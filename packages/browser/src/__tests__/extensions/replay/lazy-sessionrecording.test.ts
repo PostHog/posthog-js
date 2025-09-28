@@ -25,11 +25,7 @@ import {
     SessionRecordingOptions,
 } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
-import {
-    RECORDING_IDLE_THRESHOLD_MS,
-    RECORDING_MAX_EVENT_SIZE,
-    SessionRecording,
-} from '../../../extensions/replay/sessionrecording'
+import { RECORDING_IDLE_THRESHOLD_MS, RECORDING_MAX_EVENT_SIZE } from '../../../extensions/replay/sessionrecording'
 import { assignableWindow, window } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import {
@@ -579,543 +575,6 @@ describe('Lazy SessionRecording', () => {
             )
         })
 
-        describe('recording', () => {
-            describe('canvas', () => {
-                it('passes the remote config to rrweb', () => {
-                    posthog.persistence?.register({
-                        [SESSION_RECORDING_REMOTE_CONFIG]: {
-                            canvasRecording: {
-                                enabled: true,
-                                fps: 6,
-                                quality: 0.2,
-                            },
-                        },
-                    })
-
-                    sessionRecording.startIfEnabledOrStop()
-
-                    sessionRecording['_onScriptLoaded']()
-                    expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
-                        expect.objectContaining({
-                            recordCanvas: true,
-                            sampling: { canvas: 6 },
-                            dataURLOptions: {
-                                type: 'image/webp',
-                                quality: 0.2,
-                            },
-                        })
-                    )
-                })
-
-                it('skips when any config variable is missing', () => {
-                    sessionRecording.startIfEnabledOrStop()
-
-                    sessionRecording.onRemoteConfig(
-                        makeFlagsResponse({
-                            sessionRecording: {
-                                endpoint: '/s/',
-                                recordCanvas: null,
-                                canvasFps: null,
-                                canvasQuality: null,
-                            },
-                        })
-                    )
-
-                    sessionRecording['_onScriptLoaded']()
-
-                    const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
-                    expect(mockParams).not.toHaveProperty('recordCanvas')
-                    expect(mockParams).not.toHaveProperty('canvasFps')
-                    expect(mockParams).not.toHaveProperty('canvasQuality')
-                })
-            })
-
-            it('calls rrweb.record with the right options', () => {
-                posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: false })
-
-                sessionRecording.startIfEnabledOrStop()
-                // maskAllInputs should change from default
-                // someUnregisteredProp should not be present
-                expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith({
-                    emit: expect.anything(),
-                    maskAllInputs: false,
-                    blockClass: 'ph-no-capture',
-                    blockSelector: undefined,
-                    ignoreClass: 'ph-ignore-input',
-                    maskTextClass: 'ph-mask',
-                    maskTextSelector: undefined,
-                    maskInputOptions: { password: true },
-                    maskInputFn: undefined,
-                    slimDOMOptions: {},
-                    collectFonts: false,
-                    plugins: [],
-                    inlineStylesheet: true,
-                    recordCrossOriginIframes: false,
-                })
-            })
-
-            it('records events emitted before and after starting recording', () => {
-                expect(loadScriptMock).toHaveBeenCalled()
-
-                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
-                expect(posthog.capture).not.toHaveBeenCalled()
-
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
-                    data: [
-                        {
-                            data: {
-                                source: 1,
-                            },
-                            type: 3,
-                        },
-                    ],
-                    size: 30,
-                    // session id and window id are not null 🚀
-                    sessionId: sessionId,
-                    windowId: 'windowId',
-                })
-
-                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-
-                // next call to emit won't flush the buffer
-                // the events aren't big enough
-                _emit(createIncrementalSnapshot({ data: { source: 2 } }))
-
-                // access private method 🤯so we don't need to wait for the timer
-                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toEqual(0)
-
-                expect(posthog.capture).toHaveBeenCalledTimes(1)
-                expect(posthog.capture).toHaveBeenCalledWith(
-                    '$snapshot',
-                    {
-                        $snapshot_bytes: 60,
-                        $snapshot_data: [
-                            { type: 3, data: { source: 1 } },
-                            { type: 3, data: { source: 2 } },
-                        ],
-                        $session_id: sessionId,
-                        $window_id: 'windowId',
-                        $lib: 'web',
-                        $lib_version: '0.0.1',
-                    },
-                    {
-                        _url: 'https://test.com/s/',
-                        _noTruncate: true,
-                        _batchKey: 'recordings',
-                        skip_client_rate_limiting: true,
-                    }
-                )
-            })
-
-            it('buffers emitted events', () => {
-                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-                sessionRecording.startIfEnabledOrStop()
-                expect(loadScriptMock).toHaveBeenCalled()
-
-                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
-                _emit(createIncrementalSnapshot({ data: { source: 2 } }))
-
-                expect(posthog.capture).not.toHaveBeenCalled()
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_flushBufferTimer']).not.toBeUndefined()
-
-                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_flushBufferTimer']).toBeUndefined()
-
-                expect(posthog.capture).toHaveBeenCalledTimes(1)
-                expect(posthog.capture).toHaveBeenCalledWith(
-                    '$snapshot',
-                    {
-                        $session_id: sessionId,
-                        $window_id: 'windowId',
-                        $snapshot_bytes: 60,
-                        $snapshot_data: [
-                            { type: 3, data: { source: 1 } },
-                            { type: 3, data: { source: 2 } },
-                        ],
-                        $lib: 'web',
-                        $lib_version: '0.0.1',
-                    },
-                    {
-                        _url: 'https://test.com/s/',
-                        _noTruncate: true,
-                        _batchKey: 'recordings',
-                        skip_client_rate_limiting: true,
-                    }
-                )
-            })
-
-            it('flushes buffer if the size of the buffer hits the limit', () => {
-                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-                sessionRecording.startIfEnabledOrStop()
-                expect(loadScriptMock).toHaveBeenCalled()
-                const bigData = 'a'.repeat(RECORDING_MAX_EVENT_SIZE * 0.8)
-
-                _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
-                _emit(createIncrementalSnapshot({ data: { source: 1, payload: 1 } }))
-                _emit(createIncrementalSnapshot({ data: { source: 1, payload: 2 } }))
-
-                expect(posthog.capture).not.toHaveBeenCalled()
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toMatchObject({ size: 755101 })
-
-                // Another big event means the old data will be flushed
-                _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
-                expect(posthog.capture).toHaveBeenCalled()
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toEqual(1) // The new event
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toMatchObject({ size: 755017 })
-            })
-
-            it('maintains the buffer if the recording is buffering', () => {
-                sessionRecording.startIfEnabledOrStop()
-                expect(loadScriptMock).toHaveBeenCalled()
-
-                const bigData = 'a'.repeat(RECORDING_MAX_EVENT_SIZE * 0.8)
-
-                _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toMatchObject({ size: 755017 }) // the size of the big data event
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toEqual(1) // full snapshot and a big event
-
-                _emit(createIncrementalSnapshot({ data: { source: 1, payload: 1 } }))
-                _emit(createIncrementalSnapshot({ data: { source: 1, payload: 2 } }))
-
-                expect(posthog.capture).not.toHaveBeenCalled()
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toMatchObject({ size: 755101 })
-
-                // Another big event means the old data will be flushed
-                _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
-                // but the recording is still buffering
-                expect(sessionRecording.status).toBe('buffering')
-                expect(posthog.capture).not.toHaveBeenCalled()
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toEqual(4) // + the new event
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toMatchObject({
-                    size: 755017 + 755101,
-                }) // the size of the big data event
-            })
-
-            it('flushes buffer if the session_id changes', () => {
-                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-                sessionRecording.startIfEnabledOrStop()
-
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].sessionId).toEqual(sessionId)
-
-                _emit(createIncrementalSnapshot({ emit: 1 }))
-
-                expect(posthog.capture).not.toHaveBeenCalled()
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].sessionId).not.toEqual(null)
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([
-                    { data: { source: 1 }, emit: 1, type: 3 },
-                ])
-
-                // Not exactly right but easier to test than rotating the session id
-                // this simulates as the session id changing _after_ it has initially been set
-                // i.e. the data in the buffer should be sent with 'otherSessionId'
-                sessionRecording['_lazyLoadedSessionRecording']['_buffer']!.sessionId = 'otherSessionId'
-                _emit(createIncrementalSnapshot({ emit: 2 }))
-
-                expect(posthog.capture).toHaveBeenCalledWith(
-                    '$snapshot',
-                    {
-                        $session_id: 'otherSessionId',
-                        $window_id: 'windowId',
-                        $snapshot_data: [{ data: { source: 1 }, emit: 1, type: 3 }],
-                        $snapshot_bytes: 39,
-                        $lib: 'web',
-                        $lib_version: '0.0.1',
-                    },
-                    {
-                        _url: 'https://test.com/s/',
-                        _noTruncate: true,
-                        _batchKey: 'recordings',
-                        skip_client_rate_limiting: true,
-                    }
-                )
-
-                // and the rrweb event emitted _after_ the session id change should be sent yet
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
-                    data: [
-                        {
-                            data: {
-                                source: 1,
-                            },
-                            emit: 2,
-                            type: 3,
-                        },
-                    ],
-                    sessionId: sessionId,
-                    size: 39,
-                    windowId: 'windowId',
-                })
-            })
-
-            it("doesn't load recording script if already loaded", () => {
-                loadScriptMock.mockClear()
-                sessionRecording.startIfEnabledOrStop()
-                expect(loadScriptMock).not.toHaveBeenCalled()
-            })
-
-            it('loads recording script from right place', () => {
-                expect(loadScriptMock).toHaveBeenCalledWith(expect.anything(), 'lazy-recorder', expect.anything())
-            })
-
-            it('session recording can be turned on and off', () => {
-                expect(sessionRecording.started).toEqual(true)
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_stopRrweb']).not.toEqual(undefined)
-
-                sessionRecording.stopRecording()
-
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_stopRrweb']).toEqual(undefined)
-                expect(sessionRecording.started).toEqual(false)
-            })
-
-            it('can emit when there are circular references', () => {
-                posthog.config.session_recording.compress_events = false
-                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-                sessionRecording.startIfEnabledOrStop()
-
-                const someObject = { emit: 1 }
-                // the same object can be there multiple times
-                const circularObject: Record<string, any> = { emit: someObject, again: someObject }
-                // but a circular reference will be replaced
-                circularObject.circularReference = circularObject
-                _emit(createFullSnapshot(circularObject))
-
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
-                    data: [
-                        {
-                            again: {
-                                emit: 1,
-                            },
-                            circularReference: {
-                                again: {
-                                    emit: 1,
-                                },
-                                // the circular reference is captured to the buffer,
-                                // but it didn't explode when estimating size
-                                circularReference: expect.any(Object),
-                                emit: {
-                                    emit: 1,
-                                },
-                            },
-                            data: {},
-                            emit: {
-                                emit: 1,
-                            },
-                            type: 2,
-                        },
-                    ],
-                    sessionId: sessionId,
-                    size: 149,
-                    windowId: 'windowId',
-                })
-            })
-
-            describe('the session id manager', () => {
-                const startingDate = new Date()
-
-                const emitAtDateTime = (date: Date, source = 1) =>
-                    _emit({
-                        event: 123,
-                        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                        timestamp: date.getTime(),
-                        data: {
-                            source,
-                        },
-                    })
-
-                describe('onSessionId Callbacks', () => {
-                    let mockCallback: Mock<SessionIdChangedCallback>
-                    let unsubscribeCallback: () => void
-
-                    beforeEach(() => {
-                        sessionManager = new SessionIdManager({
-                            config,
-                            persistence: new PostHogPersistence(config),
-                            register: jest.fn(),
-                        } as unknown as PostHog)
-                        posthog.sessionManager = sessionManager
-
-                        mockCallback = jest.fn()
-                        unsubscribeCallback = sessionManager.onSessionId(mockCallback)
-
-                        expect(mockCallback).not.toHaveBeenCalled()
-
-                        sessionRecording.startIfEnabledOrStop()
-                        sessionRecording['_lazyLoadAndStart']()
-
-                        expect(mockCallback).toHaveBeenCalledTimes(1)
-                    })
-
-                    afterEach(() => {
-                        jest.useRealTimers()
-                    })
-
-                    it('calls the callback when the session id changes', () => {
-                        const startingSessionId = sessionManager['_getSessionId']()[1]
-
-                        emitAtDateTime(startingDate)
-
-                        emitAtDateTime(
-                            new Date(
-                                startingDate.getFullYear(),
-                                startingDate.getMonth(),
-                                startingDate.getDate(),
-                                startingDate.getHours(),
-                                startingDate.getMinutes() + 1
-                            )
-                        )
-
-                        const inactivityThresholdLater = new Date(
-                            startingDate.getFullYear(),
-                            startingDate.getMonth(),
-                            startingDate.getDate(),
-                            startingDate.getHours(),
-                            startingDate.getMinutes() + 32
-                        )
-
-                        // restarting the session checks the session id using "now" so we need to fix that
-                        jest.useFakeTimers().setSystemTime(inactivityThresholdLater)
-                        emitAtDateTime(inactivityThresholdLater)
-
-                        expect(sessionManager['_getSessionId']()[1]).not.toEqual(startingSessionId)
-
-                        expect(mockCallback).toHaveBeenCalledTimes(2)
-                        // last call received the new session id
-                        expect(mockCallback.mock.calls[1][0]).toEqual(sessionManager['_getSessionId']()[1])
-                    })
-
-                    it('does not calls the callback when the session id changes after unsubscribe', () => {
-                        unsubscribeCallback()
-
-                        const startingSessionId = sessionManager['_getSessionId']()[1]
-                        emitAtDateTime(startingDate)
-                        emitAtDateTime(
-                            new Date(
-                                startingDate.getFullYear(),
-                                startingDate.getMonth(),
-                                startingDate.getDate(),
-                                startingDate.getHours(),
-                                startingDate.getMinutes() + 1
-                            )
-                        )
-
-                        const inactivityThresholdLater = new Date(
-                            startingDate.getFullYear(),
-                            startingDate.getMonth(),
-                            startingDate.getDate(),
-                            startingDate.getHours(),
-                            startingDate.getMinutes() + 32
-                        )
-                        emitAtDateTime(inactivityThresholdLater)
-
-                        expect(sessionManager['_getSessionId']()[1]).not.toEqual(startingSessionId)
-
-                        expect(mockCallback).toHaveBeenCalledTimes(1)
-                        // the only call received the original session id
-                        expect(mockCallback.mock.calls[0][0]).toEqual(startingSessionId)
-                    })
-                })
-
-                describe('with a real session id manager', () => {
-                    beforeEach(() => {
-                        sessionManager = new SessionIdManager({
-                            config,
-                            persistence: new PostHogPersistence(config),
-                            register: jest.fn(),
-                        } as unknown as PostHog)
-                        posthog.sessionManager = sessionManager
-
-                        sessionRecording.onRemoteConfig(
-                            makeFlagsResponse({
-                                sessionRecording: {
-                                    endpoint: '/s/',
-                                },
-                            })
-                        )
-                        sessionRecording['_lazyLoadAndStart']()
-                    })
-
-                    it('does not change session id for a second _emit', () => {
-                        const startingSessionId = sessionManager['_getSessionId']()[1]
-
-                        emitAtDateTime(startingDate)
-                        emitAtDateTime(
-                            new Date(
-                                startingDate.getFullYear(),
-                                startingDate.getMonth(),
-                                startingDate.getDate(),
-                                startingDate.getHours(),
-                                startingDate.getMinutes() + 1
-                            )
-                        )
-
-                        expect(sessionManager['_getSessionId']()[1]).toEqual(startingSessionId)
-                    })
-
-                    it('restarts recording if the session is rotated because session has been inactive for 30 minutes', () => {
-                        const startingSessionId = sessionManager['_getSessionId']()[1]
-
-                        sessionRecording['_lazyLoadedSessionRecording'].stop = jest.fn()
-                        sessionRecording['_lazyLoadedSessionRecording'].start = jest.fn()
-
-                        emitAtDateTime(startingDate)
-                        emitAtDateTime(
-                            new Date(
-                                startingDate.getFullYear(),
-                                startingDate.getMonth(),
-                                startingDate.getDate(),
-                                startingDate.getHours(),
-                                startingDate.getMinutes() + 1
-                            )
-                        )
-
-                        const inactivityThresholdLater = new Date(
-                            startingDate.getFullYear(),
-                            startingDate.getMonth(),
-                            startingDate.getDate(),
-                            startingDate.getHours(),
-                            startingDate.getMinutes() + 32
-                        )
-                        emitAtDateTime(inactivityThresholdLater)
-
-                        expect(sessionManager['_getSessionId']()[1]).not.toEqual(startingSessionId)
-                        expect(sessionRecording['_lazyLoadedSessionRecording'].stop).toHaveBeenCalled()
-                        expect(sessionRecording['_lazyLoadedSessionRecording'].start).toHaveBeenCalled()
-                    })
-
-                    it('restarts recording if the session is rotated because max time has passed', () => {
-                        const startingSessionId = sessionManager['_getSessionId']()[1]
-
-                        sessionRecording['_lazyLoadedSessionRecording'].stop = jest.fn()
-                        sessionRecording['_lazyLoadedSessionRecording'].start = jest.fn()
-
-                        emitAtDateTime(startingDate)
-                        emitAtDateTime(
-                            new Date(
-                                startingDate.getFullYear(),
-                                startingDate.getMonth(),
-                                startingDate.getDate(),
-                                startingDate.getHours(),
-                                startingDate.getMinutes() + 1
-                            )
-                        )
-
-                        const moreThanADayLater = new Date(
-                            startingDate.getFullYear(),
-                            startingDate.getMonth(),
-                            startingDate.getDate() + 1,
-                            startingDate.getHours() + 1
-                        )
-                        emitAtDateTime(moreThanADayLater)
-
-                        expect(sessionManager['_getSessionId']()[1]).not.toEqual(startingSessionId)
-
-                        expect(sessionRecording['_lazyLoadedSessionRecording'].stop).toHaveBeenCalled()
-                        expect(sessionRecording['_lazyLoadedSessionRecording'].start).toHaveBeenCalled()
-                    })
-                })
-            })
-        })
-
         describe('idle timeouts', () => {
             let startingTimestamp = -1
 
@@ -1157,7 +616,13 @@ describe('Lazy SessionRecording', () => {
             }
 
             beforeEach(() => {
-                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                        },
+                    })
+                )
                 sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
                 expect(sessionRecording.status).toEqual('active')
 
@@ -1553,361 +1018,36 @@ describe('Lazy SessionRecording', () => {
             })
         })
 
-        describe('linked flags', () => {
-            it('stores the linked flag on flags response', () => {
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual(null)
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
-
-                sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
-                )
-
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual('the-flag-key')
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
-                expect(sessionRecording.status).toEqual('buffering')
-
-                expect(onFeatureFlagsCallback).not.toBeNull()
-
-                onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': true })
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
-                expect(sessionRecording.status).toEqual('active')
-
-                onFeatureFlagsCallback?.(['different', 'keys'], { different: true, keys: true })
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
-                expect(sessionRecording.status).toEqual('buffering')
-            })
-
-            it('does not react to flags that are present but false', () => {
-                sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
-                )
-
-                expect(sessionRecording.status).toEqual('buffering')
-
-                expect(onFeatureFlagsCallback).not.toBeNull()
-
-                onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': false })
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
-                expect(sessionRecording.status).toEqual('buffering')
-            })
-
-            it('can handle linked flags with variants', () => {
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual(null)
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
-
-                sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({
-                        sessionRecording: { endpoint: '/s/', linkedFlag: { flag: 'the-flag-key', variant: 'test-a' } },
-                    })
-                )
-
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual({
-                    flag: 'the-flag-key',
-                    variant: 'test-a',
-                })
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
-                expect(sessionRecording.status).toEqual('buffering')
-
-                expect(onFeatureFlagsCallback).not.toBeNull()
-
-                onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'test-a' })
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
-                expect(sessionRecording.status).toEqual('active')
-
-                onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'control' })
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
-                expect(sessionRecording.status).toEqual('buffering')
-            })
-
-            it('can handle linked flags with any variants', () => {
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual(null)
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
-
-                sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({
-                        // when the variant is any we only send the key
-                        sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' },
-                    })
-                )
-
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual('the-flag-key')
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
-                expect(sessionRecording.status).toEqual('buffering')
-
-                expect(onFeatureFlagsCallback).not.toBeNull()
-
-                onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'literally-anything' })
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
-                expect(sessionRecording.status).toEqual('active')
-
-                onFeatureFlagsCallback?.(['not-the-flag-key'], { 'not-the-flag-key': 'literally-anything' })
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
-                expect(sessionRecording.status).toEqual('buffering')
-            })
-
-            it('can be overriden', () => {
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual(null)
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
-
-                sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
-                )
-
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual('the-flag-key')
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
-                expect(sessionRecording.status).toEqual('buffering')
-
-                sessionRecording.overrideLinkedFlag()
-
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
-                expect(sessionRecording.status).toEqual('active')
-            })
-
-            /**
-             * this is partly a regression test, with a running rrweb,
-             * if you don't pause while buffering
-             * the browser can be trapped in an infinite loop of pausing
-             * while trying to report it is paused 🙈
-             */
-            it('can be paused while waiting for flag', () => {
-                fakeNavigateTo('https://test.com/blocked')
-
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual(null)
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
-                expect(sessionRecording.status).toEqual('buffering')
-
-                sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({
-                        sessionRecording: {
-                            endpoint: '/s/',
-                            linkedFlag: 'the-flag-key',
-                            urlBlocklist: [
-                                {
-                                    matching: 'regex',
-                                    url: '/blocked',
-                                },
-                            ],
-                        },
-                    })
-                )
-
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual('the-flag-key')
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
-                expect(sessionRecording.status).toEqual('buffering')
-                expect(sessionRecording['paused']).toBeUndefined()
-
-                const snapshotEvent = {
-                    event: 123,
-                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                    data: {
-                        source: 1,
-                    },
-                    timestamp: new Date().getTime(),
-                }
-                _emit(snapshotEvent)
-
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual('the-flag-key')
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
-                expect(sessionRecording.status).toEqual('paused')
-
-                sessionRecording.overrideLinkedFlag()
-
-                expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
-                expect(sessionRecording.status).toEqual('paused')
-
-                fakeNavigateTo('https://test.com/allowed')
-
-                expect(sessionRecording.status).toEqual('paused')
-
-                _emit(snapshotEvent)
-                expect(sessionRecording.status).toEqual('active')
-            })
-        })
-
-        describe('buffering minimum duration', () => {
-            it('can report no duration when no data', () => {
-                sessionRecording.startIfEnabledOrStop()
-                expect(sessionRecording.status).toBe('buffering')
-                expect(sessionRecording['_sessionDuration']).toBe(null)
-            })
-
-            it('can report zero duration', () => {
-                sessionRecording.startIfEnabledOrStop()
-                expect(sessionRecording.status).toBe('buffering')
-                const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
-                _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp }))
-                expect(sessionRecording['_sessionDuration']).toBe(0)
-            })
-
-            it('can report a duration', () => {
-                sessionRecording.startIfEnabledOrStop()
-                expect(sessionRecording.status).toBe('buffering')
-                const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
-                _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
-                expect(sessionRecording['_sessionDuration']).toBe(100)
-            })
-
-            it('starts with an undefined minimum duration', () => {
-                sessionRecording.startIfEnabledOrStop()
-                expect(sessionRecording['_minimumDuration']).toBe(null)
-            })
-
-            it('can set minimum duration from flags response', () => {
-                sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({
-                        sessionRecording: { minimumDurationMilliseconds: 1500 },
-                    })
-                )
-                expect(sessionRecording['_minimumDuration']).toBe(1500)
-            })
-
-            it('does not flush if below the minimum duration', () => {
-                sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({
-                        sessionRecording: { minimumDurationMilliseconds: 1500 },
-                    })
-                )
-                sessionRecording.startIfEnabledOrStop()
-                expect(sessionRecording.status).toBe('active')
-                const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
-                _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
-                expect(sessionRecording['_sessionDuration']).toBe(100)
-                expect(sessionRecording['_minimumDuration']).toBe(1500)
-
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(1) // the emitted incremental event
-                // call the private method to avoid waiting for the timer
-                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
-
-                expect(posthog.capture).not.toHaveBeenCalled()
-            })
-
-            it('does flush if session duration is negative', () => {
-                sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({
-                        sessionRecording: { minimumDurationMilliseconds: 1500 },
-                    })
-                )
-                sessionRecording.startIfEnabledOrStop()
-                expect(sessionRecording.status).toBe('active')
-                const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
-
-                // if we have some data in the buffer and the buffer has a session id but then the session id changes
-                // then the session duration will be negative, and we will never flush the buffer
-                // this setup isn't quite that but does simulate the behaviour closely enough
-                _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp - 1000 }))
-
-                expect(sessionRecording['_sessionDuration']).toBe(-1000)
-                expect(sessionRecording['_minimumDuration']).toBe(1500)
-
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(1) // the emitted incremental event
-                // call the private method to avoid waiting for the timer
-                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
-
-                expect(posthog.capture).toHaveBeenCalled()
-            })
-
-            it('does not stay buffering after the minimum duration', () => {
-                sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({
-                        sessionRecording: { minimumDurationMilliseconds: 1500 },
-                    })
-                )
-                sessionRecording.startIfEnabledOrStop()
-                expect(sessionRecording.status).toBe('active')
-                const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
-                _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
-                expect(sessionRecording['_sessionDuration']).toBe(100)
-                expect(sessionRecording['_minimumDuration']).toBe(1500)
-
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(1) // the emitted incremental event
-                // call the private method to avoid waiting for the timer
-                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
-
-                expect(posthog.capture).not.toHaveBeenCalled()
-
-                _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 1501 }))
-
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(2) // two emitted incremental events
-                // call the private method to avoid waiting for the timer
-                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
-
-                expect(posthog.capture).toHaveBeenCalled()
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(0)
-                expect(sessionRecording['_sessionDuration']).toBe(null)
-                _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 1502 }))
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(1)
-                expect(sessionRecording['_sessionDuration']).toBe(1502)
-                // call the private method to avoid waiting for the timer
-                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
-
-                expect(posthog.capture).toHaveBeenCalled()
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(0)
-            })
-        })
-
-        describe('when rrweb is not available', () => {
-            beforeEach(() => {
-                // Fake rrweb not being available
-                loadScriptMock.mockImplementation((_ph, _path, callback) => {
-                    callback()
-                })
-                sessionRecording = new SessionRecording(posthog)
-
-                expect(sessionRecording['_queuedRRWebEvents']).toHaveLength(0)
-
-                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-
-                expect(sessionRecording['_queuedRRWebEvents']).toHaveLength(1)
-
-                sessionRecording.startIfEnabledOrStop()
-                expect(loadScriptMock).toHaveBeenCalled()
-            })
-
-            it('queues events', () => {
-                sessionRecording.tryAddCustomEvent('test', { test: 'test' })
-
-                expect(sessionRecording['_queuedRRWebEvents']).toHaveLength(2)
-            })
-
-            it('limits the queue of events', () => {
-                sessionRecording.tryAddCustomEvent('test', { test: 'test' })
-
-                expect(sessionRecording['_queuedRRWebEvents']).toHaveLength(2)
-
-                for (let i = 0; i < 100; i++) {
-                    sessionRecording.tryAddCustomEvent('test', { test: 'test' })
-                }
-
-                expect(sessionRecording['_queuedRRWebEvents']).toHaveLength(10)
-            })
-
-            it('processes the queue when rrweb is available again', () => {
-                addRRwebToWindow()
-
-                sessionRecording.onRRwebEmit(createIncrementalSnapshot({ data: { source: 1 } }) as any)
-
-                expect(sessionRecording['_queuedRRWebEvents']).toHaveLength(0)
-            })
-        })
-
         describe('scheduled full snapshots', () => {
             it('starts out unscheduled', () => {
                 expect(sessionRecording['_fullSnapshotTimer']).toBe(undefined)
             })
 
             it('does not schedule a snapshot on start', () => {
-                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                        },
+                    })
+                )
                 expect(sessionRecording['_fullSnapshotTimer']).toBe(undefined)
             })
 
             it('schedules a snapshot, when we take a full snapshot', () => {
-                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                        },
+                    })
+                )
                 const startTimer = sessionRecording['_fullSnapshotTimer']
 
                 _emit(createFullSnapshot())
 
-                expect(sessionRecording['_fullSnapshotTimer']).not.toBe(undefined)
-                expect(sessionRecording['_fullSnapshotTimer']).not.toBe(startTimer)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimer']).not.toBe(undefined)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimer']).not.toBe(startTimer)
             })
         })
 
@@ -1915,15 +1055,20 @@ describe('Lazy SessionRecording', () => {
             beforeEach(() => {
                 jest.spyOn(sessionRecording, 'tryAddCustomEvent')
                 posthog.config.capture_pageview = false
-                sessionRecording.startIfEnabledOrStop()
-                // clear the spy calls
-                ;(sessionRecording.tryAddCustomEvent as any).mockClear()
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                        },
+                    })
+                )
+                jest.spyOn(sessionRecording['_lazyLoadedSessionRecording'], '_tryAddCustomEvent')
             })
 
             it('does not capture pageview on meta event', () => {
                 _emit(createIncrementalSnapshot({ type: META_EVENT_TYPE }))
 
-                expect(sessionRecording.tryAddCustomEvent).not.toHaveBeenCalled()
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent']).not.toHaveBeenCalled()
             })
 
             it('captures pageview as expected on non-meta event', () => {
@@ -1931,38 +1076,48 @@ describe('Lazy SessionRecording', () => {
 
                 _emit(createIncrementalSnapshot({ type: 3 }))
 
-                expect(sessionRecording.tryAddCustomEvent).toHaveBeenCalledWith('$url_changed', {
-                    href: 'https://test.com',
-                })
-                ;(sessionRecording.tryAddCustomEvent as any).mockClear()
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent']).toHaveBeenCalledWith(
+                    '$url_changed',
+                    {
+                        href: 'https://test.com/',
+                    }
+                )
+                ;(sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent'] as any).mockClear()
 
                 _emit(createIncrementalSnapshot({ type: 3 }))
                 // the window href has not changed, so we don't capture another pageview
-                expect(sessionRecording.tryAddCustomEvent).not.toHaveBeenCalled()
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent']).not.toHaveBeenCalled()
 
                 fakeNavigateTo('https://test.com/other')
                 _emit(createIncrementalSnapshot({ type: 3 }))
 
                 // the window href has changed, so we capture another pageview
-                expect(sessionRecording.tryAddCustomEvent).toHaveBeenCalledWith('$url_changed', {
-                    href: 'https://test.com/other',
-                })
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent']).toHaveBeenCalledWith(
+                    '$url_changed',
+                    {
+                        href: 'https://test.com/other',
+                    }
+                )
             })
         })
 
         describe('when pageview capture is enabled', () => {
             beforeEach(() => {
-                jest.spyOn(sessionRecording, 'tryAddCustomEvent')
                 posthog.config.capture_pageview = true
-                sessionRecording.startIfEnabledOrStop()
-                // clear the spy calls
-                ;(sessionRecording.tryAddCustomEvent as any).mockClear()
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                        },
+                    })
+                )
+                jest.spyOn(sessionRecording['_lazyLoadedSessionRecording'], '_tryAddCustomEvent')
             })
 
             it('does not capture pageview on rrweb events', () => {
                 _emit(createIncrementalSnapshot({ type: 3 }))
 
-                expect(sessionRecording.tryAddCustomEvent).not.toHaveBeenCalled()
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent']).not.toHaveBeenCalled()
             })
         })
 
@@ -1977,7 +1132,13 @@ describe('Lazy SessionRecording', () => {
             beforeEach(() => {
                 posthog.config.session_recording.compress_events = true
                 sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                        },
+                    })
+                )
                 // need to have active event to start recording
                 _emit(createIncrementalSnapshot({ type: 3 }))
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
@@ -2171,276 +1332,838 @@ describe('Lazy SessionRecording', () => {
                 )
             })
         })
+    })
 
-        describe('URL blocking', () => {
-            beforeEach(() => {
-                sessionRecording.startIfEnabledOrStop()
-                jest.spyOn(sessionRecording, 'tryAddCustomEvent')
-            })
-
-            it('does not flush buffer and includes pause event when hitting blocked URL', async () => {
-                sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({
-                        sessionRecording: {
-                            endpoint: '/s/',
-                            urlBlocklist: [
-                                {
-                                    matching: 'regex',
-                                    url: '/blocked',
-                                },
-                            ],
-                        },
-                    })
-                )
-
-                // Emit some events before hitting blocked URL
-                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
-                _emit(createIncrementalSnapshot({ data: { source: 2 } }))
-
-                // Simulate URL change to blocked URL
-                fakeNavigateTo('https://test.com/blocked')
-
-                expect(posthog.capture).not.toHaveBeenCalled()
-
-                // Verify subsequent events are not captured while on blocked URL
-                _emit(createIncrementalSnapshot({ data: { source: 3 } }))
-                _emit(createIncrementalSnapshot({ data: { source: 4 } }))
-
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([
-                    {
-                        data: {
-                            source: 1,
-                        },
-                        type: 3,
+    describe('recording', () => {
+        it('calls rrweb.record with the right options', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
                     },
-                    {
-                        data: {
-                            source: 2,
-                        },
-                        type: 3,
-                    },
-                ])
-
-                // Simulate URL change to allowed URL
-                fakeNavigateTo('https://test.com/allowed')
-
-                // Verify recording resumes with resume event
-                _emit(createIncrementalSnapshot({ data: { source: 5 } }))
-
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toStrictEqual([
-                    {
-                        data: {
-                            source: 1,
-                        },
-                        type: 3,
-                    },
-                    {
-                        data: {
-                            source: 2,
-                        },
-                        type: 3,
-                    },
-                    // restarts with a snapshot
-                    expect.objectContaining({
-                        type: 2,
-                    }),
-                    expect.objectContaining({
-                        type: 3,
-                        data: { source: 5 },
-                    }),
-                ])
-            })
-
-            it('only pauses once when sampling determines session should not record', () => {
-                sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({
-                        sessionRecording: {
-                            endpoint: '/s/',
-                            sampleRate: '0.00',
-                            urlBlocklist: [
-                                {
-                                    matching: 'regex',
-                                    url: '/blocked',
-                                },
-                            ],
-                        },
-                    })
-                )
-                expect(sessionRecording.status).toBe('disabled')
-                expect(sessionRecording['_urlTriggerMatching']['urlBlocked']).toBe(false)
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(0)
-
-                fakeNavigateTo('https://test.com/blocked')
-                // check is trigger by rrweb emit, not the navigation per se, so...
-                _emit(createFullSnapshot({ data: { source: 1 } }))
-
-                expect(posthog.capture).not.toHaveBeenCalled()
-                expect(sessionRecording.status).toBe('paused')
-                expect(sessionRecording['_urlTriggerMatching']['urlBlocked']).toBe(true)
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(0)
-                expect(sessionRecording.tryAddCustomEvent).toHaveBeenCalledWith('recording paused', {
-                    reason: 'url blocker',
                 })
-                ;(sessionRecording.tryAddCustomEvent as any).mockClear()
-
-                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
-                // regression: to check we've not accidentally got stuck in a pausing loop
-                expect(sessionRecording.tryAddCustomEvent).not.toHaveBeenCalledWith('recording paused', {
-                    reason: 'url blocker',
-                })
+            )
+            // maskAllInputs should change from default
+            // someUnregisteredProp should not be present
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith({
+                emit: expect.anything(),
+                maskAllInputs: false,
+                blockClass: 'ph-no-capture',
+                blockSelector: undefined,
+                ignoreClass: 'ph-ignore-input',
+                maskTextClass: 'ph-mask',
+                maskTextSelector: undefined,
+                maskInputOptions: { password: true },
+                maskInputFn: undefined,
+                slimDOMOptions: {},
+                collectFonts: false,
+                plugins: [],
+                inlineStylesheet: true,
+                recordCrossOriginIframes: false,
             })
         })
 
-        describe('Event triggering', () => {
-            beforeEach(() => {
-                sessionRecording.startIfEnabledOrStop()
-            })
+        it('records events emitted before and after starting recording', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            expect(loadScriptMock).toHaveBeenCalled()
 
-            it('flushes buffer and starts when sees event', async () => {
-                sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({
-                        sessionRecording: {
-                            endpoint: '/s/',
-                            eventTriggers: ['$exception'],
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            expect(posthog.capture).not.toHaveBeenCalled()
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
+                data: [
+                    {
+                        data: {
+                            source: 1,
                         },
-                    })
-                )
-
-                expect(sessionRecording.status).toBe('buffering')
-
-                // Emit some events before hitting blocked URL
-                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
-                _emit(createIncrementalSnapshot({ data: { source: 2 } }))
-
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(2)
-
-                simpleEventEmitter.emit('eventCaptured', { event: 'not-$exception' })
-
-                expect(sessionRecording.status).toBe('buffering')
-
-                simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
-
-                expect(sessionRecording.status).toBe('active')
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(0)
+                        type: 3,
+                    },
+                ],
+                size: 30,
+                // session id and window id are not null 🚀
+                sessionId: sessionId,
+                windowId: 'windowId',
             })
 
-            it('starts if sees an event but still waiting for a URL when in OR', async () => {
-                sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({
-                        sessionRecording: {
-                            endpoint: '/s/',
-                            eventTriggers: ['$exception'],
-                            urlTriggers: [{ url: 'start-on-me', matching: 'regex' }],
-                            triggerMatchType: 'any',
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            // next call to emit won't flush the buffer
+            // the events aren't big enough
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            // access private method 🤯so we don't need to wait for the timer
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toEqual(0)
+
+            expect(posthog.capture).toHaveBeenCalledTimes(1)
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $snapshot_bytes: 60,
+                    $snapshot_data: [
+                        { type: 3, data: { source: 1 } },
+                        { type: 3, data: { source: 2 } },
+                    ],
+                    $session_id: sessionId,
+                    $window_id: 'windowId',
+                    $lib: 'web',
+                    $lib_version: '0.0.1',
+                },
+                {
+                    _url: 'https://test.com/s/',
+                    _noTruncate: true,
+                    _batchKey: 'recordings',
+                    skip_client_rate_limiting: true,
+                }
+            )
+        })
+
+        it('buffers emitted events', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            expect(loadScriptMock).toHaveBeenCalled()
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            expect(posthog.capture).not.toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_flushBufferTimer']).not.toBeUndefined()
+
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_flushBufferTimer']).toBeUndefined()
+
+            expect(posthog.capture).toHaveBeenCalledTimes(1)
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $session_id: sessionId,
+                    $window_id: 'windowId',
+                    $snapshot_bytes: 60,
+                    $snapshot_data: [
+                        { type: 3, data: { source: 1 } },
+                        { type: 3, data: { source: 2 } },
+                    ],
+                    $lib: 'web',
+                    $lib_version: '0.0.1',
+                },
+                {
+                    _url: 'https://test.com/s/',
+                    _noTruncate: true,
+                    _batchKey: 'recordings',
+                    skip_client_rate_limiting: true,
+                }
+            )
+        })
+
+        it('flushes buffer if the size of the buffer hits the limit', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            expect(loadScriptMock).toHaveBeenCalled()
+            const bigData = 'a'.repeat(RECORDING_MAX_EVENT_SIZE * 0.8)
+
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: 2 } }))
+
+            expect(posthog.capture).not.toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toMatchObject({ size: 755101 })
+
+            // Another big event means the old data will be flushed
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
+            expect(posthog.capture).toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toEqual(1) // The new event
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toMatchObject({ size: 755017 })
+        })
+
+        it('maintains the buffer if the recording is buffering', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['waiting_for_an_event_means_we_are_buffering'],
+                    },
+                })
+            )
+            expect(loadScriptMock).toHaveBeenCalled()
+
+            const bigData = 'a'.repeat(RECORDING_MAX_EVENT_SIZE * 0.8)
+
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toMatchObject({ size: 755017 }) // the size of the big data event
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toEqual(1) // full snapshot and a big event
+
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: 2 } }))
+
+            expect(posthog.capture).not.toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toMatchObject({ size: 755101 })
+
+            // Another big event means the old data will be flushed
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
+            // but the recording is still buffering
+            expect(sessionRecording.status).toBe('buffering')
+            expect(posthog.capture).not.toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toEqual(4) // + the new event
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toMatchObject({
+                size: 755017 + 755101,
+            }) // the size of the big data event
+        })
+
+        it('flushes buffer if the session_id changes', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].sessionId).toEqual(sessionId)
+
+            _emit(createIncrementalSnapshot({ emit: 1 }))
+
+            expect(posthog.capture).not.toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].sessionId).not.toEqual(null)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([
+                { data: { source: 1 }, emit: 1, type: 3 },
+            ])
+
+            // Not exactly right but easier to test than rotating the session id
+            // this simulates as the session id changing _after_ it has initially been set
+            // i.e. the data in the buffer should be sent with 'otherSessionId'
+            sessionRecording['_lazyLoadedSessionRecording']['_buffer']!.sessionId = 'otherSessionId'
+            _emit(createIncrementalSnapshot({ emit: 2 }))
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $session_id: 'otherSessionId',
+                    $window_id: 'windowId',
+                    $snapshot_data: [{ data: { source: 1 }, emit: 1, type: 3 }],
+                    $snapshot_bytes: 39,
+                    $lib: 'web',
+                    $lib_version: '0.0.1',
+                },
+                {
+                    _url: 'https://test.com/s/',
+                    _noTruncate: true,
+                    _batchKey: 'recordings',
+                    skip_client_rate_limiting: true,
+                }
+            )
+
+            // and the rrweb event emitted _after_ the session id change should be sent yet
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
+                data: [
+                    {
+                        data: {
+                            source: 1,
                         },
-                    })
-                )
-
-                expect(sessionRecording.status).toBe('buffering')
-
-                // Emit some events before hitting blocked URL
-                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
-                _emit(createIncrementalSnapshot({ data: { source: 2 } }))
-
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(2)
-
-                simpleEventEmitter.emit('eventCaptured', { event: 'not-$exception' })
-
-                expect(sessionRecording.status).toBe('buffering')
-
-                simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
-
-                // even though still waiting for URL to trigger
-                expect(sessionRecording.status).toBe('active')
+                        emit: 2,
+                        type: 3,
+                    },
+                ],
+                sessionId: sessionId,
+                size: 39,
+                windowId: 'windowId',
             })
+        })
 
-            it('does not start if sees an event but still waiting for a URL when in AND', async () => {
-                sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({
-                        sessionRecording: {
-                            endpoint: '/s/',
-                            eventTriggers: ['$exception'],
-                            urlTriggers: [{ url: 'start-on-me', matching: 'regex' }],
-                            triggerMatchType: 'all',
+        it("doesn't load recording script if already loaded", () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            loadScriptMock.mockClear()
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            expect(loadScriptMock).not.toHaveBeenCalled()
+        })
+
+        it('loads recording script from right place', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            expect(loadScriptMock).toHaveBeenCalledWith(expect.anything(), 'lazy-recorder', expect.anything())
+        })
+
+        it('session recording can be turned on and off', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(sessionRecording.started).toEqual(true)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_stopRrweb']).not.toEqual(undefined)
+
+            sessionRecording.stopRecording()
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_stopRrweb']).toEqual(undefined)
+            expect(sessionRecording.started).toEqual(false)
+        })
+
+        it('can emit when there are circular references', () => {
+            posthog.config.session_recording.compress_events = false
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            const someObject = { emit: 1 }
+            // the same object can be there multiple times
+            const circularObject: Record<string, any> = { emit: someObject, again: someObject }
+            // but a circular reference will be replaced
+            circularObject.circularReference = circularObject
+            _emit(createFullSnapshot(circularObject))
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
+                data: [
+                    {
+                        again: {
+                            emit: 1,
                         },
-                    })
-                )
-
-                expect(sessionRecording.status).toBe('buffering')
-
-                // Emit some events before hitting blocked URL
-                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
-                _emit(createIncrementalSnapshot({ data: { source: 2 } }))
-
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(2)
-
-                simpleEventEmitter.emit('eventCaptured', { event: 'not-$exception' })
-
-                expect(sessionRecording.status).toBe('buffering')
-
-                simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
-
-                // because still waiting for URL to trigger
-                expect(sessionRecording.status).toBe('buffering')
-            })
-
-            it('never sends data when sampling is false regardless of event triggers', async () => {
-                // this is a regression test for https://posthoghelp.zendesk.com/agent/tickets/24373
-                // where the buffered data was sent to capture when the event trigger fired
-                // before the sample rate was taken into account
-                // and then would immediately stop
-
-                sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({
-                        sessionRecording: {
-                            endpoint: '/s/',
-                            eventTriggers: ['$exception'],
-                            sampleRate: '0.00', // i.e. never send recording
-                            triggerMatchType: 'all',
+                        circularReference: {
+                            again: {
+                                emit: 1,
+                            },
+                            // the circular reference is captured to the buffer,
+                            // but it didn't explode when estimating size
+                            circularReference: expect.any(Object),
+                            emit: {
+                                emit: 1,
+                            },
                         },
-                    })
-                )
-
-                expect(sessionRecording.status).toBe('buffering')
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(0)
-
-                // Emit some events before hitting event trigger
-                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
-                _emit(createIncrementalSnapshot({ data: { source: 2 } }))
-
-                simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
-                expect(sessionRecording.status).toBe('disabled')
-                expect(posthog.capture).not.toHaveBeenCalled()
-            })
-
-            it('sends data when sampling is false and there is an event triggers in OR mode', async () => {
-                // this is a regression test for https://posthoghelp.zendesk.com/agent/tickets/24373
-                // where the buffered data was sent to capture when the event trigger fired
-                // before the sample rate was taken into account
-                // and then would immediately stop
-
-                sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({
-                        sessionRecording: {
-                            endpoint: '/s/',
-                            eventTriggers: ['$exception'],
-                            sampleRate: '0.00', // i.e. never send recording
-                            triggerMatchType: 'any',
+                        data: {},
+                        emit: {
+                            emit: 1,
                         },
-                    })
-                )
-
-                expect(sessionRecording.status).toBe('buffering')
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(0)
-
-                // Emit some events before hitting event trigger
-                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
-                _emit(createIncrementalSnapshot({ data: { source: 2 } }))
-
-                simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
-                expect(sessionRecording.status).toBe('active')
-                expect(posthog.capture).toHaveBeenCalled()
+                        type: 2,
+                    },
+                ],
+                sessionId: sessionId,
+                size: 149,
+                windowId: 'windowId',
             })
+        })
+
+        describe('the session id manager', () => {
+            const startingDate = new Date()
+
+            const emitAtDateTime = (date: Date, source = 1) =>
+                _emit({
+                    event: 123,
+                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                    timestamp: date.getTime(),
+                    data: {
+                        source,
+                    },
+                })
+
+            describe('onSessionId Callbacks', () => {
+                let mockCallback: Mock<SessionIdChangedCallback>
+                let unsubscribeCallback: () => void
+
+                beforeEach(() => {
+                    sessionManager = new SessionIdManager({
+                        config,
+                        persistence: new PostHogPersistence(config),
+                        register: jest.fn(),
+                    } as unknown as PostHog)
+                    posthog.sessionManager = sessionManager
+
+                    mockCallback = jest.fn()
+                    unsubscribeCallback = sessionManager.onSessionId(mockCallback)
+
+                    expect(mockCallback).not.toHaveBeenCalled()
+
+                    sessionRecording.onRemoteConfig(
+                        makeFlagsResponse({
+                            sessionRecording: {
+                                endpoint: '/s/',
+                            },
+                        })
+                    )
+                    sessionRecording['_lazyLoadAndStart']()
+
+                    expect(mockCallback).toHaveBeenCalledTimes(1)
+                })
+
+                afterEach(() => {
+                    jest.useRealTimers()
+                })
+
+                it('calls the callback when the session id changes', () => {
+                    const startingSessionId = sessionManager['_getSessionId']()[1]
+
+                    emitAtDateTime(startingDate)
+
+                    emitAtDateTime(
+                        new Date(
+                            startingDate.getFullYear(),
+                            startingDate.getMonth(),
+                            startingDate.getDate(),
+                            startingDate.getHours(),
+                            startingDate.getMinutes() + 1
+                        )
+                    )
+
+                    const inactivityThresholdLater = new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate(),
+                        startingDate.getHours(),
+                        startingDate.getMinutes() + 32
+                    )
+
+                    // restarting the session checks the session id using "now" so we need to fix that
+                    jest.useFakeTimers().setSystemTime(inactivityThresholdLater)
+                    emitAtDateTime(inactivityThresholdLater)
+
+                    expect(sessionManager['_getSessionId']()[1]).not.toEqual(startingSessionId)
+
+                    expect(mockCallback).toHaveBeenCalledTimes(2)
+                    // last call received the new session id
+                    expect(mockCallback.mock.calls[1][0]).toEqual(sessionManager['_getSessionId']()[1])
+                })
+
+                it('does not calls the callback when the session id changes after unsubscribe', () => {
+                    unsubscribeCallback()
+
+                    const startingSessionId = sessionManager['_getSessionId']()[1]
+                    emitAtDateTime(startingDate)
+                    emitAtDateTime(
+                        new Date(
+                            startingDate.getFullYear(),
+                            startingDate.getMonth(),
+                            startingDate.getDate(),
+                            startingDate.getHours(),
+                            startingDate.getMinutes() + 1
+                        )
+                    )
+
+                    const inactivityThresholdLater = new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate(),
+                        startingDate.getHours(),
+                        startingDate.getMinutes() + 32
+                    )
+                    emitAtDateTime(inactivityThresholdLater)
+
+                    expect(sessionManager['_getSessionId']()[1]).not.toEqual(startingSessionId)
+
+                    expect(mockCallback).toHaveBeenCalledTimes(1)
+                    // the only call received the original session id
+                    expect(mockCallback.mock.calls[0][0]).toEqual(startingSessionId)
+                })
+            })
+
+            describe('with a real session id manager', () => {
+                beforeEach(() => {
+                    sessionManager = new SessionIdManager({
+                        config,
+                        persistence: new PostHogPersistence(config),
+                        register: jest.fn(),
+                    } as unknown as PostHog)
+                    posthog.sessionManager = sessionManager
+
+                    sessionRecording.onRemoteConfig(
+                        makeFlagsResponse({
+                            sessionRecording: {
+                                endpoint: '/s/',
+                            },
+                        })
+                    )
+                    sessionRecording['_lazyLoadAndStart']()
+                })
+
+                it('does not change session id for a second _emit', () => {
+                    const startingSessionId = sessionManager['_getSessionId']()[1]
+
+                    emitAtDateTime(startingDate)
+                    emitAtDateTime(
+                        new Date(
+                            startingDate.getFullYear(),
+                            startingDate.getMonth(),
+                            startingDate.getDate(),
+                            startingDate.getHours(),
+                            startingDate.getMinutes() + 1
+                        )
+                    )
+
+                    expect(sessionManager['_getSessionId']()[1]).toEqual(startingSessionId)
+                })
+
+                it('restarts recording if the session is rotated because session has been inactive for 30 minutes', () => {
+                    const startingSessionId = sessionManager['_getSessionId']()[1]
+
+                    sessionRecording['_lazyLoadedSessionRecording'].stop = jest.fn()
+                    sessionRecording['_lazyLoadedSessionRecording'].start = jest.fn()
+
+                    emitAtDateTime(startingDate)
+                    emitAtDateTime(
+                        new Date(
+                            startingDate.getFullYear(),
+                            startingDate.getMonth(),
+                            startingDate.getDate(),
+                            startingDate.getHours(),
+                            startingDate.getMinutes() + 1
+                        )
+                    )
+
+                    const inactivityThresholdLater = new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate(),
+                        startingDate.getHours(),
+                        startingDate.getMinutes() + 32
+                    )
+                    emitAtDateTime(inactivityThresholdLater)
+
+                    expect(sessionManager['_getSessionId']()[1]).not.toEqual(startingSessionId)
+                    expect(sessionRecording['_lazyLoadedSessionRecording'].stop).toHaveBeenCalled()
+                    expect(sessionRecording['_lazyLoadedSessionRecording'].start).toHaveBeenCalled()
+                })
+
+                it('restarts recording if the session is rotated because max time has passed', () => {
+                    const startingSessionId = sessionManager['_getSessionId']()[1]
+
+                    sessionRecording['_lazyLoadedSessionRecording'].stop = jest.fn()
+                    sessionRecording['_lazyLoadedSessionRecording'].start = jest.fn()
+
+                    emitAtDateTime(startingDate)
+                    emitAtDateTime(
+                        new Date(
+                            startingDate.getFullYear(),
+                            startingDate.getMonth(),
+                            startingDate.getDate(),
+                            startingDate.getHours(),
+                            startingDate.getMinutes() + 1
+                        )
+                    )
+
+                    const moreThanADayLater = new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate() + 1,
+                        startingDate.getHours() + 1
+                    )
+                    emitAtDateTime(moreThanADayLater)
+
+                    expect(sessionManager['_getSessionId']()[1]).not.toEqual(startingSessionId)
+
+                    expect(sessionRecording['_lazyLoadedSessionRecording'].stop).toHaveBeenCalled()
+                    expect(sessionRecording['_lazyLoadedSessionRecording'].start).toHaveBeenCalled()
+                })
+            })
+        })
+    })
+
+    describe('URL blocking', () => {
+        it('does not flush buffer and includes pause event when hitting blocked URL', async () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        urlBlocklist: [
+                            {
+                                matching: 'regex',
+                                url: '/blocked',
+                            },
+                        ],
+                    },
+                })
+            )
+
+            // Emit some events before hitting blocked URL
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            // Simulate URL change to blocked URL
+            fakeNavigateTo('https://test.com/blocked')
+
+            expect(posthog.capture).not.toHaveBeenCalled()
+
+            // Verify subsequent events are not captured while on blocked URL
+            _emit(createIncrementalSnapshot({ data: { source: 3 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 4 } }))
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([
+                {
+                    data: {
+                        source: 1,
+                    },
+                    type: 3,
+                },
+                {
+                    data: {
+                        source: 2,
+                    },
+                    type: 3,
+                },
+            ])
+
+            // Simulate URL change to allowed URL
+            fakeNavigateTo('https://test.com/allowed')
+
+            // Verify recording resumes with resume event
+            _emit(createIncrementalSnapshot({ data: { source: 5 } }))
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toStrictEqual([
+                {
+                    data: {
+                        source: 1,
+                    },
+                    type: 3,
+                },
+                {
+                    data: {
+                        source: 2,
+                    },
+                    type: 3,
+                },
+                // restarts with a snapshot
+                expect.objectContaining({
+                    type: 2,
+                }),
+                expect.objectContaining({
+                    type: 3,
+                    data: { source: 5 },
+                }),
+            ])
+        })
+
+        it('only pauses once when sampling determines session should not record', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        sampleRate: '0.00',
+                        urlBlocklist: [
+                            {
+                                matching: 'regex',
+                                url: '/blocked',
+                            },
+                        ],
+                    },
+                })
+            )
+            jest.spyOn(sessionRecording['_lazyLoadedSessionRecording'], '_tryAddCustomEvent')
+            expect(sessionRecording.status).toBe('disabled')
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_urlTriggerMatching']['urlBlocked']).toBe(false)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(0)
+
+            fakeNavigateTo('https://test.com/blocked')
+            // check is trigger by rrweb emit, not the navigation per se, so...
+            _emit(createFullSnapshot({ data: { source: 1 } }))
+
+            expect(posthog.capture).not.toHaveBeenCalled()
+            expect(sessionRecording.status).toBe('paused')
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_urlTriggerMatching']['urlBlocked']).toBe(true)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(0)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent']).toHaveBeenCalledWith(
+                'recording paused',
+                {
+                    reason: 'url blocker',
+                }
+            )
+            ;(sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent'] as any).mockClear()
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            // regression: to check we've not accidentally got stuck in a pausing loop
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent']).not.toHaveBeenCalledWith(
+                'recording paused',
+                {
+                    reason: 'url blocker',
+                }
+            )
+        })
+    })
+
+    describe('Event triggering', () => {
+        it('flushes buffer and starts when sees event', async () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Emit some events before hitting blocked URL
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(2)
+
+            simpleEventEmitter.emit('eventCaptured', { event: 'not-$exception' })
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+
+            expect(sessionRecording.status).toBe('active')
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(0)
+        })
+
+        it('starts if sees an event but still waiting for a URL when in OR', async () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                        urlTriggers: [{ url: 'start-on-me', matching: 'regex' }],
+                        triggerMatchType: 'any',
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Emit some events before hitting blocked URL
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(2)
+
+            simpleEventEmitter.emit('eventCaptured', { event: 'not-$exception' })
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+
+            // even though still waiting for URL to trigger
+            expect(sessionRecording.status).toBe('active')
+        })
+
+        it('does not start if sees an event but still waiting for a URL when in AND', async () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                        urlTriggers: [{ url: 'start-on-me', matching: 'regex' }],
+                        triggerMatchType: 'all',
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Emit some events before hitting blocked URL
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(2)
+
+            simpleEventEmitter.emit('eventCaptured', { event: 'not-$exception' })
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+
+            // because still waiting for URL to trigger
+            expect(sessionRecording.status).toBe('buffering')
+        })
+
+        it('never sends data when sampling is false regardless of event triggers', async () => {
+            // this is a regression test for https://posthoghelp.zendesk.com/agent/tickets/24373
+            // where the buffered data was sent to capture when the event trigger fired
+            // before the sample rate was taken into account
+            // and then would immediately stop
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                        sampleRate: '0.00', // i.e. never send recording
+                        triggerMatchType: 'all',
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(0)
+
+            // Emit some events before hitting event trigger
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+            expect(sessionRecording.status).toBe('disabled')
+            expect(posthog.capture).not.toHaveBeenCalled()
+        })
+
+        it('sends data when sampling is false and there is an event triggers in OR mode', async () => {
+            // this is a regression test for https://posthoghelp.zendesk.com/agent/tickets/24373
+            // where the buffered data was sent to capture when the event trigger fired
+            // before the sample rate was taken into account
+            // and then would immediately stop
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                        sampleRate: '0.00', // i.e. never send recording
+                        triggerMatchType: 'any',
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(0)
+
+            // Emit some events before hitting event trigger
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+            expect(sessionRecording.status).toBe('active')
+            expect(posthog.capture).toHaveBeenCalled()
         })
     })
 
@@ -2466,32 +2189,56 @@ describe('Lazy SessionRecording', () => {
         it('sets the pageview capture hook once', () => {
             expect(sessionRecording['_removePageViewCaptureHook']).toBeUndefined()
 
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
 
-            expect(sessionRecording['_removePageViewCaptureHook']).not.toBeUndefined()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_removePageViewCaptureHook']).not.toBeUndefined()
             expect(posthog.on).toHaveBeenCalledTimes(1)
 
             // calling a second time doesn't add another capture hook
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
             expect(posthog.on).toHaveBeenCalledTimes(1)
         })
 
         it('removes the pageview capture hook on stop', () => {
-            sessionRecording.startIfEnabledOrStop()
-            expect(sessionRecording['_removePageViewCaptureHook']).not.toBeUndefined()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_removePageViewCaptureHook']).not.toBeUndefined()
 
             expect(removePageviewCaptureHookMock).not.toHaveBeenCalled()
             sessionRecording.stopRecording()
 
             expect(removePageviewCaptureHookMock).toHaveBeenCalledTimes(1)
-            expect(sessionRecording['_removePageViewCaptureHook']).toBeUndefined()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_removePageViewCaptureHook']).toBeUndefined()
         })
 
         it('sets the window event listeners', () => {
             //mock window add event listener to check if it is called
             window.addEventListener = jest.fn().mockImplementation(() => () => {})
 
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
             expect(sessionRecording['_onBeforeUnload']).not.toBeNull()
             // we register 4 event listeners
             expect(window.addEventListener).toHaveBeenCalledTimes(4)
@@ -2500,31 +2247,15 @@ describe('Lazy SessionRecording', () => {
             // so we don't need to test if the addEvenListener registrations are called multiple times
         })
 
-        it('emits an options event', () => {
-            sessionRecording.startIfEnabledOrStop()
-            expect(sessionRecording.tryAddCustomEvent).toHaveBeenCalledWith('$session_options', {
-                activePlugins: [],
-                sessionRecordingOptions: {
-                    blockClass: 'ph-no-capture',
-                    blockSelector: undefined,
-                    collectFonts: false,
-                    ignoreClass: 'ph-ignore-input',
-                    inlineStylesheet: true,
-                    maskAllInputs: false,
-                    maskInputFn: undefined,
-                    maskInputOptions: { password: true },
-                    maskTextClass: 'ph-mask',
-                    maskTextFn: undefined,
-                    maskTextSelector: undefined,
-                    recordCrossOriginIframes: false,
-                    slimDOMOptions: {},
-                },
-            })
-        })
-
         it('call stopRecording if its not enabled', () => {
             posthog.config.disable_session_recording = true
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
             expect(sessionRecording.stopRecording).toHaveBeenCalled()
         })
     })
@@ -2628,25 +2359,6 @@ describe('Lazy SessionRecording', () => {
             expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(undefined)
             expect(sessionRecording.status).toBe('active')
         })
-
-        it('turning sample rate from null to 0, resets values as expected', () => {
-            // first turn sample rate to null
-            sessionRecording.onRemoteConfig(
-                makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: null } })
-            )
-
-            // then check that a session is no longer sampled out (i.e. storage is cleared not false)
-            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(undefined)
-            expect(sessionRecording.status).toBe('active')
-
-            // set sample rate to 0, i.e. no sessions will run
-            sessionRecording.onRemoteConfig(
-                makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.00' } })
-            )
-            // then check that a session is sampled (i.e. storage is false not true or null)
-            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
-            expect(sessionRecording.status).toBe('disabled')
-        })
     })
 
     describe('masking', () => {
@@ -2724,6 +2436,415 @@ describe('Lazy SessionRecording', () => {
             )
 
             expect(assignableWindow.__PosthogExtensions__.rrwebPlugins.getRecordConsolePlugin).toHaveBeenCalled()
+        })
+    })
+
+    describe('linked flags', () => {
+        it('stores the linked flag on flags response', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
+            )
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlag).toEqual(
+                'the-flag-key'
+            )
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
+            expect(sessionRecording.status).toEqual('buffering')
+
+            expect(onFeatureFlagsCallback).not.toBeNull()
+
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': true })
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
+            expect(sessionRecording.status).toEqual('active')
+
+            onFeatureFlagsCallback?.(['different', 'keys'], { different: true, keys: true })
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
+            expect(sessionRecording.status).toEqual('buffering')
+        })
+
+        it('does not react to flags that are present but false', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
+            )
+
+            expect(sessionRecording.status).toEqual('buffering')
+
+            expect(onFeatureFlagsCallback).not.toBeNull()
+
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': false })
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
+            expect(sessionRecording.status).toEqual('buffering')
+        })
+
+        it('can handle linked flags with variants', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', linkedFlag: { flag: 'the-flag-key', variant: 'test-a' } },
+                })
+            )
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlag).toEqual({
+                flag: 'the-flag-key',
+                variant: 'test-a',
+            })
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
+            expect(sessionRecording.status).toEqual('buffering')
+
+            expect(onFeatureFlagsCallback).not.toBeNull()
+
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'test-a' })
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
+            expect(sessionRecording.status).toEqual('active')
+
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'control' })
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
+            expect(sessionRecording.status).toEqual('buffering')
+        })
+
+        it('can handle linked flags with any variants', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    // when the variant is any we only send the key
+                    sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' },
+                })
+            )
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlag).toEqual(
+                'the-flag-key'
+            )
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
+            expect(sessionRecording.status).toEqual('buffering')
+
+            expect(onFeatureFlagsCallback).not.toBeNull()
+
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'literally-anything' })
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
+            expect(sessionRecording.status).toEqual('active')
+
+            onFeatureFlagsCallback?.(['not-the-flag-key'], { 'not-the-flag-key': 'literally-anything' })
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
+            expect(sessionRecording.status).toEqual('buffering')
+        })
+
+        it('can be overriden', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
+            )
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlag).toEqual(
+                'the-flag-key'
+            )
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
+            expect(sessionRecording.status).toEqual('buffering')
+
+            sessionRecording.overrideLinkedFlag()
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
+            expect(sessionRecording.status).toEqual('active')
+        })
+
+        /**
+         * this is partly a regression test, with a running rrweb,
+         * if you don't pause while buffering
+         * the browser can be trapped in an infinite loop of pausing
+         * while trying to report it is paused 🙈
+         */
+        it('can be paused while waiting for flag', () => {
+            fakeNavigateTo('https://test.com/blocked')
+
+            expect(sessionRecording.status).toEqual('lazy_loading')
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        linkedFlag: 'the-flag-key',
+                        urlBlocklist: [
+                            {
+                                matching: 'regex',
+                                url: '/blocked',
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlag).toEqual(
+                'the-flag-key'
+            )
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
+            expect(sessionRecording.status).toEqual('buffering')
+            expect(sessionRecording['paused']).toBeUndefined()
+
+            const snapshotEvent = {
+                event: 123,
+                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                data: {
+                    source: 1,
+                },
+                timestamp: new Date().getTime(),
+            }
+            _emit(snapshotEvent)
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlag).toEqual(
+                'the-flag-key'
+            )
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
+            expect(sessionRecording.status).toEqual('paused')
+
+            sessionRecording.overrideLinkedFlag()
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
+            expect(sessionRecording.status).toEqual('paused')
+
+            fakeNavigateTo('https://test.com/allowed')
+
+            expect(sessionRecording.status).toEqual('paused')
+
+            _emit(snapshotEvent)
+            expect(sessionRecording.status).toEqual('active')
+        })
+    })
+
+    describe('when rrweb is not available', () => {
+        beforeEach(() => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            expect(loadScriptMock).toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_queuedRRWebEvents']).toEqual([])
+
+            // fake rrweb being unavailable
+            assignableWindow.__PosthogExtensions__.rrweb.record = null
+        })
+
+        it('queues events', () => {
+            sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent']('test', { test: 'test' })
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_queuedRRWebEvents']).toHaveLength(1)
+        })
+
+        it('limits the queue of events', () => {
+            sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent']('test', { test: 'test' })
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_queuedRRWebEvents']).toHaveLength(1)
+
+            for (let i = 0; i < 100; i++) {
+                sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent']('test', { test: 'test' })
+            }
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_queuedRRWebEvents']).toHaveLength(10)
+        })
+
+        it('processes the queue when rrweb is available again', () => {
+            addRRwebToWindow()
+
+            sessionRecording['_lazyLoadedSessionRecording'].onRRwebEmit(
+                createIncrementalSnapshot({ data: { source: 1 } }) as any
+            )
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_queuedRRWebEvents']).toHaveLength(0)
+        })
+    })
+
+    describe('buffering minimum duration', () => {
+        it('can report no duration when no data', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionDuration']).toBe(null)
+        })
+
+        it('can report zero duration', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp }))
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionDuration']).toBe(0)
+        })
+
+        it('can report a duration', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionDuration']).toBe(100)
+        })
+
+        it('starts with an undefined minimum duration', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_minimumDuration']).toBe(null)
+        })
+
+        it('can set minimum duration from flags response', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500 },
+                })
+            )
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_minimumDuration']).toBe(1500)
+        })
+
+        it('does not flush if below the minimum duration', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500 },
+                })
+            )
+            expect(sessionRecording.status).toBe('active')
+            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionDuration']).toBe(100)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_minimumDuration']).toBe(1500)
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(1) // the emitted incremental event
+            // call the private method to avoid waiting for the timer
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(posthog.capture).not.toHaveBeenCalled()
+        })
+
+        it('does flush if session duration is negative', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500 },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('active')
+            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+
+            // if we have some data in the buffer and the buffer has a session id but then the session id changes
+            // then the session duration will be negative, and we will never flush the buffer
+            // this setup isn't quite that but does simulate the behaviour closely enough
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp - 1000 }))
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionDuration']).toBe(-1000)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_minimumDuration']).toBe(1500)
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(1) // the emitted incremental event
+            // call the private method to avoid waiting for the timer
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalled()
+        })
+
+        it('does not stay buffering after the minimum duration', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500 },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('active')
+            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionDuration']).toBe(100)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_minimumDuration']).toBe(1500)
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(1) // the emitted incremental event
+            // call the private method to avoid waiting for the timer
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(posthog.capture).not.toHaveBeenCalled()
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 1501 }))
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(2) // two emitted incremental events
+            // call the private method to avoid waiting for the timer
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(0)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionDuration']).toBe(null)
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 1502 }))
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(1)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionDuration']).toBe(1502)
+            // call the private method to avoid waiting for the timer
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(0)
+        })
+    })
+
+    describe('canvas', () => {
+        it('passes the remote config to rrweb', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        canvasQuality: '0.2',
+                        canvasFps: 6,
+                        recordCanvas: true,
+                    },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    recordCanvas: true,
+                    sampling: { canvas: 6 },
+                    dataURLOptions: {
+                        type: 'image/webp',
+                        quality: 0.2,
+                    },
+                })
+            )
+        })
+
+        it('skips when any config variable is missing', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        recordCanvas: null,
+                        canvasFps: null,
+                        canvasQuality: null,
+                    },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
+            expect(mockParams).not.toHaveProperty('recordCanvas')
+            expect(mockParams).not.toHaveProperty('canvasFps')
+            expect(mockParams).not.toHaveProperty('canvasQuality')
         })
     })
 })
