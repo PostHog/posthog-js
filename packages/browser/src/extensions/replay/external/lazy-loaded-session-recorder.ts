@@ -835,7 +835,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._receivedFlags &&
             this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING
         ) {
-            this._clearBufferFromMostRecentMeta()
+            this._clearBufferBeforeMostRecentMeta()
         }
 
         const throttledEvent = this._mutationThrottler ? this._mutationThrottler.throttleMutations(rawEvent) : rawEvent
@@ -1027,7 +1027,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         return mostRecentSnapshot ? mostRecentSnapshot.timestamp - sessionStartTimestamp : null
     }
 
-    private _clearBufferFromMostRecentMeta(): SnapshotBuffer {
+    private _clearBufferBeforeMostRecentMeta(): SnapshotBuffer {
         if (!this._buffer || this._buffer.data.length === 0) {
             return this._clearBuffer()
         }

@@ -1093,7 +1093,7 @@ export class SessionRecording {
             this._receivedFlags &&
             this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING
         ) {
-            this._clearBuffer()
+            this._clearBufferBeforeMostRecentMeta()
         }
 
         const throttledEvent = this._mutationThrottler ? this._mutationThrottler.throttleMutations(rawEvent) : rawEvent
@@ -1193,6 +1193,28 @@ export class SessionRecording {
         }
 
         return url
+    }
+
+    private _clearBufferBeforeMostRecentMeta(): SnapshotBuffer {
+        if (!this._buffer || this._buffer.data.length === 0) {
+            return this._clearBuffer()
+        }
+
+        // Find the last meta event index by iterating backwards
+        let lastMetaIndex = -1
+        for (let i = this._buffer.data.length - 1; i >= 0; i--) {
+            if (this._buffer.data[i].type === EventType.Meta) {
+                lastMetaIndex = i
+                break
+            }
+        }
+        if (lastMetaIndex >= 0) {
+            this._buffer.data = this._buffer.data.slice(lastMetaIndex)
+            this._buffer.size = this._buffer.data.reduce((acc, curr) => acc + estimateSize(curr), 0)
+            return this._buffer
+        } else {
+            return this._clearBuffer()
+        }
     }
 
     private _clearBuffer(): SnapshotBuffer {
