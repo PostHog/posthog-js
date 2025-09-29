@@ -26,7 +26,6 @@ import {
 } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
 import { RECORDING_IDLE_THRESHOLD_MS, RECORDING_MAX_EVENT_SIZE } from '../../../extensions/replay/sessionrecording'
-import { TRIGGER_PENDING } from '../../../extensions/replay/triggerMatching'
 import { assignableWindow, window } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import {
@@ -2179,22 +2178,13 @@ describe('Lazy SessionRecording', () => {
 
             expect(sessionRecording.status).toBe('buffering')
 
-            // Mock trigger status to be TRIGGER_PENDING
-            const mockTriggerStatus = jest.fn().mockReturnValue(TRIGGER_PENDING)
-            sessionRecording['_lazyLoadedSessionRecording']['_triggerMatching']['triggerStatus'] = mockTriggerStatus
-
-            // Mock _receivedFlags to true so buffer clearing can happen
-            sessionRecording['_lazyLoadedSessionRecording']['_receivedFlags'] = true
-
-            // Emit incremental event, then meta event, then custom event, then full snapshot
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
             _emit(createMetaSnapshot())
             _emit(createCustomSnapshot({}, { tag: 'test' }))
             _emit(createFullSnapshot())
 
-            // Buffer should only contain the meta event (the most recent meta event)
+            // Buffer should only data since (including) the meta event
             const bufferData = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data
-            expect(bufferData).toHaveLength(3)
             expect(bufferData).toEqual([
                 createMetaSnapshot(),
                 createCustomSnapshot({}, { tag: 'test' }),
