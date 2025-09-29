@@ -47,6 +47,7 @@
         "_checkStepUrl",
         "_checkSurveyEligibility",
         "_clearBuffer",
+        "_clearBufferBeforeMostRecentMeta",
         "_clearConditionalRecordingPersistence",
         "_clearDebouncer",
         "_clearFlushTimeout",
