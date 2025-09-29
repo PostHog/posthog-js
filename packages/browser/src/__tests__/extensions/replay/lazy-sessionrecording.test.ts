@@ -2165,6 +2165,32 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording.status).toBe('active')
             expect(posthog.capture).toHaveBeenCalled()
         })
+
+        it('clears buffer but keeps most recent meta event when trigger pending and receiving full snapshot', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createMetaSnapshot())
+            _emit(createCustomSnapshot({}, { tag: 'test' }))
+            _emit(createFullSnapshot())
+
+            // Buffer should only data since (including) the meta event
+            const bufferData = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data
+            expect(bufferData).toEqual([
+                createMetaSnapshot(),
+                createCustomSnapshot({}, { tag: 'test' }),
+                createFullSnapshot(),
+            ])
+        })
     })
 
     describe('startIfEnabledOrStop', () => {
