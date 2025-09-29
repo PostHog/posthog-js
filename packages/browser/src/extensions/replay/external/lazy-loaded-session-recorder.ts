@@ -43,6 +43,7 @@ import {
     isNullish,
     isNumber,
     isObject,
+    isString,
     isUndefined,
 } from '@posthog/core'
 import {
@@ -319,7 +320,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private get _isSampled(): boolean | null {
         const currentValue = this._instance.get_property(SESSION_RECORDING_IS_SAMPLED)
-        return isBoolean(currentValue) ? currentValue : null
+        // originally we would store `true` or `false` or nothing,
+        // but that would mean sometimes we would carry on recording on session id change
+        return isBoolean(currentValue) ? currentValue : isString(currentValue) ? currentValue === this.sessionId : null
     }
 
     private get _sampleRate(): number | null {
@@ -557,7 +560,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private get _fullSnapshotIntervalMillis(): number {
-        if (this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING) {
+        if (
+            this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING &&
+            !['sampled', 'active'].includes(this.status)
+        ) {
             return ONE_MINUTE
         }
 
@@ -684,6 +690,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             })
         })
 
+        this._makeSamplingDecision(this.sessionId)
         this._receivedFlags = true
         this._startRecorder()
 
@@ -929,7 +936,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     public overrideSampling() {
         this._instance.persistence?.register({
             // short-circuits the `makeSamplingDecision` function in the session recording module
-            [SESSION_RECORDING_IS_SAMPLED]: true,
+            [SESSION_RECORDING_IS_SAMPLED]: this.sessionId,
         })
         this._tryTakeFullSnapshot()
         this._reportStarted('sampling_overridden')
@@ -1188,7 +1195,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         this._instance.persistence?.register({
-            [SESSION_RECORDING_IS_SAMPLED]: shouldSample,
+            [SESSION_RECORDING_IS_SAMPLED]: shouldSample ? sessionId : false,
         })
     }
 
