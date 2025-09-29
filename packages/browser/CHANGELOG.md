@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.268.7
+
+### Patch Changes
+
+- [#2373](https://github.com/PostHog/posthog-js/pull/2373) [`aff9455`](https://github.com/PostHog/posthog-js/commit/aff94552ccf9257c73c3704f0ad81815436460e0) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: 2 small conditional recording fixes
+
 ## 1.268.6
 
 ### Patch Changes
