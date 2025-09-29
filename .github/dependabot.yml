@@ -1,6 +1,9 @@
 version: 2
 updates:
     - package-ecosystem: 'npm'
+      package-manager: 'pnpm'
+      commit-message:
+          prefix: 'chore(llma)'
       directory: '/packages/ai'
       schedule:
           interval: 'daily'
