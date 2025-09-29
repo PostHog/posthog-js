@@ -4,6 +4,8 @@ updates:
       package-manager: 'pnpm'
       commit-message:
           prefix: 'chore(llma)'
+      labels:
+          - release
       directory: '/packages/ai'
       schedule:
           interval: 'daily'
