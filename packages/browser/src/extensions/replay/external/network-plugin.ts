@@ -8,6 +8,7 @@
 // however, in the PR, it throws when the performance observer data is not available
 // and assumes it is running in a browser with the Request API (i.e. not IE11)
 // copying here so that we can use it before rrweb adopt it
+import { addEventListener } from './utils'
 import type { IWindow, listenerHandler, RecordPlugin } from '@rrweb/types'
 import { CapturedNetworkRequest, Headers, InitiatorType, NetworkRecordOptions } from '../../../types'
 import { isArray, isBoolean, isFormData, isNull, isNullish, isString, isUndefined, isObject } from '@posthog/core'
@@ -294,10 +295,14 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                 // This is very tricky code, and making it passive won't bring many performance benefits,
                 // so let's ignore the rule here.
                 // eslint-disable-next-line posthog-js/no-add-event-listener
-                xhr.addEventListener('readystatechange', () => {
+                const readyStateListener = () => {
                     if (xhr.readyState !== xhr.DONE) {
                         return
                     }
+
+                    // Clean up the listener immediately when done to prevent memory leaks
+                    xhr.removeEventListener('readystatechange', readyStateListener)
+
                     end = win.performance.now()
                     const responseHeaders: Headers = {}
                     const rawHeaders = xhr.getAllResponseHeaders()
@@ -340,7 +345,8 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                         .catch(() => {
                             //
                         })
-                })
+                }
+                addEventListener(xhr, 'readystatechange', readyStateListener)
 
                 originalOpen.call(xhr, method, url, async, username, password)
             }
