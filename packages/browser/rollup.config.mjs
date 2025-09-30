@@ -108,10 +108,16 @@ const plugins = (es5, noExternal) => [
             comments: false,
         },
         mangle:
-            // Don't mangle properties in no-external builds, as it is used in Browser extensions which have to go through a review process with e.g. Google, and they can be weird about obfuscated code.
-            // Don't mangle properties in the es5 build, as it relies on helpers which don't work well with mangling.
             noExternal || es5
-                ? true
+                ? {
+                      // Don't mangle properties in no-external builds, as it is used in Browser extensions which have to go through a review process with e.g. Google, and they can be weird about obfuscated code.
+                      // Don't mangle properties in the es5 build, as it relies on helpers which don't work well with mangling.
+                      properties: false,
+                      reserved: [
+                          // we don't want to emit $ since that clashes with jquery
+                          '$',
+                      ],
+                  }
                 : {
                       // Note:
                       // PROPERTY MANGLING CAN BREAK YOUR CODE
