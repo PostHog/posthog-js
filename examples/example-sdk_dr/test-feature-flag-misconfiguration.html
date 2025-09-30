@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PostHog Feature Flag Misconfiguration Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+        }
+
+        #log {
+            background-color: #2d2d2d;
+            border: 1px solid #404040;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            margin: 20px 0;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #0052a3;
+        }
+
+        .error {
+            color: #ff6b6b;
+        }
+
+        .success {
+            color: #51cf66;
+        }
+
+        .info {
+            color: #74c0fc;
+        }
+
+        .warning {
+            color: #ffd43b;
+        }
+
+        .scenario {
+            background-color: #2a2a2a;
+            border: 1px solid #404040;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+
+        h1,
+        h3 {
+            color: #ffffff;
+        }
+
+        #stats {
+            background-color: #2a2a2a;
+            border: 1px solid #404040;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>PostHog Feature Flag Misconfiguration Test</h1>
+    <p>This page tests feature flag misconfiguration detection where flags are called before PostHog has loaded.</p>
+
+    <div class="scenario">
+        <h3>Test Scenarios:</h3>
+        <p>These tests simulate common feature flag misconfigurations:</p>
+        <ul>
+            <li><strong>Flag before init</strong>: Calling isFeatureEnabled() before posthog.init()</li>
+            <li><strong>Multiple flags before init</strong>: Several flag calls before initialization</li>
+            <li><strong>Proper usage</strong>: Flags called after PostHog is properly loaded</li>
+        </ul>
+        <p><strong>Expected result</strong>: SDK Doctor should detect feature flag misconfigurations</p>
+    </div>
+
+    <div>
+        <button onclick="testFlagBeforeInit()">Test Flag Before Init (Problem)</button>
+        <button onclick="testMultipleFlagsBeforeInit()">Test Multiple Flags Before Init (Problem)</button>
+        <button onclick="testFlagAfterInit()">Test Proper Flag Usage (Good)</button>
+    </div>
+
+    <div id="stats">
+        <h3>Test Status:</h3>
+        <p>Tests Run: <span id="testsRun">0</span></p>
+        <p>Flags Called: <span id="flagsCalled">0</span></p>
+        <p>Misconfigurations: <span id="misconfigurations">0</span></p>
+    </div>
+    <div id="log"></div>
+    <script>
+        // Configuration
+        const API_KEY = 'YOUR_POSTHOG_API_KEY'; // Replace with your PostHog project API key (format: phc_...)
+        const API_HOST = 'http://localhost:8010'; // Replace with your PostHog instance URL
+
+        // Track test state
+        let testsRun = 0;
+        let flagsCalled = 0;
+        let misconfigurations = 0;
+        let testRunning = false;
+
+        // Dynamic version fetching
+        let currentVersion = '1.260.2'; // Fallback
+
+        // Fetch latest PostHog JS versions from changelog (much simpler!)
+        async function fetchLatestVersions() {
+            try {
+                log('🔄 Fetching latest PostHog JS SDK versions from CHANGELOG.md...', 'info');
+                const response = await fetch('https://raw.githubusercontent.com/PostHog/posthog-js/main/packages/browser/CHANGELOG.md');
+                if (response.ok) {
+                    const changelogText = await response.text();
+
+                    // Extract version numbers using simple regex - much cleaner!
+                    const versionMatches = changelogText.match(/^## (\d+\.\d+\.\d+)$/gm);
+
+                    if (versionMatches) {
+                        const versions = versionMatches
+                            .map(match => match.replace(/^## /, ''))
+                            .filter(v => /^\d+\.\d+\.\d+$/.test(v)) // Ensure valid semver format
+                            .slice(0, 6); // Get latest 6 versions
+
+                        currentVersion = versions[0];
+
+                        log(`✅ Latest JS version: ${currentVersion}`, 'success');
+                    } else {
+                        log(`⚠️ No versions found in changelog, using fallback`, 'warning');
+                    }
+                } else {
+                    log(`⚠️ Failed to fetch changelog from GitHub, using fallback`, 'warning');
+                }
+            } catch (error) {
+                log(`⚠️ Error fetching versions: ${error.message}, using fallback`, 'warning');
+            }
+        }
+
+        // Initialize PostHog with the latest version
+        function initPostHogWithLatestVersion() {
+            // Initialize PostHog snippet
+            !function (t, e) { var o, n, p, r; e.__SV || (window.posthog = e, e._i = [], e.init = function (i, s, a) { function g(t, e) { var o = e.split("."); 2 == o.length && (t = t[o[0]], e = o[1]); t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))) } } (p = t.createElement("script")).type = "text/javascript", p.async = !0, p.src = s.api_host + "/static/array.js", (r = t.getElementsByTagName("script")[0]).parentNode.insertBefore(p, r); var u = e; for (void 0 !== a ? u = e[a] = [] : a = "posthog", u.people = u.people || [], u.toString = function (t) { var e = "posthog"; return "posthog" !== a && (e += "." + a), t || (e += " (stub)"), e }, u.people.toString = function () { return u.toString(1) + ".people (stub)" }, o = "capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "), n = 0; n < o.length; n++)g(u, o[n]); e._i.push([i, s, a]) }, e.__SV = 1) }(document, window.posthog || []);
+
+            // Initialize with the latest version
+            posthog.init(API_KEY, {
+                api_host: API_HOST,
+                person_profiles: 'identified_only',
+                debug: true,
+                capture_pageview: false,
+                disable_session_recording: true,
+                autocapture: false
+            });
+
+            // Override version to report the fetched latest version
+            setTimeout(() => {
+                if (window.posthog && window.posthog.capture) {
+                    const originalCapture = window.posthog.capture;
+                    window.posthog.capture = function (...args) {
+                        if (args[1] && typeof args[1] === 'object') {
+                            args[1].$lib_version = currentVersion;
+                        }
+                        return originalCapture.apply(this, args);
+                    };
+                    log(`✅ PostHog initialized with version: ${currentVersion}`, 'success');
+                }
+            }, 1000);
+        }
+
+        function updateCounts() {
+            document.getElementById('testsRun').textContent = testsRun;
+            document.getElementById('flagsCalled').textContent = flagsCalled;
+            document.getElementById('misconfigurations').textContent = misconfigurations;
+        }
+
+        function log(message, className = '') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            if (className) {
+                entry.className = className;
+            }
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        // Global counter to ensure unique session IDs
+        let sessionCounter = 0;
+
+        // Generate truly unique PostHog-style session IDs
+        function generateSessionId() {
+            sessionCounter++;
+            const timestamp = (Date.now() + sessionCounter * 1000).toString(16); // Add counter to timestamp
+            const random1 = Math.random().toString(16).substr(2, 4);
+            const random2 = Math.random().toString(16).substr(2, 4);
+            const random3 = Math.random().toString(16).substr(2, 4);
+            const random4 = (Math.random().toString(16) + sessionCounter.toString(16)).substr(2, 12);
+            const sessionId = `${timestamp.substr(0, 8)}-${random1}-${random2}-${random3}-${random4}`;
+            console.log(`Generated unique session ID #${sessionCounter}: ${sessionId}`);
+            return sessionId;
+        }
+
+        // Generate consistent distinct_id per test session
+        let currentDistinctId = null;
+
+        function getOrGenerateDistinctId() {
+            if (!currentDistinctId) {
+                currentDistinctId = 'flag-test-user-' + Math.random().toString(36).substring(7);
+                console.log(`Generated distinct_id: ${currentDistinctId}`);
+            }
+            return currentDistinctId;
+        }
+
+        // Send events that simulate feature flag misconfigurations
+        async function sendMisconfigEvent(eventName, sessionId, properties = {}) {
+            const eventData = {
+                api_key: API_KEY,
+                event: eventName,
+                properties: {
+                    distinct_id: getOrGenerateDistinctId(),
+                    $lib: 'web',
+                    $lib_version: currentVersion,
+                    $session_id: sessionId,
+                    $current_url: window.location.href,
+                    $host: window.location.host || 'localhost',
+                    $pathname: window.location.pathname || '/test',
+                    $browser: 'Chrome',
+                    $device_type: 'Desktop',
+                    $os: 'Mac OS X',
+                    token: API_KEY,
+                    ...properties
+                },
+                timestamp: new Date().toISOString()
+            };
+
+            try {
+                const response = await fetch(`${API_HOST}/e/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+                    },
+                    body: JSON.stringify(eventData)
+                });
+
+                if (response.ok) {
+                    log(`✓ Sent ${eventName} event`, 'success');
+                    return true;
+                } else {
+                    const errorText = await response.text();
+                    log(`❌ Failed: ${response.status} - ${errorText}`, 'error');
+                    return false;
+                }
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        window.testFlagBeforeInit = async function () {
+            if (testRunning) return;
+            testRunning = true;
+            testsRun++;
+            updateCounts();
+
+            // Reset distinct_id for this test session
+            currentDistinctId = null;
+
+            log('=== 🚨 Testing Flag Before Init ===', 'warning');
+            log('This will simulate feature flag called BEFORE PostHog initialization', 'info');
+            log('');
+
+            try {
+                const sessionId = generateSessionId();
+                log(`🔍 Using session ID: ${sessionId}`, 'info');
+                log(`🔍 Using distinct_id: ${getOrGenerateDistinctId()}`, 'info');
+
+                // Simulate feature flag call before init (this creates the misconfiguration)
+                log('1️⃣ Simulating feature flag called before initialization...', 'warning');
+                await sendMisconfigEvent('$feature_flag_called', sessionId, {
+                    $feature_flag: 'test-flag-before-init',
+                    $feature_flag_response: false,
+                    $feature_flag_bootstrapped: false,
+                    flag_call_timing: 'before_init',
+                    misconfiguration_type: 'flag_before_init'
+                });
+
+                flagsCalled++;
+                misconfigurations++;
+                updateCounts();
+
+                log(`❌ Flag called: 'test-flag-before-init' before init`, 'error');
+                log('🚨 MISCONFIGURATION: Flag called before PostHog loaded!', 'error');
+
+                // Wait a moment
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                // Now simulate PostHog initialization (after the flag was called)
+                log('', '');
+                log('2️⃣ Now simulating PostHog initialization (too late!)...', 'info');
+                await sendMisconfigEvent('$pageview', sessionId, {
+                    init_timing: 'after_flag_call',
+                    scenario: 'flag_before_init_test'
+                });
+
+                log('✅ PostHog initialization simulated', 'success');
+                log('💡 But flag was already called before init - misconfiguration detected!', 'warning');
+                log('📊 SDK Doctor should detect: "Feature flag misconfiguration"', 'info');
+
+            } catch (error) {
+                log(`❌ Test error: ${error.message}`, 'error');
+            }
+
+            log('');
+            log('=== ⚠️ Flag Before Init Test Complete! ===', 'warning');
+
+            setTimeout(() => testRunning = false, 3000);
+        };
+
+        window.testFlagAfterInit = async function () {
+            if (testRunning) return;
+            testRunning = true;
+            testsRun++;
+            updateCounts();
+
+            // Reset distinct_id for this test session
+            currentDistinctId = null;
+
+            log('=== ✅ Testing Proper Flag Usage ===', 'success');
+            log('This will simulate proper PostHog initialization FIRST, then flag calls', 'info');
+            log('');
+
+            try {
+                const sessionId = generateSessionId();
+
+                // Simulate PostHog initialization first
+                log('1️⃣ Simulating PostHog initialization...', 'info');
+                await sendMisconfigEvent('$pageview', sessionId, {
+                    init_timing: 'proper_init_first',
+                    scenario: 'proper_flag_usage_test'
+                });
+
+                log('✅ PostHog initialization simulated', 'success');
+
+                // Wait a moment to simulate loading time
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                // Now simulate proper flag calls AFTER initialization
+                log('2️⃣ Now calling feature flags AFTER initialization...', 'info');
+
+                const flagsToTest = ['test-flag-after-init', 'proper-usage-flag', 'well-configured-flag'];
+
+                for (let i = 0; i < flagsToTest.length; i++) {
+                    const flagName = flagsToTest[i];
+
+                    // Simulate proper flag call AFTER PostHog initialization
+                    await sendMisconfigEvent('$feature_flag_called', sessionId, {
+                        $feature_flag: flagName,
+                        $feature_flag_response: Math.random() > 0.5, // Random true/false
+                        $feature_flag_bootstrapped: false, // Bootstrapping is NOT required for proper usage
+                        flag_call_timing: 'after_init',
+                        proper_usage: true
+                    });
+
+                    flagsCalled++;
+                    log(`✅ Flag ${i + 1}: isFeatureEnabled('${flagName}') called properly`, 'success');
+
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+
+                updateCounts();
+
+                log('');
+                log('🎉 PROPER USAGE: All flags called after PostHog initialization!', 'success');
+                log('📊 SDK Doctor should show: "Feature flag health is good"', 'info');
+                log('🔑 Key pattern: Flags called AFTER $pageview (timing-based, not bootstrap-dependent)', 'info');
+
+            } catch (error) {
+                log(`❌ Test error: ${error.message}`, 'error');
+            }
+
+            log('');
+            log('=== ✅ Proper Flag Usage Test Complete! ===', 'success');
+
+            setTimeout(() => testRunning = false, 3000);
+        };
+
+        window.testMultipleFlagsBeforeInit = async function () {
+            if (testRunning) return;
+            testRunning = true;
+            testsRun++;
+            updateCounts();
+
+            // Reset distinct_id for this test session
+            currentDistinctId = null;
+
+            log('=== 🚨 Testing Multiple Flags Before Init ===', 'error');
+            log('This will simulate SEVERAL flags called before initializing PostHog', 'info');
+            log('');
+
+            try {
+                const sessionId = generateSessionId();
+                log(`🔍 Using session ID: ${sessionId}`, 'info');
+                log(`🔍 Using distinct_id: ${getOrGenerateDistinctId()}`, 'info');
+
+                // Simulate multiple feature flags called BEFORE initializing PostHog
+                log('1️⃣ Simulating multiple feature flags before initialization...', 'warning');
+
+                const flags = [
+                    'header-redesign',
+                    'new-checkout-flow',
+                    'dark-mode-toggle',
+                    'beta-dashboard',
+                    'advanced-analytics'
+                ];
+
+                for (let i = 0; i < flags.length; i++) {
+                    const flagName = flags[i];
+
+                    // Simulate flag call BEFORE init (this creates the misconfiguration)
+                    await sendMisconfigEvent('$feature_flag_called', sessionId, {
+                        $feature_flag: flagName,
+                        $feature_flag_response: false, // Usually false when called before init
+                        $feature_flag_bootstrapped: false,
+                        flag_call_timing: 'before_init',
+                        misconfiguration_type: 'multiple_flags_before_init',
+                        flag_sequence: i + 1
+                    });
+
+                    flagsCalled++;
+                    misconfigurations++;
+
+                    log(`❌ Flag ${i + 1}: isFeatureEnabled('${flagName}') called before init`, 'error');
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+
+                updateCounts();
+                log('', '');
+                log(`🚨 SEVERE MISCONFIGURATION: ${flags.length} flags called before init!`, 'error');
+
+                // Wait a moment
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                // Now simulate PostHog initialization (too late!)
+                log('', '');
+                log('2️⃣ Finally simulating PostHog initialization (way too late!)...', 'info');
+                await sendMisconfigEvent('$pageview', sessionId, {
+                    init_timing: 'after_multiple_flag_calls',
+                    scenario: 'multiple_flags_before_init_test',
+                    flags_called_before: flags.length
+                });
+
+                log('✅ PostHog initialization simulated', 'success');
+                log(`💥 But ${flags.length} flags were already called before init!`, 'error');
+                log('📊 SDK Doctor should detect: "Multiple feature flag misconfigurations"', 'info');
+                log(`📈 Expected detection count: ${flags.length} flags`, 'warning');
+
+            } catch (error) {
+                log(`❌ Test error: ${error.message}`, 'error');
+            }
+
+            log('');
+            log('=== 💥 Multiple Flags Before Init Test Complete! ===', 'error');
+
+            setTimeout(() => testRunning = false, 4000);
+        };
+
+        // Initialize page
+        window.addEventListener('load', async () => {
+            log('🚀 Feature flag misconfiguration test loaded', 'info');
+            await fetchLatestVersions();
+            log(`Using PostHog JS SDK version: ${currentVersion}`, 'info');
+
+            // Initialize PostHog with the fetched latest version
+            initPostHogWithLatestVersion();
+
+            log('Ready to test feature flag misconfigurations!', 'success');
+            log('📋 Available tests:', 'info');
+            log('  • Flag Before Init - Calls flag before posthog.init()', 'info');
+            log('  • Multiple Flags Before Init - Calls several flags before init', 'info');
+            log('  • Proper Flag Usage - Initializes first, then calls flags', 'info');
+            log('');
+            updateCounts();
+        });
+    </script>
+</body>
+
+</html>
