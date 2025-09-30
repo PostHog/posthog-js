@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,6 +14,7 @@
             background-color: #1a1a1a;
             color: #e0e0e0;
         }
+
         #log {
             background-color: #2d2d2d;
             border: 1px solid #404040;
@@ -24,6 +26,7 @@
             overflow-y: auto;
             margin: 20px 0;
         }
+
         button {
             padding: 10px 20px;
             margin: 5px;
@@ -35,9 +38,11 @@
             border-radius: 5px;
             transition: background-color 0.2s;
         }
+
         button:hover {
             background-color: #0052a3;
         }
+
         .scenario-group {
             margin: 20px 0;
             padding: 15px;
@@ -45,16 +50,19 @@
             border-radius: 5px;
             background-color: #2a2a2a;
         }
+
         .scenario-title {
             font-size: 18px;
             font-weight: bold;
             margin-bottom: 10px;
             color: #74c0fc;
         }
+
         .scenario-description {
             margin-bottom: 10px;
             color: #b0b0b0;
         }
+
         .expected-results {
             background-color: #1e3a1e;
             padding: 10px;
@@ -62,15 +70,19 @@
             margin: 10px 0;
             font-size: 12px;
         }
+
         .error {
             color: #ff6b6b;
         }
+
         .success {
             color: #51cf66;
         }
+
         .info {
             color: #74c0fc;
         }
+
         .version-info {
             background-color: #2a2a3a;
             padding: 8px;
@@ -81,9 +93,12 @@
         }
     </style>
 </head>
+
 <body>
     <h1>🕒 Time-Based Version Detection Test</h1>
-    <p><strong>NEW APPROACH:</strong> Tests the dual check logic - versions are "Outdated" if <code>releasesBehind >= 3</code> OR <code>(releasesBehind >= 2 && versionAge > 48h)</code></p>
+    <p>Tests the dual check logic - versions are "Outdated" if
+        <code>releasesBehind >= 3</code> OR <code>(releasesBehind >= 2 && versionAge > 48h)</code>
+    </p>
 
     <div class="scenario-group">
         <div class="scenario-title">📝 Current Setup</div>
@@ -92,7 +107,8 @@
 
     <div class="scenario-group">
         <div class="scenario-title">📚 Select SDK to Test</div>
-        <select id="sdkSelector" onchange="changeSdk()" style="padding: 8px; font-size: 16px; margin: 10px 0; background-color: #2a2a2a; color: #e0e0e0; border: 1px solid #404040;">
+        <select id="sdkSelector" onchange="changeSdk()"
+            style="padding: 8px; font-size: 16px; margin: 10px 0; background-color: #2a2a2a; color: #e0e0e0; border: 1px solid #404040;">
             <option value="web">🌐 Web SDK (posthog-js)</option>
             <option value="python">🐍 Python SDK</option>
             <option value="node">📗 Node.js SDK</option>
@@ -123,7 +139,8 @@
                 <button onclick="testRealCurrentVersion()">✅ Current Version (16 events)</button>
                 <button onclick="testRealCloseEnough()">🟡 1 Release Behind (16 events)</button>
                 <button onclick="testRealOutdated()">🔴 6+ Releases Behind (16 events)</button>
-                <button onclick="testWebSdkEdgeCase1264()">🎯 Web Edge: v1.264.2 (3+ Behind, 5 Days - Should be Close Enough)</button>
+                <button onclick="testWebSdkEdgeCase1264()">🎯 Web Edge: v1.264.2 (3+ Behind, 5 Days - Should be Close
+                    Enough)</button>
                 <button onclick="testAllRealVersions()">🧪 All Real Version Tests (48 events)</button>
             </div>
 
@@ -141,7 +158,8 @@
                 <button onclick="testPythonRealCurrentVersion()">✅ Current Python Version (16 events)</button>
                 <button onclick="testPythonRealCloseEnough()">🟡 1 Release Behind (16 events)</button>
                 <button onclick="testPythonRealOutdated()">🔴 6+ Releases Behind (16 events)</button>
-                <button onclick="testPythonEdgeCase672()">🎯 Python Edge: v6.7.2 (3 Behind, 13 Days - Should be Close Enough)</button>
+                <button onclick="testPythonEdgeCase672()">🎯 Python Edge: v6.7.2 (3 Behind, 13 Days - Should be Close
+                    Enough)</button>
                 <button onclick="testAllPythonRealVersions()">🧪 All Python Real Tests (48 events)</button>
             </div>
 
@@ -159,7 +177,8 @@
                 <button onclick="testNodeRealCurrentVersion()">✅ Current Node.js Version (16 events)</button>
                 <button onclick="testNodeRealCloseEnough()">🟡 1 Release Behind (16 events)</button>
                 <button onclick="testNodeRealOutdated()">🔴 6+ Releases Behind (16 events)</button>
-                <button onclick="testNodeEdgeCase581()">🎯 Node.js Edge: v5.8.1 (3 Behind, 20 Days - Should be Close Enough)</button>
+                <button onclick="testNodeEdgeCase581()">🎯 Node.js Edge: v5.8.1 (3 Behind, 20 Days - Should be Close
+                    Enough)</button>
                 <button onclick="testAllNodeRealVersions()">🧪 All Node.js Real Tests (48 events)</button>
             </div>
 
@@ -176,7 +195,8 @@
                 <button onclick="testReactNativeCurrentVersion()">🟢 React Native Current Version</button>
                 <button onclick="testReactNativeCloseEnoughVersion()">🟡 React Native Close Enough Version</button>
                 <button onclick="testReactNativeOutdatedVersion()">🔴 React Native Outdated Version</button>
-                <button onclick="testReactNativeEdgeCase443()">🎯 React Native Edge: v4.4.3 (3 Behind, 20 Days - Should be Close Enough)</button>
+                <button onclick="testReactNativeEdgeCase443()">🎯 React Native Edge: v4.4.3 (3 Behind, 20 Days - Should
+                    be Close Enough)</button>
                 <button onclick="testAllReactNativeRealVersions()">🧪 All React Native Real Tests (48 events)</button>
             </div>
 
@@ -193,7 +213,8 @@
                 <button onclick="testFlutterCurrentVersion()">🟢 Flutter Current Version</button>
                 <button onclick="testFlutterCloseEnoughVersion()">🟡 Flutter Close Enough Version</button>
                 <button onclick="testFlutterOutdatedVersion()">🔴 Flutter Outdated Version</button>
-                <button onclick="testFlutterEdgeCase542()">🎯 Flutter Edge: v5.4.2 (3 Behind, 9 Days - Should be Close Enough)</button>
+                <button onclick="testFlutterEdgeCase542()">🎯 Flutter Edge: v5.4.2 (3 Behind, 9 Days - Should be Close
+                    Enough)</button>
                 <button onclick="testAllFlutterRealVersions()">🧪 All Flutter Real Tests (48 events)</button>
             </div>
 
@@ -211,7 +232,8 @@
                 <button onclick="testiOSRealCurrentVersion()">✅ Current iOS Version (16 events)</button>
                 <button onclick="testiOSRealCloseEnough()">🟡 1 Release Behind (16 events)</button>
                 <button onclick="testiOSRealOutdated()">🔴 6+ Releases Behind (16 events)</button>
-                <button onclick="testiOSEdgeCase()">🎯 iOS Edge: v3.30.0 (2 Behind, 54 Days - Should be Close Enough with 60d threshold)</button>
+                <button onclick="testiOSEdgeCase()">🎯 iOS Edge: v3.30.0 (2 Behind, 54 Days - Should be Close Enough
+                    with 60d threshold)</button>
                 <button onclick="testAlliOSRealVersions()">🧪 All iOS Real Tests (48 events)</button>
             </div>
         </div>
@@ -228,7 +250,8 @@
                 <button onclick="testAndroidRealCurrentVersion()">✅ Current Android Version (16 events)</button>
                 <button onclick="testAndroidRealCloseEnough()">🟡 1 Release Behind (16 events)</button>
                 <button onclick="testAndroidRealOutdated()">🔴 6+ Releases Behind (16 events)</button>
-                <button onclick="testAndroidEdgeCase()">🎯 Android Edge: v3.21.0 (3 Behind, 25 Days - Should be Close Enough with 30d threshold)</button>
+                <button onclick="testAndroidEdgeCase()">🎯 Android Edge: v3.21.0 (3 Behind, 25 Days - Should be Close
+                    Enough with 30d threshold)</button>
                 <button onclick="testAllAndroidRealVersions()">🧪 All Android Real Tests (48 events)</button>
             </div>
         </div>
@@ -236,17 +259,19 @@
         <div id="goTests" class="sdk-tests" style="display: none;">
             <div class="scenario-group">
                 <div class="scenario-title">🔷 Go SDK Real Version Tests</div>
-                <div class="scenario-description">Tests for PostHog Go SDK time-based detection using real release data.</div>
+                <div class="scenario-description">Tests for PostHog Go SDK time-based detection using real release data.
+                </div>
 
                 <p><strong>Expected Badge Results:</strong></p>
                 <p>✅ Current: v1.6.3 (matches latest)<br>
-                🟡 Close enough: v1.6.2 (1 release behind)<br>
-                🔴 Outdated: v1.6.0 (3+ releases behind, >48h old)</p>
+                    🟡 Close enough: v1.6.2 (1 release behind)<br>
+                    🔴 Outdated: v1.6.0 (3+ releases behind, >48h old)</p>
 
                 <button onclick="testGoRealCurrentVersion()">✅ Current Go Version (16 events)</button>
                 <button onclick="testGoRealCloseEnough()">🟡 1 Release Behind (16 events)</button>
                 <button onclick="testGoRealOutdated()">🔴 3+ Releases Behind (16 events)</button>
-                <button onclick="testGoEdgeCaseSimplified()">🎯 Go Edge: v1.6.6 (2 Behind, Should Show Close Enough)</button>
+                <button onclick="testGoEdgeCaseSimplified()">🎯 Go Edge: v1.6.6 (2 Behind, Should Show Close
+                    Enough)</button>
 
                 <button onclick="testAllGoRealVersions()">🧪 All Go Real Tests (48 events)</button>
             </div>
@@ -256,7 +281,8 @@
             <div class="scenario-group">
                 <div class="scenario-title">🐘 PHP SDK Simplified Tests</div>
                 <div class="scenario-description">
-                    PHP SDK uses simplified logic: 1-2 releases behind = "Close enough", 3+ = "Outdated" (no time-based detection needed)
+                    PHP SDK uses simplified logic: 1-2 releases behind = "Close enough", 3+ = "Outdated" (no time-based
+                    detection needed)
                 </div>
                 <div id="php-version-info" class="version-info">Loading PHP version data...</div>
                 <button onclick="testPhpCurrentVersion()">✅ Current PHP Version (16 events)</button>
@@ -277,7 +303,8 @@
                 <button onclick="testRubyRealCurrentVersion()">✅ Current Ruby Version (16 events)</button>
                 <button onclick="testRubyRealCloseEnough()">🟡 1 Release Behind (16 events)</button>
                 <button onclick="testRubyRealOutdated()">🔴 3+ Releases Behind (16 events)</button>
-                <button onclick="testRubyEdgeCase()">🎯 Ruby Edge: v2.7.0 (3 Behind, Test Days - Should be Close Enough with adjusted threshold)</button>
+                <button onclick="testRubyEdgeCase()">🎯 Ruby Edge: v2.7.0 (3 Behind, Test Days - Should be Close Enough
+                    with adjusted threshold)</button>
                 <button onclick="testAllRubyRealVersions()">🧪 All Ruby Real Tests (48 events)</button>
             </div>
         </div>
@@ -286,7 +313,8 @@
             <div class="scenario-group">
                 <div class="scenario-title">⚗️ Elixir SDK Simplified Tests</div>
                 <div class="scenario-description">
-                    Elixir SDK uses simplified logic: 1-2 releases behind = "Close enough", 3+ = "Outdated" (no time-based detection needed)
+                    Elixir SDK uses simplified logic: 1-2 releases behind = "Close enough", 3+ = "Outdated" (no
+                    time-based detection needed)
                 </div>
                 <div id="elixir-version-info" class="version-info">Loading Elixir version data...</div>
                 <button onclick="testElixirCurrentVersion()">✅ Current Elixir Version (16 events)</button>
@@ -301,7 +329,8 @@
             <div class="scenario-group">
                 <div class="scenario-title">🔷 .NET SDK Simplified Tests</div>
                 <div class="scenario-description">
-                    .NET SDK uses simplified logic: 1-2 releases behind = "Close enough", 3+ = "Outdated" (no time-based detection needed)
+                    .NET SDK uses simplified logic: 1-2 releases behind = "Close enough", 3+ = "Outdated" (no time-based
+                    detection needed)
                 </div>
                 <div id="dotnet-version-info" class="version-info">Loading .NET version data...</div>
                 <button onclick="testDotnetCurrentVersion()">✅ Current .NET Version (16 events)</button>
@@ -343,23 +372,23 @@
                 const response = await fetch('https://raw.githubusercontent.com/PostHog/posthog-js/main/packages/browser/CHANGELOG.md', {
                     cache: 'no-cache'
                 });
-                
+
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
-                
+
                 const changelog = await response.text();
-                
+
                 // Parse versions and dates - looking for "## 1.2.3" format
                 const versionMatches = changelog.match(/^## (\d+\.\d+\.\d+)$/gm);
-                
+
                 if (versionMatches && versionMatches.length >= 5) {
                     versions = versionMatches
                         .map(match => match.replace(/^## /, ''))
                         .slice(0, 10); // Get first 10 versions
-                    
+
                     latestVersion = versions[0];
-                    
+
                     // For release dates, we'll simulate realistic dates
                     const now = new Date();
                     versionDates[versions[0]] = new Date(now.getTime() - (6 * 60 * 60 * 1000)); // 6 hours ago (recent)
@@ -367,7 +396,7 @@
                     versionDates[versions[2]] = new Date(now.getTime() - (1 * 60 * 60 * 1000)); // 1 hour ago (VERY recent for dual check test)
                     versionDates[versions[3]] = new Date(now.getTime() - (5 * 24 * 60 * 60 * 1000)); // 5 days ago (old)
                     versionDates[versions[4]] = new Date(now.getTime() - (10 * 24 * 60 * 60 * 1000)); // 10 days ago (very old)
-                    
+
                     log(`✅ Latest JS SDK: ${latestVersion}`, 'success');
                     log(`📋 Found ${versions.length} versions for testing`, 'info');
                     updateVersionDisplay();
@@ -596,7 +625,7 @@
             }
 
             // Load PostHog from local server for SDK testing
-            !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]);t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+            !function (t, e) { var o, n, p, r; e.__SV || (window.posthog = e, e._i = [], e.init = function (i, s, a) { function g(t, e) { var o = e.split("."); 2 == o.length && (t = t[o[0]], e = o[1]); t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))) } } (p = t.createElement("script")).type = "text/javascript", p.async = !0, p.src = s.api_host + "/static/array.js", (r = t.getElementsByTagName("script")[0]).parentNode.insertBefore(p, r); var u = e; for (void 0 !== a ? u = e[a] = [] : a = "posthog", u.people = u.people || [], u.toString = function (t) { var e = "posthog"; return "posthog" !== a && (e += "." + a), t || (e += " (stub)"), e }, u.people.toString = function () { return u.toString(1) + ".people (stub)" }, o = "capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "), n = 0; n < o.length; n++)g(u, o[n]); e._i.push([i, s, a]) }, e.__SV = 1) }(document, window.posthog || []);
 
             posthog.init(currentApiKey, {
                 api_host: 'http://localhost:8010',
@@ -614,7 +643,7 @@
         async function sendTestEvent(version, scenario, eventIndex) {
             try {
                 const releaseAge = versionDates[version] ? Math.round((Date.now() - versionDates[version].getTime()) / (1000 * 60 * 60)) : 'unknown';
-                
+
                 posthog.capture('test_time_based_detection', {
                     $lib: 'web',
                     $lib_version: version,
@@ -652,7 +681,7 @@
                 window.posthog.reset();
             }
 
-            !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]);t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+            !function (t, e) { var o, n, p, r; e.__SV || (window.posthog = e, e._i = [], e.init = function (i, s, a) { function g(t, e) { var o = e.split("."); 2 == o.length && (t = t[o[0]], e = o[1]); t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))) } } (p = t.createElement("script")).type = "text/javascript", p.async = !0, p.src = s.api_host + "/static/array.js", (r = t.getElementsByTagName("script")[0]).parentNode.insertBefore(p, r); var u = e; for (void 0 !== a ? u = e[a] = [] : a = "posthog", u.people = u.people || [], u.toString = function (t) { var e = "posthog"; return "posthog" !== a && (e += "." + a), t || (e += " (stub)"), e }, u.people.toString = function () { return u.toString(1) + ".people (stub)" }, o = "capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "), n = 0; n < o.length; n++)g(u, o[n]); e._i.push([i, s, a]) }, e.__SV = 1) }(document, window.posthog || []);
 
             posthog.init(currentApiKey, {
                 api_host: 'http://localhost:8010',
@@ -1140,7 +1169,7 @@
             }
 
             // Initialize PostHog normally (we'll simulate React Native events)
-            !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]);t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+            !function (t, e) { var o, n, p, r; e.__SV || (window.posthog = e, e._i = [], e.init = function (i, s, a) { function g(t, e) { var o = e.split("."); 2 == o.length && (t = t[o[0]], e = o[1]); t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))) } } (p = t.createElement("script")).type = "text/javascript", p.async = !0, p.src = s.api_host + "/static/array.js", (r = t.getElementsByTagName("script")[0]).parentNode.insertBefore(p, r); var u = e; for (void 0 !== a ? u = e[a] = [] : a = "posthog", u.people = u.people || [], u.toString = function (t) { var e = "posthog"; return "posthog" !== a && (e += "." + a), t || (e += " (stub)"), e }, u.people.toString = function () { return u.toString(1) + ".people (stub)" }, o = "capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "), n = 0; n < o.length; n++)g(u, o[n]); e._i.push([i, s, a]) }, e.__SV = 1) }(document, window.posthog || []);
 
             posthog.init(currentApiKey, {
                 api_host: HOST,
@@ -1413,7 +1442,7 @@
                 window.posthog.reset();
             }
 
-            !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]);t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+            !function (t, e) { var o, n, p, r; e.__SV || (window.posthog = e, e._i = [], e.init = function (i, s, a) { function g(t, e) { var o = e.split("."); 2 == o.length && (t = t[o[0]], e = o[1]); t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))) } } (p = t.createElement("script")).type = "text/javascript", p.async = !0, p.src = s.api_host + "/static/array.js", (r = t.getElementsByTagName("script")[0]).parentNode.insertBefore(p, r); var u = e; for (void 0 !== a ? u = e[a] = [] : a = "posthog", u.people = u.people || [], u.toString = function (t) { var e = "posthog"; return "posthog" !== a && (e += "." + a), t || (e += " (stub)"), e }, u.people.toString = function () { return u.toString(1) + ".people (stub)" }, o = "capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "), n = 0; n < o.length; n++)g(u, o[n]); e._i.push([i, s, a]) }, e.__SV = 1) }(document, window.posthog || []);
 
             posthog.init(currentApiKey, {
                 api_host: 'http://localhost:8010',
@@ -2391,7 +2420,7 @@
             }
 
             // Initialize PostHog normally (we'll simulate Node.js events)
-            !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]);t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+            !function (t, e) { var o, n, p, r; e.__SV || (window.posthog = e, e._i = [], e.init = function (i, s, a) { function g(t, e) { var o = e.split("."); 2 == o.length && (t = t[o[0]], e = o[1]); t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))) } } (p = t.createElement("script")).type = "text/javascript", p.async = !0, p.src = s.api_host + "/static/array.js", (r = t.getElementsByTagName("script")[0]).parentNode.insertBefore(p, r); var u = e; for (void 0 !== a ? u = e[a] = [] : a = "posthog", u.people = u.people || [], u.toString = function (t) { var e = "posthog"; return "posthog" !== a && (e += "." + a), t || (e += " (stub)"), e }, u.people.toString = function () { return u.toString(1) + ".people (stub)" }, o = "capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "), n = 0; n < o.length; n++)g(u, o[n]); e._i.push([i, s, a]) }, e.__SV = 1) }(document, window.posthog || []);
 
             posthog.init(currentApiKey, {
                 api_host: HOST,
@@ -2900,7 +2929,7 @@
             }
 
             // Initialize PostHog directly with snippet (bypasses CORS)
-            !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]);t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+            !function (t, e) { var o, n, p, r; e.__SV || (window.posthog = e, e._i = [], e.init = function (i, s, a) { function g(t, e) { var o = e.split("."); 2 == o.length && (t = t[o[0]], e = o[1]); t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))) } } (p = t.createElement("script")).type = "text/javascript", p.async = !0, p.src = s.api_host + "/static/array.js", (r = t.getElementsByTagName("script")[0]).parentNode.insertBefore(p, r); var u = e; for (void 0 !== a ? u = e[a] = [] : a = "posthog", u.people = u.people || [], u.toString = function (t) { var e = "posthog"; return "posthog" !== a && (e += "." + a), t || (e += " (stub)"), e }, u.people.toString = function () { return u.toString(1) + ".people (stub)" }, o = "capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "), n = 0; n < o.length; n++)g(u, o[n]); e._i.push([i, s, a]) }, e.__SV = 1) }(document, window.posthog || []);
 
             // Initialize with local PostHog
             posthog.init(currentApiKey, {
@@ -2924,7 +2953,7 @@
                         }
                         // Also override any version reporting
                         const originalCapture = window.posthog.capture;
-                        window.posthog.capture = function(...args) {
+                        window.posthog.capture = function (...args) {
                             if (args[1] && typeof args[1] === 'object') {
                                 args[1].$lib_version = version;
                             }
@@ -3373,7 +3402,7 @@
             if (window.posthog) {
                 window.posthog.reset();
             }
-            !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]);t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+            !function (t, e) { var o, n, p, r; e.__SV || (window.posthog = e, e._i = [], e.init = function (i, s, a) { function g(t, e) { var o = e.split("."); 2 == o.length && (t = t[o[0]], e = o[1]); t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))) } } (p = t.createElement("script")).type = "text/javascript", p.async = !0, p.src = s.api_host + "/static/array.js", (r = t.getElementsByTagName("script")[0]).parentNode.insertBefore(p, r); var u = e; for (void 0 !== a ? u = e[a] = [] : a = "posthog", u.people = u.people || [], u.toString = function (t) { var e = "posthog"; return "posthog" !== a && (e += "." + a), t || (e += " (stub)"), e }, u.people.toString = function () { return u.toString(1) + ".people (stub)" }, o = "capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "), n = 0; n < o.length; n++)g(u, o[n]); e._i.push([i, s, a]) }, e.__SV = 1) }(document, window.posthog || []);
             posthog.init(currentApiKey, {
                 api_host: 'http://localhost:8010',
                 debug: true,
@@ -3541,7 +3570,7 @@
         }
 
         // Initialize on page load
-        window.onload = async function() {
+        window.onload = async function () {
             updateApiKeyDisplay();
             log('🕒 Enhanced Time-Based Detection Test Ready', 'success');
             log('📱 NEW: Multi-SDK support + Real version tests + 🧪 Mock edge case tests', 'info');
@@ -3806,7 +3835,7 @@
 
                 for (let i = 0; i < patterns.length; i++) {
                     const matches = [...text.matchAll(patterns[i])];
-                    log(`🔍 Pattern ${i+1} found ${matches.length} matches`, 'info');
+                    log(`🔍 Pattern ${i + 1} found ${matches.length} matches`, 'info');
                     if (matches.length > 0) {
                         versionMatches = matches;
                         workingPattern = i + 1;
@@ -4378,4 +4407,5 @@
 
     </script>
 </body>
+
 </html>
