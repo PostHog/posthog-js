@@ -1,5 +1,13 @@
 # posthog-js
 
+## 1.268.9
+
+### Patch Changes
+
+- [#2378](https://github.com/PostHog/posthog-js/pull/2378) [`b920bac`](https://github.com/PostHog/posthog-js/commit/b920bac4f4c561981eb4651dc02a841a5f87cfb0) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: don't mangle to $ in no external or es5 builds
+
+- [#2376](https://github.com/PostHog/posthog-js/pull/2376) [`b5eb605`](https://github.com/PostHog/posthog-js/commit/b5eb605f193684c1e6dd9b698717810e8ac233a8) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: rotating buffer while trigger pending
+
 ## 1.268.8
 
 ### Patch Changes
