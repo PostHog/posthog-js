@@ -49,7 +49,9 @@ export function isPersistenceEnabledWithLocalStorage(
     return !!(
         posthog?.persistence &&
         !posthog.persistence.isDisabled() &&
-        posthog.config?.persistence?.includes('localStorage')
+        posthog.config.persistence &&
+        typeof posthog.config.persistence === 'string' &&
+        posthog.config.persistence.includes('localStorage')
     )
 }
 
