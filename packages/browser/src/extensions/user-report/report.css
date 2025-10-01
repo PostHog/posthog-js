@@ -1,0 +1,180 @@
+.ph-report-container {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2147483647;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif;
+}
+
+.ph-report-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 2147483646;
+}
+
+.ph-report-modal {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    width: 500px;
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.ph-report-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.ph-report-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #111827;
+    margin: 0;
+}
+
+.ph-report-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #6b7280;
+    padding: 0;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+
+.ph-report-close:hover {
+    background: #f3f4f6;
+}
+
+.ph-report-body {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.ph-report-privacy-notice {
+    background: #fef3c7;
+    border: 1px solid #fbbf24;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: #92400e;
+    line-height: 1.5;
+}
+
+.ph-report-privacy-notice strong {
+    font-weight: 600;
+}
+
+.ph-report-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 8px;
+}
+
+.ph-report-textarea {
+    width: 100%;
+    min-height: 120px;
+    padding: 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    resize: vertical;
+    margin-bottom: 16px;
+    box-sizing: border-box;
+}
+
+.ph-report-textarea:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.ph-report-footer {
+    padding: 16px 24px;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.ph-report-button {
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.ph-report-button-cancel {
+    background: white;
+    border: 1px solid #d1d5db;
+    color: #374151;
+}
+
+.ph-report-button-cancel:hover {
+    background: #f9fafb;
+}
+
+.ph-report-button-submit {
+    background: #000;
+    border: none;
+    color: white;
+}
+
+.ph-report-button-submit:hover {
+    background: #1f2937;
+}
+
+.ph-report-button-submit:disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+}
+
+.ph-report-success {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 24px;
+    text-align: center;
+}
+
+.ph-report-success-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+}
+
+.ph-report-success-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #111827;
+    margin: 0 0 8px 0;
+}
+
+.ph-report-success-message {
+    font-size: 14px;
+    color: #6b7280;
+    margin: 0 0 24px 0;
+}

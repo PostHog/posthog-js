@@ -26,6 +26,7 @@ import { PostHogExceptions } from './posthog-exceptions'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import { PostHogSurveys } from './posthog-surveys'
+import { UserReportManager } from './extensions/user-report'
 import {
     DisplaySurveyOptions,
     SurveyCallback,
@@ -172,6 +173,8 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_web_experiments: true, // disabled in beta.
     disable_surveys: false,
     disable_surveys_automatic_display: false,
+    enable_user_report: false,
+    user_report: {},
     disable_external_dependency_loading: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
@@ -323,6 +326,7 @@ export class PostHog {
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
     sessionRecording?: SessionRecording | SessionRecordingWrapper
+    _userReport?: UserReportManager
     externalIntegrations?: ExternalIntegrations
     webPerformance = new DeprecatedWebPerformanceObserver()
 
@@ -1746,6 +1750,41 @@ export class PostHog {
      */
     getSurveys(callback: SurveyCallback, forceReload = false): void {
         this.surveys.getSurveys(callback, forceReload)
+    }
+
+    /**
+     * Show the user report dialog to collect bug reports with optional screenshots and annotations.
+     * Requires `enable_user_report: true` in config.
+     *
+     * @example
+     * ```js
+     * // Basic usage
+     * posthog.showReportDialog()
+     *
+     * // With custom options
+     * posthog.showReportDialog({
+     *   title: 'Found a bug?',
+     *   description: 'Tell us what went wrong'
+     * })
+     * ```
+     *
+     * @public
+     * @param {Object} [options] Optional customization for the report dialog
+     * @param {string} [options.title] Custom title for the dialog
+     * @param {string} [options.description] Custom description text
+     */
+    showReportDialog(options?: { title?: string; description?: string }): void {
+        if (!this.config.enable_user_report) {
+            logger.warn('User report feature is not enabled. Set enable_user_report: true in config.')
+            return
+        }
+
+        if (!this._userReport) {
+            logger.info('Loading user report extension...')
+            this._userReport = new UserReportManager(this)
+        }
+
+        this._userReport.show(options)
     }
 
     /**

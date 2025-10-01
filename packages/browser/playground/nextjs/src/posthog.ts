@@ -82,6 +82,8 @@ if (typeof window !== 'undefined') {
         cookieless_mode: 'on_reject',
         __preview_flags_v2: true,
         ...configForConsent(),
+        disable_surveys: false,
+        enable_user_report: false,
     })
     // Help with debugging
     ;(window as any).posthog = posthog
