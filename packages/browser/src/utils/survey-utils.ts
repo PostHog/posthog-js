@@ -2,6 +2,7 @@ import { DisplaySurveyOptions, DisplaySurveyType, Survey, SurveyType } from '../
 import { createLogger } from '../utils/logger'
 import { PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
+import { isNullish } from '@posthog/core'
 
 export const SURVEY_LOGGER = createLogger('[Surveys]')
 
@@ -58,7 +59,19 @@ export function isPersistenceEnabledWithLocalStorage(
  * to maintain backwards compatibility.
  */
 export const getFromPersistenceWithLocalStorageFallback = (key: string, posthog?: PostHog) => {
-    if (!isPersistenceEnabledWithLocalStorage(posthog)) {
+    let value = undefined
+
+    // Try persistence if available
+    if (isPersistenceEnabledWithLocalStorage(posthog)) {
+        try {
+            value = posthog.persistence.get_property(key)
+        } catch (e) {
+            SURVEY_LOGGER.error('Error getting property from persistence', e)
+        }
+    }
+
+    // Fall back to localStorage if not found or error
+    if (isNullish(value)) {
         try {
             return localStorage.getItem(key)
         } catch (e) {
@@ -67,12 +80,7 @@ export const getFromPersistenceWithLocalStorageFallback = (key: string, posthog?
         }
     }
 
-    try {
-        return posthog.persistence.get_property(key)
-    } catch (e) {
-        SURVEY_LOGGER.error('Error getting property from persistence', e)
-        return null
-    }
+    return value
 }
 
 /**
