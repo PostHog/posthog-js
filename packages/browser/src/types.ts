@@ -774,7 +774,7 @@ export interface PostHogConfig {
      *
      * @default undefined
      */
-    evaluation_environments?: string[]
+    evaluation_environments?: readonly string[]
 
     /**
      * Determines whether PostHog should disable toolbar metrics.

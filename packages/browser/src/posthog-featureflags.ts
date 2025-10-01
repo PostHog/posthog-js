@@ -168,6 +168,25 @@ export class PostHogFeatureFlags {
         this.featureFlagEventHandlers = []
     }
 
+    private _getValidEvaluationEnvironments(): string[] {
+        const envs = this._instance.config.evaluation_environments
+        if (!envs?.length) {
+            return []
+        }
+
+        return envs.filter((env) => {
+            const isValid = env && typeof env === 'string' && env.trim().length > 0
+            if (!isValid) {
+                logger.error('Invalid evaluation environment found:', env, 'Expected non-empty string')
+            }
+            return isValid
+        })
+    }
+
+    private _shouldIncludeEvaluationEnvironments(): boolean {
+        return this._getValidEvaluationEnvironments().length > 0
+    }
+
     flags(): void {
         if (this._instance.config.__preview_remote_config) {
             // If remote config is enabled we don't call /flags and we mark it as called so that we don't simulate it
@@ -392,8 +411,8 @@ export class PostHogFeatureFlags {
         }
 
         // Add evaluation environments if configured
-        if (this._instance.config.evaluation_environments && this._instance.config.evaluation_environments.length > 0) {
-            data.evaluation_environments = this._instance.config.evaluation_environments
+        if (this._shouldIncludeEvaluationEnvironments()) {
+            data.evaluation_environments = this._getValidEvaluationEnvironments()
         }
 
         // flags supports loading config data with the `config` query param, but if you're using remote config, you
@@ -586,8 +605,8 @@ export class PostHogFeatureFlags {
         }
 
         // Add evaluation environments if configured
-        if (this._instance.config.evaluation_environments && this._instance.config.evaluation_environments.length > 0) {
-            data.evaluation_environments = this._instance.config.evaluation_environments
+        if (this._shouldIncludeEvaluationEnvironments()) {
+            data.evaluation_environments = this._getValidEvaluationEnvironments()
         }
 
         this._instance._send_request({
