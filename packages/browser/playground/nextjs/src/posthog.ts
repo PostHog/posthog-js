@@ -83,7 +83,7 @@ if (typeof window !== 'undefined') {
         __preview_flags_v2: true,
         ...configForConsent(),
         disable_surveys: false,
-        enable_user_report: false,
+        enable_user_report: true,
     })
     // Help with debugging
     ;(window as any).posthog = posthog
