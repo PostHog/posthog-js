@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.268.11
+
+### Patch Changes
+
+- [#2381](https://github.com/PostHog/posthog-js/pull/2381) [`06a79f9`](https://github.com/PostHog/posthog-js/commit/06a79f99e7bebcbf669e9ce37ef4441224339e9a) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: remove xhr event listener when handling it to avoid potential memory leak
+
 ## 1.268.10
 
 ### Patch Changes
