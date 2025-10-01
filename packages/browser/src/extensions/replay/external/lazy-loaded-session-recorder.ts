@@ -1339,6 +1339,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // stay unknown if we're not sure if we're idle or not
         this._isIdle = isBoolean(this._isIdle) ? this._isIdle : 'unknown'
 
+        this.tryAddCustomEvent('$remote_config_received', this._remoteConfig)
         this._tryAddCustomEvent('$session_options', {
             sessionRecordingOptions,
             activePlugins: activePlugins.map((p) => p?.name),
