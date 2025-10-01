@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.269.0
+
+### Minor Changes
+
+- [#2369](https://github.com/PostHog/posthog-js/pull/2369) [`2a6ea65`](https://github.com/PostHog/posthog-js/commit/2a6ea65333460027f163d186ab6b241488c4c750) Thanks [@dmarticus](https://github.com/dmarticus)! - This PR implements support for evaluation environments in the posthog-js SDK, allowing users to specify which environment tags their SDK instance should use when evaluating feature flags.
+
 ## 1.268.11
 
 ### Patch Changes
