@@ -72,8 +72,8 @@ export const ScreenshotCapture = ({ onCapture, onCancel }: ScreenshotCaptureProp
         setIsSelecting(false)
 
         // Calculate final selection bounds
-        Math.min(selection.startX, e.clientX)
-        Math.min(selection.startY, e.clientY)
+        const x = Math.min(selection.startX, e.clientX)
+        const y = Math.min(selection.startY, e.clientY)
         const width = Math.abs(e.clientX - selection.startX)
         const height = Math.abs(e.clientY - selection.startY)
 
@@ -84,15 +84,15 @@ export const ScreenshotCapture = ({ onCapture, onCancel }: ScreenshotCaptureProp
             return
         }
 
-        // Hide overlay, capture page, then callback
+        // Hide overlay, capture page, then crop to selection
         setIsCapturing(true)
 
         // Small delay to let overlay hide
         setTimeout(async () => {
             try {
-                const dataUrl = await captureFullPage()
+                const dataUrl = await captureRegion(x, y, width, height)
                 logger.info('Screenshot captured successfully')
-                onCapture(dataUrl.toDataURL('image/png'))
+                onCapture(dataUrl)
             } catch (error) {
                 logger.error('Failed to capture screenshot', error)
                 onCancel()
@@ -143,6 +143,42 @@ export const ScreenshotCapture = ({ onCapture, onCancel }: ScreenshotCaptureProp
             )}
         </div>
     )
+}
+
+/**
+ * Captures a region of the page as a screenshot
+ */
+async function captureRegion(x: number, y: number, width: number, height: number): Promise<string> {
+    if (!document || !window) {
+        throw new Error('Document/window not available')
+    }
+
+    try {
+        // First, capture the entire viewport
+        const fullCanvas = await captureFullPage()
+
+        // Then crop to the selected region
+        const croppedCanvas = document.createElement('canvas')
+        const ctx = croppedCanvas.getContext('2d')
+
+        if (!ctx) {
+            throw new Error('Could not get canvas context')
+        }
+
+        // Account for device pixel ratio
+        const dpr = window.devicePixelRatio || 1
+        croppedCanvas.width = width * dpr
+        croppedCanvas.height = height * dpr
+        ctx.scale(dpr, dpr)
+
+        // Crop the region
+        ctx.drawImage(fullCanvas, x * dpr, y * dpr, width * dpr, height * dpr, 0, 0, width, height)
+
+        return croppedCanvas.toDataURL('image/png')
+    } catch (error) {
+        logger.error('Failed to capture region', error)
+        throw error
+    }
 }
 
 /**
