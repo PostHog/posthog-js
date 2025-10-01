@@ -1,10 +1,32 @@
+/* CSS Variables for theming */
+:host {
+    --ph-report-bg: #1a1a1a;
+    --ph-report-surface: #242424;
+    --ph-report-surface-hover: #2a2a2a;
+    --ph-report-border: #3a3a3a;
+    --ph-report-text-primary: #ffffff;
+    --ph-report-text-secondary: #a3a3a3;
+    --ph-report-text-muted: #737373;
+    --ph-report-accent: #6366f1;
+    --ph-report-accent-hover: #4f46e5;
+    --ph-report-danger: #ef4444;
+    --ph-report-danger-hover: #dc2626;
+    --ph-report-success: #10b981;
+    --ph-report-backdrop: rgba(0, 0, 0, 0.75);
+    --ph-report-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05),
+                        0 24px 48px -12px rgba(0, 0, 0, 0.5),
+                        0 12px 24px -6px rgba(0, 0, 0, 0.3);
+}
+
 .ph-report-container {
     position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     z-index: 2147483647;
-    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif;
+    font-family: inherit;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 .ph-report-backdrop {
@@ -13,54 +35,87 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--ph-report-backdrop);
+    backdrop-filter: blur(8px);
     z-index: 2147483646;
+    animation: ph-report-fade-in 0.15s ease-out;
+}
+
+@keyframes ph-report-fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 }
 
 .ph-report-modal {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-    width: 500px;
+    background: var(--ph-report-bg);
+    border-radius: 16px;
+    box-shadow: var(--ph-report-shadow);
+    width: 900px;
     max-width: 90vw;
     max-height: 90vh;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    animation: ph-report-scale-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    border: 1px solid var(--ph-report-border);
+}
+
+@keyframes ph-report-scale-in {
+    from {
+        opacity: 0;
+        transform: scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
 .ph-report-header {
-    padding: 20px 24px;
-    border-bottom: 1px solid #e5e7eb;
+    padding: 24px 28px 20px;
+    border-bottom: 1px solid var(--ph-report-border);
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
 .ph-report-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: #111827;
+    font-size: 17px;
+    font-weight: 590;
+    color: var(--ph-report-text-primary);
     margin: 0;
+    letter-spacing: -0.01em;
 }
 
 .ph-report-close {
-    background: none;
+    background: transparent;
     border: none;
-    font-size: 24px;
+    font-size: 20px;
     cursor: pointer;
-    color: #6b7280;
+    color: var(--ph-report-text-muted);
     padding: 0;
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
+    border-radius: 8px;
+    transition: all 0.12s ease;
+    line-height: 1;
 }
 
 .ph-report-close:hover {
-    background: #f3f4f6;
+    background: var(--ph-report-surface-hover);
+    color: var(--ph-report-text-primary);
+}
+
+.ph-report-close:active {
+    background: var(--ph-report-surface);
+    transform: scale(0.96);
 }
 
 .ph-report-body {
@@ -70,13 +125,13 @@
 }
 
 .ph-report-privacy-notice {
-    background: #fef3c7;
-    border: 1px solid #fbbf24;
+    background: rgba(251, 191, 36, 0.1);
+    border: 1px solid rgba(251, 191, 36, 0.3);
     border-radius: 8px;
     padding: 12px;
     margin-bottom: 16px;
     font-size: 13px;
-    color: #92400e;
+    color: #fbbf24;
     line-height: 1.5;
 }
 
@@ -88,7 +143,7 @@
     display: block;
     font-size: 14px;
     font-weight: 500;
-    color: #374151;
+    color: var(--ph-report-text-secondary);
     margin-bottom: 8px;
 }
 
@@ -96,27 +151,50 @@
     width: 100%;
     min-height: 120px;
     padding: 12px;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--ph-report-border);
     border-radius: 8px;
     font-size: 14px;
     font-family: inherit;
     resize: vertical;
     margin-bottom: 16px;
     box-sizing: border-box;
+    background: var(--ph-report-surface);
+    color: var(--ph-report-text-primary);
+}
+
+.ph-report-textarea::placeholder {
+    color: var(--ph-report-text-muted);
 }
 
 .ph-report-textarea:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: var(--ph-report-accent);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 }
 
 .ph-report-footer {
     padding: 16px 24px;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid var(--ph-report-border);
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+.ph-report-footer-left {
+    flex: 1;
+}
+
+.ph-report-footer-right {
+    display: flex;
     gap: 12px;
+}
+
+.ph-report-privacy-footer {
+    margin: 0;
+    font-size: 12px;
+    color: var(--ph-report-text-muted);
+    line-height: 1.4;
 }
 
 .ph-report-button {
@@ -129,28 +207,43 @@
 }
 
 .ph-report-button-cancel {
-    background: white;
-    border: 1px solid #d1d5db;
-    color: #374151;
+    background: var(--ph-report-surface);
+    border: 1px solid var(--ph-report-border);
+    color: var(--ph-report-text-secondary);
 }
 
 .ph-report-button-cancel:hover {
-    background: #f9fafb;
+    background: var(--ph-report-surface-hover);
+    color: var(--ph-report-text-primary);
 }
 
 .ph-report-button-submit {
-    background: #000;
+    background: var(--ph-report-accent);
     border: none;
     color: white;
 }
 
 .ph-report-button-submit:hover {
-    background: #1f2937;
+    background: var(--ph-report-accent-hover);
 }
 
 .ph-report-button-submit:disabled {
-    background: #9ca3af;
+    background: rgba(99, 102, 241, 0.3);
     cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.ph-report-button-attach {
+    background: var(--ph-report-surface);
+    border: 1px dashed var(--ph-report-border);
+    color: var(--ph-report-text-secondary);
+    margin-top: 12px;
+}
+
+.ph-report-button-attach:hover {
+    background: var(--ph-report-surface-hover);
+    border-color: var(--ph-report-accent);
+    color: var(--ph-report-accent);
 }
 
 .ph-report-success {
@@ -169,12 +262,188 @@
 .ph-report-success-title {
     font-size: 20px;
     font-weight: 600;
-    color: #111827;
+    color: var(--ph-report-text-primary);
     margin: 0 0 8px 0;
 }
 
 .ph-report-success-message {
     font-size: 14px;
-    color: #6b7280;
+    color: var(--ph-report-text-secondary);
     margin: 0 0 24px 0;
+}
+
+/* Screenshot Capture Overlay */
+.ph-screenshot-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 2147483647;
+    cursor: crosshair;
+    user-select: none;
+}
+
+.ph-screenshot-instructions {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: white;
+    font-size: 16px;
+    font-weight: 500;
+    pointer-events: none;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.ph-screenshot-instructions-sub {
+    margin-top: 8px;
+    font-size: 14px;
+    font-weight: 400;
+    opacity: 0.8;
+}
+
+.ph-screenshot-selection {
+    position: fixed;
+    border: 2px solid #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+    pointer-events: none;
+}
+
+.ph-screenshot-selection-border {
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    border: 2px dashed white;
+    animation: ph-screenshot-dash 0.5s linear infinite;
+}
+
+@keyframes ph-screenshot-dash {
+    to {
+        stroke-dashoffset: -8px;
+    }
+}
+
+/* Sidebar Layout */
+.ph-report-sidebar-layout {
+    display: flex;
+    gap: 20px;
+    min-height: 400px;
+}
+
+.ph-report-screenshot-section {
+    flex: 2;
+    display: flex;
+    flex-direction: column;
+}
+
+.ph-report-form-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--ph-report-border);
+    padding-left: 20px;
+}
+
+.ph-report-form-section .ph-report-textarea {
+    flex: 1;
+    min-height: 200px;
+}
+
+.ph-report-single-column {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Screenshot Preview */
+.ph-report-screenshot-preview {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--ph-report-border);
+    background: var(--ph-report-surface);
+}
+
+.ph-report-screenshot-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.ph-report-screenshot-remove {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    border: none;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    line-height: 1;
+}
+
+.ph-report-screenshot-remove:hover {
+    background: rgba(0, 0, 0, 0.8);
+    transform: scale(1.05);
+}
+
+.ph-report-screenshot-remove:active {
+    transform: scale(0.95);
+}
+
+/* Screenshot Placeholder */
+.ph-report-screenshot-placeholder {
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    border: 2px dashed var(--ph-report-border);
+    background: var(--ph-report-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ph-report-screenshot-placeholder-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.ph-report-screenshot-placeholder-icon {
+    font-size: 48px;
+    opacity: 0.3;
+}
+
+.ph-report-button-capture {
+    background: var(--ph-report-accent);
+    border: none;
+    color: white;
+    font-weight: 500;
+}
+
+.ph-report-button-capture:hover {
+    background: var(--ph-report-accent-hover);
+}
+
+.ph-report-screenshot-placeholder-hint {
+    margin: 0;
+    font-size: 13px;
+    color: var(--ph-report-text-muted);
 }

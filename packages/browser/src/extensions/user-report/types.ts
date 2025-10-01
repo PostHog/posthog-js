@@ -17,6 +17,7 @@ export interface ReportData {
 export interface ReportDialogOptions {
     title?: string
     description?: string
+    screenshot?: string // Base64 data URL
 }
 
 export interface IAnnotationEngine {

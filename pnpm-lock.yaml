@@ -36,10 +36,10 @@ catalogs:
 
 patchedDependencies:
   '@rrweb/record@2.0.0-alpha.17':
-    hash: 4a974d451d029e3ef6c302f641dfaf41fb0881146b6d5198ccdbe8d50776b64f
+    hash: 46frarym7rupyfspsu67b3afhe
     path: patches/@rrweb__record@2.0.0-alpha.17.patch
   '@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17':
-    hash: 70915838e13e38a12d8b9a5e9f76e1b58a10a6d634133f01644cc4b5c63a5515
+    hash: ytsspyi7p3hvqcq64vqb7wb6bu
     path: patches/@rrweb__rrweb-plugin-console-record@2.0.0-alpha.17.patch
 
 importers:
@@ -185,6 +185,9 @@ importers:
       fflate:
         specifier: ^0.4.8
         version: 0.4.8
+      modern-screenshot:
+        specifier: ^4.6.6
+        version: 4.6.6
       preact:
         specifier: ^10.19.3
         version: 10.19.3
@@ -254,10 +257,10 @@ importers:
         version: 12.1.4(rollup@4.50.0)(tslib@2.8.1)(typescript@5.8.2)
       '@rrweb/record':
         specifier: 2.0.0-alpha.17
-        version: 2.0.0-alpha.17(patch_hash=4a974d451d029e3ef6c302f641dfaf41fb0881146b6d5198ccdbe8d50776b64f)
+        version: 2.0.0-alpha.17(patch_hash=46frarym7rupyfspsu67b3afhe)
       '@rrweb/rrweb-plugin-console-record':
         specifier: 2.0.0-alpha.17
-        version: 2.0.0-alpha.17(patch_hash=70915838e13e38a12d8b9a5e9f76e1b58a10a6d634133f01644cc4b5c63a5515)(rrweb@2.0.0-alpha.17)
+        version: 2.0.0-alpha.17(patch_hash=ytsspyi7p3hvqcq64vqb7wb6bu)(rrweb@2.0.0-alpha.17)
       '@rrweb/types':
         specifier: 2.0.0-alpha.17
         version: 2.0.0-alpha.17
@@ -1699,7 +1702,7 @@ packages:
 
   '@expo/bunyan@4.0.1':
     resolution: {integrity: sha512-+Lla7nYSiHZirgK+U/uYzsLv/X+HaJienbD5AKX1UQZHYfWaP+9uuQluRB4GrEVWF0GZ7vEVp/jzaOT9k/SQlg==}
-    engines: {'0': node >=0.10.0}
+    engines: {node: '>=0.10.0'}
 
   '@expo/cli@0.1.7':
     resolution: {integrity: sha512-F81fPthpT7QtVu1P7QeZMezGn0tCcalCh3ANIzWBaQZNG4vly7mo2dp3PMGzNdmXq6yt93bJ4HbfS+0/NpKl7g==}
@@ -7466,6 +7469,9 @@ packages:
     resolution: {integrity: sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==}
     engines: {node: '>=10'}
     hasBin: true
+
+  modern-screenshot@4.6.6:
+    resolution: {integrity: sha512-8tF0xEpe7yx37mK95UcIghSCWYeu628K2hLJl+ZNY2ANmRzYLlRLpquPHAQcL8keF6BoeEzTEw4GrgmUpGuZ8w==}
 
   moment-duration-format-commonjs@1.0.0:
     resolution: {integrity: sha512-MVFR4hIh4jfuwSCPBEE5CCwn3refvTsxK/Yv/DpKJ6YcNnCimlVJ6DQeTJG1KVQPw1o8m3tkbHE9gVjivyv9iA==}
@@ -13783,12 +13789,12 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.50.0':
     optional: true
 
-  '@rrweb/record@2.0.0-alpha.17(patch_hash=4a974d451d029e3ef6c302f641dfaf41fb0881146b6d5198ccdbe8d50776b64f)':
+  '@rrweb/record@2.0.0-alpha.17(patch_hash=46frarym7rupyfspsu67b3afhe)':
     dependencies:
       '@rrweb/types': 2.0.0-alpha.17
       rrweb: 2.0.0-alpha.17
 
-  '@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17(patch_hash=70915838e13e38a12d8b9a5e9f76e1b58a10a6d634133f01644cc4b5c63a5515)(rrweb@2.0.0-alpha.17)':
+  '@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17(patch_hash=ytsspyi7p3hvqcq64vqb7wb6bu)(rrweb@2.0.0-alpha.17)':
     dependencies:
       rrweb: 2.0.0-alpha.17
 
@@ -20097,6 +20103,8 @@ snapshots:
       minimist: 1.2.8
 
   mkdirp@1.0.4: {}
+
+  modern-screenshot@4.6.6: {}
 
   moment-duration-format-commonjs@1.0.0: {}
 
