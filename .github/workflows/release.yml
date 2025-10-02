@@ -89,12 +89,12 @@ jobs:
                }'
 
       # a CDP destination is set-up to alert when we get this event
-      - name: Send Automerge Event to PostHog
+      - name: Send failure event to PostHog
         if: ${{ failure() }}
         uses: PostHog/posthog-github-action@v0.1
         with:
             posthog-token: '${{ secrets.POSTHOG_API_TOKEN }}'
-            event: 'posthog-js-github-release-pr-status'
+            event: 'posthog-js-github-release-workflow-failure'
             properties: >-
                 {
                   "commitSha": "${{ github.sha }}",
