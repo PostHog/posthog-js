@@ -1,5 +1,8 @@
 import { PostHog } from './posthog-core'
 import { FeedbackItemAttachResponse, FeedbackItemResponse, RequestResponse } from './types'
+import { createLogger } from './utils/logger'
+
+const logger = createLogger('[PostHogFeedback]')
 
 export default class PostHogFeedback {
     constructor(private readonly _instance: PostHog) {}
@@ -57,7 +60,10 @@ export default class PostHogFeedback {
         attachmentUrls: string[] | null = null,
         callback: (json: FeedbackItemResponse) => void
     ): void {
-        this._sendPostHogApiRequest('', { category, value, topic, attachment_urls: attachmentUrls }, callback)
+        const payload = { category_id: category, value, content: value, topic, attachment_urls: attachmentUrls }
+        logger.info('Creating feedback item payload', payload)
+
+        this._sendPostHogApiRequest('', payload, callback)
     }
 
     _sendPostHogApiRequest(endpoint: string, data: Record<string, any>, callback: (json: any) => void): void {

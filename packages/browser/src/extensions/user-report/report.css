@@ -172,6 +172,31 @@
     margin-bottom: 8px;
 }
 
+.ph-report-select {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--ph-report-border);
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    margin-bottom: 16px;
+    box-sizing: border-box;
+    background: var(--ph-report-surface);
+    color: var(--ph-report-text-primary);
+    cursor: pointer;
+}
+
+.ph-report-select:focus {
+    outline: none;
+    border-color: var(--ph-report-accent);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+.ph-report-select option {
+    background: var(--ph-report-surface);
+    color: var(--ph-report-text-primary);
+}
+
 .ph-report-textarea {
     width: 100%;
     min-height: 120px;

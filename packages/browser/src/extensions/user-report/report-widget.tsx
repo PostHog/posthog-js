@@ -18,8 +18,14 @@ interface ReportWidgetProps {
     onClose: () => void
 }
 
+const FEEDBACK_CATEGORIES = [
+    { value: '0199a511-042a-73bf-9af9-7340eaa9a381', label: 'Bug' },
+    { value: '0199a511-58e1-7fc8-88cf-2ae6756f332e', label: 'Feature Request' },
+] as const
+
 export const ReportWidget = ({ posthog, options, onClose }: ReportWidgetProps) => {
     const [description, setDescription] = useState('')
+    const [category, setCategory] = useState<string>(FEEDBACK_CATEGORIES[0].value)
     const [isSubmitted, setIsSubmitted] = useState(false)
     const [screenshot, setScreenshot] = useState<string | undefined>(options?.screenshot)
     const [isCapturing, setIsCapturing] = useState(false)
@@ -107,7 +113,7 @@ export const ReportWidget = ({ posthog, options, onClose }: ReportWidgetProps) =
             }
 
             // Submit via PostHog feedback API
-            posthog.captureFeedback('0199a511-042a-73bf-9af9-7340eaa9a381', description, {
+            posthog.captureFeedback(category, description, {
                 topic: 'user_report',
                 attachments: screenshotFile ? [screenshotFile] : undefined,
                 onComplete: (feedbackItemId, eventId) => {
@@ -238,7 +244,22 @@ export const ReportWidget = ({ posthog, options, onClose }: ReportWidgetProps) =
 
                             {/* Form Section (Right) */}
                             <div className="ph-report-form-section">
-                                <label className="ph-report-label">Describe the issue</label>
+                                <label className="ph-report-label">Category</label>
+                                <select
+                                    className="ph-report-select"
+                                    value={category}
+                                    onChange={(e) => setCategory((e.target as HTMLSelectElement).value)}
+                                >
+                                    {FEEDBACK_CATEGORIES.map((cat) => (
+                                        <option key={cat.value} value={cat.value}>
+                                            {cat.label}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                <label className="ph-report-label" style={{ marginTop: '16px' }}>
+                                    Describe the issue
+                                </label>
                                 <textarea
                                     className="ph-report-textarea"
                                     placeholder={placeholder}
