@@ -87,3 +87,21 @@ jobs:
                    "package_version": "${{ steps.check-package-version.outputs.committed-version }}"
                  }
                }'
+
+      # a CDP destination is set-up to alert when we get this event
+      - name: Send Automerge Event to PostHog
+        if: ${{ failure() }}
+        uses: PostHog/posthog-github-action@v0.1
+        with:
+            posthog-token: '${{ secrets.POSTHOG_API_TOKEN }}'
+            event: 'posthog-js-github-release-pr-status'
+            properties: >-
+                {
+                  "prUrl": "${{ github.event.pull_request.html_url }}",
+                  "jobStatus": "${{ job.status }}",
+                  "prTitle": "${{ github.event.pull_request.title }}",
+                  "prNumber": "${{ github.event.pull_request.number }}",
+                  "prState": "${{ github.event.pull_request.mergeable_state }}",
+                  "matrixPackage": "${{ matrix.package.name }}",
+                  "packageVersion": "${{ steps.check-package-version.outputs.committed-version }}"
+                }
