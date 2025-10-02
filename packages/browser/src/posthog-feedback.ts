@@ -1,5 +1,5 @@
 import { PostHog } from './posthog-core'
-import { FeedbackItemAttachResponse, FeedbackItemResponse } from './types'
+import { FeedbackItemAttachResponse, FeedbackItemResponse, RequestResponse } from './types'
 
 export default class PostHogFeedback {
     constructor(private readonly _instance: PostHog) {}
@@ -28,8 +28,8 @@ export default class PostHogFeedback {
 
     _uploadAttachment(attachment: File | undefined, callback: (presignedUrls: string[]) => void): void {
         if (attachment) {
-            this._sendRequest(
-                this._posthogApiUrl('attach'),
+            this._sendPostHogApiRequest(
+                'attach',
                 {},
                 ({ presigned_url: { url, fields } }: FeedbackItemAttachResponse) => {
                     const data = new FormData()
@@ -57,28 +57,29 @@ export default class PostHogFeedback {
         attachmentUrls: string[] | null = null,
         callback: (json: FeedbackItemResponse) => void
     ): void {
-        this._sendRequest(this._posthogApiUrl(), { category, value, topic, attachment_urls: attachmentUrls }, callback)
+        this._sendPostHogApiRequest('', { category, value, topic, attachment_urls: attachmentUrls }, callback)
     }
 
-    _posthogApiUrl(endpoint: string = ''): string {
-        return this._instance.requestRouter.endpointFor(
+    _sendPostHogApiRequest(endpoint: string, data: Record<string, any>, callback: (json: any) => void): void {
+        const url = this._instance.requestRouter.endpointFor(
             'api',
             `/api/feedback_items/${endpoint}?token=${this._instance.config.token}`
         )
+        this._sendRequest(url, data, (response) => {
+            if (response.json) {
+                callback(response.json)
+            } else if (response.text) {
+                callback(JSON.parse(response.text))
+            }
+        })
     }
 
-    _sendRequest(url: string, data: Record<string, any>, callback: (json: any) => void): void {
+    _sendRequest(url: string, data: Record<string, any>, callback: (json: RequestResponse) => void): void {
         this._instance._send_request({
             url: url,
             method: 'POST',
             data: data,
-            callback: (response) => {
-                if (response.json) {
-                    callback(response.json)
-                } else if (response.text) {
-                    callback(JSON.parse(response.text))
-                }
-            },
+            callback,
         })
     }
 }

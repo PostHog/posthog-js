@@ -6,7 +6,7 @@ export default function SurveyForm() {
     return (
         <div className="space-y-2">
             <div>
-                <button id="feedback-button">Feedback</button>
+                <button id="feedback-button">Open dialog</button>
             </div>
             <div style={{ width: '100%', height: 1, background: 'rgba(0,0,0,.1)' }}></div>
             <form
