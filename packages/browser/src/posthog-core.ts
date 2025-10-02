@@ -26,7 +26,8 @@ import { PostHogExceptions } from './posthog-exceptions'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import { PostHogSurveys } from './posthog-surveys'
-import { UserReportManager } from './extensions/user-report'
+// Lazy-loaded to avoid SSR issues with markerjs-ui (HTMLElement dependency)
+// import { UserReportManager } from './extensions/user-report'
 import {
     DisplaySurveyOptions,
     SurveyCallback,
@@ -328,7 +329,7 @@ export class PostHog {
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
     sessionRecording?: SessionRecording | SessionRecordingWrapper
-    _userReport?: UserReportManager
+    _userReport?: any // Lazy-loaded UserReportManager
     externalIntegrations?: ExternalIntegrations
     webPerformance = new DeprecatedWebPerformanceObserver()
 
@@ -1800,12 +1801,42 @@ export class PostHog {
             return
         }
 
-        if (!this._userReport) {
-            logger.info('Loading user report extension...')
-            this._userReport = new UserReportManager(this)
+        // If already loaded, show immediately
+        if (this._userReport) {
+            this._userReport.show(options)
+            return
         }
 
-        this._userReport.show(options)
+        // Check for PostHog extensions
+        const phExtensions = assignableWindow?.__PosthogExtensions__
+        if (!phExtensions) {
+            logger.error('PostHog Extensions not found.')
+            return
+        }
+
+        // Check if user-report code is already loaded
+        if (phExtensions.generateUserReport) {
+            this._userReport = phExtensions.generateUserReport(this)
+            this._userReport.show(options)
+            return
+        }
+
+        // Load user-report extension dynamically
+        const loadExternalDependency = phExtensions.loadExternalDependency
+        if (!loadExternalDependency) {
+            logger.error('PostHog loadExternalDependency extension not found.')
+            return
+        }
+
+        logger.info('Loading user report extension...')
+        loadExternalDependency(this, 'user-report', (err) => {
+            if (err || !phExtensions.generateUserReport) {
+                logger.error('Could not load user-report script', err)
+            } else {
+                this._userReport = phExtensions.generateUserReport(this)
+                this._userReport.show(options)
+            }
+        })
     }
 
     /**

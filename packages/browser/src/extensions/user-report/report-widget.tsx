@@ -3,10 +3,14 @@ import { useEffect, useState } from 'preact/hooks'
 import { createLogger } from '../../utils/logger'
 import { PostHog } from '../../posthog-core'
 import { ReportDialogOptions } from './types'
-import { window } from '../../utils/globals'
+import { window as _window } from '../../utils/globals'
 import { ScreenshotCapture } from './screenshot-capture'
+import { AnnotationOverlay } from './annotation-overlay'
+import { addEventListener } from '../../utils'
 
 const logger = createLogger('[UserReport.Widget]')
+
+const window = _window as Window & typeof globalThis
 
 interface ReportWidgetProps {
     posthog: PostHog
@@ -14,26 +18,53 @@ interface ReportWidgetProps {
     onClose: () => void
 }
 
-export const ReportWidget = ({ options, onClose }: ReportWidgetProps) => {
+export const ReportWidget = ({ posthog, options, onClose }: ReportWidgetProps) => {
     const [description, setDescription] = useState('')
     const [isSubmitted, setIsSubmitted] = useState(false)
     const [screenshot, setScreenshot] = useState<string | undefined>(options?.screenshot)
     const [isCapturing, setIsCapturing] = useState(false)
+    const [escPressCount, setEscPressCount] = useState(0)
+    const [showEscWarning, setShowEscWarning] = useState(false)
+
     useEffect(() => {
         logger.info('Report widget mounted')
 
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
-                logger.info('ESC pressed, closing dialog')
-                onClose()
+                if (screenshot) {
+                    // When screenshot is present, require double ESC
+                    setEscPressCount((prev) => prev + 1)
+
+                    if (escPressCount === 0) {
+                        // First ESC press - show warning
+                        logger.info('First ESC press - showing warning')
+                        setShowEscWarning(true)
+
+                        // Hide warning after 2 seconds
+                        setTimeout(() => setShowEscWarning(false), 2000)
+                    } else {
+                        // Second ESC press - close
+                        logger.info('Second ESC press - closing dialog')
+                        onClose()
+                    }
+                } else {
+                    // No screenshot - close immediately
+                    logger.info('ESC pressed, closing dialog')
+                    onClose()
+                }
             }
         }
 
-        // Cleanup on unmount
+        addEventListener(window, 'keydown', handleKeyDown as EventListener)
+
+        // Reset ESC counter after 3 seconds of no presses
+        const resetTimer = setTimeout(() => setEscPressCount(0), 3000)
+
         return () => {
             window?.removeEventListener('keydown', handleKeyDown)
+            clearTimeout(resetTimer)
         }
-    }, [onClose])
+    }, [onClose, screenshot, escPressCount])
 
     const handleBackdropClick = () => {
         logger.info('Backdrop clicked, closing dialog')
@@ -45,6 +76,21 @@ export const ReportWidget = ({ options, onClose }: ReportWidgetProps) => {
         e.stopPropagation()
     }
 
+    const dataUrlToFile = (dataUrl: string, filename: string): File => {
+        // Extract base64 data from data URL
+        const arr = dataUrl.split(',')
+        const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/png'
+        const bstr = atob(arr[1])
+        let n = bstr.length
+        const u8arr = new Uint8Array(n)
+
+        while (n--) {
+            u8arr[n] = bstr.charCodeAt(n)
+        }
+
+        return new File([u8arr], filename, { type: mime })
+    }
+
     const handleSubmit = () => {
         if (!description.trim()) {
             logger.warn('Cannot submit empty report')
@@ -53,13 +99,30 @@ export const ReportWidget = ({ options, onClose }: ReportWidgetProps) => {
 
         logger.info('Submitting report', { description, hasScreenshot: !!screenshot })
 
-        // TODO: Wire up API submission
-        setIsSubmitted(true)
+        try {
+            // Convert screenshot data URL to File if present
+            let screenshotFile: File | undefined = undefined
+            if (screenshot) {
+                screenshotFile = dataUrlToFile(screenshot, 'screenshot.png')
+            }
 
-        // Auto-close after success
-        setTimeout(() => {
-            onClose()
-        }, 2000)
+            // Submit via PostHog feedback API
+            posthog.captureFeedback('bug', description, {
+                topic: 'user_report',
+                attachments: screenshotFile ? [screenshotFile] : undefined,
+                onComplete: (feedbackItemId, eventId) => {
+                    logger.info('Report submitted successfully', { feedbackItemId, eventId })
+                    setIsSubmitted(true)
+
+                    // Auto-close after success
+                    setTimeout(() => {
+                        onClose()
+                    }, 2000)
+                },
+            })
+        } catch (error) {
+            logger.error('Failed to submit report', error)
+        }
     }
 
     const handleAttachScreenshot = () => {
@@ -81,6 +144,12 @@ export const ReportWidget = ({ options, onClose }: ReportWidgetProps) => {
     const handleRemoveScreenshot = () => {
         logger.info('Removing screenshot')
         setScreenshot(undefined)
+    }
+
+    const handleAnnotatedImageReady = (dataUrl: string) => {
+        // Update screenshot with annotated version
+        setScreenshot(dataUrl)
+        logger.info('Annotated image ready')
     }
 
     const title = options?.title || 'Report an Issue'
@@ -116,7 +185,10 @@ export const ReportWidget = ({ options, onClose }: ReportWidgetProps) => {
     return (
         <div className="ph-report-backdrop" onClick={handleBackdropClick}>
             <div className="ph-report-container" onClick={handleModalClick}>
-                <div className="ph-report-modal">
+                <div className={`ph-report-modal ${screenshot ? 'ph-report-modal-large' : ''}`}>
+                    {/* ESC Warning */}
+                    {showEscWarning && <div className="ph-report-esc-warning">Press ESC again to close</div>}
+
                     {/* Header */}
                     <div className="ph-report-header">
                         <h2 className="ph-report-title">{title}</h2>
@@ -132,7 +204,10 @@ export const ReportWidget = ({ options, onClose }: ReportWidgetProps) => {
                             <div className="ph-report-screenshot-section">
                                 {screenshot ? (
                                     <div className="ph-report-screenshot-preview">
-                                        <img src={screenshot} alt="Screenshot" className="ph-report-screenshot-img" />
+                                        <AnnotationOverlay
+                                            screenshotDataUrl={screenshot}
+                                            onAnnotatedImageReady={handleAnnotatedImageReady}
+                                        />
                                         <button
                                             className="ph-report-screenshot-remove"
                                             onClick={handleRemoveScreenshot}

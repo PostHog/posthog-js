@@ -62,6 +62,28 @@
     flex-direction: column;
     animation: ph-report-scale-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     border: 1px solid var(--ph-report-border);
+    transition: width 0.3s ease, height 0.3s ease;
+}
+
+.ph-report-modal-large {
+    width: 80vw;
+    height: 80vh;
+}
+
+.ph-report-esc-warning {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(251, 191, 36, 0.95);
+    color: #1a1a1a;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    z-index: 1000;
+    animation: ph-report-fade-in 0.2s ease-out;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 @keyframes ph-report-scale-in {
@@ -121,7 +143,10 @@
 .ph-report-body {
     padding: 24px;
     overflow-y: auto;
-    flex: 1;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 .ph-report-privacy-notice {
@@ -333,12 +358,14 @@
     display: flex;
     gap: 20px;
     min-height: 400px;
+    height: 100%;
 }
 
 .ph-report-screenshot-section {
     flex: 2;
     display: flex;
     flex-direction: column;
+    min-height: 0;
 }
 
 .ph-report-form-section {
@@ -347,10 +374,11 @@
     flex-direction: column;
     border-left: 1px solid var(--ph-report-border);
     padding-left: 20px;
+    min-height: 0;
 }
 
 .ph-report-form-section .ph-report-textarea {
-    flex: 1;
+    flex: 1 1 auto;
     min-height: 200px;
 }
 
@@ -446,4 +474,187 @@
     margin: 0;
     font-size: 13px;
     color: var(--ph-report-text-muted);
+}
+
+/* Annotation Overlay */
+.ph-annotation-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: all;
+}
+
+.ph-annotation-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.ph-annotation-text {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 500;
+    white-space: nowrap;
+    pointer-events: auto;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+    min-width: 40px;
+}
+
+.ph-annotation-text-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: white;
+    font-size: 15px;
+    font-weight: 500;
+    font-family: inherit;
+    min-width: 100px;
+    padding: 0;
+}
+
+.ph-annotation-text-input::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.ph-annotation-box {
+    position: absolute;
+    border: 3px solid #3b82f6;
+    border-radius: 4px;
+    pointer-events: none;
+}
+
+.ph-annotation-blur {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    pointer-events: none;
+}
+
+/* Annotation Toolbar */
+.ph-annotation-toolbar {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 10;
+}
+
+.ph-annotation-toolbar-tools,
+.ph-annotation-toolbar-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.ph-annotation-toolbar-divider {
+    width: 1px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.2);
+    margin: 0 4px;
+}
+
+.ph-annotation-tool {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 18px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.ph-annotation-tool:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.ph-annotation-tool:active:not(:disabled) {
+    transform: scale(0.95);
+}
+
+.ph-annotation-tool:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.ph-annotation-tool-active {
+    background: var(--ph-report-accent);
+    color: white;
+}
+
+.ph-annotation-tool-active:hover {
+    background: var(--ph-report-accent-hover);
+}
+
+/* Screenshot section with annotation */
+.ph-report-screenshot-preview.ph-report-screenshot-annotating {
+    cursor: crosshair;
+}
+
+/* markerjs-ui Editor Styles */
+.ph-annotation-editor {
+    font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    font-weight: 400;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+
+    & a {
+        font-weight: 500;
+        color: #646cff;
+        text-decoration: inherit;
+
+        &:hover {
+            color: #535bf2;
+        }
+    }
+
+    & button {
+        border-radius: 8px;
+        border: 1px solid transparent;
+        padding: 0.6em 1.2em;
+        font-size: 1em;
+        font-weight: 500;
+        font-family: inherit;
+        background-color: #1a1a1a;
+        cursor: pointer;
+        transition: border-color 0.25s;
+
+        &:hover {
+            border-color: #646cff;
+        }
+
+        &:focus,
+        &:focus-visible {
+            outline: 4px auto -webkit-focus-ring-color;
+        }
+    }
 }

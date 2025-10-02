@@ -50,6 +50,8 @@
         "react/package.json"
     ],
     "dependencies": {
+        "@markerjs/markerjs-ui": "^1.0.1",
+        "@markerjs/markerjs3": "^3.8.0",
         "@posthog/core": "workspace:*",
         "core-js": "^3.38.1",
         "fflate": "^0.4.8",

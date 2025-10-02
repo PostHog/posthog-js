@@ -96,3 +96,11 @@ export class UserReportManager {
         this.hide()
     }
 }
+
+/**
+ * Generator function for lazy loading user-report extension
+ * Called by external-scripts-loader when user-report.js is loaded
+ */
+export function generateUserReport(posthog: PostHog): UserReportManager {
+    return new UserReportManager(posthog)
+}
