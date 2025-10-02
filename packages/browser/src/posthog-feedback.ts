@@ -65,7 +65,7 @@ export default class PostHogFeedback {
         attachmentUrls: string[] | null = null,
         callback: (json: FeedbackItemResponse) => void
     ): void {
-        this._sendRequest('', { category, value, topic, attachment_urls: attachmentUrls }, callback)
+        this._sendRequest('', { category, value, content: value, topic, attachment_urls: attachmentUrls }, callback)
     }
 
     _sendRequest(endpoint: string, data: Record<string, any>, callback: (json: any) => void): void {
