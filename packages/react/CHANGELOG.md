@@ -1,5 +1,11 @@
 # @posthog/react
 
+## 1.2.2
+
+### Patch Changes
+
+- [#2389](https://github.com/PostHog/posthog-js/pull/2389) [`ac17e4a`](https://github.com/PostHog/posthog-js/commit/ac17e4a61ddc7e71178daadfb1d9284fd574f4a4) Thanks [@pauldambra](https://github.com/pauldambra)! - revert: "fix(react): fix react sourcemaps"
+
 ## 1.2.1
 
 ### Patch Changes
