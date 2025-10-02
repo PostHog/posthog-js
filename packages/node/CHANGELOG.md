@@ -1,5 +1,14 @@
 # posthog-node
 
+## 5.9.2
+
+### Patch Changes
+
+- [#2370](https://github.com/PostHog/posthog-js/pull/2370) [`5820942`](https://github.com/PostHog/posthog-js/commit/582094255fa87009b02a4e193c3e63ef4621d9d0) Thanks [@hpouillot](https://github.com/hpouillot)! - remove testing from posthog-core
+
+- Updated dependencies [[`5820942`](https://github.com/PostHog/posthog-js/commit/582094255fa87009b02a4e193c3e63ef4621d9d0)]:
+  - @posthog/core@1.2.2
+
 ## 5.9.1
 
 ### Patch Changes
