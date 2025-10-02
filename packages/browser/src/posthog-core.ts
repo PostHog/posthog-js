@@ -1762,7 +1762,7 @@ export class PostHog {
         options?: {
             topic?: string
             attachments?: File[]
-            onComplete: (feedbackItemId: string, eventId: string | undefined) => void
+            onComplete?: (feedbackItemId: string, eventId: string | undefined) => void
         }
     ): void {
         if (options && options.attachments && options.attachments.length > 1) {

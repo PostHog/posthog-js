@@ -28,34 +28,26 @@ export default class PostHogFeedback {
 
     _uploadAttachment(attachment: File | undefined, callback: (presignedUrls: string[]) => void): void {
         if (attachment) {
-            this._sendRequest('attach', {}, ({ presigned_url: { url, fields } }: FeedbackItemAttachResponse) => {
-                const data = new FormData()
+            this._sendRequest(
+                this._posthogApiUrl('attach'),
+                {},
+                ({ presigned_url: { url, fields } }: FeedbackItemAttachResponse) => {
+                    const data = new FormData()
 
-                Object.entries(fields).forEach(([key, value]) => {
-                    data.append(key, value)
-                })
+                    Object.entries(fields).forEach(([key, value]) => {
+                        data.append(key, value)
+                    })
 
-                data.append('file', attachment)
+                    data.append('file', attachment)
 
-                // Upload directly to presigned URL (not through feedback_items endpoint)
-                this._uploadToPresignedUrl(url, data, () => {
-                    callback([url])
-                })
-            })
+                    this._sendRequest(url, data, () => {
+                        callback([url])
+                    })
+                }
+            )
         } else {
             callback([])
         }
-    }
-
-    _uploadToPresignedUrl(url: string, data: FormData, callback: () => void): void {
-        this._instance._send_request({
-            url: url,
-            method: 'POST',
-            data: data,
-            callback: () => {
-                callback()
-            },
-        })
     }
 
     _createFeedbackItem(
@@ -65,15 +57,19 @@ export default class PostHogFeedback {
         attachmentUrls: string[] | null = null,
         callback: (json: FeedbackItemResponse) => void
     ): void {
-        this._sendRequest('', { category, value, content: value, topic, attachment_urls: attachmentUrls }, callback)
+        this._sendRequest(this._posthogApiUrl(), { category, value, topic, attachment_urls: attachmentUrls }, callback)
     }
 
-    _sendRequest(endpoint: string, data: Record<string, any>, callback: (json: any) => void): void {
+    _posthogApiUrl(endpoint: string = ''): string {
+        return this._instance.requestRouter.endpointFor(
+            'api',
+            `/api/feedback_items/${endpoint}?token=${this._instance.config.token}`
+        )
+    }
+
+    _sendRequest(url: string, data: Record<string, any>, callback: (json: any) => void): void {
         this._instance._send_request({
-            url: this._instance.requestRouter.endpointFor(
-                'api',
-                `/api/feedback_items/${endpoint}?token=${this._instance.config.token}`
-            ),
+            url: url,
             method: 'POST',
             data: data,
             callback: (response) => {
