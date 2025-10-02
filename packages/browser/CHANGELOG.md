@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.269.1
+
+### Patch Changes
+
+- [#2393](https://github.com/PostHog/posthog-js/pull/2393) [`a3b64e6`](https://github.com/PostHog/posthog-js/commit/a3b64e6788527acca485f0e6bfca8e207b72bb2c) Thanks [@pauldambra](https://github.com/pauldambra)! - chore: variable rename so i can trigger a releas
+
 ## 1.269.0
 
 ### Minor Changes
