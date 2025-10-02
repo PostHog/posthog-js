@@ -36,10 +36,10 @@ catalogs:
 
 patchedDependencies:
   '@rrweb/record@2.0.0-alpha.17':
-    hash: 46frarym7rupyfspsu67b3afhe
+    hash: 4a974d451d029e3ef6c302f641dfaf41fb0881146b6d5198ccdbe8d50776b64f
     path: patches/@rrweb__record@2.0.0-alpha.17.patch
   '@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17':
-    hash: ytsspyi7p3hvqcq64vqb7wb6bu
+    hash: 70915838e13e38a12d8b9a5e9f76e1b58a10a6d634133f01644cc4b5c63a5515
     path: patches/@rrweb__rrweb-plugin-console-record@2.0.0-alpha.17.patch
 
 importers:
@@ -257,10 +257,10 @@ importers:
         version: 12.1.4(rollup@4.50.0)(tslib@2.8.1)(typescript@5.8.2)
       '@rrweb/record':
         specifier: 2.0.0-alpha.17
-        version: 2.0.0-alpha.17(patch_hash=46frarym7rupyfspsu67b3afhe)
+        version: 2.0.0-alpha.17(patch_hash=4a974d451d029e3ef6c302f641dfaf41fb0881146b6d5198ccdbe8d50776b64f)
       '@rrweb/rrweb-plugin-console-record':
         specifier: 2.0.0-alpha.17
-        version: 2.0.0-alpha.17(patch_hash=ytsspyi7p3hvqcq64vqb7wb6bu)(rrweb@2.0.0-alpha.17)
+        version: 2.0.0-alpha.17(patch_hash=70915838e13e38a12d8b9a5e9f76e1b58a10a6d634133f01644cc4b5c63a5515)(rrweb@2.0.0-alpha.17)
       '@rrweb/types':
         specifier: 2.0.0-alpha.17
         version: 2.0.0-alpha.17
@@ -1702,7 +1702,7 @@ packages:
 
   '@expo/bunyan@4.0.1':
     resolution: {integrity: sha512-+Lla7nYSiHZirgK+U/uYzsLv/X+HaJienbD5AKX1UQZHYfWaP+9uuQluRB4GrEVWF0GZ7vEVp/jzaOT9k/SQlg==}
-    engines: {node: '>=0.10.0'}
+    engines: {'0': node >=0.10.0}
 
   '@expo/cli@0.1.7':
     resolution: {integrity: sha512-F81fPthpT7QtVu1P7QeZMezGn0tCcalCh3ANIzWBaQZNG4vly7mo2dp3PMGzNdmXq6yt93bJ4HbfS+0/NpKl7g==}
@@ -13789,12 +13789,12 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.50.0':
     optional: true
 
-  '@rrweb/record@2.0.0-alpha.17(patch_hash=46frarym7rupyfspsu67b3afhe)':
+  '@rrweb/record@2.0.0-alpha.17(patch_hash=4a974d451d029e3ef6c302f641dfaf41fb0881146b6d5198ccdbe8d50776b64f)':
     dependencies:
       '@rrweb/types': 2.0.0-alpha.17
       rrweb: 2.0.0-alpha.17
 
-  '@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17(patch_hash=ytsspyi7p3hvqcq64vqb7wb6bu)(rrweb@2.0.0-alpha.17)':
+  '@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17(patch_hash=70915838e13e38a12d8b9a5e9f76e1b58a10a6d634133f01644cc4b5c63a5515)(rrweb@2.0.0-alpha.17)':
     dependencies:
       rrweb: 2.0.0-alpha.17
 

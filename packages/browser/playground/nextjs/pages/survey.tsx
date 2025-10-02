@@ -63,6 +63,14 @@ export default function SurveyForm() {
                 <p>Scroll down to see the bottom feedback button</p>
             </div>
 
+            <div
+                onClick={() => {
+                    posthog.captureFeedback('Bug', 'I love this!')
+                }}
+            >
+                Click me
+            </div>
+
             {/* Bottom feedback button */}
             <div style={{ padding: '20px', textAlign: 'center', borderTop: '1px solid #eee' }}>
                 <button

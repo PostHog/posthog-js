@@ -104,6 +104,7 @@ import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
 import { SessionRecordingWrapper } from './extensions/replay/sessionrecording-wrapper'
+import PostHogFeedback from './posthog-feedback'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -322,6 +323,7 @@ export class PostHog {
     exceptionObserver?: ExceptionObserver
     deadClicksAutocapture?: DeadClicksAutocapture
     historyAutocapture?: HistoryAutocapture
+    feedback?: PostHogFeedback
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -384,6 +386,7 @@ export class PostHog {
         this.rateLimiter = new RateLimiter(this)
         this.requestRouter = new RequestRouter(this)
         this.consent = new ConsentManager(this)
+        this.feedback = new PostHogFeedback(this)
         this.externalIntegrations = new ExternalIntegrations(this)
         // NOTE: See the property definition for deprecation notice
         this.people = {
@@ -1750,6 +1753,24 @@ export class PostHog {
      */
     getSurveys(callback: SurveyCallback, forceReload = false): void {
         this.surveys.getSurveys(callback, forceReload)
+    }
+
+    captureFeedback(
+        category: string,
+        value: string,
+        options?: {
+            topic?: string
+            attachments?: File[]
+            onComplete: (feedbackItemId: string, eventId: string | undefined) => void
+        }
+    ): void {
+        if (options && options.attachments && options.attachments.length > 1) {
+            logger.error('For now can only attach one file to feedback.')
+            return
+        }
+        const attachment = options && options.attachments ? options.attachments[0] : undefined
+
+        this.feedback?.submit(category, value, options?.topic, attachment, options?.onComplete)
     }
 
     /**

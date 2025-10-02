@@ -1715,6 +1715,17 @@ export interface EarlyAccessFeatureResponse {
     earlyAccessFeatures: EarlyAccessFeature[]
 }
 
+export interface FeedbackItemResponse {
+    id: string
+}
+
+export interface FeedbackItemAttachResponse {
+    presigned_url: {
+        url: string
+        fields: Record<string, string>
+    }
+}
+
 export type Headers = Record<string, string>
 
 /* for rrweb/network@1
