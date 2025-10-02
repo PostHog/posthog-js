@@ -28,7 +28,8 @@
   ],
   "scripts": {
     "prepare": "nuxt prepare",
-    "prepack": "nuxt-module-build build"
+    "prepack": "nuxt-module-build build",
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "dependencies": {
     "posthog-node": "workspace:*",

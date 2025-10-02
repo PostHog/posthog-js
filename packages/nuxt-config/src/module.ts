@@ -32,6 +32,7 @@ export default defineNuxtModule<ModuleOptions>({
   },
   defaults: () => ({
     host: 'https://us.i.posthog.com',
+    exceptionAutoCaptureEnabled: false,
   }),
   setup(options, nuxt) {
     const resolver = createResolver(import.meta.url)
@@ -40,6 +41,8 @@ export default defineNuxtModule<ModuleOptions>({
     nuxt.options.runtimeConfig.public.posthogPublicKey =
       nuxt.options.runtimeConfig.public.posthogPublicKey || options.publicApiKey
     nuxt.options.runtimeConfig.public.posthogHost = nuxt.options.runtimeConfig.public.posthogHost || options.host
+    nuxt.options.runtimeConfig.public.exceptionAutoCaptureEnabled =
+      nuxt.options.runtimeConfig.public.exceptionAutoCaptureEnabled || options.exceptionAutoCaptureEnabled
 
     if (!options.sourceMaps.enabled) {
       return
