@@ -8,6 +8,8 @@ on:
 jobs:
   generate-references:
     name: Generate SDK references
+    permissions:
+      contents: write
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout the repository
