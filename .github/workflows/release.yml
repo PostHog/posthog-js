@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   release:
@@ -58,32 +59,32 @@ jobs:
           npm_token: ${{ secrets.NPM_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Dispatch posthog upgrade for ${{ matrix.package.name }}
-        if: matrix.package.name == 'posthog-js' && steps.check-package-version.outputs.is-new-version == 'true'
-        run: |
-          curl -f -X POST \
-               -H "Accept: application/vnd.github+json" \
-               -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-               https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-upgrade.yml/dispatches \
-               -d '{
-                 "ref": "main",
-                 "inputs": {
-                   "package_name": "${{ matrix.package.name }}",
-                   "package_version": "${{ steps.check-package-version.outputs.committed-version }}"
-                 }
-               }'
-
-      - name: Dispatch posthog.com upgrade for ${{ matrix.package.name }}
-        if: matrix.package.name == 'posthog-js' && steps.check-package-version.outputs.is-new-version == 'true'
-        run: |
-          curl -f -X POST \
-               -H "Accept: application/vnd.github+json" \
-               -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-               https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-com-upgrade.yml/dispatches \
-               -d '{
-                 "ref": "main",
-                 "inputs": {
-                   "package_name": "${{ matrix.package.name }}",
-                   "package_version": "${{ steps.check-package-version.outputs.committed-version }}"
-                 }
-               }'
+#      - name: Dispatch posthog upgrade for ${{ matrix.package.name }}
+#        if: matrix.package.name == 'posthog-js' && steps.check-package-version.outputs.is-new-version == 'true'
+#        run: |
+#          curl -f -X POST \
+#               -H "Accept: application/vnd.github+json" \
+#               -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+#               https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-upgrade.yml/dispatches \
+#               -d '{
+#                 "ref": "main",
+#                 "inputs": {
+#                   "package_name": "${{ matrix.package.name }}",
+#                   "package_version": "${{ steps.check-package-version.outputs.committed-version }}"
+#                 }
+#               }'
+#
+#      - name: Dispatch posthog.com upgrade for ${{ matrix.package.name }}
+#        if: matrix.package.name == 'posthog-js' && steps.check-package-version.outputs.is-new-version == 'true'
+#        run: |
+#          curl -f -X POST \
+#               -H "Accept: application/vnd.github+json" \
+#               -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+#               https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-com-upgrade.yml/dispatches \
+#               -d '{
+#                 "ref": "main",
+#                 "inputs": {
+#                   "package_name": "${{ matrix.package.name }}",
+#                   "package_version": "${{ steps.check-package-version.outputs.committed-version }}"
+#                 }
+#               }'
