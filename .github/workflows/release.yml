@@ -9,11 +9,14 @@ on:
     branches:
       - main
   workflow_dispatch:
+  issue_comment:
+    types: [created]
 
 jobs:
   release:
     name: Publish
     runs-on: ubuntu-latest
+    if: github.event_name != 'issue_comment' || (github.event.issue.pull_request && contains(github.event.comment.body, '/test-release'))
     strategy:
       fail-fast: false
       matrix:
@@ -28,8 +31,20 @@ jobs:
           - name: "@posthog/nextjs-config"
 
     steps:
+      - name: Get PR ref
+        if: github.event_name == 'issue_comment'
+        id: get-pr-ref
+        run: |
+          PR_NUMBER=${{ github.event.issue.number }}
+          PR_REF=$(gh pr view $PR_NUMBER --json headRefName --jq .headRefName)
+          echo "ref=$PR_REF" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Checkout the repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'issue_comment' && steps.get-pr-ref.outputs.ref || '' }}
 
       - name: Setup environment
         uses: ./.github/actions/setup
