@@ -3,7 +3,7 @@ import { useEffect, useState } from 'preact/hooks'
 import { createLogger } from '../../utils/logger'
 import { PostHog } from '../../posthog-core'
 import { ReportDialogOptions } from './types'
-import { window as _window } from '../../utils/globals'
+import { window as _window, assignableWindow } from '../../utils/globals'
 import { ScreenshotCapture } from './screenshot-capture'
 import { AnnotationOverlay } from './annotation-overlay'
 import { addEventListener } from '../../utils'
@@ -19,13 +19,13 @@ interface ReportWidgetProps {
 }
 
 const FEEDBACK_CATEGORIES = [
-    { value: '0199a511-042a-73bf-9af9-7340eaa9a381', label: 'Bug' },
-    { value: '0199a511-58e1-7fc8-88cf-2ae6756f332e', label: 'Feature Request' },
+    { id: '0199a511-042a-73bf-9af9-7340eaa9a381', name: '[Hardcoded] Bug' },
+    { id: '0199a511-58e1-7fc8-88cf-2ae6756f332e', name: '[Hardcoded] Feature Request' },
 ] as const
 
 export const ReportWidget = ({ posthog, options, onClose }: ReportWidgetProps) => {
     const [description, setDescription] = useState('')
-    const [category, setCategory] = useState<string>(FEEDBACK_CATEGORIES[0].value)
+    const [category, setCategory] = useState<string>('')
     const [isSubmitted, setIsSubmitted] = useState(false)
     const [screenshot, setScreenshot] = useState<string | undefined>(options?.screenshot)
     const [isCapturing, setIsCapturing] = useState(false)
@@ -188,6 +188,11 @@ export const ReportWidget = ({ posthog, options, onClose }: ReportWidgetProps) =
         )
     }
 
+    const feedbackCategories = assignableWindow?._POSTHOG_REMOTE_CONFIG?.[posthog.config.token]?.config
+        ?.feedbackCategories?.length
+        ? assignableWindow._POSTHOG_REMOTE_CONFIG[posthog.config.token].config.feedbackCategories
+        : FEEDBACK_CATEGORIES
+
     return (
         <div className="ph-report-backdrop" onClick={handleBackdropClick}>
             <div className="ph-report-container" onClick={handleModalClick}>
@@ -250,9 +255,9 @@ export const ReportWidget = ({ posthog, options, onClose }: ReportWidgetProps) =
                                     value={category}
                                     onChange={(e) => setCategory((e.target as HTMLSelectElement).value)}
                                 >
-                                    {FEEDBACK_CATEGORIES.map((cat) => (
-                                        <option key={cat.value} value={cat.value}>
-                                            {cat.label}
+                                    {feedbackCategories.map((cat) => (
+                                        <option key={cat.id} value={cat.id}>
+                                            {cat.name}
                                         </option>
                                     ))}
                                 </select>

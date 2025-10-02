@@ -1472,6 +1472,7 @@ export interface RemoteConfig {
      * Supported compression algorithms
      */
     supportedCompression: Compression[]
+    feedbackCategories: { id: string; name: string }[]
 
     /**
      * If set, disables autocapture
