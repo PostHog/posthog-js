@@ -66,10 +66,7 @@ const buildTypes = {
         dts(),
         copy({
             hook: 'writeBundle',
-            targets: [
-                { src: 'dist/*', dest: '../browser/react/dist' },
-                { src: 'src/*', dest: '../browser/react/src' },
-            ],
+            targets: [{ src: 'dist/*', dest: '../browser/react/dist' }],
         }),
     ],
 }
