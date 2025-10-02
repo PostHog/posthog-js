@@ -37,13 +37,25 @@ export default class PostHogFeedback {
 
                 data.append('file', attachment)
 
-                this._sendRequest(url, data, () => {
+                // Upload directly to presigned URL (not through feedback_items endpoint)
+                this._uploadToPresignedUrl(url, data, () => {
                     callback([url])
                 })
             })
         } else {
             callback([])
         }
+    }
+
+    _uploadToPresignedUrl(url: string, data: FormData, callback: () => void): void {
+        this._instance._send_request({
+            url: url,
+            method: 'POST',
+            data: data,
+            callback: () => {
+                callback()
+            },
+        })
     }
 
     _createFeedbackItem(

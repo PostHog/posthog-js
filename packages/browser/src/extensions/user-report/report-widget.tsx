@@ -107,7 +107,7 @@ export const ReportWidget = ({ posthog, options, onClose }: ReportWidgetProps) =
             }
 
             // Submit via PostHog feedback API
-            posthog.captureFeedback('bug', description, {
+            posthog.captureFeedback('0199a511-042a-73bf-9af9-7340eaa9a381', description, {
                 topic: 'user_report',
                 attachments: screenshotFile ? [screenshotFile] : undefined,
                 onComplete: (feedbackItemId, eventId) => {
