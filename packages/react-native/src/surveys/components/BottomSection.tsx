@@ -21,7 +21,7 @@ export function BottomSection({
       <TouchableOpacity
         style={[
           styles.button,
-          { backgroundColor: appearance.submitButtonColor },
+          { backgroundColor: appearance.submitButtonColor, borderRadius: appearance.submitButtonRadius },
           submitDisabled && styles.buttonDisabled,
         ]}
         disabled={submitDisabled}
@@ -48,7 +48,6 @@ const styles = StyleSheet.create({
   },
   button: {
     padding: 10,
-    borderRadius: 5,
     alignItems: 'center',
   },
   buttonText: {

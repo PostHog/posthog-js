@@ -34,10 +34,13 @@ export interface SurveyAppearance {
     // deprecate submit button text eventually
     submitButtonText?: string
     submitButtonTextColor?: string
+    submitButtonRadius?: string
     descriptionTextColor?: string
     ratingButtonColor?: string
     ratingButtonActiveColor?: string
     ratingButtonHoverColor?: string
+    inputBackground?: string
+    placeholder?: string
     whiteLabel?: boolean
     autoDisappear?: boolean
     displayThankYouMessage?: boolean
@@ -47,7 +50,6 @@ export interface SurveyAppearance {
     thankYouMessageCloseButtonText?: string
     borderColor?: string
     position?: SurveyPosition
-    placeholder?: string
     shuffleQuestions?: boolean
     surveyPopupDelaySeconds?: number
     // widget options

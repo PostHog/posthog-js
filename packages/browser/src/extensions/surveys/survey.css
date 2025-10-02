@@ -12,6 +12,7 @@
     --ph-survey-box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     --ph-survey-submit-button-color: black;
     --ph-survey-submit-button-text-color: white;
+    --ph-survey-submit-button-radius: 6px;
     --ph-survey-rating-bg-color: white;
     --ph-survey-rating-text-color: #020617;
     --ph-survey-rating-active-bg-color: black;
@@ -509,7 +510,7 @@
     cursor: pointer;
     user-select: none;
     padding: 12px;
-    border-radius: 6px;
+    border-radius: var(--ph-survey-submit-button-radius);
     background: var(--ph-survey-submit-button-color);
     color: var(--ph-survey-submit-button-text-color);
     box-shadow: 0 2px 0 rgba(0, 0, 0, 0.045);
