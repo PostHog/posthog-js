@@ -132,7 +132,7 @@ export const sessionRecordingLoggerForPostHogInstance: (posthog: PostHog) => Pos
 export function getChangedStateKeys<S>(
     prevState: S,
     nextState: S,
-    maxDepth: number = 3
+    maxDepth: number
 ): { prevState?: Partial<S>; nextState?: Partial<S> } {
     // Fast bailouts
     if (prevState === nextState) return { prevState: {}, nextState: {} }
