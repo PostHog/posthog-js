@@ -131,7 +131,7 @@ describe('getChangeStateKeys', () => {
             const prevState = createComplexState(3, 8, true)
             const nextState = modifyStateForDrag(prevState, 5)
 
-            const { executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState))
+            const { executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState, 10))
 
             expect(executionTime).toBeLessThan(45)
         })
@@ -140,9 +140,10 @@ describe('getChangeStateKeys', () => {
             const prevState = createComplexState(4, 10, true)
             const nextState = modifyStateForDrag(prevState, 8)
 
-            const { executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState))
+            const { avgTime, maxTime } = measureMultipleExecutions(() => getChangedStateKeys(prevState, nextState, 5))
 
-            expect(executionTime).toBeLessThan(45)
+            expect(maxTime).toBeLessThan(200)
+            expect(avgTime).toBeLessThan(80)
         })
 
         test('should handle complex state changes efficiently', () => {

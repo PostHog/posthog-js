@@ -81,7 +81,7 @@ export interface PostHogStateLoggerConfig<S = any> {
     rateLimiterBucketSize?: number
     /**
      * Controls how many levels deep the state diffing goes when `diffState` is true
-     * Defaults to 10
+     * Defaults to 5
      * Increase this if you have nested state changes that are not being captured
      * Decrease this if you are seeing too much state in the diffs and want to reduce noise
      * Note that increasing this will increase the CPU cost of diffing, so use with caution
@@ -312,7 +312,7 @@ export function posthogReduxLogger<S = any>(
                         const { prevState: diffedPrevState, nextState: diffedNextState } = getChangedStateKeys(
                             maskedPrevState,
                             maskedNextState,
-                            __stateComparisonDepth ?? 10
+                            __stateComparisonDepth ?? 5
                         )
                         const invalidPayloadForDiffing: FilteredState = { 'invalid state': 'no changes after diffing' }
                         filteredPrevState = (diffedPrevState as FilteredState) ?? invalidPayloadForDiffing
