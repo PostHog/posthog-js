@@ -11,6 +11,7 @@ const remoteMaskingTextSelector = '*'
 const startOptions = (masking: Record<string, any>) => ({
     options: {
         session_recording: {
+            // not the default but makes for easier test assertions
             compress_events: false,
         },
     },
