@@ -159,6 +159,9 @@ export function autocapturePropertiesForElement(
             curEl = (curEl.parentNode as any).host
             continue
         }
+        if (!isElementNode(curEl.parentNode)) {
+            break
+        }
         targetElementList.push(curEl.parentNode as Element)
         curEl = curEl.parentNode as Element
     }
@@ -169,12 +172,16 @@ export function autocapturePropertiesForElement(
     let explicitNoCapture = false
 
     each(targetElementList, (el) => {
+        if (!isElementNode(el)) {
+            return
+        }
+
         const shouldCaptureEl = shouldCaptureElement(el)
 
         // if the element or a parent element is an anchor tag
         // include the href as a property
         if (el.tagName.toLowerCase() === 'a') {
-            href = el.getAttribute('href')
+            href = el.getAttribute('href') || false
             href = shouldCaptureEl && href && shouldCaptureValue(href) && href
         }
 
