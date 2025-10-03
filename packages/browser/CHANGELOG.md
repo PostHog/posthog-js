@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.270.1
+
+### Patch Changes
+
+- [#2390](https://github.com/PostHog/posthog-js/pull/2390) [`244b3ad`](https://github.com/PostHog/posthog-js/commit/244b3ad2f6dea8086747046044245b1514bd658b) Thanks [@hpouillot](https://github.com/hpouillot)! - fix react sourcemaps
+
 ## 1.270.0
 
 ### Minor Changes
