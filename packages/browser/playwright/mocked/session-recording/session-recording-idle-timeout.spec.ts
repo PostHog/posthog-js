@@ -34,7 +34,7 @@ async function triggerForcedIdleTimeout(page: Page) {
         }
 
         // Store the old session ID before we reset it
-        const oldSessionId = ph.get_session_id()
+        const oldSessionId = ph?.get_session_id()
 
         // Directly reset the session to simulate an idle timeout
         sessionManager.resetSessionId()
