@@ -1,6 +1,6 @@
-import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
+import { convertToURL, getQueryParam, maskParams, maskQueryParams } from './request-utils'
 import { isNull, stripLeadingDollar } from '@posthog/core'
-import { Properties } from '../types'
+import { PostHogConfig, Properties } from '../types'
 import Config from '../config'
 import { each, extend, extendArray, stripEmptyProperties } from './index'
 import { document, location, userAgent, window } from './globals'
@@ -78,32 +78,34 @@ export const COOKIE_CAMPAIGN_PARAMS = [
     'li_fat_id', // linkedin
 ]
 
-export function getCampaignParams(
-    customTrackedParams?: string[],
-    maskPersonalDataProperties?: boolean,
-    customPersonalDataProperties?: string[] | undefined
-): Record<string, string> {
+export function getCampaignParams(config: PostHogConfig): Record<string, string> {
     if (!document) {
         return {}
     }
 
-    const paramsToMask = maskPersonalDataProperties
-        ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
+    const paramsToMask = config.mask_personal_data_properties
+        ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, config.custom_personal_data_properties || [])
         : []
 
     // Initially get campaign params from the URL
-    const urlCampaignParams = _getCampaignParamsFromUrl(
-        maskQueryParams(document.URL, paramsToMask, MASKED),
-        customTrackedParams
-    )
+    const urlCampaignParams = _getCampaignParamsFromUrl(document.URL, config.custom_campaign_params)
 
     // But we can also get some of them from the cookie store
     // For example: https://learn.microsoft.com/en-us/linkedin/marketing/conversions/enabling-first-party-cookies?view=li-lms-2025-05#reading-li_fat_id-from-cookies
     const cookieCampaignParams = _getCampaignParamsFromCookie()
 
+    // set all missing campaign params to null, so that initial person properties can't be overridden later
+    const nullCampaignParams: Record<string, null> = {}
+    each(urlCampaignParams, function (_, key) {
+        nullCampaignParams[key] = null
+    })
+
     // Prefer the values found in the urlCampaignParams if possible
-    // `extend` will override the values if found in the second argument
-    return extend(cookieCampaignParams, urlCampaignParams)
+    let campaignParams = extend(nullCampaignParams, cookieCampaignParams, stripEmptyProperties(urlCampaignParams))
+
+    campaignParams = maskParams(campaignParams, paramsToMask, MASKED)
+
+    return campaignParams
 }
 
 function _getCampaignParamsFromUrl(url: string, customParams?: string[]): Record<string, string> {
@@ -121,6 +123,9 @@ function _getCampaignParamsFromUrl(url: string, customParams?: string[]): Record
 function _getCampaignParamsFromCookie(): Record<string, string> {
     const params: Record<string, any> = {}
     each(COOKIE_CAMPAIGN_PARAMS, function (kwkey) {
+        // TODO is this correct? I think we're making an assumption of the shape of the cookie here
+        // see https://learn.microsoft.com/en-us/linkedin/marketing/conversions/enabling-first-party-cookies?view=li-lms-2025-05#reading-li_fat_id-from-cookies
+        // this really need a test where we set document.cookie to a real value seen in the wild
         const kw = cookieStore._get(kwkey)
         params[kwkey] = kw ? kw : null
     })
