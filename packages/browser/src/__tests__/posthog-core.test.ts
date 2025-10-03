@@ -2,7 +2,7 @@ import { defaultPostHog } from './helpers/posthog-instance'
 import type { PostHogConfig } from '../types'
 import { uuidv7 } from '../uuidv7'
 import { SurveyEventName, SurveyEventProperties } from '../posthog-surveys-types'
-import { getFromPersistenceWithLocalStorageFallback, SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
+import { SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 
 describe('posthog core', () => {
     const mockURL = jest.fn()
@@ -262,7 +262,7 @@ describe('posthog core', () => {
                 })
 
                 // assert
-                expect(getFromPersistenceWithLocalStorageFallback(surveySeenKey, posthog)).toBe(true)
+                expect(localStorage.getItem(surveySeenKey)).toBe('true')
                 // test if property contains at least $set but dont care about the other properties
                 expect(beforeSendMock.mock.calls[0][0]).toMatchObject({
                     properties: {
@@ -290,7 +290,7 @@ describe('posthog core', () => {
                 })
 
                 // assert
-                expect(getFromPersistenceWithLocalStorageFallback(surveySeenKey, posthog)).toBe(true)
+                expect(localStorage.getItem(surveySeenKey)).toBe('true')
                 // test if property contains at least $set but dont care about the other properties
                 expect(beforeSendMock.mock.calls[0][0]).toMatchObject({
                     properties: {

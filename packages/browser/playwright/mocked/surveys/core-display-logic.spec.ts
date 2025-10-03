@@ -75,8 +75,7 @@ test.describe('surveys - core display logic', () => {
 
         expect(
             await page.evaluate(() => {
-                // @ts-expect-error - posthog is added to window in test setup
-                return window.posthog.persistence.get_property('seenSurvey_123')
+                return window.localStorage.getItem('seenSurvey_123')
             })
         ).toBeTruthy()
 
@@ -115,8 +114,7 @@ test.describe('surveys - core display logic', () => {
 
         expect(
             await page.evaluate(() => {
-                // @ts-expect-error - posthog is added to window in test setup
-                return window.posthog.persistence.get_property('seenSurvey_123')
+                return window.localStorage.getItem('seenSurvey_123')
             })
         ).toBeTruthy()
 
@@ -131,8 +129,7 @@ test.describe('surveys - core display logic', () => {
 
         expect(
             await page.evaluate(() => {
-                // @ts-expect-error - posthog is added to window in test setup
-                return window.posthog.persistence.get_property('seenSurvey_123')
+                return window.localStorage.getItem('seenSurvey_123')
             })
         ).toBeTruthy()
     })
@@ -165,8 +162,7 @@ test.describe('surveys - core display logic', () => {
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
 
         const lastSeenDate = await page.evaluate(() => {
-            // @ts-expect-error - posthog is added to window in test setup
-            return window.posthog.persistence.get_property('lastSeenSurveyDate')
+            return window.localStorage.getItem('lastSeenSurveyDate')
         })
 
         expect(lastSeenDate!.split('T')[0]).toEqual(new Date().toISOString().split('T')[0])
