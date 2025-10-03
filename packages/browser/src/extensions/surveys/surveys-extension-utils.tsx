@@ -54,9 +54,11 @@ export const defaultSurveyAppearance = {
     backgroundColor: '#eeeded',
     submitButtonColor: 'black',
     submitButtonTextColor: 'white',
+    submitButtonRadius: '6px',
     ratingButtonColor: 'white',
     ratingButtonActiveColor: 'black',
     borderColor: '#c9c6c6',
+    inputBackground: 'white',
     placeholder: 'Start typing...',
     whiteLabel: false,
     displayThankYouMessage: true,
@@ -76,7 +78,6 @@ export const defaultSurveyAppearance = {
     surveyPopupDelaySeconds: undefined,
     // Not customizable atm
     outlineColor: 'rgba(59, 130, 246, 0.8)',
-    inputBackground: 'white',
     inputTextColor: BLACK_TEXT_COLOR,
     scrollbarThumbColor: 'var(--ph-survey-border-color)',
     scrollbarTrackColor: 'var(--ph-survey-background-color)',
@@ -118,6 +119,7 @@ export const addSurveyCSSVariablesToElement = (
         '--ph-survey-submit-button-text-color',
         appearance?.submitButtonTextColor || getContrastingTextColor(effectiveAppearance.submitButtonColor)
     )
+    hostStyle.setProperty('--ph-survey-submit-button-radius', effectiveAppearance.submitButtonRadius)
     hostStyle.setProperty('--ph-survey-rating-bg-color', effectiveAppearance.ratingButtonColor)
     hostStyle.setProperty(
         '--ph-survey-rating-text-color',
@@ -136,11 +138,6 @@ export const addSurveyCSSVariablesToElement = (
     hostStyle.setProperty('--ph-widget-color', effectiveAppearance.widgetColor)
     hostStyle.setProperty('--ph-widget-text-color', getContrastingTextColor(effectiveAppearance.widgetColor))
     hostStyle.setProperty('--ph-widget-z-index', effectiveAppearance.zIndex)
-
-    // Adjust input/choice background slightly if main background is white
-    if (effectiveAppearance.backgroundColor === 'white') {
-        hostStyle.setProperty('--ph-survey-input-background', '#f8f8f8')
-    }
 
     hostStyle.setProperty('--ph-survey-input-background', effectiveAppearance.inputBackground)
     hostStyle.setProperty('--ph-survey-input-text-color', getContrastingTextColor(effectiveAppearance.inputBackground))

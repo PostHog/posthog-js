@@ -283,8 +283,11 @@ export type SurveyAppearance = {
   // deprecate submit button text eventually
   submitButtonText?: string
   submitButtonTextColor?: string
+  submitButtonRadius?: string
   ratingButtonColor?: string
   ratingButtonActiveColor?: string
+  inputBackground?: string
+  placeholder?: string
   autoDisappear?: boolean
   displayThankYouMessage?: boolean
   thankYouMessageHeader?: string
@@ -293,7 +296,6 @@ export type SurveyAppearance = {
   thankYouMessageCloseButtonText?: string
   borderColor?: string
   position?: SurveyPosition
-  placeholder?: string
   shuffleQuestions?: boolean
   surveyPopupDelaySeconds?: number
   // widget options
