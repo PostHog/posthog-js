@@ -92,7 +92,7 @@ const FIVE_MINUTES = ONE_MINUTE * 5
 const TWO_SECONDS = 2000
 export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
 const ONE_KB = 1024
-const PARTIAL_COMPRESSION_THRESHOLD = ONE_KB
+
 export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
@@ -191,11 +191,6 @@ function gzipToString(data: unknown): string {
  * so we have a custom packer that only compresses part of some events
  */
 function compressEvent(event: eventWithTime): eventWithTime | compressedEventWithTime {
-    const originalSize = estimateSize(event)
-    if (originalSize < PARTIAL_COMPRESSION_THRESHOLD) {
-        return event
-    }
-
     try {
         if (event.type === EventType.FullSnapshot) {
             return {
@@ -1093,7 +1088,7 @@ export class SessionRecording {
             this._receivedFlags &&
             this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING
         ) {
-            this._clearBuffer()
+            this._clearBufferBeforeMostRecentMeta()
         }
 
         const throttledEvent = this._mutationThrottler ? this._mutationThrottler.throttleMutations(rawEvent) : rawEvent
@@ -1193,6 +1188,28 @@ export class SessionRecording {
         }
 
         return url
+    }
+
+    private _clearBufferBeforeMostRecentMeta(): SnapshotBuffer {
+        if (!this._buffer || this._buffer.data.length === 0) {
+            return this._clearBuffer()
+        }
+
+        // Find the last meta event index by iterating backwards
+        let lastMetaIndex = -1
+        for (let i = this._buffer.data.length - 1; i >= 0; i--) {
+            if (this._buffer.data[i].type === EventType.Meta) {
+                lastMetaIndex = i
+                break
+            }
+        }
+        if (lastMetaIndex >= 0) {
+            this._buffer.data = this._buffer.data.slice(lastMetaIndex)
+            this._buffer.size = this._buffer.data.reduce((acc, curr) => acc + estimateSize(curr), 0)
+            return this._buffer
+        } else {
+            return this._clearBuffer()
+        }
     }
 
     private _clearBuffer(): SnapshotBuffer {

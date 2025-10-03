@@ -3,10 +3,7 @@ import { start } from '../utils/setup'
 
 const startOptions = {
     options: {
-        session_recording: {
-            // not the default but makes for easier test assertions
-            compress_events: false,
-        },
+        session_recording: {},
     },
     flagsResponseOverrides: {
         sessionRecording: {
@@ -14,6 +11,7 @@ const startOptions = {
         },
         capturePerformance: true,
         autocapture_opt_out: true,
+        __preview_eager_load_replay: false,
     },
     url: './playground/cypress/index.html',
 }

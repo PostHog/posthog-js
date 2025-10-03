@@ -461,4 +461,60 @@ describe('Session ID manager', () => {
             jest.useRealTimers()
         })
     })
+
+    describe('forcedIdleReset event emitter', () => {
+        it('is safe when there are no handlers registered', async () => {
+            jest.useFakeTimers()
+
+            const sessionIdManager = sessionIdMgr(persistence)
+
+            // Start with a fresh session
+            sessionIdManager.checkAndGetSessionAndWindowId(false, timestamp)
+
+            // Set up persistence to simulate inactivity
+            const idleTimestamp = timestamp - (sessionIdManager.sessionTimeoutMs + 1000)
+            persistence.props[SESSION_ID] = [idleTimestamp, 'oldSessionID', idleTimestamp]
+
+            // Fast-forward time to trigger the idle timeout timer
+            // This should not throw even with no handlers registered
+            expect(() => {
+                const idleTimeoutMs = sessionIdManager.sessionTimeoutMs * 1.1
+                jest.advanceTimersByTime(idleTimeoutMs + 1000)
+            }).not.toThrow()
+
+            jest.useRealTimers()
+        })
+
+        it('calls multiple handlers when forcedIdleReset occurs', async () => {
+            jest.useFakeTimers()
+
+            const sessionIdManager = sessionIdMgr(persistence)
+            const mockHandler1 = jest.fn()
+            const mockHandler2 = jest.fn()
+            const mockHandler3 = jest.fn()
+
+            // Register multiple handlers
+            sessionIdManager.on('forcedIdleReset', mockHandler1)
+            sessionIdManager.on('forcedIdleReset', mockHandler2)
+            sessionIdManager.on('forcedIdleReset', mockHandler3)
+
+            // Start with a fresh session
+            sessionIdManager.checkAndGetSessionAndWindowId(false, timestamp)
+
+            // Set up persistence to simulate inactivity
+            const idleTimestamp = timestamp - (sessionIdManager.sessionTimeoutMs + 1000)
+            persistence.props[SESSION_ID] = [idleTimestamp, 'oldSessionID', idleTimestamp]
+
+            // Fast-forward time to trigger the idle timeout timer
+            const idleTimeoutMs = sessionIdManager.sessionTimeoutMs * 1.1
+            jest.advanceTimersByTime(idleTimeoutMs + 1000)
+
+            // All handlers should have been called exactly once
+            expect(mockHandler1).toHaveBeenCalledTimes(1)
+            expect(mockHandler2).toHaveBeenCalledTimes(1)
+            expect(mockHandler3).toHaveBeenCalledTimes(1)
+
+            jest.useRealTimers()
+        })
+    })
 })
