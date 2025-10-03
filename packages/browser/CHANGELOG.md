@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.270.0
+
+### Minor Changes
+
+- [#2355](https://github.com/PostHog/posthog-js/pull/2355) [`9eccbab`](https://github.com/PostHog/posthog-js/commit/9eccbabbd219cee062b52fadd3b0c7ba55773f7a) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix: use persistence for surveys if localStorage usage is enabled
+
+### Patch Changes
+
+- [#2396](https://github.com/PostHog/posthog-js/pull/2396) [`13c6667`](https://github.com/PostHog/posthog-js/commit/13c6667d22edf8b0d1c1ff11ef3e8b32ac5cb2a2) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: no need to estimate the size of all rrweb events before compressing some of them
+
 ## 1.269.1
 
 ### Patch Changes
