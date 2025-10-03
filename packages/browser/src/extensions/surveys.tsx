@@ -22,9 +22,7 @@ import {
     doesSurveyActivateByEvent,
     IN_APP_SURVEY_TYPES,
     isSurveyRunning,
-    LAST_SEEN_SURVEY_DATE_KEY,
     SURVEY_LOGGER as logger,
-    setOnPersistenceWithLocalStorageFallback,
 } from '../utils/survey-utils'
 import { isNull, isUndefined } from '@posthog/core'
 import { uuidv7 } from '../uuidv7'
@@ -354,8 +352,8 @@ export class SurveyManager {
      */
     private _sortSurveysByAppearanceDelay(surveys: Survey[]): Survey[] {
         return surveys.sort((a, b) => {
-            const isSurveyInProgressA = isSurveyInProgress(a, this._posthog)
-            const isSurveyInProgressB = isSurveyInProgress(b, this._posthog)
+            const isSurveyInProgressA = isSurveyInProgress(a)
+            const isSurveyInProgressB = isSurveyInProgress(b)
             if (isSurveyInProgressA && !isSurveyInProgressB) {
                 return -1 // a comes before b (in progress surveys first)
             }
@@ -420,9 +418,9 @@ export class SurveyManager {
 
     private _internalFlagCheckSatisfied(survey: Survey): boolean {
         return (
-            canActivateRepeatedly(survey, this._posthog) ||
+            canActivateRepeatedly(survey) ||
             this._isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key) ||
-            isSurveyInProgress(survey, this._posthog)
+            isSurveyInProgress(survey)
         )
     }
 
@@ -465,13 +463,13 @@ export class SurveyManager {
             return eligibility
         }
 
-        if (!hasWaitPeriodPassed(survey.conditions?.seenSurveyWaitPeriodInDays, this._posthog)) {
+        if (!hasWaitPeriodPassed(survey.conditions?.seenSurveyWaitPeriodInDays)) {
             eligibility.eligible = false
             eligibility.reason = `Survey wait period has not passed`
             return eligibility
         }
 
-        if (getSurveySeen(survey, this._posthog)) {
+        if (getSurveySeen(survey)) {
             eligibility.eligible = false
             eligibility.reason = `Survey has already been seen and it can't be activated again`
             return eligibility
@@ -866,7 +864,7 @@ export function usePopupVisibility(
                 [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
                 sessionRecordingUrl: posthog.get_session_replay_url?.(),
             })
-            setOnPersistenceWithLocalStorageFallback(LAST_SEEN_SURVEY_DATE_KEY, new Date().toISOString(), posthog)
+            localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
         }
 
         addEventListener(window, 'PHSurveyClosed', handleSurveyClosed as EventListener)
@@ -978,7 +976,7 @@ export function SurveyPopup({
 
     const shouldShowConfirmation = isSurveySent || previewPageIndex === survey.questions.length
     const surveyContextValue = useMemo(() => {
-        const getInProgressSurvey = getInProgressSurveyState(survey, posthog)
+        const getInProgressSurvey = getInProgressSurveyState(survey)
         return {
             isPreviewMode,
             previewPageIndex: previewPageIndex,
@@ -1036,9 +1034,9 @@ export function Questions({
     forceDisableHtml: boolean
     posthog?: PostHog
 }) {
-    // Initialize responses from persistence or empty object
+    // Initialize responses from localStorage or empty object
     const [questionsResponses, setQuestionsResponses] = useState(() => {
-        const inProgressSurveyData = getInProgressSurveyState(survey, posthog)
+        const inProgressSurveyData = getInProgressSurveyState(survey)
         if (inProgressSurveyData?.responses) {
             logger.info('Survey is already in progress, filling in initial responses')
         }
@@ -1047,7 +1045,7 @@ export function Questions({
     const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit, surveySubmissionId, isPreviewMode } =
         useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(() => {
-        const inProgressSurveyData = getInProgressSurveyState(survey, posthog)
+        const inProgressSurveyData = getInProgressSurveyState(survey)
         return previewPageIndex || inProgressSurveyData?.lastQuestionIndex || 0
     })
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
@@ -1088,15 +1086,11 @@ export function Questions({
 
         if (!isSurveyCompleted) {
             setCurrentQuestionIndex(nextStep)
-            setInProgressSurveyState(
-                survey,
-                {
-                    surveySubmissionId: surveySubmissionId,
-                    responses: newResponses,
-                    lastQuestionIndex: nextStep,
-                },
-                posthog
-            )
+            setInProgressSurveyState(survey, {
+                surveySubmissionId: surveySubmissionId,
+                responses: newResponses,
+                lastQuestionIndex: nextStep,
+            })
         }
 
         // If partial responses are enabled, send the survey sent event with with the responses,

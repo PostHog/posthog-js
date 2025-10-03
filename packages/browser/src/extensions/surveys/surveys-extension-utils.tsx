@@ -14,13 +14,9 @@ import {
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window, userAgent } from '../../utils/globals'
 import {
-    clearFromPersistenceWithLocalStorageFallback,
-    getFromPersistenceWithLocalStorageFallback,
     getSurveyInteractionProperty,
     getSurveySeenKey,
-    LAST_SEEN_SURVEY_DATE_KEY,
     SURVEY_LOGGER as logger,
-    setOnPersistenceWithLocalStorageFallback,
     setSurveySeenOnLocalStorage,
     SURVEY_IN_PROGRESS_PREFIX,
 } from '../../utils/survey-utils'
@@ -407,7 +403,7 @@ export const sendSurveyEvent = ({
         logger.error('[survey sent] event not captured, PostHog instance not found.')
         return
     }
-    setSurveySeenOnLocalStorage(survey, posthog)
+    setSurveySeenOnLocalStorage(survey)
     posthog.capture(SurveyEventName.SENT, {
         [SurveyEventProperties.SURVEY_NAME]: survey.name,
         [SurveyEventProperties.SURVEY_ID]: survey.id,
@@ -429,7 +425,7 @@ export const sendSurveyEvent = ({
     if (isSurveyCompleted) {
         // Only dispatch PHSurveySent if the survey is completed, as that removes the survey from focus
         window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: survey.id } }))
-        clearInProgressSurveyState(survey, posthog)
+        clearInProgressSurveyState(survey)
     }
 }
 
@@ -442,7 +438,7 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
         return
     }
 
-    const inProgressSurvey = getInProgressSurveyState(survey, posthog)
+    const inProgressSurvey = getInProgressSurveyState(survey)
     posthog.capture(SurveyEventName.DISMISSED, {
         [SurveyEventProperties.SURVEY_NAME]: survey.name,
         [SurveyEventProperties.SURVEY_ID]: survey.id,
@@ -464,8 +460,8 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
         },
     })
     // Clear in-progress state on dismissal
-    clearInProgressSurveyState(survey, posthog)
-    setSurveySeenOnLocalStorage(survey, posthog)
+    clearInProgressSurveyState(survey)
+    setSurveySeenOnLocalStorage(survey)
     window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: survey.id } }))
 }
 
@@ -521,35 +517,35 @@ export const hasEvents = (survey: Pick<Survey, 'conditions'>): boolean => {
 }
 
 export const canActivateRepeatedly = (
-    survey: Pick<Survey, 'schedule' | 'conditions' | 'id' | 'current_iteration'>,
-    posthog?: PostHog
+    survey: Pick<Survey, 'schedule' | 'conditions' | 'id' | 'current_iteration'>
 ): boolean => {
     return (
         !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey)) ||
         survey.schedule === SurveySchedule.Always ||
-        isSurveyInProgress(survey, posthog)
+        isSurveyInProgress(survey)
     )
 }
 
 /**
- * getSurveySeen checks persistence for the surveySeenKey
+ * getSurveySeen checks local storage for the surveySeen Key a
  * and overrides this value if the survey can be repeatedly activated by its events.
  * @param survey
- * @param posthog
  */
-export const getSurveySeen = (survey: Survey, posthog?: PostHog): boolean => {
-    const surveySeen = getFromPersistenceWithLocalStorageFallback(getSurveySeenKey(survey), posthog)
+export const getSurveySeen = (survey: Survey): boolean => {
+    const surveySeen = localStorage.getItem(getSurveySeenKey(survey))
     if (surveySeen) {
         // if a survey has already been seen,
         // we will override it with the event repeated activation value.
-        return !canActivateRepeatedly(survey, posthog)
+        return !canActivateRepeatedly(survey)
     }
 
     return false
 }
 
-export const hasWaitPeriodPassed = (waitPeriodInDays: number | undefined, posthog?: PostHog): boolean => {
-    const lastSeenSurveyDate = getFromPersistenceWithLocalStorageFallback(LAST_SEEN_SURVEY_DATE_KEY, posthog)
+const LAST_SEEN_SURVEY_DATE_KEY = 'lastSeenSurveyDate'
+
+export const hasWaitPeriodPassed = (waitPeriodInDays: number | undefined): boolean => {
+    const lastSeenSurveyDate = localStorage.getItem(LAST_SEEN_SURVEY_DATE_KEY)
     if (!waitPeriodInDays || !lastSeenSurveyDate) {
         return true
     }
@@ -650,31 +646,29 @@ interface InProgressSurveyState {
 }
 
 const getInProgressSurveyStateKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {
+    let key = `${SURVEY_IN_PROGRESS_PREFIX}${survey.id}`
     if (survey.current_iteration && survey.current_iteration > 0) {
-        return `${SURVEY_IN_PROGRESS_PREFIX}${survey.id}_${survey.current_iteration}`
+        key = `${SURVEY_IN_PROGRESS_PREFIX}${survey.id}_${survey.current_iteration}`
     }
-
-    return `${SURVEY_IN_PROGRESS_PREFIX}${survey.id}`
+    return key
 }
 
 export const setInProgressSurveyState = (
     survey: Pick<Survey, 'id' | 'current_iteration'>,
-    state: InProgressSurveyState,
-    posthog?: PostHog
+    state: InProgressSurveyState
 ): void => {
     try {
-        setOnPersistenceWithLocalStorageFallback(getInProgressSurveyStateKey(survey), JSON.stringify(state), posthog)
+        localStorage.setItem(getInProgressSurveyStateKey(survey), JSON.stringify(state))
     } catch (e) {
-        logger.error('Error setting in-progress survey state', e)
+        logger.error('Error setting in-progress survey state in localStorage', e)
     }
 }
 
 export const getInProgressSurveyState = (
-    survey: Pick<Survey, 'id' | 'current_iteration'>,
-    posthog?: PostHog
+    survey: Pick<Survey, 'id' | 'current_iteration'>
 ): InProgressSurveyState | null => {
     try {
-        const stateString = getFromPersistenceWithLocalStorageFallback(getInProgressSurveyStateKey(survey), posthog)
+        const stateString = localStorage.getItem(getInProgressSurveyStateKey(survey))
         if (stateString) {
             return JSON.parse(stateString) as InProgressSurveyState
         }
@@ -684,17 +678,14 @@ export const getInProgressSurveyState = (
     return null
 }
 
-export const isSurveyInProgress = (survey: Pick<Survey, 'id' | 'current_iteration'>, posthog?: PostHog): boolean => {
-    const state = getInProgressSurveyState(survey, posthog)
+export const isSurveyInProgress = (survey: Pick<Survey, 'id' | 'current_iteration'>): boolean => {
+    const state = getInProgressSurveyState(survey)
     return !isNullish(state?.surveySubmissionId)
 }
 
-export const clearInProgressSurveyState = (
-    survey: Pick<Survey, 'id' | 'current_iteration'>,
-    posthog?: PostHog
-): void => {
+export const clearInProgressSurveyState = (survey: Pick<Survey, 'id' | 'current_iteration'>): void => {
     try {
-        clearFromPersistenceWithLocalStorageFallback(getInProgressSurveyStateKey(survey), posthog)
+        localStorage.removeItem(getInProgressSurveyStateKey(survey))
     } catch (e) {
         logger.error('Error clearing in-progress survey state from localStorage', e)
     }

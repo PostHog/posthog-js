@@ -25,11 +25,7 @@ import * as globals from '../utils/globals'
 import { assignableWindow, window } from '../utils/globals'
 import { RequestRouter } from '../utils/request-router'
 import { SurveyEventReceiver } from '../utils/survey-event-receiver'
-import {
-    getFromPersistenceWithLocalStorageFallback,
-    SURVEY_LOGGER as logger,
-    setOnPersistenceWithLocalStorageFallback,
-} from '../utils/survey-utils'
+import { SURVEY_LOGGER as logger } from '../utils/survey-utils'
 
 describe('surveys', () => {
     let config: PostHogConfig
@@ -189,7 +185,7 @@ describe('surveys', () => {
         config = {
             token: 'testtoken',
             api_host: 'https://app.posthog.com',
-            persistence: 'localStorage+cookie',
+            persistence: 'memory',
             surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
         } as unknown as PostHogConfig
 
@@ -276,13 +272,13 @@ describe('surveys', () => {
     })
 
     it('posthog.reset() removes surveys tracking properties from storage', () => {
-        setOnPersistenceWithLocalStorageFallback('seenSurvey_XYZ', '1', instance)
-        setOnPersistenceWithLocalStorageFallback('seenSurvey_ABC', '1', instance)
-        setOnPersistenceWithLocalStorageFallback('lastSeenSurveyDate', 'some date here', instance)
+        localStorage.setItem('seenSurvey_XYZ', '1')
+        localStorage.setItem('seenSurvey_ABC', '1')
+        localStorage.setItem('lastSeenSurveyDate', 'some date here')
         surveys.reset()
-        expect(getFromPersistenceWithLocalStorageFallback('lastSeenSurveyDate', instance)).toBeFalsy()
-        expect(getFromPersistenceWithLocalStorageFallback('seenSurvey_XYZ', instance)).toBeFalsy()
-        expect(getFromPersistenceWithLocalStorageFallback('seenSurvey_ABC', instance)).toBeFalsy()
+        expect(localStorage.getItem('lastSeenSurveyDate')).toBeNull()
+        expect(localStorage.getItem('seenSurvey_XYZ')).toBeNull()
+        expect(localStorage.getItem('seenSurvey_ABC')).toBeNull()
     })
 
     it('getSurveys registers the survey event receiver if a survey has events', () => {
