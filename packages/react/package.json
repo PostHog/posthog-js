@@ -25,8 +25,8 @@
     "module": "dist/esm/index.js",
     "types": "dist/types/index.d.ts",
     "files": [
-        "dist/*",
-        "README.md"
+        "dist",
+        "src"
     ],
     "peerDependencies": {
         "@types/react": ">=16.8.0",
