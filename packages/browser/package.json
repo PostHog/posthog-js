@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.268.11",
+    "version": "1.270.1",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
@@ -37,8 +37,7 @@
         "check-testcafe-results": "ts-node testcafe/check-testcafe-results.js",
         "run-testcafe-localhost": "node scripts/run-testcafe-localhost.mjs",
         "write-mangled-property-names": "WRITE_MANGLED_PROPERTIES=1 pnpm build",
-        "gen-specs": "pnpm exec tsc && pnpm exec api-extractor run --config ./api-extractor.json --local",
-        "parse-specs": "node scripts/generate-docs.js"
+        "generate-references": "pnpm exec api-extractor run --config ./api-extractor.json --local && node scripts/generate-docs.js"
     },
     "main": "dist/main.js",
     "module": "dist/module.js",

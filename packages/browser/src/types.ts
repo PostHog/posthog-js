@@ -765,6 +765,18 @@ export interface PostHogConfig {
     advanced_disable_feature_flags_on_first_load: boolean
 
     /**
+     * Evaluation environments for feature flags.
+     * When set, only feature flags that have at least one matching evaluation tag
+     * will be evaluated for this SDK instance. Feature flags with no evaluation tags
+     * will always be evaluated.
+     *
+     * Examples: ['production', 'web', 'checkout']
+     *
+     * @default undefined
+     */
+    evaluation_environments?: readonly string[]
+
+    /**
      * Determines whether PostHog should disable toolbar metrics.
      * This is our internal instrumentation for our toolbar in your website.
      *

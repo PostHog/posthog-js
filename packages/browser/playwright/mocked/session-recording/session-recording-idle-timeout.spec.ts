@@ -34,7 +34,7 @@ async function triggerForcedIdleTimeout(page: Page) {
         }
 
         // Store the old session ID before we reset it
-        const oldSessionId = ph.get_session_id()
+        const oldSessionId = ph?.get_session_id()
 
         // Directly reset the session to simulate an idle timeout
         sessionManager.resetSessionId()
@@ -48,7 +48,10 @@ async function triggerForcedIdleTimeout(page: Page) {
 
 const startOptions = {
     options: {
-        session_recording: {},
+        session_recording: {
+            // not the default but makes for easier test assertions
+            compress_events: false,
+        },
     },
     flagsResponseOverrides: {
         sessionRecording: {

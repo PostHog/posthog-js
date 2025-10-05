@@ -74,7 +74,6 @@ const MAX_CANVAS_FPS = 12
 const MAX_CANVAS_QUALITY = 1
 const TWO_SECONDS = 2000
 const ONE_KB = 1024
-const PARTIAL_COMPRESSION_THRESHOLD = ONE_KB
 
 const ONE_MINUTE = 1000 * 60
 const FIVE_MINUTES = ONE_MINUTE * 5
@@ -182,11 +181,6 @@ function gzipToString(data: unknown): string {
  * so we have a custom packer that only compresses part of some events
  */
 function compressEvent(event: eventWithTime): eventWithTime | compressedEventWithTime {
-    const originalSize = estimateSize(event)
-    if (originalSize < PARTIAL_COMPRESSION_THRESHOLD) {
-        return event
-    }
-
     try {
         if (event.type === EventType.FullSnapshot) {
             return {

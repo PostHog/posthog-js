@@ -206,7 +206,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
 export class LinkedFlagMatching implements TriggerStatusMatching {
     linkedFlag: string | FlagVariant | null = null
     linkedFlagSeen: boolean = false
-    private _flaglistenerCleanup: () => void = () => {}
+    private _flagListenerCleanup: () => void = () => {}
     constructor(private readonly _instance: PostHog) {}
 
     triggerStatus(): TriggerStatus {
@@ -230,7 +230,7 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
         if (!isNullish(this.linkedFlag) && !this.linkedFlagSeen) {
             const linkedFlag = isString(this.linkedFlag) ? this.linkedFlag : this.linkedFlag.flag
             const linkedVariant = isString(this.linkedFlag) ? null : this.linkedFlag.variant
-            this._flaglistenerCleanup = this._instance.onFeatureFlags((_flags, variants) => {
+            this._flagListenerCleanup = this._instance.onFeatureFlags((_flags, variants) => {
                 const flagIsPresent = isObject(variants) && linkedFlag in variants
                 let linkedFlagMatches = false
                 if (flagIsPresent) {
@@ -260,7 +260,7 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
     }
 
     stop(): void {
-        this._flaglistenerCleanup()
+        this._flagListenerCleanup()
     }
 }
 
