@@ -1502,7 +1502,7 @@ export interface RemoteConfig {
     /**
      * Session recording configuration options
      */
-    sessionRecording?: SessionRecordingRemoteConfig
+    sessionRecording?: SessionRecordingRemoteConfig | false
 
     /**
      * Whether surveys are enabled

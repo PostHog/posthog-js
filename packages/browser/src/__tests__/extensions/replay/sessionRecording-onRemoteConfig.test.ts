@@ -196,6 +196,7 @@ describe('SessionRecording', () => {
     })
 
     afterEach(() => {
+        // @ts-expect-error this is a test, it's safe to write to location like this
         window!.location = originalLocation
     })
 
