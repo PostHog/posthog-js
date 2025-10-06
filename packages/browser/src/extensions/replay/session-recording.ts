@@ -36,6 +36,7 @@ export class SessionRecording {
         if (this._receivedFlags && !this._isRecordingEnabled) {
             return DISABLED
         }
+
         return this._lazyLoadedSessionRecording?.status || LAZY_LOADING
     }
 
@@ -126,10 +127,9 @@ export class SessionRecording {
             const persistence = this._instance.persistence
 
             const persistResponse = () => {
-                if (!response.sessionRecording) {
-                    return
-                }
-                const sessionRecordingConfigResponse = response.sessionRecording
+                const sessionRecordingConfigResponse =
+                    response.sessionRecording === false ? undefined : response.sessionRecording
+
                 const receivedSampleRate = sessionRecordingConfigResponse?.sampleRate
 
                 const parsedSampleRate = isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
@@ -177,6 +177,11 @@ export class SessionRecording {
         if (!('sessionRecording' in response)) {
             // if sessionRecording is not in the response, we do nothing
             logger.info('skipping remote config with no sessionRecording', response)
+            return
+        }
+        if (response.sessionRecording === false) {
+            // remotely disabled
+            this._receivedFlags = true
             return
         }
 

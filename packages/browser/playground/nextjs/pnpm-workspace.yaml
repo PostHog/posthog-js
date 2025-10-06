@@ -1,3 +1,1 @@
-pnpmfile: ../.pnpmfile.cjs
-packages:
-  - "." # TODO delete this file and make the root workspace's file respect exclusion rules for this folder - weirdly tricky to do so
+# this file is intentionally empty, so that running `pnpm install` in this directory doesn't install dependencies for the workspace at the repo root

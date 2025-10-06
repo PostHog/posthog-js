@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.272.0
+
+### Minor Changes
+
+- [#2405](https://github.com/PostHog/posthog-js/pull/2405) [`cdfbd6d`](https://github.com/PostHog/posthog-js/commit/cdfbd6dba8bf212067d94cf5e3eaae3f0648473e) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: session recording config can be false, correct the types
+
 ## 1.271.0
 
 ### Minor Changes
