@@ -1,11 +1,11 @@
 import {
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
-} from '../../constants'
-import { PostHog } from '../../posthog-core'
-import { FlagVariant, RemoteConfig, SessionRecordingPersistedConfig, SessionRecordingUrlTrigger } from '../../types'
+} from '../../../constants'
+import { PostHog } from '../../../posthog-core'
+import { FlagVariant, RemoteConfig, SessionRecordingPersistedConfig, SessionRecordingUrlTrigger } from '../../../types'
 import { isNullish, isBoolean, isString, isObject } from '@posthog/core'
-import { window } from '../../utils/globals'
+import { window } from '../../../utils/globals'
 
 export const DISABLED = 'disabled'
 export const SAMPLED = 'sampled'

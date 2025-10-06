@@ -17,7 +17,7 @@ import { createLogger } from '../../../utils/logger'
 import { formDataToQuery } from '../../../utils/request-utils'
 import { patch } from '../rrweb-plugins/patch'
 import { isHostOnDenyList } from '../../../extensions/replay/external/denylist'
-import { defaultNetworkOptions } from '../config'
+import { defaultNetworkOptions } from './config'
 
 const logger = createLogger('[Recorder]')
 
