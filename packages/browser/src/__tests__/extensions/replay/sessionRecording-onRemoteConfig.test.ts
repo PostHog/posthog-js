@@ -88,10 +88,6 @@ describe('SessionRecording', () => {
         assignableWindow.__PosthogExtensions__.rrwebPlugins = {
             getRecordConsolePlugin: jest.fn(),
         }
-
-        assignableWindow.__PosthogExtensions__.initSessionRecording = () => {
-            return new LazyLoadedSessionRecording(posthog)
-        }
     }
 
     beforeEach(() => {
