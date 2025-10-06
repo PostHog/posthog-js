@@ -185,6 +185,7 @@ export class SessionRecordingWrapper {
         }
         if (response.sessionRecording === false) {
             // remotely disabled
+            this._receivedFlags = true
             return
         }
 
