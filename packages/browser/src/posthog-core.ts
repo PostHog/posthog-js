@@ -101,7 +101,7 @@ import {
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
-import { SessionRecordingWrapper } from './extensions/replay/sessionrecording-wrapper'
+import { SessionRecording } from './extensions/replay/session-recording'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -322,7 +322,7 @@ export class PostHog {
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
-    sessionRecording?: SessionRecordingWrapper
+    sessionRecording?: SessionRecording
     externalIntegrations?: ExternalIntegrations
     webPerformance = new DeprecatedWebPerformanceObserver()
 
@@ -536,7 +536,7 @@ export class PostHog {
         this.siteApps?.init()
 
         if (!startInCookielessMode) {
-            this.sessionRecording = new SessionRecordingWrapper(this)
+            this.sessionRecording = new SessionRecording(this)
             this.sessionRecording.startIfEnabledOrStop()
         }
 
@@ -2909,7 +2909,7 @@ export class PostHog {
             if (this.persistence) {
                 this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
             }
-            this.sessionRecording = new SessionRecordingWrapper(this)
+            this.sessionRecording = new SessionRecording(this)
             this.sessionRecording.startIfEnabledOrStop()
         }
 

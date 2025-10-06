@@ -41,7 +41,7 @@ import {
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
 import Mock = jest.Mock
-import { SessionRecordingWrapper } from '../../../extensions/replay/sessionrecording-wrapper'
+import { SessionRecording } from '../../../extensions/replay/session-recording'
 import {
     LazyLoadedSessionRecording,
     RECORDING_IDLE_THRESHOLD_MS,
@@ -176,7 +176,7 @@ describe('Lazy SessionRecording', () => {
     const loadScriptMock = jest.fn()
     let _emit: any
     let posthog: PostHog
-    let sessionRecording: SessionRecordingWrapper
+    let sessionRecording: SessionRecording
     let sessionId: string
     let sessionManager: SessionIdManager
     let config: PostHogConfig
@@ -290,7 +290,7 @@ describe('Lazy SessionRecording', () => {
             [SESSION_RECORDING_IS_SAMPLED]: undefined,
         })
 
-        sessionRecording = new SessionRecordingWrapper(posthog)
+        sessionRecording = new SessionRecording(posthog)
     })
 
     afterEach(() => {

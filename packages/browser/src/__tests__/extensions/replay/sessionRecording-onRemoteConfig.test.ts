@@ -9,7 +9,7 @@ import { FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE } from '../../../extensions/r
 import { PostHog } from '../../../posthog-core'
 import { FlagsResponse, PostHogConfig, Property } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
-import { SessionRecordingWrapper } from '../../../extensions/replay/sessionrecording-wrapper'
+import { SessionRecording } from '../../../extensions/replay/session-recording'
 import { assignableWindow, window } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import { type fullSnapshotEvent, type metaEvent } from '@rrweb/types'
@@ -62,7 +62,7 @@ describe('SessionRecording', () => {
     const loadScriptMock = jest.fn()
     let _emit: any
     let posthog: PostHog
-    let sessionRecording: SessionRecordingWrapper
+    let sessionRecording: SessionRecording
     let sessionId: string
     let sessionManager: SessionIdManager
     let config: PostHogConfig
@@ -168,7 +168,7 @@ describe('SessionRecording', () => {
             return new LazyLoadedSessionRecording(posthog)
         }
 
-        sessionRecording = new SessionRecordingWrapper(posthog)
+        sessionRecording = new SessionRecording(posthog)
     })
 
     afterEach(() => {

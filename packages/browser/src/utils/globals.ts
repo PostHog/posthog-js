@@ -154,6 +154,7 @@ export type PostHogExtensionKind =
     | 'exception-autocapture'
     | 'web-vitals'
     | 'recorder'
+    | 'lazy-recorder'
     | 'tracing-headers'
     | 'surveys'
     | 'dead-clicks-autocapture'
