@@ -332,8 +332,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _statusMatcher: (triggersStatus: RecordingTriggersStatus) => SessionRecordingStatus =
         nullMatchSessionRecordingStatus
 
-    private _receivedFlags: boolean = false
-
     private _onSessionIdListener: (() => void) | undefined = undefined
     private _onSessionIdleResetForcedListener: (() => void) | undefined = undefined
     private _samplingSessionListener: (() => void) | undefined = undefined
@@ -685,7 +683,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         })
 
         this._makeSamplingDecision(this.sessionId)
-        this._receivedFlags = true
         this._startRecorder()
 
         // calling addEventListener multiple times is safe and will not add duplicates
@@ -826,7 +823,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // we always start trigger pending so need to wait for flags before we know if we're really pending
         if (
             rawEvent.type === EventType.FullSnapshot &&
-            this._receivedFlags &&
             this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING
         ) {
             this._clearBufferBeforeMostRecentMeta()
@@ -881,14 +877,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     get status(): SessionRecordingStatus {
-        // todo: this check should move into the status matcher
-        if (!this._receivedFlags) {
-            return BUFFERING
-        }
-
         return this._statusMatcher({
             // can't get here without recording being enabled...
-            receivedFlags: this._receivedFlags,
+            receivedFlags: true,
             isRecordingEnabled: true,
             // things that do still vary
             isSampled: this._isSampled,

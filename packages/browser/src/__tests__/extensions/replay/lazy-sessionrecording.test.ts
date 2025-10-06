@@ -25,7 +25,6 @@ import {
     SessionRecordingOptions,
 } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
-import { RECORDING_IDLE_THRESHOLD_MS, RECORDING_MAX_EVENT_SIZE } from '../../../extensions/replay/sessionrecording'
 import { assignableWindow, window } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import {
@@ -43,7 +42,11 @@ import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
 import Mock = jest.Mock
 import { SessionRecordingWrapper } from '../../../extensions/replay/sessionrecording-wrapper'
-import { LazyLoadedSessionRecording } from '../../../extensions/replay/external/lazy-loaded-session-recorder'
+import {
+    LazyLoadedSessionRecording,
+    RECORDING_IDLE_THRESHOLD_MS,
+    RECORDING_MAX_EVENT_SIZE,
+} from '../../../extensions/replay/external/lazy-loaded-session-recorder'
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -164,6 +167,7 @@ const originalLocation = window!.location
 
 function fakeNavigateTo(href: string) {
     delete (window as any).location
+    // @ts-expect-error this is a test, it's safe to write to location like this
     window!.location = { href } as Location
 }
 
@@ -290,6 +294,7 @@ describe('Lazy SessionRecording', () => {
     })
 
     afterEach(() => {
+        // @ts-expect-error this is a test, it's safe to write to location like this
         window!.location = originalLocation
     })
 

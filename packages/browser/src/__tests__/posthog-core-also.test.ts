@@ -10,7 +10,7 @@ import { PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
-import { SessionRecording } from '../extensions/replay/sessionrecording'
+import { SessionRecordingWrapper } from '../extensions/replay/sessionrecording-wrapper'
 import { SessionPropsManager } from '../session-props'
 
 let mockGetProperties: jest.Mock
@@ -926,7 +926,7 @@ describe('posthog core', () => {
             posthog.sessionRecording = {
                 afterFlagsResponse: jest.fn(),
                 startIfEnabledOrStop: jest.fn(),
-            } as unknown as SessionRecording
+            } as unknown as SessionRecordingWrapper
             posthog.persistence = {
                 register: jest.fn(),
                 update_config: jest.fn(),

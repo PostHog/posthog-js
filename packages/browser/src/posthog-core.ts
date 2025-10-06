@@ -14,7 +14,6 @@ import {
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { ExceptionObserver } from './extensions/exception-autocapture'
 import { HistoryAutocapture } from './extensions/history-autocapture'
-import { SessionRecording } from './extensions/replay/sessionrecording'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
 import { Toolbar } from './extensions/toolbar'
@@ -323,7 +322,7 @@ export class PostHog {
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
-    sessionRecording?: SessionRecording | SessionRecordingWrapper
+    sessionRecording?: SessionRecordingWrapper
     externalIntegrations?: ExternalIntegrations
     webPerformance = new DeprecatedWebPerformanceObserver()
 
@@ -537,11 +536,7 @@ export class PostHog {
         this.siteApps?.init()
 
         if (!startInCookielessMode) {
-            if (this.config.__preview_eager_load_replay) {
-                this.sessionRecording = new SessionRecording(this)
-            } else {
-                this.sessionRecording = new SessionRecordingWrapper(this)
-            }
+            this.sessionRecording = new SessionRecordingWrapper(this)
             this.sessionRecording.startIfEnabledOrStop()
         }
 
@@ -2914,7 +2909,7 @@ export class PostHog {
             if (this.persistence) {
                 this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
             }
-            this.sessionRecording = new SessionRecording(this)
+            this.sessionRecording = new SessionRecordingWrapper(this)
             this.sessionRecording.startIfEnabledOrStop()
         }
 
