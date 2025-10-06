@@ -164,6 +164,7 @@ const originalLocation = window!.location
 
 function fakeNavigateTo(href: string) {
     delete (window as any).location
+    // @ts-expect-error this is a test, it's safe to write to location like this
     window!.location = { href } as Location
 }
 
@@ -290,6 +291,7 @@ describe('Lazy SessionRecording', () => {
     })
 
     afterEach(() => {
+        // @ts-expect-error this is a test, it's safe to write to location like this
         window!.location = originalLocation
     })
 
