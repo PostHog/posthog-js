@@ -264,7 +264,7 @@
     </script>
     
     <!-- Option 2: Use local build (after running pnpm build) -->
-    <!-- <script src="../../packages/browser/lib/array.full.js"></script> -->
+    <!-- <script src="../../packages/browser/dist/array.full.js"></script> -->
     
     <script>
         let posthogInstance = null;
@@ -314,10 +314,14 @@
             evaluationTags.forEach(tag => {
                 const chip = document.createElement('div');
                 chip.className = 'tag-chip';
-                chip.innerHTML = `
-                    ${tag}
-                    <span class="remove" onclick="removeTag('${tag}')">×</span>
-                `;
+                chip.textContent = tag;
+                
+                const removeButton = document.createElement('span');
+                removeButton.className = 'remove';
+                removeButton.textContent = '×';
+                removeButton.onclick = () => removeTag(tag);
+                
+                chip.appendChild(removeButton);
                 container.insertBefore(chip, input);
             });
         }
@@ -370,6 +374,7 @@
                     api_host: apiHost,
                     debug: debugMode,
                     loaded: function(posthog) {
+                        posthogInstance = posthog;
                         log('PostHog loaded successfully', 'success');
                         updateStatus('PostHog initialized and ready', 'success');
                     },
@@ -389,8 +394,7 @@
 
                 // Initialize PostHog
                 if (window.posthog) {
-                    posthogInstance = window.posthog;
-                    posthogInstance.init(apiKey, config);
+                    window.posthog.init(apiKey, config);
                     
                     // Identify the user
                     posthogInstance.identify(distinctId);
