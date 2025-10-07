@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.272.1
+
+### Patch Changes
+
+- [#2395](https://github.com/PostHog/posthog-js/pull/2395) [`4a39a10`](https://github.com/PostHog/posthog-js/commit/4a39a10efe606170d48a43e5eb97b8c37cb5a182) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: increase max depth for app state diffing
+
 ## 1.272.0
 
 ### Minor Changes
