@@ -84,7 +84,7 @@ export class ErrorTracking {
   }
 
   private autocaptureUnhandledRejections() {
-    const onUnhanledRejection = (error: unknown) => {
+    const onUnhandledRejection = (error: unknown) => {
       const hint: EventHint = {
         mechanism: {
           type: 'onunhandledrejection',
@@ -97,23 +97,23 @@ export class ErrorTracking {
       // @ts-expect-error
       global.HermesInternal.enablePromiseRejectionTracker({
         allRejections: true,
-        onUnhandled: (_: any, error: any) => onUnhanledRejection(error),
+        onUnhandled: (_: any, error: any) => onUnhandledRejection(error),
       })
     } else {
       // javascript-core handling
       const tracking = require('promise/setimmediate/rejection-tracking')
       tracking.enable({
         allRejections: true,
-        onUnhandled: (_: any, error: any) => onUnhanledRejection(error),
+        onUnhandled: (_: any, error: any) => onUnhandledRejection(error),
       })
     }
   }
 
   private autocapture(autocaptureOptions: AutocaptureOptions = {}) {
-    if (autocaptureOptions.uncaughtExceptions == true) {
+    if (autocaptureOptions.uncaughtExceptions === true) {
       this.autocaptureUncaughtErrors()
     }
-    if (autocaptureOptions.unhandledRejections == true) {
+    if (autocaptureOptions.unhandledRejections === true) {
       this.autocaptureUnhandledRejections()
     }
   }
