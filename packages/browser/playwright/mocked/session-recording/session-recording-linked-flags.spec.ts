@@ -5,7 +5,10 @@ import { BrowserContext, Page } from '@playwright/test'
 
 const startOptions: StartOptions = {
     options: {
-        session_recording: {},
+        session_recording: {
+            // not the default but makes for easier test assertions
+            compress_events: false,
+        },
         opt_out_capturing_by_default: true,
     },
     flagsResponseOverrides: {

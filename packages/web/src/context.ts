@@ -1,5 +1,5 @@
 import { currentTimestamp } from '@posthog/core'
-import { version } from '../package.json'
+import { version } from './version'
 
 export function getContext(window: Window | undefined): any {
   let context = {}

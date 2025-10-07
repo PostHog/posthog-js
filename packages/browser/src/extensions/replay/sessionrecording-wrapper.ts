@@ -11,7 +11,7 @@ import {
     PostHogExtensionKind,
     window,
 } from '../../utils/globals'
-import { LAZY_LOADING, SessionRecordingStatus, TriggerType } from './triggerMatching'
+import { DISABLED, LAZY_LOADING, SessionRecordingStatus, TriggerType } from './triggerMatching'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -22,6 +22,8 @@ const logger = createLogger(LOGGER_PREFIX)
  */
 export class SessionRecordingWrapper {
     _forceAllowLocalhostNetworkCapture: boolean = false
+
+    private _receivedFlags: boolean = false
 
     private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
@@ -35,6 +37,10 @@ export class SessionRecordingWrapper {
      * once a flags response is received status can be disabled, active or sampled
      */
     get status(): SessionRecordingStatus {
+        if (this._receivedFlags && !this._isRecordingEnabled) {
+            return DISABLED
+        }
+
         return this._lazyLoadedSessionRecording?.status || LAZY_LOADING
     }
 
@@ -125,7 +131,9 @@ export class SessionRecordingWrapper {
             const persistence = this._instance.persistence
 
             const persistResponse = () => {
-                const sessionRecordingConfigResponse = response.sessionRecording
+                const sessionRecordingConfigResponse =
+                    response.sessionRecording === false ? undefined : response.sessionRecording
+
                 const receivedSampleRate = sessionRecordingConfigResponse?.sampleRate
 
                 const parsedSampleRate = isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
@@ -175,8 +183,14 @@ export class SessionRecordingWrapper {
             logger.info('skipping remote config with no sessionRecording', response)
             return
         }
+        if (response.sessionRecording === false) {
+            // remotely disabled
+            this._receivedFlags = true
+            return
+        }
 
         this._persistRemoteConfig(response)
+        this._receivedFlags = true
         // TODO how do we send a custom message with the received remote config like we used to for debug
         this.startIfEnabledOrStop()
     }

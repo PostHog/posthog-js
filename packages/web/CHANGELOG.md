@@ -1,5 +1,11 @@
 # posthog-js-lite
 
+## 4.1.2
+
+### Patch Changes
+
+- [#2403](https://github.com/PostHog/posthog-js/pull/2403) [`162aa86`](https://github.com/PostHog/posthog-js/commit/162aa86bf296dc3046ee7ed6166b94e77e422805) Thanks [@hpouillot](https://github.com/hpouillot)! - fix core dependency
+
 ## 4.1.1
 
 ### Patch Changes

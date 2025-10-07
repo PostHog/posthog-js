@@ -216,6 +216,8 @@ describe('SessionRecording', () => {
             autocapture: false, // Assert that session recording works even if `autocapture = false`
             session_recording: {
                 maskAllInputs: false,
+                // not the default but makes for easier test assertions
+                compress_events: false,
             },
             persistence: 'memory',
         } as unknown as PostHogConfig
@@ -1080,7 +1082,6 @@ describe('SessionRecording', () => {
         })
 
         it('can emit when there are circular references', () => {
-            posthog.config.session_recording.compress_events = false
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.startIfEnabledOrStop()
 
@@ -2210,29 +2211,6 @@ describe('SessionRecording', () => {
                         {
                             data: expect.any(String),
                             cv: '2024-10',
-                            type: 2,
-                        },
-                    ],
-                    $session_id: sessionId,
-                    $snapshot_bytes: expect.any(Number),
-                    $window_id: 'windowId',
-                    $lib: 'web',
-                    $lib_version: '0.0.1',
-                },
-                captureOptions
-            )
-        })
-
-        it('does not compress small full snapshot data', () => {
-            _emit(createFullSnapshot({ data: { content: 'small' } }))
-            sessionRecording['_flushBuffer']()
-
-            expect(posthog.capture).toHaveBeenCalledWith(
-                '$snapshot',
-                {
-                    $snapshot_data: [
-                        {
-                            data: { content: 'small' },
                             type: 2,
                         },
                     ],

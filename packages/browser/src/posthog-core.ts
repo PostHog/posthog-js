@@ -221,7 +221,8 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     // Used for internal testing
     _onCapture: __NOOP,
 
-    __preview_eager_load_replay: true,
+    // make the default be lazy loading replay
+    __preview_eager_load_replay: false,
 })
 
 export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
@@ -2919,6 +2920,9 @@ export class PostHog {
 
         this.consent.optInOut(true)
         this._sync_opt_out_with_persistence()
+
+        // Start queue after opting in
+        this._start_queue_if_opted_in()
 
         // Reinitialize surveys if we're in cookieless mode and just opted in
         if (this.config.cookieless_mode == 'on_reject') {

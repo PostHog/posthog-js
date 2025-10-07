@@ -74,7 +74,6 @@ const MAX_CANVAS_FPS = 12
 const MAX_CANVAS_QUALITY = 1
 const TWO_SECONDS = 2000
 const ONE_KB = 1024
-const PARTIAL_COMPRESSION_THRESHOLD = ONE_KB
 
 const ONE_MINUTE = 1000 * 60
 const FIVE_MINUTES = ONE_MINUTE * 5
@@ -182,11 +181,6 @@ function gzipToString(data: unknown): string {
  * so we have a custom packer that only compresses part of some events
  */
 function compressEvent(event: eventWithTime): eventWithTime | compressedEventWithTime {
-    const originalSize = estimateSize(event)
-    if (originalSize < PARTIAL_COMPRESSION_THRESHOLD) {
-        return event
-    }
-
     try {
         if (event.type === EventType.FullSnapshot) {
             return {
@@ -691,7 +685,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         })
 
         this._makeSamplingDecision(this.sessionId)
-        this._receivedFlags = true
         this._startRecorder()
 
         // calling addEventListener multiple times is safe and will not add duplicates
@@ -832,7 +825,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // we always start trigger pending so need to wait for flags before we know if we're really pending
         if (
             rawEvent.type === EventType.FullSnapshot &&
-            this._receivedFlags &&
             this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING
         ) {
             this._clearBufferBeforeMostRecentMeta()
@@ -887,14 +879,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     get status(): SessionRecordingStatus {
-        // todo: this check should move into the status matcher
-        if (!this._receivedFlags) {
-            return BUFFERING
-        }
-
         return this._statusMatcher({
             // can't get here without recording being enabled...
-            receivedFlags: this._receivedFlags,
+            receivedFlags: true,
             isRecordingEnabled: true,
             // things that do still vary
             isSampled: this._isSampled,
@@ -1339,6 +1326,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // stay unknown if we're not sure if we're idle or not
         this._isIdle = isBoolean(this._isIdle) ? this._isIdle : 'unknown'
 
+        this.tryAddCustomEvent('$remote_config_received', this._remoteConfig)
         this._tryAddCustomEvent('$session_options', {
             sessionRecordingOptions,
             activePlugins: activePlugins.map((p) => p?.name),

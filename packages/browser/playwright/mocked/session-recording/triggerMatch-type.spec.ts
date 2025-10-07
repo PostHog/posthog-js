@@ -4,7 +4,10 @@ import { start } from '../utils/setup'
 
 const startOptions = {
     options: {
-        session_recording: {},
+        session_recording: {
+            // not the default but makes for easier test assertions
+            compress_events: false,
+        },
     },
     flagsResponseOverrides: {
         sessionRecording: {
@@ -16,14 +19,14 @@ const startOptions = {
     url: '/playground/cypress/index.html',
 }
 
-test.describe('Session recording - trigger match types 30% sampling + event trigger', () => {
-    const sampleThirtyWithTriggerOptions = {
+test.describe('Session recording - trigger match types 0% sampling + event trigger', () => {
+    const sampleZeroWithTriggerOptions = {
         ...startOptions,
         flagsResponseOverrides: {
             ...startOptions.flagsResponseOverrides,
             sessionRecording: {
                 ...startOptions.flagsResponseOverrides.sessionRecording,
-                sampleRate: '0.3',
+                sampleRate: '0',
                 eventTriggers: ['example'],
             } satisfies RemoteConfig['sessionRecording'],
         },
@@ -31,11 +34,11 @@ test.describe('Session recording - trigger match types 30% sampling + event trig
 
     test.describe('ANY match type', () => {
         const anyMatchOptions = {
-            ...sampleThirtyWithTriggerOptions,
+            ...sampleZeroWithTriggerOptions,
             flagsResponseOverrides: {
-                ...sampleThirtyWithTriggerOptions.flagsResponseOverrides,
+                ...sampleZeroWithTriggerOptions.flagsResponseOverrides,
                 sessionRecording: {
-                    ...sampleThirtyWithTriggerOptions.flagsResponseOverrides.sessionRecording,
+                    ...sampleZeroWithTriggerOptions.flagsResponseOverrides.sessionRecording,
                     triggerMatchType: 'any',
                 } satisfies RemoteConfig['sessionRecording'],
             },
@@ -73,11 +76,11 @@ test.describe('Session recording - trigger match types 30% sampling + event trig
 
     test.describe('ALL match type', () => {
         const allMatchOptions = {
-            ...sampleThirtyWithTriggerOptions,
+            ...sampleZeroWithTriggerOptions,
             flagsResponseOverrides: {
-                ...sampleThirtyWithTriggerOptions.flagsResponseOverrides,
+                ...sampleZeroWithTriggerOptions.flagsResponseOverrides,
                 sessionRecording: {
-                    ...sampleThirtyWithTriggerOptions.flagsResponseOverrides.sessionRecording,
+                    ...sampleZeroWithTriggerOptions.flagsResponseOverrides.sessionRecording,
                     triggerMatchType: 'all',
                 } satisfies RemoteConfig['sessionRecording'],
             },
@@ -114,6 +117,23 @@ test.describe('Session recording - trigger match types 30% sampling + event trig
             const snapshotEvent = events.find((e) => e.event === '$snapshot')
             expect(events.find((e) => e.event === 'example')).toBeTruthy()
             expect(snapshotEvent).toBeFalsy()
+
+            await page.resetCapturedEvents()
+            await page.evaluate(() => {
+                const ph = (window as WindowWithPostHog).posthog
+                ph?.startSessionRecording({ sampling: true })
+            })
+
+            // Try to trigger a recording by interacting
+            await page.locator('[data-cy-input]').fill('hello posthog!')
+
+            await page.waitForTimeout(1000)
+
+            // Get all events
+            const eventsAfterOverride = await page.capturedEvents()
+
+            const snapshotEventAfterOverride = eventsAfterOverride.find((e) => e.event === '$snapshot')
+            expect(snapshotEventAfterOverride).toBeTruthy()
         })
     })
 })

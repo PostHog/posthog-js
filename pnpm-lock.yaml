@@ -614,6 +614,10 @@ importers:
         version: 5.8.2
 
   packages/web:
+    dependencies:
+      '@posthog/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@posthog-tooling/rollup-utils':
         specifier: workspace:*
@@ -621,9 +625,6 @@ importers:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
-      '@posthog/core':
-        specifier: workspace:*
-        version: link:../core
       jest:
         specifier: 'catalog:'
         version: 29.7.0(@types/node@22.17.0)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.17.0)(typescript@5.8.2))
