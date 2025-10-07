@@ -163,6 +163,7 @@ export abstract class PostHogCoreStateless {
     this.disableGeoip = options?.disableGeoip ?? true
     this.disabled = options?.disabled ?? false
     this.historicalMigration = options?.historicalMigration ?? false
+    this.evaluationEnvironments = options?.evaluationEnvironments
     // Init promise allows the derived class to block calls until it is ready
     this._initPromise = Promise.resolve()
     this._isInitialized = true
@@ -449,17 +450,24 @@ export abstract class PostHogCoreStateless {
     await this._initPromise
 
     const url = `${this.host}/flags/?v=2&config=true`
+    const requestData: Record<string, any> = {
+      token: this.apiKey,
+      distinct_id: distinctId,
+      groups,
+      person_properties: personProperties,
+      group_properties: groupProperties,
+      ...extraPayload,
+    }
+
+    // Add evaluation environments if configured
+    if (this.evaluationEnvironments && this.evaluationEnvironments.length > 0) {
+      requestData.evaluation_environments = this.evaluationEnvironments
+    }
+
     const fetchOptions: PostHogFetchOptions = {
       method: 'POST',
       headers: { ...this.getCustomHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        token: this.apiKey,
-        distinct_id: distinctId,
-        groups,
-        person_properties: personProperties,
-        group_properties: groupProperties,
-        ...extraPayload,
-      }),
+      body: JSON.stringify(requestData),
     }
 
     this.logMsgIfDebug(() => console.log('PostHog Debug', 'Flags URL', url))

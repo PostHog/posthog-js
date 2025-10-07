@@ -22,6 +22,7 @@ import {
   PostHogCustomAppProperties,
   PostHogCustomStorage,
   PostHogSessionReplayConfig,
+  PostHogRNOptions,
 } from './types'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativeSessionReplay } from './optional/OptionalSessionReplay'
@@ -29,47 +30,48 @@ import { ErrorTracking } from './error-tracking'
 
 export { PostHogPersistedProperty }
 
-export type PostHogOptions = PostHogCoreOptions & {
-  /** Allows you to provide the storage type. By default 'file'.
-   * 'file' will try to load the best available storage, the provided 'customStorage', 'customAsyncStorage' or in-memory storage.
-   */
-  persistence?: 'memory' | 'file'
-  /** Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated */
-  customAppProperties?:
-    | PostHogCustomAppProperties
-    | ((properties: PostHogCustomAppProperties) => PostHogCustomAppProperties)
-  /** Allows you to provide a custom asynchronous storage such as async-storage, expo-file-system or a synchronous storage such as mmkv.
-   * If not provided, PostHog will attempt to use the best available storage via optional peer dependencies (async-storage, expo-file-system).
-   * If `persistence` is set to 'memory', this option will be ignored.
-   */
-  customStorage?: PostHogCustomStorage
+export type PostHogOptions = PostHogCoreOptions &
+  PostHogRNOptions & {
+    /** Allows you to provide the storage type. By default 'file'.
+     * 'file' will try to load the best available storage, the provided 'customStorage', 'customAsyncStorage' or in-memory storage.
+     */
+    persistence?: 'memory' | 'file'
+    /** Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated */
+    customAppProperties?:
+      | PostHogCustomAppProperties
+      | ((properties: PostHogCustomAppProperties) => PostHogCustomAppProperties)
+    /** Allows you to provide a custom asynchronous storage such as async-storage, expo-file-system or a synchronous storage such as mmkv.
+     * If not provided, PostHog will attempt to use the best available storage via optional peer dependencies (async-storage, expo-file-system).
+     * If `persistence` is set to 'memory', this option will be ignored.
+     */
+    customStorage?: PostHogCustomStorage
 
-  /** Captures app lifecycle events such as Application Installed, Application Updated, Application Opened, Application Became Active and Application Backgrounded.
-   * By default is false.
-   * Application Installed and Application Updated events are not supported with persistence set to 'memory'.
-   */
-  captureAppLifecycleEvents?: boolean
+    /** Captures app lifecycle events such as Application Installed, Application Updated, Application Opened, Application Became Active and Application Backgrounded.
+     * By default is false.
+     * Application Installed and Application Updated events are not supported with persistence set to 'memory'.
+     */
+    captureAppLifecycleEvents?: boolean
 
-  /**
-   * Enable Recording of Session Replays for Android and iOS
-   * Requires Record user sessions to be enabled in the PostHog Project Settings
-   * Defaults to false
-   */
-  enableSessionReplay?: boolean
+    /**
+     * Enable Recording of Session Replays for Android and iOS
+     * Requires Record user sessions to be enabled in the PostHog Project Settings
+     * Defaults to false
+     */
+    enableSessionReplay?: boolean
 
-  /**
-   * Configuration for Session Replay
-   */
-  sessionReplayConfig?: PostHogSessionReplayConfig
+    /**
+     * Configuration for Session Replay
+     */
+    sessionReplayConfig?: PostHogSessionReplayConfig
 
-  /**
-   * If enabled, the session id ($session_id) will be persisted across app restarts.
-   * This is an option for back compatibility, so your current data isn't skewed with the new version of the SDK.
-   * If this is false, the session id will be always reset on app restart.
-   * Defaults to false
-   */
-  enablePersistSessionIdAcrossRestart?: boolean
-}
+    /**
+     * If enabled, the session id ($session_id) will be persisted across app restarts.
+     * This is an option for back compatibility, so your current data isn't skewed with the new version of the SDK.
+     * If this is false, the session id will be always reset on app restart.
+     * Defaults to false
+     */
+    enablePersistSessionIdAcrossRestart?: boolean
+  }
 
 export class PostHog extends PostHogCore {
   private _persistence: PostHogOptions['persistence']

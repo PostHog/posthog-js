@@ -2468,6 +2468,88 @@ describe('PostHog Node.js', () => {
     })
   })
 
+  describe('evaluation environments', () => {
+    it('should send evaluation environments when configured', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          decideFlags: { 'test-flag': true },
+          flagsPayloads: {},
+        })
+      )
+
+      const posthogWithEnvs = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        evaluationEnvironments: ['production', 'backend'],
+        ...posthogImmediateResolveOptions,
+      })
+
+      await posthogWithEnvs.getAllFlags('some-distinct-id')
+
+      expect(mockedFetch).toHaveBeenCalledWith(
+        'http://example.com/flags/?v=2&config=true',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"evaluation_environments":["production","backend"]'),
+        })
+      )
+
+      await posthogWithEnvs.shutdown()
+    })
+
+    it('should not send evaluation environments when not configured', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          decideFlags: { 'test-flag': true },
+          flagsPayloads: {},
+        })
+      )
+
+      const posthogWithoutEnvs = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        ...posthogImmediateResolveOptions,
+      })
+
+      await posthogWithoutEnvs.getAllFlags('some-distinct-id')
+
+      expect(mockedFetch).toHaveBeenCalledWith(
+        'http://example.com/flags/?v=2&config=true',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.not.stringContaining('evaluation_environments'),
+        })
+      )
+
+      await posthogWithoutEnvs.shutdown()
+    })
+
+    it('should not send evaluation environments when configured as empty array', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          decideFlags: { 'test-flag': true },
+          flagsPayloads: {},
+        })
+      )
+
+      const posthogWithEmptyEnvs = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        evaluationEnvironments: [],
+        ...posthogImmediateResolveOptions,
+      })
+
+      await posthogWithEmptyEnvs.getAllFlags('some-distinct-id')
+
+      expect(mockedFetch).toHaveBeenCalledWith(
+        'http://example.com/flags/?v=2&config=true',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.not.stringContaining('evaluation_environments'),
+        })
+      )
+
+      await posthogWithEmptyEnvs.shutdown()
+    })
+  })
+
   describe('getRemoteConfigPayload', () => {
     let requestRemoteConfigPayloadSpy: jest.SpyInstance
 
