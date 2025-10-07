@@ -876,8 +876,8 @@ packages:
     engines: {node: '>=14'}
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-Q+IAWfDePZi22IBYJjgOq8HUje3I0sMw91hVAqLPW9f28besNPbFwf4fHURS1QeX52DYJXNJ9sBHhENwWnhmQw==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.1.0
+    resolution: {integrity: sha512-3Wq6selBCYIslq/dxky8OmMIkVKknXVl6TaS5kDsuEYA++5Jd7ExzMwuzb+mB0hmF045Zb/WRoB0lnCOZTBsUw==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.2.2
 
   '@radix-ui/react-compose-refs@1.1.2':
     resolution: {integrity: sha512-z4eqJvfiNnFMHIIvXP3CY57y2WJs5g2v3X0zm9mEJkrkNv4rDxu+sg9Jh8EkXyeqBkB7SOcboo9dMVqhyrACIg==}
@@ -3159,8 +3159,8 @@ packages:
       react-native: '*'
 
   posthog-react-native@file:../../target/posthog-react-native.tgz:
-    resolution: {integrity: sha512-GMQqbkArcmSE552zvub3b81bHfXAFLONwG9q9mqLFPe0z2qPDMWufKB4kL1NPaIRR2Pn0iTCl09Lvo07FbrCXw==, tarball: file:../../target/posthog-react-native.tgz}
-    version: 4.6.1
+    resolution: {integrity: sha512-8jlTy6jXoh4jUyotmojM+3yZjwbQb6jDZyl3pknNV0JG1u/LnvD4ysRjqHuNfcMb+xf/kR1ZEfJjvRayYsT4Yg==, tarball: file:../../target/posthog-react-native.tgz}
+    version: 4.7.1
     peerDependencies:
       '@react-native-async-storage/async-storage': '>=1.0.0'
       '@react-navigation/native': '>= 5.0.0'
