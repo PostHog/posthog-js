@@ -1,5 +1,11 @@
 # posthog-react-native
 
+## 4.8.0
+
+### Minor Changes
+
+- [#2360](https://github.com/PostHog/posthog-js/pull/2360) [`8ea1ce8`](https://github.com/PostHog/posthog-js/commit/8ea1ce8a9d02de35e2c1bea3f49518455fb53ffe) Thanks [@hpouillot](https://github.com/hpouillot)! - add stacktrace to exceptions
+
 ## 4.7.1
 
 ### Patch Changes
