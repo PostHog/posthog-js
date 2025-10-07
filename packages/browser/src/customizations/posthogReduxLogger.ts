@@ -1,4 +1,4 @@
-import { BucketedRateLimiter, isNullish, isObject, isUndefined, Logger } from '@posthog/core'
+import { BucketedRateLimiter, isEmptyObject, isNullish, isObject, isUndefined, Logger } from '@posthog/core'
 import { createLogger } from '../utils/logger'
 import type { PostHog } from '../posthog-core'
 
@@ -147,57 +147,48 @@ export function getChangedState<S>(prevState: S, nextState: S, maxDepth: number 
     // all keys changed when no previous state
     if (!prevState && nextState) return nextState
     // something weird has happened, return empty
-    if (!nextState) return {}
-    // something weird has happened, return empty
-    if (!prevState) return {}
+    if (!nextState || !prevState) return {}
 
     const changed: any = {}
+    const allKeys = new Set([...Object.keys(prevState), ...Object.keys(nextState)])
 
-    // any keys in next that are not in prev are new/changed
-    for (const key of Object.keys(nextState)) {
-        if (isUndefined((prevState as any)[key])) {
-            changed[key] = (nextState as any)[key]
-        }
-    }
-    // any keys in prev that are not in next are removed/changed
-    for (const key of Object.keys(prevState)) {
-        if (isUndefined((nextState as any)[key])) {
-            changed[key] = (prevState as any)[key]
-        }
-    }
-    // now for any other key, seek differences
-    const alreadyChangedKeys = new Set(Object.keys(changed))
-    const previousKeys = Object.keys(prevState).filter((k) => !alreadyChangedKeys.has(k))
-    const nextKeys = Object.keys(nextState).filter((k) => !alreadyChangedKeys.has(k))
-    const keysToCheck = Array.from(new Set([...previousKeys, ...nextKeys]))
-
-    for (const key of keysToCheck) {
+    for (const key of allKeys) {
         const prevValue = (prevState as any)[key]
         const nextValue = (nextState as any)[key]
 
-        if (prevValue === nextValue) {
-            // same value, skip
+        // Key exists in only one object
+        if (isUndefined(prevValue)) {
+            changed[key] = nextValue
             continue
         }
-        if (isNullish(prevValue) && isNullish(nextValue)) {
-            // both null, skip
+        if (isUndefined(nextValue)) {
+            changed[key] = prevValue
             continue
         }
 
-        if (!isObject(prevValue) || !isObject(nextValue) || isNullish(prevValue) || isNullish(nextValue)) {
-            // primitive value or one is null, so must be changed
+        // Same value
+        if (prevValue === nextValue) {
+            continue
+        }
+
+        // Both null/undefined
+        if (isNullish(prevValue) && isNullish(nextValue)) {
+            continue
+        }
+
+        // Primitive or one is null
+        if (!isObject(prevValue) || !isObject(nextValue)) {
             changed[key] = nextValue
             continue
         }
 
-        // both are objects, do a recursive diff if we haven't reached max depth
+        // Both are objects, recurse if under max depth
         if (maxDepth > 1) {
             const childChanged = getChangedState(prevValue, nextValue, maxDepth - 1)
-            if (Object.keys(childChanged).length > 0) {
+            if (!isEmptyObject(childChanged)) {
                 changed[key] = childChanged
             }
         } else {
-            // max depth reached, just mark as changed
             changed[key] = `max depth reached, checking for changed value`
         }
     }
