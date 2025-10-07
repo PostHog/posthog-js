@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PostHog Evaluation Tags Example</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #1D4ED8;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 30px;
+        }
+        .config-section {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .config-row {
+            display: flex;
+            margin: 10px 0;
+            align-items: center;
+        }
+        .config-row label {
+            width: 200px;
+            font-weight: 600;
+            color: #495057;
+        }
+        .config-row input, .config-row select {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .tag-input-container {
+            flex: 1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+        .tag-chip {
+            background: #e3f2fd;
+            border: 1px solid #90caf9;
+            border-radius: 16px;
+            padding: 4px 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+        .tag-chip .remove {
+            cursor: pointer;
+            color: #f44336;
+            font-weight: bold;
+            background: white;
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+        .add-tag-input {
+            padding: 4px 8px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 5px;
+            transition: background-color 0.3s;
+        }
+        .btn-primary {
+            background: #1D4ED8;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #1E40AF;
+        }
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        .status {
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+            background: #e8f5e9;
+            border: 1px solid #4caf50;
+        }
+        .status.error {
+            background: #ffebee;
+            border-color: #f44336;
+        }
+        .status.warning {
+            background: #fff3e0;
+            border-color: #ff9800;
+        }
+        .log-container {
+            background: #263238;
+            color: #aed581;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid transparent;
+        }
+        .log-entry.info {
+            border-left-color: #64b5f6;
+        }
+        .log-entry.success {
+            border-left-color: #81c784;
+        }
+        .log-entry.error {
+            border-left-color: #e57373;
+        }
+        .log-entry.warning {
+            border-left-color: #ffb74d;
+        }
+        .flag-results {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f0f4f8;
+            border-radius: 5px;
+        }
+        .flag-item {
+            padding: 10px;
+            margin: 10px 0;
+            background: white;
+            border-radius: 5px;
+            border: 1px solid #e0e0e0;
+        }
+        .flag-item strong {
+            color: #1D4ED8;
+        }
+        .actions {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #dee2e6;
+        }
+        .json-display {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 PostHog Evaluation Tags Testing</h1>
+        
+        <div class="status" id="status">
+            <strong>Status:</strong> <span id="statusText">Not initialized</span>
+        </div>
+
+        <div class="config-section">
+            <h2>⚙️ Configuration</h2>
+            
+            <div class="config-row">
+                <label for="apiKey">API Key:</label>
+                <input type="text" id="apiKey" placeholder="phc_..." value="phc_MtUiRBIpAR0REUvQHHwwUq9CnLMdvGnxI4WCDDc0tur">
+            </div>
+            
+            <div class="config-row">
+                <label for="apiHost">API Host:</label>
+                <input type="text" id="apiHost" placeholder="https://app.posthog.com" value="https://app.posthog.com">
+            </div>
+            
+            <div class="config-row">
+                <label for="personalKey">Personal API Key:</label>
+                <input type="text" id="personalKey" placeholder="phx_... (optional for secure flags)">
+            </div>
+            
+            <div class="config-row">
+                <label for="distinctId">Distinct ID:</label>
+                <input type="text" id="distinctId" placeholder="user-123" value="test-user-123">
+            </div>
+
+            <div class="config-row">
+                <label>Evaluation Tags:</label>
+                <div class="tag-input-container" id="tagContainer">
+                    <input type="text" class="add-tag-input" id="tagInput" placeholder="Add tag (press Enter)">
+                </div>
+            </div>
+            
+            <div class="config-row">
+                <label for="debugMode">Debug Mode:</label>
+                <select id="debugMode">
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button class="btn btn-primary" onclick="initializePostHog()">Initialize PostHog</button>
+            <button class="btn btn-secondary" onclick="testFeatureFlags()">Test Feature Flags</button>
+            <button class="btn btn-secondary" onclick="reloadFeatureFlags()">Reload Flags</button>
+            <button class="btn btn-secondary" onclick="getAllFlags()">Get All Flags</button>
+            <button class="btn btn-danger" onclick="clearLogs()">Clear Logs</button>
+        </div>
+
+        <div class="flag-results" id="flagResults" style="display: none;">
+            <h3>📊 Feature Flag Results</h3>
+            <div id="flagContent"></div>
+        </div>
+
+        <div class="log-container" id="logContainer">
+            <div class="log-entry info">Waiting for initialization...</div>
+        </div>
+    </div>
+
+    <!-- PostHog Library -->
+    <!-- Option 1: Use CDN (recommended for quick testing) -->
+    <script>
+        !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId setPersonProperties".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    </script>
+    
+    <!-- Option 2: Use local build (after running pnpm build) -->
+    <!-- <script src="../../packages/browser/dist/array.full.js"></script> -->
+    
+    <script>
+        let posthogInstance = null;
+        let evaluationTags = [];
+
+        // Initialize tags UI
+        function initializeTagsUI() {
+            const tagInput = document.getElementById('tagInput');
+            
+            tagInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const value = this.value.trim();
+                    if (value && !evaluationTags.includes(value)) {
+                        addTag(value);
+                        this.value = '';
+                    }
+                }
+            });
+
+            // Add some default example tags
+            addTag('production');
+            addTag('experiment-A');
+            addTag('cohort-2025');
+        }
+
+        function addTag(tag) {
+            evaluationTags.push(tag);
+            renderTags();
+            log(`Added evaluation tag: "${tag}"`, 'info');
+        }
+
+        function removeTag(tag) {
+            evaluationTags = evaluationTags.filter(t => t !== tag);
+            renderTags();
+            log(`Removed evaluation tag: "${tag}"`, 'info');
+        }
+
+        function renderTags() {
+            const container = document.getElementById('tagContainer');
+            const input = document.getElementById('tagInput');
+            
+            // Clear existing chips
+            container.querySelectorAll('.tag-chip').forEach(chip => chip.remove());
+            
+            // Add new chips
+            evaluationTags.forEach(tag => {
+                const chip = document.createElement('div');
+                chip.className = 'tag-chip';
+                chip.textContent = tag;
+                
+                const removeButton = document.createElement('span');
+                removeButton.className = 'remove';
+                removeButton.textContent = '×';
+                removeButton.onclick = () => removeTag(tag);
+                
+                chip.appendChild(removeButton);
+                container.insertBefore(chip, input);
+            });
+        }
+
+        function log(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            logContainer.appendChild(entry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        function updateStatus(message, type = 'success') {
+            const statusDiv = document.getElementById('status');
+            const statusText = document.getElementById('statusText');
+            
+            statusDiv.className = 'status';
+            if (type === 'error') {
+                statusDiv.classList.add('error');
+            } else if (type === 'warning') {
+                statusDiv.classList.add('warning');
+            }
+            
+            statusText.textContent = message;
+        }
+
+        function clearLogs() {
+            const logContainer = document.getElementById('logContainer');
+            logContainer.innerHTML = '<div class="log-entry info">Logs cleared</div>';
+        }
+
+        function initializePostHog() {
+            const apiKey = document.getElementById('apiKey').value;
+            const apiHost = document.getElementById('apiHost').value;
+            const personalKey = document.getElementById('personalKey').value;
+            const distinctId = document.getElementById('distinctId').value;
+            const debugMode = document.getElementById('debugMode').value === 'true';
+
+            if (!apiKey) {
+                log('Error: API key is required', 'error');
+                updateStatus('Missing API key', 'error');
+                return;
+            }
+
+            try {
+                // Configuration object with evaluation environments
+                const config = {
+                    api_host: apiHost,
+                    debug: debugMode,
+                    loaded: function(posthog) {
+                        posthogInstance = posthog;
+                        log('PostHog loaded successfully', 'success');
+                        updateStatus('PostHog initialized and ready', 'success');
+                    },
+                    // Add evaluation environments if tags are present
+                    ...(evaluationTags.length > 0 && {
+                        evaluation_environments: evaluationTags
+                    })
+                };
+
+                // Add personal API key if provided
+                if (personalKey) {
+                    config.personal_api_key = personalKey;
+                }
+
+                log('Initializing PostHog with config:', 'info');
+                log(JSON.stringify(config, null, 2), 'info');
+
+                // Initialize PostHog
+                if (window.posthog) {
+                    window.posthog.init(apiKey, config);
+                    
+                    // Identify the user
+                    posthogInstance.identify(distinctId);
+                    log(`Identified user: ${distinctId}`, 'info');
+                    
+                    // Log the evaluation environments being used
+                    if (evaluationTags.length > 0) {
+                        log('Evaluation environments configured: ' + JSON.stringify(evaluationTags), 'info');
+                    }
+                } else {
+                    throw new Error('PostHog library not loaded');
+                }
+            } catch (error) {
+                log(`Error initializing PostHog: ${error.message}`, 'error');
+                updateStatus('Failed to initialize PostHog', 'error');
+            }
+        }
+
+        function testFeatureFlags() {
+            if (!posthogInstance) {
+                log('Error: PostHog not initialized', 'error');
+                updateStatus('PostHog not initialized', 'error');
+                return;
+            }
+
+            log('Testing feature flags with evaluation tags...', 'info');
+            
+            // Test specific flags
+            const testFlags = [
+                'test-flag-1',
+                'experiment-flag',
+                'rollout-feature',
+                'beta-feature',
+                'your-flag-key'
+            ];
+
+            const results = [];
+            
+            testFlags.forEach(flagKey => {
+                const value = posthogInstance.getFeatureFlag(flagKey);
+                const payload = posthogInstance.getFeatureFlagPayload(flagKey);
+                
+                results.push({
+                    key: flagKey,
+                    value: value,
+                    payload: payload
+                });
+                
+                log(`Flag "${flagKey}": ${JSON.stringify(value)} | Payload: ${JSON.stringify(payload)}`, 
+                    value ? 'success' : 'warning');
+            });
+
+            displayFlagResults(results);
+        }
+
+        function reloadFeatureFlags() {
+            if (!posthogInstance) {
+                log('Error: PostHog not initialized', 'error');
+                updateStatus('PostHog not initialized', 'error');
+                return;
+            }
+
+            log('Reloading feature flags...', 'info');
+            
+            // Note: To change evaluation environments, you need to reinitialize PostHog
+            // The evaluation_environments are set during initialization and cannot be changed dynamically
+            if (evaluationTags.length > 0) {
+                log('Note: Evaluation environments are set during initialization.', 'warning');
+                log('To use different tags, reinitialize PostHog with new config.', 'warning');
+                log('Current tags: ' + JSON.stringify(evaluationTags), 'info');
+            }
+            
+            posthogInstance.reloadFeatureFlags();
+            
+            // Listen for flags to be loaded
+            posthogInstance.onFeatureFlags(function() {
+                log('Feature flags reloaded successfully', 'success');
+                updateStatus('Feature flags reloaded', 'success');
+                
+                // Show all flags after reload
+                getAllFlags();
+            });
+        }
+
+        function getAllFlags() {
+            if (!posthogInstance) {
+                log('Error: PostHog not initialized', 'error');
+                updateStatus('PostHog not initialized', 'error');
+                return;
+            }
+
+            log('Getting all feature flags...', 'info');
+            
+            // Get all flags
+            const allFlags = posthogInstance.getFeatureFlags();
+            const results = [];
+            
+            if (allFlags && Object.keys(allFlags).length > 0) {
+                Object.entries(allFlags).forEach(([key, value]) => {
+                    const payload = posthogInstance.getFeatureFlagPayload(key);
+                    results.push({
+                        key: key,
+                        value: value,
+                        payload: payload
+                    });
+                    log(`Flag "${key}": ${JSON.stringify(value)}`, 'success');
+                });
+            } else {
+                log('No feature flags available', 'warning');
+            }
+            
+            displayFlagResults(results);
+        }
+
+        function displayFlagResults(results) {
+            const resultsDiv = document.getElementById('flagResults');
+            const contentDiv = document.getElementById('flagContent');
+            
+            if (results.length === 0) {
+                contentDiv.innerHTML = '<div class="flag-item">No feature flags found</div>';
+            } else {
+                contentDiv.innerHTML = results.map(flag => `
+                    <div class="flag-item">
+                        <strong>Flag Key:</strong> ${flag.key}<br>
+                        <strong>Value:</strong> ${JSON.stringify(flag.value)}<br>
+                        ${flag.payload ? `<strong>Payload:</strong> <div class="json-display">${JSON.stringify(flag.payload, null, 2)}</div>` : ''}
+                    </div>
+                `).join('');
+            }
+            
+            resultsDiv.style.display = 'block';
+        }
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            initializeTagsUI();
+            log('Page loaded. Ready to initialize PostHog.', 'info');
+            log('Evaluation tags feature allows you to pass additional context for feature flag evaluation.', 'info');
+            log('Add tags above and initialize PostHog to test the feature.', 'info');
+        });
+    </script>
+</body>
+</html>
