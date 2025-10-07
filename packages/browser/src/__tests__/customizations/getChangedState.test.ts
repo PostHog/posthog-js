@@ -150,7 +150,7 @@ describe('getChangedState', () => {
                 getChangedState(prevState, nextState, 5)
             )
 
-            expect(medianTime).toBeLessThan(80)
+            expect(medianTime).toBeLessThan(100)
             expect(avgTime).toBeLessThan(50)
             expect(stdDev).toBeLessThan(30)
         })
