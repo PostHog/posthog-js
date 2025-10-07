@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.273.0
+
+### Minor Changes
+
+- [#2408](https://github.com/PostHog/posthog-js/pull/2408) [`66b12f8`](https://github.com/PostHog/posthog-js/commit/66b12f827c272f878839c3eacbc9783db0ce0916) Thanks [@thmsobrmlr](https://github.com/thmsobrmlr)! - Fixes an issue where the event queue was not started until a page reload after calling `opt_in_capturing()`
+
 ## 1.272.1
 
 ### Patch Changes
