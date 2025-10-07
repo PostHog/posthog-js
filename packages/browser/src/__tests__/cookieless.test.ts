@@ -78,6 +78,7 @@ describe('cookieless', () => {
     beforeEach(() => {
         mockURLGetter.mockImplementation(() => 'http://localhost')
         mockedCookieBox.cookie = ''
+        mockedFetch.mockResolvedValue({ status: 200, text: () => Promise.resolve('{"flags": {}}') })
     })
 
     describe('always mode', () => {
@@ -316,7 +317,6 @@ describe('cookieless', () => {
 
         it('should restart the request queue when opting in', async () => {
             // we're testing the interaction with the request queue, so we need to mock fetch rather than relying on before_send
-            mockedFetch.mockResolvedValue({ status: 200, text: () => Promise.resolve('{}') })
             jest.useFakeTimers()
             const { posthog } = await setup({
                 cookieless_mode: 'on_reject',
