@@ -1,0 +1,128 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`getChangedState correctness tests should handle Redux-style state changes 1`] = `
+Object {
+  "todos": Array [
+    Object {
+      "completed": true,
+      "id": 1,
+      "text": "Learn React",
+    },
+    Object {
+      "completed": true,
+      "id": 2,
+      "text": "Learn Redux",
+    },
+    Object {
+      "completed": false,
+      "id": 3,
+      "text": "Learn Testing",
+    },
+  ],
+  "user": Object {
+    "profile": Object {
+      "avatar": "new.jpg",
+    },
+  },
+  "visibilityFilter": "SHOW_COMPLETED",
+}
+`;
+
+exports[`getChangedState correctness tests should handle added keys 1`] = `
+Object {
+  "c": 3,
+}
+`;
+
+exports[`getChangedState correctness tests should handle arrays as primitive values 1`] = `
+Object {
+  "list": Array [
+    1,
+    2,
+    3,
+    4,
+  ],
+}
+`;
+
+exports[`getChangedState correctness tests should handle changed keys 1`] = `
+Object {
+  "b": 5,
+}
+`;
+
+exports[`getChangedState correctness tests should handle deeply nested changes within depth limit 1`] = `
+Object {
+  "level1": Object {
+    "level2": Object {
+      "level3": Object {
+        "value": "new",
+      },
+    },
+  },
+}
+`;
+
+exports[`getChangedState correctness tests should handle depth limit respected 1`] = `
+Object {
+  "l1": Object {
+    "l2": "max depth reached, checking for changed value",
+  },
+}
+`;
+
+exports[`getChangedState correctness tests should handle empty objects 1`] = `
+Object {
+  "a": 1,
+}
+`;
+
+exports[`getChangedState correctness tests should handle identical states 1`] = `Object {}`;
+
+exports[`getChangedState correctness tests should handle mixed data types 1`] = `
+Object {
+  "array": Array [
+    4,
+    5,
+    6,
+  ],
+  "boolean": false,
+  "nullValue": "not null",
+  "object": Object {
+    "nested": "changed",
+  },
+  "string": "world",
+  "undefinedValue": "defined",
+}
+`;
+
+exports[`getChangedState correctness tests should handle nested object changes 1`] = `
+Object {
+  "settings": Object {
+    "theme": "light",
+  },
+  "user": Object {
+    "age": 31,
+  },
+}
+`;
+
+exports[`getChangedState correctness tests should handle null and undefined values 1`] = `
+Object {
+  "a": "changed",
+  "b": "defined",
+  "c": null,
+}
+`;
+
+exports[`getChangedState correctness tests should handle number vs boolean (non-object input) 1`] = `Object {}`;
+
+exports[`getChangedState correctness tests should handle object vs null (non-object input) 1`] = `Object {}`;
+
+exports[`getChangedState correctness tests should handle removed keys 1`] = `
+Object {
+  "c": 3,
+}
+`;
+
+exports[`getChangedState correctness tests should handle string vs object (non-object input) 1`] = `Object {}`;
