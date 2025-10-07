@@ -2926,6 +2926,9 @@ export class PostHog {
             this.surveys.loadIfEnabled()
         }
 
+        // Restart autocapture after opting in
+        this.autocapture?.startIfEnabled()
+
         // Don't capture if captureEventName is null or false
         if (isUndefined(options?.captureEventName) || options?.captureEventName) {
             this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
