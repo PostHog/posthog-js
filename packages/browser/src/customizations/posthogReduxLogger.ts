@@ -57,6 +57,7 @@ export interface StateEvent {
     executionTimeMs?: number
     prevState: any
     nextState: any
+    changedState: any
 }
 
 export type PostHogStateLogger = (title: string, stateEvent: StateEvent) => void
@@ -66,7 +67,6 @@ export interface PostHogStateLoggerConfig<S = any> {
     maskState?: (state: S, action?: UnknownAction) => S
     titleFunction?: (stateEvent: StateEvent) => string
     logger?: PostHogStateLogger
-    diffState?: boolean
     /**
      * actions logging is token bucket rate limited to avoid flooding
      * this controls the rate limiter's refill rate, see BucketedRateLimiter docs for details
@@ -80,7 +80,7 @@ export interface PostHogStateLoggerConfig<S = any> {
      */
     rateLimiterBucketSize?: number
     /**
-     * Controls how many levels deep the state diffing goes when `diffState` is true
+     * Controls how many levels deep the state diffing goes when looking for changed keys
      * Defaults to 5
      * Increase this if you have nested state changes that are not being captured
      * Decrease this if you are seeing too much state in the diffs and want to reduce noise
@@ -89,6 +89,17 @@ export interface PostHogStateLoggerConfig<S = any> {
      * Normally this is only changed with posthog support assistance
      */
     __stateComparisonDepth?: number
+    /**
+     * Which parts of the state event to include in the logged event
+     * By default we include, previous and changed keys only
+     *
+     * NB the more you include the more likely a log will be dropped by rate limiting or max size limits
+     */
+    include?: {
+        prevState?: boolean
+        nextState?: boolean
+        changedState?: boolean
+    }
 }
 
 /**
@@ -129,57 +140,69 @@ export const sessionRecordingLoggerForPostHogInstance: (posthog: PostHog) => Pos
  *
  * Returns { prevState: changedKeysOnly, nextState: changedKeysOnly }
  */
-export function getChangedStateKeys<S>(
-    prevState: S,
-    nextState: S,
-    maxDepth: number
-): { prevState?: Partial<S>; nextState?: Partial<S> } {
+export function getChangedState<S>(prevState: S, nextState: S, maxDepth: number = 5): Partial<S> {
     // Fast bailouts
-    if (prevState === nextState) return { prevState: {}, nextState: {} }
-    if (!prevState || !nextState) return { prevState: prevState as Partial<S>, nextState: nextState as Partial<S> }
     if (typeof prevState !== 'object' || typeof nextState !== 'object') return {}
-    if (maxDepth <= 0) return { prevState: prevState as Partial<S>, nextState: nextState as Partial<S> }
+    if (prevState === nextState) return {}
+    // all keys changed when no previous state
+    if (!prevState && nextState) return nextState
+    // something weird has happened, return empty
+    if (!nextState) return {}
+    // something weird has happened, return empty
+    if (!prevState) return {}
 
-    const prev: any = {}
-    const next: any = {}
-    let hasChanges = false
+    const changed: any = {}
 
-    // Single pass: check all keys from both objects
-    const allKeys = new Set([...Object.keys(prevState), ...Object.keys(nextState)])
+    // any keys in next that are not in prev are new/changed
+    for (const key of Object.keys(nextState)) {
+        if (isUndefined((prevState as any)[key])) {
+            changed[key] = (nextState as any)[key]
+        }
+    }
+    // any keys in prev that are not in next are removed/changed
+    for (const key of Object.keys(prevState)) {
+        if (isUndefined((nextState as any)[key])) {
+            changed[key] = (prevState as any)[key]
+        }
+    }
+    // now for any other key, seek differences
+    const alreadyChangedKeys = new Set(Object.keys(changed))
+    const previousKeys = Object.keys(prevState).filter((k) => !alreadyChangedKeys.has(k))
+    const nextKeys = Object.keys(nextState).filter((k) => !alreadyChangedKeys.has(k))
+    const keysToCheck = Array.from(new Set([...previousKeys, ...nextKeys]))
 
-    for (const key of allKeys) {
-        const prevVal = (prevState as any)[key]
-        const nextVal = (nextState as any)[key]
+    for (const key of keysToCheck) {
+        const prevValue = (prevState as any)[key]
+        const nextValue = (nextState as any)[key]
 
-        if (prevVal === nextVal) continue // No change
-
-        hasChanges = true
-
-        // Handle missing keys
-        if (isUndefined(prevVal)) {
-            next[key] = nextVal
+        if (prevValue === nextValue) {
+            // same value, skip
             continue
         }
-        if (isUndefined(nextVal)) {
-            prev[key] = prevVal
+        if (isNullish(prevValue) && isNullish(nextValue)) {
+            // both null, skip
             continue
         }
 
-        // For objects, recurse once more, otherwise treat as primitive
-        if (isObject(prevVal) && isObject(nextVal)) {
-            const nested = getChangedStateKeys(prevVal, nextVal, maxDepth - 1)
+        if (!isObject(prevValue) || !isObject(nextValue) || isNullish(prevValue) || isNullish(nextValue)) {
+            // primitive value or one is null, so must be changed
+            changed[key] = nextValue
+            continue
+        }
 
-            // Only include if there are actual changes
-            if (nested.prevState && Object.keys(nested.prevState).length > 0) prev[key] = nested.prevState
-            if (nested.nextState && Object.keys(nested.nextState).length > 0) next[key] = nested.nextState
+        // both are objects, do a recursive diff if we haven't reached max depth
+        if (maxDepth > 1) {
+            const childChanged = getChangedState(prevValue, nextValue, maxDepth - 1)
+            if (Object.keys(childChanged).length > 0) {
+                changed[key] = childChanged
+            }
         } else {
-            // Primitive or array - include both values
-            prev[key] = prevVal
-            next[key] = nextVal
+            // max depth reached, just mark as changed
+            changed[key] = `max depth reached, checking for changed value`
         }
     }
 
-    return hasChanges ? { prevState: prev, nextState: next } : { prevState: {}, nextState: {} }
+    return changed
 }
 
 // Debounced logger for rate limit messages
@@ -256,7 +279,11 @@ export function posthogReduxLogger<S = any>(
         maskState,
         titleFunction = defaultTitleFunction,
         logger = browserConsoleLogger,
-        diffState = true,
+        include = {
+            prevState: true,
+            nextState: false,
+            changedState: true,
+        },
         rateLimiterRefillRate = 1,
         rateLimiterBucketSize = 10,
         __stateComparisonDepth,
@@ -304,25 +331,9 @@ export function posthogReduxLogger<S = any>(
                 try {
                     const maskedPrevState = maskState ? maskState(prevState, maskedAction) : prevState
                     const maskedNextState = maskState ? maskState(nextState, maskedAction) : nextState
-
-                    type FilteredState = { 'invalid state'?: string } | (S & Record<string, any>)
-                    let filteredPrevState: FilteredState
-                    let filteredNextState: FilteredState
-                    if (diffState) {
-                        const { prevState: diffedPrevState, nextState: diffedNextState } = getChangedStateKeys(
-                            maskedPrevState,
-                            maskedNextState,
-                            __stateComparisonDepth ?? 5
-                        )
-                        const invalidPayloadForDiffing: FilteredState = { 'invalid state': 'no changes after diffing' }
-                        filteredPrevState = (diffedPrevState as FilteredState) ?? invalidPayloadForDiffing
-                        filteredNextState = (diffedNextState as FilteredState) ?? invalidPayloadForDiffing
-                    } else {
-                        const invalidPayloadForLogging = { 'invalid state': 'logger only supports object payloads' }
-                        filteredPrevState = isObject(maskedPrevState) ? maskedPrevState : invalidPayloadForLogging
-                        filteredNextState = isObject(maskedNextState) ? maskedNextState : invalidPayloadForLogging
-                    }
-
+                    const changedState = include.changedState
+                        ? getChangedState(maskedPrevState, maskedNextState, __stateComparisonDepth ?? 5)
+                        : undefined
                     const { type, ...actionData } = maskedAction
 
                     const reduxEvent: StateEvent = {
@@ -330,8 +341,9 @@ export function posthogReduxLogger<S = any>(
                         payload: actionData,
                         timestamp: Date.now(),
                         executionTimeMs,
-                        prevState: filteredPrevState,
-                        nextState: filteredNextState,
+                        prevState: include.prevState ? maskedPrevState : undefined,
+                        nextState: include.nextState ? maskedNextState : undefined,
+                        changedState: include.changedState ? changedState : undefined,
                     }
 
                     const title = titleFunction(reduxEvent)

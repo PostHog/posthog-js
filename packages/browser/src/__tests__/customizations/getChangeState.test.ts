@@ -1,4 +1,4 @@
-import { getChangedStateKeys } from '../../customizations/posthogReduxLogger'
+import { getChangedState } from '../../customizations/posthogReduxLogger'
 
 // Helper function to create complex nested state objects
 function createComplexState(depth: number, breadth: number, includeArrays = false): Record<string, any> {
@@ -86,7 +86,7 @@ function measureMultipleExecutions<T>(
     return { result: lastResult!, avgTime, maxTime, times }
 }
 
-describe('getChangeStateKeys', () => {
+describe('getChangeState', () => {
     describe('performance tests', () => {
         test('should handle realistic UI state efficiently', () => {
             // Fixed test data representing realistic UI state
@@ -122,7 +122,7 @@ describe('getChangeStateKeys', () => {
                 },
             }
 
-            const { executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState))
+            const { executionTime } = measureExecutionTime(() => getChangedState(prevState, nextState))
 
             expect(executionTime).toBeLessThan(10)
         })
@@ -131,7 +131,7 @@ describe('getChangeStateKeys', () => {
             const prevState = createComplexState(3, 8, true)
             const nextState = modifyStateForDrag(prevState, 5)
 
-            const { executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState, 10))
+            const { executionTime } = measureExecutionTime(() => getChangedState(prevState, nextState, 10))
 
             expect(executionTime).toBeLessThan(45)
         })
@@ -140,10 +140,10 @@ describe('getChangeStateKeys', () => {
             const prevState = createComplexState(4, 10, true)
             const nextState = modifyStateForDrag(prevState, 8)
 
-            const { avgTime, maxTime } = measureMultipleExecutions(() => getChangedStateKeys(prevState, nextState, 5))
+            const { avgTime, maxTime } = measureMultipleExecutions(() => getChangedState(prevState, nextState, 5))
 
-            expect(maxTime).toBeLessThan(200)
-            expect(avgTime).toBeLessThan(80)
+            expect(maxTime).toBeLessThan(50)
+            expect(avgTime).toBeLessThan(40)
         })
 
         test('should handle complex state changes efficiently', () => {
@@ -182,7 +182,7 @@ describe('getChangeStateKeys', () => {
                 },
             }
 
-            const { avgTime, maxTime } = measureMultipleExecutions(() => getChangedStateKeys(prevState, nextState))
+            const { avgTime, maxTime } = measureMultipleExecutions(() => getChangedState(prevState, nextState))
 
             // Should be fast for realistic complex state
             expect(avgTime).toBeLessThan(20)
@@ -193,15 +193,14 @@ describe('getChangeStateKeys', () => {
             const state = createComplexState(4, 8, true)
 
             const startTime = performance.now()
-            const result = getChangedStateKeys(state, state)
+            const result = getChangedState(state, state)
             const endTime = performance.now()
 
             const executionTime = endTime - startTime
 
             // Should be very fast for identical states
             expect(executionTime).toBeLessThan(5)
-            expect(result.prevState).toEqual({})
-            expect(result.nextState).toEqual({})
+            expect(result).toEqual({})
         })
     })
 
@@ -278,10 +277,10 @@ describe('getChangeStateKeys', () => {
             {
                 name: 'depth limit respected',
                 prevState: {
-                    l1: { l2: { l3: { l4: { l5: 'old' } } } },
+                    l1: { l2: { l3: { l4: { l5: { l6: 'old' } } } } },
                 },
                 nextState: {
-                    l1: { l2: { l3: { l4: { l5: 'new' } } } },
+                    l1: { l2: { l3: { l4: { l5: { l6: 'new' } } } } },
                 },
                 maxDepth: 2,
             },
@@ -355,7 +354,7 @@ describe('getChangeStateKeys', () => {
                 },
             },
         ])('should handle $name', ({ prevState, nextState, maxDepth }) => {
-            const result = getChangedStateKeys(prevState, nextState, maxDepth)
+            const result = getChangedState(prevState, nextState, maxDepth)
             expect(result).toMatchSnapshot()
         })
     })
