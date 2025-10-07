@@ -5,6 +5,8 @@ import {
   EventHint,
   geckoStackLineParser,
   ObjectCoercer,
+  PrimitiveCoercer,
+  PromiseRejectionEventCoercer,
   StringCoercer,
 } from '@posthog/core/error-tracking'
 import type { PostHog } from '../posthog-rn'
@@ -15,7 +17,13 @@ export class ErrorTracking {
 
   constructor(private instance: PostHog) {
     this.errorPropertiesBuilder = new ErrorPropertiesBuilder(
-      [new ErrorCoercer(), new ObjectCoercer(), new StringCoercer()],
+      [
+        new PromiseRejectionEventCoercer(),
+        new ErrorCoercer(),
+        new ObjectCoercer(),
+        new StringCoercer(),
+        new PrimitiveCoercer(),
+      ],
       [chromeStackLineParser, geckoStackLineParser]
     )
   }
