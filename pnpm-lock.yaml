@@ -134,8 +134,8 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0
       '@anthropic-ai/sdk':
-        specifier: ^0.62.0
-        version: 0.62.0
+        specifier: ^0.63.1
+        version: 0.63.1(zod@4.1.5)
       '@google/genai':
         specifier: ^1.19.0
         version: 1.19.0
@@ -614,6 +614,10 @@ importers:
         version: 5.8.2
 
   packages/web:
+    dependencies:
+      '@posthog/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@posthog-tooling/rollup-utils':
         specifier: workspace:*
@@ -621,9 +625,6 @@ importers:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
-      '@posthog/core':
-        specifier: workspace:*
-        version: link:../core
       jest:
         specifier: 'catalog:'
         version: 29.7.0(@types/node@22.17.0)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.17.0)(typescript@5.8.2))
@@ -704,9 +705,14 @@ packages:
     resolution: {integrity: sha512-qRmjj8nj9qmLTQXXmaR1cck3UXSRMPrbsLJAasZpF+t3riI71BXed5ebIOYwQntykeZuhjsdweEc9BxH5Jc26w==}
     engines: {node: '>=6.0.0'}
 
-  '@anthropic-ai/sdk@0.62.0':
-    resolution: {integrity: sha512-gT2VFKX0gSp7KJNlav/vzRFjJOPYDZxCJRx7MYUc+fqURc5aS6OI/UJeD2KytJkjsIWv0OOwH1ePc1S5QE2GZw==}
+  '@anthropic-ai/sdk@0.63.1':
+    resolution: {integrity: sha512-wMA/Xx5GLO+npV992YKUfsmlI6699XG/jFjCPTf/nsMBfUh3e3KmNiOKuhqSMZibOjoLOlhYc7L4pfLPI8A+RA==}
     hasBin: true
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
 
   '@ast-grep/napi-darwin-arm64@0.37.0':
     resolution: {integrity: sha512-QAiIiaAbLvMEg/yBbyKn+p1gX2/FuaC0SMf7D7capm/oG4xGMzdeaQIcSosF4TCxxV+hIH4Bz9e4/u7w6Bnk3Q==}
@@ -6849,6 +6855,10 @@ packages:
     resolution: {integrity: sha512-YBOEogm5w9Op337yb6pAT6ZXDqlxAsQCanM3grid8lMWNxRJO/zWEJi3ZzqDL8boWfwhTFym5EFrNgWwpqcBRg==}
     engines: {node: '>=6.0.0'}
 
+  json-schema-to-ts@3.1.1:
+    resolution: {integrity: sha512-+DWg8jCJG2TEnpy7kOm/7/AxaYoaRbjVB4LFZLySZlWn8exGs3A4OLJR966cVvU26N7X9TWxl+Jsw7dzAqKT6g==}
+    engines: {node: '>=16'}
+
   json-schema-traverse@0.4.1:
     resolution: {integrity: sha512-xbbCH5dCYU5T8LcEhhuh7HJ88HXuW3qsI3Y0zOZFKfZEHcpWiHU/Jxzk629Brsab/mMiHQti9wMP+845RPe3Vg==}
 
@@ -9876,6 +9886,9 @@ packages:
   truncate-utf8-bytes@1.0.2:
     resolution: {integrity: sha512-95Pu1QXQvruGEhv62XCMO3Mm90GscOCClvrIUwCM0PYOXK3kaF3l3sIHxx71ThJfcbM2O5Au6SO3AWCSEfW4mQ==}
 
+  ts-algebra@2.0.0:
+    resolution: {integrity: sha512-FPAhNPFMrkwz76P7cdjdmiShwMynZYN6SgOujD1urY4oNm80Ou9oMdmbR45LotcKOXoy7wSmHkRFE6Mxbrhefw==}
+
   ts-api-utils@1.3.0:
     resolution: {integrity: sha512-UQMIo7pb8WRomKR1/+MFVLTroIvDVtMX3K6OUir8ynLyzB8Jeriont2bTAtmNPa1ekAgN7YPDyf6V+ygrdU+eQ==}
     engines: {node: '>=16'}
@@ -10592,7 +10605,11 @@ snapshots:
       '@jridgewell/gen-mapping': 0.1.1
       '@jridgewell/trace-mapping': 0.3.29
 
-  '@anthropic-ai/sdk@0.62.0': {}
+  '@anthropic-ai/sdk@0.63.1(zod@4.1.5)':
+    dependencies:
+      json-schema-to-ts: 3.1.1
+    optionalDependencies:
+      zod: 4.1.5
 
   '@ast-grep/napi-darwin-arm64@0.37.0':
     optional: true
@@ -12770,14 +12787,14 @@ snapshots:
 
   '@jimp/bmp@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/utils': 0.16.1
       bmp-js: 0.1.0
 
   '@jimp/core@0.16.1':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/utils': 0.16.1
       any-base: 1.1.0
       buffer: 5.7.1
@@ -12791,12 +12808,12 @@ snapshots:
 
   '@jimp/custom@0.16.1':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/core': 0.16.1
 
   '@jimp/gif@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/utils': 0.16.1
       gifwrap: 0.9.2
@@ -12804,39 +12821,39 @@ snapshots:
 
   '@jimp/jpeg@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/utils': 0.16.1
       jpeg-js: 0.4.2
 
   '@jimp/plugin-blit@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/utils': 0.16.1
 
   '@jimp/plugin-blur@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/utils': 0.16.1
 
   '@jimp/plugin-circle@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/utils': 0.16.1
 
   '@jimp/plugin-color@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/utils': 0.16.1
       tinycolor2: 1.4.2
 
   '@jimp/plugin-contain@0.16.1(@jimp/custom@0.16.1)(@jimp/plugin-blit@0.16.1(@jimp/custom@0.16.1))(@jimp/plugin-resize@0.16.1(@jimp/custom@0.16.1))(@jimp/plugin-scale@0.16.1(@jimp/custom@0.16.1)(@jimp/plugin-resize@0.16.1(@jimp/custom@0.16.1)))':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/plugin-blit': 0.16.1(@jimp/custom@0.16.1)
       '@jimp/plugin-resize': 0.16.1(@jimp/custom@0.16.1)
@@ -12845,7 +12862,7 @@ snapshots:
 
   '@jimp/plugin-cover@0.16.1(@jimp/custom@0.16.1)(@jimp/plugin-crop@0.16.1(@jimp/custom@0.16.1))(@jimp/plugin-resize@0.16.1(@jimp/custom@0.16.1))(@jimp/plugin-scale@0.16.1(@jimp/custom@0.16.1)(@jimp/plugin-resize@0.16.1(@jimp/custom@0.16.1)))':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/plugin-crop': 0.16.1(@jimp/custom@0.16.1)
       '@jimp/plugin-resize': 0.16.1(@jimp/custom@0.16.1)
@@ -12854,62 +12871,62 @@ snapshots:
 
   '@jimp/plugin-crop@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/utils': 0.16.1
 
   '@jimp/plugin-displace@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/utils': 0.16.1
 
   '@jimp/plugin-dither@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/utils': 0.16.1
 
   '@jimp/plugin-fisheye@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/utils': 0.16.1
 
   '@jimp/plugin-flip@0.16.1(@jimp/custom@0.16.1)(@jimp/plugin-rotate@0.16.1(@jimp/custom@0.16.1)(@jimp/plugin-blit@0.16.1(@jimp/custom@0.16.1))(@jimp/plugin-crop@0.16.1(@jimp/custom@0.16.1))(@jimp/plugin-resize@0.16.1(@jimp/custom@0.16.1)))':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/plugin-rotate': 0.16.1(@jimp/custom@0.16.1)(@jimp/plugin-blit@0.16.1(@jimp/custom@0.16.1))(@jimp/plugin-crop@0.16.1(@jimp/custom@0.16.1))(@jimp/plugin-resize@0.16.1(@jimp/custom@0.16.1))
       '@jimp/utils': 0.16.1
 
   '@jimp/plugin-gaussian@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/utils': 0.16.1
 
   '@jimp/plugin-invert@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/utils': 0.16.1
 
   '@jimp/plugin-mask@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/utils': 0.16.1
 
   '@jimp/plugin-normalize@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/utils': 0.16.1
 
   '@jimp/plugin-print@0.16.1(@jimp/custom@0.16.1)(@jimp/plugin-blit@0.16.1(@jimp/custom@0.16.1))':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/plugin-blit': 0.16.1(@jimp/custom@0.16.1)
       '@jimp/utils': 0.16.1
@@ -12917,13 +12934,13 @@ snapshots:
 
   '@jimp/plugin-resize@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/utils': 0.16.1
 
   '@jimp/plugin-rotate@0.16.1(@jimp/custom@0.16.1)(@jimp/plugin-blit@0.16.1(@jimp/custom@0.16.1))(@jimp/plugin-crop@0.16.1(@jimp/custom@0.16.1))(@jimp/plugin-resize@0.16.1(@jimp/custom@0.16.1))':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/plugin-blit': 0.16.1(@jimp/custom@0.16.1)
       '@jimp/plugin-crop': 0.16.1(@jimp/custom@0.16.1)
@@ -12932,14 +12949,14 @@ snapshots:
 
   '@jimp/plugin-scale@0.16.1(@jimp/custom@0.16.1)(@jimp/plugin-resize@0.16.1(@jimp/custom@0.16.1))':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/plugin-resize': 0.16.1(@jimp/custom@0.16.1)
       '@jimp/utils': 0.16.1
 
   '@jimp/plugin-shadow@0.16.1(@jimp/custom@0.16.1)(@jimp/plugin-blur@0.16.1(@jimp/custom@0.16.1))(@jimp/plugin-resize@0.16.1(@jimp/custom@0.16.1))':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/plugin-blur': 0.16.1(@jimp/custom@0.16.1)
       '@jimp/plugin-resize': 0.16.1(@jimp/custom@0.16.1)
@@ -12947,7 +12964,7 @@ snapshots:
 
   '@jimp/plugin-threshold@0.16.1(@jimp/custom@0.16.1)(@jimp/plugin-color@0.16.1(@jimp/custom@0.16.1))(@jimp/plugin-resize@0.16.1(@jimp/custom@0.16.1))':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/plugin-color': 0.16.1(@jimp/custom@0.16.1)
       '@jimp/plugin-resize': 0.16.1(@jimp/custom@0.16.1)
@@ -12955,7 +12972,7 @@ snapshots:
 
   '@jimp/plugins@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/plugin-blit': 0.16.1(@jimp/custom@0.16.1)
       '@jimp/plugin-blur': 0.16.1(@jimp/custom@0.16.1)
@@ -12982,20 +12999,20 @@ snapshots:
 
   '@jimp/png@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       '@jimp/utils': 0.16.1
       pngjs: 3.4.0
 
   '@jimp/tiff@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/custom': 0.16.1
       utif: 2.0.1
 
   '@jimp/types@0.16.1(@jimp/custom@0.16.1)':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@jimp/bmp': 0.16.1(@jimp/custom@0.16.1)
       '@jimp/custom': 0.16.1
       '@jimp/gif': 0.16.1(@jimp/custom@0.16.1)
@@ -13006,7 +13023,7 @@ snapshots:
 
   '@jimp/utils@0.16.1':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       regenerator-runtime: 0.13.7
 
   '@jridgewell/gen-mapping@0.1.1':
@@ -13082,7 +13099,7 @@ snapshots:
 
   '@manypkg/find-root@1.1.0':
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@types/node': 12.20.37
       find-up: 4.1.0
       fs-extra: 8.1.0
@@ -14035,7 +14052,7 @@ snapshots:
   '@testing-library/dom@7.31.2':
     dependencies:
       '@babel/code-frame': 7.27.1
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@types/aria-query': 4.2.2
       aria-query: 4.2.2
       chalk: 4.1.2
@@ -14633,7 +14650,7 @@ snapshots:
 
   aria-query@4.2.2:
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
       '@babel/runtime-corejs3': 7.27.6
 
   aria-query@5.1.3:
@@ -19289,6 +19306,11 @@ snapshots:
       traverse: 0.6.11
       valid-url: 1.0.9
 
+  json-schema-to-ts@3.1.1:
+    dependencies:
+      '@babel/runtime': 7.27.6
+      ts-algebra: 2.0.0
+
   json-schema-traverse@0.4.1: {}
 
   json-schema-traverse@1.0.0: {}
@@ -19851,7 +19873,7 @@ snapshots:
 
   metro-runtime@0.70.4:
     dependencies:
-      '@babel/runtime': 7.13.9
+      '@babel/runtime': 7.27.6
 
   metro-source-map@0.70.4:
     dependencies:
@@ -22845,6 +22867,8 @@ snapshots:
   truncate-utf8-bytes@1.0.2:
     dependencies:
       utf8-byte-length: 1.0.4
+
+  ts-algebra@2.0.0: {}
 
   ts-api-utils@1.3.0(typescript@5.8.2):
     dependencies:

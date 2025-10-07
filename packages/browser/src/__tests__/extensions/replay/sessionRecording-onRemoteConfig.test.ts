@@ -126,6 +126,7 @@ describe('SessionRecording', () => {
             autocapture: false, // Assert that session recording works even if `autocapture = false`
             session_recording: {
                 maskAllInputs: false,
+                compress_events: false,
             },
             persistence: 'memory',
         } as unknown as PostHogConfig
@@ -195,6 +196,7 @@ describe('SessionRecording', () => {
     })
 
     afterEach(() => {
+        // @ts-expect-error this is a test, it's safe to write to location like this
         window!.location = originalLocation
     })
 

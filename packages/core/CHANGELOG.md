@@ -1,5 +1,17 @@
 # @posthog/core
 
+## 1.2.2
+
+### Patch Changes
+
+- [#2370](https://github.com/PostHog/posthog-js/pull/2370) [`5820942`](https://github.com/PostHog/posthog-js/commit/582094255fa87009b02a4e193c3e63ef4621d9d0) Thanks [@hpouillot](https://github.com/hpouillot)! - remove testing export
+
+## 1.2.1
+
+### Patch Changes
+
+- [#2356](https://github.com/PostHog/posthog-js/pull/2356) [`caecb94`](https://github.com/PostHog/posthog-js/commit/caecb94493f6b85003ecbd6750a81e27139b1fa5) Thanks [@hpouillot](https://github.com/hpouillot)! - update error properties builder
+
 ## 1.2.0
 
 ### Minor Changes

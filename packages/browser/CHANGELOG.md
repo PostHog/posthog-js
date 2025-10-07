@@ -1,5 +1,102 @@
 # posthog-js
 
+## 1.272.0
+
+### Minor Changes
+
+- [#2405](https://github.com/PostHog/posthog-js/pull/2405) [`cdfbd6d`](https://github.com/PostHog/posthog-js/commit/cdfbd6dba8bf212067d94cf5e3eaae3f0648473e) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: session recording config can be false, correct the types
+
+## 1.271.0
+
+### Minor Changes
+
+- [#2385](https://github.com/PostHog/posthog-js/pull/2385) [`7373238`](https://github.com/PostHog/posthog-js/commit/7373238d8b2e0d8777131ffc93caae0ff4dd3bad) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: switch replay to lazy loaded by default"
+
+## 1.270.1
+
+### Patch Changes
+
+- [#2390](https://github.com/PostHog/posthog-js/pull/2390) [`244b3ad`](https://github.com/PostHog/posthog-js/commit/244b3ad2f6dea8086747046044245b1514bd658b) Thanks [@hpouillot](https://github.com/hpouillot)! - fix react sourcemaps
+
+## 1.270.0
+
+### Minor Changes
+
+- [#2355](https://github.com/PostHog/posthog-js/pull/2355) [`9eccbab`](https://github.com/PostHog/posthog-js/commit/9eccbabbd219cee062b52fadd3b0c7ba55773f7a) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix: use persistence for surveys if localStorage usage is enabled
+
+### Patch Changes
+
+- [#2396](https://github.com/PostHog/posthog-js/pull/2396) [`13c6667`](https://github.com/PostHog/posthog-js/commit/13c6667d22edf8b0d1c1ff11ef3e8b32ac5cb2a2) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: no need to estimate the size of all rrweb events before compressing some of them
+
+## 1.269.1
+
+### Patch Changes
+
+- [#2393](https://github.com/PostHog/posthog-js/pull/2393) [`a3b64e6`](https://github.com/PostHog/posthog-js/commit/a3b64e6788527acca485f0e6bfca8e207b72bb2c) Thanks [@pauldambra](https://github.com/pauldambra)! - chore: variable rename so i can trigger a releas
+
+## 1.269.0
+
+### Minor Changes
+
+- [#2369](https://github.com/PostHog/posthog-js/pull/2369) [`2a6ea65`](https://github.com/PostHog/posthog-js/commit/2a6ea65333460027f163d186ab6b241488c4c750) Thanks [@dmarticus](https://github.com/dmarticus)! - This PR implements support for evaluation environments in the posthog-js SDK, allowing users to specify which environment tags their SDK instance should use when evaluating feature flags.
+
+### Patch Changes
+
+- [#2381](https://github.com/PostHog/posthog-js/pull/2381) [`06a79f9`](https://github.com/PostHog/posthog-js/commit/06a79f99e7bebcbf669e9ce37ef4441224339e9a) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: remove xhr event listener when handling it to avoid potential memory leak
+- [#2374](https://github.com/PostHog/posthog-js/pull/2374) [`5af6e2d`](https://github.com/PostHog/posthog-js/commit/5af6e2d1fb1694cecfa4ef515cac192fb194fa4e) Thanks [@hpouillot](https://github.com/hpouillot)! - fix react sourcemaps
+
+## 1.268.11
+
+- failed release due to an error in CI, included in 1.269.0
+
+* [#2381](https://github.com/PostHog/posthog-js/pull/2381) [`06a79f9`](https://github.com/PostHog/posthog-js/commit/06a79f99e7bebcbf669e9ce37ef4441224339e9a) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: remove xhr event listener when handling it to avoid potential memory leak
+
+## 1.268.10
+
+- failed release due to an error in CI, included in 1.269.0
+
+* [#2374](https://github.com/PostHog/posthog-js/pull/2374) [`5af6e2d`](https://github.com/PostHog/posthog-js/commit/5af6e2d1fb1694cecfa4ef515cac192fb194fa4e) Thanks [@hpouillot](https://github.com/hpouillot)! - fix react sourcemaps
+
+## 1.268.9
+
+### Patch Changes
+
+- [#2378](https://github.com/PostHog/posthog-js/pull/2378) [`b920bac`](https://github.com/PostHog/posthog-js/commit/b920bac4f4c561981eb4651dc02a841a5f87cfb0) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: don't mangle to $ in no external or es5 builds
+
+- [#2376](https://github.com/PostHog/posthog-js/pull/2376) [`b5eb605`](https://github.com/PostHog/posthog-js/commit/b5eb605f193684c1e6dd9b698717810e8ac233a8) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: rotating buffer while trigger pending
+
+## 1.268.8
+
+### Patch Changes
+
+- Updated dependencies [[`5820942`](https://github.com/PostHog/posthog-js/commit/582094255fa87009b02a4e193c3e63ef4621d9d0)]:
+    - @posthog/core@1.2.2
+
+## 1.268.7
+
+### Patch Changes
+
+- [#2373](https://github.com/PostHog/posthog-js/pull/2373) [`aff9455`](https://github.com/PostHog/posthog-js/commit/aff94552ccf9257c73c3704f0ad81815436460e0) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: 2 small conditional recording fixes
+
+## 1.268.6
+
+### Patch Changes
+
+- [#2368](https://github.com/PostHog/posthog-js/pull/2368) [`2102ee4`](https://github.com/PostHog/posthog-js/commit/2102ee4ad300dfa1f6ee9260b332b27d780ff583) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: recorder behaviour when idle session is force terminated then restarted
+
+## 1.268.5
+
+### Patch Changes
+
+- [#2362](https://github.com/PostHog/posthog-js/pull/2362) [`8b570b8`](https://github.com/PostHog/posthog-js/commit/8b570b832532d2827fd03a7da0d5554028ce7d77) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: over eager rename left a couple of old versions trying to call onRemoteConfig that doesn't exist
+
+## 1.268.4
+
+### Patch Changes
+
+- Updated dependencies [[`caecb94`](https://github.com/PostHog/posthog-js/commit/caecb94493f6b85003ecbd6750a81e27139b1fa5)]:
+    - @posthog/core@1.2.1
+
 ## 1.268.3
 
 ### Patch Changes

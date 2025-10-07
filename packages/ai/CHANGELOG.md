@@ -1,5 +1,11 @@
 # posthog-ai
 
+## 6.4.3
+
+### Patch Changes
+
+- [#2364](https://github.com/PostHog/posthog-js/pull/2364) [`d91fef6`](https://github.com/PostHog/posthog-js/commit/d91fef61a4e866a02b9543234501487803fe4a5f) Thanks [@dependabot](https://github.com/apps/dependabot)! - Update Anthropic SDK
+
 ## 6.4.2
 
 ### Patch Changes

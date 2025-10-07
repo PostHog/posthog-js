@@ -1,0 +1,38 @@
+version: 2
+updates:
+    - package-ecosystem: 'npm'
+      commit-message:
+          prefix: 'chore(llma)'
+      labels:
+          - release
+      directory: '/packages/ai'
+      schedule:
+          interval: 'daily'
+          time: '10:00'
+          timezone: 'UTC'
+      groups:
+          ai-providers:
+              patterns:
+                  - '@anthropic-ai/sdk'
+                  - '@google/genai'
+                  - 'openai'
+                  - '@ai-sdk/provider'
+                  - 'ai'
+                  - '@langchain/core'
+                  - 'langchain'
+      allow:
+          - dependency-name: '@anthropic-ai/sdk'
+          - dependency-name: '@google/genai'
+          - dependency-name: 'openai'
+          - dependency-name: '@ai-sdk/provider'
+          - dependency-name: 'ai'
+          - dependency-name: '@langchain/core'
+          - dependency-name: 'langchain'
+      open-pull-requests-limit: 1
+      reviewers:
+          - 'PostHog/team-llm-analytics'
+      # Uncomment below to enable auto-merge for minor updates when CI passes
+      # pull-request-branch-name:
+      #   separator: "/"
+      # assignees:
+      #   - "PostHog/ai-team"
