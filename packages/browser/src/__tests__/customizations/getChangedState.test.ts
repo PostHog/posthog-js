@@ -86,7 +86,7 @@ function measureMultipleExecutions<T>(
     return { result: lastResult!, avgTime, maxTime, times }
 }
 
-describe('getChangeState', () => {
+describe('getChangedState', () => {
     describe('performance tests', () => {
         test('should handle realistic UI state efficiently', () => {
             // Fixed test data representing realistic UI state
