@@ -1,5 +1,11 @@
 # posthog-node
 
+## 5.9.3
+
+### Patch Changes
+
+- [#2406](https://github.com/PostHog/posthog-js/pull/2406) [`ea58d34`](https://github.com/PostHog/posthog-js/commit/ea58d34c62e139f11d5b41bf67b52624308deffa) Thanks [@dmarticus](https://github.com/dmarticus)! - Use `SubtleCrypto` directly to compute SHA-1 hashes, fix "module not found" warning in edge runtimes.
+
 ## 5.9.2
 
 ### Patch Changes

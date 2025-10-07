@@ -3,7 +3,10 @@ import { start } from '../utils/setup'
 
 const startOptions = {
     options: {
-        session_recording: {},
+        session_recording: {
+            // not the default but makes for easier test assertions
+            compress_events: false,
+        },
     },
     flagsResponseOverrides: {
         sessionRecording: {

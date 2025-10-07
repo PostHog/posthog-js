@@ -22,6 +22,7 @@ yalc*
 cypress/videos
 coverage
 react/dist
+react/src
 test-result.json
 yarn-error.log
 stats.html

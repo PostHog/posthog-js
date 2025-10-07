@@ -137,9 +137,17 @@ export class URLTriggerMatching implements TriggerStatusMatching {
 
     onConfig(config: ReplayConfigType) {
         this._urlTriggers =
-            (isEagerLoadedConfig(config) ? config.sessionRecording?.urlTriggers : config?.urlTriggers) || []
+            (isEagerLoadedConfig(config)
+                ? isObject(config.sessionRecording)
+                    ? config.sessionRecording?.urlTriggers
+                    : []
+                : config?.urlTriggers) || []
         this._urlBlocklist =
-            (isEagerLoadedConfig(config) ? config.sessionRecording?.urlBlocklist : config?.urlBlocklist) || []
+            (isEagerLoadedConfig(config)
+                ? isObject(config.sessionRecording)
+                    ? config.sessionRecording?.urlBlocklist
+                    : []
+                : config?.urlBlocklist) || []
     }
 
     /**
@@ -206,7 +214,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
 export class LinkedFlagMatching implements TriggerStatusMatching {
     linkedFlag: string | FlagVariant | null = null
     linkedFlagSeen: boolean = false
-    private _flaglistenerCleanup: () => void = () => {}
+    private _flagListenerCleanup: () => void = () => {}
     constructor(private readonly _instance: PostHog) {}
 
     triggerStatus(): TriggerStatus {
@@ -225,12 +233,16 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
 
     onConfig(config: ReplayConfigType, onStarted: (flag: string, variant: string | null) => void) {
         this.linkedFlag =
-            (isEagerLoadedConfig(config) ? config.sessionRecording?.linkedFlag : config?.linkedFlag) || null
+            (isEagerLoadedConfig(config)
+                ? isObject(config.sessionRecording)
+                    ? config.sessionRecording?.linkedFlag
+                    : null
+                : config?.linkedFlag) || null
 
         if (!isNullish(this.linkedFlag) && !this.linkedFlagSeen) {
             const linkedFlag = isString(this.linkedFlag) ? this.linkedFlag : this.linkedFlag.flag
             const linkedVariant = isString(this.linkedFlag) ? null : this.linkedFlag.variant
-            this._flaglistenerCleanup = this._instance.onFeatureFlags((_flags, variants) => {
+            this._flagListenerCleanup = this._instance.onFeatureFlags((_flags, variants) => {
                 const flagIsPresent = isObject(variants) && linkedFlag in variants
                 let linkedFlagMatches = false
                 if (flagIsPresent) {
@@ -260,7 +272,7 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
     }
 
     stop(): void {
-        this._flaglistenerCleanup()
+        this._flagListenerCleanup()
     }
 }
 
@@ -271,7 +283,11 @@ export class EventTriggerMatching implements TriggerStatusMatching {
 
     onConfig(config: ReplayConfigType) {
         this._eventTriggers =
-            (isEagerLoadedConfig(config) ? config.sessionRecording?.eventTriggers : config?.eventTriggers) || []
+            (isEagerLoadedConfig(config)
+                ? isObject(config.sessionRecording)
+                    ? config.sessionRecording?.eventTriggers
+                    : []
+                : config?.eventTriggers) || []
     }
 
     /**

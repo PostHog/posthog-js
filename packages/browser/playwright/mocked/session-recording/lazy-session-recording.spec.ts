@@ -96,7 +96,7 @@ test.describe('Session recording - array.js', () => {
             ph?.startSessionRecording()
         })
 
-        await ensureActivitySendsSnapshots(page, ['$session_options', '$posthog_config'])
+        await ensureActivitySendsSnapshots(page, ['$remote_config_received', '$session_options', '$posthog_config'])
 
         // the session id is not rotated by stopping and starting the recording
         const finishingSessionId = await page.evaluate(() => {

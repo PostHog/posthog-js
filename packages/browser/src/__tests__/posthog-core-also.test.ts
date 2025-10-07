@@ -467,10 +467,7 @@ describe('posthog core', () => {
                 $session_entry_referring_domain: 'https://referrer.example.com',
                 $is_identified: false,
                 $process_person_profile: false,
-                $recording_status: 'buffering',
-                $sdk_debug_current_session_duration: null,
-                $sdk_debug_replay_internal_buffer_length: 0,
-                $sdk_debug_replay_internal_buffer_size: 0,
+                $recording_status: 'lazy_loading',
                 $sdk_debug_retry_queue_size: 0,
                 $config_defaults: 'unset',
             })
@@ -496,10 +493,7 @@ describe('posthog core', () => {
                 $lib_custom_api_host: 'https://custom.posthog.com',
                 $is_identified: false,
                 $process_person_profile: false,
-                $recording_status: 'buffering',
-                $sdk_debug_current_session_duration: null,
-                $sdk_debug_replay_internal_buffer_length: 0,
-                $sdk_debug_replay_internal_buffer_size: 0,
+                $recording_status: 'lazy_loading',
                 $sdk_debug_retry_queue_size: 0,
                 $config_defaults: 'unset',
             })

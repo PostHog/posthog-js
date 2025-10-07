@@ -1,6 +1,9 @@
 packages:
   - packages/*
   - tooling/*
+  - '!**/playground/**'
+  - '!**/examples/**'
+
 
 catalog:
   tsup: ^8.5.0

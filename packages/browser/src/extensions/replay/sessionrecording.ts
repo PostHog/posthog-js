@@ -92,7 +92,7 @@ const FIVE_MINUTES = ONE_MINUTE * 5
 const TWO_SECONDS = 2000
 export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
 const ONE_KB = 1024
-const PARTIAL_COMPRESSION_THRESHOLD = ONE_KB
+
 export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
@@ -191,11 +191,6 @@ function gzipToString(data: unknown): string {
  * so we have a custom packer that only compresses part of some events
  */
 function compressEvent(event: eventWithTime): eventWithTime | compressedEventWithTime {
-    const originalSize = estimateSize(event)
-    if (originalSize < PARTIAL_COMPRESSION_THRESHOLD) {
-        return event
-    }
-
     try {
         if (event.type === EventType.FullSnapshot) {
             return {
@@ -635,37 +630,40 @@ export class SessionRecording {
 
     onRemoteConfig(response: RemoteConfig) {
         this.tryAddCustomEvent('$remote_config_received', response)
+        this._receivedFlags = true
+
         this._persistRemoteConfig(response)
 
-        if (response.sessionRecording?.endpoint) {
-            this._endpoint = response.sessionRecording?.endpoint
-        }
+        if (response.sessionRecording) {
+            if (response.sessionRecording?.endpoint) {
+                this._endpoint = response.sessionRecording?.endpoint
+            }
 
-        this._setupSampling()
+            this._setupSampling()
 
-        if (response.sessionRecording?.triggerMatchType === 'any') {
-            this._statusMatcher = anyMatchSessionRecordingStatus
-            this._triggerMatching = new OrTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
-        } else {
-            // either the setting is "ALL"
-            // or we default to the most restrictive
-            this._statusMatcher = allMatchSessionRecordingStatus
-            this._triggerMatching = new AndTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
-        }
-        this._instance.register_for_session({
-            $sdk_debug_replay_remote_trigger_matching_config: response.sessionRecording?.triggerMatchType,
-        })
-
-        this._urlTriggerMatching.onConfig(response)
-        this._eventTriggerMatching.onConfig(response)
-        this._linkedFlagMatching.onConfig(response, (flag, variant) => {
-            this._reportStarted('linked_flag_matched', {
-                flag,
-                variant,
+            if (response.sessionRecording?.triggerMatchType === 'any') {
+                this._statusMatcher = anyMatchSessionRecordingStatus
+                this._triggerMatching = new OrTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
+            } else {
+                // either the setting is "ALL"
+                // or we default to the most restrictive
+                this._statusMatcher = allMatchSessionRecordingStatus
+                this._triggerMatching = new AndTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
+            }
+            this._instance.register_for_session({
+                $sdk_debug_replay_remote_trigger_matching_config: response.sessionRecording?.triggerMatchType,
             })
-        })
 
-        this._receivedFlags = true
+            this._urlTriggerMatching.onConfig(response)
+            this._eventTriggerMatching.onConfig(response)
+            this._linkedFlagMatching.onConfig(response, (flag, variant) => {
+                this._reportStarted('linked_flag_matched', {
+                    flag,
+                    variant,
+                })
+            })
+        }
+
         this.startIfEnabledOrStop()
     }
 
@@ -685,33 +683,34 @@ export class SessionRecording {
             const persistence = this._instance.persistence
 
             const persistResponse = () => {
-                const receivedSampleRate = response.sessionRecording?.sampleRate
+                const receivedConfig = response.sessionRecording === false ? undefined : response.sessionRecording
+                const receivedSampleRate = receivedConfig?.sampleRate
 
                 const parsedSampleRate = isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
                 if (isNullish(parsedSampleRate)) {
                     this._resetSampling()
                 }
 
-                const receivedMinimumDuration = response.sessionRecording?.minimumDurationMilliseconds
+                const receivedMinimumDuration = receivedConfig?.minimumDurationMilliseconds
 
                 persistence.register({
                     [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
-                    [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: response.sessionRecording?.consoleLogRecordingEnabled,
+                    [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: receivedConfig?.consoleLogRecordingEnabled,
                     [SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE]: {
                         capturePerformance: response.capturePerformance,
-                        ...response.sessionRecording?.networkPayloadCapture,
+                        ...receivedConfig?.networkPayloadCapture,
                     },
-                    [SESSION_RECORDING_MASKING]: response.sessionRecording?.masking,
+                    [SESSION_RECORDING_MASKING]: receivedConfig?.masking,
                     [SESSION_RECORDING_CANVAS_RECORDING]: {
-                        enabled: response.sessionRecording?.recordCanvas,
-                        fps: response.sessionRecording?.canvasFps,
-                        quality: response.sessionRecording?.canvasQuality,
+                        enabled: receivedConfig?.recordCanvas,
+                        fps: receivedConfig?.canvasFps,
+                        quality: receivedConfig?.canvasQuality,
                     },
                     [SESSION_RECORDING_SAMPLE_RATE]: parsedSampleRate,
                     [SESSION_RECORDING_MINIMUM_DURATION]: isUndefined(receivedMinimumDuration)
                         ? null
                         : receivedMinimumDuration,
-                    [SESSION_RECORDING_SCRIPT_CONFIG]: response.sessionRecording?.scriptConfig,
+                    [SESSION_RECORDING_SCRIPT_CONFIG]: receivedConfig?.scriptConfig,
                 })
             }
 

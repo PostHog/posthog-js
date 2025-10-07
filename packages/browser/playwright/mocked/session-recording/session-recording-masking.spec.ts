@@ -11,6 +11,7 @@ const remoteMaskingTextSelector = '*'
 const startOptions = (masking: Record<string, any>) => ({
     options: {
         session_recording: {
+            // not the default but makes for easier test assertions
             compress_events: false,
         },
     },
@@ -46,8 +47,8 @@ function assertTheConfigIsAsExpected(snapshotEvents: CaptureResult[], expectedMa
     const remoteConfigReceived = customSnapshots.filter((s) => s.data.tag === '$remote_config_received')[0].data.payload
     const sessionOptions = customSnapshots.filter((s) => s.data.tag === '$session_options')[0].data.payload
 
-    expect(remoteConfigReceived.sessionRecording.masking.maskAllInputs).toBe(expectedMasking.maskAllInputs)
-    expect(remoteConfigReceived.sessionRecording.masking.maskTextSelector).toBe(expectedMasking.maskTextSelector)
+    expect(remoteConfigReceived.masking.maskAllInputs).toBe(expectedMasking.maskAllInputs)
+    expect(remoteConfigReceived.masking.maskTextSelector).toBe(expectedMasking.maskTextSelector)
 
     expect(sessionOptions.sessionRecordingOptions.maskAllInputs).toBe(expectedMasking.maskAllInputs)
     expect(sessionOptions.sessionRecordingOptions.maskTextSelector).toBe(expectedMasking.maskTextSelector)

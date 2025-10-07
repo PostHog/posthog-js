@@ -52,7 +52,10 @@ async function ensureActivitySendsSnapshots(page: Page, expectedCustomTags: stri
 
 const startOptions = {
     options: {
-        session_recording: {},
+        session_recording: {
+            // not the default but makes for easier test assertions
+            compress_events: false,
+        },
     },
     flagsResponseOverrides: {
         sessionRecording: {
@@ -95,7 +98,7 @@ test.describe('Session recording - array.js', () => {
             ph?.startSessionRecording()
         })
 
-        await ensureActivitySendsSnapshots(page, ['$session_options', '$posthog_config'])
+        await ensureActivitySendsSnapshots(page, ['$remote_config_received', '$session_options', '$posthog_config'])
 
         // the session id is not rotated by stopping and starting the recording
         const finishingSessionId = await page.evaluate(() => {
