@@ -12,6 +12,7 @@ import {
     RemoteConfigFeatureFlagCallback,
     EarlyAccessFeatureStage,
     FeatureFlagDetail,
+    FeatureFlagsContext,
 } from './types'
 import { PostHogPersistence } from './posthog-persistence'
 
@@ -440,6 +441,7 @@ export class PostHogFeatureFlags {
             timeout: this._instance.config.feature_flag_request_timeout_ms,
             callback: (response) => {
                 let errorsLoading = true
+                let error
 
                 if (response.statusCode === 200) {
                     // successful request
@@ -449,6 +451,11 @@ export class PostHogFeatureFlags {
                         this.$anon_distinct_id = undefined
                     }
                     errorsLoading = false
+                } else {
+                    error = {
+                        message: response.text,
+                        status: response.statusCode,
+                    }
                 }
 
                 this._requestInFlight = false
@@ -476,7 +483,7 @@ export class PostHogFeatureFlags {
                 }
 
                 if (!data.disable_flags) {
-                    this.receivedFeatureFlags(response.json ?? {}, errorsLoading)
+                    this.receivedFeatureFlags(response.json ?? {}, { errorsLoading, error })
                 }
 
                 if (this._additionalReloadRequested) {
@@ -651,7 +658,7 @@ export class PostHogFeatureFlags {
         this.featureFlagEventHandlers = this.featureFlagEventHandlers.filter((h) => h !== handler)
     }
 
-    receivedFeatureFlags(response: Partial<FlagsResponse>, errorsLoading?: boolean): void {
+    receivedFeatureFlags(response: Partial<FlagsResponse>, context?: FeatureFlagsContext): void {
         if (!this._instance.persistence) {
             return
         }
@@ -661,7 +668,7 @@ export class PostHogFeatureFlags {
         const currentFlagPayloads = this.getFlagPayloads()
         const currentFlagDetails = this.getFlagsWithDetails()
         parseFlagsResponse(response, this._instance.persistence, currentFlags, currentFlagPayloads, currentFlagDetails)
-        this._fireFeatureFlagsCallbacks(errorsLoading)
+        this._fireFeatureFlagsCallbacks(context)
     }
 
     /**
@@ -856,9 +863,9 @@ export class PostHogFeatureFlags {
         }
     }
 
-    _fireFeatureFlagsCallbacks(errorsLoading?: boolean): void {
+    _fireFeatureFlagsCallbacks(context?: FeatureFlagsContext): void {
         const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
-        this.featureFlagEventHandlers.forEach((handler) => handler(flags, flagVariants, { errorsLoading }))
+        this.featureFlagEventHandlers.forEach((handler) => handler(flags, flagVariants, context))
     }
 
     /**

@@ -1597,12 +1597,18 @@ export type SiteApp = {
     processEvent?: (globals: SiteAppGlobals) => void
 }
 
+export type FeatureFlagsContext = {
+    errorsLoading?: boolean
+    error?: {
+        status: number
+        message?: string
+    }
+}
+
 export type FeatureFlagsCallback = (
     flags: string[],
     variants: Record<string, string | boolean>,
-    context?: {
-        errorsLoading?: boolean
-    }
+    context?: FeatureFlagsContext
 ) => void
 
 export type FeatureFlagDetail = {
