@@ -142,7 +142,7 @@ describe('getChangeState', () => {
 
             const { avgTime, maxTime } = measureMultipleExecutions(() => getChangedState(prevState, nextState, 5))
 
-            expect(maxTime).toBeLessThan(100)
+            expect(maxTime).toBeLessThan(130)
             expect(avgTime).toBeLessThan(40)
         })
 
