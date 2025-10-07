@@ -25,11 +25,11 @@ import {
 } from './types'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativeSessionReplay } from './optional/OptionalSessionReplay'
-import { ErrorTracking } from './error-tracking'
+import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
 
 export { PostHogPersistedProperty }
 
-export type PostHogOptions = PostHogCoreOptions & {
+export interface PostHogOptions extends PostHogCoreOptions {
   /** Allows you to provide the storage type. By default 'file'.
    * 'file' will try to load the best available storage, the provided 'customStorage', 'customAsyncStorage' or in-memory storage.
    */
@@ -69,6 +69,11 @@ export type PostHogOptions = PostHogCoreOptions & {
    * Defaults to false
    */
   enablePersistSessionIdAcrossRestart?: boolean
+
+  /**
+   * Error Tracking Configuration
+   */
+  errorTracking?: ErrorTrackingOptions
 }
 
 export class PostHog extends PostHogCore {
@@ -121,7 +126,7 @@ export class PostHog extends PostHogCore {
     this._persistence = options?.persistence ?? 'file'
     this._disableSurveys = options?.disableSurveys ?? false
     this._disableRemoteConfig = options?.disableRemoteConfig ?? false
-    this._errorTracking = new ErrorTracking(this)
+    this._errorTracking = new ErrorTracking(this, options?.errorTracking)
 
     // Either build the app properties from the existing ones
     this._appProperties =
