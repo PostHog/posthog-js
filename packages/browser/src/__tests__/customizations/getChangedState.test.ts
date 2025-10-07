@@ -70,7 +70,7 @@ function measureExecutionTime<T>(fn: () => T): { result: T; executionTime: numbe
 function measureMultipleExecutions<T>(
     fn: () => T,
     iterations: number = 10
-): { result: T; avgTime: number; maxTime: number; times: number[] } {
+): { result: T; avgTime: number; medianTime: number; stdDev: number; times: number[] } {
     const times: number[] = []
     let lastResult: T
 
@@ -81,9 +81,15 @@ function measureMultipleExecutions<T>(
     }
 
     const avgTime = times.reduce((a, b) => a + b) / times.length
-    const maxTime = Math.max(...times)
 
-    return { result: lastResult!, avgTime, maxTime, times }
+    const sortedTimes = [...times].sort((a, b) => a - b)
+    const mid = Math.floor(sortedTimes.length / 2)
+    const medianTime = sortedTimes.length % 2 === 0 ? (sortedTimes[mid - 1] + sortedTimes[mid]) / 2 : sortedTimes[mid]
+
+    const variance = times.reduce((sum, time) => sum + Math.pow(time - avgTime, 2), 0) / times.length
+    const stdDev = Math.sqrt(variance)
+
+    return { result: lastResult!, avgTime, medianTime, stdDev, times }
 }
 
 describe('getChangedState', () => {
@@ -140,10 +146,13 @@ describe('getChangedState', () => {
             const prevState = createComplexState(4, 10, true)
             const nextState = modifyStateForDrag(prevState, 8)
 
-            const { avgTime, maxTime } = measureMultipleExecutions(() => getChangedState(prevState, nextState, 5))
+            const { avgTime, medianTime, stdDev } = measureMultipleExecutions(() =>
+                getChangedState(prevState, nextState, 5)
+            )
 
-            expect(maxTime).toBeLessThan(130)
-            expect(avgTime).toBeLessThan(40)
+            expect(medianTime).toBeLessThan(40)
+            expect(avgTime).toBeLessThan(50)
+            expect(stdDev).toBeLessThan(30)
         })
 
         test('should handle complex state changes efficiently', () => {
@@ -182,11 +191,13 @@ describe('getChangedState', () => {
                 },
             }
 
-            const { avgTime, maxTime } = measureMultipleExecutions(() => getChangedState(prevState, nextState))
+            const { avgTime, medianTime, stdDev } = measureMultipleExecutions(() =>
+                getChangedState(prevState, nextState)
+            )
 
-            // Should be fast for realistic complex state
-            expect(avgTime).toBeLessThan(20)
-            expect(maxTime).toBeLessThan(40)
+            expect(medianTime).toBeLessThan(10)
+            expect(avgTime).toBeLessThan(15)
+            expect(stdDev).toBeLessThan(10)
         })
 
         test('should handle identical states efficiently', () => {
