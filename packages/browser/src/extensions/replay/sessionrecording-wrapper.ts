@@ -37,11 +37,15 @@ export class SessionRecordingWrapper {
      * once a flags response is received status can be disabled, active or sampled
      */
     get status(): SessionRecordingStatus {
+        if (this._lazyLoadedSessionRecording) {
+            return this._lazyLoadedSessionRecording.status
+        }
+
         if (this._receivedFlags && !this._isRecordingEnabled) {
             return DISABLED
         }
 
-        return this._lazyLoadedSessionRecording?.status || LAZY_LOADING
+        return LAZY_LOADING
     }
 
     constructor(private readonly _instance: PostHog) {
