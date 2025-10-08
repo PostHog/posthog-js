@@ -1,4 +1,4 @@
-import { BucketedRateLimiter, isNullish, isObject, isUndefined, Logger } from '@posthog/core'
+import { BucketedRateLimiter, isEmptyObject, isNullish, isObject, isUndefined, Logger } from '@posthog/core'
 import { createLogger } from '../utils/logger'
 import type { PostHog } from '../posthog-core'
 
@@ -57,6 +57,7 @@ export interface StateEvent {
     executionTimeMs?: number
     prevState: any
     nextState: any
+    changedState: any
 }
 
 export type PostHogStateLogger = (title: string, stateEvent: StateEvent) => void
@@ -66,7 +67,6 @@ export interface PostHogStateLoggerConfig<S = any> {
     maskState?: (state: S, action?: UnknownAction) => S
     titleFunction?: (stateEvent: StateEvent) => string
     logger?: PostHogStateLogger
-    diffState?: boolean
     /**
      * actions logging is token bucket rate limited to avoid flooding
      * this controls the rate limiter's refill rate, see BucketedRateLimiter docs for details
@@ -79,6 +79,27 @@ export interface PostHogStateLoggerConfig<S = any> {
      * normally this is only changed with posthog support assistance
      */
     rateLimiterBucketSize?: number
+    /**
+     * Controls how many levels deep the state diffing goes when looking for changed keys
+     * Defaults to 5
+     * Increase this if you have nested state changes that are not being captured
+     * Decrease this if you are seeing too much state in the diffs and want to reduce noise
+     * Note that increasing this will increase the CPU cost of diffing, so use with caution
+     * and only increase if necessary
+     * Normally this is only changed with posthog support assistance
+     */
+    __stateComparisonDepth?: number
+    /**
+     * Which parts of the state event to include in the logged event
+     * By default we include, previous and changed keys only
+     *
+     * NB the more you include the more likely a log will be dropped by rate limiting or max size limits
+     */
+    include?: {
+        prevState?: boolean
+        nextState?: boolean
+        changedState?: boolean
+    }
 }
 
 /**
@@ -119,57 +140,60 @@ export const sessionRecordingLoggerForPostHogInstance: (posthog: PostHog) => Pos
  *
  * Returns { prevState: changedKeysOnly, nextState: changedKeysOnly }
  */
-export function getChangedStateKeys<S>(
-    prevState: S,
-    nextState: S,
-    maxDepth: number = 3
-): { prevState?: Partial<S>; nextState?: Partial<S> } {
+export function getChangedState<S>(prevState: S, nextState: S, maxDepth: number = 5): Partial<S> {
     // Fast bailouts
-    if (prevState === nextState) return { prevState: {}, nextState: {} }
-    if (!prevState || !nextState) return { prevState: prevState as Partial<S>, nextState: nextState as Partial<S> }
     if (typeof prevState !== 'object' || typeof nextState !== 'object') return {}
-    if (maxDepth <= 0) return { prevState: prevState as Partial<S>, nextState: nextState as Partial<S> }
+    if (prevState === nextState) return {}
+    // all keys changed when no previous state
+    if (!prevState && nextState) return nextState
+    // something weird has happened, return empty
+    if (!nextState || !prevState) return {}
 
-    const prev: any = {}
-    const next: any = {}
-    let hasChanges = false
-
-    // Single pass: check all keys from both objects
+    const changed: any = {}
     const allKeys = new Set([...Object.keys(prevState), ...Object.keys(nextState)])
 
     for (const key of allKeys) {
-        const prevVal = (prevState as any)[key]
-        const nextVal = (nextState as any)[key]
+        const prevValue = (prevState as any)[key]
+        const nextValue = (nextState as any)[key]
 
-        if (prevVal === nextVal) continue // No change
-
-        hasChanges = true
-
-        // Handle missing keys
-        if (isUndefined(prevVal)) {
-            next[key] = nextVal
+        // Key exists in only one object
+        if (isUndefined(prevValue)) {
+            changed[key] = nextValue
             continue
         }
-        if (isUndefined(nextVal)) {
-            prev[key] = prevVal
+        if (isUndefined(nextValue)) {
+            changed[key] = prevValue
             continue
         }
 
-        // For objects, recurse once more, otherwise treat as primitive
-        if (isObject(prevVal) && isObject(nextVal)) {
-            const nested = getChangedStateKeys(prevVal, nextVal, maxDepth - 1)
+        // Same value
+        if (prevValue === nextValue) {
+            continue
+        }
 
-            // Only include if there are actual changes
-            if (nested.prevState && Object.keys(nested.prevState).length > 0) prev[key] = nested.prevState
-            if (nested.nextState && Object.keys(nested.nextState).length > 0) next[key] = nested.nextState
+        // Both null/undefined
+        if (isNullish(prevValue) && isNullish(nextValue)) {
+            continue
+        }
+
+        // Primitive or one is null
+        if (!isObject(prevValue) || !isObject(nextValue)) {
+            changed[key] = nextValue
+            continue
+        }
+
+        // Both are objects, recurse if under max depth
+        if (maxDepth > 1) {
+            const childChanged = getChangedState(prevValue, nextValue, maxDepth - 1)
+            if (!isEmptyObject(childChanged)) {
+                changed[key] = childChanged
+            }
         } else {
-            // Primitive or array - include both values
-            prev[key] = prevVal
-            next[key] = nextVal
+            changed[key] = `max depth reached, checking for changed value`
         }
     }
 
-    return hasChanges ? { prevState: prev, nextState: next } : { prevState: {}, nextState: {} }
+    return changed
 }
 
 // Debounced logger for rate limit messages
@@ -246,9 +270,14 @@ export function posthogReduxLogger<S = any>(
         maskState,
         titleFunction = defaultTitleFunction,
         logger = browserConsoleLogger,
-        diffState = true,
+        include = {
+            prevState: true,
+            nextState: false,
+            changedState: true,
+        },
         rateLimiterRefillRate = 1,
         rateLimiterBucketSize = 10,
+        __stateComparisonDepth,
     } = config
 
     const rateLimiter: BucketedRateLimiter<string> = new BucketedRateLimiter({
@@ -293,24 +322,9 @@ export function posthogReduxLogger<S = any>(
                 try {
                     const maskedPrevState = maskState ? maskState(prevState, maskedAction) : prevState
                     const maskedNextState = maskState ? maskState(nextState, maskedAction) : nextState
-
-                    type FilteredState = { 'invalid state'?: string } | (S & Record<string, any>)
-                    let filteredPrevState: FilteredState
-                    let filteredNextState: FilteredState
-                    if (diffState) {
-                        const { prevState: diffedPrevState, nextState: diffedNextState } = getChangedStateKeys(
-                            maskedPrevState,
-                            maskedNextState
-                        )
-                        const invalidPayloadForDiffing: FilteredState = { 'invalid state': 'no changes after diffing' }
-                        filteredPrevState = (diffedPrevState as FilteredState) ?? invalidPayloadForDiffing
-                        filteredNextState = (diffedNextState as FilteredState) ?? invalidPayloadForDiffing
-                    } else {
-                        const invalidPayloadForLogging = { 'invalid state': 'logger only supports object payloads' }
-                        filteredPrevState = isObject(maskedPrevState) ? maskedPrevState : invalidPayloadForLogging
-                        filteredNextState = isObject(maskedNextState) ? maskedNextState : invalidPayloadForLogging
-                    }
-
+                    const changedState = include.changedState
+                        ? getChangedState(maskedPrevState, maskedNextState, __stateComparisonDepth ?? 5)
+                        : undefined
                     const { type, ...actionData } = maskedAction
 
                     const reduxEvent: StateEvent = {
@@ -318,8 +332,9 @@ export function posthogReduxLogger<S = any>(
                         payload: actionData,
                         timestamp: Date.now(),
                         executionTimeMs,
-                        prevState: filteredPrevState,
-                        nextState: filteredNextState,
+                        prevState: include.prevState ? maskedPrevState : undefined,
+                        nextState: include.nextState ? maskedNextState : undefined,
+                        changedState: include.changedState ? changedState : undefined,
                     }
 
                     const title = titleFunction(reduxEvent)

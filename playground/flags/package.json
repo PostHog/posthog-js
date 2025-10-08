@@ -5,7 +5,9 @@
     "main": "index.js",
     "scripts": {
         "start": "node index.js",
-        "remote-config": "node remote-config-example.js"
+        "remote-config": "node remote-config-example.js",
+        "evaluation-tags": "node evaluation-tags-example.js",
+        "serve": "python3 -m http.server 8080 || python -m SimpleHTTPServer 8080"
     },
     "license": "ISC",
     "dependencies": {

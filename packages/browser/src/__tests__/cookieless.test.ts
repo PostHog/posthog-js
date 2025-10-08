@@ -8,11 +8,13 @@ jest.mock('../utils/globals', () => {
     const mockURLGetter = jest.fn()
     const mockReferrerGetter = jest.fn()
     const mockedCookieBox = { cookie: '' }
+    const mockedFetch = jest.fn()
     return {
         ...orig,
         mockURLGetter,
         mockReferrerGetter,
         mockedCookieBox: mockedCookieBox,
+        mockedFetch,
         document: {
             ...orig.document,
             createElement: (...args: any[]) => orig.document.createElement(...args),
@@ -49,11 +51,12 @@ jest.mock('../utils/globals', () => {
             send: jest.fn(),
             setRequestHeader: jest.fn(),
         }),
+        fetch: mockedFetch,
     }
 })
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockedCookieBox, document } = require('../utils/globals')
+const { mockURLGetter, mockedCookieBox, mockedFetch, document } = require('../utils/globals')
 
 const delay = (timeoutMs: number) => new Promise((resolve) => setTimeout(resolve, timeoutMs))
 
@@ -75,6 +78,7 @@ describe('cookieless', () => {
     beforeEach(() => {
         mockURLGetter.mockImplementation(() => 'http://localhost')
         mockedCookieBox.cookie = ''
+        mockedFetch.mockResolvedValue({ status: 200, text: () => Promise.resolve('{"flags": {}}') })
     })
 
     describe('always mode', () => {
@@ -309,6 +313,27 @@ describe('cookieless', () => {
             expect(beforeSendMock.mock.calls[3][0].properties.$window_id).toBe(undefined)
             expect(beforeSendMock.mock.calls[3][0].properties.$cookieless_mode).toEqual(true)
             expect(posthog.sessionRecording).toBeFalsy()
+        })
+
+        it('should restart the request queue when opting in', async () => {
+            // we're testing the interaction with the request queue, so we need to mock fetch rather than relying on before_send
+            jest.useFakeTimers()
+            const { posthog } = await setup({
+                cookieless_mode: 'on_reject',
+                request_batching: true,
+            })
+            expect(mockedFetch).toBeCalledTimes(1) // flags
+            expect(mockedFetch.mock.calls[0][0]).toContain('/flags/')
+
+            posthog.opt_in_capturing()
+            expect(mockedFetch).toBeCalledTimes(3) // flags + opt in + pageview
+            expect(JSON.parse(mockedFetch.mock.calls[1][1].body).event).toEqual('$opt_in')
+            expect(JSON.parse(mockedFetch.mock.calls[2][1].body).event).toEqual('$pageview')
+
+            posthog.capture('custom event')
+            jest.runOnlyPendingTimers() // allows the batch queue to flush
+            expect(mockedFetch).toBeCalledTimes(4) // flags + opt in + pageview + custom event
+            expect(JSON.parse(mockedFetch.mock.calls[3][1].body)[0].event).toEqual('custom event')
         })
     })
 })
