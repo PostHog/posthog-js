@@ -26,6 +26,8 @@ import { PostHogExceptions } from './posthog-exceptions'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import { PostHogSurveys } from './posthog-surveys'
+// Lazy-loaded to avoid SSR issues with markerjs-ui (HTMLElement dependency)
+// import { UserReportManager } from './extensions/user-report'
 import {
     DisplaySurveyOptions,
     SurveyCallback,
@@ -103,6 +105,7 @@ import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
 import { SessionRecordingWrapper } from './extensions/replay/sessionrecording-wrapper'
+import PostHogFeedback from './posthog-feedback'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -172,6 +175,8 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_web_experiments: true, // disabled in beta.
     disable_surveys: false,
     disable_surveys_automatic_display: false,
+    enable_user_report: false,
+    user_report: {},
     disable_external_dependency_loading: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
@@ -320,10 +325,12 @@ export class PostHog {
     exceptionObserver?: ExceptionObserver
     deadClicksAutocapture?: DeadClicksAutocapture
     historyAutocapture?: HistoryAutocapture
+    feedback?: PostHogFeedback
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
     sessionRecording?: SessionRecording | SessionRecordingWrapper
+    _userReport?: any // Lazy-loaded UserReportManager
     externalIntegrations?: ExternalIntegrations
     webPerformance = new DeprecatedWebPerformanceObserver()
 
@@ -381,6 +388,7 @@ export class PostHog {
         this.rateLimiter = new RateLimiter(this)
         this.requestRouter = new RequestRouter(this)
         this.consent = new ConsentManager(this)
+        this.feedback = new PostHogFeedback(this)
         this.externalIntegrations = new ExternalIntegrations(this)
         // NOTE: See the property definition for deprecation notice
         this.people = {
@@ -1747,6 +1755,89 @@ export class PostHog {
      */
     getSurveys(callback: SurveyCallback, forceReload = false): void {
         this.surveys.getSurveys(callback, forceReload)
+    }
+
+    captureFeedback(
+        category: string,
+        value: string,
+        options?: {
+            topic?: string
+            attachments?: File[]
+            onComplete?: (feedbackItemId: string, eventId: string | undefined) => void
+        }
+    ): void {
+        if (options && options.attachments && options.attachments.length > 1) {
+            logger.error('For now can only attach one file to feedback.')
+            return
+        }
+        const attachment = options && options.attachments ? options.attachments[0] : undefined
+
+        this.feedback?.submit(category, value, options?.topic, attachment, options?.onComplete)
+    }
+
+    /**
+     * Show the user report dialog to collect bug reports with optional screenshots and annotations.
+     * Requires `enable_user_report: true` in config.
+     *
+     * @example
+     * ```js
+     * // Basic usage
+     * posthog.showReportDialog()
+     *
+     * // With custom options
+     * posthog.showReportDialog({
+     *   title: 'Found a bug?',
+     *   description: 'Tell us what went wrong'
+     * })
+     * ```
+     *
+     * @public
+     * @param {Object} [options] Optional customization for the report dialog
+     * @param {string} [options.title] Custom title for the dialog
+     * @param {string} [options.description] Custom description text
+     */
+    showReportDialog(options?: { title?: string; description?: string }): void {
+        if (!this.config.enable_user_report) {
+            logger.warn('User report feature is not enabled. Set enable_user_report: true in config.')
+            return
+        }
+
+        // If already loaded, show immediately
+        if (this._userReport) {
+            this._userReport.show(options)
+            return
+        }
+
+        // Check for PostHog extensions
+        const phExtensions = assignableWindow?.__PosthogExtensions__
+        if (!phExtensions) {
+            logger.error('PostHog Extensions not found.')
+            return
+        }
+
+        // Check if user-report code is already loaded
+        if (phExtensions.generateUserReport) {
+            this._userReport = phExtensions.generateUserReport(this)
+            this._userReport.show(options)
+            return
+        }
+
+        // Load user-report extension dynamically
+        const loadExternalDependency = phExtensions.loadExternalDependency
+        if (!loadExternalDependency) {
+            logger.error('PostHog loadExternalDependency extension not found.')
+            return
+        }
+
+        logger.info('Loading user report extension...')
+        loadExternalDependency(this, 'user-report', (err) => {
+            if (err || !phExtensions.generateUserReport) {
+                logger.error('Could not load user-report script', err)
+            } else {
+                this._userReport = phExtensions.generateUserReport(this)
+                this._userReport.show(options)
+            }
+        })
     }
 
     /**

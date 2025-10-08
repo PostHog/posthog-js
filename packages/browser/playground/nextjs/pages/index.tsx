@@ -35,7 +35,21 @@ export default function Home() {
                 Trigger posthog <span>events </span>
             </h2>
             <div className="flex items-center gap-2 flex-wrap">
-                <button onClick={() => posthog.capture('Clicked button')}>Capture event</button>
+                <button
+                    onClick={() =>
+                        posthog.capture('Clicked button', {
+                            foo: 'foo',
+                            nested: {
+                                object: 'hello',
+                            },
+                            array: ['hello', 'world'],
+                            true: true,
+                            false: false,
+                        })
+                    }
+                >
+                    Capture event
+                </button>
                 <button id="subscribe-user-to-newsletter" onClick={() => posthog.capture('user_subscribed')}>
                     Subscribe to newsletter
                 </button>
@@ -108,6 +122,7 @@ export default function Home() {
                 >
                     Display survey
                 </button>
+                <button onClick={() => posthog?.showReportDialog()}>Suggest a feature</button>
 
                 <button onClick={() => posthog?.reset()} id="set-user-properties">
                     Reset

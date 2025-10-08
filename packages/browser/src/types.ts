@@ -273,6 +273,22 @@ export type ConfigDefaults = '2025-05-24' | 'unset'
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
 /**
+ * Configuration options for the User Report feature.
+ */
+export interface UserReportConfig {
+    /** Whether the user report feature is enabled. @default false */
+    enabled?: boolean
+    /** Custom API endpoint for submitting reports. */
+    api_endpoint?: string
+    /** Custom label for the report widget. @default 'Report an Issue' */
+    widget_label?: string
+    /** Custom color for the report widget. @default '#000000' */
+    widget_color?: string
+    /** Maximum screenshot size in bytes. @default 10485760 (10MB) */
+    max_screenshot_size?: number
+}
+
+/**
  * Configuration options for the PostHog JavaScript SDK.
  * @see https://posthog.com/docs/libraries/js#config
  */
@@ -483,6 +499,22 @@ export interface PostHogConfig {
      * @default false
      */
     disable_surveys_automatic_display: boolean
+
+    /**
+     * Determines whether the user report feature is enabled.
+     * When enabled, you can call `posthog.showReportDialog()` to allow users to report bugs with screenshots and annotations.
+     *
+     * @default false
+     */
+    enable_user_report: boolean
+
+    /**
+     * Configuration options for the user report feature.
+     * Only applies when `enable_user_report` is true.
+     *
+     * @default {}
+     */
+    user_report: UserReportConfig
 
     /**
      * Determines whether PostHog should disable web experiments.
@@ -1452,6 +1484,7 @@ export interface RemoteConfig {
      * Supported compression algorithms
      */
     supportedCompression: Compression[]
+    feedbackCategories: { id: string; name: string }[]
 
     /**
      * If set, disables autocapture
@@ -1693,6 +1726,17 @@ export type EarlyAccessFeatureCallback = (earlyAccessFeatures: EarlyAccessFeatur
 
 export interface EarlyAccessFeatureResponse {
     earlyAccessFeatures: EarlyAccessFeature[]
+}
+
+export interface FeedbackItemResponse {
+    id: string
+}
+
+export interface FeedbackItemAttachResponse {
+    presigned_url: {
+        url: string
+        fields: Record<string, string>
+    }
 }
 
 export type Headers = Record<string, string>
