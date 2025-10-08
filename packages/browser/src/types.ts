@@ -880,6 +880,30 @@ export interface PostHogConfig {
     bootstrap: BootstrapConfig
 
     /**
+     * Enable automatic bootstrapping from URL parameters.
+     * When enabled, PostHog will automatically read `ph_bootstrap_*` parameters from the URL
+     * to continue user sessions across browsers (e.g., from in-app browsers to regular browsers).
+     *
+     * This is useful for maintaining attribution when users transition from social media in-app browsers
+     * (LinkedIn, Facebook, Instagram, etc.) to their default browser.
+     *
+     * If a `config.bootstrap` was provided, this does nothing.
+     *
+     * URL parameters read:
+     * - `ph_bootstrap_distinct_id` - User's distinct ID
+     * - `ph_bootstrap_session_id` - Session ID to continue
+     *
+     * @default false
+     * @example
+     * ```js
+     * posthog.init('token', {
+     *   enable_bootstrap_from_url: true
+     * })
+     * ```
+     */
+    enable_bootstrap_from_url: boolean
+
+    /**
      * The segment analytics object.
      *
      * @see https://posthog.com/docs/libraries/segment

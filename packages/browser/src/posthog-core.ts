@@ -44,6 +44,7 @@ import { SessionIdManager } from './sessionid'
 import { SiteApps } from './site-apps'
 import { localStore } from './storage'
 import {
+    BootstrapConfig,
     CaptureOptions,
     CaptureResult,
     Compression,
@@ -103,6 +104,7 @@ import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
 import { SessionRecordingWrapper } from './extensions/replay/sessionrecording-wrapper'
+import { getQueryParam } from './utils/request-utils'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -211,6 +213,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     capture_performance: undefined,
     name: 'posthog',
     bootstrap: {},
+    enable_bootstrap_from_url: false,
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
     person_profiles: 'identified_only',
@@ -224,6 +227,28 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     // make the default be lazy loading replay
     __preview_eager_load_replay: false,
 })
+
+export const maybeBootstrapFromUrl = (
+    origConfig: Partial<PostHogConfig>
+): { bootstrap: Partial<BootstrapConfig> | undefined } => {
+    // Don't bootstrap from URL if feature disabled or in SSR
+    if (!origConfig.enable_bootstrap_from_url || typeof window === 'undefined') {
+        return { bootstrap: {} }
+    }
+
+    // If explicit bootstrap config provided, skip URL bootstrap (explicit takes priority)
+    if (origConfig.bootstrap && !isEmptyObject(origConfig.bootstrap)) {
+        return { bootstrap: {} }
+    }
+
+    const distinctID = getQueryParam(window.location.href, `__ph_distinct_id`)
+    const sessionID = getQueryParam(window.location.href, `__ph_session_id`)
+    const isIdentifiedID = getQueryParam(window.location.href, `__ph_is_identified`) === 'true'
+
+    return {
+        bootstrap: { distinctID, sessionID, isIdentifiedID },
+    }
+}
 
 export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
     const renames: Partial<PostHogConfig> = {}
@@ -489,7 +514,7 @@ export class PostHog {
         }
 
         this.set_config(
-            extend({}, defaultConfig(config.defaults), configRenames(config), {
+            extend({}, defaultConfig(config.defaults), maybeBootstrapFromUrl(config), configRenames(config), {
                 name: name,
                 token: token,
             })
@@ -582,12 +607,15 @@ export class PostHog {
 
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
         // eslint-disable-next-line posthog-js/no-direct-undefined-check
-        if (config.bootstrap?.distinctID !== undefined) {
+        if (this.config.bootstrap?.distinctID !== undefined) {
             const uuid = this.config.get_device_id(uuidv7())
-            const deviceID = config.bootstrap?.isIdentifiedID ? uuid : config.bootstrap.distinctID
-            this.persistence.set_property(USER_STATE, config.bootstrap?.isIdentifiedID ? 'identified' : 'anonymous')
+            const deviceID = this.config.bootstrap?.isIdentifiedID ? uuid : this.config.bootstrap.distinctID
+            this.persistence.set_property(
+                USER_STATE,
+                this.config.bootstrap?.isIdentifiedID ? 'identified' : 'anonymous'
+            )
             this.register({
-                distinct_id: config.bootstrap.distinctID,
+                distinct_id: this.config.bootstrap.distinctID,
                 $device_id: deviceID,
             })
         }
@@ -2751,6 +2779,14 @@ export class PostHog {
      */
     getSessionProperty(property_name: string): Property | undefined {
         return this.sessionPersistence?.props[property_name]
+    }
+
+    /**
+     *
+     * @returns
+     */
+    isIdentified(): boolean {
+        return this._isIdentified()
     }
 
     /**
