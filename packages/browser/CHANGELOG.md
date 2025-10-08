@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.273.1
+
+### Patch Changes
+
+- [#2412](https://github.com/PostHog/posthog-js/pull/2412) [`25a8846`](https://github.com/PostHog/posthog-js/commit/25a88461136ba453492bb277f8771ad0584873c1) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: rely on 'state' less when reporting replay status
+
 ## 1.273.0
 
 ### Minor Changes
