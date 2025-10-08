@@ -5,6 +5,7 @@ module.exports = {
     modulePathIgnorePatterns: ['src/__tests__/setup.js', 'src/__tests__/helpers/'],
     clearMocks: true,
     testEnvironment: 'jsdom',
+    prettierPath: null,
     moduleNameMapper: {
         '\\.css$': 'identity-obj-proxy',
         '^preact$': '<rootDir>/../../node_modules/.pnpm/preact@10.19.3/node_modules/preact/dist/preact.js',
