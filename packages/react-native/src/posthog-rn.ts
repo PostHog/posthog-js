@@ -126,7 +126,7 @@ export class PostHog extends PostHogCore {
     this._persistence = options?.persistence ?? 'file'
     this._disableSurveys = options?.disableSurveys ?? false
     this._disableRemoteConfig = options?.disableRemoteConfig ?? false
-    this._errorTracking = new ErrorTracking(this, options?.errorTracking)
+    this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger)
 
     // Either build the app properties from the existing ones
     this._appProperties =

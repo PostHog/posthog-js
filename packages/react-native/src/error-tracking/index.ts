@@ -11,8 +11,8 @@ import {
   StringCoercer,
 } from '@posthog/core/error-tracking'
 import type { PostHog } from '../posthog-rn'
-import { PostHogEventProperties } from '@posthog/core'
-import { isHermes } from '../utils'
+import { Logger, PostHogEventProperties } from '@posthog/core'
+import { trackUncaughtExceptions, trackUnhandledRejections } from './utils'
 
 interface AutocaptureOptions {
   uncaughtExceptions?: boolean
@@ -24,11 +24,13 @@ export interface ErrorTrackingOptions {
 }
 
 export class ErrorTracking {
-  errorPropertiesBuilder: ErrorPropertiesBuilder
+  private errorPropertiesBuilder: ErrorPropertiesBuilder
+  private logger: Logger
 
   constructor(
     private instance: PostHog,
-    options: ErrorTrackingOptions = {}
+    options: ErrorTrackingOptions = {},
+    logger: Logger
   ) {
     this.errorPropertiesBuilder = new ErrorPropertiesBuilder(
       [
@@ -40,16 +42,21 @@ export class ErrorTracking {
       ],
       [chromeStackLineParser, geckoStackLineParser]
     )
+    this.logger = logger.createLogger('[ErrorTracking]')
     const autocaptureOptions = this.resolveAutocaptureOptions(options.autocapture)
     this.autocapture(autocaptureOptions)
   }
 
   captureException(input: unknown, additionalProperties: PostHogEventProperties, hint: EventHint) {
-    const properties = this.errorPropertiesBuilder.buildFromUnknown(input, hint)
-    return this.instance.capture('$exception', {
-      ...properties,
-      ...additionalProperties,
-    } as unknown as PostHogEventProperties)
+    try {
+      const properties = this.errorPropertiesBuilder.buildFromUnknown(input, hint)
+      return this.instance.capture('$exception', {
+        ...properties,
+        ...additionalProperties,
+      } as unknown as PostHogEventProperties)
+    } catch (error) {
+      this.logger.error('An error occurred while capturing an $exception event:', error)
+    }
   }
 
   private resolveAutocaptureOptions(autocapture: AutocaptureOptions | boolean = false): AutocaptureOptions {
@@ -66,8 +73,7 @@ export class ErrorTracking {
   }
 
   private autocaptureUncaughtErrors() {
-    const globalHandler = ErrorUtils.getGlobalHandler()
-    ErrorUtils.setGlobalHandler((error, isFatal) => {
+    const onUncaughtException = (error: unknown, isFatal: boolean) => {
       const hint: EventHint = {
         mechanism: {
           type: 'onuncaughtexception',
@@ -79,8 +85,12 @@ export class ErrorTracking {
         additionalProperties['$exception_level'] = 'fatal' as SeverityLevel
       }
       this.captureException(error, additionalProperties, hint)
-      globalHandler?.(error, isFatal)
-    })
+    }
+    try {
+      trackUncaughtExceptions(onUncaughtException)
+    } catch (err) {
+      this.logger.warn('Failed to track uncaught exceptions: ', err)
+    }
   }
 
   private autocaptureUnhandledRejections() {
@@ -93,19 +103,11 @@ export class ErrorTracking {
       }
       this.captureException(error, {}, hint)
     }
-    if (isHermes()) {
-      // @ts-expect-error
-      global.HermesInternal.enablePromiseRejectionTracker({
-        allRejections: true,
-        onUnhandled: (_: any, error: any) => onUnhandledRejection(error),
-      })
-    } else {
-      // javascript-core handling
-      const tracking = require('promise/setimmediate/rejection-tracking')
-      tracking.enable({
-        allRejections: true,
-        onUnhandled: (_: any, error: any) => onUnhandledRejection(error),
-      })
+
+    try {
+      trackUnhandledRejections(onUnhandledRejection)
+    } catch (err) {
+      this.logger.warn('Failed to track unhandled rejections: ', err)
     }
   }
 

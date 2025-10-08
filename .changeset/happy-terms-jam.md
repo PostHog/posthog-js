@@ -1,5 +1,5 @@
 ---
-'posthog-react-native': patch
+'posthog-react-native': minor
 ---
 
 add error tracking autocapture
