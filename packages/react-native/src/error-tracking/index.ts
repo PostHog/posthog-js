@@ -1,6 +1,7 @@
 import {
   chromeStackLineParser,
   ErrorCoercer,
+  ErrorEventCoercer,
   ErrorPropertiesBuilder,
   EventHint,
   geckoStackLineParser,
@@ -36,6 +37,7 @@ export class ErrorTracking {
       [
         new PromiseRejectionEventCoercer(),
         new ErrorCoercer(),
+        new ErrorEventCoercer(),
         new ObjectCoercer(),
         new StringCoercer(),
         new PrimitiveCoercer(),
@@ -81,10 +83,18 @@ export class ErrorTracking {
         },
       }
       const additionalProperties: any = {}
+
       if (isFatal) {
         additionalProperties['$exception_level'] = 'fatal' as SeverityLevel
       }
+
       this.captureException(error, additionalProperties, hint)
+
+      if (isFatal) {
+        void this.instance.flush().catch(() => {
+          this.logger.critical('Failed to flush events')
+        })
+      }
     }
     try {
       trackUncaughtExceptions(onUncaughtException)
