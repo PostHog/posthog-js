@@ -9,6 +9,7 @@ import {
   PostHogFetchOptions,
   PostHogFetchResponse,
   PostHogPersistedProperty,
+  Survey,
   SurveyResponse,
   logFlushError,
   maybeAdd,
@@ -80,6 +81,8 @@ export class PostHog extends PostHogCore {
   private _disableSurveys: boolean
   private _disableRemoteConfig: boolean
   private _errorTracking: ErrorTracking
+  private _surveysReadyPromise: Promise<void> | null = null
+  private _surveysReady: boolean = false
 
   /**
    * Creates a new PostHog instance for React Native. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
@@ -174,14 +177,30 @@ export class PostHog extends PostHogCore {
       this._isInitialized = true
 
       if (this._disableRemoteConfig === false) {
-        this.reloadRemoteConfigAsync()
+        this.reloadRemoteConfigAsync().then((response) => {
+          if (response) {
+            this._handleSurveysFromRemoteConfig(response)
+          }
+          this._notifySurveysReady()
+        })
       } else {
         this.logMsgIfDebug(() => console.info('PostHog Debug', `Remote config is disabled.`))
+
         if (options?.preloadFeatureFlags !== false) {
           this.logMsgIfDebug(() => console.info('PostHog Debug', `Feature flags will be preloaded from Flags API.`))
-          this.reloadFeatureFlags()
+          // Preload flags (and parse surveys as well since we are calling with config=true already)
+          this._flagsAsyncWithSurveys().then(() => {
+            this._notifySurveysReady()
+          })
         } else {
-          this.logMsgIfDebug(() => console.info('PostHog Debug', `preloadFeatureFlags is disabled.`))
+          this.logMsgIfDebug(() =>
+            console.info('PostHog Debug', 'preloadFeatureFlags is disabled, loading surveys from API.')
+          )
+          // Load surveys directly from API since both remote config and preloading feature flags are disabled
+          // Note: if flags are not loaded/cached then surveys will not be displayed until reloadFeatureFlags() is called, since surveys depend on internal flags
+          this._loadSurveysFromAPI().then(() => {
+            this._notifySurveysReady()
+          })
         }
       }
 
@@ -852,7 +871,7 @@ export class PostHog extends PostHogCore {
   public async getSurveys(): Promise<SurveyResponse['surveys']> {
     if (this._disableSurveys === true) {
       this.logMsgIfDebug(() => console.log('PostHog Debug', 'Loading surveys is disabled.'))
-      this.setPersistedProperty<SurveyResponse['surveys']>(PostHogPersistedProperty.Surveys, null)
+      this._cacheSurveys(null, 'disabled in config')
       return []
     }
 
@@ -861,20 +880,139 @@ export class PostHog extends PostHogCore {
     if (surveys && surveys.length > 0) {
       this.logMsgIfDebug(() => console.log('PostHog Debug', 'Surveys fetched from storage: ', JSON.stringify(surveys)))
       return surveys
-    } else {
-      this.logMsgIfDebug(() => console.log('PostHog Debug', 'No surveys found in storage'))
     }
 
-    if (this._disableRemoteConfig === true) {
-      const surveysFromApi = await super.getSurveysStateless()
-
-      if (surveysFromApi && surveysFromApi.length > 0) {
-        this.setPersistedProperty<SurveyResponse['surveys']>(PostHogPersistedProperty.Surveys, surveysFromApi)
-        return surveysFromApi
-      }
-    }
-
+    this.logMsgIfDebug(() => console.log('PostHog Debug', 'No surveys found in storage'))
     return []
+  }
+
+  /**
+   * Returns a promise that resolves when surveys are ready to be loaded.
+   * If surveys are already loaded and ready to go, returns a resolved promise instead.
+   */
+  public onSurveysReady(): Promise<void> {
+    if (this._surveysReady) {
+      // If surveys are already ready, resolve immediately
+      return Promise.resolve()
+    }
+
+    if (!this._surveysReadyPromise) {
+      this._surveysReadyPromise = new Promise<void>((resolve) => {
+        this._surveysReadyResolve = resolve
+      })
+    }
+
+    return this._surveysReadyPromise
+  }
+
+  private _surveysReadyResolve: (() => void) | null = null
+
+  /**
+   * Helper function to cache surveys to storage with consistent logging
+   */
+  private _cacheSurveys(surveys: Survey[] | null, source: string): void {
+    this.setPersistedProperty<SurveyResponse['surveys']>(PostHogPersistedProperty.Surveys, surveys)
+
+    if (surveys && surveys.length > 0) {
+      this.logMsgIfDebug(() => console.log(`PostHog Debug`, `Surveys cached from ${source}:`, JSON.stringify(surveys)))
+    } else if (surveys === null) {
+      this.logMsgIfDebug(() => console.log(`PostHog Debug`, `Surveys cleared (${source})`))
+    } else {
+      this.logMsgIfDebug(() => console.log(`PostHog Debug`, `No surveys to cache from ${source})`))
+    }
+  }
+
+  /**
+   * Internal method to notify that surveys are ready
+   */
+  private _notifySurveysReady(): void {
+    this._surveysReady = true
+    if (this._surveysReadyResolve) {
+      this._surveysReadyResolve()
+      this._surveysReadyResolve = null
+      this._surveysReadyPromise = null
+    }
+  }
+
+  /**
+   * Handle surveys from remote config response
+   */
+  private _handleSurveysFromRemoteConfig(response: any): void {
+    if (this._disableSurveys === true) {
+      this.logMsgIfDebug(() => console.log('PostHog Debug', 'Loading surveys skipped, disabled.'))
+      this._cacheSurveys(null, 'remote config (disabled)')
+      return
+    }
+
+    const surveys = response.surveys
+
+    // If surveys is not an array, it means there are no surveys (its a boolean)
+    if (Array.isArray(surveys)) {
+      this._cacheSurveys(surveys as Survey[], 'remote config')
+    } else {
+      this._cacheSurveys(null, 'remote config')
+    }
+  }
+
+  /**
+   * Load flags AND handle surveys from the flags response (only when remote config is disabled)
+   */
+  private async _flagsAsyncWithSurveys(): Promise<void> {
+    try {
+      const flagsResponse = await (this as any).flagsAsync(true)
+
+      // Only handle surveys from flags if remote config is disabled and surveys are enabled
+      // When remote config is enabled, surveys will come from there instead
+      if (this._disableRemoteConfig === true) {
+        if (this._disableSurveys === true) {
+          this.logMsgIfDebug(() => console.log('PostHog Debug', 'Loading surveys skipped, disabled.'))
+          this._cacheSurveys(null, 'flags (disabled)')
+          return
+        }
+
+        // Handle surveys if they exist in the response
+        const responseWithSurveys = flagsResponse as any
+        if (responseWithSurveys?.surveys) {
+          const surveys = responseWithSurveys.surveys
+
+          // If surveys is not an array, it means there are no surveys (its a boolean)
+          if (Array.isArray(surveys)) {
+            this._cacheSurveys(surveys as Survey[], 'flags endpoint')
+          } else {
+            this._cacheSurveys(null, 'flags endpoint')
+          }
+        } else {
+          // If no surveys in flags response, try loading from API as fallback
+          this.logMsgIfDebug(() => console.log('PostHog Debug', 'No surveys in flags response, loading from API'))
+          await this._loadSurveysFromAPI()
+        }
+      }
+    } catch (error) {
+      this.logMsgIfDebug(() => console.error('PostHog Debug', 'Error in _flagsAsyncWithSurveys:', error))
+    }
+  }
+
+  /**
+   * Internal method to load surveys from API (when remote config is disabled)
+   */
+  private async _loadSurveysFromAPI(): Promise<void> {
+    if (this._disableSurveys === true) {
+      this.logMsgIfDebug(() => console.log('PostHog Debug', 'Loading surveys skipped, disabled.'))
+      this._cacheSurveys(null, 'API (disabled)')
+      return
+    }
+
+    try {
+      const surveysFromApi = await super.getSurveysStateless()
+      if (surveysFromApi && surveysFromApi.length > 0) {
+        this._cacheSurveys(surveysFromApi, 'API')
+      } else {
+        this._cacheSurveys(null, 'API')
+      }
+    } catch (error) {
+      this.logMsgIfDebug(() => console.error('PostHog Debug', 'Error loading surveys from API:', error))
+      this._cacheSurveys(null, 'API (error)')
+    }
   }
 
   private async startSessionReplay(options?: PostHogOptions): Promise<void> {
