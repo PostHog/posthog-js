@@ -39,7 +39,7 @@ export type ExceptionList = Exception[]
 
 export interface Mechanism {
   handled?: boolean
-  type?: 'generic' | 'onunhandledrejection' | 'onuncaughtexception' | 'middleware'
+  type?: 'generic' | 'onunhandledrejection' | 'onuncaughtexception' | 'onconsoleerror' | 'middleware'
   source?: string
   synthetic?: boolean
 }

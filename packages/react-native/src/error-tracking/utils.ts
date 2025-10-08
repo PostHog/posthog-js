@@ -1,6 +1,6 @@
 import { GLOBAL_OBJ, isHermes, isWeb } from '../utils'
 
-type ExceptionHook = (error: unknown, isFatal: boolean) => void
+type ExceptionHook = (error: unknown, isFatal: boolean, syntheticException?: Error) => void
 
 export function trackUnhandledRejections(tracker: ExceptionHook): void {
   if (
@@ -29,6 +29,22 @@ export function trackUncaughtExceptions(tracker: ExceptionHook): void {
     })
   } else {
     throw new Error('ErrorUtils globalHandlers are not defined')
+  }
+}
+
+export function trackConsole(level: string, tracker: ExceptionHook): void {
+  const con = console as any
+  if (!con) {
+    throw new Error('console not available, cannot wrap console.error')
+  }
+
+  const originalMethod = con[level]
+  con[level] = function (...args: any[]): void {
+    const message = args.join(' ')
+    const error = args.find((arg) => arg instanceof Error)
+    const syntheticException = new Error('Synthetic PostHog Error')
+    tracker(error ?? message, false, syntheticException)
+    return originalMethod?.(...args)
   }
 }
 

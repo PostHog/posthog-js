@@ -35,6 +35,18 @@ export default function ErrorTrackingScreen() {
                 }}
                 title="Capture promise rejection"
             />
+            <Button
+                onPress={() => {
+                    console.error('User logs an error', new Error('Error inside console log'))
+                }}
+                title="Capture console error"
+            />
+            <Button
+                onPress={() => {
+                    console.warn('Console warning')
+                }}
+                title="Capture console warn"
+            />
         </ParallaxScrollView>
     )
 }

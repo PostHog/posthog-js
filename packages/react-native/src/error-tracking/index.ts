@@ -13,20 +13,38 @@ import {
 } from '@posthog/core/error-tracking'
 import type { PostHog } from '../posthog-rn'
 import { Logger, PostHogEventProperties } from '@posthog/core'
-import { trackUncaughtExceptions, trackUnhandledRejections } from './utils'
+import { trackConsole, trackUncaughtExceptions, trackUnhandledRejections } from './utils'
 
+type LogLevel = 'debug' | 'log' | 'info' | 'warn' | 'error'
+
+const LogLevelList: LogLevel[] = ['debug', 'log', 'info', 'warn', 'error']
+
+// user provided configuration
 interface AutocaptureOptions {
   uncaughtExceptions?: boolean
   unhandledRejections?: boolean
+  console?: boolean | LogLevel[]
 }
 
 export interface ErrorTrackingOptions {
   autocapture?: AutocaptureOptions | boolean
 }
 
+// resolved configuration
+interface ResolvedAutocaptureOptions {
+  uncaughtExceptions: boolean
+  unhandledRejections: boolean
+  console: LogLevel[]
+}
+
+interface ResolvedErrorTrackingOptions {
+  autocapture: ResolvedAutocaptureOptions
+}
+
 export class ErrorTracking {
   private errorPropertiesBuilder: ErrorPropertiesBuilder
   private logger: Logger
+  private options: ResolvedErrorTrackingOptions
 
   constructor(
     private instance: PostHog,
@@ -45,8 +63,8 @@ export class ErrorTracking {
       [chromeStackLineParser, geckoStackLineParser]
     )
     this.logger = logger.createLogger('[ErrorTracking]')
-    const autocaptureOptions = this.resolveAutocaptureOptions(options.autocapture)
-    this.autocapture(autocaptureOptions)
+    this.options = this.resolveOptions(options)
+    this.autocapture(this.options.autocapture)
   }
 
   captureException(input: unknown, additionalProperties: PostHogEventProperties, hint: EventHint) {
@@ -61,17 +79,33 @@ export class ErrorTracking {
     }
   }
 
-  private resolveAutocaptureOptions(autocapture: AutocaptureOptions | boolean = false): AutocaptureOptions {
+  private resolveOptions(options: ErrorTrackingOptions): ResolvedErrorTrackingOptions {
+    const autocaptureOptions = this.resolveAutocaptureOptions(options.autocapture)
+    return {
+      autocapture: autocaptureOptions,
+    }
+  }
+
+  private resolveAutocaptureOptions(autocapture: AutocaptureOptions | boolean = false): ResolvedAutocaptureOptions {
     if (typeof autocapture === 'boolean') {
       return {
         uncaughtExceptions: autocapture,
         unhandledRejections: autocapture,
+        console: [],
       }
     }
     return {
       uncaughtExceptions: !!autocapture.uncaughtExceptions,
       unhandledRejections: !!autocapture.unhandledRejections,
+      console: this.resolveConsoleOptions(autocapture.console),
     }
+  }
+
+  private resolveConsoleOptions(console: boolean | LogLevel[] = false): LogLevel[] {
+    if (typeof console === 'boolean') {
+      return console ? ['error'] : []
+    }
+    return Array.isArray(console) ? console.filter((level) => LogLevelList.includes(level)) : []
   }
 
   private autocaptureUncaughtErrors() {
@@ -121,12 +155,39 @@ export class ErrorTracking {
     }
   }
 
-  private autocapture(autocaptureOptions: AutocaptureOptions = {}) {
+  private autocaptureConsole(levels: LogLevel[]) {
+    const onConsole = (level: LogLevel) => (error: unknown, isFatal: boolean, syntheticException?: Error) => {
+      const hint: EventHint = {
+        mechanism: {
+          type: 'onconsoleerror',
+          handled: true,
+        },
+        syntheticException,
+      }
+      const additionalProperties = {
+        $exception_level: level,
+      }
+      this.captureException(error, additionalProperties, hint)
+    }
+
+    try {
+      for (const level of levels) {
+        trackConsole(level, onConsole(level))
+      }
+    } catch (err) {
+      this.logger.warn('Failed to track console errors: ', err)
+    }
+  }
+
+  private autocapture(autocaptureOptions: ResolvedAutocaptureOptions) {
     if (autocaptureOptions.uncaughtExceptions === true) {
       this.autocaptureUncaughtErrors()
     }
     if (autocaptureOptions.unhandledRejections === true) {
       this.autocaptureUnhandledRejections()
+    }
+    if (autocaptureOptions.console.length > 0) {
+      this.autocaptureConsole(autocaptureOptions.console)
     }
   }
 }
