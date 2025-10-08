@@ -81,6 +81,7 @@ if (typeof window !== 'undefined') {
         __preview_remote_config: true,
         cookieless_mode: 'on_reject',
         __preview_flags_v2: true,
+        enable_bootstrap_from_url: true,
         ...configForConsent(),
     })
     // Help with debugging
