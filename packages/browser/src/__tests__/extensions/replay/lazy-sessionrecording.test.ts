@@ -2237,6 +2237,44 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_removePageViewCaptureHook']).toBeUndefined()
         })
 
+        it('clears the flush buffer timer on stop', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            // Set a flush buffer timer
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBufferTimer'] = setTimeout(() => {}, 1000)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_flushBufferTimer']).not.toBeUndefined()
+
+            sessionRecording.stopRecording()
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_flushBufferTimer']).toBeUndefined()
+        })
+
+        it('calls mutation throttler stop on stop', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            // Create a mutation throttler with a spy
+            const mutationThrottler = sessionRecording['_lazyLoadedSessionRecording']['_mutationThrottler']
+            if (mutationThrottler) {
+                const stopSpy = jest.spyOn(mutationThrottler, 'stop')
+
+                sessionRecording.stopRecording()
+
+                expect(stopSpy).toHaveBeenCalled()
+            }
+        })
+
         it('sets the window event listeners', () => {
             //mock window add event listener to check if it is called
             window.addEventListener = jest.fn().mockImplementation(() => () => {})

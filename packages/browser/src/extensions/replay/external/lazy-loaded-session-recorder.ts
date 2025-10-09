@@ -762,6 +762,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._clearBuffer()
         clearInterval(this._fullSnapshotTimer)
+        if (this._flushBufferTimer) {
+            clearTimeout(this._flushBufferTimer)
+            this._flushBufferTimer = undefined
+        }
 
         this._removePageViewCaptureHook?.()
         this._removePageViewCaptureHook = undefined
@@ -777,6 +781,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._eventTriggerMatching.stop()
         this._urlTriggerMatching.stop()
         this._linkedFlagMatching.stop()
+
+        this._mutationThrottler?.stop()
 
         this._stopRrweb?.()
         this._stopRrweb = undefined

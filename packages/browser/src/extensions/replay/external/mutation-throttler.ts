@@ -94,4 +94,9 @@ export class MutationThrottler {
         }
         return event
     }
+
+    public stop() {
+        this._rateLimiter.stop()
+        this._loggedTracker = {}
+    }
 }
