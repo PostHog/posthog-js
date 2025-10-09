@@ -43,7 +43,8 @@
   "license": "MIT",
   "dependencies": {
     "@posthog/cli": "^0.4.7",
-    "semver": "^7.7.2"
+    "semver": "^7.7.2",
+    "@posthog/core": "workspace:*"
   },
   "keywords": [
     "posthog",
