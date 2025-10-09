@@ -2275,6 +2275,47 @@ describe('Lazy SessionRecording', () => {
             }
         })
 
+        it('clears queued rrweb events on stop', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            // Add some queued events
+            sessionRecording['_lazyLoadedSessionRecording']['_queuedRRWebEvents'] = [
+                { rrwebMethod: () => {}, attempt: 1, enqueuedAt: Date.now() },
+                { rrwebMethod: () => {}, attempt: 1, enqueuedAt: Date.now() },
+            ]
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_queuedRRWebEvents']).toHaveLength(2)
+
+            sessionRecording.stopRecording()
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_queuedRRWebEvents']).toHaveLength(0)
+        })
+
+        it('clears force idle session id listener on stop', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            // Set up a force idle listener
+            const mockListener = jest.fn()
+            sessionRecording['_lazyLoadedSessionRecording']['_forceIdleSessionIdListener'] = mockListener
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_forceIdleSessionIdListener']).toBeDefined()
+
+            sessionRecording.stopRecording()
+
+            expect(mockListener).toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_forceIdleSessionIdListener']).toBeUndefined()
+        })
+
         it('sets the window event listeners', () => {
             //mock window add event listener to check if it is called
             window.addEventListener = jest.fn().mockImplementation(() => () => {})
