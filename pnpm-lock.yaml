@@ -411,9 +411,6 @@ importers:
       '@posthog/cli':
         specifier: ^0.4.7
         version: 0.4.7
-      '@posthog/core':
-        specifier: workspace:*
-        version: link:../core
       semver:
         specifier: ^7.7.2
         version: 7.7.2

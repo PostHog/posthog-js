@@ -60,8 +60,7 @@
     "ts-jest": "catalog:"
   },
   "peerDependencies": {
-    "next": ">12.1.0",
-    "@posthog/core": "workspace:*"
+    "next": ">12.1.0"
   },
   "files": [
     "dist/"
