@@ -1,0 +1,147 @@
+import { defineNuxtModule, addPlugin, createResolver, addServerPlugin } from '@nuxt/kit'
+import type { PostHogConfig } from 'posthog-js'
+import type { PostHogOptions } from 'posthog-node'
+import { callBinary } from '@posthog/core'
+
+const VUE_OUTPUT_DIRECTORY = '.output/public'
+const NITRO_OUTPUT_DIRECTORY = '.output/server/chunks'
+
+interface DisabledSourcemaps {
+  enabled: false
+}
+
+interface EnabledSourcemaps {
+  enabled: true
+  personalApiKey: string
+  envId: string
+  version?: string
+  project?: string
+  verbose?: boolean
+}
+
+export interface ModuleOptions {
+  host: string
+  publicKey: string
+  nuxt: {
+    exceptionAutoCaptureEnabled?: boolean
+    configOverride?: Partial<PostHogConfig>
+    debug?: boolean
+  }
+  nitro: {
+    exceptionAutoCaptureEnabled?: boolean
+    configOverride?: PostHogOptions
+    debug?: boolean
+  }
+  sourcemaps: DisabledSourcemaps | EnabledSourcemaps | undefined
+}
+
+export default defineNuxtModule<ModuleOptions>({
+  meta: {
+    name: '@posthog/nuxt',
+    configKey: 'posthogConfig',
+    compatibility: {
+      nuxt: '>=3.7.0',
+    },
+  },
+  defaults: () => ({
+    host: 'https://us.i.posthog.com',
+    nuxt: {
+      exceptionAutoCaptureEnabled: false,
+      configOverride: {},
+      debug: false,
+    },
+    nitro: {
+      exceptionAutoCaptureEnabled: false,
+      configOverride: {},
+      debug: false,
+    },
+  }),
+  setup(options, nuxt) {
+    const resolver = createResolver(import.meta.url)
+    addPlugin(resolver.resolve('./runtime/vue-plugin'))
+    addServerPlugin(resolver.resolve('./runtime/nitro-plugin'))
+
+    // general
+    nuxt.options.runtimeConfig.public.posthogPublicKey =
+      nuxt.options.runtimeConfig.public.posthogPublicKey || options.publicKey
+    nuxt.options.runtimeConfig.public.posthogHost = nuxt.options.runtimeConfig.public.posthogHost || options.host
+
+    // nuxt specific
+    nuxt.options.runtimeConfig.public.nuxtExceptionAutoCaptureEnabled =
+      nuxt.options.runtimeConfig.public.nuxtExceptionAutoCaptureEnabled || options.nuxt.exceptionAutoCaptureEnabled
+    nuxt.options.runtimeConfig.public.nuxtPosthogClientConfigOverride =
+      nuxt.options.runtimeConfig.public.nuxtPosthogClientConfigOverride || options.nuxt.configOverride
+    nuxt.options.runtimeConfig.public.nuxtPosthogClientDebug =
+      nuxt.options.runtimeConfig.public.nuxtPosthogClientDebug || options.nuxt.debug
+
+    // nitro specific
+    nuxt.options.runtimeConfig.public.nitroExceptionAutoCaptureEnabled =
+      nuxt.options.runtimeConfig.public.nitroExceptionAutoCaptureEnabled || options.nitro.exceptionAutoCaptureEnabled
+    nuxt.options.runtimeConfig.public.nitroPosthogClientConfigOverride =
+      nuxt.options.runtimeConfig.public.nitroPosthogClientConfigOverride || options.nitro.configOverride
+    nuxt.options.runtimeConfig.public.nitroPosthogClientDebug =
+      nuxt.options.runtimeConfig.public.nitroPosthogClientDebug || options.nitro.debug
+
+    if (!options.sourcemaps?.enabled) {
+      return
+    }
+
+    const sourcemapsConfig = options.sourcemaps as EnabledSourcemaps
+
+    nuxt.hooks.hook('nitro:build:public-assets', async () => {
+      try {
+        callBinary(['sourcemap', 'inject', '--directory', VUE_OUTPUT_DIRECTORY], {}, sourcemapsConfig.verbose ?? false)
+      } catch (error) {
+        console.error('PostHog sourcemap inject failed:', error)
+      }
+    })
+
+    nuxt.hooks.hook('close', async () => {
+      try {
+        callBinary(
+          'posthog-cli',
+          ['sourcemap', 'inject', '--directory', NITRO_OUTPUT_DIRECTORY],
+          {
+            env: 
+          }
+          {},
+          sourcemapsConfig.verbose ?? false
+        )
+      } catch (error) {
+        console.error('PostHog sourcemap inject failed:', error)
+      }
+
+      const uploadEnv = {
+        POSTHOG_CLI_ENV_ID: sourcemapsConfig.envId,
+        POSTHOG_CLI_TOKEN: sourcemapsConfig.personalApiKey,
+      }
+
+      const serverUploadBaseOptions = []
+      if (options.host) {
+        serverUploadBaseOptions.push('--host', options.host)
+      }
+      serverUploadBaseOptions.push('sourcemap', 'upload', '--directory', VUE_OUTPUT_DIRECTORY)
+      if (sourcemapsConfig.version) {
+        serverUploadBaseOptions.push('--version', sourcemapsConfig.version)
+      }
+      if (sourcemapsConfig.project) {
+        serverUploadBaseOptions.push('--project', sourcemapsConfig.project)
+      }
+
+      const nitroUploadConfig = [...serverUploadBaseOptions, '--directory', NITRO_OUTPUT_DIRECTORY]
+      const vueUploadConfig = [...serverUploadBaseOptions, '--directory', VUE_OUTPUT_DIRECTORY]
+
+      try {
+        await callPosthogCli(nitroUploadConfig, uploadEnv, sourcemapsConfig.verbose ?? false)
+      } catch (error) {
+        console.error('PostHog sourcemap upload failed:', error)
+      }
+
+      try {
+        await callPosthogCli(vueUploadConfig, uploadEnv, sourcemapsConfig.verbose ?? false)
+      } catch (error) {
+        console.error('PostHog sourcemap upload failed:', error)
+      }
+    })
+  },
+})
