@@ -823,6 +823,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // we're processing a full snapshot, so we should reset the timer
         if (rawEvent.type === EventType.FullSnapshot) {
             this._scheduleFullSnapshot()
+            // Full snapshots reset rrweb's node IDs, so clear any logged node tracking
+            this._mutationThrottler?.reset()
         }
 
         // Clear the buffer if waiting for a trigger and only keep data from after the current full snapshot

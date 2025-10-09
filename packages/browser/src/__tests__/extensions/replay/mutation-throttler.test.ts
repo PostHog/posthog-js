@@ -119,6 +119,20 @@ describe('MutationThrottler', () => {
         expect(result).toBe(event)
     })
 
+    describe('reset()', () => {
+        test('clears the logged tracker', () => {
+            // Populate the logged tracker
+            mutationThrottler['_loggedTracker']['123'] = true
+            mutationThrottler['_loggedTracker']['456'] = true
+
+            expect(Object.keys(mutationThrottler['_loggedTracker'])).toHaveLength(2)
+
+            mutationThrottler.reset()
+
+            expect(Object.keys(mutationThrottler['_loggedTracker'])).toHaveLength(0)
+        })
+    })
+
     describe('stop()', () => {
         test('clears the rate limiter interval', () => {
             const stopSpy = jest.spyOn(mutationThrottler['_rateLimiter'], 'stop')
