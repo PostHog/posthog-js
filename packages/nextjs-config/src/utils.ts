@@ -1,7 +1,7 @@
 import nextPackage from 'next/package.json' with { type: 'json' }
 import semver from 'semver'
 import { PostHogNextConfigComplete } from './config'
-import { callBinary } from '@posthog/core'
+import { spawnLocal } from '@posthog/core/process'
 
 export function getNextJsVersion(): string {
   return nextPackage.version
@@ -38,7 +38,15 @@ export async function processSourceMaps(posthogOptions: PostHogNextConfigComplet
 }
 
 async function callPosthogCli(args: string[], env: NodeJS.ProcessEnv, verbose: boolean): Promise<void> {
-  await callBinary('posthog-cli', args, { env, verbose, resolveFrom: __dirname, cwd: process.cwd() })
+  await spawnLocal('posthog-cli', args, {
+    env,
+    stdio: verbose ? 'inherit' : 'ignore',
+    onBinaryFound: (binaryPath) => {
+      console.log(`running posthog-cli binary from ${binaryPath}`)
+    },
+    resolveFrom: __dirname,
+    cwd: process.cwd(),
+  })
 }
 
 // Helper to detect if Turbopack is enabled
