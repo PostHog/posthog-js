@@ -116,6 +116,7 @@ export abstract class PostHogCoreStateless {
   private removeDebugCallback?: () => void
   private disableGeoip: boolean
   private historicalMigration: boolean
+  private evaluationEnvironments?: readonly string[]
   protected disabled
   protected disableCompression: boolean
 
