@@ -22,7 +22,6 @@ import {
   PostHogCustomAppProperties,
   PostHogCustomStorage,
   PostHogSessionReplayConfig,
-  PostHogRNOptions,
 } from './types'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativeSessionReplay } from './optional/OptionalSessionReplay'
