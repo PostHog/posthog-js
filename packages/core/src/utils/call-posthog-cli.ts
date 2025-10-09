@@ -46,7 +46,8 @@ export async function callPosthogCli(args: string[], env: NodeJS.ProcessEnv, ver
   try {
     binaryLocation = resolveBinaryPath(process.env.PATH ?? '', __dirname, 'posthog-cli')
   } catch (e) {
-    throw new Error(`Binary ${e} not found. Make sure postinstall script has been allowed for @posthog/cli`)
+    console.error(e)
+    throw new Error(`Binary posthog-cli not found. Make sure postinstall script has been allowed for @posthog/cli`)
   }
 
   if (verbose) {
