@@ -1,10 +1,14 @@
-import { PostHog } from '@/entrypoints/index.node'
+import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation, isPending, wait, waitForPromises } from './utils'
 import { randomUUID } from 'crypto'
 
 jest.mock('../version', () => ({ version: '1.2.3' }))
 
 const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+
+const posthogImmediateResolveOptions: PostHogOptions = {
+  fetchRetryCount: 0,
+}
 
 const waitForFlushTimer = async (): Promise<void> => {
   await waitForPromises()
@@ -2468,6 +2472,10 @@ describe('PostHog Node.js', () => {
   })
 
   describe('evaluation environments', () => {
+    beforeEach(() => {
+      mockedFetch.mockClear()
+    })
+
     it('should send evaluation environments when configured', async () => {
       mockedFetch.mockImplementation(
         apiImplementation({

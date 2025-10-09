@@ -9,13 +9,13 @@ AppState.addEventListener = jest.fn()
 describe('PostHog React Native', () => {
   describe('evaluation environments', () => {
     it('should send evaluation environments when configured', async () => {
-      const posthogWithEnvs = new PostHog('test-token', {
+      posthog = new PostHog('test-token', {
         evaluationEnvironments: ['production', 'mobile'],
         flushInterval: 0,
       })
-      await posthogWithEnvs.ready()
+      await posthog.ready()
 
-      await posthogWithEnvs.reloadFeatureFlagsAsync()
+      await posthog.reloadFeatureFlagsAsync()
 
       expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
         expect.stringContaining('/flags/?v=2&config=true'),
@@ -24,17 +24,15 @@ describe('PostHog React Native', () => {
           body: expect.stringContaining('"evaluation_environments":["production","mobile"]'),
         })
       )
-
-      await posthogWithEnvs.shutdown()
     })
 
     it('should not send evaluation environments when not configured', async () => {
-      const posthogWithoutEnvs = new PostHog('test-token', {
+      posthog = new PostHog('test-token', {
         flushInterval: 0,
       })
-      await posthogWithoutEnvs.ready()
+      await posthog.ready()
 
-      await posthogWithoutEnvs.reloadFeatureFlagsAsync()
+      await posthog.reloadFeatureFlagsAsync()
 
       expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
         expect.stringContaining('/flags/?v=2&config=true'),
@@ -43,18 +41,16 @@ describe('PostHog React Native', () => {
           body: expect.not.stringContaining('evaluation_environments'),
         })
       )
-
-      await posthogWithoutEnvs.shutdown()
     })
 
     it('should not send evaluation environments when configured as empty array', async () => {
-      const posthogWithEmptyEnvs = new PostHog('test-token', {
+      posthog = new PostHog('test-token', {
         evaluationEnvironments: [],
         flushInterval: 0,
       })
-      await posthogWithEmptyEnvs.ready()
+      await posthog.ready()
 
-      await posthogWithEmptyEnvs.reloadFeatureFlagsAsync()
+      await posthog.reloadFeatureFlagsAsync()
 
       expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
         expect.stringContaining('/flags/?v=2&config=true'),
@@ -63,8 +59,6 @@ describe('PostHog React Native', () => {
           body: expect.not.stringContaining('evaluation_environments'),
         })
       )
-
-      await posthogWithEmptyEnvs.shutdown()
     })
   })
 
