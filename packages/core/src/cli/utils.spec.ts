@@ -1,4 +1,4 @@
-import { buildLocalBinaryPaths } from './call-posthog-cli'
+import { buildLocalBinaryPaths } from './utils'
 
 describe('buildLocalBinaryPaths', () => {
   it('generates possible binary locations', () => {

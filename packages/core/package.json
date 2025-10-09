@@ -49,6 +49,11 @@
       "types": "./dist/utils/index.d.ts",
       "require": "./dist/utils/index.js",
       "import": "./dist/utils/index.mjs"
+    },
+    "./cli": {
+      "types": "./dist/cli/index.d.ts",
+      "require": "./dist/cli/index.js",
+      "import": "./dist/cli/index.mjs"
     }
   },
   "devDependencies": {
