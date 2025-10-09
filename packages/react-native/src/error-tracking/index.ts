@@ -159,13 +159,13 @@ export class ErrorTracking {
     const onConsole = (level: LogLevel) => (error: unknown, isFatal: boolean, syntheticException?: Error) => {
       const hint: EventHint = {
         mechanism: {
-          type: 'onconsoleerror',
+          type: 'onconsole',
           handled: true,
         },
         syntheticException,
       }
       const additionalProperties = {
-        $exception_level: level,
+        $exception_level: level as SeverityLevel,
       }
       this.captureException(error, additionalProperties, hint)
     }
