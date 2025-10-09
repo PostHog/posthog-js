@@ -14,13 +14,12 @@ export default defineNuxtConfig({
   posthogConfig: {
     host: 'http://localhost:8010',
     publicKey: process.env.POSTHOG_PROJECT_API_KEY!,
-    nuxt: {
-      exceptionAutoCaptureEnabled: true,
-      debug: true,
+    debug: true,
+    clientConfig: {
+      capture_exceptions: true,
     },
-    nitro: {
-      exceptionAutoCaptureEnabled: true,
-      debug: true,
+    serverConfig: {
+      enableExceptionAutocapture: true,
     },
     sourcemaps: {
       enabled: true,

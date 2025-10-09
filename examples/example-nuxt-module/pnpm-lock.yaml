@@ -805,7 +805,7 @@ packages:
     version: 1.2.4
 
   '@posthog/nuxt@file:../../target/posthog-nuxt.tgz':
-    resolution: {integrity: sha512-HMW5lytZ5gTNKE3p8lWwO5IIIu4PHsT7/JrZpDidTVVIv2PZJwbpQ56SCzttH4a5QiD5b4aGtAlIfH32Fbm8hQ==, tarball: file:../../target/posthog-nuxt.tgz}
+    resolution: {integrity: sha512-i19ROVk11aTmh1KZ46dSi+8AHfDTyjalMRjjePa6wJNxD9M9DIjbMsSnP4VVj49F+zb8DFUcrVidsHQRUlDH7w==, tarball: file:../../target/posthog-nuxt.tgz}
     version: 0.0.1
 
   '@rolldown/pluginutils@1.0.0-beta.29':

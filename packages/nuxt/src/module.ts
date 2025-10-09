@@ -27,16 +27,9 @@ interface EnabledSourcemaps {
 export interface ModuleOptions {
   host: string
   publicKey: string
-  nuxt: {
-    exceptionAutoCaptureEnabled?: boolean
-    configOverride?: Partial<PostHogConfig>
-    debug?: boolean
-  }
-  nitro: {
-    exceptionAutoCaptureEnabled?: boolean
-    configOverride?: PostHogOptions
-    debug?: boolean
-  }
+  debug?: boolean
+  clientConfig: Partial<PostHogConfig>
+  serverConfig: PostHogOptions
   sourcemaps: DisabledSourcemaps | EnabledSourcemaps | undefined
 }
 
@@ -50,16 +43,9 @@ export default defineNuxtModule<ModuleOptions>({
   },
   defaults: () => ({
     host: 'https://us.i.posthog.com',
-    nuxt: {
-      exceptionAutoCaptureEnabled: false,
-      configOverride: {},
-      debug: false,
-    },
-    nitro: {
-      exceptionAutoCaptureEnabled: false,
-      configOverride: {},
-      debug: false,
-    },
+    debug: false,
+    clientConfig: {},
+    serverConfig: {},
   }),
   setup(options, nuxt) {
     const resolver = createResolver(import.meta.url)
@@ -70,24 +56,17 @@ export default defineNuxtModule<ModuleOptions>({
     nuxt.options.runtimeConfig.public.posthogPublicKey =
       nuxt.options.runtimeConfig.public.posthogPublicKey || options.publicKey
     nuxt.options.runtimeConfig.public.posthogHost = nuxt.options.runtimeConfig.public.posthogHost || options.host
+    nuxt.options.runtimeConfig.public.posthogDebug = nuxt.options.runtimeConfig.public.posthogDebug || options.debug
 
     // nuxt specific
-    nuxt.options.runtimeConfig.public.nuxtExceptionAutoCaptureEnabled =
-      nuxt.options.runtimeConfig.public.nuxtExceptionAutoCaptureEnabled || options.nuxt.exceptionAutoCaptureEnabled
-    nuxt.options.runtimeConfig.public.nuxtPosthogClientConfigOverride =
-      nuxt.options.runtimeConfig.public.nuxtPosthogClientConfigOverride || options.nuxt.configOverride
-    nuxt.options.runtimeConfig.public.nuxtPosthogClientDebug =
-      nuxt.options.runtimeConfig.public.nuxtPosthogClientDebug || options.nuxt.debug
+    nuxt.options.runtimeConfig.public.posthogClientConfig =
+      nuxt.options.runtimeConfig.public.posthogClientConfig || options.clientConfig
 
     // nitro specific
-    nuxt.options.runtimeConfig.public.nitroExceptionAutoCaptureEnabled =
-      nuxt.options.runtimeConfig.public.nitroExceptionAutoCaptureEnabled || options.nitro.exceptionAutoCaptureEnabled
-    nuxt.options.runtimeConfig.public.nitroPosthogClientConfigOverride =
-      nuxt.options.runtimeConfig.public.nitroPosthogClientConfigOverride || options.nitro.configOverride
-    nuxt.options.runtimeConfig.public.nitroPosthogClientDebug =
-      nuxt.options.runtimeConfig.public.nitroPosthogClientDebug || options.nitro.debug
+    nuxt.options.runtimeConfig.public.posthogServerConfig =
+      nuxt.options.runtimeConfig.public.posthogServerConfig || options.serverConfig
 
-    if (!options.sourcemaps?.enabled) {
+    if (!options.sourcemaps?.enabled || nuxt.options.dev) {
       return
     }
 

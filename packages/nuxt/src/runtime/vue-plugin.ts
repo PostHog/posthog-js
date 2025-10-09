@@ -1,14 +1,13 @@
 import { defineNuxtPlugin, useRuntimeConfig } from '#app'
 
-import posthog from 'posthog-js'
+import posthog, { type PostHogConfig } from 'posthog-js'
 
-export default defineNuxtPlugin((nuxtApp) => {
+export default defineNuxtPlugin(() => {
   const runtimeConfig = useRuntimeConfig()
   const publicApiKey = runtimeConfig.public.posthogPublicKey as string
   const host = runtimeConfig.public.posthogHost as string
-  const exceptionAutoCaptureEnabled = (runtimeConfig.public.nuxtExceptionAutoCaptureEnabled as boolean) || false
-  const configOverride = runtimeConfig.public.nuxtPosthogClientConfigOverride as Record<string, unknown>
-  const debug = runtimeConfig.public.nuxtPosthogClientDebug as boolean
+  const configOverride = runtimeConfig.public.posthogClientConfig as Partial<PostHogConfig>
+  const debug = runtimeConfig.public.posthogDebug as boolean
 
   // prevent nitro from trying to load this
   if (!window || posthog.__loaded) {
@@ -22,12 +21,6 @@ export default defineNuxtPlugin((nuxtApp) => {
 
   if (debug) {
     posthog.debug(true)
-  }
-
-  if (exceptionAutoCaptureEnabled) {
-    nuxtApp.hooks.hook('vue:error', (error) => {
-      posthog.captureException(error)
-    })
   }
 
   return {

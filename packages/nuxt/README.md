@@ -59,6 +59,8 @@ export default defineNuxtConfig({
 const { $posthog } = useNuxtApp()
 ```
 
+4. On the server side, the PostHog client instance initialized by the plugin is intended exclusively for error tracking. If you require additional PostHog client functionality for other purposes, please instantiate a separate client within your application as needed.
+
 ## FAQ
 
 ```
