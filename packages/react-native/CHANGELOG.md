@@ -1,5 +1,11 @@
 # posthog-react-native
 
+## 4.9.0
+
+### Minor Changes
+
+- [#2410](https://github.com/PostHog/posthog-js/pull/2410) [`1f294ec`](https://github.com/PostHog/posthog-js/commit/1f294ecb3c816b283f04c0dacc01739d79a5805c) Thanks [@hpouillot](https://github.com/hpouillot)! - add error tracking autocapture
+
 ## 4.8.1
 
 ### Patch Changes
