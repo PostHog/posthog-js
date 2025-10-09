@@ -25,7 +25,6 @@ import { FeatureFlagsPoller } from './extensions/feature-flags/feature-flags'
 import ErrorTracking from './extensions/error-tracking'
 import { safeSetTimeout, PostHogEventProperties } from '@posthog/core'
 import { PostHogMemoryStorage } from './storage-memory'
-import { createLogger } from './utils/logger'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -40,7 +39,6 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private featureFlagsPoller?: FeatureFlagsPoller
   protected errorTracking: ErrorTracking
   private maxCacheSize: number
-  private logger: Logger
   public readonly options: PostHogOptions
 
   distinctIdHasSentFlagCalls: Record<string, string[]>
@@ -79,8 +77,6 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     this.options = options
 
-    this.logger = createLogger(this.logMsgIfDebug.bind(this))
-
     this.options.featureFlagsPollingInterval =
       typeof options.featureFlagsPollingInterval === 'number'
         ? Math.max(options.featureFlagsPollingInterval, MINIMUM_POLLING_INTERVAL)
@@ -115,7 +111,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       }
     }
 
-    this.errorTracking = new ErrorTracking(this, options, this.logger)
+    this.errorTracking = new ErrorTracking(this, options, this._logger)
     this.distinctIdHasSentFlagCalls = {}
     this.maxCacheSize = options.maxCacheSize || MAX_CACHE_SIZE
   }
@@ -309,9 +305,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   capture(props: EventMessage): void {
     if (typeof props === 'string') {
-      this.logMsgIfDebug(() =>
-        console.warn('Called capture() with a string as the first argument when an object was expected.')
-      )
+      this._logger.warn('Called capture() with a string as the first argument when an object was expected.')
     }
     this.addPendingPromise(
       this.prepareEventMessage(props)
@@ -375,9 +369,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   async captureImmediate(props: EventMessage): Promise<void> {
     if (typeof props === 'string') {
-      this.logMsgIfDebug(() =>
-        console.warn('Called captureImmediate() with a string as the first argument when an object was expected.')
-      )
+      this._logger.warn('Called captureImmediate() with a string as the first argument when an object was expected.')
     }
     return this.addPendingPromise(
       this.prepareEventMessage(props)
@@ -1518,12 +1510,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     for (const fn of fns) {
       result = fn(result)
       if (!result) {
-        this.logMsgIfDebug(() => console.info(`Event '${eventMessage.event}' was rejected in beforeSend function`))
+        this._logger.info(`Event '${eventMessage.event}' was rejected in beforeSend function`)
         return null
       }
       if (!result.properties || Object.keys(result.properties).length === 0) {
         const message = `Event '${result.event}' has no properties after beforeSend function, this is likely an error.`
-        this.logMsgIfDebug(() => console.warn(message))
+        this._logger.warn(message)
       }
     }
 
