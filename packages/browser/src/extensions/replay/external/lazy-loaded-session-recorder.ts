@@ -7,7 +7,7 @@ import {
     type listenerHandler,
     RecordPlugin,
 } from '@rrweb/types'
-import { buildNetworkRequestOptions } from '../config'
+import { buildNetworkRequestOptions } from './config'
 import {
     ACTIVE,
     allMatchSessionRecordingStatus,
@@ -28,12 +28,12 @@ import {
     TriggerStatusMatching,
     TriggerType,
     URLTriggerMatching,
-} from '../triggerMatching'
-import { estimateSize, INCREMENTAL_SNAPSHOT_EVENT_TYPE, truncateLargeConsoleLogs } from '../sessionrecording-utils'
+} from './triggerMatching'
+import { estimateSize, INCREMENTAL_SNAPSHOT_EVENT_TYPE, truncateLargeConsoleLogs } from './sessionrecording-utils'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
 import { assignableWindow, LazyLoadedSessionRecordingInterface, window, document } from '../../../utils/globals'
 import { addEventListener } from '../../../utils'
-import { MutationThrottler } from '../mutation-throttler'
+import { MutationThrottler } from './mutation-throttler'
 import { createLogger } from '../../../utils/logger'
 import {
     clampToRange,
@@ -331,8 +331,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _statusMatcher: (triggersStatus: RecordingTriggersStatus) => SessionRecordingStatus =
         nullMatchSessionRecordingStatus
-
-    private _receivedFlags: boolean = false
 
     private _onSessionIdListener: (() => void) | undefined = undefined
     private _onSessionIdleResetForcedListener: (() => void) | undefined = undefined

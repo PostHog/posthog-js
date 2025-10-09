@@ -11,16 +11,12 @@ import {
     PostHogExtensionKind,
     window,
 } from '../../utils/globals'
-import { DISABLED, LAZY_LOADING, SessionRecordingStatus, TriggerType } from './triggerMatching'
+import { DISABLED, LAZY_LOADING, SessionRecordingStatus, TriggerType } from './external/triggerMatching'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
 
-/**
- * This only exists to let us test changes to sessionrecording.ts before rolling them out to everyone
- * it should not be depended on in other ways, since i'm going to delete it long before the end of September 2025
- */
-export class SessionRecordingWrapper {
+export class SessionRecording {
     _forceAllowLocalhostNetworkCapture: boolean = false
 
     private _receivedFlags: boolean = false
@@ -195,7 +191,6 @@ export class SessionRecordingWrapper {
 
         this._persistRemoteConfig(response)
         this._receivedFlags = true
-        // TODO how do we send a custom message with the received remote config like we used to for debug
         this.startIfEnabledOrStop()
     }
 

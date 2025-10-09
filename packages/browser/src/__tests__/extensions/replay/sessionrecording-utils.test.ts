@@ -9,7 +9,7 @@ import {
     SEVEN_MEGABYTES,
     estimateSize,
     circularReferenceReplacer,
-} from '../../../extensions/replay/sessionrecording-utils'
+} from '../../../extensions/replay/external/sessionrecording-utils'
 import { largeString, threeMBAudioURI, threeMBImageURI } from '../test_data/sessionrecording-utils-test-data'
 import type { eventWithTime } from '@rrweb/types'
 
