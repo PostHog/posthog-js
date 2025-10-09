@@ -12,7 +12,7 @@ importers:
     dependencies:
       '@posthog/nuxt':
         specifier: file:../../target/posthog-nuxt.tgz
-        version: file:../../target/posthog-nuxt.tgz(@nuxt/kit@3.19.3(magicast@0.3.5))(@posthog/core@1.2.3)(posthog-js@1.274.0)(posthog-node@5.9.4)
+        version: file:../../target/posthog-nuxt.tgz(magicast@0.3.5)
       nuxt:
         specifier: ^3.19.3
         version: 3.19.3(@parcel/watcher@2.5.1)(@vue/compiler-sfc@3.5.22)(db0@0.3.4)(ioredis@5.8.1)(magicast@0.3.5)(rollup@4.52.4)(terser@5.44.0)(vite@7.1.9(jiti@2.6.1)(terser@5.44.0)(yaml@2.8.1))(yaml@2.8.1)
@@ -800,21 +800,13 @@ packages:
     engines: {node: '>=14', npm: '>=6'}
     hasBin: true
 
-  '@posthog/core@1.2.3':
-    resolution: {integrity: sha512-rm3ULv4xPPCZ1Ek/60+bUZYNVravRcso8fk9zarxSu9ll/WNNdINSUJor04ULqoBADH6kh5O2t8dn9F7Tkj53A==}
-
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-8XLpUPhp4vqsGgvT69NnNj97pIogkmvc/BQPjGIU+3mXUZZRvJUKjOCuvPPZaZV1H+IZHoJgw0LDPX2ZSc5k3g==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.2.2
+    resolution: {integrity: sha512-InR03pHlwt9YlKhcQMOXy7QsgqatoCvO6Nnve6uyImDwKcYvk1gOpkGVdR2+jirWQV7vb8FKa9IKPKU1B4/3FA==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.2.4
 
   '@posthog/nuxt@file:../../target/posthog-nuxt.tgz':
-    resolution: {integrity: sha512-VFW4Q49BK2U98fK1D/S0j6ausQgeClJqix4l2dEAcgO9gWR0MEwpgEU+tlqW5fW/orMIrKDVanP830q1vxXrAw==, tarball: file:../../target/posthog-nuxt.tgz}
+    resolution: {integrity: sha512-HMW5lytZ5gTNKE3p8lWwO5IIIu4PHsT7/JrZpDidTVVIv2PZJwbpQ56SCzttH4a5QiD5b4aGtAlIfH32Fbm8hQ==, tarball: file:../../target/posthog-nuxt.tgz}
     version: 0.0.1
-    peerDependencies:
-      '@nuxt/kit': '>=3.7.0'
-      '@posthog/core': '>=1.0.2'
-      posthog-js: '>=1.257.2'
-      posthog-node: '>=5.6.0'
 
   '@rolldown/pluginutils@1.0.0-beta.29':
     resolution: {integrity: sha512-NIJgOsMjbxAXvoGq/X0gD7VPMQ8j9g0BiDaNjVNVjvl+iKXxL3Jre0v31RmBYeLEmkbj2s02v8vFTbUXi5XS2Q==}
@@ -2585,8 +2577,9 @@ packages:
     resolution: {integrity: sha512-3Ybi1tAuwAP9s0r1UQ2J4n5Y0G05bJkpUIO0/bI9MhwmD70S5aTWbXGBwxHrelT+XM1k6dM0pk+SwNkpTRN7Pg==}
     engines: {node: ^10 || ^12 || >=14}
 
-  posthog-js@1.274.0:
-    resolution: {integrity: sha512-z3/Hj6svCXNcdkg+hN/jdrRromDX835V2oqyC+nMC3rV85ubNs4XvjjJ9mzeytbpg7KNqo2cHrd9zwfoQwxNvw==}
+  posthog-js@file:../../target/posthog-js.tgz:
+    resolution: {integrity: sha512-owZkOEBdomteS5x3s8/tfysCKVId+8tj3JIIAq4r7vJ9INgKxeC9Ys/Ysa58nsQWdgTcIMV7v92+bOy2sHcgog==, tarball: file:../../target/posthog-js.tgz}
+    version: 1.274.1
     peerDependencies:
       '@rrweb/types': 2.0.0-alpha.17
       rrweb-snapshot: 2.0.0-alpha.17
@@ -2596,8 +2589,9 @@ packages:
       rrweb-snapshot:
         optional: true
 
-  posthog-node@5.9.4:
-    resolution: {integrity: sha512-WAWtmrqq/7+5c0KoaA0+BsZQ+3u6yXnHDxI7ohuFrh5xQ4ehubicvw1DJzlkmdOxS2JZjnqKX9+aKY/zjoHqdQ==}
+  posthog-node@file:../../target/posthog-node.tgz:
+    resolution: {integrity: sha512-fh5Wp8vYhNBX9mSpeW9XWJgZcgfXbHPDe9nhGrJlaTw/XE3DhJ6UUhQuqDe0TO6mEZMqpkuqtY9XUAtk961vrw==, tarball: file:../../target/posthog-node.tgz}
+    version: 5.9.5
     engines: {node: '>=20'}
 
   preact@10.27.2:
@@ -4109,19 +4103,20 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  '@posthog/core@1.2.3': {}
-
   '@posthog/core@file:../../target/posthog-core.tgz': {}
 
-  '@posthog/nuxt@file:../../target/posthog-nuxt.tgz(@nuxt/kit@3.19.3(magicast@0.3.5))(@posthog/core@1.2.3)(posthog-js@1.274.0)(posthog-node@5.9.4)':
+  '@posthog/nuxt@file:../../target/posthog-nuxt.tgz(magicast@0.3.5)':
     dependencies:
       '@nuxt/kit': 3.19.3(magicast@0.3.5)
       '@posthog/cli': 0.4.8
-      '@posthog/core': 1.2.3
-      posthog-js: 1.274.0
-      posthog-node: 5.9.4
+      '@posthog/core': file:../../target/posthog-core.tgz
+      posthog-js: file:../../target/posthog-js.tgz
+      posthog-node: file:../../target/posthog-node.tgz
     transitivePeerDependencies:
+      - '@rrweb/types'
       - debug
+      - magicast
+      - rrweb-snapshot
 
   '@rolldown/pluginutils@1.0.0-beta.29': {}
 
@@ -6091,7 +6086,7 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  posthog-js@1.274.0:
+  posthog-js@file:../../target/posthog-js.tgz:
     dependencies:
       '@posthog/core': file:../../target/posthog-core.tgz
       core-js: 3.45.1
@@ -6099,7 +6094,7 @@ snapshots:
       preact: 10.27.2
       web-vitals: 4.2.4
 
-  posthog-node@5.9.4:
+  posthog-node@file:../../target/posthog-node.tgz:
     dependencies:
       '@posthog/core': file:../../target/posthog-core.tgz
 
