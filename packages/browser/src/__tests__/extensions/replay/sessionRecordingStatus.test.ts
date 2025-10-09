@@ -14,7 +14,7 @@ import {
     TRIGGER_DISABLED,
     TRIGGER_PENDING,
     URLTriggerMatching,
-} from '../../../extensions/replay/triggerMatching'
+} from '../../../extensions/replay/external/triggerMatching'
 import { PostHog } from '../../../posthog-core'
 
 type TestConfig = {

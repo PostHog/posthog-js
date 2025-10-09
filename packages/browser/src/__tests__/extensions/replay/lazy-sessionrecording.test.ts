@@ -14,7 +14,7 @@ import {
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
-} from '../../../extensions/replay/sessionrecording-utils'
+} from '../../../extensions/replay/external/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
 import {
     FlagsResponse,
@@ -25,7 +25,6 @@ import {
     SessionRecordingOptions,
 } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
-import { RECORDING_IDLE_THRESHOLD_MS, RECORDING_MAX_EVENT_SIZE } from '../../../extensions/replay/sessionrecording'
 import { assignableWindow, window } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import {
@@ -42,8 +41,12 @@ import {
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
 import Mock = jest.Mock
-import { SessionRecordingWrapper } from '../../../extensions/replay/sessionrecording-wrapper'
-import { LazyLoadedSessionRecording } from '../../../extensions/replay/external/lazy-loaded-session-recorder'
+import { SessionRecording } from '../../../extensions/replay/session-recording'
+import {
+    LazyLoadedSessionRecording,
+    RECORDING_IDLE_THRESHOLD_MS,
+    RECORDING_MAX_EVENT_SIZE,
+} from '../../../extensions/replay/external/lazy-loaded-session-recorder'
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -173,7 +176,7 @@ describe('Lazy SessionRecording', () => {
     const loadScriptMock = jest.fn()
     let _emit: any
     let posthog: PostHog
-    let sessionRecording: SessionRecordingWrapper
+    let sessionRecording: SessionRecording
     let sessionId: string
     let sessionManager: SessionIdManager
     let config: PostHogConfig
@@ -287,7 +290,7 @@ describe('Lazy SessionRecording', () => {
             [SESSION_RECORDING_IS_SAMPLED]: undefined,
         })
 
-        sessionRecording = new SessionRecordingWrapper(posthog)
+        sessionRecording = new SessionRecording(posthog)
     })
 
     afterEach(() => {

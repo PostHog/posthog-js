@@ -342,7 +342,7 @@ describe('request', () => {
                     data: { foo: 'bar' },
                 })
             )
-            expect(mockedXHR.send.mock.calls[0][0]).toMatchInlineSnapshot(`"{\\"foo\\":\\"bar\\"}"`)
+            expect(mockedXHR.send.mock.calls[0][0]).toMatchInlineSnapshot(`"{"foo":"bar"}"`)
             expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/json')
         })
 
@@ -431,7 +431,7 @@ describe('request', () => {
                 reader.readAsText(blob)
             })
 
-            expect(result).toMatchInlineSnapshot(`"{\\"foo\\":\\"bar\\"}"`)
+            expect(result).toMatchInlineSnapshot(`"{"foo":"bar"}"`)
         })
 
         it('should respect base64 compression', async () => {

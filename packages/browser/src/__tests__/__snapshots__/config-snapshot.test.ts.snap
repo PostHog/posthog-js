@@ -2,599 +2,599 @@
 
 exports[`config snapshot for PostHogConfig 1`] = `
 "{
-  \\"api_host\\": \\"string\\",
-  \\"ui_host\\": [
-    \\"null\\",
-    \\"string\\"
+  "api_host": "string",
+  "ui_host": [
+    "null",
+    "string"
   ],
-  \\"api_transport\\": [
-    \\"undefined\\",
-    \\"\\\\\\"XHR\\\\\\"\\",
-    \\"\\\\\\"fetch\\\\\\"\\"
+  "api_transport": [
+    "undefined",
+    "\\"XHR\\"",
+    "\\"fetch\\""
   ],
-  \\"token\\": \\"string\\",
-  \\"name\\": \\"string\\",
-  \\"autocapture\\": [
-    \\"false\\",
-    \\"true\\",
+  "token": "string",
+  "name": "string",
+  "autocapture": [
+    "false",
+    "true",
     {
-      \\"url_allowlist\\": [
-        \\"undefined\\",
-        \\"(string | RegExp)[]\\"
+      "url_allowlist": [
+        "undefined",
+        "(string | RegExp)[]"
       ],
-      \\"url_ignorelist\\": [
-        \\"undefined\\",
-        \\"(string | RegExp)[]\\"
+      "url_ignorelist": [
+        "undefined",
+        "(string | RegExp)[]"
       ],
-      \\"dom_event_allowlist\\": [
-        \\"undefined\\",
-        \\"DomAutocaptureEvents[]\\"
+      "dom_event_allowlist": [
+        "undefined",
+        "DomAutocaptureEvents[]"
       ],
-      \\"element_allowlist\\": [
-        \\"undefined\\",
-        \\"AutocaptureCompatibleElement[]\\"
+      "element_allowlist": [
+        "undefined",
+        "AutocaptureCompatibleElement[]"
       ],
-      \\"css_selector_allowlist\\": [
-        \\"undefined\\",
-        \\"string[]\\"
+      "css_selector_allowlist": [
+        "undefined",
+        "string[]"
       ],
-      \\"element_attribute_ignorelist\\": [
-        \\"undefined\\",
-        \\"string[]\\"
+      "element_attribute_ignorelist": [
+        "undefined",
+        "string[]"
       ],
-      \\"capture_copied_text\\": [
-        \\"undefined\\",
-        \\"false\\",
-        \\"true\\"
+      "capture_copied_text": [
+        "undefined",
+        "false",
+        "true"
       ]
     }
   ],
-  \\"rageclick\\": [
-    \\"false\\",
-    \\"true\\",
+  "rageclick": [
+    "false",
+    "true",
     {
-      \\"css_selector_ignorelist\\": [
-        \\"undefined\\",
-        \\"string[]\\"
+      "css_selector_ignorelist": [
+        "undefined",
+        "string[]"
       ]
     }
   ],
-  \\"cross_subdomain_cookie\\": [
-    \\"false\\",
-    \\"true\\"
+  "cross_subdomain_cookie": [
+    "false",
+    "true"
   ],
-  \\"persistence\\": [
-    \\"\\\\\\"localStorage\\\\\\"\\",
-    \\"\\\\\\"cookie\\\\\\"\\",
-    \\"\\\\\\"memory\\\\\\"\\",
-    \\"\\\\\\"localStorage+cookie\\\\\\"\\",
-    \\"\\\\\\"sessionStorage\\\\\\"\\"
+  "persistence": [
+    "\\"localStorage\\"",
+    "\\"cookie\\"",
+    "\\"memory\\"",
+    "\\"localStorage+cookie\\"",
+    "\\"sessionStorage\\""
   ],
-  \\"persistence_name\\": \\"string\\",
-  \\"cookie_name\\": [
-    \\"undefined\\",
-    \\"string\\"
+  "persistence_name": "string",
+  "cookie_name": [
+    "undefined",
+    "string"
   ],
-  \\"loaded\\": \\"(posthog_instance: PostHog) => void\\",
-  \\"save_referrer\\": [
-    \\"false\\",
-    \\"true\\"
+  "loaded": "(posthog_instance: PostHog) => void",
+  "save_referrer": [
+    "false",
+    "true"
   ],
-  \\"save_campaign_params\\": [
-    \\"false\\",
-    \\"true\\"
+  "save_campaign_params": [
+    "false",
+    "true"
   ],
-  \\"store_google\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\"
+  "store_google": [
+    "undefined",
+    "false",
+    "true"
   ],
-  \\"custom_campaign_params\\": \\"string[]\\",
-  \\"custom_blocked_useragents\\": \\"string[]\\",
-  \\"debug\\": [
-    \\"false\\",
-    \\"true\\"
+  "custom_campaign_params": "string[]",
+  "custom_blocked_useragents": "string[]",
+  "debug": [
+    "false",
+    "true"
   ],
-  \\"verbose\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\"
+  "verbose": [
+    "undefined",
+    "false",
+    "true"
   ],
-  \\"capture_pageview\\": [
-    \\"false\\",
-    \\"true\\",
-    \\"\\\\\\"history_change\\\\\\"\\"
+  "capture_pageview": [
+    "false",
+    "true",
+    "\\"history_change\\""
   ],
-  \\"capture_pageleave\\": [
-    \\"false\\",
-    \\"true\\",
-    \\"\\\\\\"if_capture_pageview\\\\\\"\\"
+  "capture_pageleave": [
+    "false",
+    "true",
+    "\\"if_capture_pageview\\""
   ],
-  \\"cookie_expiration\\": \\"number\\",
-  \\"upgrade\\": [
-    \\"false\\",
-    \\"true\\"
+  "cookie_expiration": "number",
+  "upgrade": [
+    "false",
+    "true"
   ],
-  \\"disable_session_recording\\": [
-    \\"false\\",
-    \\"true\\"
+  "disable_session_recording": [
+    "false",
+    "true"
   ],
-  \\"disable_persistence\\": [
-    \\"false\\",
-    \\"true\\"
+  "disable_persistence": [
+    "false",
+    "true"
   ],
-  \\"disable_cookie\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\"
+  "disable_cookie": [
+    "undefined",
+    "false",
+    "true"
   ],
-  \\"disable_surveys\\": [
-    \\"false\\",
-    \\"true\\"
+  "disable_surveys": [
+    "false",
+    "true"
   ],
-  \\"disable_surveys_automatic_display\\": [
-    \\"false\\",
-    \\"true\\"
+  "disable_surveys_automatic_display": [
+    "false",
+    "true"
   ],
-  \\"disable_web_experiments\\": [
-    \\"false\\",
-    \\"true\\"
+  "disable_web_experiments": [
+    "false",
+    "true"
   ],
-  \\"disable_external_dependency_loading\\": [
-    \\"false\\",
-    \\"true\\"
+  "disable_external_dependency_loading": [
+    "false",
+    "true"
   ],
-  \\"prepare_external_dependency_script\\": [
-    \\"undefined\\",
-    \\"(script: HTMLScriptElement) => HTMLScriptElement | null\\"
+  "prepare_external_dependency_script": [
+    "undefined",
+    "(script: HTMLScriptElement) => HTMLScriptElement | null"
   ],
-  \\"prepare_external_dependency_stylesheet\\": [
-    \\"undefined\\",
-    \\"(stylesheet: HTMLStyleElement) => HTMLStyleElement | null\\"
+  "prepare_external_dependency_stylesheet": [
+    "undefined",
+    "(stylesheet: HTMLStyleElement) => HTMLStyleElement | null"
   ],
-  \\"enable_recording_console_log\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\"
+  "enable_recording_console_log": [
+    "undefined",
+    "false",
+    "true"
   ],
-  \\"secure_cookie\\": [
-    \\"false\\",
-    \\"true\\"
+  "secure_cookie": [
+    "false",
+    "true"
   ],
-  \\"opt_out_capturing_by_default\\": [
-    \\"false\\",
-    \\"true\\"
+  "opt_out_capturing_by_default": [
+    "false",
+    "true"
   ],
-  \\"opt_out_capturing_persistence_type\\": [
-    \\"\\\\\\"localStorage\\\\\\"\\",
-    \\"\\\\\\"cookie\\\\\\"\\"
+  "opt_out_capturing_persistence_type": [
+    "\\"localStorage\\"",
+    "\\"cookie\\""
   ],
-  \\"opt_out_persistence_by_default\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\"
+  "opt_out_persistence_by_default": [
+    "undefined",
+    "false",
+    "true"
   ],
-  \\"opt_out_useragent_filter\\": [
-    \\"false\\",
-    \\"true\\"
+  "opt_out_useragent_filter": [
+    "false",
+    "true"
   ],
-  \\"opt_out_capturing_cookie_prefix\\": [
-    \\"null\\",
-    \\"string\\"
+  "opt_out_capturing_cookie_prefix": [
+    "null",
+    "string"
   ],
-  \\"consent_persistence_name\\": [
-    \\"null\\",
-    \\"string\\"
+  "consent_persistence_name": [
+    "null",
+    "string"
   ],
-  \\"opt_in_site_apps\\": [
-    \\"false\\",
-    \\"true\\"
+  "opt_in_site_apps": [
+    "false",
+    "true"
   ],
-  \\"respect_dnt\\": [
-    \\"false\\",
-    \\"true\\"
+  "respect_dnt": [
+    "false",
+    "true"
   ],
-  \\"property_denylist\\": \\"string[]\\",
-  \\"property_blacklist\\": [
-    \\"undefined\\",
-    \\"string[]\\"
+  "property_denylist": "string[]",
+  "property_blacklist": [
+    "undefined",
+    "string[]"
   ],
-  \\"request_headers\\": \\"{ [header_name: string]: string; }\\",
-  \\"xhr_headers\\": [
-    \\"undefined\\",
-    \\"{ [header_name: string]: string; }\\"
+  "request_headers": "{ [header_name: string]: string; }",
+  "xhr_headers": [
+    "undefined",
+    "{ [header_name: string]: string; }"
   ],
-  \\"on_request_error\\": [
-    \\"undefined\\",
-    \\"(error: RequestResponse) => void\\"
+  "on_request_error": [
+    "undefined",
+    "(error: RequestResponse) => void"
   ],
-  \\"on_xhr_error\\": [
-    \\"undefined\\",
-    \\"(failedRequest: XMLHttpRequest) => void\\"
+  "on_xhr_error": [
+    "undefined",
+    "(failedRequest: XMLHttpRequest) => void"
   ],
-  \\"request_batching\\": [
-    \\"false\\",
-    \\"true\\"
+  "request_batching": [
+    "false",
+    "true"
   ],
-  \\"properties_string_max_length\\": \\"number\\",
-  \\"defaults\\": [
-    \\"\\\\\\"2025-05-24\\\\\\"\\",
-    \\"\\\\\\"unset\\\\\\"\\"
+  "properties_string_max_length": "number",
+  "defaults": [
+    "\\"2025-05-24\\"",
+    "\\"unset\\""
   ],
-  \\"session_recording\\": {
-    \\"blockClass\\": [
-      \\"undefined\\",
-      \\"string\\",
-      \\"RegExp\\"
+  "session_recording": {
+    "blockClass": [
+      "undefined",
+      "string",
+      "RegExp"
     ],
-    \\"blockSelector\\": [
-      \\"undefined\\",
-      \\"null\\",
-      \\"string\\"
+    "blockSelector": [
+      "undefined",
+      "null",
+      "string"
     ],
-    \\"ignoreClass\\": [
-      \\"undefined\\",
-      \\"string\\",
-      \\"RegExp\\"
+    "ignoreClass": [
+      "undefined",
+      "string",
+      "RegExp"
     ],
-    \\"maskTextClass\\": [
-      \\"undefined\\",
-      \\"string\\",
-      \\"RegExp\\"
+    "maskTextClass": [
+      "undefined",
+      "string",
+      "RegExp"
     ],
-    \\"maskTextSelector\\": [
-      \\"undefined\\",
-      \\"null\\",
-      \\"string\\"
+    "maskTextSelector": [
+      "undefined",
+      "null",
+      "string"
     ],
-    \\"maskTextFn\\": [
-      \\"undefined\\",
-      \\"null\\",
-      \\"(text: string, element?: HTMLElement | undefined) => string\\"
+    "maskTextFn": [
+      "undefined",
+      "null",
+      "(text: string, element?: HTMLElement | undefined) => string"
     ],
-    \\"maskAllInputs\\": [
-      \\"undefined\\",
-      \\"false\\",
-      \\"true\\"
+    "maskAllInputs": [
+      "undefined",
+      "false",
+      "true"
     ],
-    \\"maskInputOptions\\": [
-      \\"undefined\\",
-      \\"Partial<{ color: boolean; date: boolean; 'datetime-local': boolean; email: boolean; month: boolean; number: boolean; range: boolean; search: boolean; tel: boolean; text: boolean; time: boolean; url: boolean; week: boolean; textarea: boolean; select: boolean; password: boolean; }>\\"
+    "maskInputOptions": [
+      "undefined",
+      "Partial<{ color: boolean; date: boolean; 'datetime-local': boolean; email: boolean; month: boolean; number: boolean; range: boolean; search: boolean; tel: boolean; text: boolean; time: boolean; url: boolean; week: boolean; textarea: boolean; select: boolean; password: boolean; }>"
     ],
-    \\"maskInputFn\\": [
-      \\"undefined\\",
-      \\"null\\",
-      \\"(text: string, element?: HTMLElement | undefined) => string\\"
+    "maskInputFn": [
+      "undefined",
+      "null",
+      "(text: string, element?: HTMLElement | undefined) => string"
     ],
-    \\"slimDOMOptions\\": [
-      \\"undefined\\",
-      \\"true\\",
-      \\"Partial<{ script: boolean; comment: boolean; headFavicon: boolean; headWhitespace: boolean; headMetaDescKeywords: boolean; headMetaSocial: boolean; headMetaRobots: boolean; headMetaHttpEquiv: boolean; headMetaAuthorship: boolean; headMetaVerification: boolean; headTitleMutations: boolean; }>\\",
-      \\"\\\\\\"all\\\\\\"\\"
+    "slimDOMOptions": [
+      "undefined",
+      "true",
+      "Partial<{ script: boolean; comment: boolean; headFavicon: boolean; headWhitespace: boolean; headMetaDescKeywords: boolean; headMetaSocial: boolean; headMetaRobots: boolean; headMetaHttpEquiv: boolean; headMetaAuthorship: boolean; headMetaVerification: boolean; headTitleMutations: boolean; }>",
+      "\\"all\\""
     ],
-    \\"collectFonts\\": [
-      \\"undefined\\",
-      \\"false\\",
-      \\"true\\"
+    "collectFonts": [
+      "undefined",
+      "false",
+      "true"
     ],
-    \\"inlineStylesheet\\": [
-      \\"undefined\\",
-      \\"false\\",
-      \\"true\\"
+    "inlineStylesheet": [
+      "undefined",
+      "false",
+      "true"
     ],
-    \\"recordCrossOriginIframes\\": [
-      \\"undefined\\",
-      \\"false\\",
-      \\"true\\"
+    "recordCrossOriginIframes": [
+      "undefined",
+      "false",
+      "true"
     ],
-    \\"recordHeaders\\": [
-      \\"undefined\\",
-      \\"false\\",
-      \\"true\\"
+    "recordHeaders": [
+      "undefined",
+      "false",
+      "true"
     ],
-    \\"recordBody\\": [
-      \\"undefined\\",
-      \\"false\\",
-      \\"true\\"
+    "recordBody": [
+      "undefined",
+      "false",
+      "true"
     ],
-    \\"captureCanvas\\": [
-      \\"undefined\\",
-      \\"SessionRecordingCanvasOptions\\"
+    "captureCanvas": [
+      "undefined",
+      "SessionRecordingCanvasOptions"
     ],
-    \\"maskCapturedNetworkRequestFn\\": [
-      \\"undefined\\",
-      \\"null\\",
-      \\"(data: CapturedNetworkRequest) => CapturedNetworkRequest | null | undefined\\"
+    "maskCapturedNetworkRequestFn": [
+      "undefined",
+      "null",
+      "(data: CapturedNetworkRequest) => CapturedNetworkRequest | null | undefined"
     ],
-    \\"maskNetworkRequestFn\\": [
-      \\"undefined\\",
-      \\"null\\",
-      \\"(data: NetworkRequest) => NetworkRequest | null | undefined\\"
+    "maskNetworkRequestFn": [
+      "undefined",
+      "null",
+      "(data: NetworkRequest) => NetworkRequest | null | undefined"
     ],
-    \\"full_snapshot_interval_millis\\": [
-      \\"undefined\\",
-      \\"number\\"
+    "full_snapshot_interval_millis": [
+      "undefined",
+      "number"
     ],
-    \\"compress_events\\": [
-      \\"undefined\\",
-      \\"false\\",
-      \\"true\\"
+    "compress_events": [
+      "undefined",
+      "false",
+      "true"
     ],
-    \\"session_idle_threshold_ms\\": [
-      \\"undefined\\",
-      \\"number\\"
+    "session_idle_threshold_ms": [
+      "undefined",
+      "number"
     ],
-    \\"__mutationThrottlerRefillRate\\": [
-      \\"undefined\\",
-      \\"number\\"
+    "__mutationThrottlerRefillRate": [
+      "undefined",
+      "number"
     ],
-    \\"__mutationThrottlerBucketSize\\": [
-      \\"undefined\\",
-      \\"number\\"
+    "__mutationThrottlerBucketSize": [
+      "undefined",
+      "number"
     ]
   },
-  \\"error_tracking\\": {
-    \\"captureExtensionExceptions\\": [
-      \\"undefined\\",
-      \\"false\\",
-      \\"true\\"
+  "error_tracking": {
+    "captureExtensionExceptions": [
+      "undefined",
+      "false",
+      "true"
     ],
-    \\"__exceptionRateLimiterRefillRate\\": [
-      \\"undefined\\",
-      \\"number\\"
+    "__exceptionRateLimiterRefillRate": [
+      "undefined",
+      "number"
     ],
-    \\"__exceptionRateLimiterBucketSize\\": [
-      \\"undefined\\",
-      \\"number\\"
+    "__exceptionRateLimiterBucketSize": [
+      "undefined",
+      "number"
     ]
   },
-  \\"session_idle_timeout_seconds\\": \\"number\\",
-  \\"mask_all_element_attributes\\": [
-    \\"false\\",
-    \\"true\\"
+  "session_idle_timeout_seconds": "number",
+  "mask_all_element_attributes": [
+    "false",
+    "true"
   ],
-  \\"mask_all_text\\": [
-    \\"false\\",
-    \\"true\\"
+  "mask_all_text": [
+    "false",
+    "true"
   ],
-  \\"mask_personal_data_properties\\": [
-    \\"false\\",
-    \\"true\\"
+  "mask_personal_data_properties": [
+    "false",
+    "true"
   ],
-  \\"custom_personal_data_properties\\": \\"string[]\\",
-  \\"advanced_disable_flags\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\"
+  "custom_personal_data_properties": "string[]",
+  "advanced_disable_flags": [
+    "undefined",
+    "false",
+    "true"
   ],
-  \\"advanced_disable_decide\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\"
+  "advanced_disable_decide": [
+    "undefined",
+    "false",
+    "true"
   ],
-  \\"advanced_disable_feature_flags\\": [
-    \\"false\\",
-    \\"true\\"
+  "advanced_disable_feature_flags": [
+    "false",
+    "true"
   ],
-  \\"advanced_disable_feature_flags_on_first_load\\": [
-    \\"false\\",
-    \\"true\\"
+  "advanced_disable_feature_flags_on_first_load": [
+    "false",
+    "true"
   ],
-  \\"evaluation_environments\\": [
-    \\"undefined\\",
-    \\"readonly string[]\\"
+  "evaluation_environments": [
+    "undefined",
+    "readonly string[]"
   ],
-  \\"advanced_disable_toolbar_metrics\\": [
-    \\"false\\",
-    \\"true\\"
+  "advanced_disable_toolbar_metrics": [
+    "false",
+    "true"
   ],
-  \\"advanced_only_evaluate_survey_feature_flags\\": [
-    \\"false\\",
-    \\"true\\"
+  "advanced_only_evaluate_survey_feature_flags": [
+    "false",
+    "true"
   ],
-  \\"advanced_enable_surveys\\": [
-    \\"false\\",
-    \\"true\\"
+  "advanced_enable_surveys": [
+    "false",
+    "true"
   ],
-  \\"feature_flag_request_timeout_ms\\": \\"number\\",
-  \\"surveys_request_timeout_ms\\": \\"number\\",
-  \\"get_device_id\\": \\"(uuid: string) => string\\",
-  \\"before_send\\": [
-    \\"undefined\\",
-    \\"BeforeSendFn\\",
-    \\"BeforeSendFn[]\\"
+  "feature_flag_request_timeout_ms": "number",
+  "surveys_request_timeout_ms": "number",
+  "get_device_id": "(uuid: string) => string",
+  "before_send": [
+    "undefined",
+    "BeforeSendFn",
+    "BeforeSendFn[]"
   ],
-  \\"sanitize_properties\\": [
-    \\"null\\",
-    \\"(properties: Properties, event_name: string) => Properties\\"
+  "sanitize_properties": [
+    "null",
+    "(properties: Properties, event_name: string) => Properties"
   ],
-  \\"_onCapture\\": \\"(eventName: string, eventData: CaptureResult) => void\\",
-  \\"capture_performance\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\",
+  "_onCapture": "(eventName: string, eventData: CaptureResult) => void",
+  "capture_performance": [
+    "undefined",
+    "false",
+    "true",
     {
-      \\"network_timing\\": [
-        \\"undefined\\",
-        \\"false\\",
-        \\"true\\"
+      "network_timing": [
+        "undefined",
+        "false",
+        "true"
       ],
-      \\"web_vitals\\": [
-        \\"undefined\\",
-        \\"false\\",
-        \\"true\\"
+      "web_vitals": [
+        "undefined",
+        "false",
+        "true"
       ],
-      \\"__web_vitals_max_value\\": [
-        \\"undefined\\",
-        \\"number\\"
+      "__web_vitals_max_value": [
+        "undefined",
+        "number"
       ],
-      \\"web_vitals_allowed_metrics\\": [
-        \\"undefined\\",
-        \\"SupportedWebVitalsMetrics[]\\"
+      "web_vitals_allowed_metrics": [
+        "undefined",
+        "SupportedWebVitalsMetrics[]"
       ],
-      \\"web_vitals_delayed_flush_ms\\": [
-        \\"undefined\\",
-        \\"number\\"
+      "web_vitals_delayed_flush_ms": [
+        "undefined",
+        "number"
       ]
     }
   ],
-  \\"disable_compression\\": [
-    \\"false\\",
-    \\"true\\"
+  "disable_compression": [
+    "false",
+    "true"
   ],
-  \\"bootstrap\\": {
-    \\"distinctID\\": [
-      \\"undefined\\",
-      \\"string\\"
+  "bootstrap": {
+    "distinctID": [
+      "undefined",
+      "string"
     ],
-    \\"isIdentifiedID\\": [
-      \\"undefined\\",
-      \\"false\\",
-      \\"true\\"
+    "isIdentifiedID": [
+      "undefined",
+      "false",
+      "true"
     ],
-    \\"featureFlags\\": [
-      \\"undefined\\",
-      \\"Record<string, string | boolean>\\"
+    "featureFlags": [
+      "undefined",
+      "Record<string, string | boolean>"
     ],
-    \\"featureFlagPayloads\\": [
-      \\"undefined\\",
-      \\"Record<string, JsonType>\\"
+    "featureFlagPayloads": [
+      "undefined",
+      "Record<string, JsonType>"
     ],
-    \\"sessionID\\": [
-      \\"undefined\\",
-      \\"string\\"
+    "sessionID": [
+      "undefined",
+      "string"
     ]
   },
-  \\"segment\\": [
-    \\"undefined\\",
-    \\"SegmentAnalytics\\"
+  "segment": [
+    "undefined",
+    "SegmentAnalytics"
   ],
-  \\"capture_heatmaps\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\",
+  "capture_heatmaps": [
+    "undefined",
+    "false",
+    "true",
     {
-      \\"flush_interval_milliseconds\\": \\"number\\"
+      "flush_interval_milliseconds": "number"
     }
   ],
-  \\"enable_heatmaps\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\"
+  "enable_heatmaps": [
+    "undefined",
+    "false",
+    "true"
   ],
-  \\"capture_dead_clicks\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\",
+  "capture_dead_clicks": [
+    "undefined",
+    "false",
+    "true",
     [
-      \\"{ scroll_threshold_ms?: number | undefined; selection_change_threshold_ms?: number | undefined; mutation_threshold_ms?: number | undefined; __onCapture?: ((click: DeadClickCandidate, properties: Properties) => void) | undefined; }\\",
-      \\"Pick<AutocaptureConfig, \\\\\\"element_attribute_ignorelist\\\\\\">\\"
+      "{ scroll_threshold_ms?: number | undefined; selection_change_threshold_ms?: number | undefined; mutation_threshold_ms?: number | undefined; __onCapture?: ((click: DeadClickCandidate, properties: Properties) => void) | undefined; }",
+      "Pick<AutocaptureConfig, \\"element_attribute_ignorelist\\">"
     ]
   ],
-  \\"capture_exceptions\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\",
-    \\"ExceptionAutoCaptureConfig\\"
+  "capture_exceptions": [
+    "undefined",
+    "false",
+    "true",
+    "ExceptionAutoCaptureConfig"
   ],
-  \\"disable_scroll_properties\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\"
+  "disable_scroll_properties": [
+    "undefined",
+    "false",
+    "true"
   ],
-  \\"scroll_root_selector\\": [
-    \\"undefined\\",
-    \\"string\\",
-    \\"string[]\\"
+  "scroll_root_selector": [
+    "undefined",
+    "string",
+    "string[]"
   ],
-  \\"person_profiles\\": [
-    \\"undefined\\",
-    \\"\\\\\\"always\\\\\\"\\",
-    \\"\\\\\\"never\\\\\\"\\",
-    \\"\\\\\\"identified_only\\\\\\"\\"
+  "person_profiles": [
+    "undefined",
+    "\\"always\\"",
+    "\\"never\\"",
+    "\\"identified_only\\""
   ],
-  \\"process_person\\": [
-    \\"undefined\\",
-    \\"\\\\\\"always\\\\\\"\\",
-    \\"\\\\\\"never\\\\\\"\\",
-    \\"\\\\\\"identified_only\\\\\\"\\"
+  "process_person": [
+    "undefined",
+    "\\"always\\"",
+    "\\"never\\"",
+    "\\"identified_only\\""
   ],
-  \\"rate_limiting\\": [
-    \\"undefined\\",
-    \\"{ events_per_second?: number | undefined; events_burst_limit?: number | undefined; }\\"
+  "rate_limiting": [
+    "undefined",
+    "{ events_per_second?: number | undefined; events_burst_limit?: number | undefined; }"
   ],
-  \\"fetch_options\\": [
-    \\"undefined\\",
-    \\"{ cache?: RequestCache | undefined; next_options?: NextOptions | undefined; }\\"
+  "fetch_options": [
+    "undefined",
+    "{ cache?: RequestCache | undefined; next_options?: NextOptions | undefined; }"
   ],
-  \\"request_queue_config\\": [
-    \\"undefined\\",
+  "request_queue_config": [
+    "undefined",
     {
-      \\"flush_interval_ms\\": [
-        \\"undefined\\",
-        \\"number\\"
+      "flush_interval_ms": [
+        "undefined",
+        "number"
       ]
     }
   ],
-  \\"integrations\\": [
-    \\"undefined\\",
-    \\"Record<ExternalIntegrationKind, boolean>\\"
+  "integrations": [
+    "undefined",
+    "Record<ExternalIntegrationKind, boolean>"
   ],
-  \\"cookieless_mode\\": [
-    \\"undefined\\",
-    \\"\\\\\\"always\\\\\\"\\",
-    \\"\\\\\\"on_reject\\\\\\"\\"
+  "cookieless_mode": [
+    "undefined",
+    "\\"always\\"",
+    "\\"on_reject\\""
   ],
-  \\"__add_tracing_headers\\": [
-    \\"undefined\\",
-    \\"string[]\\"
+  "__add_tracing_headers": [
+    "undefined",
+    "string[]"
   ],
-  \\"__preview_remote_config\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\"
+  "__preview_remote_config": [
+    "undefined",
+    "false",
+    "true"
   ],
-  \\"__preview_flags_v2\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\"
+  "__preview_flags_v2": [
+    "undefined",
+    "false",
+    "true"
   ],
-  \\"__preview_eager_load_replay\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\"
+  "__preview_eager_load_replay": [
+    "undefined",
+    "false",
+    "true"
   ],
-  \\"__preview_disable_beacon\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\"
+  "__preview_disable_beacon": [
+    "undefined",
+    "false",
+    "true"
   ],
-  \\"__preview_disable_xhr_credentials\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\"
+  "__preview_disable_xhr_credentials": [
+    "undefined",
+    "false",
+    "true"
   ],
-  \\"__preview_lazy_load_replay\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\"
+  "__preview_lazy_load_replay": [
+    "undefined",
+    "false",
+    "true"
   ],
-  \\"api_method\\": [
-    \\"undefined\\",
-    \\"string\\"
+  "api_method": [
+    "undefined",
+    "string"
   ],
-  \\"inapp_protocol\\": [
-    \\"undefined\\",
-    \\"string\\"
+  "inapp_protocol": [
+    "undefined",
+    "string"
   ],
-  \\"inapp_link_new_window\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\"
+  "inapp_link_new_window": [
+    "undefined",
+    "false",
+    "true"
   ],
-  \\"ip\\": [
-    \\"false\\",
-    \\"true\\"
+  "ip": [
+    "false",
+    "true"
   ]
 }"
 `;

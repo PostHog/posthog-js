@@ -17,7 +17,7 @@ module.exports = {
   },
   overrides: [
     {
-      files: 'src/optional/**',
+      files: 'src/**',
       rules: {
         '@typescript-eslint/no-require-imports': 'off',
       },

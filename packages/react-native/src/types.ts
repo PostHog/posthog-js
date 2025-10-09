@@ -150,17 +150,3 @@ export interface PostHogCustomStorage {
   getItem: (key: string) => string | null | Promise<string | null>
   setItem: (key: string, value: string) => void | Promise<void>
 }
-
-export interface PostHogRNOptions {
-  /**
-   * Evaluation environments for feature flags.
-   * When set, only feature flags that have at least one matching evaluation tag
-   * will be evaluated for this SDK instance. Feature flags with no evaluation tags
-   * will always be evaluated.
-   *
-   * Examples: ['production', 'mobile', 'react-native']
-   *
-   * @default undefined
-   */
-  evaluationEnvironments?: readonly string[]
-}
