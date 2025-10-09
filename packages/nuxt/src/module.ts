@@ -2,8 +2,8 @@ import { defineNuxtModule, addPlugin, createResolver, addServerPlugin } from '@n
 import type { PostHogConfig } from 'posthog-js'
 import type { PostHogOptions } from 'posthog-node'
 import { spawnLocal } from '@posthog/core/process'
-import { fileURLToPath } from 'url'
-import { dirname } from 'path'
+import { fileURLToPath } from 'node:url'
+import { dirname } from 'node:path'
 
 const VUE_OUTPUT_DIRECTORY = '.output/public'
 const NITRO_OUTPUT_DIRECTORY = '.output/server/chunks'
