@@ -762,10 +762,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._clearBuffer()
         clearInterval(this._fullSnapshotTimer)
-        if (this._flushBufferTimer) {
-            clearTimeout(this._flushBufferTimer)
-            this._flushBufferTimer = undefined
-        }
+        this._clearFlushBufferTimer()
 
         this._removePageViewCaptureHook?.()
         this._removePageViewCaptureHook = undefined
@@ -945,11 +942,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._activateTrigger(triggerType)
     }
 
-    private _flushBuffer(): SnapshotBuffer {
+    private _clearFlushBufferTimer() {
         if (this._flushBufferTimer) {
             clearTimeout(this._flushBufferTimer)
             this._flushBufferTimer = undefined
         }
+    }
+
+    private _flushBuffer(): SnapshotBuffer {
+        this._clearFlushBufferTimer()
 
         const minimumDuration = this._minimumDuration
         const sessionDuration = this._sessionDuration
