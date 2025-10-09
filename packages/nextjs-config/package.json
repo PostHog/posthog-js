@@ -21,7 +21,7 @@
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "build": "rslib build",
-    "test:unit": "jest",
+    "test:unit": "jest --passWithNoTests",
     "dev": "rslib build --watch",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
