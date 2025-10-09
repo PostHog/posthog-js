@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.9.5
+
+### Patch Changes
+
+- Updated dependencies [[`10da2ee`](https://github.com/PostHog/posthog-js/commit/10da2ee0b8862ad0e32b68e452fae1bc77620bbf)]:
+  - @posthog/core@1.2.4
+
 ## 5.9.4
 
 ### Patch Changes

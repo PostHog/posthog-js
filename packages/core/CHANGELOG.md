@@ -1,5 +1,11 @@
 # @posthog/core
 
+## 1.2.4
+
+### Patch Changes
+
+- [#2419](https://github.com/PostHog/posthog-js/pull/2419) [`10da2ee`](https://github.com/PostHog/posthog-js/commit/10da2ee0b8862ad0e32b68e452fae1bc77620bbf) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - move binary calling logic to core package
+
 ## 1.2.3
 
 ### Patch Changes
