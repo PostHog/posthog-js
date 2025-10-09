@@ -1,5 +1,16 @@
 # posthog-js
 
+## 1.274.0
+
+### Minor Changes
+
+- [#2404](https://github.com/PostHog/posthog-js/pull/2404) [`39ace01`](https://github.com/PostHog/posthog-js/commit/39ace016839ceaf2dac9a224612c78e45e26620c) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: remove eager loaded replay and reduce bundle size by 14.8%
+
+### Patch Changes
+
+- Updated dependencies [[`e19a384`](https://github.com/PostHog/posthog-js/commit/e19a384468d722c12f4ef21feb684da31f9dcd3b)]:
+    - @posthog/core@1.2.3
+
 ## 1.273.1
 
 ### Patch Changes
