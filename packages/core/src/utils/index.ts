@@ -5,7 +5,6 @@ export * from './number-utils'
 export * from './string-utils'
 export * from './type-utils'
 export * from './promise-queue'
-export * from './call-posthog-cli'
 
 export const STRING_FORMAT = 'utf8'
 
