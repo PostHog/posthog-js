@@ -1,10 +1,14 @@
-import { PostHog } from '@/entrypoints/index.node'
+import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation, isPending, wait, waitForPromises } from './utils'
 import { randomUUID } from 'crypto'
 
 jest.mock('../version', () => ({ version: '1.2.3' }))
 
 const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+
+const posthogImmediateResolveOptions: PostHogOptions = {
+  fetchRetryCount: 0,
+}
 
 const waitForFlushTimer = async (): Promise<void> => {
   await waitForPromises()
@@ -2466,6 +2470,92 @@ describe('PostHog Node.js', () => {
       )
 
       errorSpy.mockRestore()
+    })
+  })
+
+  describe('evaluation environments', () => {
+    beforeEach(() => {
+      mockedFetch.mockClear()
+    })
+
+    it('should send evaluation environments when configured', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          decideFlags: { 'test-flag': true },
+          flagsPayloads: {},
+        })
+      )
+
+      const posthogWithEnvs = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        evaluationEnvironments: ['production', 'backend'],
+        ...posthogImmediateResolveOptions,
+      })
+
+      await posthogWithEnvs.getAllFlags('some-distinct-id')
+
+      expect(mockedFetch).toHaveBeenCalledWith(
+        'http://example.com/flags/?v=2&config=true',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"evaluation_environments":["production","backend"]'),
+        })
+      )
+
+      await posthogWithEnvs.shutdown()
+    })
+
+    it('should not send evaluation environments when not configured', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          decideFlags: { 'test-flag': true },
+          flagsPayloads: {},
+        })
+      )
+
+      const posthogWithoutEnvs = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        ...posthogImmediateResolveOptions,
+      })
+
+      await posthogWithoutEnvs.getAllFlags('some-distinct-id')
+
+      expect(mockedFetch).toHaveBeenCalledWith(
+        'http://example.com/flags/?v=2&config=true',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.not.stringContaining('evaluation_environments'),
+        })
+      )
+
+      await posthogWithoutEnvs.shutdown()
+    })
+
+    it('should not send evaluation environments when configured as empty array', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          decideFlags: { 'test-flag': true },
+          flagsPayloads: {},
+        })
+      )
+
+      const posthogWithEmptyEnvs = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        evaluationEnvironments: [],
+        ...posthogImmediateResolveOptions,
+      })
+
+      await posthogWithEmptyEnvs.getAllFlags('some-distinct-id')
+
+      expect(mockedFetch).toHaveBeenCalledWith(
+        'http://example.com/flags/?v=2&config=true',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.not.stringContaining('evaluation_environments'),
+        })
+      )
+
+      await posthogWithEmptyEnvs.shutdown()
     })
   })
 
