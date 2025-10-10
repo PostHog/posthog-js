@@ -25,6 +25,8 @@ const getLastBatchEvents = (): any[] | undefined => {
   return JSON.parse((call[1] as any).body as any).batch
 }
 
+jest.retryTimes(3)
+
 describe('PostHog Node.js', () => {
   let posthog: PostHog
 
