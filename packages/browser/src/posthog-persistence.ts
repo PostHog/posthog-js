@@ -78,7 +78,12 @@ export class PostHogPersistence {
         this.save()
     }
 
-    public isDisabled(): boolean {
+    /**
+     * Returns whether persistence is disabled. Only available in SDKs > 1.257.1. Do not use on extensions, otherwise
+     * it'll break backwards compatibility for any version before 1.257.1.
+     * @returns
+     */
+    public isDisabled?(): boolean {
         return !!this._disabled
     }
 
