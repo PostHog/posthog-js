@@ -2316,6 +2316,26 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_forceIdleSessionIdListener']).toBeUndefined()
         })
 
+        it('clears persist flags session listener on stop', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            // The listener is created in onRemoteConfig via _persistRemoteConfig
+            const mockListener = jest.fn()
+            sessionRecording['_persistFlagsOnSessionListener'] = mockListener
+            expect(sessionRecording['_persistFlagsOnSessionListener']).toBeDefined()
+
+            sessionRecording.stopRecording()
+
+            expect(mockListener).toHaveBeenCalled()
+            expect(sessionRecording['_persistFlagsOnSessionListener']).toBeUndefined()
+        })
+
         it('sets the window event listeners', () => {
             //mock window add event listener to check if it is called
             window.addEventListener = jest.fn().mockImplementation(() => () => {})
