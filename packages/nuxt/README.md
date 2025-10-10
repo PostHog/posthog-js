@@ -30,23 +30,17 @@ export default defineNuxtConfig({
     },
   },
 
-  posthog: {
+  posthogConfig: {
     host: 'http://localhost:8010', // (optional) Host URL, defaults to https://us.posthog.com
-    publicApiKey: 'public api key', // Your public web snippet key. You can find it in settings
-    nuxt: {
-      exceptionAutoCaptureEnabled: true, // Enables vue runtime plugin which forwards exceptions caught via vue:error hook
-      configOverride?: Partial<PostHogConfig> // (optional) It will be passed to the posthog-js client on init in vue
-    },
-    nitro: {
-      exceptionAutoCaptureEnabled: true, // Enables nuxt runtime plugin which forwards exceptions caught via error hook
-      configOverride?: PostHogOptions // (optional) It will be passed to the posthog-node client on init in nitro
-    },
+    publicKey: 'public api key', // Your public web snippet key. You can find it in settings
+    clientConfig?: Partial<PostHogConfig> // (optional) It will be passed to the posthog-js client on init in vue
+    serverConfig?: PostHogOptions // (optional) It will be passed to the posthog-node client on init in nitro. Please note that this client instance is intended for error-tracking purposes only
     sourceMaps: {
       enabled: true, // Enables sourcemaps generation and upload
       envId: '2', // Environment ID, see https://app.posthog.com/settings/environment#variables
       project: 'my-application', // (optional) Project name, defaults to git repository name
       version: '1.0.0', // (optional) Release version, defaults to current git commit
-      privateApiKey: 'private api key', // Your personal API key. You can generate it in settings -> Personal API keys
+      personalApiKey: 'personal api key', // Your personal API key. You can generate it in settings -> Personal API keys
     },
   },
 })

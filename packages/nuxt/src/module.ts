@@ -28,8 +28,8 @@ export interface ModuleOptions {
   host: string
   publicKey: string
   debug?: boolean
-  clientConfig: Partial<PostHogConfig>
-  serverConfig: PostHogOptions
+  clientConfig?: Partial<PostHogConfig>
+  serverConfig?: PostHogOptions
   sourcemaps: DisabledSourcemaps | EnabledSourcemaps | undefined
 }
 
