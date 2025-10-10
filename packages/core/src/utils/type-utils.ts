@@ -1,3 +1,4 @@
+import { ErrorTracking } from '..'
 import { knownUnsafeEditableEvent, KnownUnsafeEditableEvent } from '../types'
 import { includes } from './string-utils'
 
@@ -126,6 +127,17 @@ export function isEvent(candidate: unknown): candidate is Event {
 
 export function isPlainObject(candidate: unknown): candidate is Record<string, unknown> {
   return isBuiltin(candidate, 'Object')
+}
+
+export function isErrorTrackingExceptionList(candidate: unknown): candidate is ErrorTracking.ExceptionList {
+  if (isNullish(candidate) || !isArray(candidate)) {
+    return false
+  }
+  return candidate.every((i) => isErrorTrackingException(i))
+}
+
+export function isErrorTrackingException(candidate: unknown): candidate is ErrorTracking.Exception {
+  return !isNullish(candidate) && isPlainObject(candidate) && 'stacktrace' in candidate
 }
 
 export const yesLikeValues = [true, 'true', 1, '1', 'yes']
