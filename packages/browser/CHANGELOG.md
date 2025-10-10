@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.274.3
+
+### Patch Changes
+
+- [#2423](https://github.com/PostHog/posthog-js/pull/2423) [`2d4eac4`](https://github.com/PostHog/posthog-js/commit/2d4eac4cef765bec996a887f0c1124fe7db759a7) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: another small potential memory leak in the recorder wrapping code"
+
 ## 1.274.2
 
 ### Patch Changes
