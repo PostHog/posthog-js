@@ -2972,6 +2972,7 @@ export class PostHog {
                 distinct_id: COOKIELESS_SENTINEL_VALUE,
                 $device_id: null,
             })
+            this.sessionManager?.destroy()
             this.sessionManager = undefined
             this.sessionPropsManager = undefined
             this.sessionRecording?.stopRecording()
