@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.275.0
+
+### Minor Changes
+
+- [#2426](https://github.com/PostHog/posthog-js/pull/2426) [`ae941c2`](https://github.com/PostHog/posthog-js/commit/ae941c27673e50d01cecdbf55364cffa894379c4) Thanks [@thmsobrmlr](https://github.com/thmsobrmlr)! - Apply $current_url masking in web vitals and heatmaps extensions.
+
 ## 1.274.3
 
 ### Patch Changes
