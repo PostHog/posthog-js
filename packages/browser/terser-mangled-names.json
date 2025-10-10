@@ -16,6 +16,7 @@
         "_applyTransforms",
         "_areWeOnline",
         "_asRequiredConfig",
+        "_beforeUnloadListener",
         "_bucketSize",
         "_buckets",
         "_buffer",

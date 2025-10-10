@@ -2905,6 +2905,7 @@ export class PostHog {
             // If the user has explicitly opted out on_reject mode, then before we can start sending regular non-cookieless events
             // we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
             this.reset(true)
+            this.sessionManager?.destroy()
             this.sessionManager = new SessionIdManager(this)
             if (this.persistence) {
                 this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
@@ -2971,6 +2972,7 @@ export class PostHog {
                 distinct_id: COOKIELESS_SENTINEL_VALUE,
                 $device_id: null,
             })
+            this.sessionManager?.destroy()
             this.sessionManager = undefined
             this.sessionPropsManager = undefined
             this.sessionRecording?.stopRecording()
