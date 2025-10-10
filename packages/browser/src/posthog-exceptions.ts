@@ -4,7 +4,7 @@ import { PostHog } from './posthog-core'
 import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
 import { propertyComparisons } from './utils/property-utils'
-import { isString, isArray, ErrorTracking } from '@posthog/core'
+import { isString, isArray, isErrorTrackingExceptionList, ErrorTracking } from '@posthog/core'
 
 const logger = createLogger('[Error tracking]')
 
@@ -86,7 +86,7 @@ export class PostHogExceptions {
     private _matchesSuppressionRule(properties: Properties): boolean {
         const exceptionList = properties.$exception_list
 
-        if (!exceptionList || !isArray(exceptionList) || exceptionList.length === 0) {
+        if (!isErrorTrackingExceptionList(exceptionList) || exceptionList.length === 0) {
             return false
         }
 
@@ -101,8 +101,8 @@ export class PostHogExceptions {
                 return acc
             },
             {
-                $exception_types: [],
-                $exception_values: [],
+                $exception_types: [] as string[],
+                $exception_values: [] as string[],
             }
         )
 
@@ -120,11 +120,11 @@ export class PostHogExceptions {
     private _isExtensionException(properties: Properties): boolean {
         const exceptionList = properties.$exception_list
 
-        if (!exceptionList || !isArray(exceptionList)) {
-            return false
+        if (isErrorTrackingExceptionList(exceptionList)) {
+            const frames = exceptionList.flatMap((e) => e.stacktrace?.frames ?? [])
+            return frames.some((f) => f.filename && f.filename.startsWith('chrome-extension://'))
         }
 
-        const frames = (exceptionList as ErrorTracking.Exception[]).flatMap((e) => e.stacktrace?.frames ?? [])
-        return frames.some((f) => f.filename && f.filename.startsWith('chrome-extension://'))
+        return false
     }
 }
