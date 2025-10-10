@@ -93,4 +93,19 @@ describe('enable_bootstrap_from_url config', () => {
         expect(posthog.get_distinct_id()).toBe('anon-user')
         expect(posthog.persistence?.get_property('$user_state')).toBe('anonymous')
     })
+
+    it('should preserve explicit bootstrap config when enable_bootstrap_from_url is false (default)', () => {
+        posthog._init('test-token', {
+            persistence: 'memory',
+            enable_bootstrap_from_url: false,
+            bootstrap: {
+                distinctID: 'automated-tester',
+                isIdentifiedID: true,
+            },
+        })
+
+        // Should use explicit bootstrap config, even with URL params present
+        expect(posthog.get_distinct_id()).toBe('automated-tester')
+        expect(posthog.persistence?.get_property('$user_state')).toBe('identified')
+    })
 })

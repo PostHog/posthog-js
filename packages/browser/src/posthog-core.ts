@@ -228,17 +228,15 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     __preview_eager_load_replay: false,
 })
 
-export const maybeBootstrapFromUrl = (
-    origConfig: Partial<PostHogConfig>
-): { bootstrap: Partial<BootstrapConfig> | undefined } => {
+export const maybeBootstrapFromUrl = (origConfig: Partial<PostHogConfig>): { bootstrap?: Partial<BootstrapConfig> } => {
     // Don't bootstrap from URL if feature disabled or in SSR
     if (!origConfig.enable_bootstrap_from_url || typeof window === 'undefined') {
-        return { bootstrap: {} }
+        return {}
     }
 
     // If explicit bootstrap config provided, skip URL bootstrap (explicit takes priority)
     if (origConfig.bootstrap && !isEmptyObject(origConfig.bootstrap)) {
-        return { bootstrap: {} }
+        return {}
     }
 
     const distinctID = getQueryParam(window.location.href, `__ph_distinct_id`)
