@@ -4,6 +4,9 @@ import { createLogger } from '../../utils/logger'
 import { isBoolean, isNullish, isNumber, isUndefined, isObject } from '@posthog/core'
 import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { assignableWindow, window, location } from '../../utils/globals'
+import { maskQueryParams } from '../../utils/request-utils'
+import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from '../../utils/event-utils'
+import { extendArray } from '../../utils'
 
 const logger = createLogger('[Web Vitals]')
 
@@ -118,12 +121,21 @@ export class WebVitalsAutocapture {
     }
 
     private _currentURL(): string | undefined {
-        // TODO you should be able to mask the URL here
         const href = window ? window.location.href : undefined
         if (!href) {
             logger.error('Could not determine current URL')
+            return undefined
         }
-        return href
+
+        // mask url query params
+        const maskPersonalDataProperties = this._instance.config.mask_personal_data_properties
+        const customPersonalDataProperties = this._instance.config.custom_personal_data_properties
+
+        const paramsToMask = maskPersonalDataProperties
+            ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
+            : []
+
+        return maskQueryParams(href, paramsToMask, MASKED)
     }
 
     private _flushToCapture = () => {
