@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.274.2
+
+### Patch Changes
+
+- [#2421](https://github.com/PostHog/posthog-js/pull/2421) [`43b8029`](https://github.com/PostHog/posthog-js/commit/43b80293301bae1a2b97a3c0b2a967ff88506904) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: potential source of memory leak in recorder mutation throttler
+
 ## 1.274.1
 
 ### Patch Changes
