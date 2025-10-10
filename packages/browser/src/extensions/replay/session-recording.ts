@@ -119,6 +119,8 @@ export class SessionRecording {
     }
 
     stopRecording() {
+        this._persistFlagsOnSessionListener?.()
+        this._persistFlagsOnSessionListener = undefined
         this._lazyLoadedSessionRecording?.stop()
     }
 
