@@ -39,7 +39,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.ref }}
-          token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+          token: ${{ secrets.POSTHOG_BOT_PAT }}
           fetch-depth: 0
 
       - uses: ./.github/actions/setup
