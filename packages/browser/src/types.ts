@@ -286,6 +286,15 @@ export interface PostHogConfig {
     api_host: string
 
     /**
+     * URL to use for feature flag requests specifically.
+     * If not set, feature flag requests will use the URL derived from `api_host`.
+     * This is useful when you want to route feature flag requests to a different endpoint than other analytic APIs.
+     *
+     * @default null
+     */
+    flags_api_host?: string | null
+
+    /**
      * If using a reverse proxy for `api_host` then this should be the actual PostHog app URL (e.g. https://us.posthog.com).
      * This ensures that links to PostHog point to the correct host.
      *
