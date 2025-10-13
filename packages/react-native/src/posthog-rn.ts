@@ -1011,7 +1011,6 @@ export class PostHog extends PostHogCore {
       }
     } catch (error) {
       this.logMsgIfDebug(() => console.error('PostHog Debug', 'Error loading surveys from API:', error))
-      this._cacheSurveys(null, 'API (error)')
     }
   }
 
