@@ -158,6 +158,12 @@ describe('PostHogExceptions', () => {
                 )
             })
 
+            it('captures the exception if a frame from the PostHog SDK is not the kaboom frame', () => {
+                const exception = { stacktrace: { frames: [posthogFrame, inAppFrame], type: 'raw' } }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
             it('captures exceptions thrown within the PostHog SDK when enabled', () => {
                 config.error_tracking.capturePostHogExceptions = true
                 const exception = { stacktrace: { frames: [inAppFrame, posthogFrame], type: 'raw' } }

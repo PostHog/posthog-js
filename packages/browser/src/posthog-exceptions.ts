@@ -137,7 +137,8 @@ export class PostHogExceptions {
     private _isPostHogException(exceptionList: ErrorTracking.ExceptionList): boolean {
         if (exceptionList.length > 0) {
             const exception = exceptionList[0]
-            const lastFrame = exception.stacktrace?.frames?.[exceptionList.length - 1]
+            const frames = exception.stacktrace?.frames ?? []
+            const lastFrame = frames[frames.length - 1]
             return lastFrame?.filename?.includes('posthog.com/static') ?? false
         }
 
