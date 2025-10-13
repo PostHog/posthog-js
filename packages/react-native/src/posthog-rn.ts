@@ -947,7 +947,7 @@ export class PostHog extends PostHogCore {
     const surveys = response.surveys
 
     // If surveys is not an array, it means there are no surveys (its a boolean)
-    if (Array.isArray(surveys)) {
+    if (Array.isArray(surveys) && surveys.length > 0) {
       this._cacheSurveys(surveys as Survey[], 'remote config')
     } else {
       this._cacheSurveys(null, 'remote config')
@@ -976,7 +976,7 @@ export class PostHog extends PostHogCore {
           const surveys = responseWithSurveys.surveys
 
           // If surveys is not an array, it means there are no surveys (its a boolean)
-          if (Array.isArray(surveys)) {
+          if (Array.isArray(surveys) && surveys.length > 0) {
             this._cacheSurveys(surveys as Survey[], 'flags endpoint')
           } else {
             this._cacheSurveys(null, 'flags endpoint')
