@@ -890,7 +890,7 @@ export class PostHog extends PostHogCore {
    * Returns a promise that resolves when surveys are ready to be loaded.
    * If surveys are already loaded and ready to go, returns a resolved promise instead.
    */
-  public onSurveysReady(): Promise<void> {
+  private onSurveysReady(): Promise<void> {
     if (this._surveysReady) {
       // If surveys are already ready, resolve immediately
       return Promise.resolve()
