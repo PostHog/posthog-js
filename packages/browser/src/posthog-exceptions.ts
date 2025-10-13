@@ -4,7 +4,7 @@ import { PostHog } from './posthog-core'
 import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
 import { propertyComparisons } from './utils/property-utils'
-import { isString, isArray, isErrorTrackingExceptionList, ErrorTracking } from '@posthog/core'
+import { isString, isArray, ErrorTracking, isNullish } from '@posthog/core'
 
 const logger = createLogger('[Error tracking]')
 
@@ -67,14 +67,26 @@ export class PostHogExceptions {
     }
 
     sendExceptionEvent(properties: Properties): CaptureResult | undefined {
-        if (this._matchesSuppressionRule(properties)) {
-            logger.info('Skipping exception capture because a suppression rule matched')
-            return
-        }
+        const exceptionList = properties.$exception_list
 
-        if (!this._captureExtensionExceptions && this._isExtensionException(properties)) {
-            logger.info('Skipping exception capture because it was thrown by an extension')
-            return
+        if (this._isExceptionList(exceptionList)) {
+            if (this._matchesSuppressionRule(exceptionList)) {
+                logger.info('Skipping exception capture because a suppression rule matched')
+                return
+            }
+
+            if (!this._captureExtensionExceptions && this._isExtensionException(exceptionList)) {
+                logger.info('Skipping exception capture because it was thrown by an extension')
+                return
+            }
+
+            if (
+                !this._instance.config.error_tracking.capturePostHogExceptions &&
+                this._isPostHogException(exceptionList)
+            ) {
+                logger.info('Skipping exception capture because it was thrown by an extension')
+                return
+            }
         }
 
         return this._instance.capture('$exception', properties, {
@@ -83,10 +95,8 @@ export class PostHogExceptions {
         })
     }
 
-    private _matchesSuppressionRule(properties: Properties): boolean {
-        const exceptionList = properties.$exception_list
-
-        if (!isErrorTrackingExceptionList(exceptionList) || exceptionList.length === 0) {
+    private _matchesSuppressionRule(exceptionList: ErrorTracking.ExceptionList): boolean {
+        if (exceptionList.length === 0) {
             return false
         }
 
@@ -117,14 +127,24 @@ export class PostHogExceptions {
         })
     }
 
-    private _isExtensionException(properties: Properties): boolean {
-        const exceptionList = properties.$exception_list
+    private _isExtensionException(exceptionList: ErrorTracking.ExceptionList): boolean {
+        const frames = exceptionList.flatMap((e) => e.stacktrace?.frames ?? [])
+        return frames.some((f) => f.filename && f.filename.startsWith('chrome-extension://'))
 
-        if (isErrorTrackingExceptionList(exceptionList)) {
-            const frames = exceptionList.flatMap((e) => e.stacktrace?.frames ?? [])
-            return frames.some((f) => f.filename && f.filename.startsWith('chrome-extension://'))
+        return false
+    }
+
+    private _isPostHogException(exceptionList: ErrorTracking.ExceptionList): boolean {
+        if (exceptionList.length > 0) {
+            const exception = exceptionList[0]
+            const lastFrame = exception.stacktrace?.frames?.[exceptionList.length - 1]
+            return lastFrame?.filename?.includes('posthog.com/static') ?? false
         }
 
         return false
+    }
+
+    private _isExceptionList(candidate: unknown): candidate is ErrorTracking.ExceptionList {
+        return !isNullish(candidate) && isArray(candidate)
     }
 }

@@ -27,8 +27,8 @@ export interface ErrorProperties {
 }
 
 export interface Exception {
-  type?: string
-  value?: string
+  type: string
+  value: string
   mechanism?: Mechanism
   module?: string
   thread_id?: number
