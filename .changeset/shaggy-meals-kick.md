@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-fix: allow turning off debug mode"
+fix: allow turning off debug mode
