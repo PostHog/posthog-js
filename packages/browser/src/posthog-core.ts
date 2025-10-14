@@ -2517,7 +2517,10 @@ export class PostHog {
                     ? this.persistence
                     : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, isPersistenceDisabled)
 
-            this.config.debug = this._checkLocalStorageForDebug(this.config.debug)
+            const debugConfigFromLocalStorage = this._checkLocalStorageForDebug(this.config.debug)
+            if (isBoolean(debugConfigFromLocalStorage)) {
+                this.config.debug = debugConfigFromLocalStorage
+            }
 
             if (isBoolean(this.config.debug)) {
                 if (this.config.debug) {
