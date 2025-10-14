@@ -41,6 +41,7 @@
         "_checkClickTimer",
         "_checkClicks",
         "_checkFlags",
+        "_checkLocalStorageForDebug",
         "_checkStep",
         "_checkStepElement",
         "_checkStepEvent",
