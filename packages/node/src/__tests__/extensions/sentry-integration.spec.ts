@@ -129,7 +129,6 @@ describe('PostHogSentryIntegration', () => {
           ],
           $exception_message: 'example error',
           $exception_type: 'Error',
-          $exception_personURL: 'http://example.com/project/TEST_API_KEY/person/EXAMPLE_APP_GLOBAL',
           $sentry_event_id: '80a7023ac32c47f7acb0adaed600d149',
           $sentry_exception: {
             values: [

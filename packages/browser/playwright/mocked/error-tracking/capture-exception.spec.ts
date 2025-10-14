@@ -144,7 +144,6 @@ async function exceptionMatch(
 ) {
     expect(exception.event).toEqual('$exception')
     expect(exception.properties.$exception_source).toBeUndefined()
-    expect(exception.properties.$exception_personURL).toBeUndefined()
     expect(exception.properties.$exception_list).toHaveLength(exceptionCount)
     expect(exception.properties.$exception_list[0].type).toEqual(type)
     expect(exception.properties.$exception_list[0].value).toEqual(value)
