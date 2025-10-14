@@ -53,7 +53,7 @@ describe('posthog core', () => {
         })
 
         it('log when setting debug to undefined', () => {
-            const posthog = defaultPostHog().init(uuidv7(), { debug: false, disable_surveys: true })!
+            const posthog = defaultPostHog().init(uuidv7(), { debug: false })!
             posthog.debug()
             expect(console.log).toHaveBeenCalledWith(
                 "You're now in debug mode. All calls to PostHog will be logged in your console.\nYou can disable this with `posthog.debug(false)`."
@@ -61,7 +61,7 @@ describe('posthog core', () => {
         })
 
         it('log when setting debug to true', () => {
-            const posthog = defaultPostHog().init(uuidv7(), { debug: false, disable_surveys: true })!
+            const posthog = defaultPostHog().init(uuidv7(), { debug: false })!
             posthog.debug(true)
             expect(console.log).toHaveBeenCalledWith(
                 "You're now in debug mode. All calls to PostHog will be logged in your console.\nYou can disable this with `posthog.debug(false)`."
@@ -74,7 +74,7 @@ describe('posthog core', () => {
         const eventProperties = {
             event: 'prop',
         }
-        const setup = (config: Partial<PostHogConfig> = { disable_surveys: true }, token: string = uuidv7()) => {
+        const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
             const beforeSendMock = jest.fn().mockImplementation((e) => e)
             const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
             posthog.debug()
@@ -86,7 +86,6 @@ describe('posthog core', () => {
             const { posthog } = setup({
                 property_denylist: ['$lib', 'persistent', '$is_identified'],
                 property_blacklist: ['token'],
-                disable_surveys: true,
             })
 
             // act
