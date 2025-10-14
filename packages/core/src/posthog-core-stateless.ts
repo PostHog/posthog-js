@@ -450,11 +450,13 @@ export abstract class PostHogCoreStateless {
     groups: Record<string, string | number> = {},
     personProperties: Record<string, string> = {},
     groupProperties: Record<string, Record<string, string>> = {},
-    extraPayload: Record<string, any> = {}
+    extraPayload: Record<string, any> = {},
+    fetchConfig: boolean = true
   ): Promise<PostHogFlagsResponse | undefined> {
     await this._initPromise
 
-    const url = `${this.host}/flags/?v=2&config=true`
+    const configParam = fetchConfig ? '&config=true' : ''
+    const url = `${this.host}/flags/?v=2${configParam}`
     const requestData: Record<string, any> = {
       token: this.apiKey,
       distinct_id: distinctId,

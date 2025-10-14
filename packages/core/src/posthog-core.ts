@@ -450,12 +450,15 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   /***
    *** FEATURE FLAGS
    ***/
-  private async flagsAsync(sendAnonDistinctId: boolean = true): Promise<PostHogFlagsResponse | undefined> {
+  protected async flagsAsync(
+    sendAnonDistinctId: boolean = true,
+    fetchConfig: boolean = true
+  ): Promise<PostHogFlagsResponse | undefined> {
     await this._initPromise
     if (this._flagsResponsePromise) {
       return this._flagsResponsePromise
     }
-    return this._flagsAsync(sendAnonDistinctId)
+    return this._flagsAsync(sendAnonDistinctId, fetchConfig)
   }
 
   private cacheSessionReplay(source: string, response?: PostHogRemoteConfig): void {
@@ -545,7 +548,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return this._remoteConfigResponsePromise
   }
 
-  private async _flagsAsync(sendAnonDistinctId: boolean = true): Promise<PostHogFlagsResponse | undefined> {
+  private async _flagsAsync(
+    sendAnonDistinctId: boolean = true,
+    fetchConfig: boolean = true
+  ): Promise<PostHogFlagsResponse | undefined> {
     this._flagsResponsePromise = this._initPromise
       .then(async () => {
         const distinctId = this.getDistinctId()
@@ -565,7 +571,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           groups as PostHogGroupProperties,
           personProperties,
           groupProperties,
-          extraProperties
+          extraProperties,
+          fetchConfig
         )
         // Add check for quota limitation on feature flags
         if (res?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {

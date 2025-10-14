@@ -173,7 +173,7 @@ export type PostHogRemoteConfig = {
 
 export type FeatureFlagValue = string | boolean
 
-export type PostHogFlagsResponse = Omit<PostHogRemoteConfig, 'surveys' | 'hasFeatureFlags'> & {
+export type PostHogFlagsResponse = Omit<PostHogRemoteConfig, 'hasFeatureFlags'> & {
   featureFlags: {
     [key: string]: FeatureFlagValue
   }
