@@ -38,6 +38,7 @@ describe('posthog.set_config', () => {
     })
 
     afterEach(() => {
+        defaultPostHog().reset()
         Object.defineProperty(window, 'location', {
             configurable: true,
             enumerable: true,
@@ -62,8 +63,6 @@ describe('posthog.set_config', () => {
                 expect(posthog.config.debug).toBe(expectedDebug)
                 expect(Config.DEBUG).toBe(expectedDebug)
                 expect(localStorage.getItem('ph_debug')).toBe(expectedStorage)
-
-                posthog.reset()
             }
         )
 
@@ -72,14 +71,10 @@ describe('posthog.set_config', () => {
             localStorage.setItem('ph_debug', 'true')
             const token = uuidv7()
 
-            // Empty config uses defaults, which sets debug to false
             const posthog = defaultPostHog().init(token, {}, token)!
 
-            // Debug stays false because default config has debug: false
             expect(posthog.config.debug).toBe(true)
             expect(Config.DEBUG).toBe(true)
-
-            posthog.reset()
         })
 
         it('should persist debug=true to localStorage when set', () => {
@@ -90,8 +85,6 @@ describe('posthog.set_config', () => {
             posthog.set_config({ debug: true })
 
             expect(localStorage.getItem('ph_debug')).toBe('"true"')
-
-            posthog.reset()
         })
 
         it('should remove ph_debug from localStorage when debug is set to false', () => {
@@ -103,8 +96,6 @@ describe('posthog.set_config', () => {
             posthog.set_config({ debug: false })
 
             expect(localStorage.getItem('ph_debug')).toBeNull()
-
-            posthog.reset()
         })
 
         it('should toggle debug mode multiple times', () => {
@@ -125,8 +116,6 @@ describe('posthog.set_config', () => {
             expect(posthog.config.debug).toBe(true)
             expect(Config.DEBUG).toBe(true)
             expect(localStorage.getItem('ph_debug')).toBe('"true"')
-
-            posthog.reset()
         })
 
         it('should not modify debug if not a boolean', () => {
@@ -139,8 +128,6 @@ describe('posthog.set_config', () => {
 
             expect(posthog.config.debug).toBe(initialDebug)
             expect(Config.DEBUG).toBe(initialConfigDebug)
-
-            posthog.reset()
         })
     })
 
@@ -152,8 +139,6 @@ describe('posthog.set_config', () => {
             posthog.set_config({ api_host: 'https://new-host.com' })
 
             expect(posthog.config.api_host).toBe('https://new-host.com')
-
-            posthog.reset()
         })
 
         it('should update multiple config values at once', () => {
@@ -169,8 +154,6 @@ describe('posthog.set_config', () => {
             expect(posthog.config.api_host).toBe('https://new-host.com')
             expect(posthog.config.capture_pageview).toBe(false)
             expect(posthog.config.capture_pageleave).toBe(false)
-
-            posthog.reset()
         })
 
         it('should preserve existing config when updating subset of values', () => {
@@ -188,8 +171,6 @@ describe('posthog.set_config', () => {
 
             expect(posthog.config.api_host).toBe('https://original.com')
             expect(posthog.config.capture_pageview).toBe(false)
-
-            posthog.reset()
         })
 
         it('should handle empty config object', () => {
@@ -201,8 +182,6 @@ describe('posthog.set_config', () => {
 
             expect(posthog.config.debug).toBe(originalConfig.debug)
             expect(posthog.config.api_host).toBe(originalConfig.api_host)
-
-            posthog.reset()
         })
     })
 
@@ -219,8 +198,6 @@ describe('posthog.set_config', () => {
 
             // After changing to cookie, sessionPersistence should be recreated
             expect(posthog.sessionPersistence).not.toBe(originalSessionPersistence)
-
-            posthog.reset()
         })
 
         it.each([{ persistenceType: 'sessionStorage' }, { persistenceType: 'memory' }] as const)(
@@ -232,8 +209,6 @@ describe('posthog.set_config', () => {
                 posthog.set_config({ persistence: persistenceType })
 
                 expect(posthog.sessionPersistence).toBe(posthog.persistence)
-
-                posthog.reset()
             }
         )
     })
@@ -246,8 +221,6 @@ describe('posthog.set_config', () => {
             posthog.set_config({ disable_session_recording: true })
 
             expect(posthog.config.disable_session_recording).toBe(true)
-
-            posthog.reset()
         })
     })
 })
