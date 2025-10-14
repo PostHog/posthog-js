@@ -97,6 +97,7 @@ import {
     isArray,
     isEmptyObject,
     isObject,
+    isBoolean,
 } from '@posthog/core'
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
@@ -2515,13 +2516,17 @@ export class PostHog {
             if (localStore._is_supported() && localStore._get('ph_debug') === 'true') {
                 this.config.debug = true
             }
-            if (this.config.debug) {
-                Config.DEBUG = true
-                logger.info('set_config', {
-                    config,
-                    oldConfig,
-                    newConfig: { ...this.config },
-                })
+            if (isBoolean(this.config.debug)) {
+                if (this.config.debug) {
+                    Config.DEBUG = true
+                    logger.info('set_config', {
+                        config,
+                        oldConfig,
+                        newConfig: { ...this.config },
+                    })
+                } else {
+                    Config.DEBUG = false
+                }
             }
 
             this.sessionRecording?.startIfEnabledOrStop()
@@ -3167,12 +3172,14 @@ export class PostHog {
             window?.console.log("You've disabled debug mode.")
             localStorage && localStorage.removeItem('ph_debug')
             this.set_config({ debug: false })
+            Config.DEBUG = false
         } else {
             window?.console.log(
                 "You're now in debug mode. All calls to PostHog will be logged in your console.\nYou can disable this with `posthog.debug(false)`."
             )
             localStorage && localStorage.setItem('ph_debug', 'true')
             this.set_config({ debug: true })
+            Config.DEBUG = true
         }
     }
 
