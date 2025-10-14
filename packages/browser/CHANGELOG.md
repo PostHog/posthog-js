@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.275.3
+
+### Patch Changes
+
+- [#2434](https://github.com/PostHog/posthog-js/pull/2434) [`10b3d23`](https://github.com/PostHog/posthog-js/commit/10b3d232b3c6ce38de5500654e6f8aa3e80c280a) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: allow turning off debug mode
+
 ## 1.275.2
 
 ### Patch Changes
