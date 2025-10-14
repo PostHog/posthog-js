@@ -2515,7 +2515,10 @@ export class PostHog {
                     ? this.persistence
                     : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, isPersistenceDisabled)
 
-            if (localStore._is_supported() && localStore._get('ph_debug') === 'true') {
+            // pycharm inspection false positive for pointless boolean expression
+            // we only want to check localStorage if debug is not explicitly set to false
+            // noinspection PointlessBooleanExpressionJS
+            if (this.config.debug !== false && localStore._is_supported() && localStore._get('ph_debug') === 'true') {
                 this.config.debug = true
             }
 
