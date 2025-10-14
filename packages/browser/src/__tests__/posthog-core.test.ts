@@ -3,6 +3,7 @@ import type { PostHogConfig } from '../types'
 import { uuidv7 } from '../uuidv7'
 import { SurveyEventName, SurveyEventProperties } from '../posthog-surveys-types'
 import { SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
+import { beforeEach } from '@jest/globals'
 
 describe('posthog core', () => {
     const mockURL = jest.fn()
@@ -28,11 +29,44 @@ describe('posthog core', () => {
     beforeEach(() => {
         mockReferrer.mockReturnValue('https://referrer.com')
         mockURL.mockReturnValue('https://example.com')
+        // otherwise surveys code logs an error and fails the test
         console.error = jest.fn()
     })
 
     it('exposes the version', () => {
         expect(defaultPostHog().version).toMatch(/\d+\.\d+\.\d+/)
+    })
+
+    describe('posthog debug logging', () => {
+        beforeEach(() => {
+            console.error = jest.fn()
+            console.log = jest.fn()
+            console.warn = jest.fn()
+        })
+
+        it('log when setting debug to false', () => {
+            const posthog = defaultPostHog().init(uuidv7(), { debug: false })!
+            posthog.debug(false)
+            expect(console.error).not.toHaveBeenCalled()
+            expect(console.warn).not.toHaveBeenCalled()
+            expect(console.log).toHaveBeenCalledWith("You've disabled debug mode.")
+        })
+
+        it('log when setting debug to undefined', () => {
+            const posthog = defaultPostHog().init(uuidv7(), { debug: false })!
+            posthog.debug()
+            expect(console.log).toHaveBeenCalledWith(
+                "You're now in debug mode. All calls to PostHog will be logged in your console.\nYou can disable this with `posthog.debug(false)`."
+            )
+        })
+
+        it('log when setting debug to true', () => {
+            const posthog = defaultPostHog().init(uuidv7(), { debug: false })!
+            posthog.debug(true)
+            expect(console.log).toHaveBeenCalledWith(
+                "You're now in debug mode. All calls to PostHog will be logged in your console.\nYou can disable this with `posthog.debug(false)`."
+            )
+        })
     })
 
     describe('capture()', () => {

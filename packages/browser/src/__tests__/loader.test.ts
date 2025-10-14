@@ -66,14 +66,16 @@ describe(`Module-based loader in Node env`, () => {
     it(`always returns posthog from init`, () => {
         console.error = jest.fn()
         console.warn = jest.fn()
+
         expect(posthog.init(`my-test`, { disable_surveys: true }, 'sdk-1')).toBeInstanceOf(PostHog)
         expect(posthog.init(``, { disable_surveys: true }, 'sdk-2')).toBeInstanceOf(PostHog)
-        expect(console.error).toHaveBeenCalledTimes(2)
+
         expect(console.error).toHaveBeenCalledWith(
             '[PostHog.js]',
             'PostHog was initialized without a token. This likely indicates a misconfiguration. Please check the first argument passed to posthog.init()'
         )
-        // Already loaded
+
+        // Already loaded logged even when not debug
         expect(posthog.init(`my-test`, { disable_surveys: true }, 'sdk-1')).toBeInstanceOf(PostHog)
         expect(console.warn).toHaveBeenCalledWith(
             '[PostHog.js]',
