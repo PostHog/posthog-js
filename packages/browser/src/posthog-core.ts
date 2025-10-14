@@ -475,7 +475,9 @@ export class PostHog {
         }
 
         if (this.__loaded) {
-            logger.warn('You have already initialized PostHog! Re-initializing is a no-op')
+            // need to be able to log before having processed debug config
+            // eslint-disable-next-line no-console
+            console.warn('[PostHog.js]', 'You have already initialized PostHog! Re-initializing is a no-op')
             return this
         }
 
