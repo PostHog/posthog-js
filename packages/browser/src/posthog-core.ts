@@ -2520,7 +2520,7 @@ export class PostHog {
             if (isBoolean(this.config.debug)) {
                 if (this.config.debug) {
                     Config.DEBUG = true
-                    localStorage && localStorage.setItem('ph_debug', 'true')
+                    localStore._is_supported() && localStore._set('ph_debug', 'true')
                     logger.info('set_config', {
                         config,
                         oldConfig,
@@ -2528,7 +2528,7 @@ export class PostHog {
                     })
                 } else {
                     Config.DEBUG = false
-                    localStorage && localStorage.removeItem('ph_debug')
+                    localStore._is_supported() && localStore._remove('ph_debug')
                 }
             }
 
