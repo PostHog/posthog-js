@@ -446,7 +446,7 @@ export class PostHog {
             namedPosthog._init(token, config, name)
             instances[name] = namedPosthog
 
-            // Add as a property to the primary instance (this isn't type-safe but its how it was always done)
+            // Add as a property to the primary instance (this isn't type-safe but it is how it was always done)
             ;(instances[PRIMARY_INSTANCE_NAME] as any)[name] = namedPosthog
 
             return namedPosthog
@@ -483,7 +483,9 @@ export class PostHog {
 
         this.__loaded = true
         this.config = {} as PostHogConfig // will be set right below
+        config.debug = this._checkLocalStorageForDebug(config.debug)
         this._originalUserConfig = config // Store original user config for migration
+
         this._triggered_notifs = []
 
         if (config.person_profiles) {
@@ -2515,12 +2517,7 @@ export class PostHog {
                     ? this.persistence
                     : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, isPersistenceDisabled)
 
-            // pycharm inspection false positive for pointless boolean expression
-            // we only want to check localStorage if debug is not explicitly set to false
-            // noinspection PointlessBooleanExpressionJS
-            if (this.config.debug !== false && localStore._is_supported() && localStore._get('ph_debug') === 'true') {
-                this.config.debug = true
-            }
+            this.config.debug = this._checkLocalStorageForDebug(this.config.debug)
 
             if (isBoolean(this.config.debug)) {
                 if (this.config.debug) {
@@ -3290,6 +3287,12 @@ export class PostHog {
             $ai_metric_name: metricName,
             $ai_metric_value: String(metricValue),
         })
+    }
+
+    private _checkLocalStorageForDebug(debugConfig: boolean | undefined) {
+        const explicitlyFalse = isBoolean(debugConfig) && !debugConfig
+        const isTrueInLocalStorage = localStore._is_supported() && localStore._get('ph_debug') === 'true'
+        return explicitlyFalse ? false : isTrueInLocalStorage ? true : debugConfig
     }
 }
 
