@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+// Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`config snapshot for PostHogConfig 1`] = `
 "{
@@ -108,7 +108,8 @@ exports[`config snapshot for PostHogConfig 1`] = `
   "capture_pageleave": [
     "false",
     "true",
-    "\\"if_capture_pageview\\""
+    "\\"if_capture_pageview\\"",
+    "\\"on_navigation\\""
   ],
   "cookie_expiration": "number",
   "upgrade": [

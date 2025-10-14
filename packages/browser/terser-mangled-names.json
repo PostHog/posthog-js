@@ -283,6 +283,7 @@
         "_setupPopstateListener",
         "_setupSiteApps",
         "_shouldCapturePageleave",
+        "_shouldCapturePageleaveOnNavigation",
         "_shouldDisableFlags",
         "_shouldIncludeEvaluationEnvironments",
         "_showPreviewWebExperiment",
