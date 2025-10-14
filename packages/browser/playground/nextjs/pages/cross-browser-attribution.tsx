@@ -10,6 +10,7 @@ export default function CrossBrowserAttribution() {
         sessionId: '',
         isIdentified: false,
     })
+    const [sessionProps, setSessionProps] = useState<Record<string, any>>({})
 
     useEffect(() => {
         if (!posthog) return
@@ -21,10 +22,13 @@ export default function CrossBrowserAttribution() {
             isIdentified: posthog.isIdentified(),
         })
 
+        // Update session properties (attribution data)
+        setSessionProps(posthog.get_session_properties())
+
         // Check if we were bootstrapped from URL
         if (typeof window !== 'undefined') {
             const params = new URLSearchParams(window.location.search)
-            if (params.has('__ph_distinct_id')) {
+            if (params.has('__ph_distinct_id') || params.has('__ph_session_entry_utm_source')) {
                 setIsBootstrapped(true)
                 // Clean up URL after bootstrap
                 window.history.replaceState({}, '', window.location.pathname)
@@ -42,6 +46,15 @@ export default function CrossBrowserAttribution() {
         url.searchParams.set('__ph_distinct_id', posthog.get_distinct_id())
         url.searchParams.set('__ph_session_id', posthog.get_session_id())
         url.searchParams.set('__ph_is_identified', posthog.isIdentified() ? 'true' : 'false')
+
+        // Add session entry properties to preserve attribution
+        const sessionProperties = posthog.get_session_properties()
+        Object.entries(sessionProperties).forEach(([key, value]) => {
+            if (key.startsWith('$session_entry_')) {
+                const paramName = '__ph_session_entry_' + key.replace('$session_entry_', '')
+                url.searchParams.set(paramName, String(value))
+            }
+        })
 
         setTrackingUrl(url.toString())
     }
@@ -80,6 +93,25 @@ export default function CrossBrowserAttribution() {
                         <code className="bg-white px-2 py-1 rounded ml-2">{sessionInfo.isIdentified.toString()}</code>
                     </div>
                 </div>
+            </div>
+
+            <div className="bg-gray-100 p-4 rounded mb-6">
+                <h2 className="text-xl font-semibold mb-3">Session Properties (Attribution Data)</h2>
+                {Object.keys(sessionProps).length > 0 ? (
+                    <div className="space-y-2 font-mono text-sm">
+                        {Object.entries(sessionProps).map(([key, value]) => (
+                            <div key={key}>
+                                <span className="font-semibold">{key}:</span>
+                                <code className="bg-white px-2 py-1 rounded ml-2">{String(value)}</code>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-sm text-gray-600">
+                        No session properties yet. Navigate from a page with UTM parameters or bootstrap from a URL with
+                        session properties.
+                    </p>
+                )}
             </div>
 
             <div className="mb-6">
@@ -136,9 +168,27 @@ export default function CrossBrowserAttribution() {
                         <code className="bg-white px-1 rounded">__ph_session_id</code>,{' '}
                         <code className="bg-white px-1 rounded">__ph_is_identified</code>
                     </li>
+                    <li>
+                        Session properties (UTM parameters, referrer, etc.) are added as{' '}
+                        <code className="bg-white px-1 rounded">__ph_session_entry_*</code> params
+                    </li>
                     <li>Opening the URL in another browser reads these params and continues the session</li>
-                    <li>All events are attributed to the same user, preserving attribution chain</li>
+                    <li>All events are attributed to the same user with preserved session properties</li>
                 </ol>
+            </div>
+
+            <div className="mt-4 bg-purple-50 border border-purple-300 p-4 rounded">
+                <h3 className="font-semibold mb-2">Example Use Case:</h3>
+                <p className="text-sm text-gray-700 mb-2">
+                    A user lands on your marketing site from Google Ads (UTM parameters captured). They click a link to
+                    your booking site. Without session bootstrapping, the UTM data is lost.
+                </p>
+                <p className="text-sm text-gray-700">
+                    <strong>With session bootstrapping:</strong> The marketing site builds a URL with{' '}
+                    <code className="bg-white px-1 rounded">__ph_session_entry_utm_source=google</code>,{' '}
+                    <code className="bg-white px-1 rounded">__ph_session_entry_utm_campaign=summer_sale</code>, etc.
+                    Events on the booking site maintain the same attribution data!
+                </p>
             </div>
         </div>
     )

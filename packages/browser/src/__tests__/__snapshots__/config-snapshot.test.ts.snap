@@ -463,12 +463,12 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"sessionID\\": [
       \\"undefined\\",
       \\"string\\"
+    ],
+    \\"sessionProps\\": [
+      \\"undefined\\",
+      \\"Record<string, any>\\"
     ]
   },
-  \\"enable_bootstrap_from_url\\": [
-    \\"false\\",
-    \\"true\\"
-  ],
   \\"segment\\": [
     \\"undefined\\",
     \\"SegmentAnalytics\\"

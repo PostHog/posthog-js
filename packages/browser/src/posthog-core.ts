@@ -243,8 +243,36 @@ export const maybeBootstrapFromUrl = (origConfig: Partial<PostHogConfig>): { boo
     const sessionID = getQueryParam(window.location.href, `__ph_session_id`)
     const isIdentifiedID = getQueryParam(window.location.href, `__ph_is_identified`) === 'true'
 
+    // Parse session entry properties from URL params with error handling and limits
+    const sessionProps: Record<string, any> = {}
+    const MAX_SESSION_PROPS = 20 // Limit to prevent abuse
+    const MAX_PROP_VALUE_LENGTH = 500 // Prevent excessively long values
+
+    try {
+        const url = new URL(window.location.href)
+        let propCount = 0
+
+        url.searchParams.forEach((value, key) => {
+            if (key.startsWith('__ph_session_entry_') && propCount < MAX_SESSION_PROPS) {
+                // Extract the property name (e.g., '__ph_session_entry_utm_source' -> '$session_entry_utm_source')
+                const propName = `$session_entry_${key.slice(19)}` // 19 = '__ph_session_entry_'.length
+                // Limit value length to prevent abuse
+                sessionProps[propName] = value.slice(0, MAX_PROP_VALUE_LENGTH)
+                propCount++
+            }
+        })
+    } catch (error) {
+        // If URL parsing fails, log error and continue without session props
+        logger.error('[Bootstrap] Failed to parse URL for session properties:', error)
+    }
+
     return {
-        bootstrap: { distinctID, sessionID, isIdentifiedID },
+        bootstrap: {
+            distinctID,
+            sessionID,
+            isIdentifiedID,
+            ...(Object.keys(sessionProps).length > 0 ? { sessionProps } : {})
+        },
     }
 }
 
@@ -2416,6 +2444,31 @@ export class PostHog {
      */
     get_session_id(): string {
         return this.sessionManager?.checkAndGetSessionAndWindowId(true).sessionId ?? ''
+    }
+
+    /**
+     * Returns the current session properties including attribution data like UTM parameters.
+     * These are the `$session_entry_*` properties that are attached to all events in the session.
+     *
+     * Useful for building cross-domain tracking URLs to preserve attribution across websites.
+     *
+     * @public
+     *
+     * @example
+     * ```js
+     * const sessionProps = posthog.get_session_properties()
+     * // Returns: { $session_entry_utm_source: 'google', $session_entry_utm_campaign: 'summer_sale', ... }
+     *
+     * // Build a tracking URL
+     * const url = new URL('https://example.com')
+     * Object.entries(sessionProps).forEach(([key, value]) => {
+     *   const paramName = '__ph_session_entry_' + key.replace('$session_entry_', '')
+     *   url.searchParams.set(paramName, value)
+     * })
+     * ```
+     */
+    get_session_properties(): Record<string, any> {
+        return this.sessionPropsManager?.getSessionProps() ?? {}
     }
 
     /**

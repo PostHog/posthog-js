@@ -108,4 +108,87 @@ describe('enable_bootstrap_from_url config', () => {
         expect(posthog.get_distinct_id()).toBe('automated-tester')
         expect(posthog.persistence?.get_property('$user_state')).toBe('identified')
     })
+
+    it('should parse session entry properties from URL params', () => {
+        window.location.href =
+            'https://example.com?__ph_distinct_id=test-user&__ph_session_id=test-session&__ph_session_entry_utm_source=facebook&__ph_session_entry_utm_campaign=summer_sale&__ph_session_entry_utm_medium=social'
+
+        posthog._init('test-token', {
+            persistence: 'memory',
+            enable_bootstrap_from_url: true,
+        })
+
+        const sessionProps = posthog.get_session_properties()
+
+        expect(sessionProps).toEqual({
+            $session_entry_utm_source: 'facebook',
+            $session_entry_utm_campaign: 'summer_sale',
+            $session_entry_utm_medium: 'social',
+        })
+    })
+
+    it('should handle URL with only session entry properties', () => {
+        window.location.href =
+            'https://example.com?__ph_session_entry_utm_source=google&__ph_session_entry_referring_domain=example.org'
+
+        posthog._init('test-token', {
+            persistence: 'memory',
+            enable_bootstrap_from_url: true,
+        })
+
+        const sessionProps = posthog.get_session_properties()
+
+        expect(sessionProps).toEqual({
+            $session_entry_utm_source: 'google',
+            $session_entry_referring_domain: 'example.org',
+        })
+    })
+
+    it('should work with URL that has no session entry properties', () => {
+        window.location.href = 'https://example.com?__ph_distinct_id=test-user&__ph_session_id=test-session'
+
+        posthog._init('test-token', {
+            persistence: 'memory',
+            enable_bootstrap_from_url: true,
+        })
+
+        // Should derive session props from current page since no bootstrapped props
+        const sessionProps = posthog.get_session_properties()
+
+        // We expect it to be an object (could be empty or derived from current page)
+        expect(typeof sessionProps).toBe('object')
+    })
+
+    it('should URL decode session entry property values', () => {
+        const encodedValue = encodeURIComponent('Test Campaign with spaces & special chars!')
+        window.location.href = `https://example.com?__ph_session_entry_utm_campaign=${encodedValue}`
+
+        posthog._init('test-token', {
+            persistence: 'memory',
+            enable_bootstrap_from_url: true,
+        })
+
+        const sessionProps = posthog.get_session_properties()
+
+        expect(sessionProps.$session_entry_utm_campaign).toBe('Test Campaign with spaces & special chars!')
+    })
+
+    it('should preserve session entry properties across events', () => {
+        window.location.href =
+            'https://example.com?__ph_distinct_id=test-user&__ph_session_id=test-session&__ph_session_entry_utm_source=linkedin&__ph_session_entry_utm_campaign=product_launch'
+
+        posthog._init('test-token', {
+            persistence: 'memory',
+            enable_bootstrap_from_url: true,
+        })
+
+        // Verify that session props are available
+        const sessionProps = posthog.get_session_properties()
+        expect(sessionProps).toHaveProperty('$session_entry_utm_source', 'linkedin')
+        expect(sessionProps).toHaveProperty('$session_entry_utm_campaign', 'product_launch')
+
+        // The session props should be the same on subsequent calls
+        const sessionProps2 = posthog.get_session_properties()
+        expect(sessionProps2).toEqual(sessionProps)
+    })
 })

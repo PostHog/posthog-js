@@ -3,7 +3,9 @@ import type { SegmentAnalytics } from './extensions/segment-integration'
 import { PostHog } from './posthog-core'
 import { KnownUnsafeEditableEvent } from '@posthog/core'
 import { Survey } from './posthog-surveys-types'
-import { SAMPLED } from './extensions/replay/triggerMatching'
+// only importing types here, so won't affect the bundle
+// eslint-disable-next-line posthog-js/no-external-replay-imports
+import type { SAMPLED } from './extensions/replay/external/triggerMatching'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -143,6 +145,13 @@ export interface BootstrapConfig {
      * - the timestamp of the last event in the session must be < the timestamp part + 24 hours
      * **/
     sessionID?: string
+
+    /**
+     * Optionally provide session entry properties to preserve attribution across domains.
+     * These are the `$session_entry_*` properties that will be attached to all events in the session.
+     * Example: { $session_entry_utm_source: 'google', $session_entry_utm_campaign: 'summer_sale' }
+     */
+    sessionProps?: Record<string, any>
 }
 
 export type SupportedWebVitalsMetrics = 'LCP' | 'CLS' | 'FCP' | 'INP'
@@ -878,30 +887,6 @@ export interface PostHogConfig {
      * @default {}
      */
     bootstrap: BootstrapConfig
-
-    /**
-     * Enable automatic bootstrapping from URL parameters.
-     * When enabled, PostHog will automatically read `ph_bootstrap_*` parameters from the URL
-     * to continue user sessions across browsers (e.g., from in-app browsers to regular browsers).
-     *
-     * This is useful for maintaining attribution when users transition from social media in-app browsers
-     * (LinkedIn, Facebook, Instagram, etc.) to their default browser.
-     *
-     * If a `config.bootstrap` was provided, this does nothing.
-     *
-     * URL parameters read:
-     * - `ph_bootstrap_distinct_id` - User's distinct ID
-     * - `ph_bootstrap_session_id` - Session ID to continue
-     *
-     * @default false
-     * @example
-     * ```js
-     * posthog.init('token', {
-     *   enable_bootstrap_from_url: true
-     * })
-     * ```
-     */
-    enable_bootstrap_from_url: boolean
 
     /**
      * The segment analytics object.
