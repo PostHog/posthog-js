@@ -986,6 +986,7 @@ export class PostHog extends PostHogCore {
         if (Array.isArray(surveys) && surveys.length > 0) {
           this._cacheSurveys(surveys as Survey[], 'flags endpoint')
         } else {
+          this.logMsgIfDebug(() => console.log('PostHog Debug', 'No surveys in flags response'))
           this._cacheSurveys(null, 'flags endpoint')
         }
       }
