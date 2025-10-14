@@ -189,33 +189,31 @@ export class PostHog extends PostHogCore {
             }
           })
           .catch((error) => {
-            this.logMsgIfDebug(() => console.error('PostHog Debug', 'Error loading remote config:', error))
+            this._logger.error('Error loading remote config:', error)
           })
           .finally(() => {
             this._notifySurveysReady()
           })
       } else {
-        this.logMsgIfDebug(() => console.info('PostHog Debug', `Remote config is disabled.`))
+        this._logger.info('Remote config is disabled.')
 
         if (options?.preloadFeatureFlags !== false) {
-          this.logMsgIfDebug(() => console.info('PostHog Debug', `Feature flags will be preloaded from Flags API.`))
+          this._logger.info('Feature flags will be preloaded from Flags API.')
           // Preload flags (and parse surveys as well since we are calling with config=true already)
           this._flagsAsyncWithSurveys()
             .catch((error) => {
-              this.logMsgIfDebug(() => console.error('PostHog Debug', 'Error loading flags with surveys:', error))
+              this._logger.error('Error loading flags with surveys:', error)
             })
             .finally(() => {
               this._notifySurveysReady()
             })
         } else {
-          this.logMsgIfDebug(() =>
-            console.info('PostHog Debug', 'preloadFeatureFlags is disabled, loading surveys from API.')
-          )
+          this._logger.info('preloadFeatureFlags is disabled, loading surveys from API.')
           // Load surveys directly from API since both remote config and preloading feature flags are disabled
           // Note: if flags are not loaded/cached then surveys will not be displayed until reloadFeatureFlags() is called, since surveys depend on internal flags
           this._loadSurveysFromAPI()
             .catch((error) => {
-              this.logMsgIfDebug(() => console.error('PostHog Debug', 'Error loading surveys from API:', error))
+              this._logger.error('Error loading surveys from API:', error)
             })
             .finally(() => {
               this._notifySurveysReady()
@@ -878,7 +876,7 @@ export class PostHog extends PostHogCore {
 
   public async getSurveys(): Promise<SurveyResponse['surveys']> {
     if (this._disableSurveys === true) {
-      this.logMsgIfDebug(() => console.log('PostHog Debug', 'Loading surveys is disabled.'))
+      this._logger.info('Loading surveys is disabled.')
       this._cacheSurveys(null, 'disabled in config')
       return []
     }
@@ -890,7 +888,7 @@ export class PostHog extends PostHogCore {
       return surveys
     }
 
-    this.logMsgIfDebug(() => console.log('PostHog Debug', 'No surveys found in storage'))
+    this._logger.info('No surveys found in storage')
     return []
   }
 
@@ -923,11 +921,11 @@ export class PostHog extends PostHogCore {
     this.setPersistedProperty<SurveyResponse['surveys']>(PostHogPersistedProperty.Surveys, surveys)
 
     if (surveys && surveys.length > 0) {
-      this.logMsgIfDebug(() => console.log(`PostHog Debug`, `Surveys cached from ${source}:`, JSON.stringify(surveys)))
+      this._logger.info(`Surveys cached from ${source}:`, JSON.stringify(surveys))
     } else if (surveys === null) {
-      this.logMsgIfDebug(() => console.log(`PostHog Debug`, `Surveys cleared (${source})`))
+      this._logger.info(`Surveys cleared (${source})`)
     } else {
-      this.logMsgIfDebug(() => console.log(`PostHog Debug`, `No surveys to cache from ${source})`))
+      this._logger.info(`No surveys to cache from ${source})`)
     }
   }
 
@@ -948,7 +946,7 @@ export class PostHog extends PostHogCore {
    */
   private _handleSurveysFromRemoteConfig(response: any): void {
     if (this._disableSurveys === true) {
-      this.logMsgIfDebug(() => console.log('PostHog Debug', 'Loading surveys skipped, disabled.'))
+      this._logger.info('Loading surveys skipped, disabled.')
       this._cacheSurveys(null, 'remote config (disabled)')
       return
     }
@@ -974,7 +972,7 @@ export class PostHog extends PostHogCore {
       // When remote config is enabled, surveys will come from there instead
       if (this._disableRemoteConfig === true) {
         if (this._disableSurveys === true) {
-          this.logMsgIfDebug(() => console.log('PostHog Debug', 'Loading surveys skipped, disabled.'))
+          this._logger.info('Loading surveys skipped, disabled.')
           this._cacheSurveys(null, 'flags (disabled)')
           return
         }
@@ -986,12 +984,12 @@ export class PostHog extends PostHogCore {
         if (Array.isArray(surveys) && surveys.length > 0) {
           this._cacheSurveys(surveys as Survey[], 'flags endpoint')
         } else {
-          this.logMsgIfDebug(() => console.log('PostHog Debug', 'No surveys in flags response'))
+          this._logger.info('No surveys in flags response')
           this._cacheSurveys(null, 'flags endpoint')
         }
       }
     } catch (error) {
-      this.logMsgIfDebug(() => console.error('PostHog Debug', 'Error in _flagsAsyncWithSurveys:', error))
+      this._logger.error('Error in _flagsAsyncWithSurveys:', error)
     }
   }
 
@@ -1000,7 +998,7 @@ export class PostHog extends PostHogCore {
    */
   private async _loadSurveysFromAPI(): Promise<void> {
     if (this._disableSurveys === true) {
-      this.logMsgIfDebug(() => console.log('PostHog Debug', 'Loading surveys skipped, disabled.'))
+      this._logger.info('Loading surveys skipped, disabled.')
       this._cacheSurveys(null, 'API (disabled)')
       return
     }
@@ -1013,7 +1011,7 @@ export class PostHog extends PostHogCore {
         this._cacheSurveys(null, 'API')
       }
     } catch (error) {
-      this.logMsgIfDebug(() => console.error('PostHog Debug', 'Error loading surveys from API:', error))
+      this._logger.error('Error loading surveys from API:', error)
     }
   }
 
