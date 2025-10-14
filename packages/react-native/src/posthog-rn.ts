@@ -885,7 +885,7 @@ export class PostHog extends PostHogCore {
    * If surveys are already loaded and ready to go, returns a resolved promise instead.
    * @internal
    */
-  onSurveysReady(): Promise<void> {
+  _onSurveysReady(): Promise<void> {
     if (this._surveysReady) {
       // If surveys are already ready, resolve immediately
       return Promise.resolve()
@@ -954,7 +954,7 @@ export class PostHog extends PostHogCore {
    */
   private async _flagsAsyncWithSurveys(): Promise<void> {
     try {
-      const flagsResponse = await (this as any).flagsAsync(true)
+      const flagsResponse = await this.flagsAsync(true, true)
 
       // Only handle surveys from flags if remote config is disabled and surveys are enabled
       // When remote config is enabled, surveys will come from there instead
@@ -965,21 +965,14 @@ export class PostHog extends PostHogCore {
           return
         }
 
-        // Handle surveys if they exist in the response
-        const responseWithSurveys = flagsResponse as any
-        if (responseWithSurveys?.surveys) {
-          const surveys = responseWithSurveys.surveys
+        // Handle surveys from the response (surveys key is included when config=true)
+        const surveys = flagsResponse?.surveys
 
-          // If surveys is not an array, it means there are no surveys (its a boolean)
-          if (Array.isArray(surveys) && surveys.length > 0) {
-            this._cacheSurveys(surveys as Survey[], 'flags endpoint')
-          } else {
-            this._cacheSurveys(null, 'flags endpoint')
-          }
+        // If surveys is not an array, it means there are no surveys (its a boolean)
+        if (Array.isArray(surveys) && surveys.length > 0) {
+          this._cacheSurveys(surveys as Survey[], 'flags endpoint')
         } else {
-          // If no surveys in flags response, try loading from API as fallback
-          this.logMsgIfDebug(() => console.log('PostHog Debug', 'No surveys in flags response, loading from API'))
-          await this._loadSurveysFromAPI()
+          this._cacheSurveys(null, 'flags endpoint')
         }
       }
     } catch (error) {

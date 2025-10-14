@@ -85,7 +85,7 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
   useEffect(() => {
     posthog
       .ready()
-      .then(() => posthog.onSurveysReady())
+      .then(() => posthog._onSurveysReady())
       .then(() => posthog.getSurveys())
       .then(setSurveys)
       .catch(() => {})
