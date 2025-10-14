@@ -1,5 +1,47 @@
 # posthog-js
 
+## 1.275.1
+
+### Patch Changes
+
+- [#2422](https://github.com/PostHog/posthog-js/pull/2422) [`4e15fda`](https://github.com/PostHog/posthog-js/commit/4e15fdada76201eaceb407c3260a8fef025c87d0) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: possible memory leak in session id replacement in cookieless mode
+
+## 1.275.0
+
+### Minor Changes
+
+- [#2426](https://github.com/PostHog/posthog-js/pull/2426) [`ae941c2`](https://github.com/PostHog/posthog-js/commit/ae941c27673e50d01cecdbf55364cffa894379c4) Thanks [@thmsobrmlr](https://github.com/thmsobrmlr)! - Apply $current_url masking in web vitals and heatmaps extensions.
+
+## 1.274.3
+
+### Patch Changes
+
+- [#2423](https://github.com/PostHog/posthog-js/pull/2423) [`2d4eac4`](https://github.com/PostHog/posthog-js/commit/2d4eac4cef765bec996a887f0c1124fe7db759a7) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: another small potential memory leak in the recorder wrapping code"
+
+## 1.274.2
+
+### Patch Changes
+
+- [#2421](https://github.com/PostHog/posthog-js/pull/2421) [`43b8029`](https://github.com/PostHog/posthog-js/commit/43b80293301bae1a2b97a3c0b2a967ff88506904) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: potential source of memory leak in recorder mutation throttler
+
+## 1.274.1
+
+### Patch Changes
+
+- Updated dependencies [[`10da2ee`](https://github.com/PostHog/posthog-js/commit/10da2ee0b8862ad0e32b68e452fae1bc77620bbf)]:
+    - @posthog/core@1.2.4
+
+## 1.274.0
+
+### Minor Changes
+
+- [#2404](https://github.com/PostHog/posthog-js/pull/2404) [`39ace01`](https://github.com/PostHog/posthog-js/commit/39ace016839ceaf2dac9a224612c78e45e26620c) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: remove eager loaded replay and reduce bundle size by 14.8%
+
+### Patch Changes
+
+- Updated dependencies [[`e19a384`](https://github.com/PostHog/posthog-js/commit/e19a384468d722c12f4ef21feb684da31f9dcd3b)]:
+    - @posthog/core@1.2.3
+
 ## 1.273.1
 
 ### Patch Changes

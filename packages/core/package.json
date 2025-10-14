@@ -1,6 +1,6 @@
 {
   "name": "@posthog/core",
-  "version": "1.2.2",
+  "version": "1.2.4",
   "license": "MIT",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -49,6 +49,11 @@
       "types": "./dist/utils/index.d.ts",
       "require": "./dist/utils/index.js",
       "import": "./dist/utils/index.mjs"
+    },
+    "./process": {
+      "types": "./dist/process/index.d.ts",
+      "require": "./dist/process/index.js",
+      "import": "./dist/process/index.mjs"
     }
   },
   "devDependencies": {

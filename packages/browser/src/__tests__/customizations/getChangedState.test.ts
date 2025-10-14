@@ -151,9 +151,9 @@ describe('getChangedState', () => {
             )
 
             // these run much slower in CI than on my machine
-            expect(medianTime).toBeLessThan(100)
-            expect(avgTime).toBeLessThan(200)
-            expect(stdDev).toBeLessThan(100)
+            expect(medianTime).toBeLessThan(150)
+            expect(avgTime).toBeLessThan(250)
+            expect(stdDev).toBeLessThan(150)
         })
 
         test('should handle complex state changes efficiently', () => {

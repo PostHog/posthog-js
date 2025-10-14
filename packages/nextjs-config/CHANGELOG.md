@@ -1,5 +1,14 @@
 # @posthog/nextjs-config
 
+## 1.3.2
+
+### Patch Changes
+
+- [#2419](https://github.com/PostHog/posthog-js/pull/2419) [`10da2ee`](https://github.com/PostHog/posthog-js/commit/10da2ee0b8862ad0e32b68e452fae1bc77620bbf) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - move binary calling logic to core package
+
+- Updated dependencies [[`10da2ee`](https://github.com/PostHog/posthog-js/commit/10da2ee0b8862ad0e32b68e452fae1bc77620bbf)]:
+  - @posthog/core@1.2.4
+
 ## 1.3.1
 
 ### Patch Changes
