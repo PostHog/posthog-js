@@ -182,30 +182,44 @@ export class PostHog extends PostHogCore {
       this._isInitialized = true
 
       if (this._disableRemoteConfig === false) {
-        this.reloadRemoteConfigAsync().then((response) => {
-          if (response) {
-            this._handleSurveysFromRemoteConfig(response)
-          }
-          this._notifySurveysReady()
-        })
+        this.reloadRemoteConfigAsync()
+          .then((response) => {
+            if (response) {
+              this._handleSurveysFromRemoteConfig(response)
+            }
+          })
+          .catch((error) => {
+            this.logMsgIfDebug(() => console.error('PostHog Debug', 'Error loading remote config:', error))
+          })
+          .finally(() => {
+            this._notifySurveysReady()
+          })
       } else {
         this.logMsgIfDebug(() => console.info('PostHog Debug', `Remote config is disabled.`))
 
         if (options?.preloadFeatureFlags !== false) {
           this.logMsgIfDebug(() => console.info('PostHog Debug', `Feature flags will be preloaded from Flags API.`))
           // Preload flags (and parse surveys as well since we are calling with config=true already)
-          this._flagsAsyncWithSurveys().then(() => {
-            this._notifySurveysReady()
-          })
+          this._flagsAsyncWithSurveys()
+            .catch((error) => {
+              this.logMsgIfDebug(() => console.error('PostHog Debug', 'Error loading flags with surveys:', error))
+            })
+            .finally(() => {
+              this._notifySurveysReady()
+            })
         } else {
           this.logMsgIfDebug(() =>
             console.info('PostHog Debug', 'preloadFeatureFlags is disabled, loading surveys from API.')
           )
           // Load surveys directly from API since both remote config and preloading feature flags are disabled
           // Note: if flags are not loaded/cached then surveys will not be displayed until reloadFeatureFlags() is called, since surveys depend on internal flags
-          this._loadSurveysFromAPI().then(() => {
-            this._notifySurveysReady()
-          })
+          this._loadSurveysFromAPI()
+            .catch((error) => {
+              this.logMsgIfDebug(() => console.error('PostHog Debug', 'Error loading surveys from API:', error))
+            })
+            .finally(() => {
+              this._notifySurveysReady()
+            })
         }
       }
 
