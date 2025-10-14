@@ -90,6 +90,16 @@ export class HistoryAutocapture {
 
             // Only capture pageview if the pathname has changed and the feature is enabled
             if (currentPathname !== this._lastPathname && this.isEnabled) {
+                // Capture pageleave for the previous page before capturing the new pageview
+                // PageViewManager will handle checking if there's a previous pageview to leave
+                if (this._instance._shouldCapturePageleaveOnNavigation()) {
+                    const pageleaveProps = this._instance.pageViewManager.doPageLeave(new Date())
+                    // Only capture pageleave if there was a previous page ($prev_pageview_id will be present)
+                    if (pageleaveProps.$prev_pageview_id) {
+                        this._instance.capture('$pageleave', { ...pageleaveProps, navigation_type: navigationType })
+                    }
+                }
+
                 this._instance.capture('$pageview', { navigation_type: navigationType })
             }
 

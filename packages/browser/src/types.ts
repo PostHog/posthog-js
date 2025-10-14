@@ -433,10 +433,11 @@ export interface PostHogConfig {
      * Determines whether PostHog should capture pageleave events.
      * If set to `true`, it will capture pageleave events for all pages.
      * If set to `'if_capture_pageview'`, it will only capture pageleave events if `capture_pageview` is also set to `true` or `'history_change'`.
+     * If set to `'on_navigation'`, it will capture pageleave events on every browser history navigation (pushState, replaceState, popstate) as well as window unload.
      *
      * @default 'if_capture_pageview'
      */
-    capture_pageleave: boolean | 'if_capture_pageview'
+    capture_pageleave: boolean | 'if_capture_pageview' | 'on_navigation'
 
     /**
      * Determines the number of days to store cookies for.

@@ -2784,9 +2784,14 @@ export class PostHog {
     _shouldCapturePageleave(): boolean {
         return (
             this.config.capture_pageleave === true ||
+            this.config.capture_pageleave === 'on_navigation' ||
             (this.config.capture_pageleave === 'if_capture_pageview' &&
                 (this.config.capture_pageview === true || this.config.capture_pageview === 'history_change'))
         )
+    }
+
+    _shouldCapturePageleaveOnNavigation(): boolean {
+        return this.config.capture_pageleave === 'on_navigation'
     }
 
     /**
