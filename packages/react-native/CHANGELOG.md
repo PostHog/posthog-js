@@ -1,5 +1,11 @@
 # posthog-react-native
 
+## 4.10.1
+
+### Patch Changes
+
+- [#2415](https://github.com/PostHog/posthog-js/pull/2415) [`ab30675`](https://github.com/PostHog/posthog-js/commit/ab30675f9fcb9323dfbc8447fd5b244a0a631983) Thanks [@ioannisj](https://github.com/ioannisj)! - fix surveys only appear on subsequent app launches after being loaded and cached
+
 ## 4.10.0
 
 ### Minor Changes
