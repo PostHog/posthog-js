@@ -3172,14 +3172,12 @@ export class PostHog {
             window?.console.log("You've disabled debug mode.")
             localStorage && localStorage.removeItem('ph_debug')
             this.set_config({ debug: false })
-            Config.DEBUG = false
         } else {
             window?.console.log(
                 "You're now in debug mode. All calls to PostHog will be logged in your console.\nYou can disable this with `posthog.debug(false)`."
             )
             localStorage && localStorage.setItem('ph_debug', 'true')
             this.set_config({ debug: true })
-            Config.DEBUG = true
         }
     }
 
