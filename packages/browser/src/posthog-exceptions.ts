@@ -84,7 +84,7 @@ export class PostHogExceptions {
                 !this._instance.config.error_tracking.capturePostHogExceptions &&
                 this._isPostHogException(exceptionList)
             ) {
-                logger.info('Skipping exception capture because it was thrown by an extension')
+                logger.info('Skipping exception capture because it was thrown by the PostHog SDK')
                 return
             }
         }
@@ -130,8 +130,6 @@ export class PostHogExceptions {
     private _isExtensionException(exceptionList: ErrorTracking.ExceptionList): boolean {
         const frames = exceptionList.flatMap((e) => e.stacktrace?.frames ?? [])
         return frames.some((f) => f.filename && f.filename.startsWith('chrome-extension://'))
-
-        return false
     }
 
     private _isPostHogException(exceptionList: ErrorTracking.ExceptionList): boolean {
