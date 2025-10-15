@@ -36,12 +36,10 @@ export const delay = (ms: number): Promise<void> => {
 
 export const createMockLogger = (): Logger => {
   return {
-    _log: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    critical: jest.fn(),
-    uninitializedWarning: jest.fn(),
+    info: jest.fn((...args) => console.log(...args)),
+    warn: jest.fn((...args) => console.warn(...args)),
+    error: jest.fn((...args) => console.error(...args)),
+    critical: jest.fn((...args) => console.error(...args)),
     createLogger: createMockLogger,
   }
 }

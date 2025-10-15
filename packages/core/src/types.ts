@@ -55,6 +55,17 @@ export type PostHogCoreOptions = {
   disableGeoip?: boolean
   /** Special flag to indicate ingested data is for a historical migration. */
   historicalMigration?: boolean
+  /**
+   * Evaluation environments for feature flags.
+   * When set, only feature flags that have at least one matching evaluation tag
+   * will be evaluated for this SDK instance. Feature flags with no evaluation tags
+   * will always be evaluated.
+   *
+   * Examples: ['production', 'web', 'mobile']
+   *
+   * @default undefined
+   */
+  evaluationEnvironments?: readonly string[]
 }
 
 export enum PostHogPersistedProperty {
@@ -162,7 +173,7 @@ export type PostHogRemoteConfig = {
 
 export type FeatureFlagValue = string | boolean
 
-export type PostHogFlagsResponse = Omit<PostHogRemoteConfig, 'surveys' | 'hasFeatureFlags'> & {
+export type PostHogFlagsResponse = Omit<PostHogRemoteConfig, 'hasFeatureFlags'> & {
   featureFlags: {
     [key: string]: FeatureFlagValue
   }
@@ -509,12 +520,10 @@ export type ActionStepType = {
 }
 
 export type Logger = {
-  _log: (level: 'log' | 'warn' | 'error', ...args: any[]) => void
   info: (...args: any[]) => void
   warn: (...args: any[]) => void
   error: (...args: any[]) => void
   critical: (...args: any[]) => void
-  uninitializedWarning: (methodName: string) => void
   createLogger: (prefix: string) => Logger
 }
 

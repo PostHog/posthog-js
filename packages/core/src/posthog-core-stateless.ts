@@ -1,6 +1,7 @@
 import { SimpleEventEmitter } from './eventemitter'
 import { getFeatureFlagValue, normalizeFlagsResponse } from './featureFlagUtils'
 import { gzipCompress, isGzipSupported } from './gzip'
+import { createLogger } from './logger'
 import {
   PostHogFlagsResponse,
   PostHogCoreOptions,
@@ -18,6 +19,7 @@ import {
   PostHogFetchOptions,
   PostHogPersistedProperty,
   PostHogQueueItem,
+  Logger,
 } from './types'
 import {
   allSettled,
@@ -114,6 +116,7 @@ export abstract class PostHogCoreStateless {
   private removeDebugCallback?: () => void
   private disableGeoip: boolean
   private historicalMigration: boolean
+  private evaluationEnvironments?: readonly string[]
   protected disabled
   protected disableCompression: boolean
 
@@ -127,6 +130,7 @@ export abstract class PostHogCoreStateless {
   protected _initPromise: Promise<void>
   protected _isInitialized: boolean = false
   protected _remoteConfigResponsePromise?: Promise<PostHogRemoteConfig | undefined>
+  protected _logger: Logger
 
   // Abstract methods to be overridden by implementations
   abstract fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse>
@@ -138,34 +142,36 @@ export abstract class PostHogCoreStateless {
   abstract getPersistedProperty<T>(key: PostHogPersistedProperty): T | undefined
   abstract setPersistedProperty<T>(key: PostHogPersistedProperty, value: T | null): void
 
-  constructor(apiKey: string, options?: PostHogCoreOptions) {
+  constructor(apiKey: string, options: PostHogCoreOptions = {}) {
     assert(apiKey, "You must pass your PostHog project's api key.")
 
     this.apiKey = apiKey
-    this.host = removeTrailingSlash(options?.host || 'https://us.i.posthog.com')
-    this.flushAt = options?.flushAt ? Math.max(options?.flushAt, 1) : 20
-    this.maxBatchSize = Math.max(this.flushAt, options?.maxBatchSize ?? 100)
-    this.maxQueueSize = Math.max(this.flushAt, options?.maxQueueSize ?? 1000)
-    this.flushInterval = options?.flushInterval ?? 10000
-    this.preloadFeatureFlags = options?.preloadFeatureFlags ?? true
+    this.host = removeTrailingSlash(options.host || 'https://us.i.posthog.com')
+    this.flushAt = options.flushAt ? Math.max(options.flushAt, 1) : 20
+    this.maxBatchSize = Math.max(this.flushAt, options.maxBatchSize ?? 100)
+    this.maxQueueSize = Math.max(this.flushAt, options.maxQueueSize ?? 1000)
+    this.flushInterval = options.flushInterval ?? 10000
+    this.preloadFeatureFlags = options.preloadFeatureFlags ?? true
     // If enable is explicitly set to false we override the optout
-    this.defaultOptIn = options?.defaultOptIn ?? true
-    this.disableSurveys = options?.disableSurveys ?? false
+    this.defaultOptIn = options.defaultOptIn ?? true
+    this.disableSurveys = options.disableSurveys ?? false
 
     this._retryOptions = {
-      retryCount: options?.fetchRetryCount ?? 3,
-      retryDelay: options?.fetchRetryDelay ?? 3000, // 3 seconds
+      retryCount: options.fetchRetryCount ?? 3,
+      retryDelay: options.fetchRetryDelay ?? 3000, // 3 seconds
       retryCheck: isPostHogFetchError,
     }
-    this.requestTimeout = options?.requestTimeout ?? 10000 // 10 seconds
-    this.featureFlagsRequestTimeoutMs = options?.featureFlagsRequestTimeoutMs ?? 3000 // 3 seconds
-    this.remoteConfigRequestTimeoutMs = options?.remoteConfigRequestTimeoutMs ?? 3000 // 3 seconds
-    this.disableGeoip = options?.disableGeoip ?? true
-    this.disabled = options?.disabled ?? false
+    this.requestTimeout = options.requestTimeout ?? 10000 // 10 seconds
+    this.featureFlagsRequestTimeoutMs = options.featureFlagsRequestTimeoutMs ?? 3000 // 3 seconds
+    this.remoteConfigRequestTimeoutMs = options.remoteConfigRequestTimeoutMs ?? 3000 // 3 seconds
+    this.disableGeoip = options.disableGeoip ?? true
+    this.disabled = options.disabled ?? false
     this.historicalMigration = options?.historicalMigration ?? false
+    this.evaluationEnvironments = options?.evaluationEnvironments
     // Init promise allows the derived class to block calls until it is ready
     this._initPromise = Promise.resolve()
     this._isInitialized = true
+    this._logger = createLogger('[PostHog]', this.logMsgIfDebug.bind(this))
     this.disableCompression = !isGzipSupported() || (options?.disableCompression ?? false)
   }
 
@@ -177,7 +183,7 @@ export abstract class PostHogCoreStateless {
 
   protected wrap(fn: () => void): void {
     if (this.disabled) {
-      this.logMsgIfDebug(() => console.warn('[PostHog] The client is disabled'))
+      this._logger.warn('The client is disabled')
       return
     }
 
@@ -245,7 +251,7 @@ export abstract class PostHogCoreStateless {
     this.removeDebugCallback?.()
 
     if (enabled) {
-      const removeDebugCallback = this.on('*', (event, payload) => console.log('PostHog Debug', event, payload))
+      const removeDebugCallback = this.on('*', (event, payload) => this._logger.info(event, payload))
       this.removeDebugCallback = () => {
         removeDebugCallback()
         this.removeDebugCallback = undefined
@@ -429,7 +435,7 @@ export abstract class PostHogCoreStateless {
     return this.fetchWithRetry(url, fetchOptions, { retryCount: 0 }, this.remoteConfigRequestTimeoutMs)
       .then((response) => response.json() as Promise<PostHogRemoteConfig>)
       .catch((error) => {
-        this.logMsgIfDebug(() => console.error('Remote config could not be loaded', error))
+        this._logger.error('Remote config could not be loaded', error)
         this._events.emit('error', error)
         return undefined
       })
@@ -444,25 +450,34 @@ export abstract class PostHogCoreStateless {
     groups: Record<string, string | number> = {},
     personProperties: Record<string, string> = {},
     groupProperties: Record<string, Record<string, string>> = {},
-    extraPayload: Record<string, any> = {}
+    extraPayload: Record<string, any> = {},
+    fetchConfig: boolean = true
   ): Promise<PostHogFlagsResponse | undefined> {
     await this._initPromise
 
-    const url = `${this.host}/flags/?v=2&config=true`
+    const configParam = fetchConfig ? '&config=true' : ''
+    const url = `${this.host}/flags/?v=2${configParam}`
+    const requestData: Record<string, any> = {
+      token: this.apiKey,
+      distinct_id: distinctId,
+      groups,
+      person_properties: personProperties,
+      group_properties: groupProperties,
+      ...extraPayload,
+    }
+
+    // Add evaluation environments if configured
+    if (this.evaluationEnvironments && this.evaluationEnvironments.length > 0) {
+      requestData.evaluation_environments = this.evaluationEnvironments
+    }
+
     const fetchOptions: PostHogFetchOptions = {
       method: 'POST',
       headers: { ...this.getCustomHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        token: this.apiKey,
-        distinct_id: distinctId,
-        groups,
-        person_properties: personProperties,
-        group_properties: groupProperties,
-        ...extraPayload,
-      }),
+      body: JSON.stringify(requestData),
     }
 
-    this.logMsgIfDebug(() => console.log('PostHog Debug', 'Flags URL', url))
+    this._logger.info('Flags URL', url)
 
     // Don't retry /flags API calls
     return this.fetchWithRetry(url, fetchOptions, { retryCount: 0 }, this.featureFlagsRequestTimeoutMs)
@@ -731,7 +746,7 @@ export abstract class PostHogCoreStateless {
     await this._initPromise
 
     if (this.disableSurveys === true) {
-      this.logMsgIfDebug(() => console.log('PostHog Debug', 'Loading surveys is disabled.'))
+      this._logger.info('Loading surveys is disabled.')
       return []
     }
 
@@ -746,7 +761,7 @@ export abstract class PostHogCoreStateless {
         if (response.status !== 200 || !response.json) {
           const msg = `Surveys API could not be loaded: ${response.status}`
           const error = new Error(msg)
-          this.logMsgIfDebug(() => console.error(error))
+          this._logger.error(error)
 
           this._events.emit('error', new Error(msg))
           return undefined
@@ -755,7 +770,7 @@ export abstract class PostHogCoreStateless {
         return response.json() as Promise<SurveyResponse>
       })
       .catch((error) => {
-        this.logMsgIfDebug(() => console.error('Surveys API could not be loaded', error))
+        this._logger.error('Surveys API could not be loaded', error)
 
         this._events.emit('error', error)
         return undefined
@@ -764,7 +779,7 @@ export abstract class PostHogCoreStateless {
     const newSurveys = response?.surveys
 
     if (newSurveys) {
-      this.logMsgIfDebug(() => console.log('PostHog Debug', 'Surveys fetched from API: ', JSON.stringify(newSurveys)))
+      this._logger.info('Surveys fetched from API: ', JSON.stringify(newSurveys))
     }
 
     return newSurveys ?? []
@@ -819,7 +834,7 @@ export abstract class PostHogCoreStateless {
 
       if (queue.length >= this.maxQueueSize) {
         queue.shift()
-        this.logMsgIfDebug(() => console.info('Queue is full, the oldest event is dropped.'))
+        this._logger.info('Queue is full, the oldest event is dropped.')
       }
 
       queue.push({ message })
@@ -840,7 +855,7 @@ export abstract class PostHogCoreStateless {
 
   protected async sendImmediate(type: string, _message: any, options?: PostHogCaptureOptions): Promise<void> {
     if (this.disabled) {
-      this.logMsgIfDebug(() => console.warn('[PostHog] The client is disabled'))
+      this._logger.warn('The client is disabled')
       return
     }
 
@@ -1057,10 +1072,8 @@ export abstract class PostHogCoreStateless {
         if (isPostHogFetchContentTooLargeError(err) && batchMessages.length > 1) {
           // if we get a 413 error, we want to reduce the batch size and try again
           this.maxBatchSize = Math.max(1, Math.floor(batchMessages.length / 2))
-          this.logMsgIfDebug(() =>
-            console.warn(
-              `Received 413 when sending batch of size ${batchMessages.length}, reducing batch size to ${this.maxBatchSize}`
-            )
+          this._logger.warn(
+            `Received 413 when sending batch of size ${batchMessages.length}, reducing batch size to ${this.maxBatchSize}`
           )
           // do not persist the queue change, we want to retry the same batch
           continue
@@ -1177,7 +1190,7 @@ export abstract class PostHogCoreStateless {
     return Promise.race([
       new Promise<void>((_, reject) => {
         safeSetTimeout(() => {
-          this.logMsgIfDebug(() => console.error('Timed out while shutting down PostHog'))
+          this._logger.error('Timed out while shutting down PostHog')
           hasTimedOut = true
           reject('Timeout while shutting down PostHog. Some events may not have been sent.')
         }, shutdownTimeoutMs)
@@ -1211,10 +1224,8 @@ export abstract class PostHogCoreStateless {
    */
   async shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
     if (this.shutdownPromise) {
-      this.logMsgIfDebug(() =>
-        console.warn(
-          'shutdown() called while already shutting down. shutdown() is meant to be called once before process exit - use flush() for per-request cleanup'
-        )
+      this._logger.warn(
+        'shutdown() called while already shutting down. shutdown() is meant to be called once before process exit - use flush() for per-request cleanup'
       )
     } else {
       this.shutdownPromise = this._shutdown(shutdownTimeoutMs).finally(() => {

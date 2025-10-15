@@ -116,13 +116,11 @@ export function createEventProcessor(
             $exception_message: any
             $exception_type: any
             $exception_list: any
-            $exception_personURL: string
             $exception_level: SeverityLevel
         } = {
             // PostHog Exception Properties,
             $exception_message: exceptions[0]?.value || event.message,
             $exception_type: exceptions[0]?.type,
-            $exception_personURL: personUrl,
             $exception_level: event.level,
             $exception_list: exceptionList,
             // Sentry Exception Properties

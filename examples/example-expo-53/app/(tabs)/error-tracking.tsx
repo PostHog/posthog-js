@@ -23,6 +23,30 @@ export default function ErrorTrackingScreen() {
                 onPress={() => posthog.captureException(new Error('User clicked Capture Error'))}
                 title="Capture error manually"
             />
+            <Button
+                onPress={() => {
+                    throw new Error('User throws an Error')
+                }}
+                title="Capture error automatically"
+            />
+            <Button
+                onPress={() => {
+                    Promise.reject(new Error('User rejects a Promise'))
+                }}
+                title="Capture promise rejection"
+            />
+            <Button
+                onPress={() => {
+                    console.error('User logs an error', new Error('Error inside console log'))
+                }}
+                title="Capture console error"
+            />
+            <Button
+                onPress={() => {
+                    console.warn('Console warning')
+                }}
+                title="Capture console warn"
+            />
         </ParallaxScrollView>
     )
 }

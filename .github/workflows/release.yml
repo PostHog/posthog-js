@@ -25,6 +25,7 @@ jobs:
           - name: "@posthog/react"
           - name: "@posthog/ai"
           - name: "@posthog/nextjs-config"
+          - name: "@posthog/nuxt"
 
     steps:
       - name: Checkout the repository

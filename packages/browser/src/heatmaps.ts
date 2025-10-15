@@ -10,7 +10,9 @@ import { createLogger } from './utils/logger'
 import { isElementInToolbar, isElementNode, isTag } from './utils/element-utils'
 import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensions/dead-clicks-autocapture'
 import { includes } from '@posthog/core'
-import { addEventListener } from './utils'
+import { addEventListener, extendArray } from './utils'
+import { maskQueryParams } from './utils/request-utils'
+import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from './utils/event-utils'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
 
@@ -198,8 +200,17 @@ export class Heatmaps {
             return
         }
 
-        // TODO we should be able to mask this
-        const url = window.location.href
+        const href = window.location.href
+
+        // mask url query params
+        const maskPersonalDataProperties = this.instance.config.mask_personal_data_properties
+        const customPersonalDataProperties = this.instance.config.custom_personal_data_properties
+
+        const paramsToMask = maskPersonalDataProperties
+            ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
+            : []
+
+        const url = maskQueryParams(href, paramsToMask, MASKED)
 
         this._buffer = this._buffer || {}
 

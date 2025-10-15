@@ -1,7 +1,7 @@
 // An MSW server that handles requests to https://app.posthog.com/e/ and stores
 
 import { ResponseComposition, rest } from 'msw'
-import { setupServer } from 'msw/lib/node'
+import { setupServer } from 'msw/node'
 import { RestContext } from 'msw'
 import { RestRequest } from 'msw'
 import { decompressSync, strFromU8 } from 'fflate'

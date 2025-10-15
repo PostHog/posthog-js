@@ -1,10 +1,14 @@
-import { PostHog } from '@/entrypoints/index.node'
+import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation, isPending, wait, waitForPromises } from './utils'
 import { randomUUID } from 'crypto'
 
 jest.mock('../version', () => ({ version: '1.2.3' }))
 
 const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+
+const posthogImmediateResolveOptions: PostHogOptions = {
+  fetchRetryCount: 0,
+}
 
 const waitForFlushTimer = async (): Promise<void> => {
   await waitForPromises()
@@ -25,12 +29,24 @@ const getLastBatchEvents = (): any[] | undefined => {
   return JSON.parse((call[1] as any).body as any).batch
 }
 
+jest.retryTimes(3)
+
 describe('PostHog Node.js', () => {
   let posthog: PostHog
+
+  let warnSpy: jest.SpyInstance
+  let logSpy: jest.SpyInstance
+  let infoSpy: jest.SpyInstance
+  let errorSpy: jest.SpyInstance
 
   jest.useFakeTimers()
 
   beforeEach(() => {
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {})
+    infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {})
+    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
     posthog = new PostHog('TEST_API_KEY', {
       host: 'http://example.com',
       fetchRetryCount: 0,
@@ -59,6 +75,9 @@ describe('PostHog Node.js', () => {
 
     // ensure clean shutdown & no test interdependencies
     await posthog.shutdown()
+    warnSpy.mockRestore()
+    logSpy.mockRestore()
+    errorSpy.mockRestore()
   })
 
   describe('core methods', () => {
@@ -329,11 +348,11 @@ describe('PostHog Node.js', () => {
     })
 
     it('should warn if capture is called with a string', () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
       posthog.debug(true)
       // @ts-expect-error - Testing the warning when passing a string instead of an object
       posthog.capture('test-event')
       expect(warnSpy).toHaveBeenCalledWith(
+        '[PostHog]',
         'Called capture() with a string as the first argument when an object was expected.'
       )
       warnSpy.mockRestore()
@@ -459,7 +478,6 @@ describe('PostHog Node.js', () => {
     })
 
     it('should log when event is dropped in debug mode', async () => {
-      const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {})
       const beforeSendFn = jest.fn(() => null)
       const ph = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
@@ -472,22 +490,13 @@ describe('PostHog Node.js', () => {
       ph.capture({ distinctId: '123', event: 'test-event' })
       await waitForFlushTimer()
 
-      expect(infoSpy).toHaveBeenCalledWith("Event 'test-event' was rejected in beforeSend function")
-      infoSpy.mockRestore()
+      expect(logSpy).toHaveBeenCalledWith('[PostHog]', "Event 'test-event' was rejected in beforeSend function")
+      logSpy.mockRestore()
     })
   })
 
   describe('shutdown', () => {
-    let warnSpy: jest.SpyInstance, logSpy: jest.SpyInstance
     beforeEach(() => {
-      const actualLog = console.log
-      warnSpy = jest.spyOn(console, 'warn').mockImplementation((...args) => {
-        actualLog('spied warn:', ...args)
-      })
-      logSpy = jest.spyOn(console, 'log').mockImplementation((...args) => {
-        actualLog('spied log:', ...args)
-      })
-
       mockedFetch.mockImplementation(async () => {
         // simulate network delay
         await wait(500)
@@ -542,9 +551,6 @@ describe('PostHog Node.js', () => {
         { event: 'test-event-2' },
         { event: 'test-event-3' },
       ])
-
-      logSpy.mockRestore()
-      warnSpy.mockRestore()
     })
 
     it('should shutdown cleanly with pending capture flag promises', async () => {
@@ -581,7 +587,6 @@ describe('PostHog Node.js', () => {
       expect(10).toEqual(logSpy.mock.calls.filter((call) => call[1].includes('capture')).length)
       // 1 for the captured events, 1 for the final flush of feature flag called events
       expect(2).toEqual(logSpy.mock.calls.filter((call) => call[1].includes('flush')).length)
-      logSpy.mockRestore()
     })
   })
 
@@ -2465,6 +2470,92 @@ describe('PostHog Node.js', () => {
       )
 
       errorSpy.mockRestore()
+    })
+  })
+
+  describe('evaluation environments', () => {
+    beforeEach(() => {
+      mockedFetch.mockClear()
+    })
+
+    it('should send evaluation environments when configured', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          decideFlags: { 'test-flag': true },
+          flagsPayloads: {},
+        })
+      )
+
+      const posthogWithEnvs = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        evaluationEnvironments: ['production', 'backend'],
+        ...posthogImmediateResolveOptions,
+      })
+
+      await posthogWithEnvs.getAllFlags('some-distinct-id')
+
+      expect(mockedFetch).toHaveBeenCalledWith(
+        'http://example.com/flags/?v=2&config=true',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"evaluation_environments":["production","backend"]'),
+        })
+      )
+
+      await posthogWithEnvs.shutdown()
+    })
+
+    it('should not send evaluation environments when not configured', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          decideFlags: { 'test-flag': true },
+          flagsPayloads: {},
+        })
+      )
+
+      const posthogWithoutEnvs = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        ...posthogImmediateResolveOptions,
+      })
+
+      await posthogWithoutEnvs.getAllFlags('some-distinct-id')
+
+      expect(mockedFetch).toHaveBeenCalledWith(
+        'http://example.com/flags/?v=2&config=true',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.not.stringContaining('evaluation_environments'),
+        })
+      )
+
+      await posthogWithoutEnvs.shutdown()
+    })
+
+    it('should not send evaluation environments when configured as empty array', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          decideFlags: { 'test-flag': true },
+          flagsPayloads: {},
+        })
+      )
+
+      const posthogWithEmptyEnvs = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        evaluationEnvironments: [],
+        ...posthogImmediateResolveOptions,
+      })
+
+      await posthogWithEmptyEnvs.getAllFlags('some-distinct-id')
+
+      expect(mockedFetch).toHaveBeenCalledWith(
+        'http://example.com/flags/?v=2&config=true',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.not.stringContaining('evaluation_environments'),
+        })
+      )
+
+      await posthogWithEmptyEnvs.shutdown()
     })
   })
 

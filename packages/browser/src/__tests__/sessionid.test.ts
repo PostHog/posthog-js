@@ -358,20 +358,20 @@ describe('Session ID manager', () => {
         it('uses the custom session_idle_timeout_seconds if within bounds', () => {
             assignableWindow.POSTHOG_DEBUG = true
             expect(mockSessionManager(61)['_sessionTimeoutMs']).toEqual(61 * 1000)
-            expect(console.warn).toBeCalledTimes(0)
+            expect(console.warn).toHaveBeenCalledTimes(0)
             expect(mockSessionManager(59)['_sessionTimeoutMs']).toEqual(60 * 1000)
-            expect(console.warn).toBeCalledTimes(1)
+            expect(console.warn).toHaveBeenCalledTimes(1)
             expect(mockSessionManager(30 * 60 - 1)['_sessionTimeoutMs']).toEqual((30 * 60 - 1) * 1000)
-            expect(console.warn).toBeCalledTimes(1)
+            expect(console.warn).toHaveBeenCalledTimes(1)
             expect(mockSessionManager(MAX_SESSION_IDLE_TIMEOUT_SECONDS + 1)['_sessionTimeoutMs']).toEqual(
                 MAX_SESSION_IDLE_TIMEOUT_SECONDS * 1000
             )
-            expect(console.warn).toBeCalledTimes(2)
+            expect(console.warn).toHaveBeenCalledTimes(2)
             // @ts-expect-error - test invalid input
             expect(mockSessionManager('foobar')['_sessionTimeoutMs']).toEqual(
                 DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS * 1000
             )
-            expect(console.warn).toBeCalledTimes(3)
+            expect(console.warn).toHaveBeenCalledTimes(3)
         })
     })
 
@@ -513,6 +513,75 @@ describe('Session ID manager', () => {
             expect(mockHandler1).toHaveBeenCalledTimes(1)
             expect(mockHandler2).toHaveBeenCalledTimes(1)
             expect(mockHandler3).toHaveBeenCalledTimes(1)
+
+            jest.useRealTimers()
+        })
+    })
+
+    describe('destroy()', () => {
+        it('clears the idle timeout timer', () => {
+            jest.useFakeTimers()
+            const sessionIdManager = sessionIdMgr(persistence)
+
+            // The timer is created in the constructor
+            expect(sessionIdManager['_enforceIdleTimeout']).toBeDefined()
+
+            sessionIdManager.destroy()
+
+            expect(sessionIdManager['_enforceIdleTimeout']).toBeUndefined()
+            jest.useRealTimers()
+        })
+
+        it('removes the beforeunload event listener', () => {
+            const removeEventListenerSpy = jest.spyOn(window, 'removeEventListener')
+            const sessionIdManager = sessionIdMgr(persistence)
+
+            expect(sessionIdManager['_beforeUnloadListener']).toBeDefined()
+
+            sessionIdManager.destroy()
+
+            expect(removeEventListenerSpy).toHaveBeenCalledWith(
+                'beforeunload',
+                expect.any(Function),
+                expect.objectContaining({ capture: false })
+            )
+            expect(sessionIdManager['_beforeUnloadListener']).toBeUndefined()
+
+            removeEventListenerSpy.mockRestore()
+        })
+
+        it('clears session id changed handlers', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            const mockHandler = jest.fn()
+
+            sessionIdManager.onSessionId(mockHandler)
+            expect(sessionIdManager['_sessionIdChangedHandlers']).toHaveLength(1)
+
+            sessionIdManager.destroy()
+
+            expect(sessionIdManager['_sessionIdChangedHandlers']).toHaveLength(0)
+        })
+
+        it('prevents timer from firing after destroy', async () => {
+            jest.useFakeTimers()
+            const sessionIdManager = sessionIdMgr(persistence)
+            const mockHandler = jest.fn()
+
+            sessionIdManager.on('forcedIdleReset', mockHandler)
+
+            // Destroy before timer fires
+            sessionIdManager.destroy()
+
+            // Set up idle session
+            const idleTimestamp = timestamp - (sessionIdManager.sessionTimeoutMs + 1000)
+            persistence.props[SESSION_ID] = [idleTimestamp, 'oldSessionID', idleTimestamp]
+
+            // Advance time past when the timer would have fired
+            const idleTimeoutMs = sessionIdManager.sessionTimeoutMs * 1.1
+            jest.advanceTimersByTime(idleTimeoutMs + 1000)
+
+            // Handler should NOT have been called since we destroyed the manager
+            expect(mockHandler).not.toHaveBeenCalled()
 
             jest.useRealTimers()
         })

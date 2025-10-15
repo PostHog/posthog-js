@@ -8,7 +8,9 @@ import {
     SiteAppLoader,
     SessionStartReason,
 } from '../types'
-import { SessionRecordingStatus, TriggerType } from '../extensions/replay/triggerMatching'
+// only importing types here, so won't affect the bundle
+// eslint-disable-next-line posthog-js/no-external-replay-imports
+import type { SessionRecordingStatus, TriggerType } from '../extensions/replay/external/triggerMatching'
 import { eventWithTime } from '@rrweb/types'
 import { ErrorTracking } from '@posthog/core'
 
@@ -154,6 +156,7 @@ export type PostHogExtensionKind =
     | 'exception-autocapture'
     | 'web-vitals'
     | 'recorder'
+    | 'lazy-recorder'
     | 'tracing-headers'
     | 'surveys'
     | 'dead-clicks-autocapture'

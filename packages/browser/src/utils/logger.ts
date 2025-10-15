@@ -3,8 +3,14 @@ import { isUndefined } from '@posthog/core'
 import { assignableWindow, window } from './globals'
 import type { Logger } from '@posthog/core'
 
-const _createLogger = (prefix: string): Logger => {
-    const logger: Logger = {
+type PosthogJsLogger = Omit<Logger, 'createLogger'> & {
+    _log: (level: 'log' | 'warn' | 'error', ...args: any[]) => void
+    uninitializedWarning: (methodName: string) => void
+    createLogger: (prefix: string) => PosthogJsLogger
+}
+
+const _createLogger = (prefix: string): PosthogJsLogger => {
+    const logger: PosthogJsLogger = {
         _log: (level: 'log' | 'warn' | 'error', ...args: any[]) => {
             if (
                 window &&

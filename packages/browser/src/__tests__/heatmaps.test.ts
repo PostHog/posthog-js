@@ -273,4 +273,45 @@ describe('heatmaps', () => {
             JSON.stringify(posthog.heatmaps['_onDeadClick'].bind(posthog.heatmaps))
         )
     })
+
+    describe.each([
+        [false, undefined, 'http://localhost/?gclid=12345&other=true'],
+        [true, undefined, 'http://localhost/?gclid=<masked>&other=true'],
+        [true, ['other'], 'http://localhost/?gclid=<masked>&other=<masked>'],
+    ])(
+        'the behaviour when mask_personal_data_properties is %s and custom_personal_data_properties is %s',
+        (
+            maskPersonalDataProperties: boolean,
+            customPersonalDataProperties: undefined | string[],
+            maskedUrl: string
+        ) => {
+            beforeEach(async () => {
+                beforeSendMock = beforeSendMock.mockClear()
+
+                const posthogWithMasking = await createPosthogInstance(uuidv7(), {
+                    before_send: beforeSendMock,
+                    mask_personal_data_properties: maskPersonalDataProperties,
+                    custom_personal_data_properties: customPersonalDataProperties,
+                })
+
+                Object.defineProperty(window, 'location', {
+                    value: {
+                        href: 'http://localhost/?gclid=12345&other=true',
+                    },
+                    writable: true,
+                })
+
+                posthogWithMasking.config.capture_heatmaps = true
+                posthogWithMasking.heatmaps!.startIfEnabled()
+                posthogWithMasking.heatmaps?.['_onClick']?.(createMockMouseEvent())
+
+                jest.advanceTimersByTime(posthogWithMasking.heatmaps!.flushIntervalMilliseconds + 1)
+            })
+
+            it('masks properties accordingly', async () => {
+                const heatmapData = beforeSendMock.mock.lastCall[0].properties.$heatmap_data
+                expect(heatmapData).toMatchObject({ [maskedUrl]: {} })
+            })
+        }
+    )
 })

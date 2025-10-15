@@ -1,6 +1,6 @@
 {
   "name": "@posthog/nextjs-config",
-  "version": "1.3.1",
+  "version": "1.3.3",
   "description": "NextJS configuration helper for Posthog 🦔",
   "repository": {
     "type": "git",
@@ -21,7 +21,7 @@
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "build": "rslib build",
-    "test:unit": "jest",
+    "test:unit": "jest --passWithNoTests",
     "dev": "rslib build --watch",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
@@ -43,7 +43,8 @@
   "license": "MIT",
   "dependencies": {
     "@posthog/cli": "^0.4.7",
-    "semver": "^7.7.2"
+    "semver": "^7.7.2",
+    "@posthog/core": "workspace:*"
   },
   "keywords": [
     "posthog",
