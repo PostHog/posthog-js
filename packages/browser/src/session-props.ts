@@ -47,6 +47,8 @@ export class SessionPropsManager {
     private readonly _sessionSourceParamGenerator: (
         instance?: PostHog
     ) => LegacySessionSourceProps | CurrentSessionSourceProps
+    private _bootstrappedSessionProps?: Record<string, any>
+    private _bootstrapSessionId?: string
 
     constructor(
         instance: PostHog,
@@ -58,6 +60,8 @@ export class SessionPropsManager {
         this._sessionIdManager = sessionIdManager
         this._persistence = persistence
         this._sessionSourceParamGenerator = sessionSourceParamGenerator || generateSessionSourceParams
+        this._bootstrappedSessionProps = instance.config.bootstrap?.sessionProps
+        this._bootstrapSessionId = instance.config.bootstrap?.sessionID
 
         this._sessionIdManager.onSessionId(this._onSessionIdCallback)
     }
@@ -70,6 +74,23 @@ export class SessionPropsManager {
         const stored = this._getStored()
         if (stored && stored.sessionId === sessionId) {
             return
+        }
+
+        // Clear bootstrapped props when session changes
+        if (this._bootstrappedSessionProps) {
+            if (this._bootstrapSessionId) {
+                // If we have a bootstrap session ID, only clear if it doesn't match
+                if (this._bootstrapSessionId !== sessionId) {
+                    this._bootstrappedSessionProps = undefined
+                }
+            } else {
+                // No bootstrap session ID - clear on session change (but NOT on first initialization)
+                if (stored) {
+                    // There was a previous session, so this is a session change - clear the props
+                    this._bootstrappedSessionProps = undefined
+                }
+                // If !stored, this is the first session - keep the bootstrapped props
+            }
         }
 
         const newProps: StoredSessionSourceProps = {
@@ -100,7 +121,24 @@ export class SessionPropsManager {
     }
 
     getSessionProps() {
-        // it's the same props, but don't include null for unset properties, and add a prefix
+        const stored = this._getStored()
+
+        // If we have bootstrapped session props, use them if:
+        // 1. We have a bootstrap session ID and it matches the current session, OR
+        // 2. No bootstrap session ID was provided (session props only), use until session changes
+        if (this._bootstrappedSessionProps) {
+            if (this._bootstrapSessionId) {
+                // Bootstrap session ID exists - only use if it matches current session (or no session yet)
+                if (!stored || stored.sessionId === this._bootstrapSessionId) {
+                    return this._bootstrappedSessionProps
+                }
+            } else {
+                // No bootstrap session ID - use bootstrapped props (they'll be cleared on first session change)
+                return this._bootstrappedSessionProps
+            }
+        }
+
+        // Otherwise, derive from stored props with $session_entry_ prefix
         const p: Record<string, any> = {}
         each(stripEmptyProperties(this.getSetOnceProps()), (v, k) => {
             if (k === '$current_url') {
