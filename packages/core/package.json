@@ -59,6 +59,7 @@
   "devDependencies": {
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
+    "@types/jest": "^29.5.0",
     "jest": "catalog:"
   }
 }
