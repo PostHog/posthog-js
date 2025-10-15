@@ -381,4 +381,74 @@ describe('Session Props Manager', () => {
         expect(newSessionProps).not.toEqual(bootstrappedProps)
         expect(newSessionProps).toHaveProperty('$session_entry_utm_source', 'organic')
     })
+
+    it('should use bootstrapped session props when returning user has expired session', () => {
+        // arrange - User returns after session timeout/expiration
+        const bootstrappedProps = {
+            $session_entry_utm_source: 'email',
+            $session_entry_utm_campaign: 'newsletter',
+        }
+
+        const onSessionId = jest.fn()
+        const generateProps = jest.fn()
+        const persistenceRegister = jest.fn()
+        const sessionIdManager = {
+            onSessionId,
+        } as unknown as SessionIdManager
+        const persistence = {
+            register: persistenceRegister,
+            props: {
+                // Old expired session exists in persistence
+                $client_session_props: {
+                    props: {
+                        r: 'http://oldsite.com',
+                        u: 'https://app.example.com/old-page?utm_source=google',
+                    },
+                    sessionId: 'expired-session-from-yesterday',
+                },
+            },
+        } as unknown as PostHogPersistence
+        const posthog = {
+            sessionManager: sessionIdManager,
+            persistence,
+            config: {
+                bootstrap: {
+                    sessionProps: bootstrappedProps,
+                    // Note: no sessionID provided
+                },
+            },
+        } as unknown as PostHog
+
+        const sessionPropsManager = new SessionPropsManager(posthog, sessionIdManager, persistence, generateProps)
+
+        // Initial state - should use bootstrapped props
+        expect(sessionPropsManager.getSessionProps()).toEqual(bootstrappedProps)
+
+        // Simulate first callback with NEW session ID (old session expired, new one generated)
+        const callback = onSessionId.mock.calls[0][0]
+        callback('new-session-after-expiration')
+
+        // After first callback, should STILL use bootstrapped props
+        // (expired session is treated like fresh start)
+        expect(sessionPropsManager.getSessionProps()).toEqual(bootstrappedProps)
+
+        // Update persistence to reflect the new session
+        persistence.props = {
+            $client_session_props: {
+                props: {
+                    r: 'http://example.com',
+                    u: 'https://app.example.com/page?utm_source=organic',
+                },
+                sessionId: 'new-session-after-expiration',
+            },
+        }
+
+        // Now simulate a REAL session change (user continues browsing, session changes)
+        callback('another-new-session')
+
+        // After second callback (real session change), should derive from stored props
+        const newSessionProps = sessionPropsManager.getSessionProps()
+        expect(newSessionProps).not.toEqual(bootstrappedProps)
+        expect(newSessionProps).toHaveProperty('$session_entry_utm_source', 'organic')
+    })
 })
