@@ -1,9 +1,16 @@
 name: "Generate References"
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
+    inputs:
+      package_name:
+        description: "Package name to generate references for"
+        required: true
+        type: string
+      package_path:
+        description: "Absolute path to the package directory (from repo root)"
+        required: true
+        type: string
 
 jobs:
   generate-references:
@@ -11,6 +18,7 @@ jobs:
     permissions:
       contents: write
     runs-on: ubuntu-22.04
+
     steps:
       - name: Checkout the repository
         uses: actions/checkout@85e6279cec87321a52edac9c87bce653a07cf6c2
@@ -23,23 +31,26 @@ jobs:
 
       - name: Build packages
         run: pnpm build
-        
-      - name: Generate SDK references
-        run: pnpm generate-references
+
+      - name: Generate references for ${{ github.event.inputs.package_name }}
+        run: pnpm exec turbo --filter="${{ github.event.inputs.package_name }}" generate-references
 
       - name: Check for changes in references
         id: changes
         run: |
-          if [ -n "$(git status --porcelain packages/*/references/)" ]; then
+          PACKAGE_DIR="${{ github.event.inputs.package_path }}/references/"
+          if [ -n "$(git status --porcelain "$PACKAGE_DIR")" ]; then
             echo "changed=true" >> $GITHUB_OUTPUT
-            echo "New references generated in packages references directories:"
-            git status --porcelain packages/*/references/
+            echo "New references generated for ${{ github.event.inputs.package_name }}:"
+            git status --porcelain "$PACKAGE_DIR"
           else
             echo "changed=false" >> $GITHUB_OUTPUT
-            echo "No new references generated in packages references directories"
+            echo "No new references generated for ${{ github.event.inputs.package_name }}"
           fi
-      - uses: stefanzweifel/git-auto-commit-action@b3e3f72439fc3af08948f989a19a825463598a
+          
+      - uses: stefanzweifel/git-auto-commit-action@778341af668090896ca464160c2def5d1d1a3eb0
         if: steps.changes.outputs.changed == 'true'
         with:
           commit_message: "Update generated references"
           file_pattern: "packages/*/references/**"
+          token: ${{ secrets.POSTHOG_BOT_PAT }}

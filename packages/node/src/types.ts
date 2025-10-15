@@ -78,6 +78,17 @@ export type PostHogOptions = PostHogCoreOptions & {
    * If a function returns null, the event will be dropped.
    */
   before_send?: BeforeSendFn | BeforeSendFn[]
+  /**
+   * Evaluation environments for feature flags.
+   * When set, only feature flags that have at least one matching evaluation tag
+   * will be evaluated for this SDK instance. Feature flags with no evaluation tags
+   * will always be evaluated.
+   *
+   * Examples: ['production', 'backend', 'api']
+   *
+   * @default undefined
+   */
+  evaluationEnvironments?: readonly string[]
 }
 
 export type PostHogFeatureFlag = {

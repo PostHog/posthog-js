@@ -97,6 +97,7 @@ import {
     isArray,
     isEmptyObject,
     isObject,
+    isBoolean,
 } from '@posthog/core'
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
@@ -445,7 +446,7 @@ export class PostHog {
             namedPosthog._init(token, config, name)
             instances[name] = namedPosthog
 
-            // Add as a property to the primary instance (this isn't type-safe but its how it was always done)
+            // Add as a property to the primary instance (this isn't type-safe but it is how it was always done)
             ;(instances[PRIMARY_INSTANCE_NAME] as any)[name] = namedPosthog
 
             return namedPosthog
@@ -474,13 +475,17 @@ export class PostHog {
         }
 
         if (this.__loaded) {
-            logger.warn('You have already initialized PostHog! Re-initializing is a no-op')
+            // need to be able to log before having processed debug config
+            // eslint-disable-next-line no-console
+            console.warn('[PostHog.js]', 'You have already initialized PostHog! Re-initializing is a no-op')
             return this
         }
 
         this.__loaded = true
         this.config = {} as PostHogConfig // will be set right below
+        config.debug = this._checkLocalStorageForDebug(config.debug)
         this._originalUserConfig = config // Store original user config for migration
+
         this._triggered_notifs = []
 
         if (config.person_profiles) {
@@ -2512,16 +2517,24 @@ export class PostHog {
                     ? this.persistence
                     : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, isPersistenceDisabled)
 
-            if (localStore._is_supported() && localStore._get('ph_debug') === 'true') {
-                this.config.debug = true
+            const debugConfigFromLocalStorage = this._checkLocalStorageForDebug(this.config.debug)
+            if (isBoolean(debugConfigFromLocalStorage)) {
+                this.config.debug = debugConfigFromLocalStorage
             }
-            if (this.config.debug) {
-                Config.DEBUG = true
-                logger.info('set_config', {
-                    config,
-                    oldConfig,
-                    newConfig: { ...this.config },
-                })
+
+            if (isBoolean(this.config.debug)) {
+                if (this.config.debug) {
+                    Config.DEBUG = true
+                    localStore._is_supported() && localStore._set('ph_debug', 'true')
+                    logger.info('set_config', {
+                        config,
+                        oldConfig,
+                        newConfig: { ...this.config },
+                    })
+                } else {
+                    Config.DEBUG = false
+                    localStore._is_supported() && localStore._remove('ph_debug')
+                }
             }
 
             this.sessionRecording?.startIfEnabledOrStop()
@@ -2905,6 +2918,7 @@ export class PostHog {
             // If the user has explicitly opted out on_reject mode, then before we can start sending regular non-cookieless events
             // we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
             this.reset(true)
+            this.sessionManager?.destroy()
             this.sessionManager = new SessionIdManager(this)
             if (this.persistence) {
                 this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
@@ -2971,6 +2985,7 @@ export class PostHog {
                 distinct_id: COOKIELESS_SENTINEL_VALUE,
                 $device_id: null,
             })
+            this.sessionManager?.destroy()
             this.sessionManager = undefined
             this.sessionPropsManager = undefined
             this.sessionRecording?.stopRecording()
@@ -3163,13 +3178,11 @@ export class PostHog {
     debug(debug?: boolean): void {
         if (debug === false) {
             window?.console.log("You've disabled debug mode.")
-            localStorage && localStorage.removeItem('ph_debug')
             this.set_config({ debug: false })
         } else {
             window?.console.log(
                 "You're now in debug mode. All calls to PostHog will be logged in your console.\nYou can disable this with `posthog.debug(false)`."
             )
-            localStorage && localStorage.setItem('ph_debug', 'true')
             this.set_config({ debug: true })
         }
     }
@@ -3277,6 +3290,12 @@ export class PostHog {
             $ai_metric_name: metricName,
             $ai_metric_value: String(metricValue),
         })
+    }
+
+    private _checkLocalStorageForDebug(debugConfig: boolean | undefined) {
+        const explicitlyFalse = isBoolean(debugConfig) && !debugConfig
+        const isTrueInLocalStorage = localStore._is_supported() && localStore._get('ph_debug') === 'true'
+        return explicitlyFalse ? false : isTrueInLocalStorage ? true : debugConfig
     }
 }
 

@@ -37,6 +37,8 @@ export class SessionIdManager {
     // we track activity so we can end the session proactively when it has passed the idle timeout
     private _enforceIdleTimeout: ReturnType<typeof setTimeout> | undefined
 
+    private _beforeUnloadListener: (() => void) | undefined = undefined
+
     private _eventEmitter: SimpleEventEmitter = new SimpleEventEmitter()
     public on(event: 'forcedIdleReset', handler: () => void): () => void {
         return this._eventEmitter.on(event, handler)
@@ -197,6 +199,25 @@ export class SessionIdManager {
         this._setSessionId(null, null, null)
     }
 
+    /**
+     * Cleans up resources used by SessionIdManager.
+     * Should be called when the SessionIdManager is no longer needed to prevent memory leaks.
+     */
+    destroy(): void {
+        // Clear the idle timeout timer
+        clearTimeout(this._enforceIdleTimeout)
+        this._enforceIdleTimeout = undefined
+
+        // Remove the beforeunload event listener
+        if (this._beforeUnloadListener && window) {
+            window.removeEventListener('beforeunload', this._beforeUnloadListener, { capture: false } as any)
+            this._beforeUnloadListener = undefined
+        }
+
+        // Clear session id changed handlers
+        this._sessionIdChangedHandlers = []
+    }
+
     /*
      * Listens to window unloads and removes the primaryWindowExists key from sessionStorage.
      * Reloaded or fresh tabs created after a DOM unloads (reloading the same tab) WILL NOT have this primaryWindowExists flag in session storage.
@@ -204,17 +225,12 @@ export class SessionIdManager {
      * We conditionally check the primaryWindowExists value in the constructor to decide if the window id in the last session storage should be carried over.
      */
     private _listenToReloadWindow(): void {
-        addEventListener(
-            window,
-            'beforeunload',
-            () => {
-                if (this._canUseSessionStorage()) {
-                    sessionStore._remove(this._primary_window_exists_storage_key)
-                }
-            },
-            // Not making it passive to try and force the browser to handle this before the page is unloaded
-            { capture: false }
-        )
+        this._beforeUnloadListener = () => {
+            if (this._canUseSessionStorage()) {
+                sessionStore._remove(this._primary_window_exists_storage_key)
+            }
+        }
+        addEventListener(window, 'beforeunload', this._beforeUnloadListener, { capture: false })
     }
 
     private _sessionHasBeenIdleTooLong = (timestamp: number, lastActivityTimestamp: number) => {
