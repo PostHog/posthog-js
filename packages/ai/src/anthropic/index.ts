@@ -1,4 +1,4 @@
-import AnthropicOriginal, { APIPromise } from '@anthropic-ai/sdk'
+import { Anthropic as AnthropicOriginal, APIPromise } from '@anthropic-ai/sdk'
 import { PostHog } from 'posthog-node'
 import {
   formatResponseAnthropic,
