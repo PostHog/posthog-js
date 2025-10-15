@@ -6,6 +6,7 @@ type NextRuntime = 'edge' | 'nodejs' | undefined
 
 export class SourcemapWebpackPlugin {
   directory: string
+  private distDir: string
 
   constructor(
     private posthogOptions: PostHogNextConfigComplete,
@@ -14,6 +15,7 @@ export class SourcemapWebpackPlugin {
     distDir?: string
   ) {
     const resolvedDistDir = path.resolve(distDir ?? '.next')
+    this.distDir = resolvedDistDir
     if (!this.posthogOptions.personalApiKey) {
       throw new Error(
         `Personal API key not provided. If you are using turbo, make sure to add env variables to your turbo config`
@@ -47,6 +49,12 @@ export class SourcemapWebpackPlugin {
           },
         }
         await processSourceMaps(posthogOptions, this.directory)
+
+        // Also process CSS sourcemaps if this is client-side build
+        if (!this.isServer) {
+          const cssDirectory = path.join(this.distDir, 'static/css')
+          await processSourceMaps(posthogOptions, cssDirectory)
+        }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : error
         return console.error('Error running PostHog sourcemap plugin:', errorMessage)
