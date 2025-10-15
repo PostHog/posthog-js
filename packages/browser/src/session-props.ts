@@ -49,6 +49,7 @@ export class SessionPropsManager {
     ) => LegacySessionSourceProps | CurrentSessionSourceProps
     private _bootstrappedSessionProps?: Record<string, any>
     private _bootstrapSessionId?: string
+    private _isFirstCallback: boolean = true
 
     constructor(
         instance: PostHog,
@@ -84,14 +85,18 @@ export class SessionPropsManager {
                     this._bootstrappedSessionProps = undefined
                 }
             } else {
-                // No bootstrap session ID - clear on session change (but NOT on first initialization)
-                if (stored) {
-                    // There was a previous session, so this is a session change - clear the props
+                // No bootstrap session ID - only clear on subsequent callbacks
+                // On first callback, keep props regardless of stored session state
+                // (handles both fresh users AND returning users with expired sessions)
+                if (!this._isFirstCallback) {
+                    // This is a real session change during active browsing - clear the props
                     this._bootstrappedSessionProps = undefined
                 }
-                // If !stored, this is the first session - keep the bootstrapped props
+                // If _isFirstCallback is true, keep the bootstrapped props
             }
         }
+
+        this._isFirstCallback = false
 
         const newProps: StoredSessionSourceProps = {
             sessionId,
