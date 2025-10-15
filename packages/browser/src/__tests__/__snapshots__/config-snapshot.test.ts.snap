@@ -339,7 +339,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "false",
       "true"
     ],
-    "capturePostHogExceptions": [
+    "__capturePostHogExceptions": [
       "undefined",
       "false",
       "true"

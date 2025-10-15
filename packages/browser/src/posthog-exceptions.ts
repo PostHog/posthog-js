@@ -81,7 +81,7 @@ export class PostHogExceptions {
             }
 
             if (
-                !this._instance.config.error_tracking.capturePostHogExceptions &&
+                !this._instance.config.error_tracking.__capturePostHogExceptions &&
                 this._isPostHogException(exceptionList)
             ) {
                 logger.info('Skipping exception capture because it was thrown by the PostHog SDK')

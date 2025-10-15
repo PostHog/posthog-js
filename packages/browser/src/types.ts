@@ -1068,11 +1068,11 @@ export interface ErrorTrackingOptions {
     captureExtensionExceptions?: boolean
 
     /**
-     * ADVANCED: determines whether exception caused by the PostHog SDK will be captured
+     * UNSTABLE: determines whether exception caused by the PostHog SDK will be captured
      *
      * @default false
      */
-    capturePostHogExceptions?: boolean
+    __capturePostHogExceptions?: boolean
 
     /**
      * ADVANCED: alters the refill rate for the token bucket mutation throttling

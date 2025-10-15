@@ -165,7 +165,7 @@ describe('PostHogExceptions', () => {
             })
 
             it('captures exceptions thrown within the PostHog SDK when enabled', () => {
-                config.error_tracking.capturePostHogExceptions = true
+                config.error_tracking.__capturePostHogExceptions = true
                 const exception = { stacktrace: { frames: [inAppFrame, posthogFrame], type: 'raw' } }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
                 expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
