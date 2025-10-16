@@ -226,14 +226,14 @@ importers:
         specifier: workspace:*
         version: link:../../tooling/rollup-utils
       '@posthog/rrweb-plugin-console-record':
-        specifier: ^0.0.13
-        version: 0.0.13(@posthog/rrweb-utils@0.0.9)(@posthog/rrweb@0.0.9)
+        specifier: ^0.0.26
+        version: 0.0.26(@posthog/rrweb-utils@0.0.9)(@posthog/rrweb@0.0.9)
       '@posthog/rrweb-record':
-        specifier: ^0.0.13
-        version: 0.0.13
+        specifier: ^0.0.26
+        version: 0.0.26
       '@posthog/rrweb-types':
-        specifier: ^0.0.13
-        version: 0.0.13
+        specifier: ^0.0.26
+        version: 0.0.26
       '@rollup/plugin-babel':
         specifier: ^6.0.4
         version: 6.0.4(@babel/core@7.27.1)(@types/babel__core@7.1.18)(rollup@4.50.0)
@@ -3245,20 +3245,20 @@ packages:
   '@posthog/rrdom@0.0.9':
     resolution: {integrity: sha512-o0Ey7pnphpUZXggIhVr5vFsazRSfuxVtILjH4Y2NBec0u5Qfhe7oz24TQqyxzuiARWocXntNT0cLlWBl1ZEaoQ==}
 
-  '@posthog/rrweb-plugin-console-record@0.0.13':
-    resolution: {integrity: sha512-Av4H0kQnlAHYpkKe3x1cDY5h02wuk1CEq6Sxp06E7TPs/wsiksnA//DHyroxdz1pg1MMmmmhB4k5sCg7Tf3Tdg==}
+  '@posthog/rrweb-plugin-console-record@0.0.26':
+    resolution: {integrity: sha512-x1pcNVQ5yNRgNObrvMcXOui3d82Ulqils2fYkF87NFQpPCCoLKTb4BIFn9IYIaqkzrUmAdq2zU5bjPlAakzM2A==}
     peerDependencies:
       '@posthog/rrweb': '*'
       '@posthog/rrweb-utils': '*'
 
-  '@posthog/rrweb-record@0.0.13':
-    resolution: {integrity: sha512-98rZZmKFwn4GHA8BdLE/RuCTqEr3Z07ss0cNvkKrXb5VSR6vh3MpWj7SIB8tfp6mLnABA3xJrgC8wfQFMf+OpA==}
+  '@posthog/rrweb-record@0.0.26':
+    resolution: {integrity: sha512-etoejpiUUANluMfBTT+b7D93BCyyBpkuBhQx7mwRxVY4xtwv0gsDUvicIJHxJD9d5LCKe3W9X+J1YJXFSJijLw==}
 
   '@posthog/rrweb-snapshot@0.0.9':
     resolution: {integrity: sha512-Zza2DZ2PQTd1fQI3aHMvH8cyvVrupgz8f4L68fmVmXXDZEd1945cSGWiV6jxVvo0KadQfvxNxkyAnatX7N76LQ==}
 
-  '@posthog/rrweb-types@0.0.13':
-    resolution: {integrity: sha512-DYXE4VCHvUQnLXLSF//l+c9H9btVV3aLb7Lw4TkluqiMbBtCPdg1qAcSLYrZnpJJT2aKb+8p0LFz/YpZ34qdvQ==}
+  '@posthog/rrweb-types@0.0.26':
+    resolution: {integrity: sha512-aMQ8zcW1xWH7k2Pk2LcS0ZMev5Jah8JrN43prYNk4t960Fr0NjINP1eeF7vTvDtoQyEBJ6zNg7xa0D0nn4atzA==}
 
   '@posthog/rrweb-utils@0.0.9':
     resolution: {integrity: sha512-IbK9ZSwCQMYKyy3RFAFhPTUFj6tJAOxCgJsA7km3e7YyIcT2a1uTz/ebj3Hy+Uu2euhApTYY73gFrriAi90RQw==}
@@ -16766,24 +16766,24 @@ snapshots:
     dependencies:
       '@posthog/rrweb-snapshot': 0.0.9
 
-  '@posthog/rrweb-plugin-console-record@0.0.13(@posthog/rrweb-utils@0.0.9)(@posthog/rrweb@0.0.9)':
+  '@posthog/rrweb-plugin-console-record@0.0.26(@posthog/rrweb-utils@0.0.9)(@posthog/rrweb@0.0.9)':
     dependencies:
       '@posthog/rrweb': 0.0.9
       '@posthog/rrweb-utils': 0.0.9
 
-  '@posthog/rrweb-record@0.0.13':
+  '@posthog/rrweb-record@0.0.26':
     dependencies:
       '@posthog/rrweb': 0.0.9
-      '@posthog/rrweb-types': 0.0.13
+      '@posthog/rrweb-types': 0.0.26
       '@posthog/rrweb-utils': 0.0.9
 
   '@posthog/rrweb-snapshot@0.0.9':
     dependencies:
       '@types/postcss-safe-parser': 5.0.4
-      postcss: 8.5.3
-      postcss-safe-parser: 7.0.1(postcss@8.5.3)
+      postcss: 8.5.6
+      postcss-safe-parser: 7.0.1(postcss@8.5.6)
 
-  '@posthog/rrweb-types@0.0.13': {}
+  '@posthog/rrweb-types@0.0.26': {}
 
   '@posthog/rrweb-utils@0.0.9': {}
 
@@ -16791,12 +16791,12 @@ snapshots:
     dependencies:
       '@posthog/rrdom': 0.0.9
       '@posthog/rrweb-snapshot': 0.0.9
-      '@posthog/rrweb-types': 0.0.13
+      '@posthog/rrweb-types': 0.0.26
       '@posthog/rrweb-utils': 0.0.9
       '@types/css-font-loading-module': 0.0.7
       '@xstate/fsm': 1.5.2
       base64-arraybuffer: 1.0.2
-      mitt: 3.0.0
+      mitt: 3.0.1
 
   '@react-native-async-storage/async-storage@1.24.0(react-native@0.69.12(@babel/core@7.27.1)(@babel/preset-env@7.27.2(@babel/core@7.27.1))(react@18.2.0))':
     dependencies:
@@ -17882,7 +17882,7 @@ snapshots:
 
   '@types/postcss-safe-parser@5.0.4':
     dependencies:
-      postcss: 8.5.3
+      postcss: 8.5.6
 
   '@types/prop-types@15.7.5': {}
 
@@ -26128,9 +26128,9 @@ snapshots:
       postcss: 8.5.6
       postcss-value-parser: 4.2.0
 
-  postcss-safe-parser@7.0.1(postcss@8.5.3):
+  postcss-safe-parser@7.0.1(postcss@8.5.6):
     dependencies:
-      postcss: 8.5.3
+      postcss: 8.5.6
 
   postcss-selector-parser@6.1.2:
     dependencies:
