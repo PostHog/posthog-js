@@ -28,6 +28,7 @@ import { Compression, PostHogPersistedProperty } from './types'
 import { maybeAdd, PostHogCoreStateless, QuotaLimitedFeature } from './posthog-core-stateless'
 import { uuidv7 } from './vendor/uuidv7'
 import { isPlainError } from './utils'
+import { TypedEventCapture, createTypedEventCapture } from './typed-events'
 
 export abstract class PostHogCore extends PostHogCoreStateless {
   // options
@@ -40,6 +41,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   private _sessionMaxLengthSeconds: number = 24 * 60 * 60 // 24 hours
   protected sessionProps: PostHogEventProperties = {}
 
+  // Typed event capture instance
+  public readonly typed: TypedEventCapture<this>
+
   constructor(apiKey: string, options?: PostHogCoreOptions) {
     // Default for stateful mode is to not disable geoip. Only override if explicitly set
     const disableGeoipOption = options?.disableGeoip ?? false
@@ -51,6 +55,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
     this.sendFeatureFlagEvent = options?.sendFeatureFlagEvent ?? true
     this._sessionExpirationTimeSeconds = options?.sessionExpirationTimeSeconds ?? 1800 // 30 minutes
+
+    // Initialize typed event capture
+    this.typed = createTypedEventCapture(this)
   }
 
   protected setupBootstrap(options?: Partial<PostHogCoreOptions>): void {

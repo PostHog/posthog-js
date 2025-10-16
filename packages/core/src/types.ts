@@ -129,6 +129,12 @@ export type PostHogEventProperties = {
   [key: string]: JsonType
 }
 
+// Event schemas can be augmented by generated types from posthog-cli schema pull
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
+export interface PostHogEventSchemas {
+  // This interface is intentionally empty and should be augmented by generated types
+}
+
 export type PostHogGroupProperties = {
   [type: string]: string | number
 }

@@ -3,6 +3,9 @@ import type { SegmentAnalytics } from './extensions/segment-integration'
 import { PostHog } from './posthog-core'
 import { KnownUnsafeEditableEvent } from '@posthog/core'
 import { Survey } from './posthog-surveys-types'
+
+// Re-export PostHogEventSchemas from @posthog/core for typed events
+export type { PostHogEventSchemas } from '@posthog/core'
 // only importing types here, so won't affect the bundle
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SAMPLED } from './extensions/replay/external/triggerMatching'
