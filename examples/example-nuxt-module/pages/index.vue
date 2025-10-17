@@ -4,6 +4,8 @@
     <p>Test various hard-to-catch errors:</p>
 
     <div style="display: flex; flex-direction: column; gap: 10px; max-width: 400px">
+      <button @click="testEvent" style="padding: 10px; cursor: pointer">0. Test Event</button>
+
       <button @click="throwSimpleError" style="padding: 10px; cursor: pointer">1. Simple Synchronous Error</button>
 
       <button @click="throwUncaughtPromiseRejection" style="padding: 10px; cursor: pointer">
@@ -27,6 +29,18 @@
 
 <script setup lang="ts">
 import { throwSimpleError as utilThrowError } from '~/utils/errorUtils'
+
+const { $posthog } = useNuxtApp()
+
+// 0. Test event
+const testEvent = () => {
+  console.log('testEvent')
+  console.log($posthog)
+
+  if ($posthog) {
+    $posthog().capture('test_event')
+  }
+}
 
 // 1. Simple synchronous error
 const throwSimpleError = () => {
