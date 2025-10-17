@@ -342,7 +342,6 @@ export class PostHog {
     SentryIntegration: typeof SentryIntegration
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
 
-    // Typed event capture instance
     readonly typed: TypedEventCapture<this>
 
     private _internalEventEmitter = new SimpleEventEmitter()
@@ -375,8 +374,6 @@ export class PostHog {
         this._visibilityStateListener = null
         this._initialPersonProfilesConfig = null
         this._cachedPersonProperties = null
-
-        // Initialize typed event capture
         this.typed = createTypedEventCapture(this)
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)

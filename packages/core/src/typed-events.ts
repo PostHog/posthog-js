@@ -1,6 +1,21 @@
 /**
  * Typed event capture infrastructure for PostHog.
- * Event schemas are defined via module augmentation in posthog-events.d.ts
+ *
+ * Event schemas can be augmented in PostHogEventSchemas interface via module augmentation.
+ * This is typically done by generated types from `posthog-cli schema pull`.
+ *
+ * @example
+ * // In your types file or generated file:
+ * declare module '@posthog/core' {
+ *   interface PostHogEventSchemas {
+ *     'user_signed_up': { plan: string; trial: boolean }
+ *     'purchase_completed': { amount: number; currency: string }
+ *   }
+ * }
+ *
+ * // Usage:
+ * posthog.typed.user_signed_up({ plan: 'pro', trial: true })
+ * posthog.typed.purchase_completed({ amount: 99.99, currency: 'USD' })
  */
 
 import type { PostHogEventSchemas } from './types'
