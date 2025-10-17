@@ -801,12 +801,12 @@ packages:
     hasBin: true
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-InR03pHlwt9YlKhcQMOXy7QsgqatoCvO6Nnve6uyImDwKcYvk1gOpkGVdR2+jirWQV7vb8FKa9IKPKU1B4/3FA==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.2.4
+    resolution: {integrity: sha512-L2BrCrJ+qurz6hueQjZsdnC6d2PtavX0NaXH8Db/7vS1Lbn0ZrtsSk+Sc6owDwecT6hxL3SNMLulVRjdOlSH7w==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.3.0
 
   '@posthog/nuxt@file:../../target/posthog-nuxt.tgz':
-    resolution: {integrity: sha512-i19ROVk11aTmh1KZ46dSi+8AHfDTyjalMRjjePa6wJNxD9M9DIjbMsSnP4VVj49F+zb8DFUcrVidsHQRUlDH7w==, tarball: file:../../target/posthog-nuxt.tgz}
-    version: 0.0.1
+    resolution: {integrity: sha512-ifKC3CZ14qeEIT+f9RAkvniDLsjNjCn2Ti3KAVlALSInk228oaIYgES+wgsMqbISPk8jMNeka7mluwAJu3VVlA==, tarball: file:../../target/posthog-nuxt.tgz}
+    version: 0.0.7
 
   '@rolldown/pluginutils@1.0.0-beta.29':
     resolution: {integrity: sha512-NIJgOsMjbxAXvoGq/X0gD7VPMQ8j9g0BiDaNjVNVjvl+iKXxL3Jre0v31RmBYeLEmkbj2s02v8vFTbUXi5XS2Q==}
@@ -2578,8 +2578,8 @@ packages:
     engines: {node: ^10 || ^12 || >=14}
 
   posthog-js@file:../../target/posthog-js.tgz:
-    resolution: {integrity: sha512-owZkOEBdomteS5x3s8/tfysCKVId+8tj3JIIAq4r7vJ9INgKxeC9Ys/Ysa58nsQWdgTcIMV7v92+bOy2sHcgog==, tarball: file:../../target/posthog-js.tgz}
-    version: 1.274.1
+    resolution: {integrity: sha512-K6ewNkPixHe/rkzk4a/aycDf9NMpwPTTDEATl2Qxv3Rq9i897koXabpQbTR1tZQvUX+V0bhpcxljM+VNHydEzQ==, tarball: file:../../target/posthog-js.tgz}
+    version: 1.276.0
     peerDependencies:
       '@rrweb/types': 2.0.0-alpha.17
       rrweb-snapshot: 2.0.0-alpha.17
@@ -2590,8 +2590,8 @@ packages:
         optional: true
 
   posthog-node@file:../../target/posthog-node.tgz:
-    resolution: {integrity: sha512-fh5Wp8vYhNBX9mSpeW9XWJgZcgfXbHPDe9nhGrJlaTw/XE3DhJ6UUhQuqDe0TO6mEZMqpkuqtY9XUAtk961vrw==, tarball: file:../../target/posthog-node.tgz}
-    version: 5.9.5
+    resolution: {integrity: sha512-Sd2msrySGVva6J2oUjHh6OK2r2l7J9e6bUvSOZHB6KPZkY27I+IvetlfI2AalcqebPKctabf52SIdqWXPCVzyQ==, tarball: file:../../target/posthog-node.tgz}
+    version: 5.10.0
     engines: {node: '>=20'}
 
   preact@10.27.2:
