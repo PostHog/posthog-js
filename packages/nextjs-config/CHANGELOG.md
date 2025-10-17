@@ -1,5 +1,11 @@
 # @posthog/nextjs-config
 
+## 1.3.4
+
+### Patch Changes
+
+- [#2450](https://github.com/PostHog/posthog-js/pull/2450) [`4ef7051`](https://github.com/PostHog/posthog-js/commit/4ef7051bc1d29a4013227f910b6a060969486136) Thanks [@daibhin](https://github.com/daibhin)! - bump the @posthog/cli version
+
 ## 1.3.3
 
 ### Patch Changes
