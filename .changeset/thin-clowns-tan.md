@@ -2,4 +2,4 @@
 '@posthog/nuxt': patch
 ---
 
-use new cli (v0.5.0)
+use new cli (v0.5.1)
