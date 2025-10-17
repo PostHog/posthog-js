@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname } from 'node:path'
 
 const VUE_OUTPUT_DIRECTORY = '.output/public'
-const NITRO_OUTPUT_DIRECTORY = '.output/server/chunks'
+const NITRO_OUTPUT_DIRECTORY = '.output/server'
 
 const filename = fileURLToPath(import.meta.url)
 const resolvedDirname = dirname(filename)
@@ -72,12 +72,32 @@ export default defineNuxtModule<ModuleOptions>({
 
     const sourcemapsConfig = options.sourcemaps as EnabledSourcemaps
 
+    const cliEnv = {
+      ...process.env,
+      POSTHOG_CLI_ENV_ID: sourcemapsConfig.envId,
+      POSTHOG_CLI_TOKEN: sourcemapsConfig.personalApiKey,
+    }
+
+    const sharedInjectOptions: string[] = [
+      '--host',
+      options.host,
+      'sourcemap',
+      'inject',
+      '--ignore',
+      '**/node_modules/**',
+    ]
+    if (options.sourcemaps.project) {
+      sharedInjectOptions.push('--project', options.sourcemaps.project)
+    }
+
+    if (options.sourcemaps.version) {
+      sharedInjectOptions.push('--version', options.sourcemaps.version)
+    }
+
     nuxt.hooks.hook('nitro:build:public-assets', async () => {
       try {
-        await spawnLocal('posthog-cli', ['sourcemap', 'inject', '--directory', VUE_OUTPUT_DIRECTORY], {
-          env: {
-            ...process.env,
-          },
+        await spawnLocal('posthog-cli', [...sharedInjectOptions, '--directory', VUE_OUTPUT_DIRECTORY], {
+          env: cliEnv,
           cwd: process.cwd(),
           resolveFrom: resolvedDirname,
           stdio: 'inherit',
@@ -90,10 +110,8 @@ export default defineNuxtModule<ModuleOptions>({
 
     nuxt.hooks.hook('close', async () => {
       try {
-        await spawnLocal('posthog-cli', ['sourcemap', 'inject', '--directory', NITRO_OUTPUT_DIRECTORY], {
-          env: {
-            ...process.env,
-          },
+        await spawnLocal('posthog-cli', [...sharedInjectOptions, '--directory', NITRO_OUTPUT_DIRECTORY], {
+          env: cliEnv,
           cwd: process.cwd(),
           resolveFrom: resolvedDirname,
           stdio: 'inherit',
@@ -103,47 +121,20 @@ export default defineNuxtModule<ModuleOptions>({
         console.error('PostHog sourcemap inject failed:', error)
       }
 
-      const uploadEnv = {
-        POSTHOG_CLI_ENV_ID: sourcemapsConfig.envId,
-        POSTHOG_CLI_TOKEN: sourcemapsConfig.personalApiKey,
-      }
-
-      const serverUploadBaseOptions = []
-      if (options.host) {
-        serverUploadBaseOptions.push('--host', options.host)
-      }
-      serverUploadBaseOptions.push('sourcemap', 'upload')
-      if (sourcemapsConfig.version) {
-        serverUploadBaseOptions.push('--version', sourcemapsConfig.version)
-      }
-      if (sourcemapsConfig.project) {
-        serverUploadBaseOptions.push('--project', sourcemapsConfig.project)
-      }
-
-      const nitroUploadConfig = [...serverUploadBaseOptions, '--directory', NITRO_OUTPUT_DIRECTORY]
-      const vueUploadConfig = [...serverUploadBaseOptions, '--directory', VUE_OUTPUT_DIRECTORY]
+      const uploadOptions = [
+        '--host',
+        options.host,
+        'sourcemap',
+        'upload',
+        '--directory',
+        '.output',
+        '--ignore',
+        '**/node_modules/**',
+      ]
 
       try {
-        await spawnLocal('posthog-cli', nitroUploadConfig, {
-          env: {
-            ...process.env,
-            ...uploadEnv,
-          },
-          cwd: process.cwd(),
-          resolveFrom: resolvedDirname,
-          stdio: 'inherit',
-          onBinaryFound: () => {},
-        })
-      } catch (error) {
-        console.error('PostHog sourcemap upload failed:', error)
-      }
-
-      try {
-        await spawnLocal('posthog-cli', vueUploadConfig, {
-          env: {
-            ...process.env,
-            ...uploadEnv,
-          },
+        await spawnLocal('posthog-cli', uploadOptions, {
+          env: cliEnv,
           cwd: process.cwd(),
           resolveFrom: resolvedDirname,
           stdio: 'inherit',
