@@ -7,7 +7,7 @@ import {
     type listenerHandler,
     RecordPlugin,
 } from '@rrweb/types'
-import { buildNetworkRequestOptions } from '../config'
+import { buildNetworkRequestOptions } from './config'
 import {
     ACTIVE,
     allMatchSessionRecordingStatus,
@@ -28,12 +28,12 @@ import {
     TriggerStatusMatching,
     TriggerType,
     URLTriggerMatching,
-} from '../triggerMatching'
-import { estimateSize, INCREMENTAL_SNAPSHOT_EVENT_TYPE, truncateLargeConsoleLogs } from '../sessionrecording-utils'
+} from './triggerMatching'
+import { estimateSize, INCREMENTAL_SNAPSHOT_EVENT_TYPE, truncateLargeConsoleLogs } from './sessionrecording-utils'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
 import { assignableWindow, LazyLoadedSessionRecordingInterface, window, document } from '../../../utils/globals'
 import { addEventListener } from '../../../utils'
-import { MutationThrottler } from '../mutation-throttler'
+import { MutationThrottler } from './mutation-throttler'
 import { createLogger } from '../../../utils/logger'
 import {
     clampToRange,
@@ -74,7 +74,6 @@ const MAX_CANVAS_FPS = 12
 const MAX_CANVAS_QUALITY = 1
 const TWO_SECONDS = 2000
 const ONE_KB = 1024
-const PARTIAL_COMPRESSION_THRESHOLD = ONE_KB
 
 const ONE_MINUTE = 1000 * 60
 const FIVE_MINUTES = ONE_MINUTE * 5
@@ -182,11 +181,6 @@ function gzipToString(data: unknown): string {
  * so we have a custom packer that only compresses part of some events
  */
 function compressEvent(event: eventWithTime): eventWithTime | compressedEventWithTime {
-    const originalSize = estimateSize(event)
-    if (originalSize < PARTIAL_COMPRESSION_THRESHOLD) {
-        return event
-    }
-
     try {
         if (event.type === EventType.FullSnapshot) {
             return {
@@ -338,11 +332,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _statusMatcher: (triggersStatus: RecordingTriggersStatus) => SessionRecordingStatus =
         nullMatchSessionRecordingStatus
 
-    private _receivedFlags: boolean = false
-
     private _onSessionIdListener: (() => void) | undefined = undefined
     private _onSessionIdleResetForcedListener: (() => void) | undefined = undefined
     private _samplingSessionListener: (() => void) | undefined = undefined
+    private _forceIdleSessionIdListener: (() => void) | undefined = undefined
 
     constructor(private readonly _instance: PostHog) {
         // we know there's a sessionManager, so don't need to start without a session id
@@ -691,7 +684,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         })
 
         this._makeSamplingDecision(this.sessionId)
-        this._receivedFlags = true
         this._startRecorder()
 
         // calling addEventListener multiple times is safe and will not add duplicates
@@ -711,10 +703,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._isIdle = 'unknown'
                 this.stop()
                 // then we want a session id listener to restart the recording when a new session starts
-                const waitForSessionIdListener = this._sessionManager.onSessionId(
+                this._forceIdleSessionIdListener = this._sessionManager.onSessionId(
                     (sessionId, windowId, changeReason) => {
                         // this should first unregister itself
-                        waitForSessionIdListener()
+                        this._forceIdleSessionIdListener?.()
+                        this._forceIdleSessionIdListener = undefined
                         this._onSessionIdCallback(sessionId, windowId, changeReason)
                     }
                 )
@@ -771,6 +764,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._clearBuffer()
         clearInterval(this._fullSnapshotTimer)
+        this._clearFlushBufferTimer()
 
         this._removePageViewCaptureHook?.()
         this._removePageViewCaptureHook = undefined
@@ -782,10 +776,17 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._onSessionIdleResetForcedListener = undefined
         this._samplingSessionListener?.()
         this._samplingSessionListener = undefined
+        this._forceIdleSessionIdListener?.()
+        this._forceIdleSessionIdListener = undefined
 
         this._eventTriggerMatching.stop()
         this._urlTriggerMatching.stop()
         this._linkedFlagMatching.stop()
+
+        this._mutationThrottler?.stop()
+
+        // Clear any queued rrweb events to prevent memory leaks from closures
+        this._queuedRRWebEvents = []
 
         this._stopRrweb?.()
         this._stopRrweb = undefined
@@ -826,13 +827,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // we're processing a full snapshot, so we should reset the timer
         if (rawEvent.type === EventType.FullSnapshot) {
             this._scheduleFullSnapshot()
+            // Full snapshots reset rrweb's node IDs, so clear any logged node tracking
+            this._mutationThrottler?.reset()
         }
 
         // Clear the buffer if waiting for a trigger and only keep data from after the current full snapshot
         // we always start trigger pending so need to wait for flags before we know if we're really pending
         if (
             rawEvent.type === EventType.FullSnapshot &&
-            this._receivedFlags &&
             this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING
         ) {
             this._clearBufferBeforeMostRecentMeta()
@@ -887,14 +889,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     get status(): SessionRecordingStatus {
-        // todo: this check should move into the status matcher
-        if (!this._receivedFlags) {
-            return BUFFERING
-        }
-
         return this._statusMatcher({
             // can't get here without recording being enabled...
-            receivedFlags: this._receivedFlags,
+            receivedFlags: true,
             isRecordingEnabled: true,
             // things that do still vary
             isSampled: this._isSampled,
@@ -952,11 +949,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._activateTrigger(triggerType)
     }
 
-    private _flushBuffer(): SnapshotBuffer {
+    private _clearFlushBufferTimer() {
         if (this._flushBufferTimer) {
             clearTimeout(this._flushBufferTimer)
             this._flushBufferTimer = undefined
         }
+    }
+
+    private _flushBuffer(): SnapshotBuffer {
+        this._clearFlushBufferTimer()
 
         const minimumDuration = this._minimumDuration
         const sessionDuration = this._sessionDuration
@@ -1339,6 +1340,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // stay unknown if we're not sure if we're idle or not
         this._isIdle = isBoolean(this._isIdle) ? this._isIdle : 'unknown'
 
+        this.tryAddCustomEvent('$remote_config_received', this._remoteConfig)
         this._tryAddCustomEvent('$session_options', {
             sessionRecordingOptions,
             activePlugins: activePlugins.map((p) => p?.name),

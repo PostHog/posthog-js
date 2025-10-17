@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: "PostHog/posthog.com"
-          token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+          token: ${{ secrets.POSTHOG_BOT_PAT }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
@@ -61,7 +61,7 @@ jobs:
         id: com-repo-pr
         uses: peter-evans/create-pull-request@v3
         with:
-          token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+          token: ${{ secrets.POSTHOG_BOT_PAT }}
           commit-message: "chore(deps): Update ${{ github.event.inputs.package_name }} to ${{ github.event.inputs.package_version }}"
           branch: ${{ steps.generate-branch-name.outputs.branch_name }}
           delete-branch: true

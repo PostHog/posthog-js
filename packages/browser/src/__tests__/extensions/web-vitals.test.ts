@@ -21,6 +21,13 @@ jest.mock('../../utils/globals', () => {
         hash: '',
         href: 'http://localhost/',
     })
+
+    const mockWindow = original.window || global.window
+    Object.defineProperty(mockWindow, 'location', {
+        get: () => mockLocation(),
+        configurable: true,
+    })
+
     return {
         ...original,
         assignableWindow: {
@@ -30,6 +37,7 @@ jest.mock('../../utils/globals', () => {
         get location() {
             return mockLocation()
         },
+        window: mockWindow,
     }
 })
 
@@ -376,6 +384,7 @@ describe('web vitals', () => {
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
     })
+
     it.each(['http', 'https'])('should run on %s protocol', async (protocol) => {
         mockLocation.mockReturnValue({
             protocol: protocol + ':',
@@ -397,4 +406,86 @@ describe('web vitals', () => {
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(true)
     })
+
+    describe.each([
+        [false, undefined, 'http://localhost/?gclid=12345&other=true'],
+        [true, undefined, 'http://localhost/?gclid=<masked>&other=true'],
+        [true, ['other'], 'http://localhost/?gclid=<masked>&other=<masked>'],
+    ])(
+        'the behaviour when mask_personal_data_properties is %s and custom_personal_data_properties is %s',
+        (
+            maskPersonalDataProperties: boolean,
+            customPersonalDataProperties: undefined | string[],
+            maskedUrl: string
+        ) => {
+            beforeEach(async () => {
+                mockLocation.mockReturnValue({
+                    protocol: 'http:',
+                    host: 'localhost',
+                    pathname: '/',
+                    search: '?gclid=12345&other=true',
+                    hash: '',
+                    href: `http://localhost/?gclid=12345&other=true`,
+                })
+
+                beforeSendMock.mockClear()
+                posthog = await createPosthogInstance(uuidv7(), {
+                    before_send: beforeSendMock,
+                    capture_performance: { web_vitals: true },
+                    // sometimes pageviews sneak in and make asserting on mock capture tricky
+                    capture_pageview: false,
+                    mask_personal_data_properties: maskPersonalDataProperties,
+                    custom_personal_data_properties: customPersonalDataProperties,
+                })
+
+                loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                    // we need a set of fake web vitals handlers, so we can manually trigger the events
+                    assignableWindow.__PosthogExtensions__ = {}
+                    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
+                        onLCP: (cb: any) => {
+                            onLCPCallback = cb
+                        },
+                        onCLS: (cb: any) => {
+                            onCLSCallback = cb
+                        },
+                        onFCP: (cb: any) => {
+                            onFCPCallback = cb
+                        },
+                        onINP: (cb: any) => {
+                            onINPCallback = cb
+                        },
+                    }
+                    callback()
+                })
+
+                assignableWindow.__PosthogExtensions__ = {}
+                assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
+
+                // need to force this to get the web vitals script loaded
+                posthog.webVitalsAutocapture!.onRemoteConfig({
+                    capturePerformance: { web_vitals: true },
+                } as unknown as FlagsResponse)
+            })
+
+            it('masks properties accordingly', async () => {
+                emitAllMetrics()
+
+                expect(beforeSendMock).toBeCalledTimes(1)
+
+                expect(beforeSendMock.mock.lastCall).toMatchObject([
+                    {
+                        event: '$web_vitals',
+                        properties: {
+                            $current_url: maskedUrl,
+                            $session_entry_url: maskedUrl,
+                            $web_vitals_LCP_event: { $current_url: maskedUrl },
+                            $web_vitals_CLS_event: { $current_url: maskedUrl },
+                            $web_vitals_FCP_event: { $current_url: maskedUrl },
+                            $web_vitals_INP_event: { $current_url: maskedUrl },
+                        },
+                    },
+                ])
+            })
+        }
+    )
 })

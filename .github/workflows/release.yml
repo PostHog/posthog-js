@@ -25,6 +25,7 @@ jobs:
           - name: "@posthog/react"
           - name: "@posthog/ai"
           - name: "@posthog/nextjs-config"
+          - name: "@posthog/nuxt"
 
     steps:
       - name: Checkout the repository
@@ -57,6 +58,16 @@ jobs:
           package_version: ${{ steps.check-package-version.outputs.committed-version }}
           npm_token: ${{ secrets.NPM_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Dispatch generate-references for ${{ matrix.package.name }}
+        if: steps.check-package-version.outputs.is-new-version == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run generate-references.yml \
+            --ref main \
+            --field package_name="${{ matrix.package.name }}" \
+            --field package_path="${{ steps.get-package-path.outputs.path }}"
 
       - name: Dispatch posthog upgrade for ${{ matrix.package.name }}
         if: matrix.package.name == 'posthog-js' && steps.check-package-version.outputs.is-new-version == 'true'
@@ -87,3 +98,21 @@ jobs:
                    "package_version": "${{ steps.check-package-version.outputs.committed-version }}"
                  }
                }'
+
+      # a CDP destination is set-up to alert when we get this event
+      - name: Send failure event to PostHog
+        if: ${{ failure() }}
+        uses: PostHog/posthog-github-action@v0.1
+        with:
+            posthog-token: '${{ secrets.POSTHOG_API_TOKEN }}'
+            event: 'posthog-js-github-release-workflow-failure'
+            properties: >-
+                {
+                  "commitSha": "${{ github.sha }}",
+                  "jobStatus": "${{ job.status }}",
+                  "commitMessage": "${{ github.event.head_commit.message }}",
+                  "commitAuthor": "${{ github.event.head_commit.author.name }}",
+                  "ref": "${{ github.ref }}",
+                  "matrixPackage": "${{ matrix.package.name }}",
+                  "packageVersion": "${{ steps.check-package-version.outputs.committed-version }}"
+                }

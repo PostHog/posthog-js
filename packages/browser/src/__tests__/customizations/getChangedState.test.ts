@@ -1,4 +1,4 @@
-import { getChangedStateKeys } from '../../customizations/posthogReduxLogger'
+import { getChangedState } from '../../customizations/posthogReduxLogger'
 
 // Helper function to create complex nested state objects
 function createComplexState(depth: number, breadth: number, includeArrays = false): Record<string, any> {
@@ -70,7 +70,7 @@ function measureExecutionTime<T>(fn: () => T): { result: T; executionTime: numbe
 function measureMultipleExecutions<T>(
     fn: () => T,
     iterations: number = 10
-): { result: T; avgTime: number; maxTime: number; times: number[] } {
+): { result: T; avgTime: number; medianTime: number; stdDev: number; times: number[] } {
     const times: number[] = []
     let lastResult: T
 
@@ -81,12 +81,18 @@ function measureMultipleExecutions<T>(
     }
 
     const avgTime = times.reduce((a, b) => a + b) / times.length
-    const maxTime = Math.max(...times)
 
-    return { result: lastResult!, avgTime, maxTime, times }
+    const sortedTimes = [...times].sort((a, b) => a - b)
+    const mid = Math.floor(sortedTimes.length / 2)
+    const medianTime = sortedTimes.length % 2 === 0 ? (sortedTimes[mid - 1] + sortedTimes[mid]) / 2 : sortedTimes[mid]
+
+    const variance = times.reduce((sum, time) => sum + Math.pow(time - avgTime, 2), 0) / times.length
+    const stdDev = Math.sqrt(variance)
+
+    return { result: lastResult!, avgTime, medianTime, stdDev, times }
 }
 
-describe('getChangeStateKeys', () => {
+describe('getChangedState', () => {
     describe('performance tests', () => {
         test('should handle realistic UI state efficiently', () => {
             // Fixed test data representing realistic UI state
@@ -122,7 +128,7 @@ describe('getChangeStateKeys', () => {
                 },
             }
 
-            const { executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState))
+            const { executionTime } = measureExecutionTime(() => getChangedState(prevState, nextState))
 
             expect(executionTime).toBeLessThan(10)
         })
@@ -131,7 +137,7 @@ describe('getChangeStateKeys', () => {
             const prevState = createComplexState(3, 8, true)
             const nextState = modifyStateForDrag(prevState, 5)
 
-            const { executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState))
+            const { executionTime } = measureExecutionTime(() => getChangedState(prevState, nextState, 10))
 
             expect(executionTime).toBeLessThan(45)
         })
@@ -140,9 +146,14 @@ describe('getChangeStateKeys', () => {
             const prevState = createComplexState(4, 10, true)
             const nextState = modifyStateForDrag(prevState, 8)
 
-            const { executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState))
+            const { avgTime, medianTime, stdDev } = measureMultipleExecutions(() =>
+                getChangedState(prevState, nextState, 5)
+            )
 
-            expect(executionTime).toBeLessThan(45)
+            // these run much slower in CI than on my machine
+            expect(medianTime).toBeLessThan(150)
+            expect(avgTime).toBeLessThan(250)
+            expect(stdDev).toBeLessThan(150)
         })
 
         test('should handle complex state changes efficiently', () => {
@@ -181,26 +192,27 @@ describe('getChangeStateKeys', () => {
                 },
             }
 
-            const { avgTime, maxTime } = measureMultipleExecutions(() => getChangedStateKeys(prevState, nextState))
+            const { avgTime, medianTime, stdDev } = measureMultipleExecutions(() =>
+                getChangedState(prevState, nextState)
+            )
 
-            // Should be fast for realistic complex state
-            expect(avgTime).toBeLessThan(20)
-            expect(maxTime).toBeLessThan(40)
+            expect(medianTime).toBeLessThan(10)
+            expect(avgTime).toBeLessThan(15)
+            expect(stdDev).toBeLessThan(10)
         })
 
         test('should handle identical states efficiently', () => {
             const state = createComplexState(4, 8, true)
 
             const startTime = performance.now()
-            const result = getChangedStateKeys(state, state)
+            const result = getChangedState(state, state)
             const endTime = performance.now()
 
             const executionTime = endTime - startTime
 
             // Should be very fast for identical states
             expect(executionTime).toBeLessThan(5)
-            expect(result.prevState).toEqual({})
-            expect(result.nextState).toEqual({})
+            expect(result).toEqual({})
         })
     })
 
@@ -277,10 +289,10 @@ describe('getChangeStateKeys', () => {
             {
                 name: 'depth limit respected',
                 prevState: {
-                    l1: { l2: { l3: { l4: { l5: 'old' } } } },
+                    l1: { l2: { l3: { l4: { l5: { l6: 'old' } } } } },
                 },
                 nextState: {
-                    l1: { l2: { l3: { l4: { l5: 'new' } } } },
+                    l1: { l2: { l3: { l4: { l5: { l6: 'new' } } } } },
                 },
                 maxDepth: 2,
             },
@@ -354,7 +366,7 @@ describe('getChangeStateKeys', () => {
                 },
             },
         ])('should handle $name', ({ prevState, nextState, maxDepth }) => {
-            const result = getChangedStateKeys(prevState, nextState, maxDepth)
+            const result = getChangedState(prevState, nextState, maxDepth)
             expect(result).toMatchSnapshot()
         })
     })

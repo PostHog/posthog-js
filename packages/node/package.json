@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.9.2",
+  "version": "5.10.0",
   "description": "PostHog Node.js integration",
   "repository": {
     "type": "git",
@@ -17,8 +17,7 @@
     "dev": "rslib build -w",
     "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
-    "gen-specs": "pnpm build && pnpm exec api-extractor run --config ./api-extractor.jsonc --local",
-    "parse-specs": "node scripts/generate-docs.mjs"
+    "generate-references": "pnpm build && pnpm exec api-extractor run --config ./api-extractor.jsonc --local && node scripts/generate-docs.mjs"
   },
   "engines": {
     "node": ">=20"

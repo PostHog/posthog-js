@@ -1,5 +1,53 @@
 # posthog-node
 
+## 5.10.0
+
+### Minor Changes
+
+- [#2417](https://github.com/PostHog/posthog-js/pull/2417) [`daf919b`](https://github.com/PostHog/posthog-js/commit/daf919be225527ee4ad026d806dec195b75e44aa) Thanks [@dmarticus](https://github.com/dmarticus)! - feat: Add evaluation environments support for feature flags
+
+  This PR implements support for evaluation environments in the posthog-node SDK, allowing users to specify which environment tags their SDK instance should use when evaluating feature flags.
+
+  Users can now configure the SDK with an `evaluationEnvironments` option:
+
+  ```typescript
+  const client = new PostHog('api-key', {
+    host: 'https://app.posthog.com',
+    evaluationEnvironments: ['production', 'backend', 'api'],
+  })
+  ```
+
+  When set, only feature flags that have at least one matching evaluation tag will be evaluated for this SDK instance. Feature flags with no evaluation tags will always be evaluated.
+
+### Patch Changes
+
+- [#2431](https://github.com/PostHog/posthog-js/pull/2431) [`7d45a7a`](https://github.com/PostHog/posthog-js/commit/7d45a7a52c44ba768913d66a4c4363d107042682) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: remove deprecated attribute $exception_personURL from exception events
+
+- Updated dependencies [[`daf919b`](https://github.com/PostHog/posthog-js/commit/daf919be225527ee4ad026d806dec195b75e44aa), [`7d45a7a`](https://github.com/PostHog/posthog-js/commit/7d45a7a52c44ba768913d66a4c4363d107042682)]:
+  - @posthog/core@1.3.0
+
+## 5.9.5
+
+### Patch Changes
+
+- Updated dependencies [[`10da2ee`](https://github.com/PostHog/posthog-js/commit/10da2ee0b8862ad0e32b68e452fae1bc77620bbf)]:
+  - @posthog/core@1.2.4
+
+## 5.9.4
+
+### Patch Changes
+
+- [#2414](https://github.com/PostHog/posthog-js/pull/2414) [`e19a384`](https://github.com/PostHog/posthog-js/commit/e19a384468d722c12f4ef21feb684da31f9dcd3b) Thanks [@hpouillot](https://github.com/hpouillot)! - create a common logger for node and react-native
+
+- Updated dependencies [[`e19a384`](https://github.com/PostHog/posthog-js/commit/e19a384468d722c12f4ef21feb684da31f9dcd3b)]:
+  - @posthog/core@1.2.3
+
+## 5.9.3
+
+### Patch Changes
+
+- [#2406](https://github.com/PostHog/posthog-js/pull/2406) [`ea58d34`](https://github.com/PostHog/posthog-js/commit/ea58d34c62e139f11d5b41bf67b52624308deffa) Thanks [@dmarticus](https://github.com/dmarticus)! - Use `SubtleCrypto` directly to compute SHA-1 hashes, fix "module not found" warning in edge runtimes.
+
 ## 5.9.2
 
 ### Patch Changes

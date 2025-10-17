@@ -9,6 +9,7 @@ import {
   PostHogFetchOptions,
   PostHogFetchResponse,
   PostHogPersistedProperty,
+  Survey,
   SurveyResponse,
   logFlushError,
   maybeAdd,
@@ -25,10 +26,11 @@ import {
 } from './types'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativeSessionReplay } from './optional/OptionalSessionReplay'
+import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
 
 export { PostHogPersistedProperty }
 
-export type PostHogOptions = PostHogCoreOptions & {
+export interface PostHogOptions extends PostHogCoreOptions {
   /** Allows you to provide the storage type. By default 'file'.
    * 'file' will try to load the best available storage, the provided 'customStorage', 'customAsyncStorage' or in-memory storage.
    */
@@ -68,6 +70,11 @@ export type PostHogOptions = PostHogCoreOptions & {
    * Defaults to false
    */
   enablePersistSessionIdAcrossRestart?: boolean
+
+  /**
+   * Error Tracking Configuration
+   */
+  errorTracking?: ErrorTrackingOptions
 }
 
 export class PostHog extends PostHogCore {
@@ -78,6 +85,9 @@ export class PostHog extends PostHogCore {
   private _enableSessionReplay?: boolean
   private _disableSurveys: boolean
   private _disableRemoteConfig: boolean
+  private _errorTracking: ErrorTracking
+  private _surveysReadyPromise: Promise<void> | null = null
+  private _surveysReady: boolean = false
 
   /**
    * Creates a new PostHog instance for React Native. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
@@ -119,6 +129,7 @@ export class PostHog extends PostHogCore {
     this._persistence = options?.persistence ?? 'file'
     this._disableSurveys = options?.disableSurveys ?? false
     this._disableRemoteConfig = options?.disableRemoteConfig ?? false
+    this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger)
 
     // Either build the app properties from the existing ones
     this._appProperties =
@@ -172,13 +183,41 @@ export class PostHog extends PostHogCore {
 
       if (this._disableRemoteConfig === false) {
         this.reloadRemoteConfigAsync()
+          .then((response) => {
+            if (response) {
+              this._handleSurveysFromRemoteConfig(response)
+            }
+          })
+          .catch((error) => {
+            this._logger.error('Error loading remote config:', error)
+          })
+          .finally(() => {
+            this._notifySurveysReady()
+          })
       } else {
-        this.logMsgIfDebug(() => console.info('PostHog Debug', `Remote config is disabled.`))
+        this._logger.info('Remote config is disabled.')
+
         if (options?.preloadFeatureFlags !== false) {
-          this.logMsgIfDebug(() => console.info('PostHog Debug', `Feature flags will be preloaded from Flags API.`))
-          this.reloadFeatureFlags()
+          this._logger.info('Feature flags will be preloaded from Flags API.')
+          // Preload flags (and parse surveys as well since we are calling with config=true already)
+          this._flagsAsyncWithSurveys()
+            .catch((error) => {
+              this._logger.error('Error loading flags with surveys:', error)
+            })
+            .finally(() => {
+              this._notifySurveysReady()
+            })
         } else {
-          this.logMsgIfDebug(() => console.info('PostHog Debug', `preloadFeatureFlags is disabled.`))
+          this._logger.info('preloadFeatureFlags is disabled, loading surveys from API.')
+          // Load surveys directly from API since both remote config and preloading feature flags are disabled
+          // Note: if flags are not loaded/cached then surveys will not be displayed until reloadFeatureFlags() is called, since surveys depend on internal flags
+          this._loadSurveysFromAPI()
+            .catch((error) => {
+              this._logger.error('Error loading surveys from API:', error)
+            })
+            .finally(() => {
+              this._notifySurveysReady()
+            })
         }
       }
 
@@ -229,6 +268,7 @@ export class PostHog extends PostHogCore {
   getLibraryVersion(): string {
     return version
   }
+
   getCustomUserAgent(): string {
     if (Platform.OS === 'web') {
       return ''
@@ -713,21 +753,14 @@ export class PostHog extends PostHogCore {
       if (OptionalReactNativeSessionReplay) {
         try {
           this._resetSessionId(OptionalReactNativeSessionReplay, String(sessionId))
-          this.logMsgIfDebug(() =>
-            console.info('PostHog Debug', `sessionId rotated from ${this._currentSessionId} to ${sessionId}.`)
-          )
+          this._logger.info(`sessionId rotated from ${this._currentSessionId} to ${sessionId}.`)
         } catch (e) {
-          this.logMsgIfDebug(() => console.error('PostHog Debug', `Failed to rotate sessionId: ${e}.`))
+          this._logger.error(`Failed to rotate sessionId: ${e}.`)
         }
       }
       this._currentSessionId = sessionId
     } else {
-      this.logMsgIfDebug(() =>
-        console.log(
-          'PostHog Debug',
-          `sessionId not rotated, sessionId ${sessionId} and currentSessionId ${this._currentSessionId}.`
-        )
-      )
+      this._logger.info(`sessionId not rotated, sessionId ${sessionId} and currentSessionId ${this._currentSessionId}.`)
     }
 
     return sessionId
@@ -738,9 +771,9 @@ export class PostHog extends PostHogCore {
     if (this._isEnableSessionReplay() && OptionalReactNativeSessionReplay) {
       try {
         OptionalReactNativeSessionReplay.endSession()
-        this.logMsgIfDebug(() => console.info('PostHog Debug', `Session replay ended.`))
+        this._logger.info(`Session replay ended.`)
       } catch (e) {
-        this.logMsgIfDebug(() => console.error('PostHog Debug', `Session replay failed to end: ${e}.`))
+        this._logger.error(`Session replay failed to end: ${e}.`)
       }
     }
   }
@@ -788,16 +821,53 @@ export class PostHog extends PostHogCore {
         distinctId = distinctId || previousDistinctId
         const anonymousId = this.getAnonymousId()
         OptionalReactNativeSessionReplay.identify(String(distinctId), String(anonymousId))
-        this.logMsgIfDebug(() =>
-          console.info(
-            'PostHog Debug',
-            `Session replay identified with distinctId ${distinctId} and anonymousId ${anonymousId}.`
-          )
-        )
+        this._logger.info(`Session replay identified with distinctId ${distinctId} and anonymousId ${anonymousId}.`)
       } catch (e) {
-        this.logMsgIfDebug(() => console.error('PostHog Debug', `Session replay failed to identify: ${e}.`))
+        this._logger.error(`Session replay failed to identify: ${e}.`)
       }
     }
+  }
+
+  /**
+   * Capture a caught exception manually
+   *
+   * {@label Error tracking}
+   *
+   * @public
+   *
+   * @example
+   * ```js
+   * // Capture a caught exception
+   * try {
+   *   // something that might throw
+   * } catch (error) {
+   *   posthog.captureException(error)
+   * }
+   * ```
+   *
+   * @example
+   * ```js
+   * // With additional properties
+   * posthog.captureException(error, {
+   *   customProperty: 'value',
+   *   anotherProperty: ['I', 'can be a list'],
+   *   ...
+   * })
+   * ```
+   *
+   * @param {Error} error The error to capture
+   * @param {Object} [additionalProperties] Any additional properties to add to the error event
+   * @returns {void}
+   */
+  captureException(error: Error | unknown, additionalProperties: PostHogEventProperties = {}): void {
+    const syntheticException = new Error('Synthetic Error')
+    this._errorTracking.captureException(error, additionalProperties, {
+      mechanism: {
+        handled: true,
+        type: 'generic',
+      },
+      syntheticException,
+    })
   }
 
   initReactNativeNavigation(options: PostHogAutocaptureOptions): boolean {
@@ -806,36 +876,149 @@ export class PostHog extends PostHogCore {
 
   public async getSurveys(): Promise<SurveyResponse['surveys']> {
     if (this._disableSurveys === true) {
-      this.logMsgIfDebug(() => console.log('PostHog Debug', 'Loading surveys is disabled.'))
-      this.setPersistedProperty<SurveyResponse['surveys']>(PostHogPersistedProperty.Surveys, null)
+      this._logger.info('Loading surveys is disabled.')
+      this._cacheSurveys(null, 'disabled in config')
       return []
     }
 
     const surveys = this.getPersistedProperty<SurveyResponse['surveys']>(PostHogPersistedProperty.Surveys)
 
     if (surveys && surveys.length > 0) {
-      this.logMsgIfDebug(() => console.log('PostHog Debug', 'Surveys fetched from storage: ', JSON.stringify(surveys)))
+      this._logger.info('Surveys fetched from storage: ', JSON.stringify(surveys))
       return surveys
-    } else {
-      this.logMsgIfDebug(() => console.log('PostHog Debug', 'No surveys found in storage'))
     }
 
-    if (this._disableRemoteConfig === true) {
-      const surveysFromApi = await super.getSurveysStateless()
-
-      if (surveysFromApi && surveysFromApi.length > 0) {
-        this.setPersistedProperty<SurveyResponse['surveys']>(PostHogPersistedProperty.Surveys, surveysFromApi)
-        return surveysFromApi
-      }
-    }
-
+    this._logger.info('No surveys found in storage')
     return []
+  }
+
+  /**
+   * Returns a promise that resolves when surveys are ready to be loaded.
+   * If surveys are already loaded and ready to go, returns a resolved promise instead.
+   * @internal
+   */
+  _onSurveysReady(): Promise<void> {
+    if (this._surveysReady) {
+      // If surveys are already ready, resolve immediately
+      return Promise.resolve()
+    }
+
+    if (!this._surveysReadyPromise) {
+      this._surveysReadyPromise = new Promise<void>((resolve) => {
+        this._surveysReadyResolve = resolve
+      })
+    }
+
+    return this._surveysReadyPromise
+  }
+
+  private _surveysReadyResolve: (() => void) | null = null
+
+  /**
+   * Helper function to cache surveys to storage with consistent logging
+   */
+  private _cacheSurveys(surveys: Survey[] | null, source: string): void {
+    this.setPersistedProperty<SurveyResponse['surveys']>(PostHogPersistedProperty.Surveys, surveys)
+
+    if (surveys && surveys.length > 0) {
+      this._logger.info(`Surveys cached from ${source}:`, JSON.stringify(surveys))
+    } else if (surveys === null) {
+      this._logger.info(`Surveys cleared (${source})`)
+    } else {
+      this._logger.info(`No surveys to cache from ${source})`)
+    }
+  }
+
+  /**
+   * Internal method to notify that surveys are ready
+   */
+  private _notifySurveysReady(): void {
+    this._surveysReady = true
+    if (this._surveysReadyResolve) {
+      this._surveysReadyResolve()
+      this._surveysReadyResolve = null
+      this._surveysReadyPromise = null
+    }
+  }
+
+  /**
+   * Handle surveys from remote config response
+   */
+  private _handleSurveysFromRemoteConfig(response: any): void {
+    if (this._disableSurveys === true) {
+      this._logger.info('Loading surveys skipped, disabled.')
+      this._cacheSurveys(null, 'remote config (disabled)')
+      return
+    }
+
+    const surveys = response.surveys
+
+    // If surveys is not an array, it means there are no surveys (its a boolean)
+    if (Array.isArray(surveys) && surveys.length > 0) {
+      this._cacheSurveys(surveys as Survey[], 'remote config')
+    } else {
+      this._cacheSurveys(null, 'remote config')
+    }
+  }
+
+  /**
+   * Load flags AND handle surveys from the flags response (only when remote config is disabled)
+   */
+  private async _flagsAsyncWithSurveys(): Promise<void> {
+    try {
+      const flagsResponse = await this.flagsAsync(true, true)
+
+      // Only handle surveys from flags if remote config is disabled and surveys are enabled
+      // When remote config is enabled, surveys will come from there instead
+      if (this._disableRemoteConfig === true) {
+        if (this._disableSurveys === true) {
+          this._logger.info('Loading surveys skipped, disabled.')
+          this._cacheSurveys(null, 'flags (disabled)')
+          return
+        }
+
+        // Handle surveys from the response (surveys key is included when config=true)
+        const surveys = flagsResponse?.surveys
+
+        // If surveys is not an array, it means there are no surveys (its a boolean)
+        if (Array.isArray(surveys) && surveys.length > 0) {
+          this._cacheSurveys(surveys as Survey[], 'flags endpoint')
+        } else {
+          this._logger.info('No surveys in flags response')
+          this._cacheSurveys(null, 'flags endpoint')
+        }
+      }
+    } catch (error) {
+      this._logger.error('Error in _flagsAsyncWithSurveys:', error)
+    }
+  }
+
+  /**
+   * Internal method to load surveys from API (when remote config is disabled)
+   */
+  private async _loadSurveysFromAPI(): Promise<void> {
+    if (this._disableSurveys === true) {
+      this._logger.info('Loading surveys skipped, disabled.')
+      this._cacheSurveys(null, 'API (disabled)')
+      return
+    }
+
+    try {
+      const surveysFromApi = await super.getSurveysStateless()
+      if (surveysFromApi && surveysFromApi.length > 0) {
+        this._cacheSurveys(surveysFromApi, 'API')
+      } else {
+        this._cacheSurveys(null, 'API')
+      }
+    } catch (error) {
+      this._logger.error('Error loading surveys from API:', error)
+    }
   }
 
   private async startSessionReplay(options?: PostHogOptions): Promise<void> {
     this._enableSessionReplay = options?.enableSessionReplay
     if (!this._isEnableSessionReplay()) {
-      this.logMsgIfDebug(() => console.info('PostHog Debug', 'Session replay is not enabled.'))
+      this._logger.info('Session replay is not enabled.')
       return
     }
 
@@ -872,9 +1055,7 @@ export class PostHog extends PostHogCore {
       throttleDelayMs,
     }
 
-    this.logMsgIfDebug(() =>
-      console.log('PostHog Debug', `Session replay SDK config: ${JSON.stringify(sdkReplayConfig)}`)
-    )
+    this._logger.info(`Session replay SDK config: ${JSON.stringify(sdkReplayConfig)}`)
 
     // if Flags API has not returned yet, we will start session replay with default config.
     const sessionReplay = this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}
@@ -882,18 +1063,10 @@ export class PostHog extends PostHogCore {
     const cachedFeatureFlags = (featureFlags as { [key: string]: FeatureFlagValue }) ?? {}
     const cachedSessionReplayConfig = (sessionReplay as { [key: string]: JsonType }) ?? {}
 
-    this.logMsgIfDebug(() =>
-      console.log(
-        'PostHog Debug',
-        `Session replay feature flags from flags cached config: ${JSON.stringify(cachedFeatureFlags)}`
-      )
-    )
+    this._logger.info('Session replay feature flags from flags cached config:', JSON.stringify(cachedFeatureFlags))
 
-    this.logMsgIfDebug(() =>
-      console.log(
-        'PostHog Debug',
-        `Session replay session recording from flags cached config: ${JSON.stringify(cachedSessionReplayConfig)}`
-      )
+    this._logger.info(
+      `Session replay session recording from flags cached config: ${JSON.stringify(cachedSessionReplayConfig)}`
     )
 
     let recordingActive = true
@@ -915,30 +1088,21 @@ export class PostHog extends PostHogCore {
         recordingActive = false
       }
 
-      this.logMsgIfDebug(() =>
-        console.log('PostHog Debug', `Session replay '${linkedFlag}' linked flag value: '${value}'`)
-      )
+      this._logger.info(`Session replay '${linkedFlag}' linked flag value: '${value}'`)
     } else if (linkedFlag && typeof linkedFlag === 'object') {
       const flag = linkedFlag['flag'] as string | undefined
       const variant = linkedFlag['variant'] as string | undefined
       if (flag && variant) {
         const value = cachedFeatureFlags[flag]
         recordingActive = value === variant
-        this.logMsgIfDebug(() =>
-          console.log('PostHog Debug', `Session replay '${flag}' linked flag variant '${variant}' and value '${value}'`)
-        )
+        this._logger.info(`Session replay '${flag}' linked flag variant '${variant}' and value '${value}'`)
       } else {
         // disable recording if the flag does not exist/quota limited
-        this.logMsgIfDebug(() =>
-          console.log(
-            'PostHog Debug',
-            `Session replay '${flag}' linked flag variant: '${variant}' does not exist/quota limited.`
-          )
-        )
+        this._logger.info(`Session replay '${flag}' linked flag variant: '${variant}' does not exist/quota limited.`)
         recordingActive = false
       }
     } else {
-      this.logMsgIfDebug(() => console.log('PostHog Debug', `Session replay has no cached linkedFlag.`))
+      this._logger.info(`Session replay has no cached linkedFlag.`)
     }
 
     if (recordingActive) {
@@ -946,7 +1110,7 @@ export class PostHog extends PostHogCore {
         const sessionId = this.getSessionId()
 
         if (sessionId.length === 0) {
-          this.logMsgIfDebug(() => console.warn('PostHog Debug', 'Session replay enabled but no sessionId found.'))
+          this._logger.warn(`Session replay enabled but no sessionId found.`)
           return
         }
 
@@ -960,9 +1124,7 @@ export class PostHog extends PostHogCore {
           flushAt: this.flushAt,
         }
 
-        this.logMsgIfDebug(() =>
-          console.log('PostHog Debug', `Session replay sdk options: ${JSON.stringify(sdkOptions)}`)
-        )
+        this._logger.info(`Session replay sdk options: ${JSON.stringify(sdkOptions)}`)
 
         try {
           if (!(await OptionalReactNativeSessionReplay.isEnabled())) {
@@ -972,25 +1134,21 @@ export class PostHog extends PostHogCore {
               sdkReplayConfig,
               cachedSessionReplayConfig
             )
-            this.logMsgIfDebug(() =>
-              console.info('PostHog Debug', `Session replay started with sessionId ${sessionId}.`)
-            )
+            this._logger.info(`Session replay started with sessionId ${sessionId}.`)
           } else {
             // if somehow the SDK is already enabled with a different sessionId, we reset it
             this._resetSessionId(OptionalReactNativeSessionReplay, String(sessionId))
-            this.logMsgIfDebug(() =>
-              console.log('PostHog Debug', `Session replay already started with sessionId ${sessionId}.`)
-            )
+            this._logger.info(`Session replay already started with sessionId ${sessionId}.`)
           }
           this._currentSessionId = sessionId
         } catch (e) {
-          this.logMsgIfDebug(() => console.error('PostHog Debug', `Session replay failed to start: ${e}.`))
+          this._logger.error(`Session replay failed to start: ${e}.`)
         }
       } else {
-        this.logMsgIfDebug(() => console.warn('PostHog Debug', 'Session replay enabled but not installed.'))
+        this._logger.warn('Session replay enabled but not installed.')
       }
     } else {
-      this.logMsgIfDebug(() => console.info('PostHog Debug', 'Session replay disabled.'))
+      this._logger.info('Session replay disabled.')
     }
   }
 
@@ -1009,12 +1167,10 @@ export class PostHog extends PostHogCore {
         | undefined
 
       if (!appBuild || !appVersion) {
-        this.logMsgIfDebug(() =>
-          console.warn(
-            'PostHog could not track installation/update/open, as the build and version were not set. ' +
-              'This can happen if some dependencies are not installed correctly, or if you have provided' +
-              'customAppProperties but not included $app_build or $app_version.'
-          )
+        this._logger.warn(
+          'PostHog could not track installation/update/open, as the build and version were not set. ' +
+            'This can happen if some dependencies are not installed correctly, or if you have provided' +
+            'customAppProperties but not included $app_build or $app_version.'
         )
       }
       if (appBuild) {
@@ -1032,10 +1188,8 @@ export class PostHog extends PostHogCore {
         }
       }
     } else {
-      this.logMsgIfDebug(() =>
-        console.warn(
-          'PostHog was initialised with persistence set to "memory", capturing native app events (Application Installed and Application Updated) is not supported.'
-        )
+      this._logger.warn(
+        'PostHog was initialised with persistence set to "memory", capturing native app events (Application Installed and Application Updated) is not supported.'
       )
     }
 

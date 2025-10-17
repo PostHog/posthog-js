@@ -1,6 +1,11 @@
 import path from 'path'
-import { generateApiSpecs } from '../../../scripts/docs/parser'
-import { HOG_REF } from '../../../scripts/docs/constants'
+import fs from 'fs'
+import { generateApiSpecs } from '../../../scripts/docs/parser.js'
+import { HOG_REF } from '../../../scripts/docs/constants.js'
+
+// Read package.json to get version
+const packageJson = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../package.json'), 'utf8'));
+const version = packageJson.version;
 
 // Node-specific configuration
 const NODE_SPEC_INFO = {
@@ -34,7 +39,8 @@ const __dirname = import.meta.dirname
 const config = {
   packageDir: path.resolve(__dirname, '..'), // packages/node
   apiJsonPath: path.resolve(__dirname, '../docs/posthog-node.api.json'),
-  outputPath: path.resolve(__dirname, '../docs/posthog-node-references.json'),
+  outputPath: path.resolve(__dirname, `../references/posthog-node-references-${version}.json`),
+  version: version,
   id: NODE_SPEC_INFO.id,
   hogRef: HOG_REF,
   specInfo: NODE_SPEC_INFO,
@@ -42,4 +48,19 @@ const config = {
   parentClass: 'PostHog',
 }
 
-generateApiSpecs(config)
+// Ensure references directory exists
+const referencesDir = path.resolve(__dirname, '../references');
+if (!fs.existsSync(referencesDir)) {
+    fs.mkdirSync(referencesDir, { recursive: true });
+}
+
+// Generate versioned file
+const output = generateApiSpecs(config)
+
+// Write versioned file
+const versionedPath = path.resolve(__dirname, `../references/posthog-node-references-${version}.json`);
+fs.writeFileSync(versionedPath, JSON.stringify(output, null, 2));
+
+// Copy to latest file
+const latestPath = path.resolve(__dirname, '../references/posthog-node-references-latest.json');
+fs.writeFileSync(latestPath, JSON.stringify(output, null, 2));

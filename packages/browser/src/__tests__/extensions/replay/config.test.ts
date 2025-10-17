@@ -1,5 +1,5 @@
 import { defaultConfig } from '../../../posthog-core'
-import { buildNetworkRequestOptions } from '../../../extensions/replay/config'
+import { buildNetworkRequestOptions } from '../../../extensions/replay/external/config'
 import { CapturedNetworkRequest } from '../../../types'
 
 describe('config', () => {

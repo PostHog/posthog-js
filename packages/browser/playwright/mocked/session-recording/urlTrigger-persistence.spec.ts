@@ -13,7 +13,10 @@ test.describe('Session recording - URL trigger with persistence and eager loadin
 
         const startOptions = {
             options: {
-                session_recording: {},
+                session_recording: {
+                    // not the default but makes for easier test assertions
+                    compress_events: false,
+                },
                 __preview_eager_load_replay: false,
             },
             url: '/playground/cypress/index.html',

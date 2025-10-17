@@ -11,17 +11,15 @@ import {
     PostHogExtensionKind,
     window,
 } from '../../utils/globals'
-import { LAZY_LOADING, SessionRecordingStatus, TriggerType } from './triggerMatching'
+import { DISABLED, LAZY_LOADING, SessionRecordingStatus, TriggerType } from './external/triggerMatching'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
 
-/**
- * This only exists to let us test changes to sessionrecording.ts before rolling them out to everyone
- * it should not be depended on in other ways, since i'm going to delete it long before the end of September 2025
- */
-export class SessionRecordingWrapper {
+export class SessionRecording {
     _forceAllowLocalhostNetworkCapture: boolean = false
+
+    private _receivedFlags: boolean = false
 
     private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
@@ -35,7 +33,15 @@ export class SessionRecordingWrapper {
      * once a flags response is received status can be disabled, active or sampled
      */
     get status(): SessionRecordingStatus {
-        return this._lazyLoadedSessionRecording?.status || LAZY_LOADING
+        if (this._lazyLoadedSessionRecording) {
+            return this._lazyLoadedSessionRecording.status
+        }
+
+        if (this._receivedFlags && !this._isRecordingEnabled) {
+            return DISABLED
+        }
+
+        return LAZY_LOADING
     }
 
     constructor(private readonly _instance: PostHog) {
@@ -113,6 +119,8 @@ export class SessionRecordingWrapper {
     }
 
     stopRecording() {
+        this._persistFlagsOnSessionListener?.()
+        this._persistFlagsOnSessionListener = undefined
         this._lazyLoadedSessionRecording?.stop()
     }
 
@@ -125,7 +133,9 @@ export class SessionRecordingWrapper {
             const persistence = this._instance.persistence
 
             const persistResponse = () => {
-                const sessionRecordingConfigResponse = response.sessionRecording
+                const sessionRecordingConfigResponse =
+                    response.sessionRecording === false ? undefined : response.sessionRecording
+
                 const receivedSampleRate = sessionRecordingConfigResponse?.sampleRate
 
                 const parsedSampleRate = isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
@@ -175,9 +185,14 @@ export class SessionRecordingWrapper {
             logger.info('skipping remote config with no sessionRecording', response)
             return
         }
+        if (response.sessionRecording === false) {
+            // remotely disabled
+            this._receivedFlags = true
+            return
+        }
 
         this._persistRemoteConfig(response)
-        // TODO how do we send a custom message with the received remote config like we used to for debug
+        this._receivedFlags = true
         this.startIfEnabledOrStop()
     }
 

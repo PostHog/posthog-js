@@ -3,7 +3,9 @@ import type { SegmentAnalytics } from './extensions/segment-integration'
 import { PostHog } from './posthog-core'
 import { KnownUnsafeEditableEvent } from '@posthog/core'
 import { Survey } from './posthog-surveys-types'
-import { SAMPLED } from './extensions/replay/triggerMatching'
+// only importing types here, so won't affect the bundle
+// eslint-disable-next-line posthog-js/no-external-replay-imports
+import type { SAMPLED } from './extensions/replay/external/triggerMatching'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -765,6 +767,18 @@ export interface PostHogConfig {
     advanced_disable_feature_flags_on_first_load: boolean
 
     /**
+     * Evaluation environments for feature flags.
+     * When set, only feature flags that have at least one matching evaluation tag
+     * will be evaluated for this SDK instance. Feature flags with no evaluation tags
+     * will always be evaluated.
+     *
+     * Examples: ['production', 'web', 'checkout']
+     *
+     * @default undefined
+     */
+    evaluation_environments?: readonly string[]
+
+    /**
      * Determines whether PostHog should disable toolbar metrics.
      * This is our internal instrumentation for our toolbar in your website.
      *
@@ -1490,7 +1504,7 @@ export interface RemoteConfig {
     /**
      * Session recording configuration options
      */
-    sessionRecording?: SessionRecordingRemoteConfig
+    sessionRecording?: SessionRecordingRemoteConfig | false
 
     /**
      * Whether surveys are enabled

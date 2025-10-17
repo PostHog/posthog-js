@@ -1,8 +1,8 @@
-import { MutationThrottler } from '../../../extensions/replay/mutation-throttler'
+import { MutationThrottler } from '../../../extensions/replay/external/mutation-throttler'
 import {
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     MUTATION_SOURCE_TYPE,
-} from '../../../extensions/replay/sessionrecording-utils'
+} from '../../../extensions/replay/external/sessionrecording-utils'
 import type { rrwebRecord } from '../../../extensions/replay/types/rrweb'
 import { jest } from '@jest/globals'
 import type { eventWithTime, mutationData } from '@rrweb/types'
@@ -117,5 +117,41 @@ describe('MutationThrottler', () => {
         const result = mutationThrottler.throttleMutations(event as unknown as eventWithTime)
 
         expect(result).toBe(event)
+    })
+
+    describe('reset()', () => {
+        test('clears the logged tracker', () => {
+            // Populate the logged tracker
+            mutationThrottler['_loggedTracker']['123'] = true
+            mutationThrottler['_loggedTracker']['456'] = true
+
+            expect(Object.keys(mutationThrottler['_loggedTracker'])).toHaveLength(2)
+
+            mutationThrottler.reset()
+
+            expect(Object.keys(mutationThrottler['_loggedTracker'])).toHaveLength(0)
+        })
+    })
+
+    describe('stop()', () => {
+        test('clears the rate limiter interval', () => {
+            const stopSpy = jest.spyOn(mutationThrottler['_rateLimiter'], 'stop')
+
+            mutationThrottler.stop()
+
+            expect(stopSpy).toHaveBeenCalled()
+        })
+
+        test('clears the logged tracker', () => {
+            // Populate the logged tracker
+            mutationThrottler['_loggedTracker']['123'] = true
+            mutationThrottler['_loggedTracker']['456'] = true
+
+            expect(Object.keys(mutationThrottler['_loggedTracker'])).toHaveLength(2)
+
+            mutationThrottler.stop()
+
+            expect(Object.keys(mutationThrottler['_loggedTracker'])).toHaveLength(0)
+        })
     })
 })

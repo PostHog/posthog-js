@@ -14,7 +14,7 @@ import {
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
-} from '../../../extensions/replay/sessionrecording-utils'
+} from '../../../extensions/replay/external/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
 import {
     FlagsResponse,
@@ -25,7 +25,6 @@ import {
     SessionRecordingOptions,
 } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
-import { RECORDING_IDLE_THRESHOLD_MS, RECORDING_MAX_EVENT_SIZE } from '../../../extensions/replay/sessionrecording'
 import { assignableWindow, window } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import {
@@ -42,8 +41,12 @@ import {
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
 import Mock = jest.Mock
-import { SessionRecordingWrapper } from '../../../extensions/replay/sessionrecording-wrapper'
-import { LazyLoadedSessionRecording } from '../../../extensions/replay/external/lazy-loaded-session-recorder'
+import { SessionRecording } from '../../../extensions/replay/session-recording'
+import {
+    LazyLoadedSessionRecording,
+    RECORDING_IDLE_THRESHOLD_MS,
+    RECORDING_MAX_EVENT_SIZE,
+} from '../../../extensions/replay/external/lazy-loaded-session-recorder'
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -164,6 +167,7 @@ const originalLocation = window!.location
 
 function fakeNavigateTo(href: string) {
     delete (window as any).location
+    // @ts-expect-error this is a test, it's safe to write to location like this
     window!.location = { href } as Location
 }
 
@@ -172,7 +176,7 @@ describe('Lazy SessionRecording', () => {
     const loadScriptMock = jest.fn()
     let _emit: any
     let posthog: PostHog
-    let sessionRecording: SessionRecordingWrapper
+    let sessionRecording: SessionRecording
     let sessionId: string
     let sessionManager: SessionIdManager
     let config: PostHogConfig
@@ -216,6 +220,8 @@ describe('Lazy SessionRecording', () => {
             autocapture: false, // Assert that session recording works even if `autocapture = false`
             session_recording: {
                 maskAllInputs: false,
+                // not the default but makes for easier test assertions
+                compress_events: false,
             },
             persistence: 'memory',
         } as unknown as PostHogConfig
@@ -284,10 +290,11 @@ describe('Lazy SessionRecording', () => {
             [SESSION_RECORDING_IS_SAMPLED]: undefined,
         })
 
-        sessionRecording = new SessionRecordingWrapper(posthog)
+        sessionRecording = new SessionRecording(posthog)
     })
 
     afterEach(() => {
+        // @ts-expect-error this is a test, it's safe to write to location like this
         window!.location = originalLocation
     })
 
@@ -1174,29 +1181,6 @@ describe('Lazy SessionRecording', () => {
                 )
             })
 
-            it('does not compress small full snapshot data', () => {
-                _emit(createFullSnapshot({ data: { content: 'small' } }))
-                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
-
-                expect(posthog.capture).toHaveBeenCalledWith(
-                    '$snapshot',
-                    {
-                        $snapshot_data: [
-                            {
-                                data: { content: 'small' },
-                                type: 2,
-                            },
-                        ],
-                        $session_id: sessionId,
-                        $snapshot_bytes: expect.any(Number),
-                        $window_id: 'windowId',
-                        $lib: 'web',
-                        $lib_version: '0.0.1',
-                    },
-                    captureOptions
-                )
-            })
-
             it('compresses incremental snapshot mutation data', () => {
                 _emit(createIncrementalMutationEvent({ texts: [Array(30).fill(uuidv7()).join('')] }))
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
@@ -1638,7 +1622,6 @@ describe('Lazy SessionRecording', () => {
         })
 
         it('can emit when there are circular references', () => {
-            posthog.config.session_recording.compress_events = false
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -2252,6 +2235,105 @@ describe('Lazy SessionRecording', () => {
 
             expect(removePageviewCaptureHookMock).toHaveBeenCalledTimes(1)
             expect(sessionRecording['_lazyLoadedSessionRecording']['_removePageViewCaptureHook']).toBeUndefined()
+        })
+
+        it('clears the flush buffer timer on stop', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            // Set a flush buffer timer
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBufferTimer'] = setTimeout(() => {}, 1000)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_flushBufferTimer']).not.toBeUndefined()
+
+            sessionRecording.stopRecording()
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_flushBufferTimer']).toBeUndefined()
+        })
+
+        it('calls mutation throttler stop on stop', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            // Create a mutation throttler with a spy
+            const mutationThrottler = sessionRecording['_lazyLoadedSessionRecording']['_mutationThrottler']
+            if (mutationThrottler) {
+                const stopSpy = jest.spyOn(mutationThrottler, 'stop')
+
+                sessionRecording.stopRecording()
+
+                expect(stopSpy).toHaveBeenCalled()
+            }
+        })
+
+        it('clears queued rrweb events on stop', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            // Add some queued events
+            sessionRecording['_lazyLoadedSessionRecording']['_queuedRRWebEvents'] = [
+                { rrwebMethod: () => {}, attempt: 1, enqueuedAt: Date.now() },
+                { rrwebMethod: () => {}, attempt: 1, enqueuedAt: Date.now() },
+            ]
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_queuedRRWebEvents']).toHaveLength(2)
+
+            sessionRecording.stopRecording()
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_queuedRRWebEvents']).toHaveLength(0)
+        })
+
+        it('clears force idle session id listener on stop', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            // Set up a force idle listener
+            const mockListener = jest.fn()
+            sessionRecording['_lazyLoadedSessionRecording']['_forceIdleSessionIdListener'] = mockListener
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_forceIdleSessionIdListener']).toBeDefined()
+
+            sessionRecording.stopRecording()
+
+            expect(mockListener).toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_forceIdleSessionIdListener']).toBeUndefined()
+        })
+
+        it('clears persist flags session listener on stop', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            // The listener is created in onRemoteConfig via _persistRemoteConfig
+            const mockListener = jest.fn()
+            sessionRecording['_persistFlagsOnSessionListener'] = mockListener
+            expect(sessionRecording['_persistFlagsOnSessionListener']).toBeDefined()
+
+            sessionRecording.stopRecording()
+
+            expect(mockListener).toHaveBeenCalled()
+            expect(sessionRecording['_persistFlagsOnSessionListener']).toBeUndefined()
         })
 
         it('sets the window event listeners', () => {

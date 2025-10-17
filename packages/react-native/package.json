@@ -1,6 +1,6 @@
 {
   "name": "posthog-react-native",
-  "version": "4.7.1",
+  "version": "4.10.1",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -21,8 +21,7 @@
     "prebuild": "node -p \"'export const version = ' + JSON.stringify(require('./package.json').version)\" > src/version.ts",
     "build": "tsc -b && babel ./dist --out-dir dist --extensions '.js'",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
-    "gen-specs": "pnpm exec tsc && pnpm exec api-extractor run --config ./api-extractor.json --local",
-    "parse-specs": "node scripts/generate-docs.js"
+    "generate-references": "pnpm exec api-extractor run --config ./api-extractor.json --local && node scripts/generate-docs.js"
   },
   "dependencies": {
     "@posthog/core": "workspace:*"

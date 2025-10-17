@@ -1,5 +1,65 @@
 # posthog-react-native
 
+## 4.10.1
+
+### Patch Changes
+
+- [#2415](https://github.com/PostHog/posthog-js/pull/2415) [`ab30675`](https://github.com/PostHog/posthog-js/commit/ab30675f9fcb9323dfbc8447fd5b244a0a631983) Thanks [@ioannisj](https://github.com/ioannisj)! - fix surveys only appear on subsequent app launches after being loaded and cached
+
+## 4.10.0
+
+### Minor Changes
+
+- [#2417](https://github.com/PostHog/posthog-js/pull/2417) [`daf919b`](https://github.com/PostHog/posthog-js/commit/daf919be225527ee4ad026d806dec195b75e44aa) Thanks [@dmarticus](https://github.com/dmarticus)! - feat: Add evaluation environments support for feature flags
+
+  This PR implements support for evaluation environments in the posthog-react-native SDK, allowing users to specify which environment tags their SDK instance should use when evaluating feature flags.
+
+  Users can now configure the SDK with an `evaluationEnvironments` option:
+
+  ```typescript
+  const posthog = new PostHog('api-key', {
+    host: 'https://app.posthog.com',
+    evaluationEnvironments: ['production', 'mobile', 'react-native'],
+  })
+  ```
+
+  When set, only feature flags that have at least one matching evaluation tag will be evaluated for this SDK instance. Feature flags with no evaluation tags will always be evaluated.
+
+### Patch Changes
+
+- [#2431](https://github.com/PostHog/posthog-js/pull/2431) [`7d45a7a`](https://github.com/PostHog/posthog-js/commit/7d45a7a52c44ba768913d66a4c4363d107042682) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: remove deprecated attribute $exception_personURL from exception events
+
+- Updated dependencies [[`daf919b`](https://github.com/PostHog/posthog-js/commit/daf919be225527ee4ad026d806dec195b75e44aa), [`7d45a7a`](https://github.com/PostHog/posthog-js/commit/7d45a7a52c44ba768913d66a4c4363d107042682)]:
+  - @posthog/core@1.3.0
+
+## 4.9.1
+
+### Patch Changes
+
+- Updated dependencies [[`10da2ee`](https://github.com/PostHog/posthog-js/commit/10da2ee0b8862ad0e32b68e452fae1bc77620bbf)]:
+  - @posthog/core@1.2.4
+
+## 4.9.0
+
+### Minor Changes
+
+- [#2410](https://github.com/PostHog/posthog-js/pull/2410) [`1f294ec`](https://github.com/PostHog/posthog-js/commit/1f294ecb3c816b283f04c0dacc01739d79a5805c) Thanks [@hpouillot](https://github.com/hpouillot)! - add error tracking autocapture
+
+## 4.8.1
+
+### Patch Changes
+
+- [#2414](https://github.com/PostHog/posthog-js/pull/2414) [`e19a384`](https://github.com/PostHog/posthog-js/commit/e19a384468d722c12f4ef21feb684da31f9dcd3b) Thanks [@hpouillot](https://github.com/hpouillot)! - create a common logger for node and react-native
+
+- Updated dependencies [[`e19a384`](https://github.com/PostHog/posthog-js/commit/e19a384468d722c12f4ef21feb684da31f9dcd3b)]:
+  - @posthog/core@1.2.3
+
+## 4.8.0
+
+### Minor Changes
+
+- [#2360](https://github.com/PostHog/posthog-js/pull/2360) [`8ea1ce8`](https://github.com/PostHog/posthog-js/commit/8ea1ce8a9d02de35e2c1bea3f49518455fb53ffe) Thanks [@hpouillot](https://github.com/hpouillot)! - add stacktrace to exceptions
+
 ## 4.7.1
 
 ### Patch Changes

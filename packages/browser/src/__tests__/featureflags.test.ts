@@ -750,6 +750,29 @@ describe('featureflags', () => {
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(true)
         })
+
+        it('should call /flags with evaluation_environments when configured', () => {
+            instance.config.evaluation_environments = ['production', 'web']
+            featureFlags.flags()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toEqual(['production', 'web'])
+        })
+
+        it('should not include evaluation_environments when not configured', () => {
+            featureFlags.flags()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toBe(undefined)
+        })
+
+        it('should not include evaluation_environments when configured as empty array', () => {
+            instance.config.evaluation_environments = []
+            featureFlags.flags()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toBe(undefined)
+        })
     })
 
     describe('onFeatureFlags', () => {
@@ -2142,5 +2165,85 @@ describe('filterActiveFeatureFlags', () => {
             'flag-1': true,
             'flag-3': 'variant-1',
         })
+    })
+})
+
+describe('getRemoteConfigPayload', () => {
+    let instance: PostHog
+    let featureFlags: PostHogFeatureFlags
+
+    beforeEach(() => {
+        instance = {
+            config: {
+                token: 'test-token',
+                api_host: 'https://test.com',
+            } as PostHogConfig,
+            get_distinct_id: () => 'test-distinct-id',
+            _send_request: jest.fn(),
+            requestRouter: {
+                endpointFor: jest.fn().mockImplementation((endpoint, path) => `${endpoint}${path}`),
+            },
+        } as unknown as PostHog
+
+        featureFlags = new PostHogFeatureFlags(instance)
+    })
+
+    it('should include evaluation_environments when configured', () => {
+        instance.config.evaluation_environments = ['staging', 'backend']
+
+        const callback = jest.fn()
+        featureFlags.getRemoteConfigPayload('test-flag', callback)
+
+        expect(instance._send_request).toHaveBeenCalledWith(
+            expect.objectContaining({
+                method: 'POST',
+                url: 'api/flags/?v=2&config=true',
+                data: expect.objectContaining({
+                    distinct_id: 'test-distinct-id',
+                    token: 'test-token',
+                    evaluation_environments: ['staging', 'backend'],
+                }),
+            })
+        )
+    })
+
+    it('should not include evaluation_environments when not configured', () => {
+        const callback = jest.fn()
+        featureFlags.getRemoteConfigPayload('test-flag', callback)
+
+        expect(instance._send_request).toHaveBeenCalledWith(
+            expect.objectContaining({
+                method: 'POST',
+                url: 'api/flags/?v=2&config=true',
+                data: expect.objectContaining({
+                    distinct_id: 'test-distinct-id',
+                    token: 'test-token',
+                }),
+            })
+        )
+
+        // Verify evaluation_environments is not in the data
+        expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toBeUndefined()
+    })
+
+    it('should not include evaluation_environments when configured as empty array', () => {
+        instance.config.evaluation_environments = []
+
+        const callback = jest.fn()
+        featureFlags.getRemoteConfigPayload('test-flag', callback)
+
+        expect(instance._send_request).toHaveBeenCalledWith(
+            expect.objectContaining({
+                method: 'POST',
+                url: 'api/flags/?v=2&config=true',
+                data: expect.objectContaining({
+                    distinct_id: 'test-distinct-id',
+                    token: 'test-token',
+                }),
+            })
+        )
+
+        // Verify evaluation_environments is not in the data
+        expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toBeUndefined()
     })
 })

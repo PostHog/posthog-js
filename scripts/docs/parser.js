@@ -6,9 +6,6 @@ const types = require('./types');
 const { writeFileSync, readFileSync } = require('fs');
 const path = require('path');
 
-const loadPackageInfo = (packageDir) => 
-    JSON.parse(readFileSync(path.resolve(packageDir, 'package.json'), 'utf8'));
-
 const loadApiPackage = (filePath) => 
     apiExtractor.ApiPackage.loadFromJsonFile(filePath);
 
@@ -80,11 +77,11 @@ const createClassDefinition = (posthogClass, functions) => ({
 });
 
 // Compose final output
-const composeOutput = (packageJson, posthogClass, functions, types, config) => ({
+const composeOutput = (posthogClass, functions, types, config) => ({
     id: config.id,
     hogRef: config.hogRef,
     info: {
-        version: packageJson.version,
+        version: config.version,
         ...config.specInfo
     },
     classes: [createClassDefinition(posthogClass, functions)],
@@ -94,7 +91,6 @@ const composeOutput = (packageJson, posthogClass, functions, types, config) => (
 });
 
 const generateApiSpecs = (config) => {
-    const packageJson = loadPackageInfo(config.packageDir);
     const apiPackage = loadApiPackage(config.apiJsonPath);
     const posthogClass = findPostHogClass(apiPackage, config.parentClass);
     
@@ -112,9 +108,7 @@ const generateApiSpecs = (config) => {
     // Combine regular methods with extra methods
     const allFunctions = [...providerMethods,...functions];
     
-    const output = composeOutput(packageJson, posthogClass, allFunctions, resolvedTypes, config);
-    
-    writeFileSync(config.outputPath, JSON.stringify(output, null, 2));
+    const output = composeOutput(posthogClass, allFunctions, resolvedTypes, config);
     
     return output;
 };

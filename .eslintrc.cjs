@@ -71,6 +71,7 @@ module.exports = {
                 'packages/react-native/**',
                 'packages/node/**',
                 'packages/web/**',
+                'examples/**',
             ],
             rules: {
                 'no-console': 'off',

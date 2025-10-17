@@ -1,27 +1,26 @@
 ## PostHog demo project
 
-From the posthog-js root folder, run:
-```bash
-pnpm package:watch
-```
-It will watch for package changes and recreate local tarballs inside the `target` folder
+### Testing local changes to packages
 
-In another terminal window, from the nextjs directory, run:
+This is a simple porject used to test local changes to the PostHog JS SDK packages.
+
+Ensure that you can have already installed and built the packages in this monorepo. From the root of the repo, run:
+
 ```bash
 pnpm install
+pnpm build
 ```
-All posthog packages will be resolved from the local tarball folder using the `.pnpmfile.cjs`
 
-Then start the development server:
+Then you can run
+
 ```bash
-NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' pnpm dev
+pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-### Testing local changes to packages
-
 Update your files, wait for the package script to finish, then, from this folder, run:
+
 ```bash
 pnpm install
 NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' pnpm dev
@@ -31,6 +30,12 @@ If you need to provide environment variables, you can do so:
 
 ```bash
 NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' NEXT_PUBLIC_POSTHOG_HOST='http://localhost:8010' pnpm dev
+```
+
+To rebuild posthog-js after making changes, you can run:
+
+```bash
+pnpm run build-posthog-js && NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' NEXT_PUBLIC_POSTHOG_HOST='http://localhost:8010' pnpm dev
 ```
 
 ### Testing cross-subdomain tracking

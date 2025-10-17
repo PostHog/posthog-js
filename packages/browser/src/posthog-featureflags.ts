@@ -168,6 +168,25 @@ export class PostHogFeatureFlags {
         this.featureFlagEventHandlers = []
     }
 
+    private _getValidEvaluationEnvironments(): string[] {
+        const envs = this._instance.config.evaluation_environments
+        if (!envs?.length) {
+            return []
+        }
+
+        return envs.filter((env) => {
+            const isValid = env && typeof env === 'string' && env.trim().length > 0
+            if (!isValid) {
+                logger.error('Invalid evaluation environment found:', env, 'Expected non-empty string')
+            }
+            return isValid
+        })
+    }
+
+    private _shouldIncludeEvaluationEnvironments(): boolean {
+        return this._getValidEvaluationEnvironments().length > 0
+    }
+
     flags(): void {
         if (this._instance.config.__preview_remote_config) {
             // If remote config is enabled we don't call /flags and we mark it as called so that we don't simulate it
@@ -391,6 +410,11 @@ export class PostHogFeatureFlags {
             data.disable_flags = true
         }
 
+        // Add evaluation environments if configured
+        if (this._shouldIncludeEvaluationEnvironments()) {
+            data.evaluation_environments = this._getValidEvaluationEnvironments()
+        }
+
         // flags supports loading config data with the `config` query param, but if you're using remote config, you
         // don't need to add that parameter because all the config data is loaded from the remote config endpoint.
         const useRemoteConfigWithFlags = this._instance.config.__preview_remote_config
@@ -575,13 +599,20 @@ export class PostHogFeatureFlags {
      */
     getRemoteConfigPayload(key: string, callback: RemoteConfigFeatureFlagCallback): void {
         const token = this._instance.config.token
+        const data: Record<string, any> = {
+            distinct_id: this._instance.get_distinct_id(),
+            token,
+        }
+
+        // Add evaluation environments if configured
+        if (this._shouldIncludeEvaluationEnvironments()) {
+            data.evaluation_environments = this._getValidEvaluationEnvironments()
+        }
+
         this._instance._send_request({
             method: 'POST',
             url: this._instance.requestRouter.endpointFor('api', '/flags/?v=2&config=true'),
-            data: {
-                distinct_id: this._instance.get_distinct_id(),
-                token,
-            },
+            data,
             compression: this._instance.config.disable_compression ? undefined : Compression.Base64,
             timeout: this._instance.config.feature_flag_request_timeout_ms,
             callback: (response) => {

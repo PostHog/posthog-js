@@ -133,23 +133,23 @@ describe('SiteApps', () => {
             emitCaptureEvent?.('test_event', { event: 'test_event', properties: { prop1: 'value1' } } as any)
 
             expect(siteAppsInstance['_bufferedInvocations']).toMatchInlineSnapshot(`
-                Array [
-                  Object {
-                    "event": Object {
-                      "distinct_id": undefined,
-                      "elements_chain": "",
-                      "event": "test_event",
-                      "properties": Object {
-                        "prop1": "value1",
-                      },
-                    },
-                    "groups": Object {},
-                    "person": Object {
-                      "properties": undefined,
-                    },
-                  },
-                ]
-            `)
+[
+  {
+    "event": {
+      "distinct_id": undefined,
+      "elements_chain": "",
+      "event": "test_event",
+      "properties": {
+        "prop1": "value1",
+      },
+    },
+    "groups": {},
+    "person": {
+      "properties": undefined,
+    },
+  },
+]
+`)
         })
 
         it('trims missedInvocations to last 990 when exceeding 1000', () => {
