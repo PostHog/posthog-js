@@ -69,6 +69,10 @@ export const COOKIELESS_MODE_FLAG_PROPERTY = '$cookieless_mode'
 
 export const WEB_EXPERIMENTS = '$web_experiments'
 
+/** Overriden feature flags */
+export const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
+export const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
+
 // These are properties that are reserved and will not be automatically included in events
 export const PERSISTENCE_RESERVED_PROPERTIES = [
     PEOPLE_DISTINCT_ID_KEY,
