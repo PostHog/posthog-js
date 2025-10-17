@@ -1,5 +1,11 @@
 # @posthog/nuxt
 
+## 0.0.9
+
+### Patch Changes
+
+- [#2448](https://github.com/PostHog/posthog-js/pull/2448) [`5b17b10`](https://github.com/PostHog/posthog-js/commit/5b17b1078130200a1e1bb89089d08cdf3ad255c5) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - use new cli (v0.5.1)
+
 ## 0.0.8
 
 ### Patch Changes
