@@ -197,6 +197,45 @@ describe('persistence', () => {
             })
         })
 
+        it('should store override feature flags and payloads in cookies', () => {
+            expect(document.cookie).toEqual('')
+
+            const lib = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
+            lib.register({ distinct_id: 'test', test_prop: 'test_val' })
+
+            lib.register({
+                $override_feature_flags: { 'test-flag': true, 'another-flag': 'variant-1' },
+            })
+            expect(document.cookie).toContain(
+                `ph__posthog=${encode({
+                    distinct_id: 'test',
+                    $override_feature_flags: { 'test-flag': true, 'another-flag': 'variant-1' },
+                })}`
+            )
+
+            lib.register({
+                $override_feature_flag_payloads: { 'test-flag': { data: 'payload' }, 'another-flag': 123 },
+            })
+            expect(document.cookie).toContain(
+                `ph__posthog=${encode({
+                    distinct_id: 'test',
+                    $override_feature_flags: { 'test-flag': true, 'another-flag': 'variant-1' },
+                    $override_feature_flag_payloads: { 'test-flag': { data: 'payload' }, 'another-flag': 123 },
+                })}`
+            )
+
+            // Clear localstorage to simulate being on a different subdomain
+            localStorage.clear()
+
+            const newLib = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
+
+            expect(newLib.props).toEqual({
+                distinct_id: 'test',
+                $override_feature_flags: { 'test-flag': true, 'another-flag': 'variant-1' },
+                $override_feature_flag_payloads: { 'test-flag': { data: 'payload' }, 'another-flag': 123 },
+            })
+        })
+
         it('should allow swapping between storage methods', () => {
             const expectedProps = () => ({ distinct_id: 'test', test_prop: 'test_val', $is_identified: false })
             let config = makePostHogConfig('test', 'localStorage+cookie')
