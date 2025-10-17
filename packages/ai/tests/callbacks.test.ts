@@ -150,4 +150,152 @@ describe('LangChainCallbackHandler', () => {
     setParentOfRunSpy.mockRestore()
     setLLMMetadataSpy.mockRestore()
   })
+
+  describe('token usage parsing in captured events', () => {
+    it.each(['token_usage', 'usage', 'tokenUsage', 'estimatedTokenUsage'])(
+      'should include $ai_input_tokens and $ai_output_tokens from llmOutput.%s',
+      (usageKey) => {
+        const serialized = {
+          lc: 1,
+          type: 'constructor' as const,
+          id: ['langchain', 'llms', 'openai', 'OpenAI'],
+          kwargs: { openai_api_base: 'https://api.openai.com/v1' },
+        }
+
+        const prompts = ['Test prompt']
+        const runId = 'test_run'
+        const parentRunId = 'parent_run'
+        const extraParams = {}
+
+        // Test data
+        const usageData = {
+          promptTokens: 10,
+          completionTokens: 5,
+        }
+
+        // Start LLM
+        handler.handleLLMStart(serialized, prompts, runId, parentRunId, extraParams)
+
+        // Mock LLM response with dynamic usage key
+        const llmResult = {
+          generations: [
+            [
+              {
+                text: 'Test response',
+                message: new AIMessage('Test response'),
+              },
+            ],
+          ],
+          llmOutput: {
+            [usageKey]: usageData,
+          },
+        }
+
+        // End LLM
+        handler.handleLLMEnd(llmResult, runId)
+
+        // Check token usage parsing
+        const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+        expect(captureCall[0].properties['$ai_input_tokens']).toBe(usageData.promptTokens)
+        expect(captureCall[0].properties['$ai_output_tokens']).toBe(usageData.completionTokens)
+      }
+    )
+
+    it('should include $ai_input_tokens and $ai_output_tokens from generationInfo.usage_metadata', () => {
+      const serialized = {
+        lc: 1,
+        type: 'constructor' as const,
+        id: ['langchain', 'llms', 'openai', 'OpenAI'],
+        kwargs: { openai_api_base: 'https://api.openai.com/v1' },
+      }
+
+      const prompts = ['Test prompt']
+      const runId = 'test_run'
+      const parentRunId = 'parent_run'
+      const extraParams = {}
+
+      // Test data
+      const usageData = {
+        promptTokens: 15,
+        completionTokens: 8,
+      }
+
+      // Start LLM
+      handler.handleLLMStart(serialized, prompts, runId, parentRunId, extraParams)
+
+      // Mock LLM response with usage in generationInfo.usage_metadata
+      const llmResult = {
+        generations: [
+          [
+            {
+              text: 'Test response',
+              message: new AIMessage('Test response'),
+              generationInfo: {
+                usage_metadata: usageData,
+              },
+            },
+          ],
+        ],
+      }
+
+      // End LLM
+      handler.handleLLMEnd(llmResult, runId)
+
+      // Check token usage parsing
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      expect(captureCall[0].properties['$ai_input_tokens']).toBe(usageData.promptTokens)
+      expect(captureCall[0].properties['$ai_output_tokens']).toBe(usageData.completionTokens)
+    })
+
+    it.each(['usage', 'amazon-bedrock-invocationMetrics'])(
+      'should include $ai_input_tokens and $ai_output_tokens from response_metadata.%s',
+      (usageKey) => {
+        const serialized = {
+          lc: 1,
+          type: 'constructor' as const,
+          id: ['langchain', 'llms', 'openai', 'OpenAI'],
+          kwargs: { openai_api_base: 'https://api.openai.com/v1' },
+        }
+
+        const prompts = ['Test prompt']
+        const runId = 'test_run'
+        const parentRunId = 'parent_run'
+        const extraParams = {}
+
+        // Test data
+        const usageData = {
+          promptTokens: 20,
+          completionTokens: 12,
+        }
+
+        // Start LLM
+        handler.handleLLMStart(serialized, prompts, runId, parentRunId, extraParams)
+
+        // Mock LLM response with usage in response_metadata
+        const llmResult = {
+          generations: [
+            [
+              {
+                text: 'Test response',
+                message: new AIMessage('Test response'),
+                generationInfo: {
+                  response_metadata: {
+                    [usageKey]: usageData,
+                  },
+                },
+              },
+            ],
+          ],
+        }
+
+        // End LLM
+        handler.handleLLMEnd(llmResult, runId)
+
+        // Check token usage parsing
+        const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+        expect(captureCall[0].properties['$ai_input_tokens']).toBe(usageData.promptTokens)
+        expect(captureCall[0].properties['$ai_output_tokens']).toBe(usageData.completionTokens)
+      }
+    )
+  })
 })
