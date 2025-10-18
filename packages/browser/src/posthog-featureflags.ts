@@ -425,7 +425,7 @@ export class PostHogFeatureFlags {
             ? '&only_evaluate_survey_feature_flags=true'
             : ''
 
-        const url = this._instance.requestRouter.endpointFor('api', flagsRoute + queryParams)
+        const url = this._instance.requestRouter.endpointFor('flags', flagsRoute + queryParams)
 
         if (useRemoteConfigWithFlags) {
             data.timezone = getTimezone()
@@ -611,7 +611,7 @@ export class PostHogFeatureFlags {
 
         this._instance._send_request({
             method: 'POST',
-            url: this._instance.requestRouter.endpointFor('api', '/flags/?v=2&config=true'),
+            url: this._instance.requestRouter.endpointFor('flags', '/flags/?v=2&config=true'),
             data,
             compression: this._instance.config.disable_compression ? undefined : Compression.Base64,
             timeout: this._instance.config.feature_flag_request_timeout_ms,

@@ -3,6 +3,11 @@
 exports[`config snapshot for PostHogConfig 1`] = `
 "{
   "api_host": "string",
+  "flags_api_host": [
+    "undefined",
+    "null",
+    "string"
+  ],
   "ui_host": [
     "null",
     "string"
