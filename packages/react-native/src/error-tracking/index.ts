@@ -1,18 +1,5 @@
-import {
-  chromeStackLineParser,
-  ErrorCoercer,
-  ErrorEventCoercer,
-  ErrorPropertiesBuilder,
-  EventHint,
-  geckoStackLineParser,
-  ObjectCoercer,
-  PrimitiveCoercer,
-  PromiseRejectionEventCoercer,
-  SeverityLevel,
-  StringCoercer,
-} from '@posthog/core/error-tracking'
 import type { PostHog } from '../posthog-rn'
-import { Logger, PostHogEventProperties } from '@posthog/core'
+import { Logger, PostHogEventProperties, ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { trackConsole, trackUncaughtExceptions, trackUnhandledRejections } from './utils'
 
 type LogLevel = 'debug' | 'log' | 'info' | 'warn' | 'error'
@@ -42,7 +29,7 @@ interface ResolvedErrorTrackingOptions {
 }
 
 export class ErrorTracking {
-  private errorPropertiesBuilder: ErrorPropertiesBuilder
+  private errorPropertiesBuilder: CoreErrorTracking.ErrorPropertiesBuilder
   private logger: Logger
   private options: ResolvedErrorTrackingOptions
 
@@ -51,23 +38,23 @@ export class ErrorTracking {
     options: ErrorTrackingOptions = {},
     logger: Logger
   ) {
-    this.errorPropertiesBuilder = new ErrorPropertiesBuilder(
+    this.errorPropertiesBuilder = new CoreErrorTracking.ErrorPropertiesBuilder(
       [
-        new PromiseRejectionEventCoercer(),
-        new ErrorCoercer(),
-        new ErrorEventCoercer(),
-        new ObjectCoercer(),
-        new StringCoercer(),
-        new PrimitiveCoercer(),
+        new CoreErrorTracking.PromiseRejectionEventCoercer(),
+        new CoreErrorTracking.ErrorCoercer(),
+        new CoreErrorTracking.ErrorEventCoercer(),
+        new CoreErrorTracking.ObjectCoercer(),
+        new CoreErrorTracking.StringCoercer(),
+        new CoreErrorTracking.PrimitiveCoercer(),
       ],
-      [chromeStackLineParser, geckoStackLineParser]
+      [CoreErrorTracking.chromeStackLineParser, CoreErrorTracking.geckoStackLineParser]
     )
     this.logger = logger.createLogger('[ErrorTracking]')
     this.options = this.resolveOptions(options)
     this.autocapture(this.options.autocapture)
   }
 
-  captureException(input: unknown, additionalProperties: PostHogEventProperties, hint: EventHint) {
+  captureException(input: unknown, additionalProperties: PostHogEventProperties, hint: CoreErrorTracking.EventHint) {
     try {
       const properties = this.errorPropertiesBuilder.buildFromUnknown(input, hint)
       return this.instance.capture('$exception', {
@@ -110,7 +97,7 @@ export class ErrorTracking {
 
   private autocaptureUncaughtErrors() {
     const onUncaughtException = (error: unknown, isFatal: boolean) => {
-      const hint: EventHint = {
+      const hint: CoreErrorTracking.EventHint = {
         mechanism: {
           type: 'onuncaughtexception',
           handled: false,
@@ -119,7 +106,7 @@ export class ErrorTracking {
       const additionalProperties: any = {}
 
       if (isFatal) {
-        additionalProperties['$exception_level'] = 'fatal' as SeverityLevel
+        additionalProperties['$exception_level'] = 'fatal' as CoreErrorTracking.SeverityLevel
       }
 
       this.captureException(error, additionalProperties, hint)
@@ -139,7 +126,7 @@ export class ErrorTracking {
 
   private autocaptureUnhandledRejections() {
     const onUnhandledRejection = (error: unknown) => {
-      const hint: EventHint = {
+      const hint: CoreErrorTracking.EventHint = {
         mechanism: {
           type: 'onunhandledrejection',
           handled: false,
@@ -157,7 +144,7 @@ export class ErrorTracking {
 
   private autocaptureConsole(levels: LogLevel[]) {
     const onConsole = (level: LogLevel) => (error: unknown, isFatal: boolean, syntheticException?: Error) => {
-      const hint: EventHint = {
+      const hint: CoreErrorTracking.EventHint = {
         mechanism: {
           type: 'onconsole',
           handled: true,
@@ -165,7 +152,7 @@ export class ErrorTracking {
         syntheticException,
       }
       const additionalProperties = {
-        $exception_level: level as SeverityLevel,
+        $exception_level: level as CoreErrorTracking.SeverityLevel,
       }
       this.captureException(error, additionalProperties, hint)
     }
