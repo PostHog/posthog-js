@@ -1,5 +1,23 @@
 # @posthog/nuxt
 
+## 0.0.10
+
+### Patch Changes
+
+- [#2456](https://github.com/PostHog/posthog-js/pull/2456) [`450c39e`](https://github.com/PostHog/posthog-js/commit/450c39e39998fad54cf568635c70fb1f08d39c81) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - fix nuxt build process hang
+
+## 0.0.9
+
+### Patch Changes
+
+- [#2448](https://github.com/PostHog/posthog-js/pull/2448) [`5b17b10`](https://github.com/PostHog/posthog-js/commit/5b17b1078130200a1e1bb89089d08cdf3ad255c5) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - use new cli (v0.5.1)
+
+## 0.0.8
+
+### Patch Changes
+
+- [#2450](https://github.com/PostHog/posthog-js/pull/2450) [`4ef7051`](https://github.com/PostHog/posthog-js/commit/4ef7051bc1d29a4013227f910b6a060969486136) Thanks [@daibhin](https://github.com/daibhin)! - bump the @posthog/cli version
+
 ## 0.0.7
 
 ### Patch Changes

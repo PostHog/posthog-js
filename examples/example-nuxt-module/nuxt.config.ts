@@ -23,9 +23,9 @@ export default defineNuxtConfig({
     },
     sourcemaps: {
       enabled: true,
-      version: 'V1',
-      envId: '2',
-      project: 'i-love-nuxt-1',
+      version: '3',
+      envId: '1',
+      project: 'my-project',
       personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY!,
     },
   },
