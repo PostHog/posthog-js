@@ -1,5 +1,11 @@
 # @posthog/nuxt
 
+## 0.0.10
+
+### Patch Changes
+
+- [#2456](https://github.com/PostHog/posthog-js/pull/2456) [`450c39e`](https://github.com/PostHog/posthog-js/commit/450c39e39998fad54cf568635c70fb1f08d39c81) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - fix nuxt build process hang
+
 ## 0.0.9
 
 ### Patch Changes
