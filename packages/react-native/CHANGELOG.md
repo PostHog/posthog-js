@@ -1,5 +1,11 @@
 # posthog-react-native
 
+## 4.10.2
+
+### Patch Changes
+
+- [#2457](https://github.com/PostHog/posthog-js/pull/2457) [`7f5e94b`](https://github.com/PostHog/posthog-js/commit/7f5e94b3839e9c6ef8363b9296993ca11e3319ad) Thanks [@daibhin](https://github.com/daibhin)! - correctly export error tracking files
+
 ## 4.10.1
 
 ### Patch Changes
