@@ -5,7 +5,7 @@ updates:
           prefix: 'chore(llma)'
       labels:
           - release
-      directory: '/packages/ai'
+      directory: '/'
       schedule:
           interval: 'daily'
           time: '10:00'
@@ -31,8 +31,3 @@ updates:
       open-pull-requests-limit: 1
       reviewers:
           - 'PostHog/team-llm-analytics'
-      # Uncomment below to enable auto-merge for minor updates when CI passes
-      # pull-request-branch-name:
-      #   separator: "/"
-      # assignees:
-      #   - "PostHog/ai-team"
