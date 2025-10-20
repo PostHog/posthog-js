@@ -1963,6 +1963,88 @@ describe('local evaluation', () => {
 
     expect(eventHandler).toHaveBeenCalledWith(1) // Should be called with number of flags loaded
   })
+
+  it('should fallback to API when flag has multiple conditions and one contains static cohort', async () => {
+    // When a flag has multiple conditions and one condition contains a static cohort
+    // (cohort not available for local evaluation), the entire flag evaluation should
+    // fallback to the API, regardless of whether other conditions could match locally.
+    //
+    // Customer scenario: Flag has:
+    // - Condition 1: Static cohort check (would return "set-1" on server)
+    // - Condition 2: Simple property check (could match locally and return "set-8")
+    //
+    // Expected: Should fallback to API and return "set-1"
+
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Multi-condition Flag',
+          key: 'default-pinned-mini-apps',
+          active: true,
+          filters: {
+            groups: [
+              {
+                // First condition: Contains a static cohort (cohort 999 is NOT in the cohorts map)
+                // This should cause the entire flag to fallback to API
+                properties: [{ key: 'id', value: 999, type: 'cohort' }],
+                rollout_percentage: 100,
+                variant: 'set-1',
+              },
+              {
+                // Second condition: Simple property check
+                properties: [
+                  {
+                    key: '$geoip_country_code',
+                    operator: 'exact',
+                    value: ['DE'],
+                    type: 'person',
+                  },
+                ],
+                rollout_percentage: 100,
+                variant: 'set-8',
+              },
+            ],
+            multivariate: {
+              variants: [
+                { key: 'set-1', rollout_percentage: 50 },
+                { key: 'set-8', rollout_percentage: 50 },
+              ],
+            },
+          },
+        },
+      ],
+      // Note: cohorts map does NOT contain cohort 999, making it a "static cohort"
+      // that requires server-side database lookup
+      cohorts: {},
+    }
+
+    mockedFetch.mockImplementation(
+      apiImplementation({
+        localFlags: flags,
+        // The /flags API returns 'set-1' because the user is in the static cohort
+        decideFlags: { 'default-pinned-mini-apps': 'set-1' },
+      })
+    )
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    const result = await posthog.getFeatureFlag('default-pinned-mini-apps', 'test-distinct-id', {
+      personProperties: {
+        $geoip_country_code: 'DE',
+      },
+    })
+
+    // Should return the correct variant from the API
+    expect(result).toEqual('set-1')
+
+    // Should call the /flags API because of the static cohort in first condition
+    expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
+  })
 })
 
 describe('getFeatureFlag', () => {

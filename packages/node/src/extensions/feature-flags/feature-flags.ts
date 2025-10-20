@@ -31,6 +31,18 @@ class InconclusiveMatchError extends Error {
   }
 }
 
+class RequiresServerEvaluation extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = this.constructor.name
+    Error.captureStackTrace(this, this.constructor)
+    // instanceof doesn't work in ES3 or ES5
+    // https://www.dannyguo.com/blog/how-to-fix-instanceof-not-working-for-custom-errors-in-typescript/
+    // this is the workaround
+    Object.setPrototypeOf(this, RequiresServerEvaluation.prototype)
+  }
+}
+
 type FeatureFlagsPollerOptions = {
   personalApiKey: string
   projectApiKey: string
@@ -130,8 +142,8 @@ class FeatureFlagsPoller {
         response = result.value
         this.logMsgIfDebug(() => console.debug(`Successfully computed flag locally: ${key} -> ${response}`))
       } catch (e) {
-        if (e instanceof InconclusiveMatchError) {
-          this.logMsgIfDebug(() => console.debug(`InconclusiveMatchError when computing flag locally: ${key}: ${e}`))
+        if (e instanceof RequiresServerEvaluation || e instanceof InconclusiveMatchError) {
+          this.logMsgIfDebug(() => console.debug(`${e.name} when computing flag locally: ${key}: ${e.message}`))
         } else if (e instanceof Error) {
           this.onError?.(new Error(`Error computing flag locally: ${key}: ${e}`))
         }
@@ -182,10 +194,8 @@ class FeatureFlagsPoller {
             payloads[flag.key] = matchPayload
           }
         } catch (e) {
-          if (e instanceof InconclusiveMatchError) {
-            this.logMsgIfDebug(() =>
-              console.debug(`InconclusiveMatchError when computing flag locally: ${flag.key}: ${e}`)
-            )
+          if (e instanceof RequiresServerEvaluation || e instanceof InconclusiveMatchError) {
+            this.logMsgIfDebug(() => console.debug(`${e.name} when computing flag locally: ${flag.key}: ${e.message}`))
           } else if (e instanceof Error) {
             this.onError?.(new Error(`Error computing flag locally: ${flag.key}: ${e}`))
           }
@@ -432,7 +442,12 @@ class FeatureFlagsPoller {
           break
         }
       } catch (e) {
-        if (e instanceof InconclusiveMatchError) {
+        if (e instanceof RequiresServerEvaluation) {
+          // Static cohort or other missing server-side data - must fallback to API
+          throw e
+        } else if (e instanceof InconclusiveMatchError) {
+          // Evaluation error (bad regex, invalid date, missing property, etc.)
+          // Track that we had an inconclusive match, but try other conditions
           isInconclusive = true
         } else {
           throw e
@@ -443,6 +458,7 @@ class FeatureFlagsPoller {
     if (result !== undefined) {
       return result
     } else if (isInconclusive) {
+      // Had evaluation errors and no successful match - can't determine locally
       throw new InconclusiveMatchError("Can't determine if feature flag is enabled or not with given properties")
     }
 
@@ -817,7 +833,9 @@ function matchCohort(
 ): boolean {
   const cohortId = String(property.value)
   if (!(cohortId in cohortProperties)) {
-    throw new InconclusiveMatchError("can't match cohort without a given cohort property value")
+    throw new RequiresServerEvaluation(
+      `cohort ${cohortId} not found in local cohorts - likely a static cohort that requires server evaluation`
+    )
   }
 
   const propertyGroup = cohortProperties[cohortId]
@@ -860,7 +878,10 @@ function matchPropertyGroup(
           }
         }
       } catch (err) {
-        if (err instanceof InconclusiveMatchError) {
+        if (err instanceof RequiresServerEvaluation) {
+          // Immediately propagate - this condition requires server-side data
+          throw err
+        } else if (err instanceof InconclusiveMatchError) {
           if (debugMode) {
             console.debug(`Failed to compute property ${prop} locally: ${err}`)
           }
@@ -914,7 +935,10 @@ function matchPropertyGroup(
           }
         }
       } catch (err) {
-        if (err instanceof InconclusiveMatchError) {
+        if (err instanceof RequiresServerEvaluation) {
+          // Immediately propagate - this condition requires server-side data
+          throw err
+        } else if (err instanceof InconclusiveMatchError) {
           if (debugMode) {
             console.debug(`Failed to compute property ${prop} locally: ${err}`)
           }
@@ -999,5 +1023,6 @@ export {
   matchProperty,
   relativeDateParseForFeatureFlagMatching,
   InconclusiveMatchError,
+  RequiresServerEvaluation,
   ClientError,
 }
