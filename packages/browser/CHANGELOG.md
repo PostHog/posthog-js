@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.277.0
+
+### Minor Changes
+
+- [#2460](https://github.com/PostHog/posthog-js/pull/2460) [`52da336`](https://github.com/PostHog/posthog-js/commit/52da3364ace5b879e1a7c64c8970ffb6fab439b6) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Bump posthog-rrweb
+
 ## 1.276.0
 
 ### Minor Changes
