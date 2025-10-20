@@ -8,7 +8,7 @@
     "incremental": false,
     "lib": ["ESNext"],
     "module": "ES2015",
-    "moduleResolution": "bundler",
+    "moduleResolution": "node",
     "noEmitOnError": true,
     "outDir": "./dist",
     "skipLibCheck": true,
