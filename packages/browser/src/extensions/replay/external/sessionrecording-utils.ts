@@ -1,4 +1,4 @@
-import type { eventWithTime, pluginEvent } from '@rrweb/types'
+import type { eventWithTime, pluginEvent } from '../types/rrweb-types'
 
 import { isObject } from '@posthog/core'
 import { SnapshotBuffer } from './lazy-loaded-session-recorder'

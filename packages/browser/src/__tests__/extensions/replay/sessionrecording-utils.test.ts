@@ -11,7 +11,7 @@ import {
     circularReferenceReplacer,
 } from '../../../extensions/replay/external/sessionrecording-utils'
 import { largeString, threeMBAudioURI, threeMBImageURI } from '../test_data/sessionrecording-utils-test-data'
-import type { eventWithTime } from '@rrweb/types'
+import type { eventWithTime } from '../../../extensions/replay/types/rrweb-types'
 
 describe(`SessionRecording utility functions`, () => {
     describe(`filterLargeDataURLs`, () => {

@@ -1,4 +1,4 @@
-import type { eventWithTime, mutationCallbackParam } from '@rrweb/types'
+import type { eventWithTime, mutationCallbackParam } from '../types/rrweb-types'
 import { INCREMENTAL_SNAPSHOT_EVENT_TYPE, MUTATION_SOURCE_TYPE } from './sessionrecording-utils'
 import type { rrwebRecord } from '../types/rrweb'
 import { BucketedRateLimiter } from '@posthog/core'

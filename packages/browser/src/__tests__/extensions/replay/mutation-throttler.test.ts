@@ -5,7 +5,7 @@ import {
 } from '../../../extensions/replay/external/sessionrecording-utils'
 import type { rrwebRecord } from '../../../extensions/replay/types/rrweb'
 import { jest } from '@jest/globals'
-import type { eventWithTime, mutationData } from '@rrweb/types'
+import type { eventWithTime, mutationData } from '../../../extensions/replay/types/rrweb-types'
 
 jest.useFakeTimers()
 

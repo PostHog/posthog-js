@@ -12,7 +12,7 @@ import { uuidv7 } from '../../../uuidv7'
 import { SessionRecording } from '../../../extensions/replay/session-recording'
 import { assignableWindow, window } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
-import { type fullSnapshotEvent, type metaEvent } from '@rrweb/types'
+import { type fullSnapshotEvent, type metaEvent } from '../../../extensions/replay/types/rrweb-types'
 import Mock = jest.Mock
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'

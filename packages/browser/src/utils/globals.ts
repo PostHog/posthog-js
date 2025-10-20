@@ -11,7 +11,7 @@ import {
 // only importing types here, so won't affect the bundle
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SessionRecordingStatus, TriggerType } from '../extensions/replay/external/triggerMatching'
-import { eventWithTime } from '@rrweb/types'
+import { eventWithTime } from '../extensions/replay/types/rrweb-types'
 import { ErrorTracking } from '@posthog/core'
 
 /*
