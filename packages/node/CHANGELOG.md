@@ -1,5 +1,11 @@
 # posthog-node
 
+## 5.10.1
+
+### Patch Changes
+
+- [#2465](https://github.com/PostHog/posthog-js/pull/2465) [`1721aba`](https://github.com/PostHog/posthog-js/commit/1721aba7e30d1f4a3f5a3f9c1ce35af5af0a4583) Thanks [@haacked](https://github.com/haacked)! - Fix bug where flag doesn't fallback to the server correctly when one condition is a static cohort condition but a later condition matches.
+
 ## 5.10.0
 
 ### Minor Changes
