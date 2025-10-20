@@ -16,3 +16,6 @@ packages/react-native/                                 @PostHog/team-mobile
 examples/example_rn_macos/                             @PostHog/team-mobile
 packages/core/                                         @PostHog/team-mobile
 packages/example-expo-53/                              @PostHog/team-mobile
+
+# AI
+/packages/ai/package.json                              @PostHog/team-llm-analytics
