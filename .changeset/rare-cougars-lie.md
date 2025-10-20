@@ -2,4 +2,4 @@
 'posthog-js': minor
 ---
 
-Includes warning on advanced_disable_flag with extra examples on what it disables
+Includes warning on advanced_disable_flags with extra examples on what it disables
