@@ -21,6 +21,17 @@ const rules = {
             leadingUnderscore: 'require',
         },
     ],
+    'no-restricted-imports': [
+        'error',
+        {
+            patterns: [
+                {
+                    group: ['@posthog/core/*'],
+                    message: 'Do not import from subpaths of "@posthog/core". Use "@posthog/core" instead.',
+                },
+            ],
+        },
+    ],
 }
 
 const extend = [
