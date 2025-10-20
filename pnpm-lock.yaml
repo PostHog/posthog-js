@@ -188,9 +188,6 @@ importers:
       preact:
         specifier: ^10.19.3
         version: 10.19.3
-      rrweb-snapshot:
-        specifier: 2.0.0-alpha.17
-        version: 2.0.0-alpha.17
       web-vitals:
         specifier: ^4.2.4
         version: 4.2.4
