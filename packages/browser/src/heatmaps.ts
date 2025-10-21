@@ -46,6 +46,10 @@ function isValidMouseEvent(e: unknown): e is MouseEvent {
     return isObject(e) && 'clientX' in e && 'clientY' in e && isNumber(e.clientX) && isNumber(e.clientY)
 }
 
+function shouldPoll(document: Document | undefined): boolean {
+    return document?.visibilityState === 'visible'
+}
+
 export class Heatmaps {
     instance: PostHog
     rageclicks = new RageClick()
@@ -97,7 +101,7 @@ export class Heatmaps {
             }
             logger.info('starting...')
             this._setupListeners()
-            this._flushInterval = setInterval(this._flush.bind(this), this.flushIntervalMilliseconds)
+            this._onVisibilityChange()
         } else {
             clearInterval(this._flushInterval ?? undefined)
             this._removeListeners()
@@ -134,10 +138,9 @@ export class Heatmaps {
             clearInterval(this._flushInterval)
         }
 
-        if (document?.visibilityState === 'visible') {
-            // if visible then we restart the check
-            this._flushInterval = setInterval(this._flush.bind(this), this.flushIntervalMilliseconds)
-        }
+        this._flushInterval = shouldPoll(document)
+            ? setInterval(this._flush.bind(this), this.flushIntervalMilliseconds)
+            : null
     }
 
     private _setupListeners(): void {
