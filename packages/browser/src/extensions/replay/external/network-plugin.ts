@@ -9,7 +9,7 @@
 // and assumes it is running in a browser with the Request API (i.e. not IE11)
 // copying here so that we can use it before rrweb adopt it
 
-import type { IWindow, listenerHandler, RecordPlugin } from '@rrweb/types'
+import type { IWindow, listenerHandler, RecordPlugin } from '../types/rrweb-types'
 import { CapturedNetworkRequest, Headers, InitiatorType, NetworkRecordOptions } from '../../../types'
 import { isArray, isBoolean, isFormData, isNull, isNullish, isString, isUndefined, isObject } from '@posthog/core'
 import { isDocument } from '../../../utils/type-utils'

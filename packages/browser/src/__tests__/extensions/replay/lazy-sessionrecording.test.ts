@@ -37,7 +37,7 @@ import {
     IncrementalSource,
     type metaEvent,
     type pluginEvent,
-} from '@rrweb/types'
+} from '../../../extensions/replay/types/rrweb-types'
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
 import Mock = jest.Mock

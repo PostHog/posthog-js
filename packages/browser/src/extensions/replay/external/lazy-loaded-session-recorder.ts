@@ -6,7 +6,7 @@ import {
     IncrementalSource,
     type listenerHandler,
     RecordPlugin,
-} from '@rrweb/types'
+} from '../types/rrweb-types'
 import { buildNetworkRequestOptions } from './config'
 import {
     ACTIVE,

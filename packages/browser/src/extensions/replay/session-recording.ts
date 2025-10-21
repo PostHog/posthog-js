@@ -1,7 +1,7 @@
 import { SESSION_RECORDING_IS_SAMPLED, SESSION_RECORDING_REMOTE_CONFIG } from '../../constants'
 import { PostHog } from '../../posthog-core'
 import { Properties, RemoteConfig, SessionRecordingPersistedConfig, SessionStartReason } from '../../types'
-import { type eventWithTime } from '@rrweb/types'
+import { type eventWithTime } from './types/rrweb-types'
 
 import { isNullish, isUndefined } from '@posthog/core'
 import { createLogger } from '../../utils/logger'
