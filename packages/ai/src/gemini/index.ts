@@ -12,6 +12,7 @@ import {
   extractAvailableToolCalls,
   formatResponseGemini,
   extractPosthogParams,
+  toContentString,
 } from '../utils'
 import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
@@ -256,7 +257,7 @@ export class WrappedModels {
           }
         }
 
-        return { role: 'user', content: String(item) }
+        return { role: 'user', content: toContentString(item) }
       })
     }
 
@@ -271,7 +272,7 @@ export class WrappedModels {
       }
     }
 
-    return [{ role: 'user', content: String(contents) }]
+    return [{ role: 'user', content: toContentString(contents) }]
   }
 
   private extractSystemInstruction(params: GenerateContentParameters): string | null {
