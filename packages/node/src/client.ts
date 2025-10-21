@@ -21,7 +21,11 @@ import {
   SendFeatureFlagsOptions,
 } from './types'
 import { FeatureFlagDetail, FeatureFlagValue, getFeatureFlagValue } from '@posthog/core'
-import { FeatureFlagsPoller, RequiresServerEvaluation } from './extensions/feature-flags/feature-flags'
+import {
+  FeatureFlagsPoller,
+  RequiresServerEvaluation,
+  InconclusiveMatchError,
+} from './extensions/feature-flags/feature-flags'
 import ErrorTracking from './extensions/error-tracking'
 import { safeSetTimeout, PostHogEventProperties } from '@posthog/core'
 import { PostHogMemoryStorage } from './storage-memory'
@@ -814,9 +818,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             response = result.payload
           }
         } catch (e) {
-          if (e instanceof RequiresServerEvaluation) {
+          if (e instanceof RequiresServerEvaluation || e instanceof InconclusiveMatchError) {
             // Fall through to server evaluation
             this._logger?.info(`${e.name} when computing flag locally: ${flag.key}: ${e.message}`)
+          } else {
+            throw e
           }
         }
       }

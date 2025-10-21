@@ -234,9 +234,6 @@ class FeatureFlagsPoller {
     // If matchValue is provided, use it directly; otherwise evaluate the flag
     if (matchValue !== undefined) {
       flagValue = matchValue
-      // Even when matchValue is provided, we need to check if the flag requires server evaluation
-      // for payload lookup (e.g., if it contains static cohorts)
-      this.checkIfFlagNeedsServerEvaluation(flag)
     } else {
       flagValue = await this.computeFlagValueLocally(
         flag,
@@ -701,23 +698,6 @@ class FeatureFlagsPoller {
 
   stopPoller(): void {
     clearTimeout(this.poller)
-  }
-
-  private checkIfFlagNeedsServerEvaluation(flag: PostHogFeatureFlag): void {
-    const flagFilters = flag.filters || {}
-    const flagConditions = flagFilters.groups || []
-
-    for (const condition of flagConditions) {
-      if (condition.properties) {
-        for (const property of condition.properties) {
-          // Static cohorts require server evaluation
-          if (property.type === 'cohort') {
-            const cohortId = String(property.value)
-            checkCohortExists(cohortId, this.cohorts)
-          }
-        }
-      }
-    }
   }
 }
 
