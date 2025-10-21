@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.278.0
+
+### Minor Changes
+
+- [#2467](https://github.com/PostHog/posthog-js/pull/2467) [`b0f1390`](https://github.com/PostHog/posthog-js/commit/b0f1390d66c46c7abd308ffd88397d0ece7d5f82) Thanks [@lricoy](https://github.com/lricoy)! - Includes warning on advanced_disable_flags with extra examples on what it disables
+
 ## 1.277.0
 
 ### Minor Changes
