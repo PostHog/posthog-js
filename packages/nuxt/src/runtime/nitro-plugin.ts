@@ -1,5 +1,5 @@
 import { PostHog, type PostHogOptions } from 'posthog-node'
-import { uuidv7 } from '@posthog/core/vendor/uuidv7'
+import { uuidv7 } from '@posthog/core'
 import { defineNitroPlugin } from 'nitropack/runtime'
 import { useRuntimeConfig } from '#imports'
 
@@ -22,7 +22,7 @@ export default defineNitroPlugin((nitroApp) => {
     client.debug(true)
   }
 
-  if (configOverride.enableExceptionAutocapture) {
+  if (enableExceptionAutocapture) {
     nitroApp.hooks.hook('error', async (error, { event }) => {
       await client.captureException(error, uuidv7(), {
         $process_person_profile: false,

@@ -2,6 +2,7 @@
  * @jest-environment jsdom
  */
 
+// eslint-disable-next-line no-restricted-imports
 import { waitForPromises } from '@posthog/core/testing'
 import { PostHog } from '../src'
 
