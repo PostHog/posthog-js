@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.279.1
+
+### Patch Changes
+
+- [#2469](https://github.com/PostHog/posthog-js/pull/2469) [`b161bb3`](https://github.com/PostHog/posthog-js/commit/b161bb3258b6dae879f76fd828a438ff6c07797f) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: stop heatmap buffer interval when hidden
+
 ## 1.279.0
 
 ### Minor Changes
