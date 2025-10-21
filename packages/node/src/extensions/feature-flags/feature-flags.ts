@@ -234,6 +234,9 @@ class FeatureFlagsPoller {
     // If matchValue is provided, use it directly; otherwise evaluate the flag
     if (matchValue !== undefined) {
       flagValue = matchValue
+      // Even when matchValue is provided, we need to check if the flag requires server evaluation
+      // for payload lookup (e.g., if it contains static cohorts)
+      this.checkIfFlagNeedsServerEvaluation(flag)
     } else {
       flagValue = await this.computeFlagValueLocally(
         flag,
@@ -699,6 +702,23 @@ class FeatureFlagsPoller {
   stopPoller(): void {
     clearTimeout(this.poller)
   }
+
+  private checkIfFlagNeedsServerEvaluation(flag: PostHogFeatureFlag): void {
+    const flagFilters = flag.filters || {}
+    const flagConditions = flagFilters.groups || []
+
+    for (const condition of flagConditions) {
+      if (condition.properties) {
+        for (const property of condition.properties) {
+          // Static cohorts require server evaluation
+          if (property.type === 'cohort') {
+            const cohortId = String(property.value)
+            checkCohortExists(cohortId, this.cohorts)
+          }
+        }
+      }
+    }
+  }
 }
 
 // # This function takes a distinct_id and a feature flag key and returns a float between 0 and 1.
@@ -825,6 +845,14 @@ function matchProperty(
   }
 }
 
+function checkCohortExists(cohortId: string, cohortProperties: FeatureFlagsPoller['cohorts']): void {
+  if (!(cohortId in cohortProperties)) {
+    throw new RequiresServerEvaluation(
+      `cohort ${cohortId} not found in local cohorts - likely a static cohort that requires server evaluation`
+    )
+  }
+}
+
 function matchCohort(
   property: FeatureFlagCondition['properties'][number],
   propertyValues: Record<string, any>,
@@ -832,11 +860,7 @@ function matchCohort(
   debugMode: boolean = false
 ): boolean {
   const cohortId = String(property.value)
-  if (!(cohortId in cohortProperties)) {
-    throw new RequiresServerEvaluation(
-      `cohort ${cohortId} not found in local cohorts - likely a static cohort that requires server evaluation`
-    )
-  }
+  checkCohortExists(cohortId, cohortProperties)
 
   const propertyGroup = cohortProperties[cohortId]
   return matchPropertyGroup(propertyGroup, propertyValues, cohortProperties, debugMode)
