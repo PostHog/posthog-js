@@ -2044,91 +2044,117 @@ describe('local evaluation', () => {
 
     // Should call the /flags API because of the static cohort in first condition
     expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
-  }),
-    it('should fallback to API for checking payload when flag has multiple conditions and one contains static cohort', async () => {
-      // Similar to the previous test, but checking getFeatureFlagPayload
+  })
 
-      // When a flag has multiple conditions and one condition contains a static cohort
-      // (cohort not available for local evaluation), the entire flag evaluation should
-      // fallback to the API, regardless of whether other conditions could match locally.
-      //
-      // Customer scenario: Flag has:
-      // - Condition 1: Static cohort check (would return "set-1" on server)
-      // - Condition 2: Simple property check (could match locally and return "set-8")
-      //
-      // Expected: Should fallback to API and return the payload for "set-1"
+  it('should fallback to API when getFeatureFlagPayload evaluates flag with static cohort (no matchValue)', async () => {
+    // When getFeatureFlagPayload is called WITHOUT a matchValue, it evaluates the flag.
+    // If the flag has static cohorts, evaluation throws RequiresServerEvaluation.
 
-      const flags = {
-        flags: [
-          {
-            id: 1,
-            name: 'Multi-condition Flag',
-            key: 'default-pinned-mini-apps',
-            active: true,
-            filters: {
-              groups: [
-                {
-                  // First condition: Contains a static cohort (cohort 999 is NOT in the cohorts map)
-                  // This should cause the entire flag to fallback to API
-                  properties: [{ key: 'id', value: 999, type: 'cohort' }],
-                  rollout_percentage: 100,
-                  variant: 'set-1',
-                },
-                {
-                  // Second condition: Simple property check
-                  properties: [
-                    {
-                      key: '$geoip_country_code',
-                      operator: 'exact',
-                      value: ['DE'],
-                      type: 'person',
-                    },
-                  ],
-                  rollout_percentage: 100,
-                  variant: 'set-8',
-                },
-              ],
-              multivariate: {
-                variants: [
-                  { key: 'set-1', rollout_percentage: 50 },
-                  { key: 'set-8', rollout_percentage: 50 },
-                ],
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Multi-condition Flag',
+          key: 'default-pinned-mini-apps',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'id', value: 999, type: 'cohort' }],
+                rollout_percentage: 100,
+                variant: 'set-1',
               },
+            ],
+            multivariate: {
+              variants: [{ key: 'set-1', rollout_percentage: 100 }],
+            },
+            payloads: {
+              'set-1': 'local-payload',
             },
           },
-        ],
-        // Note: cohorts map does NOT contain cohort 999, making it a "static cohort"
-        // that requires server-side database lookup
-        cohorts: {},
-      }
-
-      mockedFetch.mockImplementation(
-        apiImplementation({
-          localFlags: flags,
-          // The /flags API returns 'set-1' because the user is in the static cohort
-          decideFlags: { 'default-pinned-mini-apps': 'set-1' },
-          flagsPayloads: { 'default-pinned-mini-apps': 'payload' },
-        })
-      )
-
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        personalApiKey: 'TEST_PERSONAL_API_KEY',
-        ...posthogImmediateResolveOptions,
-      })
-
-      const result = await posthog.getFeatureFlagPayload('default-pinned-mini-apps', 'test-distinct-id', 'set-1', {
-        personProperties: {
-          $geoip_country_code: 'DE',
         },
+      ],
+      cohorts: {}, // cohort 999 not present = static cohort
+    }
+
+    mockedFetch.mockImplementation(
+      apiImplementation({
+        localFlags: flags,
+        decideFlags: { 'default-pinned-mini-apps': 'set-1' },
+        flagsPayloads: { 'default-pinned-mini-apps': 'api-payload' },
       })
+    )
 
-      // Should return the correct variant from the API
-      expect(result).toEqual('payload')
-
-      // Should call the /flags API because of the static cohort in first condition
-      expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
     })
+
+    // Call WITHOUT matchValue - should evaluate the flag and throw RequiresServerEvaluation
+    const result = await posthog.getFeatureFlagPayload('default-pinned-mini-apps', 'test-distinct-id', undefined, {
+      personProperties: {},
+    })
+
+    // Should return payload from API
+    expect(result).toEqual('api-payload')
+    // Should have called the /flags API
+    expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
+  it('should return local payload when getFeatureFlagPayload called with matchValue', async () => {
+    // When getFeatureFlagPayload is called WITH a matchValue, it should:
+    // 1. Skip flag evaluation
+    // 2. Look up the payload locally
+    // 3. Return it without calling the API
+
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Flag with payload',
+          key: 'test-flag',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [],
+                rollout_percentage: 100,
+                variant: 'variant-a',
+              },
+            ],
+            multivariate: {
+              variants: [{ key: 'variant-a', rollout_percentage: 100 }],
+            },
+            payloads: {
+              'variant-a': 'local-payload-a',
+            },
+          },
+        },
+      ],
+      cohorts: {},
+    }
+
+    mockedFetch.mockImplementation(
+      apiImplementation({
+        localFlags: flags,
+      })
+    )
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    // Call WITH matchValue - should use it to look up local payload
+    const result = await posthog.getFeatureFlagPayload('test-flag', 'test-distinct-id', 'variant-a')
+
+    // Should return local payload
+    expect(result).toEqual('local-payload-a')
+    // Should NOT have called the /flags API (only /decide for initial load)
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
 })
 
 describe('getFeatureFlag', () => {
