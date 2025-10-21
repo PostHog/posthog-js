@@ -1,7 +1,7 @@
 import nextPackage from 'next/package.json' with { type: 'json' }
 import semver from 'semver'
 import { PostHogNextConfigComplete } from './config'
-import { spawnLocal } from '@posthog/core/process'
+import { spawnLocal } from '@posthog/core'
 
 export function getNextJsVersion(): string {
   return nextPackage.version
