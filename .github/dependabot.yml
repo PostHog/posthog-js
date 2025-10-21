@@ -4,6 +4,7 @@ updates:
       commit-message:
           prefix: 'chore(llma)'
       labels:
+          - dependencies
           - release
       directory: '/'
       schedule:
@@ -28,6 +29,7 @@ updates:
           - dependency-name: 'ai'
           - dependency-name: '@langchain/core'
           - dependency-name: 'langchain'
+      ignore:
+          - dependency-name: '*'
+            update-types: ['version-update:semver-major']
       open-pull-requests-limit: 1
-      reviewers:
-          - 'PostHog/team-llm-analytics'
