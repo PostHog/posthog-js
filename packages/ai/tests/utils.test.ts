@@ -111,7 +111,7 @@ describe('toContentString', () => {
       const input = [
         {
           type: 'output_text',
-          text: 'I\'m just a friendly AI, so I don\'t have feelings, but I\'m here and ready to help.',
+          text: "I'm just a friendly AI, so I don't have feelings, but I'm here and ready to help.",
         },
       ]
       const result = toContentString(input)
