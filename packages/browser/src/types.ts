@@ -726,6 +726,12 @@ export interface PostHogConfig {
      * you may wish to turn off the call completely to avoid an extra request
      * and reduce resource usage on both the client and the server.
      *
+     * WARNING: Disabling this will also prevent remote configuration from loading,
+     * which could mean features like web vitals, surveys, and other features configured
+     * in PostHog settings are disabled unless explicitly enabled via client-side config.
+     * When setting this to true, make sure to explicitly configure any features you
+     * want to use (e.g., capture_performance, autocapture, etc.) in your SDK's init config.
+     *
      * @default false
      */
     advanced_disable_flags?: boolean

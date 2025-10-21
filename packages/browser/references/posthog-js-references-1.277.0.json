@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "1.278.0",
+    "version": "1.277.0",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -2686,7 +2686,7 @@
           "name": "advanced_disable_feature_flags"
         },
         {
-          "description": "One of the very first things the PostHog library does when init() is called is make a request to the /flags endpoint on PostHog's backend. This endpoint contains information on how to run the PostHog library so events are properly received in the backend, and it also contains feature flag evaluation information for the current user.\nThis endpoint is required to run most features of this library. However, if you're not using any of the described features, you may wish to turn off the call completely to avoid an extra request and reduce resource usage on both the client and the server.\nWARNING: Disabling this will also prevent remote configuration from loading, which could mean features like web vitals, surveys, and other features configured in PostHog settings are disabled unless explicitly enabled via client-side config. When setting this to true, make sure to explicitly configure any features you want to use (e.g., capture_performance, autocapture, etc.) in your SDK's init config.\nfalse",
+          "description": "One of the very first things the PostHog library does when init() is called is make a request to the /flags endpoint on PostHog's backend. This endpoint contains information on how to run the PostHog library so events are properly received in the backend, and it also contains feature flag evaluation information for the current user.\nThis endpoint is required to run most features of this library. However, if you're not using any of the described features, you may wish to turn off the call completely to avoid an extra request and reduce resource usage on both the client and the server.\nfalse",
           "type": "boolean",
           "name": "advanced_disable_flags"
         },
