@@ -53,10 +53,13 @@ export class Heatmaps {
     _initialized = false
     _mouseMoveTimeout: ReturnType<typeof setTimeout> | undefined
 
-    // TODO: Periodically flush this if no other event has taken care of it
     private _buffer: HeatmapEventBuffer
     private _flushInterval: ReturnType<typeof setInterval> | null = null
     private _deadClicksCapture: DeadClicksAutocapture | undefined
+    private _onClick_handler: ((e: Event) => void) | undefined
+    private _onMouseMove_handler: ((e: Event) => void) | undefined
+    private _flush_handler: (() => void) | undefined
+    private _onVisibilityChange_handler: (() => void) | undefined
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -97,7 +100,7 @@ export class Heatmaps {
             this._flushInterval = setInterval(this._flush.bind(this), this.flushIntervalMilliseconds)
         } else {
             clearInterval(this._flushInterval ?? undefined)
-            this._deadClicksCapture?.stop()
+            this._removeListeners()
             this.getAndClearBuffer()
         }
     }
@@ -125,17 +128,31 @@ export class Heatmaps {
         this._onClick(click.originalEvent, 'deadclick')
     }
 
+    private _onVisibilityChange(): void {
+        // always clear the interval just in case
+        if (this._flushInterval) {
+            clearInterval(this._flushInterval)
+        }
+
+        if (document?.visibilityState === 'visible') {
+            // if visible then we restart the check
+            this._flushInterval = setInterval(this._flush.bind(this), this.flushIntervalMilliseconds)
+        }
+    }
+
     private _setupListeners(): void {
         if (!window || !document) {
             return
         }
 
-        addEventListener(window, 'beforeunload', this._flush.bind(this))
+        this._flush_handler = this._flush.bind(this)
+        addEventListener(window, 'beforeunload', this._flush_handler)
 
-        addEventListener(document, 'click', (e) => this._onClick((e || window?.event) as MouseEvent), { capture: true })
-        addEventListener(document, 'mousemove', (e) => this._onMouseMove((e || window?.event) as MouseEvent), {
-            capture: true,
-        })
+        this._onClick_handler = (e) => this._onClick((e || window?.event) as MouseEvent)
+        addEventListener(document, 'click', this._onClick_handler, { capture: true })
+
+        this._onMouseMove_handler = (e) => this._onMouseMove((e || window?.event) as MouseEvent)
+        addEventListener(document, 'mousemove', this._onMouseMove_handler, { capture: true })
 
         this._deadClicksCapture = new DeadClicksAutocapture(
             this.instance,
@@ -144,7 +161,38 @@ export class Heatmaps {
         )
         this._deadClicksCapture.startIfEnabled()
 
+        this._onVisibilityChange_handler = this._onVisibilityChange.bind(this)
+        addEventListener(document, 'visibilitychange', this._onVisibilityChange_handler)
+
         this._initialized = true
+    }
+
+    private _removeListeners(): void {
+        if (!window || !document) {
+            return
+        }
+
+        if (this._flush_handler) {
+            window.removeEventListener('beforeunload', this._flush_handler)
+        }
+
+        if (this._onClick_handler) {
+            document.removeEventListener('click', this._onClick_handler, { capture: true })
+        }
+
+        if (this._onMouseMove_handler) {
+            document.removeEventListener('mousemove', this._onMouseMove_handler, { capture: true })
+        }
+
+        if (this._onVisibilityChange_handler) {
+            document.removeEventListener('visibilitychange', this._onVisibilityChange_handler)
+        }
+
+        clearTimeout(this._mouseMoveTimeout)
+
+        this._deadClicksCapture?.stop()
+
+        this._initialized = false
     }
 
     private _getProperties(e: MouseEvent, type: string): Properties {
