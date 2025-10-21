@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.279.0
+
+### Minor Changes
+
+- [#2463](https://github.com/PostHog/posthog-js/pull/2463) [`3075888`](https://github.com/PostHog/posthog-js/commit/3075888be97e03b0485d2596f9fad2bd2ba7e192) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: remove rrweb types as a peer dependency
+
 ## 1.278.0
 
 ### Minor Changes
