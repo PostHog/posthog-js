@@ -1,5 +1,5 @@
 import { PostHog } from 'posthog-node'
-import { withPrivacyMode, getModelParams } from '../utils'
+import { withPrivacyMode, getModelParams, toContentString } from '../utils'
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base'
 import { version } from '../../package.json'
 import type { Serialized } from '@langchain/core/load/serializable'
@@ -568,7 +568,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
         messageDict = { role: 'function', content: message.content }
         break
       default:
-        messageDict = { role: messageType, content: String(message.content) }
+        messageDict = { role: messageType, content: toContentString(message.content) }
         break
     }
 

@@ -8,7 +8,14 @@ import type {
 } from '@ai-sdk/provider'
 import { v4 as uuidv4 } from 'uuid'
 import { PostHog } from 'posthog-node'
-import { CostOverride, sendEventToPosthog, truncate, MAX_OUTPUT_SIZE, extractAvailableToolCalls } from '../utils'
+import {
+  CostOverride,
+  sendEventToPosthog,
+  truncate,
+  MAX_OUTPUT_SIZE,
+  extractAvailableToolCalls,
+  toContentString,
+} from '../utils'
 import { Buffer } from 'buffer'
 import { redactBase64DataUrl } from '../sanitization'
 import { isString } from '../typeGuards'
@@ -77,7 +84,7 @@ const mapVercelPrompt = (messages: LanguageModelV2Prompt): PostHogInput[] => {
       content = [
         {
           type: 'text',
-          text: truncate(String(message.content)),
+          text: truncate(toContentString(message.content)),
         },
       ]
     } else {
@@ -140,7 +147,7 @@ const mapVercelPrompt = (messages: LanguageModelV2Prompt): PostHogInput[] => {
         content = [
           {
             type: 'text',
-            text: truncate(String(message.content)),
+            text: truncate(toContentString(message.content)),
           },
         ]
       }

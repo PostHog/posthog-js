@@ -20,6 +20,32 @@ type AnthropicTool = AnthropicOriginal.Tool
 export const MAX_OUTPUT_SIZE = 200000
 const STRING_FORMAT = 'utf8'
 
+/**
+ * Safely converts content to a string, preserving structure for objects/arrays.
+ * - If content is already a string, returns it as-is
+ * - If content is an object or array, stringifies it with JSON.stringify to preserve structure
+ * - Otherwise, converts to string with String()
+ *
+ * This prevents the "[object Object]" bug when objects are naively converted to strings.
+ *
+ * @param content - The content to convert to a string
+ * @returns A string representation that preserves structure for complex types
+ */
+export function toContentString(content: unknown): string {
+  if (typeof content === 'string') {
+    return content
+  }
+  if (content !== undefined && content !== null && typeof content === 'object') {
+    try {
+      return JSON.stringify(content)
+    } catch {
+      // Fallback for circular refs, BigInt, or objects with throwing toJSON
+      return String(content)
+    }
+  }
+  return String(content)
+}
+
 export interface MonitoringEventPropertiesWithDefaults {
   distinctId?: string
   traceId: string
@@ -547,16 +573,18 @@ export function formatOpenAIResponsesInput(input: unknown, instructions?: string
       } else if (item && typeof item === 'object') {
         const obj = item as Record<string, unknown>
         const role = isString(obj.role) ? obj.role : 'user'
-        const content = obj.content || obj.text || String(item)
-        messages.push({ role, content: String(content) })
+
+        // Handle content properly - preserve structure for objects/arrays
+        const content = obj.content ?? obj.text ?? item
+        messages.push({ role, content: toContentString(content) })
       } else {
-        messages.push({ role: 'user', content: String(item) })
+        messages.push({ role: 'user', content: toContentString(item) })
       }
     }
   } else if (typeof input === 'string') {
     messages.push({ role: 'user', content: input })
   } else if (input) {
-    messages.push({ role: 'user', content: String(input) })
+    messages.push({ role: 'user', content: toContentString(input) })
   }
 
   return messages
