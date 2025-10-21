@@ -56,9 +56,9 @@ export class Heatmaps {
     private _buffer: HeatmapEventBuffer
     private _flushInterval: ReturnType<typeof setInterval> | null = null
     private _deadClicksCapture: DeadClicksAutocapture | undefined
-    private _onClick_handler: ((e: Event) => void) | undefined
-    private _onMouseMove_handler: ((e: Event) => void) | undefined
-    private _flush_handler: (() => void) | undefined
+    private _onClickHandler: ((e: Event) => void) | undefined
+    private _onMouseMoveHandler: ((e: Event) => void) | undefined
+    private _flushHandler: (() => void) | undefined
     private _onVisibilityChange_handler: (() => void) | undefined
 
     constructor(instance: PostHog) {
@@ -145,14 +145,14 @@ export class Heatmaps {
             return
         }
 
-        this._flush_handler = this._flush.bind(this)
-        addEventListener(window, 'beforeunload', this._flush_handler)
+        this._flushHandler = this._flush.bind(this)
+        addEventListener(window, 'beforeunload', this._flushHandler)
 
-        this._onClick_handler = (e) => this._onClick((e || window?.event) as MouseEvent)
-        addEventListener(document, 'click', this._onClick_handler, { capture: true })
+        this._onClickHandler = (e) => this._onClick((e || window?.event) as MouseEvent)
+        addEventListener(document, 'click', this._onClickHandler, { capture: true })
 
-        this._onMouseMove_handler = (e) => this._onMouseMove((e || window?.event) as MouseEvent)
-        addEventListener(document, 'mousemove', this._onMouseMove_handler, { capture: true })
+        this._onMouseMoveHandler = (e) => this._onMouseMove((e || window?.event) as MouseEvent)
+        addEventListener(document, 'mousemove', this._onMouseMoveHandler, { capture: true })
 
         this._deadClicksCapture = new DeadClicksAutocapture(
             this.instance,
@@ -172,16 +172,16 @@ export class Heatmaps {
             return
         }
 
-        if (this._flush_handler) {
-            window.removeEventListener('beforeunload', this._flush_handler)
+        if (this._flushHandler) {
+            window.removeEventListener('beforeunload', this._flushHandler)
         }
 
-        if (this._onClick_handler) {
-            document.removeEventListener('click', this._onClick_handler, { capture: true })
+        if (this._onClickHandler) {
+            document.removeEventListener('click', this._onClickHandler, { capture: true })
         }
 
-        if (this._onMouseMove_handler) {
-            document.removeEventListener('mousemove', this._onMouseMove_handler, { capture: true })
+        if (this._onMouseMoveHandler) {
+            document.removeEventListener('mousemove', this._onMouseMoveHandler, { capture: true })
         }
 
         if (this._onVisibilityChange_handler) {
