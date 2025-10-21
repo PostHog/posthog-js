@@ -1041,6 +1041,13 @@ export interface PostHogConfig {
      */
     __preview_disable_xhr_credentials?: boolean
 
+    /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+     * Enables collection of bot traffic as $bot_pageview events with detailed bot detection
+     * properties instead of dropping them entirely. Use it alongside opt_out_useragent_filter
+     */
+    __preview_send_bot_pageviews?: boolean
+
     // ------- RETIRED CONFIGS - NO REPLACEMENT OR USAGE -------
 
     /**
