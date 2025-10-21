@@ -1,5 +1,11 @@
 # posthog-node
 
+## 5.10.2
+
+### Patch Changes
+
+- [#2470](https://github.com/PostHog/posthog-js/pull/2470) [`a581328`](https://github.com/PostHog/posthog-js/commit/a581328156d6ee50804cd740aa84c05d4e9c1f22) Thanks [@luke-belton](https://github.com/luke-belton)! - Fix crash caused by calling `getFeatureFlagPayloads` for a flag that depends on a static cohort
+
 ## 5.10.1
 
 ### Patch Changes
