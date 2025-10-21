@@ -1,5 +1,11 @@
 # posthog-ai
 
+## 6.4.4
+
+### Patch Changes
+
+- [#2468](https://github.com/PostHog/posthog-js/pull/2468) [`873538b`](https://github.com/PostHog/posthog-js/commit/873538b9615626ad274be559f93a5fbaaa8ba8b9) Thanks [@andrewm4894](https://github.com/andrewm4894)! - fix: prevent [object Object] in content serialization - structured content is now properly JSON-stringified instead of being converted to "[object Object]"
+
 ## 6.4.3
 
 ### Patch Changes
