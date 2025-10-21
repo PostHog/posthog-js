@@ -2107,7 +2107,7 @@ describe('local evaluation', () => {
           localFlags: flags,
           // The /flags API returns 'set-1' because the user is in the static cohort
           decideFlags: { 'default-pinned-mini-apps': 'set-1' },
-          flagsPayloads: { 'default-pinned-mini-apps': { payloadKey: 'payloadValue' } },
+          flagsPayloads: { 'default-pinned-mini-apps': 'payload' },
         })
       )
 
@@ -2117,14 +2117,14 @@ describe('local evaluation', () => {
         ...posthogImmediateResolveOptions,
       })
 
-      const result = await posthog.getFeatureFlagPayload('default-pinned-mini-apps', 'test-distinct-id', {
+      const result = await posthog.getFeatureFlagPayload('default-pinned-mini-apps', 'test-distinct-id', 'set-1', {
         personProperties: {
           $geoip_country_code: 'DE',
         },
       })
 
       // Should return the correct variant from the API
-      expect(result).toEqual({ payloadKey: 'payloadValue' })
+      expect(result).toEqual('payload')
 
       // Should call the /flags API because of the static cohort in first condition
       expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
