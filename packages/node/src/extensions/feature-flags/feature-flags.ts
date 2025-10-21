@@ -825,6 +825,14 @@ function matchProperty(
   }
 }
 
+function checkCohortExists(cohortId: string, cohortProperties: FeatureFlagsPoller['cohorts']): void {
+  if (!(cohortId in cohortProperties)) {
+    throw new RequiresServerEvaluation(
+      `cohort ${cohortId} not found in local cohorts - likely a static cohort that requires server evaluation`
+    )
+  }
+}
+
 function matchCohort(
   property: FeatureFlagCondition['properties'][number],
   propertyValues: Record<string, any>,
@@ -832,11 +840,7 @@ function matchCohort(
   debugMode: boolean = false
 ): boolean {
   const cohortId = String(property.value)
-  if (!(cohortId in cohortProperties)) {
-    throw new RequiresServerEvaluation(
-      `cohort ${cohortId} not found in local cohorts - likely a static cohort that requires server evaluation`
-    )
-  }
+  checkCohortExists(cohortId, cohortProperties)
 
   const propertyGroup = cohortProperties[cohortId]
   return matchPropertyGroup(propertyGroup, propertyValues, cohortProperties, debugMode)
