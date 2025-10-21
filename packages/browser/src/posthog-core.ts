@@ -947,8 +947,13 @@ export class PostHog {
             return
         }
 
+        // Handle bot traffic based on preview flag
         if (!this.config.opt_out_useragent_filter && this._is_bot()) {
-            return
+            if (!this.config.__preview_send_bot_pageviews) {
+                // Default behavior: drop bot traffic
+                return
+            }
+            // Preview behavior: continue to send as $bot_pageview (handled in event preparation)
         }
 
         const clientRateLimitContext = !options?.skip_client_rate_limiting
@@ -992,6 +997,16 @@ export class PostHog {
             uuid,
             event: event_name,
             properties: this.calculateEventProperties(event_name, properties || {}, timestamp, uuid),
+        }
+
+        // Route pageviews to $bot_pageview when bot detected and preview flag enabled
+        if (
+            event_name === '$pageview' &&
+            this.config.__preview_send_bot_pageviews &&
+            !this.config.opt_out_useragent_filter &&
+            this._is_bot()
+        ) {
+            data.event = '$bot_pageview'
         }
 
         if (clientRateLimitContext) {
