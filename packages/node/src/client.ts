@@ -21,7 +21,7 @@ import {
   SendFeatureFlagsOptions,
 } from './types'
 import { FeatureFlagDetail, FeatureFlagValue, getFeatureFlagValue } from '@posthog/core'
-import { FeatureFlagsPoller } from './extensions/feature-flags/feature-flags'
+import { FeatureFlagsPoller, RequiresServerEvaluation } from './extensions/feature-flags/feature-flags'
 import ErrorTracking from './extensions/error-tracking'
 import { safeSetTimeout, PostHogEventProperties } from '@posthog/core'
 import { PostHogMemoryStorage } from './storage-memory'
@@ -800,17 +800,24 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
       const flag = this.featureFlagsPoller?.featureFlagsByKey[key]
       if (flag) {
-        const result = await this.featureFlagsPoller?.computeFlagAndPayloadLocally(
-          flag,
-          distinctId,
-          groups,
-          personProperties,
-          groupProperties,
-          matchValue
-        )
-        if (result) {
-          matchValue = result.value
-          response = result.payload
+        try {
+          const result = await this.featureFlagsPoller?.computeFlagAndPayloadLocally(
+            flag,
+            distinctId,
+            groups,
+            personProperties,
+            groupProperties,
+            matchValue
+          )
+          if (result) {
+            matchValue = result.value
+            response = result.payload
+          }
+        } catch (e) {
+          if (e instanceof RequiresServerEvaluation) {
+            // Fall through to server evaluation
+            this._logger?.info(`${e.name} when computing flag locally: ${flag.key}: ${e.message}`)
+          }
         }
       }
     }
