@@ -42,7 +42,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@posthog/cli": "^0.5.1",
+    "@posthog/cli": "^0.5.2",
     "semver": "^7.7.2",
     "@posthog/core": "workspace:*"
   },
