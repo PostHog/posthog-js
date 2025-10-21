@@ -169,5 +169,18 @@ describe('toContentString', () => {
       const input = { timestamp: date }
       expect(toContentString(input)).toBe('{"timestamp":"2024-01-01T00:00:00.000Z"}')
     })
+
+    it('should handle circular references gracefully', () => {
+      const obj: any = { name: 'test' }
+      obj.self = obj // Create circular reference
+      const result = toContentString(obj)
+      expect(result).toBe('[object Object]') // Falls back to String()
+    })
+
+    it('should handle BigInt gracefully', () => {
+      const input = { big: BigInt(9007199254740991) }
+      const result = toContentString(input)
+      expect(result).toBe('[object Object]') // Falls back to String()
+    })
   })
 })

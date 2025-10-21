@@ -36,7 +36,12 @@ export function toContentString(content: unknown): string {
     return content
   }
   if (content !== undefined && content !== null && typeof content === 'object') {
-    return JSON.stringify(content)
+    try {
+      return JSON.stringify(content)
+    } catch {
+      // Fallback for circular refs, BigInt, or objects with throwing toJSON
+      return String(content)
+    }
   }
   return String(content)
 }
