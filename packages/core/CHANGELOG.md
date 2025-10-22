@@ -1,5 +1,11 @@
 # @posthog/core
 
+## 1.3.1
+
+### Patch Changes
+
+- [#2478](https://github.com/PostHog/posthog-js/pull/2478) [`e0a6fe0`](https://github.com/PostHog/posthog-js/commit/e0a6fe013b5a1e92a6e7685f35f715199b716b34) Thanks [@hpouillot](https://github.com/hpouillot)! - remove some export from main core
+
 ## 1.3.0
 
 ### Minor Changes
