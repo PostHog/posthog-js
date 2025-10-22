@@ -292,6 +292,19 @@ const plugins = (es5, noExternal) => [
             )
         },
     },
+    {
+        name: 'block-node-protocol-imports',
+        resolveId(source) {
+            if (source.startsWith('node:')) {
+                // See https://posthog.slack.com/archives/C03P7NL6RMW/p1761119028457109 for context
+                // Please don't fix this by adding a polyfill, instead use an approach which keeps the bundle size small, even if it means doing something bespoke.
+                throw new Error(
+                    `Node.js protocol import detected: "${source}". This will cause issues in browser/edge environments. Check the comments in rollup.config.js for details.`
+                )
+            }
+            return null
+        },
+    },
 ]
 
 const entrypoints = fs.readdirSync('./src/entrypoints')
