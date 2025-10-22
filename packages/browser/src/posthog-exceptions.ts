@@ -1,3 +1,4 @@
+import { ErrorPropertiesBuilder } from '@posthog/core/dist/error-tracking'
 import { ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS, ERROR_TRACKING_SUPPRESSION_RULES } from './constants'
 import { PostHog } from './posthog-core'
 import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
@@ -25,7 +26,7 @@ export function buildErrorPropertiesBuilder() {
 export class PostHogExceptions {
     private readonly _instance: PostHog
     private _suppressionRules: ErrorTrackingSuppressionRule[] = []
-    private _errorPropertiesBuilder: ErrorTracking.ErrorPropertiesBuilder = buildErrorPropertiesBuilder()
+    private _errorPropertiesBuilder: ErrorPropertiesBuilder = buildErrorPropertiesBuilder()
 
     constructor(instance: PostHog) {
         this._instance = instance
