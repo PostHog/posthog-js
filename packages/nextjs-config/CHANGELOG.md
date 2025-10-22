@@ -1,5 +1,11 @@
 # @posthog/nextjs-config
 
+## 1.3.6
+
+### Patch Changes
+
+- [#2474](https://github.com/PostHog/posthog-js/pull/2474) [`5c89f78`](https://github.com/PostHog/posthog-js/commit/5c89f7828a39963b0fee23d0d9b8381bd87b0bf4) Thanks [@oliverb123](https://github.com/oliverb123)! - Bumps to depending on latest posthog-cli version, includes critical fix for sourcemap processing bug
+
 ## 1.3.5
 
 ### Patch Changes

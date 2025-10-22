@@ -1,5 +1,11 @@
 # @posthog/nuxt
 
+## 0.0.19
+
+### Patch Changes
+
+- [#2474](https://github.com/PostHog/posthog-js/pull/2474) [`5c89f78`](https://github.com/PostHog/posthog-js/commit/5c89f7828a39963b0fee23d0d9b8381bd87b0bf4) Thanks [@oliverb123](https://github.com/oliverb123)! - Bumps to depending on latest posthog-cli version, includes critical fix for sourcemap processing bug
+
 ## 0.0.18
 
 ### Patch Changes
