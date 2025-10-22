@@ -1,7 +1,7 @@
 import { defineNuxtModule, addPlugin, createResolver, addServerPlugin } from '@nuxt/kit'
 import type { PostHogConfig } from 'posthog-js'
 import type { PostHogOptions } from 'posthog-node'
-import { spawnLocal } from '@posthog/core'
+import { spawnLocal } from '@posthog/core/process'
 import { fileURLToPath } from 'node:url'
 import { dirname } from 'node:path'
 
