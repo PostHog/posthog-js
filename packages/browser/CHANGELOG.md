@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.279.3
+
+### Patch Changes
+
+- [#2482](https://github.com/PostHog/posthog-js/pull/2482) [`04ba023`](https://github.com/PostHog/posthog-js/commit/04ba0230785ea118fe5016057b97813d1fa76d11) Thanks [@robbie-c](https://github.com/robbie-c)! - Fix https://github.com/PostHog/posthog-js/issues/2471
+
 ## 1.279.2
 
 ### Patch Changes
