@@ -18,9 +18,8 @@ export async function spawnLocal(
     binaryLocation = resolveBinaryPath(options.env.PATH ?? '', options.resolveFrom, binaryName)
     options.onBinaryFound(binaryLocation)
   } catch (e) {
-    console.error(e)
     throw new Error(
-      `Binary ${binaryName} not found. Make sure postinstall script was allowed if it installs the binary`
+      `Binary ${binaryName} not found. Make sure postinstall script was allowed if it installs the binary. ${e}`
     )
   }
 
@@ -31,7 +30,7 @@ export async function spawnLocal(
     cwd: options.cwd,
   })
 
-  await new Promise<void>((resolve, reject) => {
+  return new Promise<void>((resolve, reject) => {
     child.on('close', (code) => {
       if (code === 0) {
         resolve()

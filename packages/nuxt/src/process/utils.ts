@@ -5,17 +5,12 @@ const getLocalPaths = (startPath: string): string[] => {
   const paths: string[] = []
   let currentPath = startPath
 
-  while (true) {
+  while (currentPath !== path.resolve(currentPath, '..')) {
     paths.push(currentPath)
-    const parentPath = path.resolve(currentPath, '..')
-
-    // If we've reached the root directory, stop
-    if (parentPath === currentPath) {
-      break
-    }
-
-    currentPath = parentPath
+    currentPath = path.resolve(currentPath, '..')
   }
+  // Add the root directory
+  paths.push(currentPath)
 
   return paths
 }
