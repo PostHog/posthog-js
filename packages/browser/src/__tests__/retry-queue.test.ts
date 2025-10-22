@@ -252,4 +252,54 @@ describe('RetryQueue', () => {
                 })
         })
     })
+
+    describe('memory management', () => {
+        it('stops polling when queue becomes empty', () => {
+            enqueueRequests()
+
+            expect(retryQueue['_isPolling']).toBe(true)
+            expect(retryQueue['_poller']).toBeDefined()
+            expect(retryQueue.length).toEqual(4)
+
+            fastForwardTimeAndRunTimer(3500)
+
+            expect(retryQueue.length).toEqual(0)
+            expect(retryQueue['_isPolling']).toBe(false)
+            expect(retryQueue['_poller']).toBeUndefined()
+        })
+
+        it('restarts polling when items are added after stopping', () => {
+            enqueueRequests()
+            fastForwardTimeAndRunTimer(3500)
+
+            expect(retryQueue['_isPolling']).toBe(false)
+            expect(retryQueue['_poller']).toBeUndefined()
+
+            mockPosthog._send_request.mockImplementation(({ callback }) => {
+                callback?.({ statusCode: 502 })
+            })
+
+            retryQueue.retriableRequest({
+                url: '/e',
+                data: { event: 'new-event', timestamp: now },
+            })
+
+            expect(retryQueue.length).toEqual(1)
+            expect(retryQueue['_isPolling']).toBe(true)
+            expect(retryQueue['_poller']).toBeDefined()
+        })
+
+        it('cleans up resources on unload', () => {
+            enqueueRequests()
+
+            expect(retryQueue['_isPolling']).toBe(true)
+            expect(retryQueue['_poller']).toBeDefined()
+
+            retryQueue.unload()
+
+            expect(retryQueue['_isPolling']).toBe(false)
+            expect(retryQueue['_poller']).toBeUndefined()
+            expect(retryQueue.length).toEqual(0)
+        })
+    })
 })
