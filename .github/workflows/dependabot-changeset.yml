@@ -1,25 +1,14 @@
-name: Dependabot Changesets
-
-on:
-  pull_request_target:
-    types: [opened, synchronize]
-
-permissions:
-  contents: write
-  pull-requests: write
-
+name: Auto update changeset
+on: pull_request
 jobs:
   changeset:
     runs-on: ubuntu-latest
     if: github.actor == 'dependabot[bot]'
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.head_ref }}
-
       - name: Generate changeset
         uses: the-guild-org/changesets-dependencies-action@v1.1.0
         env:
