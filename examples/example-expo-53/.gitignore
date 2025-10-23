@@ -40,3 +40,6 @@ app-example
 
 yalc.lock
 package-lock.json
+
+# testing env
+posthog-cli-vars.sh
