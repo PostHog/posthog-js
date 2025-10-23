@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.280.1
+
+### Patch Changes
+
+- [#2492](https://github.com/PostHog/posthog-js/pull/2492) [`2b13291`](https://github.com/PostHog/posthog-js/commit/2b13291db4098f076e209caae71019ab10861956) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: extendUrlParams should always replace unless the caller says otherwise
+
+- [#2491](https://github.com/PostHog/posthog-js/pull/2491) [`130c9e0`](https://github.com/PostHog/posthog-js/commit/130c9e0677dbce372986e72fca65075c4a4d78de) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: correctly update the retry count URL parameter
+
+- [#2485](https://github.com/PostHog/posthog-js/pull/2485) [`d7dced1`](https://github.com/PostHog/posthog-js/commit/d7dced1772e9b2954a250c3ace8a21e74a4e8668) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: stop polling when the retry queue is empty
+
 ## 1.280.0
 
 ### Minor Changes
