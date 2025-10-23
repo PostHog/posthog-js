@@ -312,19 +312,49 @@ describe('request', () => {
                 expect(newUrl).toEqual(posthogURL + '?a=true&b=1&c=encoded%20string%20%F0%9F%98%98')
             })
 
-            it('does not modify existing query parameters', () => {
-                const newUrl = extendURLParams(posthogURL + '?a=false', {
-                    a: true,
-                    b: 1,
-                    c: 'encoded string 😘',
-                })
-                expect(newUrl).toEqual(posthogURL + '?a=false&b=1&c=encoded%20string%20%F0%9F%98%98')
-            })
-
-            it('does not re-encode existing params', () => {
-                const newUrl = extendURLParams(posthogURL + '?a=false&b=1&c=encoded%20string%20%F0%9F%98%98', {})
-                expect(newUrl).toEqual(posthogURL + '?a=false&b=1&c=encoded%20string%20%F0%9F%98%98')
-            })
+            it.each([
+                [
+                    'replaces existing params when replace=true (default)',
+                    posthogURL + '?a=old&b=2',
+                    { a: 'new', c: 3 },
+                    true,
+                    posthogURL + '?a=new&b=2&c=3',
+                ],
+                [
+                    'preserves existing params when replace=false',
+                    posthogURL + '?a=old&b=2',
+                    { a: 'new', c: 'encoded string 😘' },
+                    false,
+                    posthogURL + '?a=old&b=2&c=encoded%20string%20%F0%9F%98%98',
+                ],
+                [
+                    'replaces multiple existing params when replace=true',
+                    posthogURL + '?retry_count=1&ver=old',
+                    { retry_count: 2, ver: 'new' },
+                    true,
+                    posthogURL + '?retry_count=2&ver=new',
+                ],
+                [
+                    'preserves multiple existing params when replace=false',
+                    posthogURL + '?retry_count=1&ver=old',
+                    { retry_count: 2, ver: 'new' },
+                    false,
+                    posthogURL + '?retry_count=1&ver=old',
+                ],
+                [
+                    'does not re-encode already encoded params',
+                    posthogURL + '?a=false&b=1&c=encoded%20string%20%F0%9F%98%98',
+                    { retry_count: 2, ver: 'new' },
+                    true,
+                    posthogURL + '?a=false&b=1&c=encoded%20string%20%F0%9F%98%98&retry_count=2&ver=new',
+                ],
+            ])(
+                '%s',
+                (_name: string, url: string, params: Record<string, any>, replace: boolean, expectedUrl: string) => {
+                    const newUrl = extendURLParams(url, params, replace)
+                    expect(newUrl).toEqual(expectedUrl)
+                }
+            )
         })
 
         describe('body encoding', () => {
