@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+// Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`config snapshot for PostHogConfig 1`] = `
 "{
@@ -335,6 +335,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
   },
   "error_tracking": {
     "captureExtensionExceptions": [
+      "undefined",
+      "false",
+      "true"
+    ],
+    "__capturePostHogExceptions": [
       "undefined",
       "false",
       "true"

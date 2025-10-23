@@ -31,7 +31,7 @@ catalogs:
       specifier: ^2.5.0
       version: 2.8.1
     typescript:
-      specifier: ^5.5.4
+      specifier: 5.8.2
       version: 5.8.2
 
 patchedDependencies:
