@@ -91,7 +91,13 @@ export function getActiveMatchingSurveys(
     //   }
     // }
 
-    // URL and CSS selector conditions are currently ignored
+    // Skip surveys with URL or CSS selector conditions (not supported in React Native)
+    if (
+      (survey.conditions?.url && survey.conditions.url !== '') ||
+      (survey.conditions?.selector && survey.conditions.selector !== '')
+    ) {
+      return false
+    }
 
     if (
       !survey.linked_flag_key &&
