@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.280.0
+
+### Minor Changes
+
+- [#2430](https://github.com/PostHog/posthog-js/pull/2430) [`5c14af2`](https://github.com/PostHog/posthog-js/commit/5c14af20818f8639dbe127de0ef7fddca06ed86b) Thanks [@daibhin](https://github.com/daibhin)! - exclude capture of exceptions thrown from the PostHog SDK
+
 ## 1.279.3
 
 ### Patch Changes
