@@ -159,7 +159,6 @@ describe('request', () => {
 
             const headers = mockedFetch.mock.calls[0][1].headers as Headers
             expect(headers.get('x-header')).toEqual('value')
-
             expect(mockedFetch).toHaveBeenCalledWith(
                 `https://any.posthog-instance.com?ver=1.23.45&_=1700000000000`,
                 expect.objectContaining({
@@ -279,7 +278,6 @@ describe('request', () => {
                             data: body,
                         })
                     )
-
                     expect(mockedFetch).toHaveBeenCalledWith(
                         `https://any.posthog-instance.com?ver=1.23.45&_=1700000000000${expectedURLParams}`,
                         expect.objectContaining({
@@ -290,199 +288,208 @@ describe('request', () => {
                     )
                 }
             )
-        })
-        it('is used as a fallback when the requested transport is disabled', async () => {
-            request(
-                createRequest({
-                    transport: 'sendBeacon',
-                    disableTransport: ['sendBeacon'],
-                })
-            )
-            expect(mockedFetch).toHaveBeenCalled()
-        })
-    })
 
-    describe('adding query params to posthog API calls', () => {
-        const posthogURL = 'https://any.posthog-instance.com/my-url'
-
-        it('extends params in a url', () => {
-            const newUrl = extendURLParams(posthogURL, {
-                a: true,
-                b: 1,
-                c: 'encoded string 😘',
+            it('is used as a fallback when the requested transport is disabled', async () => {
+                request(
+                    createRequest({
+                        transport: 'sendBeacon',
+                        disableTransport: ['sendBeacon'],
+                    })
+                )
+                expect(mockedFetch).toHaveBeenCalled()
             })
-            expect(newUrl).toEqual(posthogURL + '?a=true&b=1&c=encoded%20string%20%F0%9F%98%98')
         })
 
-        it('does not modify existing query parameters', () => {
-            const newUrl = extendURLParams(posthogURL + '?a=false', {
-                a: true,
-                b: 1,
-                c: 'encoded string 😘',
+        describe('adding query params to posthog API calls', () => {
+            const posthogURL = 'https://any.posthog-instance.com/my-url'
+
+            it('extends params in a url', () => {
+                const newUrl = extendURLParams(posthogURL, {
+                    a: true,
+                    b: 1,
+                    c: 'encoded string 😘',
+                })
+                expect(newUrl).toEqual(posthogURL + '?a=true&b=1&c=encoded%20string%20%F0%9F%98%98')
             })
-            expect(newUrl).toEqual(posthogURL + '?a=false&b=1&c=encoded%20string%20%F0%9F%98%98')
-        })
 
-        it('does not re-encode existing params', () => {
-            const newUrl = extendURLParams(posthogURL + '?a=false&b=1&c=encoded%20string%20%F0%9F%98%98', {})
-            expect(newUrl).toEqual(posthogURL + '?a=false&b=1&c=encoded%20string%20%F0%9F%98%98')
-        })
-    })
-
-    describe('body encoding', () => {
-        beforeEach(() => {
-            transport = 'XHR'
-        })
-
-        it('should send application/json if no compression is set', () => {
-            request(
-                createRequest({
-                    url: 'https://any.posthog-instance.com/',
-                    method: 'POST',
-                    data: { foo: 'bar' },
+            it('does not modify existing query parameters', () => {
+                const newUrl = extendURLParams(posthogURL + '?a=false', {
+                    a: true,
+                    b: 1,
+                    c: 'encoded string 😘',
                 })
-            )
-            expect(mockedXHR.send.mock.calls[0][0]).toMatchInlineSnapshot(`"{"foo":"bar"}"`)
-            expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/json')
+                expect(newUrl).toEqual(posthogURL + '?a=false&b=1&c=encoded%20string%20%F0%9F%98%98')
+            })
+
+            it('does not re-encode existing params', () => {
+                const newUrl = extendURLParams(posthogURL + '?a=false&b=1&c=encoded%20string%20%F0%9F%98%98', {})
+                expect(newUrl).toEqual(posthogURL + '?a=false&b=1&c=encoded%20string%20%F0%9F%98%98')
+            })
         })
 
-        it('should base64 compress data if set', () => {
-            request(
-                createRequest({
-                    url: 'https://any.posthog-instance.com/',
-                    method: 'POST',
-                    compression: Compression.Base64,
-                    data: { foo: 'bar' },
+        describe('body encoding', () => {
+            beforeEach(() => {
+                transport = 'XHR'
+            })
+
+            it('should send application/json if no compression is set', () => {
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/',
+                        method: 'POST',
+                        data: { foo: 'bar' },
+                    })
+                )
+                expect(mockedXHR.send.mock.calls[0][0]).toMatchInlineSnapshot(`"{"foo":"bar"}"`)
+                expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/json')
+            })
+
+            it('should base64 compress data if set', () => {
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/',
+                        method: 'POST',
+                        compression: Compression.Base64,
+                        data: { foo: 'bar' },
+                    })
+                )
+                expect(mockedXHR.send.mock.calls[0][0]).toMatchInlineSnapshot(`"data=eyJmb28iOiJiYXIifQ%3D%3D"`)
+                expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith(
+                    'Content-Type',
+                    'application/x-www-form-urlencoded'
+                )
+            })
+
+            it('should gzip compress data if set', async () => {
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/',
+                        method: 'POST',
+                        compression: Compression.GZipJS,
+                        data: { foo: 'bar' },
+                    })
+                )
+                expect(mockedXHR.send).toHaveBeenCalledTimes(1)
+                expect(mockedXHR.send.mock.calls[0][0]).toBeInstanceOf(Blob)
+                // Decode and check the blob content
+
+                const res = await new Promise((resolve) => {
+                    const reader = new FileReader()
+                    reader.onload = () => resolve(reader.result)
+                    reader.readAsText(mockedXHR.send.mock.calls[0][0])
                 })
-            )
-            expect(mockedXHR.send.mock.calls[0][0]).toMatchInlineSnapshot(`"data=eyJmb28iOiJiYXIifQ%3D%3D"`)
-            expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/x-www-form-urlencoded')
+
+                expect(res).toMatchInlineSnapshot(`
+                "�      �VJ��W�RJJ,R� ��+�
+                   "
+            `)
+
+                expect(mockedXHR.setRequestHeader).not.toHaveBeenCalledWith(
+                    'Content-Type',
+                    'application/x-www-form-urlencoded'
+                )
+            })
+
+            it('converts bigint properties to string without throwing', () => {
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/',
+                        method: 'POST',
+                        compression: Compression.Base64,
+                        data: { foo: BigInt('999999999999999999999') },
+                    })
+                )
+                expect(mockedXHR.send.mock.calls[0][0]).toMatchInlineSnapshot(
+                    `"data=eyJmb28iOiI5OTk5OTk5OTk5OTk5OTk5OTk5OTkifQ%3D%3D"`
+                )
+                expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith(
+                    'Content-Type',
+                    'application/x-www-form-urlencoded'
+                )
+            })
         })
 
-        it('should gzip compress data if set', async () => {
-            request(
-                createRequest({
-                    url: 'https://any.posthog-instance.com/',
-                    method: 'POST',
-                    compression: Compression.GZipJS,
-                    data: { foo: 'bar' },
-                })
-            )
-            expect(mockedXHR.send).toHaveBeenCalledTimes(1)
-            expect(mockedXHR.send.mock.calls[0][0]).toBeInstanceOf(Blob)
-            // Decode and check the blob content
+        describe('sendBeacon', () => {
+            beforeEach(() => {
+                transport = 'sendBeacon'
+            })
 
-            const res = await new Promise((resolve) => {
+            it("should encode data to a string and send it as a blob if it's a POST request", async () => {
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/',
+                        method: 'POST',
+                        data: { foo: 'bar' },
+                    })
+                )
+
+                expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
+                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&beacon=1',
+                    expect.any(Blob)
+                )
+                const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
+
                 const reader = new FileReader()
-                reader.onload = () => resolve(reader.result)
-                reader.readAsText(mockedXHR.send.mock.calls[0][0])
+                const result = await new Promise((resolve) => {
+                    reader.onload = () => resolve(reader.result)
+                    reader.readAsText(blob)
+                })
+
+                expect(result).toMatchInlineSnapshot(`"{"foo":"bar"}"`)
             })
 
-            expect(res).toMatchInlineSnapshot(`
+            it('should respect base64 compression', async () => {
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/',
+                        method: 'POST',
+                        compression: Compression.Base64,
+                        data: { foo: 'bar' },
+                    })
+                )
+
+                expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
+                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=base64&beacon=1',
+                    expect.any(Blob)
+                )
+                const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
+
+                const reader = new FileReader()
+                const result = await new Promise((resolve) => {
+                    reader.onload = () => resolve(reader.result)
+                    reader.readAsText(blob)
+                })
+
+                expect(result).toMatchInlineSnapshot(`"data=eyJmb28iOiJiYXIifQ%3D%3D"`)
+            })
+
+            it('should respect gzip compression', async () => {
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/',
+                        method: 'POST',
+                        compression: Compression.GZipJS,
+                        data: { foo: 'bar' },
+                    })
+                )
+
+                expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
+                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=gzip-js&beacon=1',
+                    expect.any(Blob)
+                )
+                const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
+
+                const reader = new FileReader()
+                const result = await new Promise((resolve) => {
+                    reader.onload = () => resolve(reader.result)
+                    reader.readAsText(blob)
+                })
+
+                expect(result).toMatchInlineSnapshot(`
                 "�      �VJ��W�RJJ,R� ��+�
                    "
             `)
-
-            expect(mockedXHR.setRequestHeader).not.toHaveBeenCalledWith(
-                'Content-Type',
-                'application/x-www-form-urlencoded'
-            )
-        })
-
-        it('converts bigint properties to string without throwing', () => {
-            request(
-                createRequest({
-                    url: 'https://any.posthog-instance.com/',
-                    method: 'POST',
-                    compression: Compression.Base64,
-                    data: { foo: BigInt('999999999999999999999') },
-                })
-            )
-            expect(mockedXHR.send.mock.calls[0][0]).toMatchInlineSnapshot(
-                `"data=eyJmb28iOiI5OTk5OTk5OTk5OTk5OTk5OTk5OTkifQ%3D%3D"`
-            )
-            expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/x-www-form-urlencoded')
-        })
-    })
-
-    describe('sendBeacon', () => {
-        beforeEach(() => {
-            transport = 'sendBeacon'
-        })
-
-        it("should encode data to a string and send it as a blob if it's a POST request", async () => {
-            request(
-                createRequest({
-                    url: 'https://any.posthog-instance.com/',
-                    method: 'POST',
-                    data: { foo: 'bar' },
-                })
-            )
-            expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&beacon=1',
-                expect.any(Blob)
-            )
-
-            const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
-
-            const reader = new FileReader()
-            const result = await new Promise((resolve) => {
-                reader.onload = () => resolve(reader.result)
-                reader.readAsText(blob)
             })
-
-            expect(result).toMatchInlineSnapshot(`"{"foo":"bar"}"`)
-        })
-
-        it('should respect base64 compression', async () => {
-            request(
-                createRequest({
-                    url: 'https://any.posthog-instance.com/',
-                    method: 'POST',
-                    compression: Compression.Base64,
-                    data: { foo: 'bar' },
-                })
-            )
-            expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=base64&beacon=1',
-                expect.any(Blob)
-            )
-
-            const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
-            const reader = new FileReader()
-            const result = await new Promise((resolve) => {
-                reader.onload = () => resolve(reader.result)
-                reader.readAsText(blob)
-            })
-
-            expect(result).toMatchInlineSnapshot(`"data=eyJmb28iOiJiYXIifQ%3D%3D"`)
-        })
-
-        it('should respect gzip compression', async () => {
-            request(
-                createRequest({
-                    url: 'https://any.posthog-instance.com/',
-                    method: 'POST',
-                    compression: Compression.GZipJS,
-                    data: { foo: 'bar' },
-                })
-            )
-            expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=gzip-js&beacon=1',
-                expect.any(Blob)
-            )
-
-            const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
-            const reader = new FileReader()
-            const result = await new Promise((resolve) => {
-                reader.onload = () => resolve(reader.result)
-                reader.readAsText(blob)
-            })
-
-            expect(result).toMatchInlineSnapshot(`
-                "�      �VJ��W�RJJ,R� ��+�
-                   "
-            `)
         })
     })
 })

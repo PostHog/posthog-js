@@ -4,6 +4,7 @@
     "scripts": {
         "build-rollup": "pnpm --filter=posthog-js build-rollup",
         "clean": "turbo clean",
+        "clean:dep": "rm -rf node_modules && pnpm -r exec rm -rf node_modules",
         "lint": "turbo lint",
         "lint:fix": "turbo lint:fix",
         "test": "turbo test",
