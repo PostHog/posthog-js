@@ -634,7 +634,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
 
   private parseUsage(response: LLMResult): [number, number, Record<string, any>] {
     let llmUsage: [number, number, Record<string, any>] = [0, 0, {}]
-    const llmUsageKeys = ['token_usage', 'usage', 'tokenUsage']
+    const llmUsageKeys = ['token_usage', 'usage', 'tokenUsage', 'estimatedTokenUsage']
 
     if (response.llmOutput != null) {
       const key = llmUsageKeys.find((k) => response.llmOutput?.[k] != null)
