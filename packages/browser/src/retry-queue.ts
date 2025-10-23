@@ -34,11 +34,13 @@ interface RetryQueueElement {
 }
 
 export class RetryQueue {
-    private _isPolling: boolean = false // flag to continue to recursively poll or not
-    private _poller: number | undefined // to become interval for reference to clear later
+    private _isPolling: boolean = false
+    private _poller: number | undefined
     private _pollIntervalMs: number = 3000
     private _queue: RetryQueueElement[] = []
     private _areWeOnline: boolean
+    private _onlineListener: (() => void) | undefined
+    private _offlineListener: (() => void) | undefined
 
     constructor(private _instance: PostHog) {
         this._queue = []
@@ -47,14 +49,17 @@ export class RetryQueue {
         if (!isUndefined(window) && 'onLine' in window.navigator) {
             this._areWeOnline = window.navigator.onLine
 
-            addEventListener(window, 'online', () => {
+            this._onlineListener = () => {
                 this._areWeOnline = true
                 this._flush()
-            })
+            }
 
-            addEventListener(window, 'offline', () => {
+            this._offlineListener = () => {
                 this._areWeOnline = false
-            })
+            }
+
+            addEventListener(window, 'online', this._onlineListener)
+            addEventListener(window, 'offline', this._offlineListener)
         }
     }
 
@@ -108,6 +113,13 @@ export class RetryQueue {
 
     private _poll(): void {
         this._poller && clearTimeout(this._poller)
+
+        if (this._queue.length === 0) {
+            this._isPolling = false
+            this._poller = undefined
+            return
+        }
+
         this._poller = setTimeout(() => {
             if (this._areWeOnline && this._queue.length > 0) {
                 this._flush()
@@ -140,6 +152,19 @@ export class RetryQueue {
         if (this._poller) {
             clearTimeout(this._poller)
             this._poller = undefined
+        }
+
+        this._isPolling = false
+
+        if (!isUndefined(window)) {
+            if (this._onlineListener) {
+                window.removeEventListener('online', this._onlineListener)
+                this._onlineListener = undefined
+            }
+            if (this._offlineListener) {
+                window.removeEventListener('offline', this._offlineListener)
+                this._offlineListener = undefined
+            }
         }
 
         for (const { requestOptions } of this._queue) {
