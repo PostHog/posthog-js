@@ -163,6 +163,102 @@ describe('getActiveMatchingSurveys', () => {
     })
   })
 
+  describe('URL and selector filtering', () => {
+    it('should exclude surveys with URL conditions', () => {
+      const surveys = [
+        createMockSurvey({
+          id: 'url-survey',
+          conditions: {
+            url: 'https://example.com',
+          },
+        }),
+      ]
+
+      const result = getActiveMatchingSurveys(surveys, mockFlags, mockSeenSurveys, mockActivatedSurveys)
+
+      expect(result).toHaveLength(0)
+    })
+
+    it('should exclude surveys with CSS selector conditions', () => {
+      const surveys = [
+        createMockSurvey({
+          id: 'selector-survey',
+          conditions: {
+            selector: '.my-selector',
+          },
+        }),
+      ]
+
+      const result = getActiveMatchingSurveys(surveys, mockFlags, mockSeenSurveys, mockActivatedSurveys)
+
+      expect(result).toHaveLength(0)
+    })
+
+    it('should exclude surveys with both URL and selector conditions', () => {
+      const surveys = [
+        createMockSurvey({
+          id: 'url-and-selector-survey',
+          conditions: {
+            url: 'https://example.com',
+            selector: '.my-selector',
+          },
+        }),
+      ]
+
+      const result = getActiveMatchingSurveys(surveys, mockFlags, mockSeenSurveys, mockActivatedSurveys)
+
+      expect(result).toHaveLength(0)
+    })
+
+    it('should include surveys without URL or selector conditions', () => {
+      const surveys = [
+        createMockSurvey({
+          id: 'no-url-selector',
+          conditions: {
+            deviceTypes: ['Mobile'],
+          },
+        }),
+      ]
+
+      const result = getActiveMatchingSurveys(surveys, mockFlags, mockSeenSurveys, mockActivatedSurveys)
+
+      expect(result).toHaveLength(1)
+      expect(result[0].id).toBe('no-url-selector')
+    })
+
+    it('should include surveys with empty conditions object', () => {
+      const surveys = [
+        createMockSurvey({
+          id: 'empty-conditions',
+          conditions: {},
+        }),
+      ]
+
+      const result = getActiveMatchingSurveys(surveys, mockFlags, mockSeenSurveys, mockActivatedSurveys)
+
+      expect(result).toHaveLength(1)
+      expect(result[0].id).toBe('empty-conditions')
+    })
+
+    it('should exclude surveys with URL conditions even when all other conditions match', () => {
+      const surveys = [
+        createMockSurvey({
+          id: 'url-with-matching-flags',
+          linked_flag_key: 'test-flag',
+          conditions: {
+            url: 'https://example.com',
+            deviceTypes: ['Mobile'],
+            deviceTypesMatchType: SurveyMatchType.Exact,
+          },
+        }),
+      ]
+
+      const result = getActiveMatchingSurveys(surveys, mockFlags, mockSeenSurveys, mockActivatedSurveys)
+
+      expect(result).toHaveLength(0)
+    })
+  })
+
   describe('Seen surveys filtering', () => {
     it('should exclude surveys that have been seen and cannot be activated repeatedly', () => {
       const surveys = [
