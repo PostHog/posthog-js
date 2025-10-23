@@ -80,4 +80,56 @@ describe('request-router', () => {
         mockPostHog.config.api_host = 'https://eu.posthog.com'
         expect(router.endpointFor('api')).toEqual('https://eu.i.posthog.com')
     })
+
+    describe('flags_api_host configuration', () => {
+        it('should use flags_api_host when set', () => {
+            const mockPostHog = {
+                config: {
+                    api_host: 'https://app.posthog.com',
+                    flags_api_host: 'https://example.com/feature-flags',
+                },
+            }
+            const router = new RequestRouter(mockPostHog as any)
+
+            expect(router.endpointFor('flags', '/flags/?v=2')).toEqual('https://example.com/feature-flags/flags/?v=2')
+        })
+
+        it('should fall back to api_host when flags_api_host is not set', () => {
+            const mockPostHog = {
+                config: {
+                    api_host: 'https://app.posthog.com',
+                },
+            }
+            const router = new RequestRouter(mockPostHog as any)
+
+            expect(router.endpointFor('flags', '/flags/?v=2')).toEqual('https://us.i.posthog.com/flags/?v=2')
+        })
+
+        it('should trim trailing slashes from flags_api_host', () => {
+            const mockPostHog = {
+                config: {
+                    api_host: 'https://app.posthog.com',
+                    flags_api_host: 'https://flags.example.com/',
+                },
+            }
+            const router = new RequestRouter(mockPostHog as any)
+
+            expect(router.endpointFor('flags', '/flags/?v=2')).toEqual('https://flags.example.com/flags/?v=2')
+        })
+
+        it('should react to flags_api_host config changes', () => {
+            const mockPostHog = {
+                config: {
+                    api_host: 'https://app.posthog.com',
+                    flags_api_host: 'https://flags1.example.com',
+                },
+            }
+            const router = new RequestRouter(mockPostHog as any)
+
+            expect(router.endpointFor('flags', '/flags/?v=2')).toEqual('https://flags1.example.com/flags/?v=2')
+
+            mockPostHog.config.flags_api_host = 'https://flags2.example.com'
+            expect(router.endpointFor('flags', '/flags/?v=2')).toEqual('https://flags2.example.com/flags/?v=2')
+        })
+    })
 })

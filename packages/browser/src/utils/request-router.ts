@@ -12,7 +12,7 @@ export enum RequestRouterRegion {
     CUSTOM = 'custom',
 }
 
-export type RequestRouterTarget = 'api' | 'ui' | 'assets'
+export type RequestRouterTarget = 'api' | 'ui' | 'assets' | 'flags'
 
 const ingestionDomain = 'i.posthog.com'
 
@@ -31,6 +31,16 @@ export class RequestRouter {
         }
         return host
     }
+
+    get flagsApiHost(): string {
+        const customHost = this.instance.config.flags_api_host
+        if (customHost) {
+            return customHost.trim().replace(/\/$/, '')
+        }
+        // Backwards compatibility: if no custom flags_api_host is set, fall back to the regular apiHost
+        return this.apiHost
+    }
+
     get uiHost(): string | undefined {
         let host = this.instance.config.ui_host?.replace(/\/$/, '')
 
@@ -72,6 +82,10 @@ export class RequestRouter {
 
         if (this.region === RequestRouterRegion.CUSTOM) {
             return this.apiHost + path
+        }
+
+        if (target === 'flags') {
+            return this.flagsApiHost + path
         }
 
         const suffix = ingestionDomain + path
