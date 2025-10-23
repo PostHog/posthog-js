@@ -28,19 +28,24 @@ type EncodedBody = {
     estimatedSize: number
 }
 
-export const extendURLParams = (url: string, params: Record<string, any>): string => {
+export const extendURLParams = (url: string, params: Record<string, any>, replace: boolean = false): string => {
     const [baseUrl, search] = url.split('?')
     const newParams = { ...params }
 
-    search?.split('&').forEach((pair) => {
-        const [key] = pair.split('=')
-        delete newParams[key]
-    })
+    const updatedSearch =
+        search?.split('&').map((pair) => {
+            const [key, origValue] = pair.split('=')
+            const value = replace ? (newParams[key] ?? origValue) : origValue
+            delete newParams[key]
+            return `${key}=${value}`
+        }) ?? []
 
-    let newSearch = formDataToQuery(newParams)
-    newSearch = newSearch ? (search ? search + '&' : '') + newSearch : search
+    const remaining = formDataToQuery(newParams)
+    if (remaining) {
+        updatedSearch.push(remaining)
+    }
 
-    return `${baseUrl}?${newSearch}`
+    return `${baseUrl}?${updatedSearch.join('&')}`
 }
 
 export const jsonStringify = (data: any, space?: string | number): string => {
