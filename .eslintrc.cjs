@@ -72,6 +72,7 @@ module.exports = {
                 'packages/node/**',
                 'packages/web/**',
                 'examples/**',
+                'playground/**',
             ],
             rules: {
                 'no-console': 'off',
