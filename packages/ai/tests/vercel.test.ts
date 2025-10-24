@@ -132,6 +132,12 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
       expect(captureCall[0].properties['$ai_lib']).toBe('posthog-ai')
       expect(captureCall[0].properties['$ai_lib_version']).toBe(version)
 
+      // Verify $ai_lib_metadata for Vercel
+      expect(captureCall[0].properties['$ai_lib_metadata']).toEqual({
+        schema: 'v1',
+        frameworks: [{ name: 'vercel' }],
+      })
+
       expect(captureCall[0]).toEqual({
         distinctId: 'test-user',
         event: '$ai_generation',
