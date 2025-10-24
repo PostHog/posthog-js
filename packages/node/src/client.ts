@@ -29,6 +29,7 @@ import {
 import ErrorTracking from './extensions/error-tracking'
 import { safeSetTimeout, PostHogEventProperties } from '@posthog/core'
 import { PostHogMemoryStorage } from './storage-memory'
+import { isBlockedUA } from './utils/bot-detection'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -1499,9 +1500,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         return props
       })
 
+    // Handle bot pageview collection based on preview flag
+    let finalEvent = eventMessage.event
+    if (
+      eventMessage.event === '$pageview' &&
+      this.options.__preview_send_bot_pageviews &&
+      typeof eventProperties.$raw_user_agent === 'string'
+    ) {
+      if (isBlockedUA(eventProperties.$raw_user_agent, this.options.custom_blocked_useragents || [])) {
+        finalEvent = '$bot_pageview'
+      }
+    }
+
     return {
       distinctId: eventMessage.distinctId,
-      event: eventMessage.event,
+      event: finalEvent,
       properties: eventProperties,
       options: {
         timestamp: eventMessage.timestamp,
