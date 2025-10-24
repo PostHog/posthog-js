@@ -15,6 +15,7 @@ import {
   MAX_OUTPUT_SIZE,
   extractAvailableToolCalls,
   toContentString,
+  getAiLibMetadata,
 } from '../utils'
 import { Buffer } from 'buffer'
 import { redactBase64DataUrl } from '../sanitization'
@@ -275,7 +276,7 @@ export const createInstrumentationMiddleware = (
         ...mapVercelParams(params),
         posthogProperties: {
           ...options.posthogProperties,
-          $ai_lib_metadata: { schema: 'v1', frameworks: [{ name: 'vercel' }] },
+          $ai_lib_metadata: getAiLibMetadata('vercel'),
         },
       }
       const availableTools = extractAvailableToolCalls('vercel', params)
@@ -364,7 +365,7 @@ export const createInstrumentationMiddleware = (
         ...mapVercelParams(params),
         posthogProperties: {
           ...options.posthogProperties,
-          $ai_lib_metadata: { schema: 'v1', frameworks: [{ name: 'vercel' }] },
+          $ai_lib_metadata: getAiLibMetadata('vercel'),
         },
       }
 
