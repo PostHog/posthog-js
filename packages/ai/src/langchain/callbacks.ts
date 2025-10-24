@@ -365,6 +365,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       $ai_latency: latency,
       $ai_span_name: run.name,
       $ai_span_id: runId,
+      $ai_lib_metadata: getAiLibMetadata(),
     }
     if (parentRunId) {
       eventProperties['$ai_parent_id'] = parentRunId
@@ -426,6 +427,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       $ai_http_status: 200,
       $ai_latency: latency,
       $ai_base_url: run.baseUrl,
+      $ai_lib_metadata: getAiLibMetadata(),
     }
 
     if (run.tools) {
@@ -668,5 +670,17 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     }
 
     return llmUsage
+  }
+}
+
+/**
+ * Generate the $ai_lib_metadata object with framework information.
+ * Since this file is langchain/callbacks.ts, we know the framework is LangChain.
+ * Returns an object with schema version and framework name.
+ */
+function getAiLibMetadata(): { schema: string; frameworks: Array<{ name: string }> } {
+  return {
+    schema: 'v1',
+    frameworks: [{ name: 'langchain' }],
   }
 }

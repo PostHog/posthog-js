@@ -522,6 +522,7 @@ export const sendEventToPosthog = async ({
   const properties = {
     $ai_lib: 'posthog-ai',
     $ai_lib_version: version,
+    $ai_lib_metadata: { schema: 'v1', frameworks: [{ name: provider }] },
     $ai_provider: params.posthogProviderOverride ?? provider,
     $ai_model: params.posthogModelOverride ?? model,
     $ai_model_parameters: getModelParams(params),
