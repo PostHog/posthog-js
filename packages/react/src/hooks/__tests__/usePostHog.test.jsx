@@ -8,15 +8,9 @@ jest.useFakeTimers()
 const posthog = { posthog_client: true }
 
 describe('usePostHog hook', () => {
-    given('renderProvider', () => ({ children }) => (
-        <PostHogProvider client={given.posthog}>{children}</PostHogProvider>
-    ))
-
-    given('posthog', () => posthog)
-
     it('should return the client', () => {
         let { result } = renderHook(() => usePostHog(), {
-            wrapper: given.renderProvider,
+            wrapper: ({ children }) => <PostHogProvider client={posthog}>{children}</PostHogProvider>,
         })
         expect(result.current).toEqual(posthog)
     })

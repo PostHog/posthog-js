@@ -23,28 +23,32 @@ const FEATURE_FLAG_PAYLOADS = {
 }
 
 describe('useFeatureFlagPayload hook', () => {
-    given('renderProvider', () => ({ children }) => (
-        <PostHogProvider client={given.posthog}>{children}</PostHogProvider>
-    ))
+    let posthog
+    let renderProvider
 
-    given('posthog', () => ({
-        isFeatureEnabled: (flag) => !!FEATURE_FLAG_STATUS[flag],
-        getFeatureFlag: (flag) => FEATURE_FLAG_STATUS[flag],
-        getFeatureFlagPayload: (flag) => FEATURE_FLAG_PAYLOADS[flag],
-        onFeatureFlags: (callback) => {
-            const activeFlags = []
-            for (const flag in FEATURE_FLAG_STATUS) {
-                if (FEATURE_FLAG_STATUS[flag]) {
-                    activeFlags.push(flag)
+    beforeEach(() => {
+        posthog = {
+            isFeatureEnabled: (flag) => !!FEATURE_FLAG_STATUS[flag],
+            getFeatureFlag: (flag) => FEATURE_FLAG_STATUS[flag],
+            getFeatureFlagPayload: (flag) => FEATURE_FLAG_PAYLOADS[flag],
+            onFeatureFlags: (callback) => {
+                const activeFlags = []
+                for (const flag in FEATURE_FLAG_STATUS) {
+                    if (FEATURE_FLAG_STATUS[flag]) {
+                        activeFlags.push(flag)
+                    }
                 }
-            }
-            callback(activeFlags)
-            return () => {}
-        },
-        featureFlags: {
-            getFlags: () => ACTIVE_FEATURE_FLAGS,
-        },
-    }))
+                callback(activeFlags)
+                return () => {}
+            },
+            featureFlags: {
+                getFlags: () => ACTIVE_FEATURE_FLAGS,
+            },
+        }
+
+        // eslint-disable-next-line react/display-name
+        renderProvider = ({ children }) => <PostHogProvider client={posthog}>{children}</PostHogProvider>
+    })
 
     it.each([
         ['example_feature_true', true],
@@ -54,7 +58,7 @@ describe('useFeatureFlagPayload hook', () => {
         ['example_feature_payload', true],
     ])('should get the boolean feature flag', (flag, expected) => {
         let { result } = renderHook(() => useFeatureFlagEnabled(flag), {
-            wrapper: given.renderProvider,
+            wrapper: renderProvider,
         })
         expect(result.current).toEqual(expected)
     })
@@ -67,14 +71,14 @@ describe('useFeatureFlagPayload hook', () => {
         ['example_feature_payload', FEATURE_FLAG_PAYLOADS.example_feature_payload],
     ])('should get the payload feature flag', (flag, expected) => {
         let { result } = renderHook(() => useFeatureFlagPayload(flag), {
-            wrapper: given.renderProvider,
+            wrapper: renderProvider,
         })
         expect(result.current).toEqual(expected)
     })
 
     it('should return the active feature flags', () => {
         let { result } = renderHook(() => useActiveFeatureFlags(), {
-            wrapper: given.renderProvider,
+            wrapper: renderProvider,
         })
         expect(result.current).toEqual(['example_feature_true', 'multivariate_feature', 'example_feature_payload'])
     })
@@ -86,7 +90,7 @@ describe('useFeatureFlagPayload hook', () => {
         ['multivariate_feature', 'string-value'],
     ])('should get the feature flag variant key', (flag, expected) => {
         let { result } = renderHook(() => useFeatureFlagVariantKey(flag), {
-            wrapper: given.renderProvider,
+            wrapper: renderProvider,
         })
         expect(result.current).toEqual(expected)
     })
