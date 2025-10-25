@@ -63,7 +63,7 @@ describe('MutationThrottler', () => {
     test('returns undefined if no mutations are left', () => {
         const event = makeEvent({ attributes: [{ id: 1, attributes: { a: 'ttribute' } }] })
 
-        mutationThrottler['_rateLimiter']['_buckets']['1'] = 0
+        mutationThrottler['_rateLimiter']['_buckets']['1'] = { tokens: 0, lastAccess: Date.now() }
 
         const result = mutationThrottler.throttleMutations(event)
 
@@ -77,7 +77,7 @@ describe('MutationThrottler', () => {
             attributes: [{ id: 1, attributes: { a: 'ttribute' } }],
         })
 
-        mutationThrottler['_rateLimiter']['_buckets']['1'] = 0
+        mutationThrottler['_rateLimiter']['_buckets']['1'] = { tokens: 0, lastAccess: Date.now() }
 
         const result = mutationThrottler.throttleMutations(event)
 
@@ -96,7 +96,7 @@ describe('MutationThrottler', () => {
             attributes: [{ id: 1, attributes: { a: 'ttribute' } }],
         })
 
-        mutationThrottler['_rateLimiter']['_buckets']['1'] = 0
+        mutationThrottler['_rateLimiter']['_buckets']['1'] = { tokens: 0, lastAccess: Date.now() }
 
         const result = mutationThrottler.throttleMutations(event)
 
