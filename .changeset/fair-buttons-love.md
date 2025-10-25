@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-fix: don't poll surveys while the page is hhidden
+fix: don't poll surveys while the page is hidden
