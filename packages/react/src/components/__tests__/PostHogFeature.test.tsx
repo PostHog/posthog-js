@@ -1,18 +1,18 @@
 import * as React from 'react'
 import { useState } from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { PostHogProvider } from '../../context'
+import { PostHogProvider, PostHog } from '../../context'
 import { PostHogFeature } from '../'
 import '@testing-library/jest-dom'
 
-const FEATURE_FLAG_STATUS = {
+const FEATURE_FLAG_STATUS: Record<string, string | boolean> = {
     multivariate_feature: 'string-value',
     example_feature_payload: 'test',
     test: true,
     test_false: false,
 }
 
-const FEATURE_FLAG_PAYLOADS = {
+const FEATURE_FLAG_PAYLOADS: Record<string, any> = {
     example_feature_payload: {
         id: 1,
         name: 'example_feature_1_payload',
@@ -21,9 +21,9 @@ const FEATURE_FLAG_PAYLOADS = {
 }
 
 describe('PostHogFeature component', () => {
-    let posthog
+    let posthog: PostHog
 
-    const renderWith = (instance, flag = 'test', matchValue = true) =>
+    const renderWith = (instance: PostHog, flag = 'test', matchValue: string | boolean | undefined = true) =>
         render(
             <PostHogProvider client={instance}>
                 <PostHogFeature flag={flag} match={matchValue}>
@@ -45,11 +45,11 @@ describe('PostHogFeature component', () => {
         window.IntersectionObserver = mockIntersectionObserver
 
         posthog = {
-            isFeatureEnabled: (flag) => !!FEATURE_FLAG_STATUS[flag],
-            getFeatureFlag: (flag) => FEATURE_FLAG_STATUS[flag],
-            getFeatureFlagPayload: (flag) => FEATURE_FLAG_PAYLOADS[flag],
-            onFeatureFlags: (callback) => {
-                const activeFlags = []
+            isFeatureEnabled: (flag: string) => !!FEATURE_FLAG_STATUS[flag],
+            getFeatureFlag: (flag: string) => FEATURE_FLAG_STATUS[flag],
+            getFeatureFlagPayload: (flag: string) => FEATURE_FLAG_PAYLOADS[flag],
+            onFeatureFlags: (callback: any) => {
+                const activeFlags: string[] = []
                 for (const flag in FEATURE_FLAG_STATUS) {
                     if (FEATURE_FLAG_STATUS[flag]) {
                         activeFlags.push(flag)
@@ -59,7 +59,7 @@ describe('PostHogFeature component', () => {
                 return () => {}
             },
             capture: jest.fn(),
-        }
+        } as unknown as PostHog
     })
 
     it('should track interactions with the feature component', () => {
@@ -233,7 +233,7 @@ describe('PostHogFeature component', () => {
         render(
             <PostHogProvider client={posthog}>
                 <PostHogFeature flag={'example_feature_payload'} match={'test'}>
-                    {(payload) => {
+                    {(payload: any) => {
                         return <div data-testid={`hi_${payload.name}`}>Hullo</div>
                     }}
                 </PostHogFeature>

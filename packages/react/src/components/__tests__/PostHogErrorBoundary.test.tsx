@@ -10,8 +10,8 @@ describe('PostHogErrorBoundary component', () => {
     mockFunction(console, 'warn')
     mockFunction(posthog, 'captureException')
 
-    const renderWithError = (props) => render(<RenderWithError {...props} />)
-    const renderWithoutError = (props) => render(<RenderWithoutError {...props} />)
+    const renderWithError = (props: any) => render(<RenderWithError {...props} />)
+    const renderWithoutError = (props?: any) => render(<RenderWithoutError {...props} />)
 
     it('should call captureException with error message', () => {
         const { container } = renderWithError({ message: 'Test error', fallback: <div></div> })
@@ -44,7 +44,7 @@ describe('PostHogErrorBoundary component', () => {
         const props = { team_id: '1234' }
         renderWithError({
             message: 'Kaboom',
-            additionalProperties: (err) => {
+            additionalProperties: (err: Error) => {
                 expect(err.message).toBe('Kaboom')
                 return props
             },
@@ -63,11 +63,11 @@ describe('captureException processing', () => {
     mockFunction(console, 'warn')
     mockFunction(posthog, 'capture')
 
-    const renderWithError = (props) => render(<RenderWithError {...props} />)
+    const renderWithError = (props: any) => render(<RenderWithError {...props} />)
 
     it('should call capture with a stacktrace', () => {
         renderWithError({ message: 'Kaboom', fallback: <div></div>, additionalProperties: {} })
-        const captureCalls = posthog.capture.mock.calls
+        const captureCalls = (posthog.capture as jest.Mock).mock.calls
         expect(captureCalls.length).toBe(1)
         const exceptionList = captureCalls[0][1].$exception_list
         expect(exceptionList.length).toBe(1)
@@ -76,7 +76,7 @@ describe('captureException processing', () => {
     })
 })
 
-function mockFunction(object, funcName) {
+function mockFunction(object: any, funcName: string) {
     const originalFunc = object[funcName]
 
     beforeEach(() => {
@@ -88,11 +88,11 @@ function mockFunction(object, funcName) {
     })
 }
 
-function ComponentWithError({ message }) {
+function ComponentWithError({ message }: { message: string }): React.ReactElement {
     throw new Error(message)
 }
 
-function RenderWithError({ message = 'Error', fallback, additionalProperties }) {
+function RenderWithError({ message = 'Error', fallback, additionalProperties }: any) {
     return (
         <PostHogErrorBoundary fallback={fallback} additionalProperties={additionalProperties}>
             <ComponentWithError message={message} />
@@ -100,7 +100,7 @@ function RenderWithError({ message = 'Error', fallback, additionalProperties }) 
     )
 }
 
-function RenderWithoutError({ additionalProperties }) {
+function RenderWithoutError({ additionalProperties }: any) {
     return (
         <PostHogErrorBoundary fallback={<div></div>} additionalProperties={additionalProperties}>
             <div>Amazing content</div>
