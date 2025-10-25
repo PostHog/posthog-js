@@ -700,10 +700,35 @@ export function generateSurveys(posthog: PostHog, isSurveysEnabled: boolean | un
 
     surveyManager.callSurveysAndEvaluateDisplayLogic(true)
 
-    // recalculate surveys every second to check if URL or selectors have changed
-    setInterval(() => {
-        surveyManager.callSurveysAndEvaluateDisplayLogic(false)
-    }, 1000)
+    let intervalId: number | undefined
+
+    const startInterval = () => {
+        if (!isUndefined(intervalId)) {
+            return
+        }
+        intervalId = setInterval(() => {
+            surveyManager.callSurveysAndEvaluateDisplayLogic(false)
+        }, 1000) as unknown as number
+    }
+
+    const stopInterval = () => {
+        if (!isUndefined(intervalId)) {
+            clearInterval(intervalId)
+            intervalId = undefined
+        }
+    }
+
+    startInterval()
+
+    addEventListener(document, 'visibilitychange', () => {
+        if (document.hidden) {
+            stopInterval()
+        } else {
+            surveyManager.callSurveysAndEvaluateDisplayLogic(false)
+            startInterval()
+        }
+    })
+
     return surveyManager
 }
 
