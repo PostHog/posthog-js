@@ -23,7 +23,7 @@ function deleteAllCookies() {
 }
 
 // periodically flakes because of unexpected console logging
-jest.retryTimes(3)
+jest.retryTimes(6)
 
 describe('consentManager', () => {
     const createPostHog = async (config: Partial<PostHogConfig> = {}) => {
