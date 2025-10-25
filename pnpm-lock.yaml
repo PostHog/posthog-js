@@ -514,20 +514,17 @@ importers:
         specifier: ^2.3.4
         version: 2.4.2(rollup@2.79.2)
       '@testing-library/jest-dom':
-        specifier: ^5.16.5
-        version: 5.17.0
+        specifier: ^6.9.1
+        version: 6.9.1
       '@testing-library/react':
         specifier: ^11.2.2
         version: 11.2.7(react-dom@17.0.2(react@17.0.2))(react@17.0.2)
       '@testing-library/react-hooks':
-        specifier: ^3.7.0
-        version: 3.7.0(react-test-renderer@17.0.2(react@17.0.2))(react@17.0.2)
+        specifier: ^8.0.1
+        version: 8.0.1(@types/react@17.0.87)(react-dom@17.0.2(react@17.0.2))(react-test-renderer@17.0.2(react@17.0.2))(react@17.0.2)
       '@types/react':
         specifier: ^17.0.0
         version: 17.0.87
-      '@types/testing-library__react-hooks':
-        specifier: ^4.0.0
-        version: 4.0.0(react-test-renderer@17.0.2(react@17.0.2))(react@17.0.2)
       cross-env:
         specifier: ^7.0.3
         version: 7.0.3
@@ -3898,12 +3895,12 @@ packages:
     resolution: {integrity: sha512-Dffe68pGwI6WlLRYR2I0piIkyole9cSBH5jGQKCGMRpHW5RHCqAUaqc2Kv0tUyd4dU4DLPKhJIjyKOnjv4tuUw==}
     engines: {node: '>=14'}
 
-  '@testing-library/jest-dom@5.17.0':
-    resolution: {integrity: sha512-ynmNeT7asXyH3aSVv4vvX4Rb+0qjOhdNHnO/3vuZNqPmhDpV/+rCSGwQ7bLcmU2cJ4dvoheIO85LQj0IbJHEtg==}
-    engines: {node: '>=8', npm: '>=6', yarn: '>=1'}
-
   '@testing-library/jest-dom@6.5.0':
     resolution: {integrity: sha512-xGGHpBXYSHUUr6XsKBfs85TWlYKpTc37cSBBVrXcib2MkHLboWlkClhWF37JKlDb9KEq3dHs+f2xR7XJEWGBxA==}
+    engines: {node: '>=14', npm: '>=6', yarn: '>=1'}
+
+  '@testing-library/jest-dom@6.9.1':
+    resolution: {integrity: sha512-zIcONa+hVtVSSep9UT3jZ5rizo2BsxgyDYU7WFD5eICBE7no3881HGeb/QkGfsJs6JTkY1aQhT7rIPC7e+0nnA==}
     engines: {node: '>=14', npm: '>=6', yarn: '>=1'}
 
   '@testing-library/preact@3.2.4':
@@ -3912,11 +3909,21 @@ packages:
     peerDependencies:
       preact: '>=10 || ^10.0.0-alpha.0 || ^10.0.0-beta.0'
 
-  '@testing-library/react-hooks@3.7.0':
-    resolution: {integrity: sha512-TwfbY6BWtWIHitjT05sbllyLIProcysC0dF0q1bbDa7OHLC6A6rJOYJwZ13hzfz3O4RtOuInmprBozJRyyo7/g==}
+  '@testing-library/react-hooks@8.0.1':
+    resolution: {integrity: sha512-Aqhl2IVmLt8IovEVarNDFuJDVWVvhnr9/GCU6UUnrYXwgDFF9h2L2o2P9KBni1AST5sT6riAyoukFLyjQUgD/g==}
+    engines: {node: '>=12'}
     peerDependencies:
-      react: '>=16.9.0'
-      react-test-renderer: '>=16.9.0'
+      '@types/react': ^16.9.0 || ^17.0.0
+      react: ^16.9.0 || ^17.0.0
+      react-dom: ^16.9.0 || ^17.0.0
+      react-test-renderer: ^16.9.0 || ^17.0.0
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      react-dom:
+        optional: true
+      react-test-renderer:
+        optional: true
 
   '@testing-library/react@11.2.7':
     resolution: {integrity: sha512-tzRNp7pzd5QmbtXNG/mhdcl7Awfu/Iz1RaVHY75zTdOkmHCuzMhRL83gWHSgOAcjS3CCbyfwUHMZgRJb4kAfpA==}
@@ -4082,9 +4089,6 @@ packages:
   '@types/react-native@0.69.26':
     resolution: {integrity: sha512-K11OWz8SU3Eill/EUhma54qOeczUjIhTlV1Luv2BODawPsM8nCVJkWaAUCqJaMFrcIKUTH0KIYUzUjqWlRUNfw==}
 
-  '@types/react-test-renderer@19.1.0':
-    resolution: {integrity: sha512-XD0WZrHqjNrxA/MaR9O22w/RNidWR9YZmBdRGI7wcnWGrv/3dA8wKCJ8m63Sn+tLJhcjmuhOi629N66W6kgWzQ==}
-
   '@types/react@17.0.87':
     resolution: {integrity: sha512-wpg9AbtJ6agjA+BKYmhG6dRWEU/2DHYwMzCaBzsz137ft6IyuqZ5fI4ic1DWL4DrI03Zy78IyVE6ucrXl0mu4g==}
 
@@ -4111,16 +4115,6 @@ packages:
 
   '@types/stack-utils@2.0.1':
     resolution: {integrity: sha512-Hl219/BT5fLAaz6NDkSuhzasy49dwQS/DSdu4MdggFB8zcXv7vflBI3xp7FEmkmdDkBUI2bPUNeMttp2knYdxw==}
-
-  '@types/testing-library__jest-dom@5.14.9':
-    resolution: {integrity: sha512-FSYhIjFlfOpGSRyVoMBMuS3ws5ehFQODymf3vlI7U1K8c7PHwWwFY7VREfmsuzHSOnoKs/9/Y983ayOs7eRzqw==}
-
-  '@types/testing-library__react-hooks@3.4.1':
-    resolution: {integrity: sha512-G4JdzEcq61fUyV6wVW9ebHWEiLK2iQvaBuCHHn9eMSbZzVh4Z4wHnUGIvQOYCCYeu5DnUtFyNYuAAgbSaO/43Q==}
-
-  '@types/testing-library__react-hooks@4.0.0':
-    resolution: {integrity: sha512-UzZUXthQtVjDruR2YA+hqg9ux5AfmZ8Kaw+QDungax+T7wb/5NC4x7YOpIqRx7oY3KksGQ69bzNE/xwzb5NslQ==}
-    deprecated: This is a stub types definition. @testing-library/react-hooks provides its own type definitions, so you do not need this installed.
 
   '@types/tough-cookie@4.0.5':
     resolution: {integrity: sha512-/Ad8+nIOV7Rl++6f1BdKxFSMgmoqEoYbHRpPcx3JEfv8VRsQe9Z4mCXeJBzxs7mbHY/XOZZuXlRNfhpVPbs6ZA==}
@@ -10725,6 +10719,12 @@ packages:
     resolution: {integrity: sha512-5m4nQKp+rZRb09LNH59GM4BxTh9251/ylbKIbpe7TpGxfJ+9kv6BLkLBXIjjspbgbnIBNqlI23tRnTWT0snUIw==}
     peerDependencies:
       react: ^18.3.1
+
+  react-error-boundary@3.1.4:
+    resolution: {integrity: sha512-uM9uPzZJTF6wRQORmSrvOIgt4lJ9MC1sNgEOj2XGsDTRE4kmpWxg7ENK9EWNKJRMAOY9z0MuF4yIfl6gp4sotA==}
+    engines: {node: '>=10', npm: '>=6'}
+    peerDependencies:
+      react: '>=16.13.1'
 
   react-is@16.13.1:
     resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
@@ -17679,18 +17679,6 @@ snapshots:
       lz-string: 1.5.0
       pretty-format: 27.5.1
 
-  '@testing-library/jest-dom@5.17.0':
-    dependencies:
-      '@adobe/css-tools': 4.4.0
-      '@babel/runtime': 7.13.9
-      '@types/testing-library__jest-dom': 5.14.9
-      aria-query: 5.1.3
-      chalk: 3.0.0
-      css.escape: 1.5.1
-      dom-accessibility-api: 0.5.16
-      lodash: 4.17.21
-      redent: 3.0.0
-
   '@testing-library/jest-dom@6.5.0':
     dependencies:
       '@adobe/css-tools': 4.4.0
@@ -17701,16 +17689,28 @@ snapshots:
       lodash: 4.17.21
       redent: 3.0.0
 
+  '@testing-library/jest-dom@6.9.1':
+    dependencies:
+      '@adobe/css-tools': 4.4.0
+      aria-query: 5.1.3
+      css.escape: 1.5.1
+      dom-accessibility-api: 0.6.3
+      picocolors: 1.1.1
+      redent: 3.0.0
+
   '@testing-library/preact@3.2.4(preact@10.19.3)':
     dependencies:
       '@testing-library/dom': 8.20.1
       preact: 10.19.3
 
-  '@testing-library/react-hooks@3.7.0(react-test-renderer@17.0.2(react@17.0.2))(react@17.0.2)':
+  '@testing-library/react-hooks@8.0.1(@types/react@17.0.87)(react-dom@17.0.2(react@17.0.2))(react-test-renderer@17.0.2(react@17.0.2))(react@17.0.2)':
     dependencies:
-      '@babel/runtime': 7.13.9
-      '@types/testing-library__react-hooks': 3.4.1
+      '@babel/runtime': 7.27.6
       react: 17.0.2
+      react-error-boundary: 3.1.4(react@17.0.2)
+    optionalDependencies:
+      '@types/react': 17.0.87
+      react-dom: 17.0.2(react@17.0.2)
       react-test-renderer: 17.0.2(react@17.0.2)
 
   '@testing-library/react@11.2.7(react-dom@17.0.2(react@17.0.2))(react@17.0.2)':
@@ -17885,10 +17885,6 @@ snapshots:
     dependencies:
       '@types/react': 17.0.87
 
-  '@types/react-test-renderer@19.1.0':
-    dependencies:
-      '@types/react': 17.0.87
-
   '@types/react@17.0.87':
     dependencies:
       '@types/prop-types': 15.7.5
@@ -17914,21 +17910,6 @@ snapshots:
   '@types/sinonjs__fake-timers@8.1.5': {}
 
   '@types/stack-utils@2.0.1': {}
-
-  '@types/testing-library__jest-dom@5.14.9':
-    dependencies:
-      '@types/jest': 28.1.8
-
-  '@types/testing-library__react-hooks@3.4.1':
-    dependencies:
-      '@types/react-test-renderer': 19.1.0
-
-  '@types/testing-library__react-hooks@4.0.0(react-test-renderer@17.0.2(react@17.0.2))(react@17.0.2)':
-    dependencies:
-      '@testing-library/react-hooks': 3.7.0(react-test-renderer@17.0.2(react@17.0.2))(react@17.0.2)
-    transitivePeerDependencies:
-      - react
-      - react-test-renderer
 
   '@types/tough-cookie@4.0.5': {}
 
@@ -26370,6 +26351,11 @@ snapshots:
       loose-envify: 1.4.0
       react: 18.2.0
       scheduler: 0.23.2
+
+  react-error-boundary@3.1.4(react@17.0.2):
+    dependencies:
+      '@babel/runtime': 7.27.6
+      react: 17.0.2
 
   react-is@16.13.1: {}
 
