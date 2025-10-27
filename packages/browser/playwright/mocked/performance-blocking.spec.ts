@@ -1,6 +1,6 @@
 import { expect, test } from './utils/posthog-playwright-test-base'
 import { gotoPage } from './utils/setup'
-import { formatMetricsForDisplay, PerformanceMetrics } from './utils/performance-utils'
+import { PerformanceMetrics } from './utils/performance-utils'
 import { pollUntilEventCaptured } from './utils/event-capture-utils'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -217,72 +217,57 @@ async function measurePostHogBlockingTime(
     return metrics
 }
 
-function writePerformanceResults(metrics: PerformanceMetrics, scenario: string, title: string): void {
-    if (!process.env.CI) {
-        return
-    }
-
+function writeMetrics(scenario: string, metrics: PerformanceMetrics): void {
     const outputDir = path.resolve(process.cwd(), 'performance-results')
-
     if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir, { recursive: true })
     }
 
-    const jsonData = {
-        ...metrics,
-        scenario,
-        threshold: BLOCKING_TIME_THRESHOLD_MS,
-        passed: metrics.totalBlockingTime <= BLOCKING_TIME_THRESHOLD_MS,
-        timestamp: new Date().toISOString(),
-    }
-
-    fs.writeFileSync(path.join(outputDir, `performance-metrics-${scenario}.json`), JSON.stringify(jsonData, null, 2))
-
-    const markdown = `# ${title}\n\n${formatMetricsForDisplay(metrics, BLOCKING_TIME_THRESHOLD_MS)}`
-    fs.writeFileSync(path.join(outputDir, `performance-report-${scenario}.md`), markdown)
+    fs.writeFileSync(
+        path.join(outputDir, `performance-metrics-${scenario}.json`),
+        JSON.stringify(
+            {
+                ...metrics,
+                scenario,
+                threshold: BLOCKING_TIME_THRESHOLD_MS,
+                passed: metrics.totalBlockingTime <= BLOCKING_TIME_THRESHOLD_MS,
+                timestamp: new Date().toISOString(),
+            },
+            null,
+            2
+        )
+    )
 }
 
 test.describe('PostHog Performance - Main Thread Blocking', () => {
-    test('measures time until main thread is quiet after PostHog loads', async ({ page, context }) => {
-        const startTime = performance.now()
+    test.skip(({ browserName }) => browserName !== 'chromium', 'Performance tests only run on Chromium')
 
-        await page.waitingForNetworkCausedBy({
-            urlPatternsToWaitFor: ['**/*recorder.js*'],
-            action: async () => {
-                await measurePostHogBlockingTime(page, context, {}, true)
-            },
-        })
+    test('measures blocking time with session recording', async ({ page, context }) => {
+        const recorderPromise = page.waitForResponse((response) => response.url().includes('recorder'))
 
-        await pollUntilEventCaptured(page, '$pageview')
-
-        await page.resetCapturedEvents()
-
-        const sessionRecordingPromise = page.waitForResponse((response) => {
-            return response.url().includes('/ses/') && response.status() === 200
-        })
+        const fullMetrics = await measurePostHogBlockingTime(page, context, {}, true)
 
         await page.locator('#test-button').click()
+        await pollUntilEventCaptured(page, '$snapshot')
 
-        await sessionRecordingPromise
+        // Get recorder download timing from browser performance API
+        const recorderDownloadTime = await page.evaluate(() => {
+            const recorderEntry = performance
+                .getEntriesByType('resource')
+                .find((entry) => entry.name.includes('recorder')) as PerformanceResourceTiming | undefined
 
-        const actualTimeToWorking = Math.round(performance.now() - startTime)
+            return recorderEntry ? Math.round(recorderEntry.duration) : undefined
+        })
 
-        const enhancedMetrics = {
-            ...(await page.evaluate(() => {
-                return (window as any).__performanceMetrics
-            })),
-            actualTimeToWorking,
-        }
+        await recorderPromise
 
-        writePerformanceResults(enhancedMetrics, 'full', 'PostHog Performance - Full Configuration')
+        expect(fullMetrics.totalBlockingTime).toBeLessThanOrEqual(BLOCKING_TIME_THRESHOLD_MS)
 
-        expect(enhancedMetrics.totalBlockingTime).toBeLessThanOrEqual(BLOCKING_TIME_THRESHOLD_MS)
+        writeMetrics('full', { ...fullMetrics, recorderDownloadTime })
     })
 
     test('measures blocking time without replay', async ({ page, context }) => {
-        const startTime = performance.now()
-
-        const metrics = await measurePostHogBlockingTime(
+        const noReplayMetrics = await measurePostHogBlockingTime(
             page,
             context,
             {
@@ -291,19 +276,12 @@ test.describe('PostHog Performance - Main Thread Blocking', () => {
             false
         )
 
+        // Verify events are being captured
         await pollUntilEventCaptured(page, '$pageview')
-
-        const actualTimeToWorking = Math.round(performance.now() - startTime)
-
-        const enhancedMetrics = {
-            ...metrics,
-            actualTimeToWorking,
-        }
-
-        writePerformanceResults(enhancedMetrics, 'no-replay', 'PostHog Performance - Without Session Replay')
-
         await page.expectCapturedEventsToBe(['$pageview'])
 
-        expect(metrics.totalBlockingTime).toBeLessThanOrEqual(BLOCKING_TIME_THRESHOLD_MS)
+        expect(noReplayMetrics.totalBlockingTime).toBeLessThanOrEqual(BLOCKING_TIME_THRESHOLD_MS)
+
+        writeMetrics('no-replay', noReplayMetrics)
     })
 })

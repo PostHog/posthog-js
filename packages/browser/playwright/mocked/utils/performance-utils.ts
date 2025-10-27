@@ -12,6 +12,7 @@ export interface PerformanceMetrics {
     longestTaskDuration: number
     timeToQuiet: number
     tasks: LongTask[]
+    recorderDownloadTime?: number
 }
 
 const QUIET_WINDOW_MS = 500
@@ -108,56 +109,4 @@ async function waitForMainThreadQuiet(page: Page, maxWaitMs: number = 10000): Pr
         timeToQuiet: Math.round(lastTaskEndTime - performanceStartTime),
         tasks,
     }
-}
-
-export function formatMetricsForDisplay(metrics: PerformanceMetrics, threshold: number): string {
-    const passed = metrics.totalBlockingTime <= threshold
-    const status = passed ? '✅ PASS' : '❌ FAIL'
-    const extendedMetrics = metrics as PerformanceMetrics & {
-        observerSupported?: boolean
-        scriptLoadTime?: number
-        initTime?: number
-        actualTimeToWorking?: number
-    }
-
-    let output = `## Performance Test Results ${status}\n\n`
-    output += `| Metric | Value | Threshold |\n`
-    output += `|--------|-------|----------|\n`
-    output += `| Total Blocking Time | ${metrics.totalBlockingTime}ms | ${threshold}ms |\n`
-    output += `| Long Tasks Count | ${metrics.longTaskCount} | - |\n`
-    output += `| Longest Task | ${metrics.longestTaskDuration}ms | - |\n`
-    output += `| Time to Quiet | ${metrics.timeToQuiet}ms | - |\n`
-
-    if (extendedMetrics.scriptLoadTime !== undefined) {
-        output += `| Script Load Time | ${extendedMetrics.scriptLoadTime}ms | - |\n`
-    }
-    if (extendedMetrics.initTime !== undefined) {
-        output += `| PostHog Init Time | ${extendedMetrics.initTime}ms | - |\n`
-    }
-    if (extendedMetrics.actualTimeToWorking !== undefined) {
-        output += `| **Time Until Working** | **${extendedMetrics.actualTimeToWorking}ms** | - |\n`
-    }
-
-    output += `\n`
-
-    if (extendedMetrics.observerSupported === false) {
-        output += `> **Note:** Long Tasks API not available in this environment. Measurements based on actual script execution timing.\n\n`
-    }
-
-    if (extendedMetrics.actualTimeToWorking !== undefined) {
-        output += `> **"Time Until Working"** includes waiting for $pageview event and session recording to start.\n\n`
-    }
-
-    if (metrics.tasks.length > 0) {
-        output += `### Long Tasks Timeline\n\n`
-        output += `| Start Time | Duration | Blocking Time |\n`
-        output += `|------------|----------|---------------|\n`
-        metrics.tasks.forEach((task) => {
-            output += `| ${Math.round(task.startTime)}ms | ${Math.round(task.duration)}ms | ${Math.round(task.blockingTime)}ms |\n`
-        })
-    } else if (metrics.totalBlockingTime === 0) {
-        output += `✨ **Excellent!** PostHog loads without blocking the main thread (< 50ms execution time).\n`
-    }
-
-    return output
 }

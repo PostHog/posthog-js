@@ -20,7 +20,7 @@ jobs:
 
   integration:
     name: Playwright E2E tests
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest-8
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,7 +47,8 @@ jobs:
 
       - name: Run Playwright tests
         if: steps.is-affected.outputs.is-affected == 'true'
-        run: pnpm exec playwright test
+        # there are hundreds of tests across 3 browsers, let's run as many workers as we can get away with
+        run: pnpm exec playwright test --workers=5
         working-directory: packages/browser
 
       - uses: actions/upload-artifact@v4
@@ -119,28 +120,40 @@ jobs:
 
       - name: Post performance results to PR
         uses: actions/github-script@v7
-        if: ${{ hashFiles('performance-results/performance-report-*.md') != '' }}
+        if: ${{ hashFiles('performance-results/performance-metrics-*.json') != '' }}
         with:
           script: |
             const fs = require('fs');
             const path = require('path');
 
-            const fullReportPath = path.join('performance-results', 'performance-report-full.md');
-            const noReplayReportPath = path.join('performance-results', 'performance-report-no-replay.md');
+            const fullMetricsPath = path.join('performance-results', 'performance-metrics-full.json');
+            const noReplayMetricsPath = path.join('performance-results', 'performance-metrics-no-replay.json');
 
-            if (!fs.existsSync(fullReportPath) && !fs.existsSync(noReplayReportPath)) {
-              console.log('No performance reports found, skipping comment');
+            if (!fs.existsSync(fullMetricsPath) || !fs.existsSync(noReplayMetricsPath)) {
+              console.log('Missing performance metrics files, skipping comment');
               return;
             }
 
-            let report = '';
+            const fullMetrics = JSON.parse(fs.readFileSync(fullMetricsPath, 'utf8'));
+            const noReplayMetrics = JSON.parse(fs.readFileSync(noReplayMetricsPath, 'utf8'));
 
-            if (fs.existsSync(fullReportPath)) {
-              report += fs.readFileSync(fullReportPath, 'utf8') + '\n\n';
+            function formatMetric(scenario, metrics) {
+              const recorderTime = metrics.recorderDownloadTime !== undefined ? `${metrics.recorderDownloadTime}ms` : 'N/A';
+              return `| ${scenario} | ${metrics.totalBlockingTime}ms | ${metrics.longTaskCount} | ${metrics.longestTaskDuration}ms | ${metrics.timeToQuiet}ms | ${metrics.scriptLoadTime || 'N/A'}ms | ${metrics.initTime || 'N/A'}ms | ${recorderTime} |`;
             }
 
-            if (fs.existsSync(noReplayReportPath)) {
-              report += fs.readFileSync(noReplayReportPath, 'utf8');
+            let report = `## 🦔 PostHog Performance Metrics\n\n`;
+            report += `| Configuration | Total Blocking Time | Long Tasks | Longest Task | Init Time | Script Load | PostHog Init | Recorder Download |\n`;
+            report += `|---------------|---------------------|------------|--------------|-----------|-------------|-------------|-------------------|\n`;
+            report += formatMetric('Full (with replay)', fullMetrics) + '\n';
+            report += formatMetric('Without replay', noReplayMetrics) + '\n\n';
+
+            if (fullMetrics.observerSupported === false) {
+              report += `> **Note:** Long Tasks API not available in Playwright. Measurements based on actual script execution timing.\n\n`;
+            }
+
+            if (fullMetrics.totalBlockingTime === 0 && noReplayMetrics.totalBlockingTime === 0) {
+              report += `✨ PostHog loads without blocking the main thread.\n`;
             }
 
             const { data: comments } = await github.rest.issues.listComments({
@@ -150,8 +163,7 @@ jobs:
             });
 
             const botComment = comments.find(comment =>
-              comment.user.type === 'Bot' &&
-              comment.body.includes('Performance Test Results')
+              comment.body && comment.body.includes('PostHog Performance Metrics')
             );
 
             const commentBody = `${report}\n\n_Performance test run on commit ${context.sha.substring(0, 7)}_`;
@@ -174,6 +186,8 @@ jobs:
 
   track-performance:
     name: Track Performance Metrics
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     needs: integration
     if: ${{ always() && github.repository == 'PostHog/posthog-js' }}
@@ -203,7 +217,7 @@ jobs:
                 "run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
                 "workflow": "${{ github.workflow }}",
                 "event_type": "${{ github.event_name }}",
-                "pr_number": "${{ github.event.pull_request.number || \"\" }}"
+                "pr_number": ${{ github.event.pull_request.number || 'null' }}
               }')
 
               echo "METRICS_PROPERTIES_${scenario}=${properties}" >> $GITHUB_ENV
