@@ -2,7 +2,6 @@ import nextPackage from 'next/package.json' with { type: 'json' }
 import semver from 'semver'
 import { PostHogNextConfigComplete } from './config'
 import { spawnLocal } from '@posthog/core/process'
-import nextJS from 'next/package.json'
 
 export function getNextJsVersion(): string {
   return nextPackage.version
@@ -57,6 +56,6 @@ export function isTurbopackEnabled(): boolean {
 }
 
 function isTurbopackDefault(): boolean {
-  const [major] = nextJS.version.split('.')
-  return Number(major) >= 16
+  const nextJsVersion = getNextJsVersion()
+  return semver.gte(nextJsVersion, '16.0.0')
 }
