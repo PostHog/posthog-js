@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PostHog Performance Test Page</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .hero {
+            width: 100%;
+            height: 400px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 2em;
+            margin-bottom: 40px;
+            border-radius: 8px;
+        }
+        .product-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .product-table th {
+            background-color: #667eea;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+        .product-table td {
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+        }
+        .product-table tr:hover {
+            background-color: #f5f5f5;
+        }
+        .price {
+            font-weight: bold;
+            color: #667eea;
+        }
+        .in-stock {
+            color: green;
+        }
+        .low-stock {
+            color: orange;
+        }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <h1>🦔 Premium Hedgehog Trousers Collection</h1>
+    </div>
+
+    <h2>Featured Products</h2>
+    <p>Discover our exclusive range of artisanal hedgehog trousers, handcrafted for the discerning spiny mammal.</p>
+
+    <table class="product-table">
+        <thead>
+            <tr>
+                <th>Product Name</th>
+                <th>Material</th>
+                <th>Size</th>
+                <th>Price</th>
+                <th>Stock Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Classic Denim Hedgehog Jeans</td>
+                <td>100% Organic Cotton</td>
+                <td>Extra Small</td>
+                <td class="price">$49.99</td>
+                <td class="in-stock">In Stock (127)</td>
+            </tr>
+            <tr>
+                <td>Velvet Evening Trousers</td>
+                <td>Premium Velvet</td>
+                <td>Small</td>
+                <td class="price">$89.99</td>
+                <td class="in-stock">In Stock (43)</td>
+            </tr>
+            <tr>
+                <td>Waterproof Adventure Pants</td>
+                <td>Gore-Tex Blend</td>
+                <td>Medium</td>
+                <td class="price">$124.99</td>
+                <td class="low-stock">Low Stock (8)</td>
+            </tr>
+            <tr>
+                <td>Breathable Summer Shorts</td>
+                <td>Linen Mix</td>
+                <td>Small</td>
+                <td class="price">$34.99</td>
+                <td class="in-stock">In Stock (215)</td>
+            </tr>
+            <tr>
+                <td>Formal Tuxedo Trousers</td>
+                <td>Silk Blend</td>
+                <td>Extra Small</td>
+                <td class="price">$149.99</td>
+                <td class="low-stock">Low Stock (3)</td>
+            </tr>
+            <tr>
+                <td>Cozy Winter Corduroys</td>
+                <td>Thick Corduroy</td>
+                <td>Medium</td>
+                <td class="price">$67.99</td>
+                <td class="in-stock">In Stock (89)</td>
+            </tr>
+            <tr>
+                <td>Athletic Performance Joggers</td>
+                <td>Moisture-Wicking Fabric</td>
+                <td>Small</td>
+                <td class="price">$54.99</td>
+                <td class="in-stock">In Stock (156)</td>
+            </tr>
+            <tr>
+                <td>Vintage Leather Breeches</td>
+                <td>Genuine Leather</td>
+                <td>Extra Small</td>
+                <td class="price">$199.99</td>
+                <td class="low-stock">Low Stock (2)</td>
+            </tr>
+            <tr>
+                <td>Eco-Friendly Bamboo Pants</td>
+                <td>Bamboo Fiber</td>
+                <td>Medium</td>
+                <td class="price">$44.99</td>
+                <td class="in-stock">In Stock (302)</td>
+            </tr>
+            <tr>
+                <td>Designer Cargo Trousers</td>
+                <td>Canvas Blend</td>
+                <td>Small</td>
+                <td class="price">$79.99</td>
+                <td class="in-stock">In Stock (67)</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div id="content">
+        <h3>Product Actions</h3>
+        <button id="test-button">Add to Cart</button>
+        <input id="test-input" placeholder="Search products..." />
+    </div>
+
+    <script>
+        window.__posthogPerformanceTest = {
+            scriptInjected: false,
+            scriptLoaded: false
+        };
+    </script>
+</body>
+</html>

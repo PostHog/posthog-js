@@ -9,7 +9,7 @@ on:
 jobs:
   unit:
     name: Unit tests
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -20,7 +20,7 @@ jobs:
 
   integration:
     name: Playwright E2E tests
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,9 +57,16 @@ jobs:
           path: packages/browser/playwright-report/
           retention-days: 30
 
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.is-affected.outputs.is-affected == 'true' }}
+        with:
+          name: performance-results
+          path: packages/browser/performance-results/
+          retention-days: 30
+
   functional:
     name: Functional tests
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Setup environment
@@ -70,7 +77,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Setup environment
@@ -80,7 +87,7 @@ jobs:
 
   write-mangled-property-names:
     name: Write mangled property names
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -95,3 +102,126 @@ jobs:
           WRITE_MANGLED_PROPERTIES: 1
 
       - run: git diff --exit-code # fail if e.g. the mangled properties list has changed, see rollup.config.js
+
+  performance-report:
+    name: Performance Report
+    runs-on: ubuntu-latest
+    needs: integration
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: performance-results
+          path: performance-results
+
+      - name: Post performance results to PR
+        uses: actions/github-script@v7
+        if: ${{ hashFiles('performance-results/performance-report-*.md') != '' }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const fullReportPath = path.join('performance-results', 'performance-report-full.md');
+            const noReplayReportPath = path.join('performance-results', 'performance-report-no-replay.md');
+
+            if (!fs.existsSync(fullReportPath) && !fs.existsSync(noReplayReportPath)) {
+              console.log('No performance reports found, skipping comment');
+              return;
+            }
+
+            let report = '';
+
+            if (fs.existsSync(fullReportPath)) {
+              report += fs.readFileSync(fullReportPath, 'utf8') + '\n\n';
+            }
+
+            if (fs.existsSync(noReplayReportPath)) {
+              report += fs.readFileSync(noReplayReportPath, 'utf8');
+            }
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('Performance Test Results')
+            );
+
+            const commentBody = `${report}\n\n_Performance test run on commit ${context.sha.substring(0, 7)}_`;
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: commentBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: commentBody,
+              });
+            }
+
+  track-performance:
+    name: Track Performance Metrics
+    runs-on: ubuntu-latest
+    needs: integration
+    if: ${{ always() && github.repository == 'PostHog/posthog-js' }}
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: performance-results
+          path: performance-results
+
+      - name: Send performance metrics to PostHog
+        if: ${{ hashFiles('performance-results/performance-metrics-*.json') != '' }}
+        run: |
+          for metrics_file in performance-results/performance-metrics-*.json; do
+            if [ -f "$metrics_file" ]; then
+              echo "Processing $metrics_file"
+
+              # Extract scenario from filename
+              scenario=$(basename "$metrics_file" | sed 's/performance-metrics-\(.*\)\.json/\1/')
+
+              # Read metrics and add context
+              properties=$(cat "$metrics_file" | jq -c '. + {
+                "repository": "${{ github.repository }}",
+                "branch": "${{ github.ref_name }}",
+                "commit_sha": "${{ github.sha }}",
+                "run_id": "${{ github.run_id }}",
+                "run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                "workflow": "${{ github.workflow }}",
+                "event_type": "${{ github.event_name }}",
+                "pr_number": "${{ github.event.pull_request.number || \"\" }}"
+              }')
+
+              echo "METRICS_PROPERTIES_${scenario}=${properties}" >> $GITHUB_ENV
+            fi
+          done
+
+      - name: Capture full configuration metrics to PostHog
+        if: ${{ hashFiles('performance-results/performance-metrics-full.json') != '' }}
+        uses: PostHog/posthog-github-action@v0.1
+        with:
+          posthog-token: ${{ secrets.POSTHOG_API_TOKEN }}
+          event: 'posthog-js-performance-measurement'
+          properties: ${{ env.METRICS_PROPERTIES_full }}
+
+      - name: Capture no-replay configuration metrics to PostHog
+        if: ${{ hashFiles('performance-results/performance-metrics-no-replay.json') != '' }}
+        uses: PostHog/posthog-github-action@v0.1
+        with:
+          posthog-token: ${{ secrets.POSTHOG_API_TOKEN }}
+          event: 'posthog-js-performance-measurement'
+          properties: ${{ env.METRICS_PROPERTIES_no-replay }}

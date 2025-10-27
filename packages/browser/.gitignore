@@ -37,3 +37,4 @@ cypress/downloads/downloads.html
 
 react/sync.js
 react/dist
+/performance-results/
