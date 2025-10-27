@@ -1,5 +1,11 @@
 # @posthog/core
 
+## 1.4.0
+
+### Minor Changes
+
+- [#2502](https://github.com/PostHog/posthog-js/pull/2502) [`751b440`](https://github.com/PostHog/posthog-js/commit/751b44040c4c0c55a19df2ad0e5f215943620e51) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: bucketed rate limiter can calculate tokens without a timer
+
 ## 1.3.1
 
 ### Patch Changes

@@ -1,5 +1,18 @@
 # posthog-js
 
+## 1.281.0
+
+### Minor Changes
+
+- [#2502](https://github.com/PostHog/posthog-js/pull/2502) [`751b440`](https://github.com/PostHog/posthog-js/commit/751b44040c4c0c55a19df2ad0e5f215943620e51) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: bucketed rate limiter can calculate tokens without a timer
+
+### Patch Changes
+
+- [#2500](https://github.com/PostHog/posthog-js/pull/2500) [`71ae0d2`](https://github.com/PostHog/posthog-js/commit/71ae0d2a55cbf69a2b60ac3ee29906f379408898) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: don't poll surveys while the page is hidden
+
+- Updated dependencies [[`751b440`](https://github.com/PostHog/posthog-js/commit/751b44040c4c0c55a19df2ad0e5f215943620e51)]:
+    - @posthog/core@1.4.0
+
 ## 1.280.1
 
 ### Patch Changes
