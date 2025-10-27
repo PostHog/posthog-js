@@ -21,35 +21,16 @@ const FEATURE_FLAG_PAYLOADS = {
 }
 
 describe('PostHogFeature component', () => {
-    given('featureFlag', () => 'test')
-    given('matchValue', () => true)
-    given(
-        'render',
-        () => () =>
-            render(
-                <PostHogProvider client={given.posthog}>
-                    <PostHogFeature flag={given.featureFlag} match={given.matchValue}>
-                        <div data-testid="helloDiv">Hello</div>
-                    </PostHogFeature>
-                </PostHogProvider>
-            )
-    )
-    given('posthog', () => ({
-        isFeatureEnabled: (flag) => !!FEATURE_FLAG_STATUS[flag],
-        getFeatureFlag: (flag) => FEATURE_FLAG_STATUS[flag],
-        getFeatureFlagPayload: (flag) => FEATURE_FLAG_PAYLOADS[flag],
-        onFeatureFlags: (callback) => {
-            const activeFlags = []
-            for (const flag in FEATURE_FLAG_STATUS) {
-                if (FEATURE_FLAG_STATUS[flag]) {
-                    activeFlags.push(flag)
-                }
-            }
-            callback(activeFlags)
-            return () => {}
-        },
-        capture: jest.fn(),
-    }))
+    let posthog
+
+    const renderWith = (instance, flag = 'test', matchValue = true) =>
+        render(
+            <PostHogProvider client={instance}>
+                <PostHogFeature flag={flag} match={matchValue}>
+                    <div data-testid="helloDiv">Hello</div>
+                </PostHogFeature>
+            </PostHogProvider>
+        )
 
     beforeEach(() => {
         // IntersectionObserver isn't available in test environment
@@ -62,83 +43,90 @@ describe('PostHogFeature component', () => {
 
         // eslint-disable-next-line compat/compat
         window.IntersectionObserver = mockIntersectionObserver
+
+        posthog = {
+            isFeatureEnabled: (flag) => !!FEATURE_FLAG_STATUS[flag],
+            getFeatureFlag: (flag) => FEATURE_FLAG_STATUS[flag],
+            getFeatureFlagPayload: (flag) => FEATURE_FLAG_PAYLOADS[flag],
+            onFeatureFlags: (callback) => {
+                const activeFlags = []
+                for (const flag in FEATURE_FLAG_STATUS) {
+                    if (FEATURE_FLAG_STATUS[flag]) {
+                        activeFlags.push(flag)
+                    }
+                }
+                callback(activeFlags)
+                return () => {}
+            },
+            capture: jest.fn(),
+        }
     })
 
     it('should track interactions with the feature component', () => {
-        given.render()
+        renderWith(posthog)
 
         fireEvent.click(screen.getByTestId('helloDiv'))
-        expect(given.posthog.capture).toHaveBeenCalledWith('$feature_interaction', {
+        expect(posthog.capture).toHaveBeenCalledWith('$feature_interaction', {
             feature_flag: 'test',
             $set: { '$feature_interaction/test': true },
         })
-        expect(given.posthog.capture).toHaveBeenCalledTimes(1)
+        expect(posthog.capture).toHaveBeenCalledTimes(1)
     })
 
     it('should not fire for every interaction with the feature component', () => {
-        given.render()
+        renderWith(posthog)
 
         fireEvent.click(screen.getByTestId('helloDiv'))
-        expect(given.posthog.capture).toHaveBeenCalledWith('$feature_interaction', {
+        expect(posthog.capture).toHaveBeenCalledWith('$feature_interaction', {
             feature_flag: 'test',
             $set: { '$feature_interaction/test': true },
         })
-        expect(given.posthog.capture).toHaveBeenCalledTimes(1)
+        expect(posthog.capture).toHaveBeenCalledTimes(1)
 
         fireEvent.click(screen.getByTestId('helloDiv'))
         fireEvent.click(screen.getByTestId('helloDiv'))
         fireEvent.click(screen.getByTestId('helloDiv'))
-        expect(given.posthog.capture).toHaveBeenCalledTimes(1)
+        expect(posthog.capture).toHaveBeenCalledTimes(1)
     })
 
     it('should track an interaction with each child node of the feature component', () => {
-        given(
-            'render',
-            () => () =>
-                render(
-                    <PostHogProvider client={given.posthog}>
-                        <PostHogFeature flag={given.featureFlag} match={given.matchValue}>
-                            <div data-testid="helloDiv">Hello</div>
-                            <div data-testid="worldDiv">World!</div>
-                        </PostHogFeature>
-                    </PostHogProvider>
-                )
+        render(
+            <PostHogProvider client={posthog}>
+                <PostHogFeature flag={'test'} match={true}>
+                    <div data-testid="helloDiv">Hello</div>
+                    <div data-testid="worldDiv">World!</div>
+                </PostHogFeature>
+            </PostHogProvider>
         )
-        given.render()
 
         fireEvent.click(screen.getByTestId('helloDiv'))
         fireEvent.click(screen.getByTestId('helloDiv'))
         fireEvent.click(screen.getByTestId('worldDiv'))
         fireEvent.click(screen.getByTestId('worldDiv'))
         fireEvent.click(screen.getByTestId('worldDiv'))
-        expect(given.posthog.capture).toHaveBeenCalledWith('$feature_interaction', {
+        expect(posthog.capture).toHaveBeenCalledWith('$feature_interaction', {
             feature_flag: 'test',
             $set: { '$feature_interaction/test': true },
         })
-        expect(given.posthog.capture).toHaveBeenCalledTimes(1)
+        expect(posthog.capture).toHaveBeenCalledTimes(1)
     })
 
     it('should not fire events when interaction is disabled', () => {
-        given(
-            'render',
-            () => () =>
-                render(
-                    <PostHogProvider client={given.posthog}>
-                        <PostHogFeature flag={given.featureFlag} match={given.matchValue} trackInteraction={false}>
-                            <div data-testid="helloDiv">Hello</div>
-                        </PostHogFeature>
-                    </PostHogProvider>
-                )
+        render(
+            <PostHogProvider client={posthog}>
+                <PostHogFeature flag={'test'} match={true} trackInteraction={false}>
+                    <div data-testid="helloDiv">Hello</div>
+                </PostHogFeature>
+            </PostHogProvider>
         )
-        given.render()
 
         fireEvent.click(screen.getByTestId('helloDiv'))
-        expect(given.posthog.capture).not.toHaveBeenCalled()
+        expect(posthog.capture).not.toHaveBeenCalled()
 
         fireEvent.click(screen.getByTestId('helloDiv'))
         fireEvent.click(screen.getByTestId('helloDiv'))
         fireEvent.click(screen.getByTestId('helloDiv'))
-        expect(given.posthog.capture).not.toHaveBeenCalled()
+        expect(posthog.capture).not.toHaveBeenCalled()
     })
 
     it('should fire events when interaction is disabled but re-enabled after', () => {
@@ -155,47 +143,37 @@ describe('PostHogFeature component', () => {
                     >
                         Click me
                     </div>
-                    <PostHogFeature
-                        flag={given.featureFlag}
-                        match={given.matchValue}
-                        trackInteraction={trackInteraction}
-                    >
+                    <PostHogFeature flag={'test'} match={true} trackInteraction={trackInteraction}>
                         <div data-testid="helloDiv">Hello</div>
                     </PostHogFeature>
                 </>
             )
         }
 
-        given(
-            'render',
-            () => () =>
-                render(
-                    <PostHogProvider client={given.posthog}>
-                        <DynamicUpdateComponent />
-                    </PostHogProvider>
-                )
+        render(
+            <PostHogProvider client={posthog}>
+                <DynamicUpdateComponent />
+            </PostHogProvider>
         )
-        given.render()
 
         fireEvent.click(screen.getByTestId('helloDiv'))
-        expect(given.posthog.capture).not.toHaveBeenCalled()
+        expect(posthog.capture).not.toHaveBeenCalled()
 
         fireEvent.click(screen.getByTestId('clicker'))
         fireEvent.click(screen.getByTestId('helloDiv'))
         fireEvent.click(screen.getByTestId('helloDiv'))
-        expect(given.posthog.capture).toHaveBeenCalledWith('$feature_interaction', {
+        expect(posthog.capture).toHaveBeenCalledWith('$feature_interaction', {
             feature_flag: 'test',
             $set: { '$feature_interaction/test': true },
         })
-        expect(given.posthog.capture).toHaveBeenCalledTimes(1)
+        expect(posthog.capture).toHaveBeenCalledTimes(1)
     })
 
     it('should not show the feature component if the flag is not enabled', () => {
-        given('featureFlag', () => 'test_false')
-        given.render()
+        renderWith(posthog, 'test_value')
 
         expect(screen.queryByTestId('helloDiv')).not.toBeInTheDocument()
-        expect(given.posthog.capture).not.toHaveBeenCalled()
+        expect(posthog.capture).not.toHaveBeenCalled()
 
         // check if any elements are found
         const allTags = screen.queryAllByText(/.*/)
@@ -207,92 +185,65 @@ describe('PostHogFeature component', () => {
     })
 
     it('should fallback when provided', () => {
-        given('featureFlag', () => 'test_false')
-        given(
-            'render',
-            () => () =>
-                render(
-                    <PostHogProvider client={given.posthog}>
-                        <PostHogFeature
-                            flag={given.featureFlag}
-                            match={given.matchValue}
-                            fallback={<div data-testid="nope">Nope</div>}
-                        >
-                            <div data-testid="helloDiv">Hello</div>
-                        </PostHogFeature>
-                    </PostHogProvider>
-                )
+        render(
+            <PostHogProvider client={posthog}>
+                <PostHogFeature flag={'test_false'} match={true} fallback={<div data-testid="nope">Nope</div>}>
+                    <div data-testid="helloDiv">Hello</div>
+                </PostHogFeature>
+            </PostHogProvider>
         )
-        given.render()
 
         expect(screen.queryByTestId('helloDiv')).not.toBeInTheDocument()
-        expect(given.posthog.capture).not.toHaveBeenCalled()
+        expect(posthog.capture).not.toHaveBeenCalled()
 
         fireEvent.click(screen.getByTestId('nope'))
-        expect(given.posthog.capture).not.toHaveBeenCalled()
+        expect(posthog.capture).not.toHaveBeenCalled()
     })
 
     it('should handle showing multivariate flags with bool match', () => {
-        given('featureFlag', () => 'multivariate_feature')
-        given('matchValue', () => true)
-
-        given.render()
+        renderWith(posthog, 'multivariate_feature')
 
         expect(screen.queryByTestId('helloDiv')).not.toBeInTheDocument()
-        expect(given.posthog.capture).not.toHaveBeenCalled()
+        expect(posthog.capture).not.toHaveBeenCalled()
     })
 
     it('should handle showing multivariate flags with incorrect match', () => {
-        given('featureFlag', () => 'multivariate_feature')
-        given('matchValue', () => 'string-valueCXCC')
-
-        given.render()
+        renderWith(posthog, 'multivariate_feature', 'string-valueCXCC')
 
         expect(screen.queryByTestId('helloDiv')).not.toBeInTheDocument()
-        expect(given.posthog.capture).not.toHaveBeenCalled()
+        expect(posthog.capture).not.toHaveBeenCalled()
     })
 
     it('should handle showing multivariate flags', () => {
-        given('featureFlag', () => 'multivariate_feature')
-        given('matchValue', () => 'string-value')
-
-        given.render()
+        renderWith(posthog, 'multivariate_feature', 'string-value')
 
         expect(screen.queryByTestId('helloDiv')).toBeInTheDocument()
-        expect(given.posthog.capture).not.toHaveBeenCalled()
+        expect(posthog.capture).not.toHaveBeenCalled()
 
         fireEvent.click(screen.getByTestId('helloDiv'))
-        expect(given.posthog.capture).toHaveBeenCalledWith('$feature_interaction', {
+        expect(posthog.capture).toHaveBeenCalledWith('$feature_interaction', {
             feature_flag: 'multivariate_feature',
             feature_flag_variant: 'string-value',
             $set: { '$feature_interaction/multivariate_feature': 'string-value' },
         })
-        expect(given.posthog.capture).toHaveBeenCalledTimes(1)
+        expect(posthog.capture).toHaveBeenCalledTimes(1)
     })
 
     it('should handle payload flags', () => {
-        given('featureFlag', () => 'example_feature_payload')
-        given('matchValue', () => 'test')
-        given(
-            'render',
-            () => () =>
-                render(
-                    <PostHogProvider client={given.posthog}>
-                        <PostHogFeature flag={given.featureFlag} match={given.matchValue}>
-                            {(payload) => {
-                                return <div data-testid={`hi_${payload.name}`}>Hullo</div>
-                            }}
-                        </PostHogFeature>
-                    </PostHogProvider>
-                )
+        render(
+            <PostHogProvider client={posthog}>
+                <PostHogFeature flag={'example_feature_payload'} match={'test'}>
+                    {(payload) => {
+                        return <div data-testid={`hi_${payload.name}`}>Hullo</div>
+                    }}
+                </PostHogFeature>
+            </PostHogProvider>
         )
 
-        given.render()
-
         expect(screen.queryByTestId('hi_example_feature_1_payload')).toBeInTheDocument()
-        expect(given.posthog.capture).not.toHaveBeenCalled()
+        expect(posthog.capture).not.toHaveBeenCalled()
 
         fireEvent.click(screen.getByTestId('hi_example_feature_1_payload'))
-        expect(given.posthog.capture).toHaveBeenCalledTimes(1)
+        expect(posthog.capture).toHaveBeenCalledTimes(1)
     })
 })
