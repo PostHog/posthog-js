@@ -2,6 +2,7 @@ import nextPackage from 'next/package.json' with { type: 'json' }
 import semver from 'semver'
 import { PostHogNextConfigComplete } from './config'
 import { spawnLocal } from '@posthog/core/process'
+import nextJS from 'next/package.json'
 
 export function getNextJsVersion(): string {
   return nextPackage.version
@@ -52,5 +53,10 @@ async function callPosthogCli(args: string[], env: NodeJS.ProcessEnv, verbose: b
 // Helper to detect if Turbopack is enabled
 export function isTurbopackEnabled(): boolean {
   // CLI flag (--turbo/--turbopack) injects TURBOPACK=1 at runtime
-  return process.env.TURBOPACK === '1'
+  return process.env.TURBOPACK === '1' || (isTurbopackDefault() && !(process.env.WEBPACK === '1'))
+}
+
+function isTurbopackDefault(): boolean {
+  const [major] = nextJS.version.split('.')
+  return Number(major) >= 16
 }
