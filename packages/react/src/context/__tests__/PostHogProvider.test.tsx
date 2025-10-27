@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { render, act } from '@testing-library/react'
-import { PostHogProvider } from '..'
+import { PostHogProvider, PostHog } from '..'
 import posthogJs from 'posthog-js'
 
 // Mock posthog-js
@@ -15,7 +15,7 @@ jest.mock('posthog-js', () => ({
 
 describe('PostHogProvider component', () => {
     it('should render children components', () => {
-        const posthog = {}
+        const posthog = {} as unknown as PostHog
         const { getByText } = render(
             <PostHogProvider client={posthog}>
                 <div>Test</div>
@@ -111,7 +111,7 @@ describe('PostHogProvider component', () => {
         })
 
         it('warns if posthogJs has been loaded elsewhere', () => {
-            posthogJs.__loaded = true // Pretend it's initialized
+            ;(posthogJs as any).__loaded = true
 
             const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
             render(
@@ -125,7 +125,7 @@ describe('PostHogProvider component', () => {
             )
 
             consoleSpy.mockRestore()
-            posthogJs.__loaded = false
+            ;(posthogJs as any).__loaded = false
         })
     })
 })

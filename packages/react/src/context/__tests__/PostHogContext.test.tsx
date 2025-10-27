@@ -1,9 +1,9 @@
 import * as React from 'react'
 import { render } from '@testing-library/react'
-import { PostHogProvider } from '..'
+import { PostHogProvider, PostHog } from '..'
 
 describe('PostHogContext component', () => {
-    let posthog = {}
+    const posthog = {} as unknown as PostHog
 
     it('should return a client instance from the context if available', () => {
         render(
@@ -19,8 +19,9 @@ describe('PostHogContext component', () => {
 
         expect(() => {
             render(
-                // it might not exist in SSR for example
-                <PostHogProvider client={undefined}>
+                // we have to cast `as any` so that we can test for when
+                // posthog might not exist - in SSR for example
+                <PostHogProvider client={undefined as any}>
                     <div>Hello</div>
                 </PostHogProvider>
             )
