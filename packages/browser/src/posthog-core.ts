@@ -947,13 +947,13 @@ export class PostHog {
             return
         }
 
-        // Handle bot traffic based on preview flag
-        if (!this.config.opt_out_useragent_filter && this._is_bot()) {
-            if (!this.config.__preview_send_bot_pageviews) {
-                // Default behavior: drop bot traffic
-                return
-            }
-            // Preview behavior: continue to send as $bot_pageview (handled in event preparation)
+        const isBot = !this.config.opt_out_useragent_filter && this._is_bot()
+        const shouldDropBotEvent = isBot && !this.config.__preview_send_bot_pageviews
+
+        // We drop bot events unless the preview flag to send bot pageviews is enabled
+        // or the user has explicitly opted out of useragent filtering
+        if (shouldDropBotEvent) {
+            return
         }
 
         const clientRateLimitContext = !options?.skip_client_rate_limiting
@@ -1000,13 +1000,11 @@ export class PostHog {
         }
 
         // Route pageviews to $bot_pageview when bot detected and preview flag enabled
-        if (
-            event_name === '$pageview' &&
-            this.config.__preview_send_bot_pageviews &&
-            !this.config.opt_out_useragent_filter &&
-            this._is_bot()
-        ) {
+        if (event_name === '$pageview' && this.config.__preview_send_bot_pageviews && isBot) {
             data.event = '$bot_pageview'
+            // While it's obvious that a $bot_pageview is (likely) from a bot, we explicitly set $browser_type
+            // to make it easy to filter and test bot pageviews in the product
+            data.properties.$browser_type = 'bot'
         }
 
         if (clientRateLimitContext) {

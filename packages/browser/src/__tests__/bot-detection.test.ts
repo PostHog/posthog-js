@@ -145,9 +145,23 @@ describe('bot detection and pageview collection', () => {
 
             expect(beforeSendMock).toHaveBeenCalled()
             expect(beforeSendMock.mock.calls[0][0].event).toBe('$bot_pageview')
-            // $browser_type should NOT be added when opt_out_useragent_filter is false
+            // $browser_type should be set to 'bot' for $bot_pageview events
             const properties = beforeSendMock.mock.calls[0][0].properties
-            expect(properties.$browser_type).toBeUndefined()
+            expect(properties.$browser_type).toBe('bot')
+        })
+
+        it('should set $browser_type to "bot" for $bot_pageview events', async () => {
+            setBotUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
+            posthog = await createPostHog({ __preview_send_bot_pageviews: true })
+
+            posthog.capture('$pageview')
+
+            expect(beforeSendMock).toHaveBeenCalled()
+            expect(beforeSendMock.mock.calls[0][0].event).toBe('$bot_pageview')
+            const properties = beforeSendMock.mock.calls[0][0].properties
+            // While it's obvious that a $bot_pageview is from a bot, we explicitly set $browser_type
+            // to make it easy to filter and test bot pageviews in the product
+            expect(properties.$browser_type).toBe('bot')
         })
 
         it('should send non-pageview events from bots with original event name', async () => {

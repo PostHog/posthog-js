@@ -1043,8 +1043,12 @@ export interface PostHogConfig {
 
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * Enables collection of bot traffic as $bot_pageview events with detailed bot detection
-     * properties instead of dropping them entirely. Use it alongside opt_out_useragent_filter
+     *
+     * Enables collection of bot traffic as $bot_pageview events instead of dropping them entirely.
+     * When enabled, pageviews from detected bots are renamed to $bot_pageview and include
+     * $browser_type: 'bot' for easy filtering and analysis.
+     *
+     * @default false
      */
     __preview_send_bot_pageviews?: boolean
 
