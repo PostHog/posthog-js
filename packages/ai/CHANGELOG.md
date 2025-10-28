@@ -1,5 +1,32 @@
 # posthog-ai
 
+## 6.5.0
+
+### Minor Changes
+
+- [#2496](https://github.com/PostHog/posthog-js/pull/2496) [`7253bb3`](https://github.com/PostHog/posthog-js/commit/7253bb30b6305b29f885eed2c542f2f6686efb0f) Thanks [@andrewm4894](https://github.com/andrewm4894)! - feat: add $ai_framework property for framework integrations
+
+  Adds a simple `$ai_framework` property to AI events when using framework layers (LangChain, Vercel AI SDK). Direct provider calls (OpenAI, Anthropic, Gemini) do not include this property, eliminating redundant data where framework would duplicate the provider name.
+
+  **Example with framework:**
+
+  ```json
+  {
+    "$ai_framework": "langchain",
+    "$ai_provider": "openai",
+    "$ai_model": "gpt-4"
+  }
+  ```
+
+  **Example without framework:**
+
+  ```json
+  {
+    "$ai_provider": "openai",
+    "$ai_model": "gpt-4"
+  }
+  ```
+
 ## 6.4.4
 
 ### Patch Changes
