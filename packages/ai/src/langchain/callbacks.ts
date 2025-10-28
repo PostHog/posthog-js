@@ -365,6 +365,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       $ai_latency: latency,
       $ai_span_name: run.name,
       $ai_span_id: runId,
+      $ai_framework: 'langchain',
     }
     if (parentRunId) {
       eventProperties['$ai_parent_id'] = parentRunId
@@ -426,6 +427,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       $ai_http_status: 200,
       $ai_latency: latency,
       $ai_base_url: run.baseUrl,
+      $ai_framework: 'langchain',
     }
 
     if (run.tools) {

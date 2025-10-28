@@ -70,6 +70,9 @@ describe('LangChainCallbackHandler', () => {
     expect(captureCall[0].properties['$ai_lib']).toBe('posthog-ai')
     expect(captureCall[0].properties['$ai_lib_version']).toBe(version)
 
+    // Check $ai_framework
+    expect(captureCall[0].properties['$ai_framework']).toBe('langchain')
+
     // Check other expected properties
     expect(captureCall[0].event).toBe('$ai_generation')
     expect(captureCall[0].properties.$ai_model).toBe('gpt-4')

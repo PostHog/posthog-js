@@ -273,6 +273,10 @@ export const createInstrumentationMiddleware = (
       const mergedParams = {
         ...options,
         ...mapVercelParams(params),
+        posthogProperties: {
+          ...options.posthogProperties,
+          $ai_framework: 'vercel',
+        },
       }
       const availableTools = extractAvailableToolCalls('vercel', params)
 
@@ -358,6 +362,10 @@ export const createInstrumentationMiddleware = (
       const mergedParams = {
         ...options,
         ...mapVercelParams(params),
+        posthogProperties: {
+          ...options.posthogProperties,
+          $ai_framework: 'vercel',
+        },
       }
 
       const modelId = options.posthogModelOverride ?? model.modelId
