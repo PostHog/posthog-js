@@ -1,0 +1,26 @@
+{
+    "name": "playground-react-nextjs",
+    "private": true,
+    "version": "0.0.0",
+    "type": "module",
+    "packageManager": "pnpm@10.12.4",
+    "scripts": {
+        "dev": "next dev",
+        "build": "next build",
+        "start": "next start",
+        "lint": "next lint"
+    },
+    "dependencies": {
+        "@posthog/react": "file:../../target/posthog-react.tgz",
+        "next": "^15.1.4",
+        "posthog-js": "file:../../target/posthog-js.tgz",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0"
+    },
+    "devDependencies": {
+        "@types/node": "^20",
+        "@types/react": "^19.0.1",
+        "@types/react-dom": "^19.0.1",
+        "typescript": "^5.7.2"
+    }
+}

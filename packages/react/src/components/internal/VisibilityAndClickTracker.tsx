@@ -1,5 +1,4 @@
-import React, { MouseEventHandler, useEffect, useRef } from 'react'
-import { usePostHog } from '../../hooks'
+import React, { MouseEventHandler, useEffect, useMemo, useRef } from 'react'
 import { isNull } from '../../utils/type-utils'
 
 /**
@@ -22,19 +21,24 @@ export function VisibilityAndClickTracker({
     options?: IntersectionObserverInit
 }): JSX.Element {
     const ref = useRef<HTMLDivElement>(null)
-    const posthog = usePostHog()
+
+    const observerOptions = useMemo(
+        () => ({
+            threshold: 0.1,
+            ...options,
+        }),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [options?.threshold, options?.root, options?.rootMargin]
+    )
 
     useEffect(() => {
         if (isNull(ref.current) || !trackView) return
 
         // eslint-disable-next-line compat/compat
-        const observer = new IntersectionObserver(([entry]) => onIntersect(entry), {
-            threshold: 0.1,
-            ...options,
-        })
+        const observer = new IntersectionObserver(([entry]) => onIntersect(entry), observerOptions)
         observer.observe(ref.current)
         return () => observer.disconnect()
-    }, [options, posthog, ref, trackView, onIntersect])
+    }, [observerOptions, trackView, onIntersect])
 
     return (
         <div ref={ref} {...props} onClick={onClick}>
