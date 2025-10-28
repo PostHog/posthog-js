@@ -1,6 +1,7 @@
 'use client'
 
 import Image from 'next/image'
+import { PostHogCaptureOnViewed } from '@posthog/react'
 
 const catImages = Array.from({ length: 120 }, (_, i) => ({
     id: i + 1,
@@ -31,7 +32,11 @@ export default function Home() {
                     <h2 style={{ fontSize: '1.5rem', color: '#555' }}>Scroll down to see the gallery...</h2>
                 </div>
 
-                <div
+                <PostHogCaptureOnViewed
+                    name="cat-gallery"
+                    properties={{ gallery_size: catImages.length, gallery_type: 'cats' }}
+                    trackAllChildren
+                    observerOptions={{ threshold: 0.1 }}
                     style={{
                         display: 'grid',
                         gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
@@ -63,11 +68,22 @@ export default function Home() {
                             />
                         </div>
                     ))}
-                </div>
+                </PostHogCaptureOnViewed>
 
-                <div style={{ height: '50vh', marginTop: '2rem' }}>
+                <PostHogCaptureOnViewed
+                    name="test-element"
+                    properties={{ test: true }}
+                    observerOptions={{ threshold: 0.1 }}
+                    style={{
+                        padding: '2rem',
+                        backgroundColor: '#00b894',
+                        color: 'white',
+                        height: '50vh',
+                        marginTop: '2rem',
+                    }}
+                >
                     <p style={{ color: '#666' }}>End of page</p>
-                </div>
+                </PostHogCaptureOnViewed>
             </div>
         </main>
     )

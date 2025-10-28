@@ -132,7 +132,8 @@ The recommended workflow for testing local changes uses tarballs, which most rea
 1. Run `pnpm turbo package` inside the root folder to generate tarballs in `./target`
 2. Navigate to the example/playground project: `cd examples/example-nextjs`
 3. Run `pnpm install` (remove `pnpm-lock.yaml` if it exists) to install local tarballs
-4. Run `pnpm dev` or `pnpm start` to start the project
+4. you might need to point package.json at the tarball like `"posthog-js": "file:../../target/posthog-js.tgz",`
+5. Run `pnpm dev` or `pnpm start` to start the project
 
 ### Development Workflow (Recommended)
 

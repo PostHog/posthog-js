@@ -1,48 +1,60 @@
-import React, { MouseEventHandler, useEffect, useMemo, useRef } from 'react'
-import { isNull } from '../../utils/type-utils'
+import React, { Children, ReactNode, useCallback, useRef } from 'react'
+import { VisibilityAndClickTracker } from './VisibilityAndClickTracker'
 
 /**
- * VisibilityAndClickTracker is an internal component,
+ * VisibilityAndClickTrackers is an internal component,
  * its API might change without warning and without being signalled as a breaking change
  *
+ * Wraps each of the children passed to it for visiblity and click tracking
+ *
  */
-export function VisibilityAndClickTracker({
+export function VisibilityAndClickTrackers({
     children,
-    onIntersect,
-    onClick,
+    trackInteraction,
     trackView,
     options,
+    onInteract,
+    onView,
     ...props
 }: {
+    flag: string
     children: React.ReactNode
-    onIntersect: (entry: IntersectionObserverEntry) => void
-    onClick?: MouseEventHandler<HTMLDivElement>
+    trackInteraction: boolean
     trackView: boolean
     options?: IntersectionObserverInit
+    onInteract?: () => void
+    onView?: () => void
 }): JSX.Element {
-    const ref = useRef<HTMLDivElement>(null)
+    const clickTrackedRef = useRef(false)
+    const visibilityTrackedRef = useRef(false)
 
-    const observerOptions = useMemo(
-        () => ({
-            threshold: 0.1,
-            ...options,
-        }),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [options?.threshold, options?.root, options?.rootMargin]
-    )
+    const cachedOnClick = useCallback(() => {
+        if (!clickTrackedRef.current && trackInteraction && onInteract) {
+            onInteract()
+            clickTrackedRef.current = true
+        }
+    }, [trackInteraction, onInteract])
 
-    useEffect(() => {
-        if (isNull(ref.current) || !trackView) return
+    const onIntersect = (entry: IntersectionObserverEntry) => {
+        if (!visibilityTrackedRef.current && entry.isIntersecting && onView) {
+            onView()
+            visibilityTrackedRef.current = true
+        }
+    }
 
-        // eslint-disable-next-line compat/compat
-        const observer = new IntersectionObserver(([entry]) => onIntersect(entry), observerOptions)
-        observer.observe(ref.current)
-        return () => observer.disconnect()
-    }, [observerOptions, trackView, onIntersect])
+    const trackedChildren = Children.map(children, (child: ReactNode) => {
+        return (
+            <VisibilityAndClickTracker
+                onClick={cachedOnClick}
+                onIntersect={onIntersect}
+                trackView={trackView}
+                options={options}
+                {...props}
+            >
+                {child}
+            </VisibilityAndClickTracker>
+        )
+    })
 
-    return (
-        <div ref={ref} {...props} onClick={onClick}>
-            {children}
-        </div>
-    )
+    return <>{trackedChildren}</>
 }

@@ -5,6 +5,7 @@ import { isNull } from '../../utils/type-utils'
  * VisibilityAndClickTracker is an internal component,
  * its API might change without warning and without being signalled as a breaking change
  *
+ * Wraps the provided children in a div, and tracks visibility of and clicks on that div
  */
 export function VisibilityAndClickTracker({
     children,
