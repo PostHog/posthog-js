@@ -220,21 +220,6 @@ app.get('/', (req, res) => {
           color: #333;
           background: #f8f9fa;
         }
-        .header {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          padding: 20px;
-          text-align: center;
-          box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .header h1 {
-          font-size: 28px;
-          margin-bottom: 5px;
-        }
-        .header p {
-          opacity: 0.9;
-          font-size: 14px;
-        }
         .container {
           display: flex;
           gap: 20px;
@@ -346,7 +331,7 @@ app.get('/', (req, res) => {
           box-shadow: 0 2px 8px rgba(0,0,0,0.08);
           display: flex;
           flex-direction: column;
-          height: calc(100vh - 140px);
+          height: 600px;
         }
         .event-log-header {
           padding: 15px 20px;
@@ -437,7 +422,38 @@ app.get('/', (req, res) => {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 8px;
+          padding: 4px 0;
+          transition: background-color 0.2s;
+        }
+        .event-header:hover {
+          background-color: rgba(0, 0, 0, 0.02);
+        }
+        .event-expand-icon {
+          font-size: 10px;
+          color: #718096;
+          transition: transform 0.2s;
+          display: inline-block;
+          width: 14px;
+        }
+        .event-icon {
+          font-size: 14px;
+        }
+        .btn-copy {
+          padding: 4px 8px;
+          font-size: 12px;
+          background: #e2e8f0;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .btn-copy:hover {
+          background: #cbd5e0;
+          transform: scale(1.05);
+        }
+        .event-details {
+          overflow: hidden;
+          transition: max-height 0.3s ease;
         }
         .event-name {
           font-weight: 600;
@@ -451,37 +467,6 @@ app.get('/', (req, res) => {
           font-size: 11px;
           color: #718096;
           font-family: 'Courier New', monospace;
-        }
-        .event-properties {
-          font-size: 12px;
-          color: #4a5568;
-          font-family: 'Courier New', monospace;
-          max-height: 0;
-          overflow: hidden;
-          transition: max-height 0.3s ease;
-        }
-        .event-properties.expanded {
-          max-height: 500px;
-          margin-top: 8px;
-          padding-top: 8px;
-          border-top: 1px solid #e2e8f0;
-        }
-        .event-property {
-          margin: 3px 0;
-        }
-        .event-property-key {
-          color: #805ad5;
-          font-weight: 600;
-        }
-        .event-toggle {
-          cursor: pointer;
-          color: #667eea;
-          font-size: 11px;
-          font-weight: 600;
-          text-decoration: underline;
-        }
-        .event-toggle:hover {
-          color: #5a67d8;
         }
         .instructions {
           font-size: 13px;
@@ -520,8 +505,8 @@ app.get('/', (req, res) => {
         let autoScroll = true;
         let eventIdCounter = 0;
 
-        // User agent override for testing bot detection
-        let userAgentOverride = null;
+        // Selected bot info for display only (doesn't affect events)
+        let selectedBotUA = null;
         let selectedBotName = null;
 
         // Initialize PostHog
@@ -531,35 +516,26 @@ app.get('/', (req, res) => {
           __preview_send_bot_pageviews: true,
           autocapture: false,
           before_send: function(event) {
-            // Override user agent if one is selected
-            if (userAgentOverride) {
-              event.properties.$raw_user_agent = userAgentOverride;
+            // Capture the full event with all properties for display
+            const eventData = {
+              id: ++eventIdCounter,
+              timestamp: new Date(),
+              event: event.event,
+              properties: event.properties || {},
+              options: {}
+            };
+
+            window.capturedEvents.push(eventData);
+            if (window.capturedEvents.length > 100) {
+              window.capturedEvents.shift();
             }
+
+            displayEventInLog(eventData);
             return event;
           },
           loaded: function(ph) {
             console.log('PostHog loaded successfully!');
             ph.debug();
-
-            // Monkey-patch capture to intercept all events
-            const originalCapture = ph.capture.bind(ph);
-            ph.capture = function(eventName, properties, options) {
-              const eventData = {
-                id: ++eventIdCounter,
-                timestamp: new Date(),
-                event: eventName,
-                properties: properties || {},
-                options: options || {}
-              };
-
-              window.capturedEvents.push(eventData);
-              if (window.capturedEvents.length > 100) {
-                window.capturedEvents.shift(); // Keep max 100 events
-              }
-
-              displayEventInLog(eventData);
-              return originalCapture(eventName, properties, options);
-            };
           }
         });
 
@@ -591,27 +567,23 @@ app.get('/', (req, res) => {
             fractionalSecondDigits: 3
           });
 
-          // Build properties JSON with bot properties first
-          const botProps = ['$browser_type', '$raw_user_agent'];
+          // Build full event JSON with bot properties highlighted
+          const botProps = ['$bot_detection_method', '$bot_type', '$browser_type', '$raw_user_agent'];
+
+          // Sort all properties alphabetically
+          const sortedKeys = Object.keys(eventData.properties).sort();
           const orderedProps = {};
-
-          // Add bot properties first (if they exist)
-          botProps.forEach(key => {
-            if (eventData.properties[key] !== undefined) {
-              orderedProps[key] = eventData.properties[key];
-            }
+          sortedKeys.forEach(key => {
+            orderedProps[key] = eventData.properties[key];
           });
 
-          // Add all other properties
-          Object.keys(eventData.properties).forEach(key => {
-            if (!botProps.includes(key)) {
-              orderedProps[key] = eventData.properties[key];
-            }
-          });
+          // Build full event object JSON
+          let eventJSON = '{\\n';
+          eventJSON += '  "id": ' + eventData.id + ',\\n';
+          eventJSON += '  "timestamp": "' + eventData.timestamp.toISOString() + '",\\n';
+          eventJSON += '  "event": "' + eventData.event + '",\\n';
+          eventJSON += '  "properties": {\\n';
 
-          // Format as JSON with bot properties highlighted
-          let propsHTML = '<pre style="margin: 0; font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all;">';
-          propsHTML += '{\\n';
           const propKeys = Object.keys(orderedProps);
           propKeys.forEach((key, idx) => {
             const value = JSON.stringify(orderedProps[key]);
@@ -619,22 +591,40 @@ app.get('/', (req, res) => {
             const comma = idx < propKeys.length - 1 ? ',' : '';
 
             if (isBotProp) {
-              propsHTML += '  <strong style="color: #e53e3e;">"' + key + '"</strong>: ' + value + comma + '\\n';
+              eventJSON += '    <strong style="color: #e53e3e;">"' + key + '"</strong>: ' + value + comma + '\\n';
             } else {
-              propsHTML += '  "' + key + '": ' + value + comma + '\\n';
+              eventJSON += '    "' + key + '": ' + value + comma + '\\n';
             }
           });
-          propsHTML += '}</pre>';
+
+          eventJSON += '  }';
+          if (Object.keys(eventData.options || {}).length > 0) {
+            eventJSON += ',\\n  "options": ' + JSON.stringify(eventData.options, null, 2).replace(/\\n/g, '\\n  ');
+          }
+          eventJSON += '\\n}';
+
+          // Create event icon/badge
+          let eventIcon = '📄';
+          if (eventClass === 'bot-pageview') eventIcon = '🤖';
+          else if (eventClass === 'custom') eventIcon = '✨';
 
           const eventCard = document.createElement('div');
           eventCard.className = 'event-card ' + eventClass;
-          eventCard.innerHTML = '<div class="event-header">' +
-            '<span class="event-name ' + eventClass + '">' + eventData.event + '</span>' +
-            '<span class="event-timestamp">' + time + '</span>' +
+          eventCard.innerHTML = '<div class="event-header" onclick="toggleEventDetails(' + eventData.id + ')" style="cursor: pointer;">' +
+            '<div style="display: flex; align-items: center; gap: 8px;">' +
+              '<span class="event-expand-icon" id="expand-icon-' + eventData.id + '">▶</span>' +
+              '<span class="event-icon">' + eventIcon + '</span>' +
+              '<span class="event-name ' + eventClass + '">' + eventData.event + '</span>' +
             '</div>' +
-            '<span class="event-toggle" onclick="toggleEventProps(' + eventData.id + ')">Show properties ▼</span>' +
-            '<div class="event-properties" id="props-' + eventData.id + '">' +
-              propsHTML +
+            '<div style="display: flex; align-items: center; gap: 10px;">' +
+              '<span class="event-timestamp">' + time + '</span>' +
+              '<button class="btn-copy" onclick="event.stopPropagation(); copyEventJSON(' + eventData.id + ')" title="Copy JSON">📋</button>' +
+            '</div>' +
+            '</div>' +
+            '<div class="event-details" id="event-details-' + eventData.id + '" style="display: none;">' +
+              '<pre style="margin: 0; font-family: monospace; font-size: 11px; white-space: pre-wrap; word-break: break-all; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e2e8f0;">' +
+                eventJSON +
+              '</pre>' +
             '</div>';
 
           logContent.appendChild(eventCard);
@@ -645,14 +635,44 @@ app.get('/', (req, res) => {
           }
         }
 
-        window.toggleEventProps = function(id) {
-          const propsEl = document.getElementById('props-' + id);
-          propsEl.classList.toggle('expanded');
-        };
-
         function updateEventCount() {
           document.getElementById('event-count').textContent = window.capturedEvents.length;
         }
+
+        window.toggleEventDetails = function(id) {
+          const details = document.getElementById('event-details-' + id);
+          const icon = document.getElementById('expand-icon-' + id);
+
+          if (details.style.display === 'none') {
+            details.style.display = 'block';
+            icon.textContent = '▼';
+          } else {
+            details.style.display = 'none';
+            icon.textContent = '▶';
+          }
+        };
+
+        window.copyEventJSON = function(id) {
+          const event = window.capturedEvents.find(e => e.id === id);
+          if (!event) return;
+
+          const jsonText = JSON.stringify(event, null, 2);
+          navigator.clipboard.writeText(jsonText).then(() => {
+            // Show feedback
+            const btn = event.target || document.querySelector('[onclick*="copyEventJSON(' + id + ')"]');
+            const originalText = btn ? btn.textContent : '';
+            if (btn) {
+              btn.textContent = '✓';
+              btn.style.background = '#48bb78';
+              setTimeout(() => {
+                btn.textContent = '📋';
+                btn.style.background = '';
+              }, 1000);
+            }
+          }).catch(err => {
+            console.error('Failed to copy:', err);
+          });
+        };
 
         window.clearEventLog = function() {
           window.capturedEvents = [];
@@ -692,39 +712,38 @@ app.get('/', (req, res) => {
           const selectedOption = select.options[select.selectedIndex];
 
           if (!value) {
-            // Reset to real user agent
-            userAgentOverride = null;
+            // Hide bot UA card
+            selectedBotUA = null;
             selectedBotName = null;
-            updateUserAgentDisplay();
+            updateBotUADisplay();
             return;
           }
 
           if (value === 'custom') {
             const customUA = prompt('Enter custom User Agent:');
             if (customUA) {
-              userAgentOverride = customUA;
+              selectedBotUA = customUA;
               selectedBotName = 'Custom Bot';
-              updateUserAgentDisplay();
+              updateBotUADisplay();
             }
           } else {
-            userAgentOverride = value;
+            selectedBotUA = value;
             selectedBotName = selectedOption.text;
-            updateUserAgentDisplay();
+            updateBotUADisplay();
           }
         }
 
-        function updateUserAgentDisplay() {
-          const displayEl = document.getElementById('current-ua-display');
-          const modeEl = document.getElementById('ua-mode');
+        function updateBotUADisplay() {
+          const botCard = document.getElementById('bot-ua-card');
+          const botDisplay = document.getElementById('bot-ua-display');
 
-          if (userAgentOverride) {
-            displayEl.textContent = userAgentOverride;
-            modeEl.innerHTML = '<span style="color: #f56565;">🤖 Testing as: ' + selectedBotName + '</span>';
-            console.log('User Agent Override:', userAgentOverride);
+          if (selectedBotUA) {
+            botDisplay.textContent = selectedBotUA;
+            botCard.style.display = 'block';
+            console.log('Selected Bot UA (for reference):', selectedBotUA);
           } else {
-            displayEl.textContent = navigator.userAgent;
-            modeEl.innerHTML = '<span style="color: #48bb78;">✅ Using Real Browser UA</span>';
-            console.log('Using real user agent');
+            botCard.style.display = 'none';
+            console.log('No bot selected');
           }
         }
 
@@ -732,25 +751,16 @@ app.get('/', (req, res) => {
         window.addEventListener('DOMContentLoaded', function() {
           console.log('Current User Agent:', navigator.userAgent);
           updateEventCount();
-          updateUserAgentDisplay();
         });
       </script>
     </head>
     <body>
-      <div class="header">
-        <h1>🤖 Bot Detection & Pageview Collection Playground</h1>
-        <p>Test PostHog's bot detection with real-time event monitoring</p>
-      </div>
-
       <div class="container">
         <!-- Left Column: Controls -->
         <div class="left-column">
           <div class="card">
-            <h2>Current User Agent</h2>
-            <div id="ua-mode" style="font-weight: 600; margin-bottom: 10px; font-size: 14px;">
-              <span style="color: #48bb78;">✅ Using Real Browser UA</span>
-            </div>
-            <div class="ua-display" id="current-ua-display">${userAgent}</div>
+            <h2>Current Browser User Agent</h2>
+            <div class="ua-display">${userAgent}</div>
           </div>
 
           <div class="card">
@@ -759,7 +769,15 @@ app.get('/', (req, res) => {
               ${botOptionsHTML}
             </select>
             <div class="info-badge">
-              💡 Select a bot to override the user agent for testing
+              💡 Select a bot to view its user agent string (for reference only)
+            </div>
+          </div>
+
+          <div class="card" id="bot-ua-card" style="display: none;">
+            <h2>Selected Bot User Agent</h2>
+            <div class="ua-display" id="bot-ua-display" style="border-left-color: #f56565;"></div>
+            <div style="font-size: 12px; color: #718096; margin-top: 10px;">
+              📋 Copy this user agent string to use in DevTools
             </div>
           </div>
 
@@ -778,21 +796,16 @@ app.get('/', (req, res) => {
           <div class="card">
             <h3>How to Test</h3>
             <div class="instructions">
-              <p style="margin-bottom: 10px;"><strong>Method 1: Bot Selector (Recommended)</strong></p>
-              <ol style="margin-bottom: 15px;">
-                <li>Select a bot from the dropdown above</li>
-                <li>Click "Send $pageview Event"</li>
-                <li>Watch it convert to $bot_pageview in the log →</li>
-              </ol>
-
-              <p style="margin-bottom: 10px;"><strong>Method 2: DevTools Override</strong></p>
+              <p style="margin-bottom: 10px;"><strong>Using DevTools to Override User Agent:</strong></p>
               <ol>
+                <li>Select a bot from the dropdown above to copy its user agent</li>
                 <li>Open DevTools (F12 or Cmd+Option+I)</li>
                 <li>Open Network conditions (Cmd+Shift+P → "Show Network conditions")</li>
                 <li>Uncheck "Use browser default"</li>
-                <li>Select "Custom…" and paste a bot UA</li>
+                <li>Select "Custom…" and paste the bot UA from above</li>
                 <li>Refresh this page</li>
                 <li>Click "Send $pageview Event"</li>
+                <li>Watch it convert to $bot_pageview in the log →</li>
               </ol>
             </div>
           </div>
