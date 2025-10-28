@@ -1,5 +1,11 @@
 # @posthog/nextjs-config
 
+## 1.3.8
+
+### Patch Changes
+
+- [#2507](https://github.com/PostHog/posthog-js/pull/2507) [`1441574`](https://github.com/PostHog/posthog-js/commit/1441574da9509a5c6c131313c2ba217a60d8038c) Thanks [@daibhin](https://github.com/daibhin)! - Support NextJS 16 switching to turbopack as a default
+
 ## 1.3.7
 
 ### Patch Changes
