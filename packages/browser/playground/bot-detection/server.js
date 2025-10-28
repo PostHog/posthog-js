@@ -219,43 +219,56 @@ app.get('/', (req, res) => {
           line-height: 1.6;
           color: #333;
           background: #f8f9fa;
+          margin: 0;
+          padding: 0;
+          height: 100vh;
+          overflow: hidden;
         }
         .container {
           display: flex;
-          gap: 20px;
-          padding: 20px;
-          max-width: 1600px;
-          margin: 0 auto;
-          min-height: calc(100vh - 100px);
-        }
-        .left-column {
-          flex: 0 0 35%;
-          display: flex;
           flex-direction: column;
-          gap: 15px;
+          height: 100vh;
         }
-        .right-column {
-          flex: 0 0 65%;
+        .control-bar {
           display: flex;
-          flex-direction: column;
+          gap: 12px;
+          padding: 12px;
+          background: white;
+          border-bottom: 2px solid #e2e8f0;
+          flex-wrap: wrap;
+          align-items: flex-start;
+        }
+        .event-log-container {
+          flex: 1;
+          min-height: 0;
+          padding: 12px;
         }
         .card {
           background: white;
-          border-radius: 8px;
-          padding: 20px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+          border-radius: 6px;
+          padding: 12px;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+          flex: 0 0 auto;
+        }
+        .card.compact {
+          min-width: 200px;
+          max-width: 300px;
+        }
+        .card.wide {
+          flex: 1;
+          min-width: 250px;
         }
         .card h2 {
-          font-size: 18px;
-          margin-bottom: 15px;
+          font-size: 14px;
+          margin-bottom: 10px;
           color: #2d3748;
-          border-bottom: 2px solid #e2e8f0;
-          padding-bottom: 8px;
+          font-weight: 600;
         }
         .card h3 {
-          font-size: 16px;
-          margin-bottom: 10px;
+          font-size: 13px;
+          margin-bottom: 8px;
           color: #4a5568;
+          font-weight: 600;
         }
         .ua-display {
           background: #f7fafc;
@@ -331,7 +344,7 @@ app.get('/', (req, res) => {
           box-shadow: 0 2px 8px rgba(0,0,0,0.08);
           display: flex;
           flex-direction: column;
-          height: 600px;
+          height: 100%;
         }
         .event-log-header {
           padding: 15px 20px;
@@ -493,9 +506,13 @@ app.get('/', (req, res) => {
           margin-top: 10px;
         }
         @media (max-width: 1200px) {
-          .container { flex-direction: column; }
-          .left-column, .right-column { flex: 1 1 100%; }
-          .event-log { height: 500px; }
+          .control-bar {
+            flex-direction: column;
+          }
+          .card.compact, .card.wide {
+            max-width: none;
+            min-width: 0;
+          }
         }
       </style>
       <script src="/posthog/array.js"></script>
@@ -756,63 +773,53 @@ app.get('/', (req, res) => {
     </head>
     <body>
       <div class="container">
-        <!-- Left Column: Controls -->
-        <div class="left-column">
-          <div class="card">
-            <h2>Current Browser User Agent</h2>
-            <div class="ua-display">${userAgent}</div>
+        <!-- Top Control Bar -->
+        <div class="control-bar">
+          <div class="card compact">
+            <h2>Browser UA</h2>
+            <div class="ua-display" style="font-size: 11px; padding: 8px;">${userAgent}</div>
           </div>
 
-          <div class="card">
+          <div class="card compact">
             <h2>Bot Selector</h2>
-            <select onchange="onBotSelect(this)">
+            <select onchange="onBotSelect(this)" style="font-size: 13px;">
               ${botOptionsHTML}
             </select>
-            <div class="info-badge">
-              💡 Select a bot to view its user agent string (for reference only)
+            <div style="font-size: 11px; color: #718096; margin-top: 6px;">
+              💡 For reference only
             </div>
           </div>
 
-          <div class="card" id="bot-ua-card" style="display: none;">
-            <h2>Selected Bot User Agent</h2>
-            <div class="ua-display" id="bot-ua-display" style="border-left-color: #f56565;"></div>
-            <div style="font-size: 12px; color: #718096; margin-top: 10px;">
-              📋 Copy this user agent string to use in DevTools
+          <div class="card compact" id="bot-ua-card" style="display: none;">
+            <h2>Selected Bot UA</h2>
+            <div class="ua-display" id="bot-ua-display" style="font-size: 11px; padding: 8px; border-left-color: #f56565;"></div>
+            <div style="font-size: 11px; color: #718096; margin-top: 6px;">
+              📋 Copy to use in DevTools
             </div>
           </div>
 
-          <div class="card">
-            <h2>Test Actions</h2>
-            <div class="button-group">
-              <button class="btn-primary" onclick="sendPageview()">
-                📄 Send $pageview Event
+          <div class="card compact">
+            <h2>Actions</h2>
+            <div class="button-group" style="gap: 8px;">
+              <button class="btn-primary" onclick="sendPageview()" style="padding: 8px 12px; font-size: 13px;">
+                📄 $pageview
               </button>
-              <button class="btn-success" onclick="sendCustomEvent()">
-                ✨ Send Custom Event
+              <button class="btn-success" onclick="sendCustomEvent()" style="padding: 8px 12px; font-size: 13px;">
+                ✨ Custom
               </button>
             </div>
           </div>
 
-          <div class="card">
-            <h3>How to Test</h3>
-            <div class="instructions">
-              <p style="margin-bottom: 10px;"><strong>Using DevTools to Override User Agent:</strong></p>
-              <ol>
-                <li>Select a bot from the dropdown above to copy its user agent</li>
-                <li>Open DevTools (F12 or Cmd+Option+I)</li>
-                <li>Open Network conditions (Cmd+Shift+P → "Show Network conditions")</li>
-                <li>Uncheck "Use browser default"</li>
-                <li>Select "Custom…" and paste the bot UA from above</li>
-                <li>Refresh this page</li>
-                <li>Click "Send $pageview Event"</li>
-                <li>Watch it convert to $bot_pageview in the log →</li>
-              </ol>
+          <div class="card wide">
+            <h2>How to Test</h2>
+            <div style="font-size: 12px;">
+              <strong>1.</strong> Select bot → <strong>2.</strong> Open DevTools (F12) → <strong>3.</strong> Network conditions (Cmd+Shift+P) → <strong>4.</strong> Set Custom UA → <strong>5.</strong> Refresh → <strong>6.</strong> Send event
             </div>
           </div>
         </div>
 
-        <!-- Right Column: Event Log -->
-        <div class="right-column">
+        <!-- Event Log -->
+        <div class="event-log-container">
           <div class="event-log">
             <div class="event-log-header">
               <div class="event-log-title">
