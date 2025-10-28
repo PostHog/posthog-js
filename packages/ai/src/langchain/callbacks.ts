@@ -1,5 +1,5 @@
 import { PostHog } from 'posthog-node'
-import { withPrivacyMode, getModelParams, toContentString, getAiLibMetadata } from '../utils'
+import { withPrivacyMode, getModelParams, toContentString } from '../utils'
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base'
 import { version } from '../../package.json'
 import type { Serialized } from '@langchain/core/load/serializable'
@@ -365,7 +365,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       $ai_latency: latency,
       $ai_span_name: run.name,
       $ai_span_id: runId,
-      $ai_lib_metadata: getAiLibMetadata('langchain'),
+      $ai_framework: 'langchain',
     }
     if (parentRunId) {
       eventProperties['$ai_parent_id'] = parentRunId
@@ -427,7 +427,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       $ai_http_status: 200,
       $ai_latency: latency,
       $ai_base_url: run.baseUrl,
-      $ai_lib_metadata: getAiLibMetadata('langchain'),
+      $ai_framework: 'langchain',
     }
 
     if (run.tools) {

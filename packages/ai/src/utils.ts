@@ -21,17 +21,6 @@ export const MAX_OUTPUT_SIZE = 200000
 const STRING_FORMAT = 'utf8'
 
 /**
- * Generate AI library metadata object with framework name.
- * Used to identify which framework/SDK generated the AI event.
- */
-export function getAiLibMetadata(framework: string): { schema: string; frameworks: Array<{ name: string }> } {
-  return {
-    schema: 'v1',
-    frameworks: [{ name: framework }],
-  }
-}
-
-/**
  * Safely converts content to a string, preserving structure for objects/arrays.
  * - If content is already a string, returns it as-is
  * - If content is an object or array, stringifies it with JSON.stringify to preserve structure
@@ -533,7 +522,6 @@ export const sendEventToPosthog = async ({
   const properties = {
     $ai_lib: 'posthog-ai',
     $ai_lib_version: version,
-    $ai_lib_metadata: getAiLibMetadata(provider),
     $ai_provider: params.posthogProviderOverride ?? provider,
     $ai_model: params.posthogModelOverride ?? model,
     $ai_model_parameters: getModelParams(params),

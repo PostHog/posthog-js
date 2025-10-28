@@ -405,10 +405,6 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(event).toBe('$ai_generation')
     expect(properties['$ai_lib']).toBe('posthog-ai')
     expect(properties['$ai_lib_version']).toBe(version)
-    expect(properties['$ai_lib_metadata']).toEqual({
-      schema: 'v1',
-      frameworks: [{ name: 'openai' }],
-    })
     expect(properties['$ai_provider']).toBe('openai')
     expect(properties['$ai_model']).toBe('gpt-4')
     expect(properties['$ai_input']).toEqual([{ role: 'user', content: 'Hello' }])
