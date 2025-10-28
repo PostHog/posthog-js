@@ -749,7 +749,7 @@ export class WrappedTranscriptions extends Transcriptions {
           const [stream1, stream2] = (value as any).tee()
           ;(async () => {
             try {
-              let finalContent: any[] = []
+              let finalContent: string = ''
               let usage: {
                 inputTokens?: number
                 outputTokens?: number
