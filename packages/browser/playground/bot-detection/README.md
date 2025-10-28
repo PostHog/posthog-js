@@ -33,19 +33,34 @@ If not provided, the app will use default test values that work locally.
 npm install
 ```
 
+### Building
+
+The playground is written in TypeScript. Build the project:
+
+```bash
+npm run build
+```
+
 ## Running the Playground
+
+### Development Mode (with hot reload)
 
 ```bash
 npm run dev
 ```
 
-Or with pnpm (from the playground directory):
+This uses `ts-node` to run the TypeScript directly.
+
+### Production Mode
 
 ```bash
-pnpm dev
+npm run build
+npm start
 ```
 
-This will start the Express server on http://localhost:8080
+This compiles TypeScript to JavaScript in the `dist/` directory and runs the compiled code.
+
+The server will start on http://localhost:8080
 
 ## How to Use
 
@@ -137,6 +152,22 @@ With debug mode enabled (default), you'll see detailed logging in the browser co
 - Check that you've run `pnpm install` first
 - The built PostHog library should exist at `../../dist/posthog.js`
 
+## Project Structure
+
+```
+bot-detection/
+├── src/
+│   └── server.ts          # TypeScript server code
+├── static/
+│   ├── styles.css         # All CSS styles
+│   ├── bot-data.js        # Bot categories and user agents
+│   └── main.js            # Client-side JavaScript
+├── dist/                  # Compiled JavaScript (generated)
+├── package.json           # Dependencies and scripts
+├── tsconfig.json          # TypeScript configuration
+└── README.md
+```
+
 ## Implementation Details
 
 This playground uses the bot detection feature added in the `lricoy/bot-pageview-collection` branch:
@@ -144,3 +175,4 @@ This playground uses the bot detection feature added in the `lricoy/bot-pageview
 - **Browser SDK**: Detects bots and renames pageviews to `$bot_pageview`
 - **Preview Flag**: `__preview_send_bot_pageviews` enables bot traffic collection
 - **Browser Type Property**: `$browser_type: 'bot'` is set on all `$bot_pageview` events for easy filtering
+- **TypeScript**: Server is written in TypeScript for better type safety and maintainability

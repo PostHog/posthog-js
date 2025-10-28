@@ -2,3 +2,7 @@ node_modules/
 package-lock.json
 .env
 *.log
+
+# TypeScript build artifacts
+dist/
+*.tsbuildinfo
