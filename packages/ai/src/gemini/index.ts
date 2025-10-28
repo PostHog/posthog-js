@@ -78,6 +78,7 @@ export class WrappedModels {
             (metadata as GenerateContentResponseUsageMetadata & { thoughtsTokenCount?: number })?.thoughtsTokenCount ??
             0,
           cacheReadInputTokens: metadata?.cachedContentTokenCount ?? 0,
+          webSearchCount: hasGoogleSearchUsage(response),
         },
         tools: availableTools,
       })
@@ -117,6 +118,7 @@ export class WrappedModels {
       inputTokens: 0,
       outputTokens: 0,
     }
+    let accumulatedGroundingMetadata: unknown = undefined
 
     try {
       const stream = await this.client.models.generateContentStream(geminiParams as GenerateContentParameters)
@@ -140,9 +142,14 @@ export class WrappedModels {
           }
         }
 
-        // Handle function calls from candidates
+        // Handle function calls and grounding metadata from candidates
         if (chunk.candidates && Array.isArray(chunk.candidates)) {
           for (const candidate of chunk.candidates) {
+            // Accumulate grounding metadata if present
+            if (candidate.groundingMetadata !== undefined && !accumulatedGroundingMetadata) {
+              accumulatedGroundingMetadata = candidate.groundingMetadata
+            }
+
             if (candidate.content && candidate.content.parts) {
               for (const part of candidate.content.parts) {
                 // Type-safe check for functionCall
@@ -185,6 +192,16 @@ export class WrappedModels {
       // Format output similar to formatResponseGemini
       const output = accumulatedContent.length > 0 ? [{ role: 'assistant', content: accumulatedContent }] : []
 
+      // Build a mock response structure to check for grounding
+      const mockResponse = {
+        candidates: accumulatedContent.length > 0
+          ? [{
+              content: { parts: accumulatedContent },
+              ...(accumulatedGroundingMetadata ? { groundingMetadata: accumulatedGroundingMetadata } : {})
+            }]
+          : []
+      }
+
       await sendEventToPosthog({
         client: this.phClient,
         ...posthogParams,
@@ -196,7 +213,10 @@ export class WrappedModels {
         baseURL: 'https://generativelanguage.googleapis.com',
         params: params as GenerateContentParameters & MonitoringParams,
         httpStatus: 200,
-        usage,
+        usage: {
+          ...usage,
+          webSearchCount: hasGoogleSearchUsage(mockResponse),
+        },
         tools: availableTools,
       })
     } catch (error: unknown) {
@@ -331,6 +351,64 @@ export class WrappedModels {
 
     return messages
   }
+}
+
+/**
+ * Detect if Google Search grounding was used in the response.
+ * Gemini bills per request that uses grounding, not per individual query.
+ * Returns 1 if grounding was used, 0 otherwise.
+ */
+function hasGoogleSearchUsage(response: unknown): number {
+  if (!response || typeof response !== 'object' || !('candidates' in response)) {
+    return 0
+  }
+
+  const candidates = response.candidates
+
+  if (!Array.isArray(candidates)) {
+    return 0
+  }
+
+  const hasGrounding = candidates.some((candidate: unknown) => {
+    if (!candidate || typeof candidate !== 'object') {
+      return false
+    }
+
+    // Check for grounding metadata
+    if ('groundingMetadata' in candidate && candidate.groundingMetadata !== undefined) {
+      return true
+    }
+
+    // Check for google search in function calls
+    if ('content' in candidate && candidate.content && typeof candidate.content === 'object') {
+      const content = candidate.content
+
+      if ('parts' in content && Array.isArray(content.parts)) {
+        return content.parts.some((part: unknown) => {
+          if (!part || typeof part !== 'object' || !('functionCall' in part)) {
+            return false
+          }
+
+          const functionCall = part.functionCall
+
+          if (
+            functionCall &&
+            typeof functionCall === 'object' &&
+            'name' in functionCall &&
+            typeof functionCall.name === 'string'
+          ) {
+            return functionCall.name.includes('google_search') || functionCall.name.includes('grounding')
+          }
+
+          return false
+        })
+      }
+    }
+
+    return false
+  })
+
+  return hasGrounding ? 1 : 0
 }
 
 export default PostHogGoogleGenAI

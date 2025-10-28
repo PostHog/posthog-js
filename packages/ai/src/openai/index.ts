@@ -8,6 +8,7 @@ import {
   withPrivacyMode,
   AIEvent,
   formatOpenAIResponsesInput,
+  calculateWebSearchCount,
 } from '../utils'
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
@@ -39,7 +40,7 @@ interface MonitoringOpenAIConfig extends ClientOptions {
   baseURL?: string
 }
 
-type RequestOptions = Record<string, any>
+type RequestOptions = Record<string, unknown>
 
 export class PostHogOpenAI extends OpenAIOrignal {
   private readonly phClient: PostHog
@@ -122,6 +123,12 @@ export class WrappedCompletions extends Completions {
                 outputTokens: 0,
               }
 
+              // Accumulate web search indicators for binary detection
+              let accumulatedCitations: unknown[] | undefined
+              let accumulatedSearchResults: unknown[] | undefined
+              let accumulatedSearchContextSize: string | undefined
+              let accumulatedAnnotations: unknown[] = []
+
               // Map to track in-progress tool calls
               const toolCallsInProgress = new Map<
                 number,
@@ -182,6 +189,32 @@ export class WrappedCompletions extends Completions {
                     reasoningTokens: chunk.usage.completion_tokens_details?.reasoning_tokens ?? 0,
                     cacheReadInputTokens: chunk.usage.prompt_tokens_details?.cached_tokens ?? 0,
                   }
+
+                  // Accumulate web search indicators (Perplexity via OpenRouter)
+                  if (
+                    'search_context_size' in chunk.usage &&
+                    typeof chunk.usage.search_context_size === 'string'
+                  ) {
+                    accumulatedSearchContextSize = chunk.usage.search_context_size
+                  }
+                }
+
+                // Accumulate root-level web search indicators (Perplexity)
+                if ('citations' in chunk && Array.isArray(chunk.citations)) {
+                  accumulatedCitations = chunk.citations
+                }
+
+                if ('search_results' in chunk && Array.isArray(chunk.search_results)) {
+                  accumulatedSearchResults = chunk.search_results
+                }
+
+                // Accumulate annotations from delta (OpenAI/Perplexity)
+                if (
+                  choice?.delta &&
+                  'annotations' in choice.delta &&
+                  Array.isArray(choice.delta.annotations)
+                ) {
+                  accumulatedAnnotations.push(...choice.delta.annotations)
                 }
               }
 
@@ -233,7 +266,19 @@ export class WrappedCompletions extends Completions {
                 baseURL: this.baseURL,
                 params: body,
                 httpStatus: 200,
-                usage,
+                usage: {
+                  inputTokens: usage.inputTokens,
+                  outputTokens: usage.outputTokens,
+                  reasoningTokens: usage.reasoningTokens,
+                  cacheReadInputTokens: usage.cacheReadInputTokens,
+                  webSearchCount: calculateWebSearchCount({
+                    citations: accumulatedCitations,
+                    search_results: accumulatedSearchResults,
+                    usage: { search_context_size: accumulatedSearchContextSize },
+                    choices:
+                      accumulatedAnnotations.length > 0 ? [{ message: { annotations: accumulatedAnnotations } }] : undefined,
+                  }),
+                },
                 tools: availableTools,
               })
             } catch (error: unknown) {
@@ -271,13 +316,14 @@ export class WrappedCompletions extends Completions {
           if ('choices' in result) {
             const latency = (Date.now() - startTime) / 1000
             const availableTools = extractAvailableToolCalls('openai', openAIParams)
+            const formattedOutput = formatResponseOpenAI(result)
             await sendEventToPosthog({
               client: this.phClient,
               ...posthogParams,
               model: openAIParams.model,
               provider: 'openai',
               input: sanitizeOpenAI(openAIParams.messages),
-              output: formatResponseOpenAI(result),
+              output: formattedOutput,
               latency,
               baseURL: this.baseURL,
               params: body,
@@ -287,6 +333,7 @@ export class WrappedCompletions extends Completions {
                 outputTokens: result.usage?.completion_tokens ?? 0,
                 reasoningTokens: result.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+                webSearchCount: calculateWebSearchCount(result),
               },
               tools: availableTools,
             })
@@ -366,11 +413,14 @@ export class WrappedResponses extends Responses {
 
     if (openAIParams.stream) {
       return parentPromise.then((value) => {
-        if ('tee' in value && typeof (value as any).tee === 'function') {
-          const [stream1, stream2] = (value as any).tee()
+        if (
+          'tee' in value &&
+          typeof value.tee === 'function'
+        ) {
+          const [stream1, stream2] = value.tee()
           ;(async () => {
             try {
-              let finalContent: any[] = []
+              let finalContent: unknown[] = []
               let usage: {
                 inputTokens?: number
                 outputTokens?: number
@@ -414,7 +464,13 @@ export class WrappedResponses extends Responses {
                 baseURL: this.baseURL,
                 params: body,
                 httpStatus: 200,
-                usage,
+                usage: {
+                  inputTokens: usage.inputTokens,
+                  outputTokens: usage.outputTokens,
+                  reasoningTokens: usage.reasoningTokens,
+                  cacheReadInputTokens: usage.cacheReadInputTokens,
+                  webSearchCount: calculateWebSearchCount({ output: finalContent }),
+                },
                 tools: availableTools,
               })
             } catch (error: unknown) {
@@ -452,6 +508,7 @@ export class WrappedResponses extends Responses {
           if ('output' in result) {
             const latency = (Date.now() - startTime) / 1000
             const availableTools = extractAvailableToolCalls('openai', openAIParams)
+            const formattedOutput = formatResponseOpenAI({ output: result.output })
             await sendEventToPosthog({
               client: this.phClient,
               ...posthogParams,
@@ -459,7 +516,7 @@ export class WrappedResponses extends Responses {
               model: openAIParams.model,
               provider: 'openai',
               input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
-              output: formatResponseOpenAI({ output: result.output }),
+              output: formattedOutput,
               latency,
               baseURL: this.baseURL,
               params: body,
@@ -469,6 +526,7 @@ export class WrappedResponses extends Responses {
                 outputTokens: result.usage?.output_tokens ?? 0,
                 reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
+                webSearchCount: calculateWebSearchCount(result),
               },
               tools: availableTools,
             })
@@ -515,9 +573,9 @@ export class WrappedResponses extends Responses {
     const startTime = Date.now()
 
     const originalCreate = super.create.bind(this)
-    const originalSelf = this as any
-    const tempCreate = originalSelf.create
-    originalSelf.create = originalCreate
+    const originalSelfRecord = this as Record<string, unknown>
+    const tempCreate = originalSelfRecord['create']
+    originalSelfRecord['create'] = originalCreate
 
     try {
       const parentPromise = super.parse(openAIParams, options)
@@ -576,7 +634,7 @@ export class WrappedResponses extends Responses {
       return wrappedPromise as APIPromise<ParsedResponse<ParsedT>>
     } finally {
       // Restore our wrapped create method
-      originalSelf.create = tempCreate
+      originalSelfRecord['create'] = tempCreate
     }
   }
 }

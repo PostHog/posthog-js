@@ -15,6 +15,7 @@ import {
   MAX_OUTPUT_SIZE,
   extractAvailableToolCalls,
   toContentString,
+  calculateWebSearchCount,
 } from '../utils'
 import { Buffer } from 'buffer'
 import { redactBase64DataUrl } from '../sanitization'
@@ -296,11 +297,42 @@ export const createInstrumentationMiddleware = (
               }
             : {}),
         }
+
+        // Calculate web search count based on provider
+        let webSearchCount = 0
+
+        if (
+          providerMetadata?.anthropic &&
+          typeof providerMetadata.anthropic === 'object' &&
+          'server_tool_use' in providerMetadata.anthropic
+        ) {
+          // Anthropic-specific extraction
+          const serverToolUse = providerMetadata.anthropic.server_tool_use
+
+          if (
+            serverToolUse &&
+            typeof serverToolUse === 'object' &&
+            'web_search_requests' in serverToolUse &&
+            typeof serverToolUse.web_search_requests === 'number'
+          ) {
+            webSearchCount = serverToolUse.web_search_requests
+          }
+        } else {
+          // For other providers through Vercel, pass available metadata to helper
+          // Note: Vercel abstracts provider responses, so we may not have access to
+          // raw citations/annotations unless Vercel exposes them in usage/metadata
+          webSearchCount = calculateWebSearchCount({
+            usage: result.usage,
+            providerMetadata: providerMetadata,
+          })
+        }
+
         const usage = {
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
           reasoningTokens: result.usage.reasoningTokens,
           cacheReadInputTokens: result.usage.cachedInputTokens,
+          webSearchCount,
           ...additionalTokenValues,
         }
         await sendEventToPosthog({
@@ -359,6 +391,7 @@ export const createInstrumentationMiddleware = (
         cacheReadInputTokens?: any
         cacheCreationInputTokens?: any
       } = {}
+      let providerMetadata: unknown = undefined
       const mergedParams = {
         ...options,
         ...mapVercelParams(params),
@@ -425,14 +458,18 @@ export const createInstrumentationMiddleware = (
             }
 
             if (chunk.type === 'finish') {
-              const providerMetadata = chunk.providerMetadata
-              const additionalTokenValues = {
-                ...(providerMetadata?.anthropic
+              providerMetadata = chunk.providerMetadata
+              const additionalTokenValues =
+                providerMetadata &&
+                typeof providerMetadata === 'object' &&
+                'anthropic' in providerMetadata &&
+                providerMetadata.anthropic &&
+                typeof providerMetadata.anthropic === 'object' &&
+                'cacheCreationInputTokens' in providerMetadata.anthropic
                   ? {
                       cacheCreationInputTokens: providerMetadata.anthropic.cacheCreationInputTokens,
                     }
-                  : {}),
-              }
+                  : {}
               usage = {
                 inputTokens: chunk.usage?.inputTokens,
                 outputTokens: chunk.usage?.outputTokens,
@@ -480,6 +517,44 @@ export const createInstrumentationMiddleware = (
                   ]
                 : []
 
+            // Calculate web search count based on provider
+            let webSearchCount = 0
+
+            if (
+              providerMetadata &&
+              typeof providerMetadata === 'object' &&
+              'anthropic' in providerMetadata &&
+              providerMetadata.anthropic &&
+              typeof providerMetadata.anthropic === 'object' &&
+              'server_tool_use' in providerMetadata.anthropic
+            ) {
+              // Anthropic-specific extraction
+              const serverToolUse = providerMetadata.anthropic.server_tool_use
+
+              if (
+                serverToolUse &&
+                typeof serverToolUse === 'object' &&
+                'web_search_requests' in serverToolUse &&
+                typeof serverToolUse.web_search_requests === 'number'
+              ) {
+                webSearchCount = serverToolUse.web_search_requests
+              }
+            } else {
+              // For other providers through Vercel, pass available metadata to helper
+              // Note: Vercel abstracts provider responses, so we may not have access to
+              // raw citations/annotations unless Vercel exposes them in usage/metadata
+              webSearchCount = calculateWebSearchCount({
+                usage: usage,
+                providerMetadata: providerMetadata,
+              })
+            }
+
+            // Update usage with web search count
+            const finalUsage = {
+              ...usage,
+              webSearchCount,
+            }
+
             await sendEventToPosthog({
               client: phClient,
               distinctId: options.posthogDistinctId,
@@ -492,7 +567,7 @@ export const createInstrumentationMiddleware = (
               baseURL,
               params: mergedParams as any,
               httpStatus: 200,
-              usage,
+              usage: finalUsage,
               tools: availableTools,
               captureImmediate: options.posthogCaptureImmediate,
             })
