@@ -442,6 +442,63 @@ describe('Autocapture system', () => {
             }
         )
 
+        describe('when rageclick is configured with custom thresholds', () => {
+            beforeEach(() => {
+                beforeSendMock.mockClear()
+            })
+
+            it('respects custom click_count threshold', () => {
+                posthog.config.rageclick = { click_count: 2 }
+                autocapture.onRemoteConfig({} as FlagsResponse)
+
+                const el = document.createElement('button')
+                const fakeEvent = makeMouseEvent({ target: el, clientX: 5, clientY: 5 })
+                Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
+
+                // Should trigger rageclick after 2 clicks instead of 3
+                autocapture['_captureEvent'](fakeEvent)
+                autocapture['_captureEvent'](fakeEvent)
+
+                const captured = beforeSendMock.mock.calls.map((args) => args[0].event)
+                expect(captured).toContain('$rageclick')
+            })
+
+            it('respects custom timeout_ms threshold', () => {
+                posthog.config.rageclick = { timeout_ms: 10 }
+                autocapture.onRemoteConfig({} as FlagsResponse)
+
+                const el = document.createElement('button')
+                const fakeEvent = makeMouseEvent({ target: el, clientX: 5, clientY: 5 })
+                Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
+
+                // Simulate clicks too far apart in time
+                autocapture['_captureEvent']({ ...fakeEvent, timeStamp: 0 })
+                autocapture['_captureEvent']({ ...fakeEvent, timeStamp: 100 })
+                autocapture['_captureEvent']({ ...fakeEvent, timeStamp: 200 })
+
+                const captured = beforeSendMock.mock.calls.map((args) => args[0].event)
+                expect(captured).not.toContain('$rageclick')
+            })
+
+            it('respects custom threshold_px distance', () => {
+                posthog.config.rageclick = { threshold_px: 5 }
+                autocapture.onRemoteConfig({} as FlagsResponse)
+
+                const el = document.createElement('button')
+                const fakeEvent1 = makeMouseEvent({ target: el, clientX: 0, clientY: 0 })
+                const fakeEvent2 = makeMouseEvent({ target: el, clientX: 10, clientY: 0 }) // beyond threshold
+                Object.setPrototypeOf(fakeEvent1, MouseEvent.prototype)
+                Object.setPrototypeOf(fakeEvent2, MouseEvent.prototype)
+
+                autocapture['_captureEvent'](fakeEvent1)
+                autocapture['_captureEvent'](fakeEvent2)
+                autocapture['_captureEvent'](fakeEvent2)
+
+                const captured = beforeSendMock.mock.calls.map((args) => args[0].event)
+                expect(captured).not.toContain('$rageclick')
+            })
+        })
+
         describe('clipboard autocapture', () => {
             let elTarget: HTMLDivElement
 
