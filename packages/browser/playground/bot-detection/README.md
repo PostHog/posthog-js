@@ -157,16 +157,38 @@ With debug mode enabled (default), you'll see detailed logging in the browser co
 ```
 bot-detection/
 ├── src/
-│   └── server.ts          # TypeScript server code
+│   ├── server.ts          # Express server (TypeScript)
+│   └── client/
+│       ├── index.tsx      # React app entry point
+│       ├── App.tsx        # Main App component
+│       ├── types.ts       # TypeScript interfaces
+│       └── components/
+│           ├── ControlBar.tsx    # Top control panel
+│           ├── BotSelector.tsx   # Bot dropdown selector
+│           ├── EventLog.tsx      # Event log container
+│           └── EventCard.tsx     # Individual event display
 ├── static/
 │   ├── styles.css         # All CSS styles
 │   ├── bot-data.js        # Bot categories and user agents
-│   └── main.js            # Client-side JavaScript
-├── dist/                  # Compiled JavaScript (generated)
+│   ├── bundle.js          # Compiled React app (generated)
+│   └── bundle.js.map      # Source map (generated)
+├── dist/                  # Compiled server code (generated)
 ├── package.json           # Dependencies and scripts
-├── tsconfig.json          # TypeScript configuration
+├── tsconfig.json          # Server TypeScript configuration
+├── tsconfig.client.json   # Client TypeScript configuration
 └── README.md
 ```
+
+**Note**: Both `static/bundle.js` and `dist/` are build artifacts and should not be edited directly. Edit the TypeScript source files in `src/` instead.
+
+## Technology Stack
+
+- **Frontend**: React 18 + TypeScript
+- **Backend**: Express + TypeScript
+- **Build Tools**:
+    - esbuild for React bundling
+    - TypeScript compiler for server
+- **State Management**: React hooks (useState, useEffect)
 
 ## Implementation Details
 
@@ -175,4 +197,5 @@ This playground uses the bot detection feature added in the `lricoy/bot-pageview
 - **Browser SDK**: Detects bots and renames pageviews to `$bot_pageview`
 - **Preview Flag**: `__preview_send_bot_pageviews` enables bot traffic collection
 - **Browser Type Property**: `$browser_type: 'bot'` is set on all `$bot_pageview` events for easy filtering
-- **TypeScript**: Server is written in TypeScript for better type safety and maintainability
+- **React + TypeScript**: Component-based UI with full type safety
+- **Clean Architecture**: Separated concerns with reusable components
