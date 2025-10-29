@@ -82,6 +82,9 @@ describe(`Segment integration`, () => {
                 })
             },
         }
+
+        // logging of network requests during init causes this to flake
+        console.error = jest.fn()
     })
 
     it('should call loaded after the segment integration has been set up', async () => {
