@@ -42,10 +42,8 @@ test.describe('Session Recording - Session Linking', () => {
             },
         })
 
-        const firstSnapshot = await page.evaluate(async () => {
-            const events = await (window as WindowWithPostHog).posthog?.getAllCapturedEvents()
-            return events?.find((e: any) => e.event === '$snapshot')
-        })
+        const capturedEvents = await page.capturedEvents()
+        const firstSnapshot = capturedEvents?.find((e: any) => e.event === '$snapshot')
 
         const firstSnapshotData = firstSnapshot?.properties?.$snapshot_data
         expect(firstSnapshotData).toBeDefined()
@@ -71,10 +69,8 @@ test.describe('Session Recording - Session Linking', () => {
 
         expect(firstSessionId).not.toEqual(newSessionId)
 
-        const secondSnapshot = await page.evaluate(async () => {
-            const events = await (window as WindowWithPostHog).posthog?.getAllCapturedEvents()
-            return events?.find((e: any) => e.event === '$snapshot')
-        })
+        const capturedEventsAfterReset = await page.capturedEvents()
+        const secondSnapshot = capturedEventsAfterReset?.find((e: any) => e.event === '$snapshot')
 
         const secondSnapshotData = secondSnapshot?.properties?.$snapshot_data
         expect(secondSnapshotData).toBeDefined()
@@ -121,10 +117,8 @@ test.describe('Session Recording - Session Linking', () => {
 
         expect(firstSessionId).not.toEqual(newSessionId)
 
-        const snapshot = await page.evaluate(async () => {
-            const events = await (window as WindowWithPostHog).posthog?.getAllCapturedEvents()
-            return events?.find((e: any) => e.event === '$snapshot')
-        })
+        const capturedEventsAfterChange = await page.capturedEvents()
+        const snapshot = capturedEventsAfterChange?.find((e: any) => e.event === '$snapshot')
 
         const snapshotData = snapshot?.properties?.$snapshot_data
 
