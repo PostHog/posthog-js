@@ -1046,7 +1046,7 @@ export interface PostHogConfig {
      * Enables collection of bot traffic as $bot_pageview events with detailed bot detection
      * properties instead of dropping them entirely. Use it alongside opt_out_useragent_filter
      */
-    __preview_send_bot_pageviews?: boolean
+    __preview_capture_bot_pageviews?: boolean
 
     // ------- RETIRED CONFIGS - NO REPLACEMENT OR USAGE -------
 
@@ -1079,13 +1079,6 @@ export interface ErrorTrackingOptions {
      * @default false
      */
     captureExtensionExceptions?: boolean
-
-    /**
-     * UNSTABLE: determines whether exception caused by the PostHog SDK will be captured
-     *
-     * @default false
-     */
-    __capturePostHogExceptions?: boolean
 
     /**
      * ADVANCED: alters the refill rate for the token bucket mutation throttling

@@ -113,7 +113,7 @@ export type PostHogOptions = PostHogCoreOptions & {
    * })
    * ```
    */
-  __preview_send_bot_pageviews?: boolean
+  __preview_capture_bot_pageviews?: boolean
 }
 
 export type PostHogFeatureFlag = {
