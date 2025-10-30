@@ -19,7 +19,7 @@ export interface BotCategories {
 export interface PostHogConfig {
     api_host: string
     ui_host: string
-    __preview_send_bot_pageviews: boolean
+    __preview_capture_bot_pageviews: boolean
     autocapture: boolean
     before_send?: (event: any) => any
     loaded?: (ph: any) => void

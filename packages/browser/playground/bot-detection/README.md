@@ -7,7 +7,7 @@ A simple playground for testing PostHog's bot detection and pageview collection 
 This playground demonstrates:
 
 - Bot detection using user agent filtering
-- `__preview_send_bot_pageviews` preview flag
+- `__preview_capture_bot_pageviews` preview flag
 - `$bot_pageview` event generation for bot traffic
 - `$browser_type` property on bot pageviews
 - Interactive testing UI with buttons
@@ -99,13 +99,13 @@ curl 'http://localhost:8080' -H 'User-Agent: Googlebot/2.1' -v
 
 ## What to Observe
 
-### When `__preview_send_bot_pageviews: true` (Default)
+### When `__preview_capture_bot_pageviews: true` (Default)
 
 - **Bot traffic**: Pageviews renamed to `$bot_pageview` with `$browser_type: 'bot'`
 - **Normal traffic**: Pageviews remain as `$pageview` without `$browser_type`
 - **Other events**: Sent normally regardless of user agent
 
-### When `__preview_send_bot_pageviews: false`
+### When `__preview_capture_bot_pageviews: false`
 
 - **Bot traffic**: All events dropped (default PostHog behavior)
 - **Normal traffic**: All events sent normally
@@ -195,7 +195,7 @@ bot-detection/
 This playground uses the bot detection feature added in the `lricoy/bot-pageview-collection` branch:
 
 - **Browser SDK**: Detects bots and renames pageviews to `$bot_pageview`
-- **Preview Flag**: `__preview_send_bot_pageviews` enables bot traffic collection
+- **Preview Flag**: `__preview_capture_bot_pageviews` enables bot traffic collection
 - **Browser Type Property**: `$browser_type: 'bot'` is set on all `$bot_pageview` events for easy filtering
 - **React + TypeScript**: Component-based UI with full type safety
 - **Clean Architecture**: Separated concerns with reusable components

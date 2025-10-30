@@ -136,10 +136,10 @@ describe('bot detection and pageview collection', () => {
         })
     })
 
-    describe('with __preview_send_bot_pageviews enabled', () => {
+    describe('with __preview_capture_bot_pageviews enabled', () => {
         it('should send bot pageviews as $bot_pageview events', async () => {
             setBotUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
-            posthog = await createPostHog({ __preview_send_bot_pageviews: true })
+            posthog = await createPostHog({ __preview_capture_bot_pageviews: true })
 
             posthog.capture('$pageview')
 
@@ -152,7 +152,7 @@ describe('bot detection and pageview collection', () => {
 
         it('should set $browser_type to "bot" for $bot_pageview events', async () => {
             setBotUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
-            posthog = await createPostHog({ __preview_send_bot_pageviews: true })
+            posthog = await createPostHog({ __preview_capture_bot_pageviews: true })
 
             posthog.capture('$pageview')
 
@@ -166,7 +166,7 @@ describe('bot detection and pageview collection', () => {
 
         it('should send non-pageview events from bots with original event name', async () => {
             setBotUserAgent('Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)')
-            posthog = await createPostHog({ __preview_send_bot_pageviews: true })
+            posthog = await createPostHog({ __preview_capture_bot_pageviews: true })
 
             posthog.capture('custom_event')
 
@@ -176,7 +176,7 @@ describe('bot detection and pageview collection', () => {
 
         it('should send webdriver-detected bot pageviews as $bot_pageview', async () => {
             setWebdriver(true)
-            posthog = await createPostHog({ __preview_send_bot_pageviews: true })
+            posthog = await createPostHog({ __preview_capture_bot_pageviews: true })
 
             posthog.capture('$pageview')
 
@@ -186,7 +186,7 @@ describe('bot detection and pageview collection', () => {
 
         it('should send normal browser pageviews as $pageview', async () => {
             setBotUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36')
-            posthog = await createPostHog({ __preview_send_bot_pageviews: true })
+            posthog = await createPostHog({ __preview_capture_bot_pageviews: true })
 
             posthog.capture('$pageview')
 
@@ -206,7 +206,7 @@ describe('bot detection and pageview collection', () => {
 
             for (const ua of botUserAgents) {
                 setBotUserAgent(ua)
-                posthog = await createPostHog({ __preview_send_bot_pageviews: true })
+                posthog = await createPostHog({ __preview_capture_bot_pageviews: true })
                 beforeSendMock.mockClear()
 
                 posthog.capture('$pageview')
@@ -217,12 +217,12 @@ describe('bot detection and pageview collection', () => {
         })
     })
 
-    describe('interaction between opt_out_useragent_filter and __preview_send_bot_pageviews', () => {
+    describe('interaction between opt_out_useragent_filter and __preview_capture_bot_pageviews', () => {
         it('should not rename events when opt_out_useragent_filter is true (bot filtering disabled)', async () => {
             setBotUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
             posthog = await createPostHog({
                 opt_out_useragent_filter: true,
-                __preview_send_bot_pageviews: true,
+                __preview_capture_bot_pageviews: true,
             })
 
             posthog.capture('$pageview')
@@ -236,7 +236,7 @@ describe('bot detection and pageview collection', () => {
             setBotUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
             posthog = await createPostHog({
                 opt_out_useragent_filter: true,
-                __preview_send_bot_pageviews: true,
+                __preview_capture_bot_pageviews: true,
             })
 
             posthog.capture('$pageview')
@@ -250,7 +250,7 @@ describe('bot detection and pageview collection', () => {
             setBotUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
             posthog = await createPostHog({
                 opt_out_useragent_filter: true,
-                __preview_send_bot_pageviews: false,
+                __preview_capture_bot_pageviews: false,
             })
 
             posthog.capture('$pageview')
@@ -265,7 +265,7 @@ describe('bot detection and pageview collection', () => {
             setBotUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
             posthog = await createPostHog({
                 opt_out_useragent_filter: true,
-                __preview_send_bot_pageviews: true,
+                __preview_capture_bot_pageviews: true,
             })
 
             posthog.capture('custom_event')
@@ -282,7 +282,7 @@ describe('bot detection and pageview collection', () => {
             const originalNav = (global as any).navigator
             ;(global as any).navigator = undefined
 
-            posthog = await createPostHog({ __preview_send_bot_pageviews: true })
+            posthog = await createPostHog({ __preview_capture_bot_pageviews: true })
 
             posthog.capture('$pageview')
 
@@ -295,7 +295,7 @@ describe('bot detection and pageview collection', () => {
             setBotUserAgent('MyCustomBot/1.0')
             posthog = await createPostHog({
                 custom_blocked_useragents: ['MyCustomBot'],
-                __preview_send_bot_pageviews: true,
+                __preview_capture_bot_pageviews: true,
             })
 
             posthog.capture('$pageview')
@@ -306,7 +306,7 @@ describe('bot detection and pageview collection', () => {
 
         it('should preserve event properties when renaming to $bot_pageview', async () => {
             setBotUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
-            posthog = await createPostHog({ __preview_send_bot_pageviews: true })
+            posthog = await createPostHog({ __preview_capture_bot_pageviews: true })
 
             posthog.capture('$pageview', { custom_prop: 'test_value' })
 

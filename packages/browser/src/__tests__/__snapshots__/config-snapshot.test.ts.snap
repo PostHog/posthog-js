@@ -339,11 +339,6 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "false",
       "true"
     ],
-    "__capturePostHogExceptions": [
-      "undefined",
-      "false",
-      "true"
-    ],
     "__exceptionRateLimiterRefillRate": [
       "undefined",
       "number"
@@ -579,7 +574,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true"
   ],
-  "__preview_send_bot_pageviews": [
+  "__preview_capture_bot_pageviews": [
     "undefined",
     "false",
     "true"

@@ -25,7 +25,7 @@ export function App({ token, apiHost, uiHost, initialUserAgent }: AppProps) {
             window.posthog.init(token, {
                 api_host: apiHost,
                 ui_host: uiHost,
-                __preview_send_bot_pageviews: true,
+                __preview_capture_bot_pageviews: true,
                 autocapture: false,
                 before_send: function (event: any) {
                     const eventData: CapturedEvent = {

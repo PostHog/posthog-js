@@ -1503,7 +1503,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // Handle bot pageview collection based on preview flag
     if (
       eventMessage.event === '$pageview' &&
-      this.options.__preview_send_bot_pageviews &&
+      this.options.__preview_capture_bot_pageviews &&
       typeof eventProperties.$raw_user_agent === 'string'
     ) {
       if (isBlockedUA(eventProperties.$raw_user_agent, this.options.custom_blocked_useragents || [])) {

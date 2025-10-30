@@ -84,7 +84,7 @@ describe('bot detection and pageview collection (Node SDK)', () => {
     })
   })
 
-  describe('with __preview_send_bot_pageviews enabled', () => {
+  describe('with __preview_capture_bot_pageviews enabled', () => {
     it('should rename bot pageviews to $bot_pageview', async () => {
       client = new PostHog('test-api-key', {
         host: 'http://example.com',
@@ -92,7 +92,7 @@ describe('bot detection and pageview collection (Node SDK)', () => {
         flushInterval: 0,
         fetchRetryCount: 0,
         disableCompression: true,
-        __preview_send_bot_pageviews: true,
+        __preview_capture_bot_pageviews: true,
       })
 
       client.capture({
@@ -123,7 +123,7 @@ describe('bot detection and pageview collection (Node SDK)', () => {
         flushInterval: 0,
         fetchRetryCount: 0,
         disableCompression: true,
-        __preview_send_bot_pageviews: true,
+        __preview_capture_bot_pageviews: true,
       })
 
       client.capture({
@@ -153,7 +153,7 @@ describe('bot detection and pageview collection (Node SDK)', () => {
         flushInterval: 0,
         fetchRetryCount: 0,
         disableCompression: true,
-        __preview_send_bot_pageviews: true,
+        __preview_capture_bot_pageviews: true,
       })
 
       client.capture({
@@ -191,7 +191,7 @@ describe('bot detection and pageview collection (Node SDK)', () => {
           flushInterval: 0,
           fetchRetryCount: 0,
           disableCompression: true,
-          __preview_send_bot_pageviews: true,
+          __preview_capture_bot_pageviews: true,
         })
 
         client.capture({
@@ -222,7 +222,7 @@ describe('bot detection and pageview collection (Node SDK)', () => {
         flushInterval: 0,
         fetchRetryCount: 0,
         disableCompression: true,
-        __preview_send_bot_pageviews: true,
+        __preview_capture_bot_pageviews: true,
       })
 
       client.capture({
@@ -247,7 +247,7 @@ describe('bot detection and pageview collection (Node SDK)', () => {
         flushInterval: 0,
         fetchRetryCount: 0,
         disableCompression: true,
-        __preview_send_bot_pageviews: true,
+        __preview_capture_bot_pageviews: true,
         custom_blocked_useragents: ['MyCustomBot'],
       })
 
@@ -276,7 +276,7 @@ describe('bot detection and pageview collection (Node SDK)', () => {
         flushInterval: 0,
         fetchRetryCount: 0,
         disableCompression: true,
-        __preview_send_bot_pageviews: true,
+        __preview_capture_bot_pageviews: true,
       })
 
       client.capture({
