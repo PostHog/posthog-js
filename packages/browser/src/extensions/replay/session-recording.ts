@@ -243,7 +243,10 @@ export class SessionRecording {
      * instead call `posthog.startSessionRecording({linked_flag: true})`
      * */
     public overrideLinkedFlag() {
-        // TODO what if this gets called before lazy loading is done
+        if (!this._lazyLoadedSessionRecording) {
+            logger.warn('overrideLinkedFlag called before recording has finished loading')
+        }
+
         this._lazyLoadedSessionRecording?.overrideLinkedFlag()
     }
 
@@ -254,7 +257,10 @@ export class SessionRecording {
      * instead call `posthog.startSessionRecording({sampling: true})`
      * */
     public overrideSampling() {
-        // TODO what if this gets called before lazy loading is done
+        if (!this._lazyLoadedSessionRecording) {
+            logger.warn('overrideSampling called before recording has finished loading')
+        }
+
         this._lazyLoadedSessionRecording?.overrideSampling()
     }
 
@@ -265,7 +271,10 @@ export class SessionRecording {
      * instead call `posthog.startSessionRecording({trigger: 'url' | 'event'})`
      * */
     public overrideTrigger(triggerType: TriggerType) {
-        // TODO what if this gets called before lazy loading is done
+        if (!this._lazyLoadedSessionRecording) {
+            logger.warn('overrideTrigger called before recording has finished loading')
+        }
+
         this._lazyLoadedSessionRecording?.overrideTrigger(triggerType)
     }
 
