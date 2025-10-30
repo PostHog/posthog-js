@@ -390,7 +390,7 @@ export class SurveyManager {
     }
 
     public renderSurvey = (survey: Survey, selector: Element): void => {
-        if (this._posthog.config.surveys?.prefillFromUrl) {
+        if (this._posthog.config?.surveys?.prefillFromUrl) {
             this._handleUrlPrefill(survey)
         }
 
