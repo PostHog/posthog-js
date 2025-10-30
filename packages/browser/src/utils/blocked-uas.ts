@@ -1,4 +1,5 @@
 // Re-export shared bot detection logic from @posthog/core
+import { isBlockedUA as isBlockedUACore } from '@posthog/core'
 export { DEFAULT_BLOCKED_UA_STRS, isBlockedUA } from '@posthog/core'
 
 // There's more in the type, but this is all we use. It's currently experimental, see
@@ -24,14 +25,17 @@ export const isLikelyBot = function (navigator: Navigator | undefined, customBlo
     }
     const ua = navigator.userAgent
     if (ua) {
-        if (isBlockedUA(ua, customBlockedUserAgents)) {
+        if (isBlockedUACore(ua, customBlockedUserAgents)) {
             return true
         }
     }
     try {
         // eslint-disable-next-line compat/compat
         const uaData = navigator?.userAgentData as NavigatorUAData
-        if (uaData?.brands && uaData.brands.some((brandObj) => isBlockedUA(brandObj?.brand, customBlockedUserAgents))) {
+        if (
+            uaData?.brands &&
+            uaData.brands.some((brandObj) => isBlockedUACore(brandObj?.brand, customBlockedUserAgents))
+        ) {
             return true
         }
     } catch {
