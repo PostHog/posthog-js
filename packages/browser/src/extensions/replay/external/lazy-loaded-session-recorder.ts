@@ -49,6 +49,7 @@ import {
 import {
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_OVERRIDE_CONFIG,
     SESSION_RECORDING_REMOTE_CONFIG,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
 } from '../../../constants'
@@ -57,6 +58,7 @@ import {
     CaptureResult,
     NetworkRecordOptions,
     NetworkRequest,
+    OverrideConfig,
     Properties,
     SessionIdChangedCallback,
     SessionRecordingOptions,
@@ -700,6 +702,28 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 variant,
             })
         })
+
+        const overrideConfig: any = this._instance.get_property(SESSION_RECORDING_OVERRIDE_CONFIG)
+
+        if (overrideConfig) {
+            const parsedConfig = (isObject(overrideConfig) ? overrideConfig : JSON.parse(overrideConfig)) as OverrideConfig
+
+            if (parsedConfig.sampling) {
+                this.overrideSampling()
+            }
+
+            if (parsedConfig.linked_flag) {
+                this.overrideLinkedFlag()
+            }
+
+            if (parsedConfig.url_trigger) {
+                this.overrideTrigger('url')
+            }
+
+            if (parsedConfig.event_trigger) {
+                this.overrideTrigger('event')
+            }
+        }
 
         this._makeSamplingDecision(this.sessionId)
         this._startRecorder()
