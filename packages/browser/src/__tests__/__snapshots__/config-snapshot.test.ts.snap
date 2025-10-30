@@ -579,6 +579,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true"
   ],
+  "__preview_capture_bot_pageviews": [
+    "undefined",
+    "false",
+    "true"
+  ],
   "__preview_lazy_load_replay": [
     "undefined",
     "false",
