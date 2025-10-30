@@ -110,6 +110,7 @@ describe('bot detection and pageview collection (Node SDK)', () => {
       expect(call).toBeDefined()
       const body = JSON.parse((call![1] as any).body)
       expect(body.batch[0].event).toBe('$bot_pageview')
+      expect(body.batch[0].properties.$browser_type).toBe('bot')
       expect(body.batch[0].properties.$raw_user_agent).toBe(
         'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
       )

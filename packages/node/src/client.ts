@@ -1501,20 +1501,20 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       })
 
     // Handle bot pageview collection based on preview flag
-    let finalEvent = eventMessage.event
     if (
       eventMessage.event === '$pageview' &&
       this.options.__preview_send_bot_pageviews &&
       typeof eventProperties.$raw_user_agent === 'string'
     ) {
       if (isBlockedUA(eventProperties.$raw_user_agent, this.options.custom_blocked_useragents || [])) {
-        finalEvent = '$bot_pageview'
+        eventMessage.event = '$bot_pageview'
+        eventProperties.$browser_type = 'bot'
       }
     }
 
     return {
       distinctId: eventMessage.distinctId,
-      event: finalEvent,
+      event: eventMessage.event,
       properties: eventProperties,
       options: {
         timestamp: eventMessage.timestamp,
