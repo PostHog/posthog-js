@@ -56,6 +56,11 @@ import {
     getSurveyStylesheet,
     addSurveyCSSVariablesToElement,
 } from './surveys/surveys-extension-utils'
+import {
+    extractPrefillParamsFromUrl,
+    convertPrefillToResponses,
+    allRequiredQuestionsFilled,
+} from '../utils/survey-url-prefill'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -220,6 +225,7 @@ export class SurveyManager {
     private _posthog: PostHog
     private _surveyInFocus: string | null
     private _surveyTimeouts: Map<string, NodeJS.Timeout> = new Map()
+    private _autoSubmitTimeout?: NodeJS.Timeout
     private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener; survey: Survey }> =
         new Map()
 
@@ -383,6 +389,11 @@ export class SurveyManager {
     }
 
     public renderSurvey = (survey: Survey, selector: Element): void => {
+        // Handle URL prefill if enabled
+        if (this._posthog.config.surveys?.prefillFromUrl) {
+            this._handleUrlPrefill(survey)
+        }
+
         Preact.render(
             <SurveyPopup
                 posthog={this._posthog}
@@ -392,6 +403,74 @@ export class SurveyManager {
             />,
             selector
         )
+    }
+
+    private _handleUrlPrefill(survey: Survey): void {
+        try {
+            const searchParams = new URLSearchParams(window.location.search)
+            const { params, autoSubmit } = extractPrefillParamsFromUrl(searchParams)
+
+            // If no prefill params, return early
+            if (Object.keys(params).length === 0) {
+                return
+            }
+
+            logger.info('[Survey Prefill] Detected URL prefill parameters')
+
+            // Convert to response format
+            const responses = convertPrefillToResponses(survey, params)
+
+            if (Object.keys(responses).length === 0) {
+                logger.warn('[Survey Prefill] No valid responses after conversion')
+                return
+            }
+
+            // Generate submission ID
+            const submissionId = uuidv7()
+
+            // Store in localStorage (existing SDK mechanism!)
+            setInProgressSurveyState(survey, {
+                surveySubmissionId: submissionId,
+                responses: responses,
+                lastQuestionIndex: 0,
+            })
+
+            logger.info('[Survey Prefill] Stored prefilled responses in localStorage')
+
+            // Handle auto-submit if requested and all required questions filled
+            const shouldAutoSubmit =
+                autoSubmit &&
+                this._posthog.config.surveys?.autoSubmitIfComplete &&
+                allRequiredQuestionsFilled(survey, responses)
+
+            if (shouldAutoSubmit) {
+                this._scheduleAutoSubmit(survey, responses, submissionId)
+            }
+        } catch (error) {
+            logger.error('[Survey Prefill] Error handling URL prefill:', error)
+        }
+    }
+
+    private _scheduleAutoSubmit(
+        survey: Survey,
+        responses: Record<string, any>,
+        submissionId: string
+    ): void {
+        const delay = this._posthog.config.surveys?.autoSubmitDelay ?? 800
+
+        logger.info('[Survey Prefill] Auto-submit scheduled')
+
+        this._autoSubmitTimeout = setTimeout(() => {
+            logger.info('[Survey Prefill] Auto-submitting survey')
+
+            sendSurveyEvent({
+                responses,
+                survey,
+                surveySubmissionId: submissionId,
+                posthog: this._posthog,
+                isSurveyCompleted: true,
+            })
+        }, delay)
     }
 
     private _isSurveyFeatureFlagEnabled(flagKey: string | null, flagVariant: string | undefined = undefined) {
