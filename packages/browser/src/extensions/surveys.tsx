@@ -228,6 +228,7 @@ export class SurveyManager {
     private _autoSubmitTimeout?: NodeJS.Timeout
     private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener; survey: Survey }> =
         new Map()
+    private _prefillHandledSurveys: Set<string> = new Set()
 
     constructor(posthog: PostHog) {
         this._posthog = posthog
@@ -405,6 +406,11 @@ export class SurveyManager {
     }
 
     private _handleUrlPrefill(survey: Survey): void {
+        // Only handle prefill once per survey session to avoid overwriting in-progress responses
+        if (this._prefillHandledSurveys.has(survey.id)) {
+            return
+        }
+
         try {
             const searchParams = new URLSearchParams(window.location.search)
             const { params, autoSubmit } = extractPrefillParamsFromUrl(searchParams)
@@ -440,6 +446,9 @@ export class SurveyManager {
             if (shouldAutoSubmit) {
                 this._scheduleAutoSubmit(survey, responses, submissionId)
             }
+
+            // Mark this survey as having been prefilled
+            this._prefillHandledSurveys.add(survey.id)
         } catch (error) {
             logger.error('[Survey Prefill] Error handling URL prefill:', error)
         }

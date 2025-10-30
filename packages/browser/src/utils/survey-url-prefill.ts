@@ -80,6 +80,9 @@ export function convertPrefillToResponses(survey: Survey, prefillParams: Prefill
 
                     // Remove duplicates and map to choice values
                     const uniqueChoices = [...new Set(choiceIndices.map((i) => question.choices[i]))]
+                    if (uniqueChoices.length < choiceIndices.length) {
+                        logger.warn(`[Survey Prefill] Removed duplicate choices for q${index}`)
+                    }
                     responses[responseKey] = uniqueChoices
                     break
                 }
@@ -110,7 +113,7 @@ export function convertPrefillToResponses(survey: Survey, prefillParams: Prefill
 }
 
 /**
- * Check if all REQUIRED questions are prefilled
+ * Check if all REQUIRED questions that support prefill are filled
  */
 export function allRequiredQuestionsFilled(survey: Survey, responses: Record<string, any>): boolean {
     return survey.questions.every((question: SurveyQuestion) => {
@@ -119,17 +122,21 @@ export function allRequiredQuestionsFilled(survey: Survey, responses: Record<str
             return true
         }
 
-        // Link and open questions don't need prefill
+        // Link and open questions don't support prefill currently, so they don't block auto-submit
+        // If support is added in the future, they will be checked like other question types below
         if (question.type === SurveyQuestionType.Link || question.type === SurveyQuestionType.Open) {
             return true
         }
 
-        // Required question must have response
+        // Required question must have a valid ID and response
         if (!question.id) {
             return false
         }
 
         const responseKey = getSurveyResponseKey(question.id)
-        return responses.hasOwnProperty(responseKey)
+        const hasResponse = responses.hasOwnProperty(responseKey)
+
+        // For question types that support prefill, require a response
+        return hasResponse
     })
 }
