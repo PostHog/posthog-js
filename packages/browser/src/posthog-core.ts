@@ -2608,7 +2608,7 @@ export class PostHog {
             // allow the session id check to rotate session id if necessary
             this.sessionManager?.checkAndGetSessionAndWindowId()
 
-            if (this.sessionRecording?.status == LAZY_LOADING) {
+            if (this.sessionRecording?.status === LAZY_LOADING) {
                 this.persistence?.register({
                     [SESSION_RECORDING_OVERRIDE_CONFIG]: overrideConfig
                 })

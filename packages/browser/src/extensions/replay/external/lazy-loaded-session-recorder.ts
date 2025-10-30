@@ -723,6 +723,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             if (parsedConfig.event_trigger) {
                 this.overrideTrigger('event')
             }
+
+            // Clean up the override config after applying it
+            this._instance.persistence?.unregister(SESSION_RECORDING_OVERRIDE_CONFIG)
         }
 
         this._makeSamplingDecision(this.sessionId)
