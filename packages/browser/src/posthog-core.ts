@@ -97,8 +97,6 @@ import {
     isArray,
     isEmptyObject,
     isObject,
-    TypedEventCapture,
-    createTypedEventCapture,
 } from '@posthog/core'
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
@@ -342,8 +340,6 @@ export class PostHog {
     SentryIntegration: typeof SentryIntegration
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
 
-    readonly typed: TypedEventCapture<this>
-
     private _internalEventEmitter = new SimpleEventEmitter()
 
     // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
@@ -374,7 +370,6 @@ export class PostHog {
         this._visibilityStateListener = null
         this._initialPersonProfilesConfig = null
         this._cachedPersonProperties = null
-        this.typed = createTypedEventCapture(this)
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
         this.scrollManager = new ScrollManager(this)
