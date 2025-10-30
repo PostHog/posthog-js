@@ -35,6 +35,7 @@ export const SESSION_RECORDING_SAMPLE_RATE = '$replay_sample_rate'
 export const SESSION_RECORDING_MINIMUM_DURATION = '$replay_minimum_duration'
 // @deprecated can be removed along with eager loaded replay
 export const SESSION_RECORDING_SCRIPT_CONFIG = '$replay_script_config'
+export const SESSION_RECORDING_OVERRIDE_CONFIG = '$replay_override_config'
 export const SESSION_ID = '$sesid'
 export const SESSION_RECORDING_IS_SAMPLED = '$session_is_sampled'
 export const SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION = '$session_recording_url_trigger_activated_session'
