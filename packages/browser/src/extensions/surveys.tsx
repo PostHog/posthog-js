@@ -671,8 +671,16 @@ export class SurveyManager {
             logger.error(`Survey ${survey.id} is not in focus. Cannot remove survey ${survey.id}.`)
         }
         this._clearSurveyTimeout(survey.id)
+        this._clearAutoSubmitTimeout()
         this._surveyInFocus = null
         this._removeSurveyFromDom(survey)
+    }
+
+    private _clearAutoSubmitTimeout(): void {
+        if (this._autoSubmitTimeout) {
+            clearTimeout(this._autoSubmitTimeout)
+            this._autoSubmitTimeout = undefined
+        }
     }
 
     // Expose internal state and methods for testing
