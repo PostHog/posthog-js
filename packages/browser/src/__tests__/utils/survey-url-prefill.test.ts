@@ -436,7 +436,7 @@ describe('convertPrefillToResponses', () => {
         it('should handle custom scale', () => {
             const customRatingQuestion: SurveyQuestion = {
                 ...ratingQuestion,
-                scale: 5 as 5,
+                scale: 5 as const,
             }
             const survey = { ...baseSurvey, questions: [customRatingQuestion] }
             const prefillParams: PrefillParams = { 0: ['5'] }
@@ -450,7 +450,7 @@ describe('convertPrefillToResponses', () => {
         it('should reject rating above custom scale', () => {
             const customRatingQuestion: SurveyQuestion = {
                 ...ratingQuestion,
-                scale: 5 as 5,
+                scale: 5 as const,
             }
             const survey = { ...baseSurvey, questions: [customRatingQuestion] }
             const prefillParams: PrefillParams = { 0: ['6'] }
@@ -534,9 +534,9 @@ describe('convertPrefillToResponses', () => {
 
             const result = convertPrefillToResponses(survey, prefillParams)
             expect(result).toEqual({
-                '$survey_response_q1': 'B',
-                '$survey_response_q2': 8,
-                '$survey_response_q3': ['X', 'Z'],
+                $survey_response_q1: 'B',
+                $survey_response_q2: 8,
+                $survey_response_q3: ['X', 'Z'],
             })
         })
 
@@ -563,7 +563,7 @@ describe('convertPrefillToResponses', () => {
 
             const result = convertPrefillToResponses(survey, prefillParams)
             expect(result).toEqual({
-                '$survey_response_q2': 5,
+                $survey_response_q2: 5,
             })
         })
 
@@ -593,7 +593,7 @@ describe('convertPrefillToResponses', () => {
 
             const result = convertPrefillToResponses(survey, prefillParams)
             expect(result).toEqual({
-                '$survey_response_q2': 3,
+                $survey_response_q2: 3,
             })
         })
     })
@@ -653,7 +653,7 @@ describe('convertPrefillToResponses', () => {
 
             const result = convertPrefillToResponses(survey, prefillParams)
             expect(result).toEqual({
-                '$survey_response_q1': 'A',
+                $survey_response_q1: 'A',
             })
         })
     })
@@ -701,8 +701,8 @@ describe('allRequiredQuestionsFilled', () => {
             ]
             const survey = { ...baseSurvey, questions }
             const responses = {
-                '$survey_response_q1': 'A',
-                '$survey_response_q2': 5,
+                $survey_response_q1: 'A',
+                $survey_response_q2: 5,
             }
 
             expect(allRequiredQuestionsFilled(survey, responses)).toBe(true)
@@ -730,7 +730,7 @@ describe('allRequiredQuestionsFilled', () => {
             ]
             const survey = { ...baseSurvey, questions }
             const responses = {
-                '$survey_response_q1': 'A',
+                $survey_response_q1: 'A',
                 // Missing q2
             }
 
@@ -792,7 +792,7 @@ describe('allRequiredQuestionsFilled', () => {
             ]
             const survey = { ...baseSurvey, questions }
             const responses = {
-                '$survey_response_q1': 'A',
+                $survey_response_q1: 'A',
                 // q2 is optional and missing
             }
 
@@ -837,7 +837,7 @@ describe('allRequiredQuestionsFilled', () => {
             ]
             const survey = { ...baseSurvey, questions }
             const responses = {
-                '$survey_response_q1': 'A',
+                $survey_response_q1: 'A',
             }
 
             expect(allRequiredQuestionsFilled(survey, responses)).toBe(true)
@@ -864,7 +864,7 @@ describe('allRequiredQuestionsFilled', () => {
             ]
             const survey = { ...baseSurvey, questions }
             const responses = {
-                '$survey_response_q1': 'A',
+                $survey_response_q1: 'A',
                 // Link question q2 not filled, but should not block
             }
 
@@ -892,7 +892,7 @@ describe('allRequiredQuestionsFilled', () => {
             ]
             const survey = { ...baseSurvey, questions }
             const responses = {
-                '$survey_response_q1': 5,
+                $survey_response_q1: 5,
                 // Open question q2 not filled, but should not block
             }
 
@@ -958,8 +958,8 @@ describe('allRequiredQuestionsFilled', () => {
             ]
             const survey = { ...baseSurvey, questions }
             const responses = {
-                '$survey_response_q1': 'A',
-                '$survey_response_q4': ['X', 'Y'],
+                $survey_response_q1: 'A',
+                $survey_response_q4: ['X', 'Y'],
                 // q2 is optional - ok to skip
                 // q3 is Open - doesn't block auto-submit
             }
@@ -995,7 +995,7 @@ describe('allRequiredQuestionsFilled', () => {
             ]
             const survey = { ...baseSurvey, questions }
             const responses = {
-                '$survey_response_q1': 'A',
+                $survey_response_q1: 'A',
                 // q3 is missing and it's a prefill-supported type
             }
 
@@ -1023,8 +1023,8 @@ describe('allRequiredQuestionsFilled', () => {
             ]
             const survey = { ...baseSurvey, questions }
             const responses = {
-                '$survey_response_q1': 'A',
-                '$survey_response_extra': 'ignored',
+                $survey_response_q1: 'A',
+                $survey_response_extra: 'ignored',
             }
 
             expect(allRequiredQuestionsFilled(survey, responses)).toBe(true)
@@ -1045,7 +1045,7 @@ describe('allRequiredQuestionsFilled', () => {
             ]
             const survey = { ...baseSurvey, questions }
             const responses = {
-                '$survey_response_q1': 0, // 0 is a valid rating
+                $survey_response_q1: 0, // 0 is a valid rating
             }
 
             expect(allRequiredQuestionsFilled(survey, responses)).toBe(true)
@@ -1063,7 +1063,7 @@ describe('allRequiredQuestionsFilled', () => {
             ]
             const survey = { ...baseSurvey, questions }
             const responses = {
-                '$survey_response_q1': '',
+                $survey_response_q1: '',
             }
 
             expect(allRequiredQuestionsFilled(survey, responses)).toBe(true)
