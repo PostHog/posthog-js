@@ -1847,3 +1847,10 @@ export type SessionStartReason =
     | 'session_id_changed'
     | 'url_trigger_matched'
     | 'event_trigger_matched'
+
+export type OverrideConfig = {
+    sampling: boolean
+    linked_flag: boolean
+    url_trigger: boolean
+    event_trigger: boolean
+}
