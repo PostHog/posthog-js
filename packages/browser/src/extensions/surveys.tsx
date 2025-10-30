@@ -389,7 +389,6 @@ export class SurveyManager {
     }
 
     public renderSurvey = (survey: Survey, selector: Element): void => {
-        // Handle URL prefill if enabled
         if (this._posthog.config.surveys?.prefillFromUrl) {
             this._handleUrlPrefill(survey)
         }
@@ -410,14 +409,12 @@ export class SurveyManager {
             const searchParams = new URLSearchParams(window.location.search)
             const { params, autoSubmit } = extractPrefillParamsFromUrl(searchParams)
 
-            // If no prefill params, return early
             if (Object.keys(params).length === 0) {
                 return
             }
 
             logger.info('[Survey Prefill] Detected URL prefill parameters')
 
-            // Convert to response format
             const responses = convertPrefillToResponses(survey, params)
 
             if (Object.keys(responses).length === 0) {
@@ -425,10 +422,8 @@ export class SurveyManager {
                 return
             }
 
-            // Generate submission ID
             const submissionId = uuidv7()
 
-            // Store in localStorage (existing SDK mechanism!)
             setInProgressSurveyState(survey, {
                 surveySubmissionId: submissionId,
                 responses: responses,
@@ -437,7 +432,6 @@ export class SurveyManager {
 
             logger.info('[Survey Prefill] Stored prefilled responses in localStorage')
 
-            // Handle auto-submit if requested and all required questions filled
             const shouldAutoSubmit =
                 autoSubmit &&
                 this._posthog.config.surveys?.autoSubmitIfComplete &&
