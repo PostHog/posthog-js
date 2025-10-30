@@ -147,7 +147,6 @@ export interface RageclickConfig {
      * @default 1000
      */
     timeout_ms?: number
-
 }
 
 export interface BootstrapConfig {
