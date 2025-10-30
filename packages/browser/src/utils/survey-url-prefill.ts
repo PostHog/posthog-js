@@ -1,6 +1,7 @@
 import { Survey, SurveyQuestion, SurveyQuestionType } from '../posthog-surveys-types'
 import { getSurveyResponseKey } from '../extensions/surveys/surveys-extension-utils'
 import { logger } from './logger'
+import { isUndefined } from '@posthog/core'
 
 /**
  * Extracted URL prefill parameters by question index
@@ -10,24 +11,49 @@ export interface PrefillParams {
 }
 
 /**
- * Extract prefill parameters from URL search params
+ * Extract prefill parameters from URL search string
  * Format: ?q0=1&q1=8&q2=0&q2=2&auto_submit=true
+ * NOTE: Manual parsing for IE11/op_mini compatibility (no URLSearchParams)
  */
-export function extractPrefillParamsFromUrl(searchParams: URLSearchParams): {
+export function extractPrefillParamsFromUrl(searchString: string): {
     params: PrefillParams
     autoSubmit: boolean
 } {
     const params: PrefillParams = {}
-    const autoSubmit = searchParams.get('auto_submit') === 'true'
+    let autoSubmit = false
 
-    for (const [key, value] of searchParams.entries()) {
-        const match = key.match(/^q(\d+)$/)
+    // Remove leading ? if present
+    const cleanSearch = searchString.replace(/^\?/, '')
+    if (!cleanSearch) {
+        return { params, autoSubmit }
+    }
+
+    // Split by & to get key-value pairs
+    const pairs = cleanSearch.split('&')
+
+    for (const pair of pairs) {
+        const [key, value] = pair.split('=')
+        if (!key || isUndefined(value)) {
+            continue
+        }
+
+        const decodedKey = decodeURIComponent(key)
+        const decodedValue = decodeURIComponent(value)
+
+        // Check for auto_submit parameter
+        if (decodedKey === 'auto_submit' && decodedValue === 'true') {
+            autoSubmit = true
+            continue
+        }
+
+        // Check for question parameters (q0, q1, etc.)
+        const match = decodedKey.match(/^q(\d+)$/)
         if (match) {
             const questionIndex = parseInt(match[1], 10)
             if (!params[questionIndex]) {
                 params[questionIndex] = []
             }
-            params[questionIndex].push(value)
+            params[questionIndex].push(decodedValue)
         }
     }
 
@@ -92,9 +118,7 @@ export function convertPrefillToResponses(survey: Survey, prefillParams: Prefill
                     const scale = question.scale || 10
 
                     if (isNaN(rating) || rating < 0 || rating > scale) {
-                        logger.warn(
-                            `[Survey Prefill] Invalid rating for q${index}: ${values[0]} (scale: 0-${scale})`
-                        )
+                        logger.warn(`[Survey Prefill] Invalid rating for q${index}: ${values[0]} (scale: 0-${scale})`)
                         return
                     }
                     responses[responseKey] = rating

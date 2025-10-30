@@ -412,8 +412,7 @@ export class SurveyManager {
         }
 
         try {
-            const searchParams = new URLSearchParams(window.location.search)
-            const { params, autoSubmit } = extractPrefillParamsFromUrl(searchParams)
+            const { params, autoSubmit } = extractPrefillParamsFromUrl(window.location.search)
 
             if (Object.keys(params).length === 0) {
                 return
@@ -454,11 +453,7 @@ export class SurveyManager {
         }
     }
 
-    private _scheduleAutoSubmit(
-        survey: Survey,
-        responses: Record<string, any>,
-        submissionId: string
-    ): void {
+    private _scheduleAutoSubmit(survey: Survey, responses: Record<string, any>, submissionId: string): void {
         const delay = this._posthog.config.surveys?.autoSubmitDelay ?? 800
 
         logger.info('[Survey Prefill] Auto-submit scheduled')
