@@ -11,6 +11,7 @@ import {
   Logger,
   PostHogCaptureOptions,
   isPlainObject,
+  isBlockedUA,
 } from '@posthog/core'
 import {
   EventMessage,
@@ -29,7 +30,6 @@ import {
 import ErrorTracking from './extensions/error-tracking'
 import { safeSetTimeout, PostHogEventProperties } from '@posthog/core'
 import { PostHogMemoryStorage } from './storage-memory'
-import { isBlockedUA } from './utils/bot-detection'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
