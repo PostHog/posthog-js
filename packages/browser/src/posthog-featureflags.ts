@@ -163,6 +163,8 @@ export class PostHogFeatureFlags {
     private _reloadDebouncer?: any
     private _flagsCalled: boolean = false
     private _flagsLoadedFromRemote: boolean = false
+    private _eventSource?: EventSource
+    private _sseConnected: boolean = false
 
     constructor(private _instance: PostHog) {
         this.featureFlagEventHandlers = []
@@ -662,6 +664,83 @@ export class PostHogFeatureFlags {
         const currentFlagDetails = this.getFlagsWithDetails()
         parseFlagsResponse(response, this._instance.persistence, currentFlags, currentFlagPayloads, currentFlagDetails)
         this._fireFeatureFlagsCallbacks(errorsLoading)
+
+        // Set up SSE connection after initial flags are loaded successfully
+        if (this._instance.config.realtime_flags && !errorsLoading && !this._sseConnected) {
+            this._setupSSEConnection()
+        }
+    }
+
+    private _setupSSEConnection(): void {
+        if (this._eventSource || this._sseConnected) {
+            // Already connected or connecting
+            return
+        }
+
+        if (this._instance._shouldDisableFlags() || this._instance.config.advanced_disable_feature_flags) {
+            return
+        }
+
+        const token = this._instance.config.token
+        const distinctId = this._instance.get_distinct_id()
+
+        if (!token || !distinctId) {
+            logger.warn('Cannot set up SSE connection without token and distinct_id')
+            return
+        }
+
+        const url = this._instance.requestRouter.endpointFor(
+            'api',
+            `/flags/stream?token=${encodeURIComponent(token)}&distinct_id=${encodeURIComponent(distinctId)}`
+        )
+
+        logger.info(url)
+
+        try {
+            this._eventSource = new EventSource(url)
+            this._eventSource.onopen = () => {
+                this._sseConnected = true
+                logger.info('SSE connection established for real-time feature flags')
+            }
+
+            this._eventSource.onmessage = (event) => {
+                try {
+                    const flags = JSON.parse(event.data)
+                    if (flags && typeof flags === 'object') {
+                        // Update flags cache and dispatch callbacks
+                        this.receivedFeatureFlags(flags)
+                    }
+                } catch (error) {
+                    logger.error('Error parsing SSE message:', error)
+                }
+            }
+
+            this._eventSource.onerror = (error) => {
+                logger.error('SSE connection error:', error)
+                this._closeSSEConnection()
+
+                // Attempt to reconnect after a delay
+                setTimeout(() => {
+                    if (this._instance.config.realtime_flags && !this._sseConnected) {
+                        this._setupSSEConnection()
+                    }
+                }, 5000)
+            }
+        } catch (error) {
+            logger.error('Failed to establish SSE connection:', error)
+        }
+    }
+
+    private _closeSSEConnection(): void {
+        if (this._eventSource) {
+            this._eventSource.close()
+            this._eventSource = undefined
+        }
+        this._sseConnected = false
+    }
+
+    shutdown(): void {
+        this._closeSSEConnection()
     }
 
     /**
