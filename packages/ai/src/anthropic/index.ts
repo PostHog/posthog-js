@@ -83,11 +83,13 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
           outputTokens: number
           cacheCreationInputTokens?: number
           cacheReadInputTokens?: number
+          webSearchCount?: number
         } = {
           inputTokens: 0,
           outputTokens: 0,
           cacheCreationInputTokens: 0,
           cacheReadInputTokens: 0,
+          webSearchCount: 0,
         }
         if ('tee' in value) {
           const [stream1, stream2] = value.tee()
@@ -177,9 +179,14 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                   usage.inputTokens = chunk.message.usage.input_tokens ?? 0
                   usage.cacheCreationInputTokens = chunk.message.usage.cache_creation_input_tokens ?? 0
                   usage.cacheReadInputTokens = chunk.message.usage.cache_read_input_tokens ?? 0
+                  usage.webSearchCount = chunk.message.usage.server_tool_use?.web_search_requests ?? 0
                 }
                 if ('usage' in chunk) {
                   usage.outputTokens = chunk.usage.output_tokens ?? 0
+                  // Update web search count if present in delta
+                  if (chunk.usage.server_tool_use?.web_search_requests !== undefined) {
+                    usage.webSearchCount = chunk.usage.server_tool_use.web_search_requests
+                  }
                 }
               }
 
@@ -269,6 +276,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 outputTokens: result.usage.output_tokens ?? 0,
                 cacheCreationInputTokens: result.usage.cache_creation_input_tokens ?? 0,
                 cacheReadInputTokens: result.usage.cache_read_input_tokens ?? 0,
+                webSearchCount: result.usage.server_tool_use?.web_search_requests ?? 0,
               },
               tools: availableTools,
             })
