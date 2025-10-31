@@ -741,18 +741,39 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _onSessionIdCallback: SessionIdChangedCallback = (sessionId, windowId, changeReason) => {
-        if (changeReason) {
-            this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
+        if (!changeReason) return
 
-            this._clearConditionalRecordingPersistence()
+        const shouldLinkSessions = changeReason.activityTimeout || changeReason.sessionPastMaximumLength
+        let oldSessionId, oldWindowId
 
-            if (!this._stopRrweb) {
-                this.start('session_id_changed')
-            }
+        if (shouldLinkSessions) {
+            oldSessionId = this._sessionId
+            oldWindowId = this._windowId
+            this._tryAddCustomEvent('$session_ending', {
+                nextSessionId: sessionId,
+                nextWindowId: windowId,
+                changeReason,
+            })
+        }
 
-            if (isNumber(this._sampleRate) && isNullish(this._samplingSessionListener)) {
-                this._makeSamplingDecision(sessionId)
-            }
+        this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
+
+        this._clearConditionalRecordingPersistence()
+
+        if (!this._stopRrweb) {
+            this.start('session_id_changed')
+        }
+
+        if (shouldLinkSessions) {
+            this._tryAddCustomEvent('$session_starting', {
+                previousSessionId: oldSessionId,
+                previousWindowId: oldWindowId,
+                changeReason,
+            })
+        }
+
+        if (isNumber(this._sampleRate) && isNullish(this._samplingSessionListener)) {
+            this._makeSamplingDecision(sessionId)
         }
     }
 

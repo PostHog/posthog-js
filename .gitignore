@@ -41,3 +41,6 @@ tsconfig.tsbuildinfo
 target
 
 .cursor/mcp.json
+
+.next
+next-env.d.ts
