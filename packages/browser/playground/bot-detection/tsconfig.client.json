@@ -1,0 +1,23 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "outDir": "./static",
+        "rootDir": "./src/client",
+        "lib": ["ES2020", "DOM"],
+        "target": "ES2020",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "jsx": "react-jsx",
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "resolveJsonModule": true,
+        "declaration": false,
+        "declarationMap": false,
+        "sourceMap": true,
+        "noEmit": true
+    },
+    "include": ["src/client/**/*"],
+    "exclude": ["node_modules", "dist", "static"]
+}

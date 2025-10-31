@@ -1,0 +1,12 @@
+node_modules/
+package-lock.json
+.env
+*.log
+
+# TypeScript build artifacts
+dist/
+*.tsbuildinfo
+
+# Compiled React bundle (generated from src/client/*.tsx)
+static/bundle.js
+static/bundle.js.map
