@@ -1,0 +1,52 @@
+{
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Where should 'hi there' be placed in the README?",
+      "options": [
+        "At the very beginning as the first line (before the logo)",
+        "After the title '# Posthog JS' and before the description",
+        "As part of or within the existing description paragraph",
+        "In a new dedicated section",
+        "Other location (please specify)"
+      ]
+    },
+    {
+      "id": "q2",
+      "question": "Should 'hi there' be formatted as plain text or as a Markdown element?",
+      "options": [
+        "Plain text",
+        "As a heading (e.g., ## hi there)",
+        "As emphasized text (e.g., *hi there* or **hi there**)",
+        "As a blockquote (e.g., > hi there)",
+        "Other formatting"
+      ]
+    },
+    {
+      "id": "q3",
+      "question": "Is 'hi there' meant to be a greeting/welcome message or does it have a specific functional purpose?",
+      "options": [
+        "A casual greeting/welcome message for users",
+        "A placeholder for future content",
+        "Part of the project description or tagline",
+        "A reference or inside joke related to the project",
+        "Other purpose"
+      ]
+    }
+  ],
+  "answered": true,
+  "answers": [
+    {
+      "questionId": "q1",
+      "selectedOption": "At the very beginning as the first line (before the logo)"
+    },
+    {
+      "questionId": "q2",
+      "selectedOption": "Plain text"
+    },
+    {
+      "questionId": "q3",
+      "selectedOption": "A casual greeting/welcome message for users"
+    }
+  ]
+}
