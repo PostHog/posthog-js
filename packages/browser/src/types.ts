@@ -129,6 +129,24 @@ export interface RageclickConfig {
      * If an element has .ph-no-capture, it will always be ignored by rageclick and autocapture
      */
     css_selector_ignorelist?: string[]
+
+    /**
+     * Maximum pixel distance between clicks to still be considered a rage click.
+     * @default 30
+     */
+    threshold_px?: number
+
+    /**
+     * Number of consecutive clicks within the timeout to qualify as a rage click.
+     * @default 3
+     */
+    click_count?: number
+
+    /**
+     * Maximum time window (in milliseconds) between the first and last click.
+     * @default 1000
+     */
+    timeout_ms?: number
 }
 
 export interface BootstrapConfig {

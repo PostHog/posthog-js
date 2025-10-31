@@ -235,11 +235,12 @@ export class Autocapture {
     _initialized: boolean = false
     _isDisabledServerSide: boolean | null = null
     _elementSelectors: Set<string> | null
-    rageclicks = new RageClick()
+    rageclicks: RageClick
     _elementsChainAsString = false
 
     constructor(instance: PostHog) {
         this.instance = instance
+        this.rageclicks = new RageClick(instance.config.rageclick)
         this._elementSelectors = null
     }
 
