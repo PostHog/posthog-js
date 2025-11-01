@@ -2,7 +2,7 @@ import type { recordOptions } from './extensions/replay/types/rrweb'
 import type { SegmentAnalytics } from './extensions/segment-integration'
 import { PostHog } from './posthog-core'
 import { KnownUnsafeEditableEvent } from '@posthog/core'
-import { Survey } from './posthog-surveys-types'
+import { Survey, SurveyConfig } from './posthog-surveys-types'
 // only importing types here, so won't affect the bundle
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SAMPLED } from './extensions/replay/external/triggerMatching'
@@ -485,6 +485,13 @@ export interface PostHogConfig {
      * @default false
      */
     disable_surveys_automatic_display: boolean
+
+    /**
+     * Survey-specific configuration options.
+     *
+     * @default undefined
+     */
+    surveys?: SurveyConfig
 
     /**
      * Determines whether PostHog should disable web experiments.
