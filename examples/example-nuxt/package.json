@@ -1,5 +1,5 @@
 {
-  "name": "example-nuxt-module",
+  "name": "example-nuxt",
   "private": true,
   "type": "module",
   "scripts": {

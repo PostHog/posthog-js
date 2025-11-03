@@ -8,6 +8,7 @@ export default defineNuxtConfig({
     debug: true,
     clientConfig: {
       capture_exceptions: true,
+      capture_pageview: 'history_change',
     },
     serverConfig: {
       enableExceptionAutocapture: true,
