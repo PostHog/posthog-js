@@ -4,6 +4,7 @@ import type { PostHogOptions } from 'posthog-node'
 import { spawnLocal } from '@posthog/core/process'
 import { fileURLToPath } from 'node:url'
 import { dirname } from 'node:path'
+import type { NuxtOptions } from 'nuxt/schema'
 
 const filename = fileURLToPath(import.meta.url)
 const resolvedDirname = dirname(filename)
@@ -96,10 +97,10 @@ export default defineNuxtModule<ModuleOptions>({
       }
     })
 
-    nuxt.hook('build:done', async () => {
-      try {
-        const buildDir = nuxt.options.buildDir
+    const outputDir = getOutputDir(nuxt.options.nitro)
 
+    nuxt.hook('close', async () => {
+      try {
         const processOptions: string[] = [
           '--host',
           options.host,
@@ -121,7 +122,7 @@ export default defineNuxtModule<ModuleOptions>({
           processOptions.push('--delete-after')
         }
 
-        await spawnLocal('posthog-cli', [...processOptions, '--directory', buildDir], {
+        await spawnLocal('posthog-cli', [...processOptions, '--directory', outputDir], {
           env: {
             ...process.env,
             POSTHOG_CLI_ENV_ID: sourcemapsConfig.envId,
@@ -139,3 +140,13 @@ export default defineNuxtModule<ModuleOptions>({
     })
   },
 })
+
+function getOutputDir(nitroConfig: NuxtOptions['nitro']): string {
+  if (nitroConfig.preset && nitroConfig.preset.includes('vercel')) {
+    return '.vercel/output'
+  }
+  if (nitroConfig.output && nitroConfig.output.dir) {
+    return nitroConfig.output.dir
+  }
+  return '.output'
+}
