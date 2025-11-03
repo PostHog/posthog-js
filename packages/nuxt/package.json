@@ -26,7 +26,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@posthog/cli": "^0.5.2",
+    "@posthog/cli": "^0.5.7",
     "@nuxt/kit": ">=3.7.0",
     "posthog-node": "workspace:*",
     "@posthog/core": "workspace:*",
