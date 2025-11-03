@@ -49,7 +49,10 @@ import {
 import {
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_IS_SAMPLED,
-    SESSION_RECORDING_OVERRIDE_CONFIG,
+    SESSION_RECORDING_OVERRIDE_SAMPLING,
+    SESSION_RECORDING_OVERRIDE_LINKED_FLAG,
+    SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER,
+    SESSION_RECORDING_OVERRIDE_URL_TRIGGER,
     SESSION_RECORDING_REMOTE_CONFIG,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
 } from '../../../constants'
@@ -58,7 +61,6 @@ import {
     CaptureResult,
     NetworkRecordOptions,
     NetworkRequest,
-    OverrideConfig,
     Properties,
     SessionIdChangedCallback,
     SessionRecordingOptions,
@@ -685,29 +687,36 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             })
         })
 
-        const overrideConfig: any = this._instance.get_property(SESSION_RECORDING_OVERRIDE_CONFIG)
+        const overrideSampling: boolean = this._instance.get_property(SESSION_RECORDING_OVERRIDE_SAMPLING) as boolean
+        if (overrideSampling) {
+            this.overrideSampling()
 
-        if (overrideConfig) {
-            const parsedConfig = (isObject(overrideConfig) ? overrideConfig : JSON.parse(overrideConfig)) as OverrideConfig
+            // Clean up the override flag after applying it
+            this._instance.persistence?.unregister(SESSION_RECORDING_OVERRIDE_SAMPLING)
+        }
 
-            if (parsedConfig.sampling) {
-                this.overrideSampling()
-            }
+        const overrideLinkedFlag: boolean = this._instance.get_property(SESSION_RECORDING_OVERRIDE_LINKED_FLAG) as boolean
+        if (overrideLinkedFlag) {
+            this.overrideLinkedFlag()
 
-            if (parsedConfig.linked_flag) {
-                this.overrideLinkedFlag()
-            }
+            // Clean up the override flag after applying it
+            this._instance.persistence?.unregister(SESSION_RECORDING_OVERRIDE_LINKED_FLAG)
+        }
 
-            if (parsedConfig.url_trigger) {
-                this.overrideTrigger('url')
-            }
+        const overrideEventTrigger: boolean = this._instance.get_property(SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER) as boolean
+        if (overrideEventTrigger) {
+            this.overrideTrigger('event')
 
-            if (parsedConfig.event_trigger) {
-                this.overrideTrigger('event')
-            }
+            // Clean up the override flag after applying it
+            this._instance.persistence?.unregister(SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER)
+        }
 
-            // Clean up the override config after applying it
-            this._instance.persistence?.unregister(SESSION_RECORDING_OVERRIDE_CONFIG)
+        const overrideUrlTrigger: boolean = this._instance.get_property(SESSION_RECORDING_OVERRIDE_URL_TRIGGER) as boolean
+        if (overrideUrlTrigger) {
+            this.overrideTrigger('url')
+
+            // Clean up the override flag after applying it
+            this._instance.persistence?.unregister(SESSION_RECORDING_OVERRIDE_URL_TRIGGER)
         }
 
         this._makeSamplingDecision(this.sessionId)
