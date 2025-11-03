@@ -10,7 +10,6 @@ import {
     PEOPLE_DISTINCT_ID_KEY,
     SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
-    SESSION_RECORDING_OVERRIDE_CONFIG,
 } from './constants'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { ExceptionObserver } from './extensions/exception-autocapture'
@@ -105,7 +104,6 @@ import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
 import { SessionRecording } from './extensions/replay/session-recording'
-import { LAZY_LOADING } from './extensions/replay/external/triggerMatching'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -2608,26 +2606,20 @@ export class PostHog {
             // allow the session id check to rotate session id if necessary
             this.sessionManager?.checkAndGetSessionAndWindowId()
 
-            if (this.sessionRecording?.status === LAZY_LOADING) {
-                this.persistence?.register({
-                    [SESSION_RECORDING_OVERRIDE_CONFIG]: overrideConfig
-                })
-            } else {
-                if (overrideConfig.sampling) {
-                    this.sessionRecording?.overrideSampling()
-                }
+            if (overrideConfig.sampling) {
+                this.sessionRecording?.overrideSampling()
+            }
 
-                if (overrideConfig.linked_flag) {
-                    this.sessionRecording?.overrideLinkedFlag()
-                }
+            if (overrideConfig.linked_flag) {
+                this.sessionRecording?.overrideLinkedFlag()
+            }
 
-                if (overrideConfig.url_trigger) {
-                    this.sessionRecording?.overrideTrigger('url')
-                }
+            if (overrideConfig.url_trigger) {
+                this.sessionRecording?.overrideTrigger('url')
+            }
 
-                if (overrideConfig.event_trigger) {
-                    this.sessionRecording?.overrideTrigger('event')
-                }
+            if (overrideConfig.event_trigger) {
+                this.sessionRecording?.overrideTrigger('event')
             }
         }
 
