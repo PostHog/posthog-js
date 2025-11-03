@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.285.0
+
+### Minor Changes
+
+- [#2503](https://github.com/PostHog/posthog-js/pull/2503) [`e95a9d5`](https://github.com/PostHog/posthog-js/commit/e95a9d5075891861982e69ddcf09f1d6241ae088) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: store previous and next session id in session recording
+
 ## 1.284.0
 
 ### Minor Changes
