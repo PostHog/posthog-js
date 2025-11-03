@@ -66,6 +66,7 @@ import {
 import { isLocalhost } from '../../../utils/request-utils'
 import Config from '../../../config'
 import { sampleOnProperty } from '../../sampling'
+import { FlushedSizeTracker } from './flushed-size-tracker'
 
 const BASE_ENDPOINT = '/s/'
 const DEFAULT_CANVAS_QUALITY = 0.4
@@ -82,8 +83,6 @@ export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
 export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
-
-const SESSION_RECORDING_FLUSHED_SIZE = '$sess_rec_flush_size'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -317,6 +316,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _removeEventTriggerCaptureHook: (() => void) | undefined = undefined
 
+    private _flushedSizeTracker: FlushedSizeTracker
+
     private get _sessionManager() {
         if (!this._instance.sessionManager) {
             throw new Error(LOGGER_PREFIX + ' must be started with a valid sessionManager.')
@@ -371,6 +372,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 `session_idle_threshold_ms (${this._sessionIdleThresholdMilliseconds}) is greater than the session timeout (${this._sessionManager.sessionTimeoutMs}). Session will never be detected as idle`
             )
         }
+
+        this._flushedSizeTracker = new FlushedSizeTracker(this._instance)
     }
 
     private get _masking():
@@ -651,12 +654,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         return !!this._stopRrweb
     }
 
-    _trackFlushedSize(size: number): void {
-        const currentFlushed = Number(this._instance.get_property(SESSION_RECORDING_FLUSHED_SIZE)) || 0
-        const newValue = currentFlushed + size
-        this._instance.persistence?.set_property(SESSION_RECORDING_FLUSHED_SIZE, newValue)
-    }
-
     get _remoteConfig(): SessionRecordingPersistedConfig | undefined {
         const persistedConfig: any = this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)
         if (!persistedConfig) {
@@ -766,7 +763,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _onSessionIdCallback: SessionIdChangedCallback = (sessionId, windowId, changeReason) => {
-        this._instance.persistence?.set_property(SESSION_RECORDING_FLUSHED_SIZE, 0)
+        this._flushedSizeTracker.reset()
 
         if (!changeReason) return
 
@@ -1044,7 +1041,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         if (this._buffer.data.length > 0) {
             const snapshotEvents = splitBuffer(this._buffer)
             snapshotEvents.forEach((snapshotBuffer) => {
-                this._trackFlushedSize(snapshotBuffer.size)
+                this._flushedSizeTracker.trackSize(snapshotBuffer.size)
                 this._captureSnapshot({
                     $snapshot_bytes: snapshotBuffer.size,
                     $snapshot_data: snapshotBuffer.data,
@@ -1317,7 +1314,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_replay_internal_buffer_size: this._buffer.size,
             $sdk_debug_current_session_duration: this._sessionDuration,
             $sdk_debug_session_start: sessionStartTimestamp,
-            $sdk_debug_replay_flushed_size: this._instance.get_property(SESSION_RECORDING_FLUSHED_SIZE),
+            $sdk_debug_replay_flushed_size: this._flushedSizeTracker.currentTrackedSize,
         }
     }
 
