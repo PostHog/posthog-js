@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { resolveBinaryPath } from './utils'
+import os from 'node:os'
 
 export async function spawnLocal(
   binaryName: string,
@@ -24,7 +25,7 @@ export async function spawnLocal(
     )
   }
 
-  const child = spawn(binaryLocation, [...args], {
+  const child = spawn(`${escapeOS(binaryLocation)}`, [...args.map(escapeOS)], {
     shell: true,
     stdio: options?.stdio ?? 'inherit',
     env: options.env,
@@ -44,4 +45,13 @@ export async function spawnLocal(
       reject(error)
     })
   })
+}
+
+function escapeOS(arg: string): string {
+  if (os.platform() === 'win32') {
+    if (!/\s|["]/.test(arg)) return arg
+    return `"${arg.replace(/(["\\])/g, '\\$1')}"`
+  } else {
+    return `'${arg.replace(/'/g, `'\\''`)}'`
+  }
 }
