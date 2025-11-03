@@ -1,4 +1,11 @@
-import { SESSION_RECORDING_IS_SAMPLED, SESSION_RECORDING_OVERRIDE_SAMPLING, SESSION_RECORDING_OVERRIDE_LINKED_FLAG, SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER, SESSION_RECORDING_OVERRIDE_URL_TRIGGER, SESSION_RECORDING_REMOTE_CONFIG } from '../../constants'
+import {
+    SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_OVERRIDE_SAMPLING,
+    SESSION_RECORDING_OVERRIDE_LINKED_FLAG,
+    SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER,
+    SESSION_RECORDING_OVERRIDE_URL_TRIGGER,
+    SESSION_RECORDING_REMOTE_CONFIG,
+} from '../../constants'
 import { PostHog } from '../../posthog-core'
 import { Properties, RemoteConfig, SessionRecordingPersistedConfig, SessionStartReason } from '../../types'
 import { type eventWithTime } from './types/rrweb-types'
@@ -245,7 +252,7 @@ export class SessionRecording {
     public overrideLinkedFlag() {
         if (!this._lazyLoadedSessionRecording) {
             this._instance.persistence?.register({
-                [SESSION_RECORDING_OVERRIDE_LINKED_FLAG]: true
+                [SESSION_RECORDING_OVERRIDE_LINKED_FLAG]: true,
             })
         }
 
@@ -261,7 +268,7 @@ export class SessionRecording {
     public overrideSampling() {
         if (!this._lazyLoadedSessionRecording) {
             this._instance.persistence?.register({
-                [SESSION_RECORDING_OVERRIDE_SAMPLING]: true
+                [SESSION_RECORDING_OVERRIDE_SAMPLING]: true,
             })
         }
 
@@ -277,7 +284,9 @@ export class SessionRecording {
     public overrideTrigger(triggerType: TriggerType) {
         if (!this._lazyLoadedSessionRecording) {
             this._instance.persistence?.register({
-                [triggerType === "url" ? SESSION_RECORDING_OVERRIDE_URL_TRIGGER : SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER]: true
+                [triggerType === 'url'
+                    ? SESSION_RECORDING_OVERRIDE_URL_TRIGGER
+                    : SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER]: true,
             })
         }
 
