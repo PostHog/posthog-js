@@ -36,6 +36,7 @@ export default defineNuxtPlugin((nuxtApp) => {
 })
 
 function autocaptureEnabled(config: PostHogClientConfig): boolean {
+  if (!config) return false
   if (typeof config.capture_exceptions === 'boolean') return config.capture_exceptions
   if (typeof config.capture_exceptions === 'object') return config.capture_exceptions.capture_unhandled_errors === true
   return false
