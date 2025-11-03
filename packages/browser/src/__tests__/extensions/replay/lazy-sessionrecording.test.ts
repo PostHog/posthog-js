@@ -2955,4 +2955,163 @@ describe('Lazy SessionRecording', () => {
             expect(mockParams).not.toHaveProperty('canvasQuality')
         })
     })
+
+    describe('session linking', () => {
+        beforeEach(() => {
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            jest.spyOn(sessionRecording['_lazyLoadedSessionRecording'], '_tryAddCustomEvent')
+        })
+
+        it('emits session linking events on activity timeout', () => {
+            const tryAddCustomEvent = sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent'] as any
+            tryAddCustomEvent.mockClear()
+
+            const newSessionId = 'new-session-id'
+            const newWindowId = 'new-window-id'
+
+            sessionManager['_sessionIdChangedHandlers'].forEach((handler) => {
+                handler(newSessionId, newWindowId, {
+                    noSessionId: false,
+                    activityTimeout: true,
+                    sessionPastMaximumLength: false,
+                })
+            })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_ending', {
+                nextSessionId: newSessionId,
+                nextWindowId: newWindowId,
+                changeReason: {
+                    noSessionId: false,
+                    activityTimeout: true,
+                    sessionPastMaximumLength: false,
+                },
+            })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_id_change', {
+                sessionId: newSessionId,
+                windowId: newWindowId,
+                changeReason: {
+                    noSessionId: false,
+                    activityTimeout: true,
+                    sessionPastMaximumLength: false,
+                },
+            })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_starting', {
+                previousSessionId: sessionId,
+                previousWindowId: 'windowId',
+                changeReason: {
+                    noSessionId: false,
+                    activityTimeout: true,
+                    sessionPastMaximumLength: false,
+                },
+            })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledTimes(3)
+        })
+
+        it('emits session linking events on session past maximum length', () => {
+            const tryAddCustomEvent = sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent'] as any
+            tryAddCustomEvent.mockClear()
+
+            const newSessionId = 'new-session-id-2'
+            const newWindowId = 'new-window-id-2'
+
+            sessionManager['_sessionIdChangedHandlers'].forEach((handler) => {
+                handler(newSessionId, newWindowId, {
+                    noSessionId: false,
+                    activityTimeout: false,
+                    sessionPastMaximumLength: true,
+                })
+            })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_ending', {
+                nextSessionId: newSessionId,
+                nextWindowId: newWindowId,
+                changeReason: {
+                    noSessionId: false,
+                    activityTimeout: false,
+                    sessionPastMaximumLength: true,
+                },
+            })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_starting', {
+                previousSessionId: sessionId,
+                previousWindowId: 'windowId',
+                changeReason: {
+                    noSessionId: false,
+                    activityTimeout: false,
+                    sessionPastMaximumLength: true,
+                },
+            })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledTimes(3)
+        })
+
+        it('does NOT emit linking events when only noSessionId is true (like after reset)', () => {
+            const tryAddCustomEvent = sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent'] as any
+            tryAddCustomEvent.mockClear()
+
+            const newSessionId = 'new-session-after-reset'
+            const newWindowId = 'new-window-after-reset'
+
+            sessionManager['_sessionIdChangedHandlers'].forEach((handler) => {
+                handler(newSessionId, newWindowId, {
+                    noSessionId: true,
+                    activityTimeout: false,
+                    sessionPastMaximumLength: false,
+                })
+            })
+
+            expect(tryAddCustomEvent).not.toHaveBeenCalledWith('$session_ending', expect.anything())
+            expect(tryAddCustomEvent).not.toHaveBeenCalledWith('$session_starting', expect.anything())
+
+            expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_id_change', {
+                sessionId: newSessionId,
+                windowId: newWindowId,
+                changeReason: {
+                    noSessionId: true,
+                    activityTimeout: false,
+                    sessionPastMaximumLength: false,
+                },
+            })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledTimes(1)
+        })
+
+        it('always emits $session_id_change event regardless of change reason', () => {
+            const tryAddCustomEvent = sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent'] as any
+
+            const testCases = [
+                { noSessionId: true, activityTimeout: false, sessionPastMaximumLength: false },
+                { noSessionId: false, activityTimeout: true, sessionPastMaximumLength: false },
+                { noSessionId: false, activityTimeout: false, sessionPastMaximumLength: true },
+            ]
+
+            testCases.forEach((changeReason, index) => {
+                tryAddCustomEvent.mockClear()
+                const newSessionId = `session-${index}`
+                const newWindowId = `window-${index}`
+
+                sessionManager['_sessionIdChangedHandlers'].forEach((handler) => {
+                    handler(newSessionId, newWindowId, changeReason)
+                })
+
+                expect(tryAddCustomEvent).toHaveBeenCalledWith(
+                    '$session_id_change',
+                    expect.objectContaining({
+                        sessionId: newSessionId,
+                        windowId: newWindowId,
+                    })
+                )
+            })
+        })
+    })
 })

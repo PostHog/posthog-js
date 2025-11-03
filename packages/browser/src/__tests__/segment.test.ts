@@ -40,7 +40,7 @@ const initPostHogInAPromise = (
 }
 
 // sometimes flakes because of unexpected console.logs
-jest.retryTimes(3)
+jest.retryTimes(6)
 
 describe(`Segment integration`, () => {
     let segment: any

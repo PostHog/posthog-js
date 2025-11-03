@@ -651,7 +651,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         // We want to ensure the sessionManager is reset if necessary on loading the recorder
-        this._sessionManager.checkAndGetSessionAndWindowId()
+        const { sessionId, windowId } = this._sessionManager.checkAndGetSessionAndWindowId()
+        this._sessionId = sessionId
+        this._windowId = windowId
 
         if (config?.endpoint) {
             this._endpoint = config?.endpoint
@@ -741,18 +743,42 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _onSessionIdCallback: SessionIdChangedCallback = (sessionId, windowId, changeReason) => {
-        if (changeReason) {
-            this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
+        if (!changeReason) return
 
-            this._clearConditionalRecordingPersistence()
+        const wasLikelyReset = changeReason.noSessionId
+        const shouldLinkSessions =
+            !wasLikelyReset && (changeReason.activityTimeout || changeReason.sessionPastMaximumLength)
 
-            if (!this._stopRrweb) {
-                this.start('session_id_changed')
-            }
+        let oldSessionId, oldWindowId
 
-            if (isNumber(this._sampleRate) && isNullish(this._samplingSessionListener)) {
-                this._makeSamplingDecision(sessionId)
-            }
+        if (shouldLinkSessions) {
+            oldSessionId = this._sessionId
+            oldWindowId = this._windowId
+            this._tryAddCustomEvent('$session_ending', {
+                nextSessionId: sessionId,
+                nextWindowId: windowId,
+                changeReason,
+            })
+        }
+
+        this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
+
+        this._clearConditionalRecordingPersistence()
+
+        if (!this._stopRrweb) {
+            this.start('session_id_changed')
+        }
+
+        if (shouldLinkSessions) {
+            this._tryAddCustomEvent('$session_starting', {
+                previousSessionId: oldSessionId,
+                previousWindowId: oldWindowId,
+                changeReason,
+            })
+        }
+
+        if (isNumber(this._sampleRate) && isNullish(this._samplingSessionListener)) {
+            this._makeSamplingDecision(sessionId)
         }
     }
 

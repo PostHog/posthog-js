@@ -1,6 +1,7 @@
 import { RemoteConfig } from '@/types'
 import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
+import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 
 const startOptions = {
     options: {
@@ -127,13 +128,8 @@ test.describe('Session recording - trigger match types 0% sampling + event trigg
             // Try to trigger a recording by interacting
             await page.locator('[data-cy-input]').fill('hello posthog!')
 
-            await page.waitForTimeout(1000)
-
-            // Get all events
-            const eventsAfterOverride = await page.capturedEvents()
-
-            const snapshotEventAfterOverride = eventsAfterOverride.find((e) => e.event === '$snapshot')
-            expect(snapshotEventAfterOverride).toBeTruthy()
+            // Poll for snapshot event instead of fixed timeout
+            await pollUntilEventCaptured(page, '$snapshot')
         })
     })
 })
