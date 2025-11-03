@@ -1,18 +1,9 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: ['@posthog/nuxt'],
-  compatibilityDate: '2025-07-15',
-  devtools: { enabled: true },
-  sourcemap: { client: 'hidden' },
-  nitro: {
-    rollupConfig: {
-      output: {
-        sourcemapExcludeSources: false,
-      },
-    },
-  },
+  compatibilityDate: '2025-11-03',
   posthogConfig: {
-    host: 'http://localhost:8010',
+    host: process.env.POSTHOG_API_HOST!,
     publicKey: process.env.POSTHOG_PROJECT_API_KEY!,
     debug: true,
     clientConfig: {
@@ -24,7 +15,7 @@ export default defineNuxtConfig({
     sourcemaps: {
       enabled: true,
       version: '3',
-      envId: '1',
+      envId: process.env.POSTHOG_API_PROJECT!,
       project: 'my-project',
       personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY!,
     },
