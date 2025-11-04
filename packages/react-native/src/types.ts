@@ -58,7 +58,7 @@ export type PostHogAutocaptureOptions = {
    * If you create a navigation ref with createNavigationContainerRef, you need to pass the navigation ref
    * Only used for expo-router and @react-navigation/native if captureScreens is true
    *
-   * @deprecated this is deprecated since it didn't work as expected, check ou the `captureScreens` comments for capturing screen views semi-automatically
+   * @deprecated this is deprecated since it didn't work as expected, check out the `captureScreens` comments for capturing screen views semi-automatically
    */
   navigationRef?: PostHogNavigationRef
 }
