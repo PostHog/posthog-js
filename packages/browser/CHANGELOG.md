@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.285.1
+
+### Patch Changes
+
+- [#2545](https://github.com/PostHog/posthog-js/pull/2545) [`c26a12c`](https://github.com/PostHog/posthog-js/commit/c26a12cc55932ff5a014c57a01a25c06715a24a1) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: allow session ending payload when recording is idle
+
 ## 1.285.0
 
 ### Minor Changes
