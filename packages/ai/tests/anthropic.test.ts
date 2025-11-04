@@ -16,6 +16,9 @@ interface MockAnthropicResponseOptions {
     output_tokens: number
     cache_creation_input_tokens?: number
     cache_read_input_tokens?: number
+    server_tool_use?: {
+      web_search_requests?: number
+    }
   }
   model?: string
   id?: string
@@ -33,7 +36,11 @@ interface MockStreamChunk {
   }
   index?: number
   message?: Partial<AnthropicOriginal.Messages.Message>
-  usage?: Partial<AnthropicOriginal.Messages.Usage>
+  usage?: Partial<AnthropicOriginal.Messages.Usage> & {
+    server_tool_use?: {
+      web_search_requests?: number
+    }
+  }
 }
 
 interface CaptureExpectations {
@@ -45,6 +52,7 @@ interface CaptureExpectations {
   outputTokens?: number
   cacheReadInputTokens?: number
   cacheCreationInputTokens?: number
+  webSearchCount?: number
   httpStatus?: number
   hasInput?: boolean
   hasOutput?: boolean
@@ -151,7 +159,10 @@ const createMockStreamChunks = (options: MockAnthropicResponseOptions = {}): Moc
         cache_creation_input_tokens: options.usage?.cache_creation_input_tokens || 0,
         cache_read_input_tokens: options.usage?.cache_read_input_tokens || 0,
         output_tokens: 0,
-      } as AnthropicOriginal.Messages.Usage,
+        ...(options.usage?.server_tool_use?.web_search_requests ? {
+          server_tool_use: { web_search_requests: options.usage.server_tool_use.web_search_requests }
+        } : {}),
+      } as any,
     },
   })
 
@@ -231,6 +242,7 @@ const assertPostHogCapture = (mockClient: PostHog, expectations: CaptureExpectat
     outputTokens: '$ai_output_tokens',
     cacheReadInputTokens: '$ai_cache_read_input_tokens',
     cacheCreationInputTokens: '$ai_cache_creation_input_tokens',
+    webSearchCount: '$ai_web_search_count',
     httpStatus: '$ai_http_status',
   }
 
@@ -899,6 +911,176 @@ describe('PostHogAnthropic', () => {
 
       expect(distinctId).toBe('user-456')
       expect(properties['$process_person_profile']).toBeUndefined()
+    })
+  })
+
+  describe('Web Search Tracking', () => {
+    conditionalTest('should track web search count in non-streaming mode', async () => {
+      mockResponse = createMockResponse({
+        content: 'Based on my search, PostHog is a product analytics platform.',
+        usage: {
+          input_tokens: 50,
+          output_tokens: 30,
+          server_tool_use: {
+            web_search_requests: 3,
+          },
+        },
+      })
+
+      await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [{ role: 'user', content: 'What is PostHog?' }],
+        max_tokens: 100,
+        posthogDistinctId: 'test-user-123',
+      })
+
+      assertPostHogCapture(mockPostHogClient, {
+        distinctId: 'test-user-123',
+        event: '$ai_generation',
+        provider: 'anthropic',
+        model: 'claude-3-opus-20240229',
+        inputTokens: 50,
+        outputTokens: 30,
+        webSearchCount: 3,
+        httpStatus: 200,
+        hasInput: true,
+        hasOutput: true,
+      })
+    })
+
+    conditionalTest('should track web search count in streaming mode', async () => {
+      mockStreamChunks = createMockStreamChunks({
+        content: 'Based on my search results, here is what I found.',
+        usage: {
+          input_tokens: 60,
+          output_tokens: 35,
+          server_tool_use: {
+            web_search_requests: 2,
+          },
+        },
+      })
+
+      const stream = await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [{ role: 'user', content: 'Search for information about AI' }],
+        max_tokens: 100,
+        stream: true,
+        posthogDistinctId: 'test-user-123',
+      })
+
+      // Consume the stream
+      for await (const _chunk of stream) {
+        // Just consume
+      }
+
+      // Allow async capture to complete
+      await waitForAsyncCapture()
+
+      assertPostHogCapture(mockPostHogClient, {
+        distinctId: 'test-user-123',
+        event: '$ai_generation',
+        provider: 'anthropic',
+        model: 'claude-3-opus-20240229',
+        inputTokens: 60,
+        outputTokens: 35,
+        webSearchCount: 2,
+        httpStatus: 200,
+        hasInput: true,
+        hasOutput: true,
+      })
+    })
+
+    conditionalTest('should not include web search count when not present', async () => {
+      mockResponse = createMockResponse({
+        content: 'Regular response without web search',
+        usage: {
+          input_tokens: 40,
+          output_tokens: 20,
+        },
+      })
+
+      await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [{ role: 'user', content: 'Hello' }],
+        max_tokens: 100,
+        posthogDistinctId: 'test-user-123',
+      })
+
+      const captureMock = mockPostHogClient.capture as jest.Mock
+      const [captureArgs] = captureMock.mock.calls
+      const { properties } = captureArgs[0]
+
+      // Should not have web search count property when it's 0 or undefined
+      expect(properties['$ai_web_search_count']).toBeUndefined()
+    })
+
+    conditionalTest('should track web search in message_delta event during streaming', async () => {
+      // Create custom stream chunks with web search in delta event
+      const customChunks: MockStreamChunk[] = [
+        {
+          type: 'message_start',
+          message: {
+            id: 'msg_test_123',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-3-opus-20240229',
+            usage: {
+              input_tokens: 50,
+              cache_creation_input_tokens: 0,
+              cache_read_input_tokens: 0,
+              output_tokens: 0,
+            } as AnthropicOriginal.Messages.Usage,
+          },
+        },
+        {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'text', text: '' } as AnthropicOriginal.Messages.TextBlock,
+        },
+        {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'text_delta', text: 'Search result' },
+        },
+        {
+          type: 'content_block_stop',
+          index: 0,
+        },
+        {
+          type: 'message_delta',
+          delta: {
+            stop_reason: 'end_turn',
+            type: 'stop_reason',
+          },
+          usage: {
+            output_tokens: 25,
+            server_tool_use: { web_search_requests: 4 },
+          } as any,
+        },
+        { type: 'message_stop' },
+      ]
+
+      mockStreamChunks = customChunks
+
+      const stream = await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [{ role: 'user', content: 'Search query' }],
+        max_tokens: 100,
+        stream: true,
+        posthogDistinctId: 'test-user-123',
+      })
+
+      // Consume the stream
+      for await (const _chunk of stream) {
+        // Just consume
+      }
+
+      // Allow async capture to complete
+      await waitForAsyncCapture()
+
+      assertPostHogCapture(mockPostHogClient, {
+        webSearchCount: 4,
+      })
     })
   })
 })

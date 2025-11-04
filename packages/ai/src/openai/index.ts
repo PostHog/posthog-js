@@ -118,16 +118,12 @@ export class WrappedCompletions extends Completions {
                 outputTokens?: number
                 reasoningTokens?: number
                 cacheReadInputTokens?: number
+                webSearchCount?: number
               } = {
                 inputTokens: 0,
                 outputTokens: 0,
+                webSearchCount: 0,
               }
-
-              // Accumulate web search indicators for binary detection
-              let accumulatedCitations: unknown[] | undefined
-              let accumulatedSearchResults: unknown[] | undefined
-              let accumulatedSearchContextSize: string | undefined
-              let accumulatedAnnotations: unknown[] = []
 
               // Map to track in-progress tool calls
               const toolCallsInProgress = new Map<
@@ -141,6 +137,11 @@ export class WrappedCompletions extends Completions {
 
               for await (const chunk of stream1) {
                 const choice = chunk?.choices?.[0]
+
+                const chunkWebSearchCount = calculateWebSearchCount(chunk)
+                if (chunkWebSearchCount > 0 && chunkWebSearchCount > (usage.webSearchCount ?? 0)) {
+                  usage.webSearchCount = chunkWebSearchCount
+                }
 
                 // Handle text content
                 const deltaContent = choice?.delta?.content
@@ -184,37 +185,12 @@ export class WrappedCompletions extends Completions {
                 // Handle usage information
                 if (chunk.usage) {
                   usage = {
+                    ...usage,
                     inputTokens: chunk.usage.prompt_tokens ?? 0,
                     outputTokens: chunk.usage.completion_tokens ?? 0,
                     reasoningTokens: chunk.usage.completion_tokens_details?.reasoning_tokens ?? 0,
                     cacheReadInputTokens: chunk.usage.prompt_tokens_details?.cached_tokens ?? 0,
                   }
-
-                  // Accumulate web search indicators (Perplexity via OpenRouter)
-                  if (
-                    'search_context_size' in chunk.usage &&
-                    typeof chunk.usage.search_context_size === 'string'
-                  ) {
-                    accumulatedSearchContextSize = chunk.usage.search_context_size
-                  }
-                }
-
-                // Accumulate root-level web search indicators (Perplexity)
-                if ('citations' in chunk && Array.isArray(chunk.citations)) {
-                  accumulatedCitations = chunk.citations
-                }
-
-                if ('search_results' in chunk && Array.isArray(chunk.search_results)) {
-                  accumulatedSearchResults = chunk.search_results
-                }
-
-                // Accumulate annotations from delta (OpenAI/Perplexity)
-                if (
-                  choice?.delta &&
-                  'annotations' in choice.delta &&
-                  Array.isArray(choice.delta.annotations)
-                ) {
-                  accumulatedAnnotations.push(...choice.delta.annotations)
                 }
               }
 
@@ -271,13 +247,7 @@ export class WrappedCompletions extends Completions {
                   outputTokens: usage.outputTokens,
                   reasoningTokens: usage.reasoningTokens,
                   cacheReadInputTokens: usage.cacheReadInputTokens,
-                  webSearchCount: calculateWebSearchCount({
-                    citations: accumulatedCitations,
-                    search_results: accumulatedSearchResults,
-                    usage: { search_context_size: accumulatedSearchContextSize },
-                    choices:
-                      accumulatedAnnotations.length > 0 ? [{ message: { annotations: accumulatedAnnotations } }] : undefined,
-                  }),
+                  webSearchCount: usage.webSearchCount,
                 },
                 tools: availableTools,
               })
@@ -426,12 +396,21 @@ export class WrappedResponses extends Responses {
                 outputTokens?: number
                 reasoningTokens?: number
                 cacheReadInputTokens?: number
+                webSearchCount?: number
               } = {
                 inputTokens: 0,
                 outputTokens: 0,
+                webSearchCount: 0,
               }
 
               for await (const chunk of stream1) {
+                if ('response' in chunk && chunk.response) {
+                  const chunkWebSearchCount = calculateWebSearchCount(chunk.response)
+                  if (chunkWebSearchCount > 0 && chunkWebSearchCount > (usage.webSearchCount ?? 0)) {
+                    usage.webSearchCount = chunkWebSearchCount
+                  }
+                }
+
                 if (
                   chunk.type === 'response.completed' &&
                   'response' in chunk &&
@@ -442,6 +421,7 @@ export class WrappedResponses extends Responses {
                 }
                 if ('response' in chunk && chunk.response?.usage) {
                   usage = {
+                    ...usage,
                     inputTokens: chunk.response.usage.input_tokens ?? 0,
                     outputTokens: chunk.response.usage.output_tokens ?? 0,
                     reasoningTokens: chunk.response.usage.output_tokens_details?.reasoning_tokens ?? 0,
@@ -469,7 +449,7 @@ export class WrappedResponses extends Responses {
                   outputTokens: usage.outputTokens,
                   reasoningTokens: usage.reasoningTokens,
                   cacheReadInputTokens: usage.cacheReadInputTokens,
-                  webSearchCount: calculateWebSearchCount({ output: finalContent }),
+                  webSearchCount: usage.webSearchCount,
                 },
                 tools: availableTools,
               })

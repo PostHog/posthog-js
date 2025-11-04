@@ -107,7 +107,7 @@ export const getModelParams = (
 }
 
 /**
- * Helper to format responses (non-streaming) for consumption, mirroring Python's openai vs. anthropic approach.
+ * Helper to format responses (non-streaming) for consumption
  */
 export const formatResponse = (response: any, provider: string): FormattedMessage[] => {
   if (!response) {

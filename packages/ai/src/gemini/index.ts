@@ -117,13 +117,18 @@ export class WrappedModels {
     let usage: TokenUsage = {
       inputTokens: 0,
       outputTokens: 0,
+      webSearchCount: 0,
     }
-    let accumulatedGroundingMetadata: unknown = undefined
 
     try {
       const stream = await this.client.models.generateContentStream(geminiParams as GenerateContentParameters)
 
       for await (const chunk of stream) {
+        const chunkWebSearchCount = hasGoogleSearchUsage(chunk)
+        if (chunkWebSearchCount > 0 && chunkWebSearchCount > (usage.webSearchCount ?? 0)) {
+          usage.webSearchCount = chunkWebSearchCount
+        }
+
         // Handle text content
         if (chunk.text) {
           // Find if we already have a text item to append to
@@ -142,14 +147,9 @@ export class WrappedModels {
           }
         }
 
-        // Handle function calls and grounding metadata from candidates
+        // Handle function calls from candidates
         if (chunk.candidates && Array.isArray(chunk.candidates)) {
           for (const candidate of chunk.candidates) {
-            // Accumulate grounding metadata if present
-            if (candidate.groundingMetadata !== undefined && !accumulatedGroundingMetadata) {
-              accumulatedGroundingMetadata = candidate.groundingMetadata
-            }
-
             if (candidate.content && candidate.content.parts) {
               for (const part of candidate.content.parts) {
                 // Type-safe check for functionCall
@@ -180,6 +180,7 @@ export class WrappedModels {
               (metadata as GenerateContentResponseUsageMetadata & { thoughtsTokenCount?: number }).thoughtsTokenCount ??
               0,
             cacheReadInputTokens: metadata.cachedContentTokenCount ?? 0,
+            webSearchCount: usage.webSearchCount,
           }
         }
         yield chunk
@@ -191,16 +192,6 @@ export class WrappedModels {
 
       // Format output similar to formatResponseGemini
       const output = accumulatedContent.length > 0 ? [{ role: 'assistant', content: accumulatedContent }] : []
-
-      // Build a mock response structure to check for grounding
-      const mockResponse = {
-        candidates: accumulatedContent.length > 0
-          ? [{
-              content: { parts: accumulatedContent },
-              ...(accumulatedGroundingMetadata ? { groundingMetadata: accumulatedGroundingMetadata } : {})
-            }]
-          : []
-      }
 
       await sendEventToPosthog({
         client: this.phClient,
@@ -215,7 +206,7 @@ export class WrappedModels {
         httpStatus: 200,
         usage: {
           ...usage,
-          webSearchCount: hasGoogleSearchUsage(mockResponse),
+          webSearchCount: usage.webSearchCount,
         },
         tools: availableTools,
       })
@@ -375,8 +366,20 @@ function hasGoogleSearchUsage(response: unknown): number {
     }
 
     // Check for grounding metadata
-    if ('groundingMetadata' in candidate && candidate.groundingMetadata !== undefined) {
-      return true
+    if ('groundingMetadata' in candidate && candidate.groundingMetadata) {
+      const metadata = candidate.groundingMetadata as any
+
+      if (typeof metadata === 'object') {
+        // Check if web_search_queries exists and is non-empty
+        if ('webSearchQueries' in metadata && Array.isArray(metadata.webSearchQueries) && metadata.webSearchQueries.length > 0) {
+          return true
+        }
+
+        // Check if grounding_chunks exists and is non-empty
+        if ('groundingChunks' in metadata && Array.isArray(metadata.groundingChunks) && metadata.groundingChunks.length > 0) {
+          return true
+        }
+      }
     }
 
     // Check for google search in function calls
