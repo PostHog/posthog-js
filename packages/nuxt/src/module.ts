@@ -111,7 +111,7 @@ export default defineNuxtModule<ModuleOptions>({
       }
     })
 
-    nuxt.hook('close', async (nuxt) => {
+    nuxt.hook('close', async () => {
       if (!isBuildProcess) return
       try {
         // Inject server sourcemaps
@@ -128,8 +128,13 @@ export default defineNuxtModule<ModuleOptions>({
 async function runInject(directory: string, host: string, sourcemapsConfig: EnabledSourcemaps) {
   const processOptions: string[] = ['--host', host, 'sourcemap', 'process', '--ignore', '**/node_modules/**']
 
-  sourcemapsConfig.project && processOptions.push('--project', sourcemapsConfig.project)
-  sourcemapsConfig.version && processOptions.push('--version', sourcemapsConfig.version)
+  if (sourcemapsConfig.project) {
+    processOptions.push('--project', sourcemapsConfig.project)
+  }
+
+  if (sourcemapsConfig.version) {
+    processOptions.push('--version', sourcemapsConfig.version)
+  }
 
   await spawnLocal('posthog-cli', [...processOptions, '--directory', directory], {
     env: {

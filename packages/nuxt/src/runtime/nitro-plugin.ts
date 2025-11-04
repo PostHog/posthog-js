@@ -3,6 +3,7 @@ import { uuidv7 } from '@posthog/core/vendor/uuidv7'
 import { defineNitroPlugin } from 'nitropack/runtime'
 import { useRuntimeConfig } from '#imports'
 import type { PostHogCommon, PostHogServerConfig } from '../module'
+import type { JsonType } from '@posthog/core'
 
 export default defineNitroPlugin((nitroApp) => {
   const runtimeConfig = useRuntimeConfig()
@@ -21,7 +22,7 @@ export default defineNitroPlugin((nitroApp) => {
 
   if (posthogServerConfig.enableExceptionAutocapture) {
     nitroApp.hooks.hook('error', (error, { event }) => {
-      const props: Record<string, any> = {
+      const props: JsonType = {
         $process_person_profile: false,
       }
       if (event?.path) {
