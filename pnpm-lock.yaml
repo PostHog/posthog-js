@@ -3240,6 +3240,11 @@ packages:
     engines: {node: '>=14', npm: '>=6'}
     hasBin: true
 
+  '@posthog/cli@0.5.7':
+    resolution: {integrity: sha512-PIDUJmXVRm4Jl5scujGHkjxpJhxnPXlZLMDpFqDwI5YoPTq+strWSN2wbfKe6JcgkqBaKamW1aDqCx4UTBkTJA==}
+    engines: {node: '>=14', npm: '>=6'}
+    hasBin: true
+
   '@posthog/rrdom@0.0.9':
     resolution: {integrity: sha512-o0Ey7pnphpUZXggIhVr5vFsazRSfuxVtILjH4Y2NBec0u5Qfhe7oz24TQqyxzuiARWocXntNT0cLlWBl1ZEaoQ==}
 
@@ -16748,6 +16753,16 @@ snapshots:
       supports-color: 10.2.2
 
   '@poppinss/exception@1.2.2': {}
+
+  '@posthog/cli@0.5.7':
+    dependencies:
+      axios: 1.12.2
+      axios-proxy-builder: 0.1.2
+      console.table: 0.10.0
+      detect-libc: 2.0.4
+      rimraf: 6.0.1
+    transitivePeerDependencies:
+      - debug
 
   '@posthog/cli@0.5.7':
     dependencies:
