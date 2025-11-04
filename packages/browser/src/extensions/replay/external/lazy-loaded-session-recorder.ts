@@ -713,7 +713,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._instance.persistence?.unregister(SESSION_RECORDING_OVERRIDE_SAMPLING)
         }
 
-        const overrideLinkedFlag: boolean = this._instance.get_property(SESSION_RECORDING_OVERRIDE_LINKED_FLAG) as boolean
+        const overrideLinkedFlag: boolean = this._instance.get_property(
+            SESSION_RECORDING_OVERRIDE_LINKED_FLAG
+        ) as boolean
         if (overrideLinkedFlag) {
             this.overrideLinkedFlag()
 
@@ -721,7 +723,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._instance.persistence?.unregister(SESSION_RECORDING_OVERRIDE_LINKED_FLAG)
         }
 
-        const overrideEventTrigger: boolean = this._instance.get_property(SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER) as boolean
+        const overrideEventTrigger: boolean = this._instance.get_property(
+            SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER
+        ) as boolean
         if (overrideEventTrigger) {
             this.overrideTrigger('event')
 
@@ -729,7 +733,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._instance.persistence?.unregister(SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER)
         }
 
-        const overrideUrlTrigger: boolean = this._instance.get_property(SESSION_RECORDING_OVERRIDE_URL_TRIGGER) as boolean
+        const overrideUrlTrigger: boolean = this._instance.get_property(
+            SESSION_RECORDING_OVERRIDE_URL_TRIGGER
+        ) as boolean
         if (overrideUrlTrigger) {
             this.overrideTrigger('url')
 
