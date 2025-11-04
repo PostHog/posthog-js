@@ -392,6 +392,10 @@ importers:
         version: 17.7.2
 
   packages/core:
+    dependencies:
+      cross-spawn:
+        specifier: ^7.0.6
+        version: 7.0.6
     devDependencies:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
@@ -399,6 +403,9 @@ importers:
       '@rslib/core':
         specifier: 'catalog:'
         version: 0.10.6(@microsoft/api-extractor@7.52.8(@types/node@22.17.0))(typescript@5.8.2)
+      '@types/cross-spawn':
+        specifier: ^6.0.6
+        version: 6.0.6
       jest:
         specifier: 'catalog:'
         version: 29.7.0(@types/node@22.17.0)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.17.0)(typescript@5.8.2))
@@ -406,8 +413,8 @@ importers:
   packages/nextjs-config:
     dependencies:
       '@posthog/cli':
-        specifier: ^0.5.2
-        version: 0.5.2
+        specifier: ^0.5.7
+        version: 0.5.7
       '@posthog/core':
         specifier: workspace:*
         version: link:../core
@@ -465,8 +472,8 @@ importers:
         specifier: '>=3.7.0'
         version: 4.1.3(magicast@0.3.5)
       '@posthog/cli':
-        specifier: ^0.5.2
-        version: 0.5.2
+        specifier: ^0.5.7
+        version: 0.5.7
       '@posthog/core':
         specifier: workspace:*
         version: link:../core
@@ -2016,7 +2023,7 @@ packages:
 
   '@expo/bunyan@4.0.1':
     resolution: {integrity: sha512-+Lla7nYSiHZirgK+U/uYzsLv/X+HaJienbD5AKX1UQZHYfWaP+9uuQluRB4GrEVWF0GZ7vEVp/jzaOT9k/SQlg==}
-    engines: {'0': node >=0.10.0}
+    engines: {node: '>=0.10.0'}
 
   '@expo/cli@0.1.7':
     resolution: {integrity: sha512-F81fPthpT7QtVu1P7QeZMezGn0tCcalCh3ANIzWBaQZNG4vly7mo2dp3PMGzNdmXq6yt93bJ4HbfS+0/NpKl7g==}
@@ -3228,8 +3235,8 @@ packages:
   '@poppinss/exception@1.2.2':
     resolution: {integrity: sha512-m7bpKCD4QMlFCjA/nKTs23fuvoVFoA83brRKmObCUNmi/9tVu8Ve3w4YQAnJu4q3Tjf5fr685HYIC/IA2zHRSg==}
 
-  '@posthog/cli@0.5.2':
-    resolution: {integrity: sha512-+jV6qbDHq1r7iTmk7JVMX4rlmCVhptlP0ngyI3WsBkY9I9mGRelHXbyJb6AFbJouKHERBLkGMZmMNT7pzuPZng==}
+  '@posthog/cli@0.5.7':
+    resolution: {integrity: sha512-PIDUJmXVRm4Jl5scujGHkjxpJhxnPXlZLMDpFqDwI5YoPTq+strWSN2wbfKe6JcgkqBaKamW1aDqCx4UTBkTJA==}
     engines: {node: '>=14', npm: '>=6'}
     hasBin: true
 
@@ -3984,6 +3991,9 @@ packages:
 
   '@types/cookie@0.4.1':
     resolution: {integrity: sha512-XW/Aa8APYr6jSVVA1y/DEIZX0/GMKLEVekNG727R8cs56ahETkRAy/3DR7+fJyh7oUgGwNQaRfXCun0+KbWY7Q==}
+
+  '@types/cross-spawn@6.0.6':
+    resolution: {integrity: sha512-fXRhhUkG4H3TQk5dBhQ7m/JDdSNHKwR2BBia62lhwEIq9xGiQKLxd6LymNhn47SjXhsUEPmxi+PKw2OkW4LLjA==}
 
   '@types/css-font-loading-module@0.0.7':
     resolution: {integrity: sha512-nl09VhutdjINdWyXxHWN/w9zlNCfr60JUqJbd24YXUuCwgeL0TpFSdElCwb6cxfB6ybE19Gjj4g0jsgkXxKv1Q==}
@@ -5641,10 +5651,6 @@ packages:
   cross-spawn@6.0.5:
     resolution: {integrity: sha512-eTVLrBSt7fjbDygz805pMnstIs2VTBNkRm0qxZd+M7A5XDdxVRWO5MxGBXZhjY4cqLYLdtrGqRf8mBPmzwSpWQ==}
     engines: {node: '>=4.8'}
-
-  cross-spawn@7.0.3:
-    resolution: {integrity: sha512-iRDPJKUPVEND7dHPO8rkbOnPpyDygcDFtWjpeWNCgy8WP2rXcxXL8TskReQl6OrB2G7+UJrags1q15Fudc7G6w==}
-    engines: {node: '>= 8'}
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -15125,7 +15131,7 @@ snapshots:
 
   '@expo/spawn-async@1.7.2':
     dependencies:
-      cross-spawn: 7.0.3
+      cross-spawn: 7.0.6
 
   '@expo/sudo-prompt@9.3.2': {}
 
@@ -16743,7 +16749,7 @@ snapshots:
 
   '@poppinss/exception@1.2.2': {}
 
-  '@posthog/cli@0.5.2':
+  '@posthog/cli@0.5.7':
     dependencies:
       axios: 1.12.2
       axios-proxy-builder: 0.1.2
@@ -17772,6 +17778,10 @@ snapshots:
   '@types/color-name@1.1.1': {}
 
   '@types/cookie@0.4.1': {}
+
+  '@types/cross-spawn@6.0.6':
+    dependencies:
+      '@types/node': 22.17.0
 
   '@types/css-font-loading-module@0.0.7': {}
 
@@ -19765,7 +19775,7 @@ snapshots:
 
   cross-env@7.0.3:
     dependencies:
-      cross-spawn: 7.0.3
+      cross-spawn: 7.0.6
 
   cross-fetch@3.2.0:
     dependencies:
@@ -19780,12 +19790,6 @@ snapshots:
       semver: 5.7.1
       shebang-command: 1.2.0
       which: 1.3.1
-
-  cross-spawn@7.0.3:
-    dependencies:
-      path-key: 3.1.1
-      shebang-command: 2.0.0
-      which: 2.0.2
 
   cross-spawn@7.0.6:
     dependencies:
@@ -20814,7 +20818,7 @@ snapshots:
       '@ungap/structured-clone': 1.2.0
       ajv: 6.12.6
       chalk: 4.1.2
-      cross-spawn: 7.0.3
+      cross-spawn: 7.0.6
       debug: 4.3.4
       doctrine: 3.0.0
       escape-string-regexp: 4.0.0
@@ -20971,7 +20975,7 @@ snapshots:
 
   execa@3.4.0:
     dependencies:
-      cross-spawn: 7.0.3
+      cross-spawn: 7.0.6
       get-stream: 5.2.0
       human-signals: 1.1.1
       is-stream: 2.0.0
@@ -20984,7 +20988,7 @@ snapshots:
 
   execa@4.1.0:
     dependencies:
-      cross-spawn: 7.0.3
+      cross-spawn: 7.0.6
       get-stream: 5.2.0
       human-signals: 1.1.1
       is-stream: 2.0.0
@@ -20996,7 +21000,7 @@ snapshots:
 
   execa@5.1.1:
     dependencies:
-      cross-spawn: 7.0.3
+      cross-spawn: 7.0.6
       get-stream: 6.0.1
       human-signals: 2.1.0
       is-stream: 2.0.0
