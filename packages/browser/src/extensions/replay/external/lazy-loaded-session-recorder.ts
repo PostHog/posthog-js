@@ -783,6 +783,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 // we'll need to correct the time of this if it's captured when idle
                 // so we don't extend reported session time with a debug event
                 lastActivityTimestamp: this._lastActivityTimestamp,
+                flushed_size: this._flushedSizeTracker.currentTrackedSize,
             })
         }
 
