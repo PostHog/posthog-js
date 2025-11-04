@@ -371,12 +371,20 @@ function hasGoogleSearchUsage(response: unknown): number {
 
       if (typeof metadata === 'object') {
         // Check if web_search_queries exists and is non-empty
-        if ('webSearchQueries' in metadata && Array.isArray(metadata.webSearchQueries) && metadata.webSearchQueries.length > 0) {
+        if (
+          'webSearchQueries' in metadata &&
+          Array.isArray(metadata.webSearchQueries) &&
+          metadata.webSearchQueries.length > 0
+        ) {
           return true
         }
 
         // Check if grounding_chunks exists and is non-empty
-        if ('groundingChunks' in metadata && Array.isArray(metadata.groundingChunks) && metadata.groundingChunks.length > 0) {
+        if (
+          'groundingChunks' in metadata &&
+          Array.isArray(metadata.groundingChunks) &&
+          metadata.groundingChunks.length > 0
+        ) {
           return true
         }
       }
