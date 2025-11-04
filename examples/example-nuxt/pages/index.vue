@@ -25,6 +25,8 @@
       <button @click="throwEventLoopError" style="padding: 10px; cursor: pointer">6. NextTick/Event Loop Error</button>
 
       <button @click="throwNestedAsyncError" style="padding: 10px; cursor: pointer">7. Nested Async Error</button>
+
+      <button @click="redirectRenderingError" style="padding: 10px; cursor: pointer">8. Rendering Error</button>
     </div>
   </div>
 </template>
@@ -98,5 +100,10 @@ const throwNestedAsyncError = () => {
   }
 
   outerAsync()
+}
+
+// 8. Rendering error
+const redirectRenderingError = () => {
+  window.location.href = '/error'
 }
 </script>

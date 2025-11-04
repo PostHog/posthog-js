@@ -3,7 +3,7 @@ import type { PostHogConfig } from 'posthog-js'
 import type { PostHogOptions } from 'posthog-node'
 import { spawnLocal } from '@posthog/core/process'
 import { fileURLToPath } from 'node:url'
-import { dirname } from 'node:path'
+import path, { dirname } from 'node:path'
 import type { NuxtOptions } from 'nuxt/schema'
 
 const filename = fileURLToPath(import.meta.url)
@@ -98,48 +98,71 @@ export default defineNuxtModule<ModuleOptions>({
     })
 
     const outputDir = getOutputDir(nuxt.options.nitro)
+    let isBuildProcess = false
 
-    nuxt.hook('close', async () => {
+    nuxt.hook('nitro:build:public-assets', async () => {
+      isBuildProcess = true
       try {
-        const processOptions: string[] = [
-          '--host',
-          options.host,
-          'sourcemap',
-          'process',
-          '--ignore',
-          '**/node_modules/**',
-        ]
-
-        if (sourcemapsConfig.project) {
-          processOptions.push('--project', sourcemapsConfig.project)
-        }
-
-        if (sourcemapsConfig.version) {
-          processOptions.push('--version', sourcemapsConfig.version)
-        }
-
-        if (sourcemapsConfig.deleteAfterUpload ?? true) {
-          processOptions.push('--delete-after')
-        }
-
-        await spawnLocal('posthog-cli', [...processOptions, '--directory', outputDir], {
-          env: {
-            ...process.env,
-            POSTHOG_CLI_ENV_ID: sourcemapsConfig.envId,
-            POSTHOG_CLI_TOKEN: sourcemapsConfig.personalApiKey,
-          },
-          cwd: process.cwd(),
-          resolveFrom: resolvedDirname,
-          stdio: 'inherit',
-          onBinaryFound: () => {},
-        })
+        // Inject public sourcemaps
+        // This cannot be done in the close hook. https://github.com/PostHog/posthog/issues/30957#issuecomment-2824545454
+        await runInject(path.join(outputDir, 'public'), options.host, sourcemapsConfig)
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('PostHog sourcemap process failed:', error)
+        console.error('Failed to process public sourcemaps:', error)
+      }
+    })
+
+    nuxt.hook('close', async (nuxt) => {
+      if (!isBuildProcess) return
+      try {
+        // Inject server sourcemaps
+        await runInject(path.join(outputDir, 'server'), options.host, sourcemapsConfig)
+        // Upload all assets
+        await runUpload(outputDir, options.host, sourcemapsConfig)
+      } catch (error) {
+        console.error('Failed to process server sourcemaps:', error)
       }
     })
   },
 })
+
+async function runInject(directory: string, host: string, sourcemapsConfig: EnabledSourcemaps) {
+  const processOptions: string[] = ['--host', host, 'sourcemap', 'process', '--ignore', '**/node_modules/**']
+
+  sourcemapsConfig.project && processOptions.push('--project', sourcemapsConfig.project)
+  sourcemapsConfig.version && processOptions.push('--version', sourcemapsConfig.version)
+
+  await spawnLocal('posthog-cli', [...processOptions, '--directory', directory], {
+    env: {
+      ...process.env,
+      POSTHOG_CLI_ENV_ID: sourcemapsConfig.envId,
+      POSTHOG_CLI_TOKEN: sourcemapsConfig.personalApiKey,
+    },
+    cwd: process.cwd(),
+    resolveFrom: resolvedDirname,
+    stdio: 'inherit',
+    onBinaryFound: () => {},
+  })
+}
+
+async function runUpload(directory: string, host: string, sourcemapsConfig: EnabledSourcemaps) {
+  const processOptions: string[] = ['--host', host, 'sourcemap', 'upload', '--ignore', '**/node_modules/**']
+
+  if (sourcemapsConfig.deleteAfterUpload ?? true) {
+    processOptions.push('--delete-after')
+  }
+
+  await spawnLocal('posthog-cli', [...processOptions, '--directory', directory], {
+    env: {
+      ...process.env,
+      POSTHOG_CLI_ENV_ID: sourcemapsConfig.envId,
+      POSTHOG_CLI_TOKEN: sourcemapsConfig.personalApiKey,
+    },
+    cwd: process.cwd(),
+    resolveFrom: resolvedDirname,
+    stdio: 'inherit',
+    onBinaryFound: () => {},
+  })
+}
 
 function getOutputDir(nitroConfig: NuxtOptions['nitro']): string {
   if (nitroConfig.preset && nitroConfig.preset.includes('vercel')) {

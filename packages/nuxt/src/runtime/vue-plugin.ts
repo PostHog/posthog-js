@@ -23,8 +23,8 @@ export default defineNuxtPlugin((nuxtApp) => {
   }
 
   if (autocaptureEnabled(posthogClientConfig)) {
-    nuxtApp.hook('vue:error', (error) => {
-      posthog.captureException(error)
+    nuxtApp.hook('vue:error', (error, info) => {
+      posthog.captureException(error, { info })
     })
   }
 

@@ -21,11 +21,17 @@ export default defineNitroPlugin((nitroApp) => {
 
   if (posthogServerConfig.enableExceptionAutocapture) {
     nitroApp.hooks.hook('error', (error, { event }) => {
-      client.captureException(error, uuidv7(), {
+      const props: Record<string, any> = {
         $process_person_profile: false,
-        path: event?.path,
-        method: event?.method,
-      })
+      }
+      if (event?.path) {
+        props.path = event.path
+      }
+      if (event?.method) {
+        props.method = event.method
+      }
+
+      client.captureException(error, uuidv7(), props)
     })
   }
 
