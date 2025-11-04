@@ -1,6 +1,5 @@
-import { spawn } from 'node:child_process'
+import { spawn } from 'cross-spawn'
 import { resolveBinaryPath } from './utils'
-import os from 'node:os'
 
 export async function spawnLocal(
   binaryName: string,
@@ -11,13 +10,13 @@ export async function spawnLocal(
     // We start traversing the file system tree from this directory and we go up until we find the binary
     resolveFrom: string
     cwd: string
-    onBinaryFound: (binaryLocation: string) => void
+    onBinaryFound?: (binaryLocation: string) => void
   }
 ): Promise<void> {
   let binaryLocation
   try {
     binaryLocation = resolveBinaryPath(options.env.PATH ?? '', options.resolveFrom, binaryName)
-    options.onBinaryFound(binaryLocation)
+    options.onBinaryFound?.(binaryLocation)
   } catch (e) {
     console.error(e)
     throw new Error(
@@ -25,8 +24,7 @@ export async function spawnLocal(
     )
   }
 
-  const child = spawn(`${escapeOS(binaryLocation)}`, [...args.map(escapeOS)], {
-    shell: true,
+  const child = spawn(binaryLocation, [...args], {
     stdio: options?.stdio ?? 'inherit',
     env: options.env,
     cwd: options.cwd,
@@ -45,13 +43,4 @@ export async function spawnLocal(
       reject(error)
     })
   })
-}
-
-function escapeOS(arg: string): string {
-  if (os.platform() === 'win32') {
-    if (!/\s|["]/.test(arg)) return arg
-    return `"${arg.replace(/(["\\])/g, '\\$1')}"`
-  } else {
-    return `'${arg.replace(/'/g, `'\\''`)}'`
-  }
 }
