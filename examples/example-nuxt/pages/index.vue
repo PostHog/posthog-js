@@ -104,6 +104,6 @@ const throwNestedAsyncError = () => {
 
 // 8. Rendering error
 const redirectRenderingError = () => {
-  window.location.href = '/error'
+  window.location.href = '/page-error'
 }
 </script>
