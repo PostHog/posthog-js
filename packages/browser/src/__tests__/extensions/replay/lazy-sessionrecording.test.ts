@@ -814,6 +814,52 @@ describe('Lazy SessionRecording', () => {
                 })
             })
 
+            it.each(['$session_ending', '$session_starting'])('allows %s events when idle', (eventTag: string) => {
+                // force idle state
+                sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
+                sessionRecording['_lazyLoadedSessionRecording']['_lastActivityTimestamp'] = startingTimestamp + 100
+                // buffer is empty
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
+                    ...EMPTY_BUFFER,
+                    sessionId: sessionId,
+                    windowId: 'windowId',
+                })
+
+                const event = createCustomSnapshot(
+                    { timestamp: startingTimestamp + 5000 },
+                    { lastActivityTimestamp: startingTimestamp + 100 },
+                    eventTag
+                )
+                sessionRecording.onRRwebEmit(event as eventWithTime)
+
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(1)
+                const bufferedEvent = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data[0]
+                expect(bufferedEvent.data.tag).toBe(eventTag)
+            })
+
+            it.each(['$session_ending', '$session_starting'])(
+                'corrects timestamp for %s events when idle',
+                (eventTag: string) => {
+                    const lastActivityTime = startingTimestamp + 100
+                    const eventRecordedTime = startingTimestamp + 5000
+
+                    // force idle state
+                    sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
+                    sessionRecording['_lazyLoadedSessionRecording']['_lastActivityTimestamp'] = lastActivityTime
+
+                    const event = createCustomSnapshot(
+                        { timestamp: eventRecordedTime },
+                        { lastActivityTimestamp: lastActivityTime },
+                        eventTag
+                    )
+                    sessionRecording.onRRwebEmit(event as eventWithTime)
+
+                    const bufferedEvent = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data[0]
+                    // timestamp should be corrected to lastActivityTimestamp, not the time rrweb recorded it
+                    expect(bufferedEvent.timestamp).toBe(lastActivityTime)
+                }
+            )
+
             it("enters idle state within one session if the activity is non-user generated and there's no activity for (RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) 5 minutes", () => {
                 const firstActivityTimestamp = startingTimestamp + 100
                 const secondActivityTimestamp = startingTimestamp + 200
@@ -2992,6 +3038,7 @@ describe('Lazy SessionRecording', () => {
                     activityTimeout: true,
                     sessionPastMaximumLength: false,
                 },
+                lastActivityTimestamp: expect.any(Number),
             })
 
             expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_id_change', {
@@ -3012,6 +3059,7 @@ describe('Lazy SessionRecording', () => {
                     activityTimeout: true,
                     sessionPastMaximumLength: false,
                 },
+                lastActivityTimestamp: expect.any(Number),
             })
 
             expect(tryAddCustomEvent).toHaveBeenCalledTimes(3)
@@ -3040,6 +3088,7 @@ describe('Lazy SessionRecording', () => {
                     activityTimeout: false,
                     sessionPastMaximumLength: true,
                 },
+                lastActivityTimestamp: expect.any(Number),
             })
 
             expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_starting', {
@@ -3050,6 +3099,7 @@ describe('Lazy SessionRecording', () => {
                     activityTimeout: false,
                     sessionPastMaximumLength: true,
                 },
+                lastActivityTimestamp: expect.any(Number),
             })
 
             expect(tryAddCustomEvent).toHaveBeenCalledTimes(3)

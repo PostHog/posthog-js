@@ -219,8 +219,24 @@ function compressEvent(event: eventWithTime): eventWithTime | compressedEventWit
     return event
 }
 
+function isCustomEvent(e: eventWithTime, tag: string): e is eventWithTime & customEvent {
+    return e.type === EventType.Custom && e.data.tag === tag
+}
+
 function isSessionIdleEvent(e: eventWithTime): e is eventWithTime & customEvent {
-    return e.type === EventType.Custom && e.data.tag === 'sessionIdle'
+    return isCustomEvent(e, 'sessionIdle')
+}
+
+function isSessionEndingEvent(e: eventWithTime): e is eventWithTime & customEvent {
+    return isCustomEvent(e, '$session_ending')
+}
+
+function isSessionStartingEvent(e: eventWithTime): e is eventWithTime & customEvent {
+    return isCustomEvent(e, '$session_starting')
+}
+
+function isAllowedWhenIdle(e: eventWithTime): boolean {
+    return isSessionIdleEvent(e) || isSessionEndingEvent(e) || isSessionStartingEvent(e)
 }
 
 /** When we put the recording into a paused state, we add a custom event.
@@ -758,6 +774,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 nextSessionId: sessionId,
                 nextWindowId: windowId,
                 changeReason,
+                // we'll need to correct the time of this if it's captured when idle
+                // so we don't extend reported session time with a debug event
+                lastActivityTimestamp: this._lastActivityTimestamp,
             })
         }
 
@@ -774,6 +793,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 previousSessionId: oldSessionId,
                 previousWindowId: oldWindowId,
                 changeReason,
+                // we'll need to correct the time of this if it's captured when idle
+                // so we don't extend reported session time with a debug event
+                lastActivityTimestamp: this._lastActivityTimestamp,
             })
         }
 
@@ -879,7 +901,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // When in an idle state we keep recording but don't capture the events,
         // we don't want to return early if idle is 'unknown'
-        if (this._isIdle === true && !isSessionIdleEvent(event)) {
+        if (this._isIdle === true && !isAllowedWhenIdle(event)) {
             return
         }
 
@@ -892,6 +914,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 const lastActivity = payload.lastActivityTimestamp
                 const threshold = payload.threshold
                 event.timestamp = lastActivity + threshold
+            }
+        }
+
+        if (isSessionEndingEvent(event) || isSessionStartingEvent(event)) {
+            // session ending/starting events have a timestamp when rrweb sees them
+            // which can artificially lengthen a session
+            // we know when the last activity was based on the payload and can correct the timestamp
+            const payload = event.data.payload as { lastActivityTimestamp?: number }
+            if (payload?.lastActivityTimestamp) {
+                event.timestamp = payload.lastActivityTimestamp
             }
         }
 
