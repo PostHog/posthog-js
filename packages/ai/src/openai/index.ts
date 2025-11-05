@@ -383,10 +383,7 @@ export class WrappedResponses extends Responses {
 
     if (openAIParams.stream) {
       return parentPromise.then((value) => {
-        if (
-          'tee' in value &&
-          typeof value.tee === 'function'
-        ) {
+        if ('tee' in value && typeof value.tee === 'function') {
           const [stream1, stream2] = value.tee()
           ;(async () => {
             try {

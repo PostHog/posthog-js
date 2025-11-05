@@ -666,8 +666,10 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       }
     }
     // Check Gemini format (grounding metadata - binary 0 or 1)
-    else if (usage.grounding_metadata?.grounding_support !== undefined ||
-             usage.grounding_metadata?.web_search_queries !== undefined) {
+    else if (
+      usage.grounding_metadata?.grounding_support !== undefined ||
+      usage.grounding_metadata?.web_search_queries !== undefined
+    ) {
       webSearchCount = 1
     }
 

@@ -159,9 +159,11 @@ const createMockStreamChunks = (options: MockAnthropicResponseOptions = {}): Moc
         cache_creation_input_tokens: options.usage?.cache_creation_input_tokens || 0,
         cache_read_input_tokens: options.usage?.cache_read_input_tokens || 0,
         output_tokens: 0,
-        ...(options.usage?.server_tool_use?.web_search_requests ? {
-          server_tool_use: { web_search_requests: options.usage.server_tool_use.web_search_requests }
-        } : {}),
+        ...(options.usage?.server_tool_use?.web_search_requests
+          ? {
+              server_tool_use: { web_search_requests: options.usage.server_tool_use.web_search_requests },
+            }
+          : {}),
       } as any,
     },
   })

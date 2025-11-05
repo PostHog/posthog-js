@@ -444,7 +444,12 @@ export function calculateWebSearchCount(result: unknown): number {
   // Check for grounding_metadata (Gemini)
   if ('candidates' in result && Array.isArray(result.candidates)) {
     for (const candidate of result.candidates) {
-      if (typeof candidate === 'object' && candidate !== null && 'grounding_metadata' in candidate && candidate.grounding_metadata) {
+      if (
+        typeof candidate === 'object' &&
+        candidate !== null &&
+        'grounding_metadata' in candidate &&
+        candidate.grounding_metadata
+      ) {
         return 1
       }
     }
