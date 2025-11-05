@@ -427,7 +427,6 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   identify({ distinctId, properties, disableGeoip }: IdentifyMessage): void {
     // Catch properties passed as $set and move them to the top level
-
     // promote $set and $set_once to top level
     const userPropsOnce = properties?.$set_once
     delete properties?.$set_once
@@ -435,13 +434,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // if no $set is provided we assume all properties are $set
     const userProps = properties?.$set || properties
 
-    super.identifyStateless(
-      distinctId,
-      {
-        $set: userProps,
-        $set_once: userPropsOnce,
-      },
-      { disableGeoip }
+    this.addPendingPromise(
+      this.prepareEventMessage({
+        distinctId,
+        event: '$identify',
+        properties: { $set: userProps, $set_once: userPropsOnce },
+        disableGeoip,
+      })
+        .then(({ distinctId, properties, options }) => {
+          return super.identifyStateless(distinctId, properties, options)
+        })
+        .catch((err) => {
+          if (err) {
+            console.error(err)
+          }
+        })
     )
   }
 
@@ -473,13 +480,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // if no $set is provided we assume all properties are $set
     const userProps = properties?.$set || properties
 
-    await super.identifyStatelessImmediate(
-      distinctId,
-      {
-        $set: userProps,
-        $set_once: userPropsOnce,
-      },
-      { disableGeoip }
+    return this.addPendingPromise(
+      this.prepareEventMessage({
+        distinctId,
+        event: '$identify',
+        properties: { $set: userProps, $set_once: userPropsOnce },
+        disableGeoip,
+      })
+        .then(({ distinctId, properties, options }) => {
+          return super.identifyStatelessImmediate(distinctId, properties, options)
+        })
+        .catch((err) => {
+          if (err) {
+            console.error(err)
+          }
+        })
     )
   }
 
@@ -1130,7 +1145,32 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param data - The group identify data
    */
   groupIdentify({ groupType, groupKey, properties, distinctId, disableGeoip }: GroupIdentifyMessage): void {
-    super.groupIdentifyStateless(groupType, groupKey, properties, { disableGeoip }, distinctId)
+    this.prepareEventMessage({
+      distinctId: distinctId || `$${groupType}_${groupKey}`,
+      event: '$groupidentify',
+      properties: {
+        $group_type: groupType,
+        $group_key: groupKey,
+        $group_set: properties || {},
+      },
+      disableGeoip,
+    })
+      .then(({ distinctId, properties, options }) => {
+        const { $group_type, $group_key, $group_set, ...eventProperties } = properties
+        return super.groupIdentifyStateless(
+          $group_type as string,
+          $group_key as string | number,
+          $group_set as PostHogEventProperties,
+          options,
+          distinctId,
+          eventProperties
+        )
+      })
+      .catch((err) => {
+        if (err) {
+          console.error(err)
+        }
+      })
   }
 
   /**
