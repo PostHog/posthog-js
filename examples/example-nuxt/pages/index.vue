@@ -4,7 +4,9 @@
     <p>Test various hard-to-catch errors:</p>
 
     <div style="display: flex; flex-direction: column; gap: 10px; max-width: 400px">
-      <button @click="testEvent" style="padding: 10px; cursor: pointer">0. Test Event</button>
+      <button @click="testCaptureEvent" style="padding: 10px; cursor: pointer">0. Test Event</button>
+
+      <button @click="testCaptureException" style="padding: 10px; cursor: pointer">0. Test Exception</button>
 
       <button @click="throwSimpleError" style="padding: 10px; cursor: pointer">1. Simple Synchronous Error</button>
 
@@ -23,6 +25,8 @@
       <button @click="throwEventLoopError" style="padding: 10px; cursor: pointer">6. NextTick/Event Loop Error</button>
 
       <button @click="throwNestedAsyncError" style="padding: 10px; cursor: pointer">7. Nested Async Error</button>
+
+      <button @click="redirectRenderingError" style="padding: 10px; cursor: pointer">8. Rendering Error</button>
     </div>
   </div>
 </template>
@@ -32,14 +36,14 @@ import { throwSimpleError as utilThrowError } from '~/utils/errorUtils'
 
 const { $posthog } = useNuxtApp()
 
-// 0. Test event
-const testEvent = () => {
-  console.log('testEvent')
-  console.log($posthog)
+// 0. Test manual capture
+const testCaptureEvent = () => {
+  $posthog()?.capture('test_event')
+}
 
-  if ($posthog) {
-    $posthog().capture('test_event')
-  }
+// 0. Test event
+const testCaptureException = () => {
+  $posthog()?.captureException(new Error('Test exception'))
 }
 
 // 1. Simple synchronous error
@@ -96,5 +100,10 @@ const throwNestedAsyncError = () => {
   }
 
   outerAsync()
+}
+
+// 8. Rendering error
+const redirectRenderingError = () => {
+  window.location.href = '/page-error'
 }
 </script>

@@ -22,6 +22,7 @@ _Please describe._
 - [ ] @posthog/react
 - [ ] @posthog/ai
 - [ ] @posthog/nextjs-config
+- [ ] @posthog/nuxt
 
 ## Additional context
 
