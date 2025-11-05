@@ -1145,32 +1145,34 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param data - The group identify data
    */
   groupIdentify({ groupType, groupKey, properties, distinctId, disableGeoip }: GroupIdentifyMessage): void {
-    this.prepareEventMessage({
-      distinctId: distinctId || `$${groupType}_${groupKey}`,
-      event: '$groupidentify',
-      properties: {
-        $group_type: groupType,
-        $group_key: groupKey,
-        $group_set: properties || {},
-      },
-      disableGeoip,
-    })
-      .then(({ distinctId, properties, options }) => {
-        const { $group_type, $group_key, $group_set, ...eventProperties } = properties
-        return super.groupIdentifyStateless(
-          $group_type as string,
-          $group_key as string | number,
-          $group_set as PostHogEventProperties,
-          options,
-          distinctId,
-          eventProperties
-        )
+    this.addPendingPromise(
+      this.prepareEventMessage({
+        distinctId: distinctId || `$${groupType}_${groupKey}`,
+        event: '$groupidentify',
+        properties: {
+          $group_type: groupType,
+          $group_key: groupKey,
+          $group_set: properties || {},
+        },
+        disableGeoip,
       })
-      .catch((err) => {
-        if (err) {
-          console.error(err)
-        }
-      })
+        .then(({ distinctId, properties, options }) => {
+          const { $group_type, $group_key, $group_set, ...eventProperties } = properties
+          return super.groupIdentifyStateless(
+            $group_type as string,
+            $group_key as string | number,
+            $group_set as PostHogEventProperties,
+            options,
+            distinctId,
+            eventProperties
+          )
+        })
+        .catch((err) => {
+          if (err) {
+            console.error(err)
+          }
+        })
+    )
   }
 
   /**
