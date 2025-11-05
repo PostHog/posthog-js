@@ -1,0 +1,157 @@
+{
+    "questions": [
+        {
+            "id": "q1",
+            "question": "How does the PostHog JavaScript SDK implement token bucket rate limiting for different exception types?",
+            "options": [
+                "Uses a single global token bucket for all exceptions",
+                "Uses separate independent token buckets for each exception type (TypeError, ReferenceError, etc.)",
+                "Uses a hierarchical bucketing system with exception type categories",
+                "Uses time-based rate limiting without token buckets"
+            ]
+        },
+        {
+            "id": "q2",
+            "question": "What is the default token bucket configuration for exception rate limiting in the PostHog SDK?",
+            "options": [
+                "Bucket size: 5 tokens, refill rate: 1 token per 5 seconds",
+                "Bucket size: 10 tokens, refill rate: 1 token per 10 seconds",
+                "Bucket size: 20 tokens, refill rate: 2 tokens per 10 seconds",
+                "Bucket size: 100 tokens, refill rate: 10 tokens per second"
+            ]
+        },
+        {
+            "id": "q3",
+            "question": "Where is the exception type extracted from in the PostHog exception tracking pipeline?",
+            "options": [
+                "From the error message string",
+                "From the stack trace filename",
+                "From errorProperties.$exception_list[0].type field",
+                "From the browser's native error classification"
+            ]
+        },
+        {
+            "id": "q4",
+            "question": "How many separate rate limiting systems does the PostHog SDK implement?",
+            "options": [
+                "One global rate limiter for all events",
+                "Two: exception-specific bucketed rate limiter and global event rate limiter",
+                "Three: per-type, per-domain, and global limiters",
+                "Four: per-type, per-domain, global, and server-side limiters"
+            ]
+        },
+        {
+            "id": "q5",
+            "question": "What happens when a token bucket for a specific exception type is exhausted?",
+            "options": [
+                "The exception is queued for later processing",
+                "The exception is dropped and a log message is generated",
+                "The exception is sent to a fallback bucket",
+                "The bucket is immediately refilled"
+            ]
+        },
+        {
+            "id": "q6",
+            "question": "Which files contain the core implementation of bucketed rate limiting for exceptions?",
+            "options": [
+                "Only /packages/browser/src/extensions/exception-autocapture/index.ts",
+                "/packages/core/src/utils/bucketed-rate-limiter.ts and /packages/browser/src/extensions/exception-autocapture/index.ts",
+                "Only /packages/core/src/error-tracking/coercers/",
+                "/packages/browser/src/request-queue.ts only"
+            ]
+        },
+        {
+            "id": "q7",
+            "question": "Are exception rate limiting buckets independent from each other?",
+            "options": [
+                "No, all exception types share tokens from a single bucket",
+                "Yes, each exception type has its own independent token bucket with separate token allocation",
+                "Partially, exception types are grouped into categories that share buckets",
+                "No, buckets are shared within the same error domain"
+            ]
+        },
+        {
+            "id": "q8",
+            "question": "How is the exception type used in the rate limiting system?",
+            "options": [
+                "It's used for logging purposes only",
+                "It's used as the bucket key for per-type rate limiting",
+                "It's used to determine the refill rate",
+                "It's used to select between different rate limiting algorithms"
+            ]
+        },
+        {
+            "id": "q9",
+            "question": "What filtering layers exist after the token bucket rate limiting check?",
+            "options": [
+                "Only server-side filtering",
+                "Suppression rules, extension exception filter, and SDK self-exception filter",
+                "Only extension exception filter",
+                "No additional filtering after rate limiting"
+            ]
+        },
+        {
+            "id": "q10",
+            "question": "Is the exception rate limiting configuration customizable?",
+            "options": [
+                "No, it uses hardcoded defaults",
+                "Yes, via error_tracking.__exceptionRateLimiterBucketSize and __exceptionRateLimiterRefillRate config options",
+                "Only the bucket size is customizable",
+                "Only the refill rate is customizable"
+            ]
+        }
+    ],
+    "answered": true,
+    "answers": [
+        {
+            "questionId": "q6",
+            "selectedOption": "Something else? (Please specify)",
+            "customInput": "You tell me"
+        },
+        {
+            "questionId": "q1",
+            "selectedOption": "Something else? (Please specify)",
+            "customInput": "You tell me"
+        },
+        {
+            "questionId": "q2",
+            "selectedOption": "Something else? (Please specify)",
+            "customInput": "You tell me"
+        },
+        {
+            "questionId": "q3",
+            "selectedOption": "Something else? (Please specify)",
+            "customInput": "You tell me"
+        },
+        {
+            "questionId": "q4",
+            "selectedOption": "Something else? (Please specify)",
+            "customInput": "You tell me"
+        },
+        {
+            "questionId": "q5",
+            "selectedOption": "Something else? (Please specify)",
+            "customInput": "You tell me"
+        },
+        {
+            "questionId": "q7",
+            "selectedOption": "Something else? (Please specify)",
+            "customInput": "You tell me"
+        },
+        {
+            "questionId": "q8",
+            "selectedOption": "Something else? (Please specify)",
+            "customInput": "You tell me"
+        },
+        {
+            "questionId": "q9",
+            "selectedOption": "Something else? (Please specify)",
+            "customInput": "You tell me"
+        },
+        {
+            "questionId": "q10",
+            "selectedOption": "Something else? (Please specify)",
+            "customInput": "You tell me"
+        }
+    ]
+}
