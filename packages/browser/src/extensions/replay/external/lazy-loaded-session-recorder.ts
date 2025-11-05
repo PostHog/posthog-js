@@ -663,6 +663,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         return parsedConfig as SessionRecordingPersistedConfig
     }
 
+    private _checkOverride(key: string, overrideFunction: () => void): void {
+        const overrideFlag: boolean = this._instance.get_property(key) as boolean
+        if (overrideFlag) {
+            overrideFunction()
+
+            // Clean up the override flag after applying it
+            this._instance.persistence?.unregister(key)
+        }
+    }
+
     start(startReason?: SessionStartReason) {
         const config = this._remoteConfig
         if (!config) {
@@ -705,43 +715,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             })
         })
 
-        const overrideSampling: boolean = this._instance.get_property(SESSION_RECORDING_OVERRIDE_SAMPLING) as boolean
-        if (overrideSampling) {
-            this.overrideSampling()
-
-            // Clean up the override flag after applying it
-            this._instance.persistence?.unregister(SESSION_RECORDING_OVERRIDE_SAMPLING)
-        }
-
-        const overrideLinkedFlag: boolean = this._instance.get_property(
-            SESSION_RECORDING_OVERRIDE_LINKED_FLAG
-        ) as boolean
-        if (overrideLinkedFlag) {
-            this.overrideLinkedFlag()
-
-            // Clean up the override flag after applying it
-            this._instance.persistence?.unregister(SESSION_RECORDING_OVERRIDE_LINKED_FLAG)
-        }
-
-        const overrideEventTrigger: boolean = this._instance.get_property(
-            SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER
-        ) as boolean
-        if (overrideEventTrigger) {
+        this._checkOverride(SESSION_RECORDING_OVERRIDE_SAMPLING, this.overrideSampling)
+        this._checkOverride(SESSION_RECORDING_OVERRIDE_LINKED_FLAG, this.overrideLinkedFlag)
+        this._checkOverride(SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER, () => {
             this.overrideTrigger('event')
-
-            // Clean up the override flag after applying it
-            this._instance.persistence?.unregister(SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER)
-        }
-
-        const overrideUrlTrigger: boolean = this._instance.get_property(
-            SESSION_RECORDING_OVERRIDE_URL_TRIGGER
-        ) as boolean
-        if (overrideUrlTrigger) {
+        })
+        this._checkOverride(SESSION_RECORDING_OVERRIDE_URL_TRIGGER, () => {
             this.overrideTrigger('url')
-
-            // Clean up the override flag after applying it
-            this._instance.persistence?.unregister(SESSION_RECORDING_OVERRIDE_URL_TRIGGER)
-        }
+        })
 
         this._makeSamplingDecision(this.sessionId)
         this._startRecorder()
