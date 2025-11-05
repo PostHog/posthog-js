@@ -52,6 +52,7 @@ import {
     EventName,
     FeatureFlagsCallback,
     JsonType,
+    OverrideConfig,
     PostHogConfig,
     Properties,
     Property,
@@ -947,7 +948,12 @@ export class PostHog {
             return
         }
 
-        if (!this.config.opt_out_useragent_filter && this._is_bot()) {
+        const isBot = !this.config.opt_out_useragent_filter && this._is_bot()
+        const shouldDropBotEvent = isBot && !this.config.__preview_capture_bot_pageviews
+
+        // We drop bot events unless the preview flag to send bot pageviews is enabled
+        // or the user has explicitly opted out of useragent filtering
+        if (shouldDropBotEvent) {
             return
         }
 
@@ -992,6 +998,14 @@ export class PostHog {
             uuid,
             event: event_name,
             properties: this.calculateEventProperties(event_name, properties || {}, timestamp, uuid),
+        }
+
+        // Route pageviews to $bot_pageview when bot detected and preview flag enabled
+        if (event_name === '$pageview' && this.config.__preview_capture_bot_pageviews && isBot) {
+            data.event = '$bot_pageview'
+            // While it's obvious that a $bot_pageview is (likely) from a bot, we explicitly set $browser_type
+            // to make it easy to filter and test bot pageviews in the product
+            data.properties.$browser_type = 'bot'
         }
 
         if (clientRateLimitContext) {
@@ -2581,7 +2595,7 @@ export class PostHog {
         override?: { sampling?: boolean; linked_flag?: boolean; url_trigger?: true; event_trigger?: true } | true
     ): void {
         const overrideAll = override === true
-        const overrideConfig = {
+        const overrideConfig: OverrideConfig = {
             sampling: overrideAll || !!override?.sampling,
             linked_flag: overrideAll || !!override?.linked_flag,
             url_trigger: overrideAll || !!override?.url_trigger,

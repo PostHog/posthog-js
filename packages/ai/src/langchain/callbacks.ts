@@ -673,6 +673,11 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
 
     if (webSearchCount !== undefined) {
       additionalTokenData.webSearchCount = webSearchCount
+
+    // In LangChain, input_tokens is the sum of input and cache read tokens.
+    // Our cost calculation expects them to be separate, for Anthropic.
+    if (parsedUsage.input && additionalTokenData.cacheReadInputTokens) {
+      parsedUsage.input = Math.max(parsedUsage.input - additionalTokenData.cacheReadInputTokens, 0)
     }
 
     return [parsedUsage.input, parsedUsage.output, additionalTokenData]

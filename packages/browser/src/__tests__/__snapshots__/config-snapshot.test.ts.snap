@@ -136,6 +136,25 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true"
   ],
+  "surveys": [
+    "undefined",
+    {
+      "prefillFromUrl": [
+        "undefined",
+        "false",
+        "true"
+      ],
+      "autoSubmitIfComplete": [
+        "undefined",
+        "false",
+        "true"
+      ],
+      "autoSubmitDelay": [
+        "undefined",
+        "number"
+      ]
+    }
+  ],
   "disable_web_experiments": [
     "false",
     "true"
@@ -575,6 +594,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "true"
   ],
   "__preview_disable_xhr_credentials": [
+    "undefined",
+    "false",
+    "true"
+  ],
+  "__preview_capture_bot_pageviews": [
     "undefined",
     "false",
     "true"

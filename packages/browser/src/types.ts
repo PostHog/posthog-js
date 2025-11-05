@@ -2,7 +2,7 @@ import type { recordOptions } from './extensions/replay/types/rrweb'
 import type { SegmentAnalytics } from './extensions/segment-integration'
 import { PostHog } from './posthog-core'
 import { KnownUnsafeEditableEvent } from '@posthog/core'
-import { Survey } from './posthog-surveys-types'
+import { Survey, SurveyConfig } from './posthog-surveys-types'
 // only importing types here, so won't affect the bundle
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SAMPLED } from './extensions/replay/external/triggerMatching'
@@ -485,6 +485,13 @@ export interface PostHogConfig {
      * @default false
      */
     disable_surveys_automatic_display: boolean
+
+    /**
+     * Survey-specific configuration options.
+     *
+     * @default undefined
+     */
+    surveys?: SurveyConfig
 
     /**
      * Determines whether PostHog should disable web experiments.
@@ -1040,6 +1047,13 @@ export interface PostHogConfig {
      * Disables sending credentials when using XHR requests.
      */
     __preview_disable_xhr_credentials?: boolean
+
+    /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+     * Enables collection of bot traffic as $bot_pageview events with detailed bot detection
+     * properties instead of dropping them entirely. Use it alongside opt_out_useragent_filter
+     */
+    __preview_capture_bot_pageviews?: boolean
 
     // ------- RETIRED CONFIGS - NO REPLACEMENT OR USAGE -------
 
@@ -1847,3 +1861,10 @@ export type SessionStartReason =
     | 'session_id_changed'
     | 'url_trigger_matched'
     | 'event_trigger_matched'
+
+export type OverrideConfig = {
+    sampling: boolean
+    linked_flag: boolean
+    url_trigger: boolean
+    event_trigger: boolean
+}

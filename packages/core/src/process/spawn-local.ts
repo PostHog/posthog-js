@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn } from 'cross-spawn'
 import { resolveBinaryPath } from './utils'
 
 export async function spawnLocal(
@@ -10,13 +10,13 @@ export async function spawnLocal(
     // We start traversing the file system tree from this directory and we go up until we find the binary
     resolveFrom: string
     cwd: string
-    onBinaryFound: (binaryLocation: string) => void
+    onBinaryFound?: (binaryLocation: string) => void
   }
 ): Promise<void> {
   let binaryLocation
   try {
     binaryLocation = resolveBinaryPath(options.env.PATH ?? '', options.resolveFrom, binaryName)
-    options.onBinaryFound(binaryLocation)
+    options.onBinaryFound?.(binaryLocation)
   } catch (e) {
     console.error(e)
     throw new Error(
@@ -25,7 +25,6 @@ export async function spawnLocal(
   }
 
   const child = spawn(binaryLocation, [...args], {
-    shell: true,
     stdio: options?.stdio ?? 'inherit',
     env: options.env,
     cwd: options.cwd,

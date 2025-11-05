@@ -1,5 +1,21 @@
 # posthog-react-native
 
+## 4.10.7
+
+### Patch Changes
+
+- [#2541](https://github.com/PostHog/posthog-js/pull/2541) [`b3a62d0`](https://github.com/PostHog/posthog-js/commit/b3a62d01aa62cc96cd4270adf1168a219f620ee7) Thanks [@marandaneto](https://github.com/marandaneto)! - chore: deprecate navigationRef autocapture
+
+- Updated dependencies [[`d8d98c9`](https://github.com/PostHog/posthog-js/commit/d8d98c95f24b612110dbf52d228c0c3bd248cd58)]:
+  - @posthog/core@1.5.1
+
+## 4.10.6
+
+### Patch Changes
+
+- Updated dependencies [[`068d55e`](https://github.com/PostHog/posthog-js/commit/068d55ed4193e82729cd34b42d9e433f85b6e606)]:
+  - @posthog/core@1.5.0
+
 ## 4.10.5
 
 ### Patch Changes

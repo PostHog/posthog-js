@@ -1,5 +1,18 @@
 # @posthog/react
 
+## 1.3.0
+
+### Minor Changes
+
+- [#2517](https://github.com/PostHog/posthog-js/pull/2517) [`46e3ca6`](https://github.com/PostHog/posthog-js/commit/46e3ca600ca478db1b319b36695dea090aa60f98) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: add a component that will wrap your components and capture an event when they are in view in the browser
+
+### Patch Changes
+
+- [#2517](https://github.com/PostHog/posthog-js/pull/2517) [`46e3ca6`](https://github.com/PostHog/posthog-js/commit/46e3ca600ca478db1b319b36695dea090aa60f98) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: complete react sdk featureflag component refactor
+
+- Updated dependencies [[`46e3ca6`](https://github.com/PostHog/posthog-js/commit/46e3ca600ca478db1b319b36695dea090aa60f98), [`46e3ca6`](https://github.com/PostHog/posthog-js/commit/46e3ca600ca478db1b319b36695dea090aa60f98)]:
+    - posthog-js@1.282.0
+
 ## 1.2.3
 
 ### Patch Changes

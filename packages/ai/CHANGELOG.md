@@ -1,5 +1,11 @@
 # posthog-ai
 
+## 6.5.1
+
+### Patch Changes
+
+- [#2537](https://github.com/PostHog/posthog-js/pull/2537) [`fb2fa06`](https://github.com/PostHog/posthog-js/commit/fb2fa06d50fe6527c77d84305dc9ddeb69a30438) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - fix(llma): cache cost calculation in the LangChain callback
+
 ## 6.5.0
 
 ### Minor Changes

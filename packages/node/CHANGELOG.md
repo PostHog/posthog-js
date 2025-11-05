@@ -1,5 +1,23 @@
 # posthog-node
 
+## 5.11.1
+
+### Patch Changes
+
+- Updated dependencies [[`d8d98c9`](https://github.com/PostHog/posthog-js/commit/d8d98c95f24b612110dbf52d228c0c3bd248cd58)]:
+  - @posthog/core@1.5.1
+
+## 5.11.0
+
+### Minor Changes
+
+- [#2520](https://github.com/PostHog/posthog-js/pull/2520) [`068d55e`](https://github.com/PostHog/posthog-js/commit/068d55ed4193e82729cd34b42d9e433f85b6e606) Thanks [@lricoy](https://github.com/lricoy)! - Add bot pageview collection behind preview flag. Enables tracking bot traffic as `$bot_pageview` events when the `__preview_capture_bot_pageviews` flag is enabled.
+
+### Patch Changes
+
+- Updated dependencies [[`068d55e`](https://github.com/PostHog/posthog-js/commit/068d55ed4193e82729cd34b42d9e433f85b6e606)]:
+  - @posthog/core@1.5.0
+
 ## 5.10.4
 
 ### Patch Changes

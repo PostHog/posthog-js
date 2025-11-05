@@ -89,6 +89,31 @@ export type PostHogOptions = PostHogCoreOptions & {
    * @default undefined
    */
   evaluationEnvironments?: readonly string[]
+  /**
+   * Additional user agent strings to block from being tracked.
+   * These are combined with the default list of blocked user agents.
+   *
+   * @default []
+   */
+  custom_blocked_useragents?: string[]
+  /**
+   * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+   * Enables collection of bot traffic as $bot_pageview events instead of dropping them.
+   * When enabled, events with a $raw_user_agent property that matches the bot detection list
+   * will have their $pageview event renamed to $bot_pageview.
+   *
+   * To use this feature, pass the user agent in event properties:
+   * ```ts
+   * client.capture({
+   *   distinctId: 'user_123',
+   *   event: '$pageview',
+   *   properties: {
+   *     $raw_user_agent: req.headers['user-agent']
+   *   }
+   * })
+   * ```
+   */
+  __preview_capture_bot_pageviews?: boolean
 }
 
 export type PostHogFeatureFlag = {
