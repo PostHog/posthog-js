@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.288.0
+
+### Minor Changes
+
+- [#2433](https://github.com/PostHog/posthog-js/pull/2433) [`392b190`](https://github.com/PostHog/posthog-js/commit/392b19061bcee86926d165ce3cd7742df1c474d5) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Add `flags_api_host` config option
+
 ## 1.287.0
 
 ### Minor Changes
