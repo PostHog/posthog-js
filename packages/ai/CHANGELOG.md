@@ -1,5 +1,11 @@
 # posthog-ai
 
+## 6.6.0
+
+### Minor Changes
+
+- [#2518](https://github.com/PostHog/posthog-js/pull/2518) [`aca2775`](https://github.com/PostHog/posthog-js/commit/aca27758b350966ace7b7f051148b47d345a9f9c) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - feat(llma): send number of web searches calls
+
 ## 6.5.1
 
 ### Patch Changes
