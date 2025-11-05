@@ -78,7 +78,7 @@ export class WrappedModels {
             (metadata as GenerateContentResponseUsageMetadata & { thoughtsTokenCount?: number })?.thoughtsTokenCount ??
             0,
           cacheReadInputTokens: metadata?.cachedContentTokenCount ?? 0,
-          webSearchCount: hasGoogleSearchUsage(response),
+          webSearchCount: calculateGoogleWebSearchCount(response),
         },
         tools: availableTools,
       })
@@ -124,7 +124,7 @@ export class WrappedModels {
       const stream = await this.client.models.generateContentStream(geminiParams as GenerateContentParameters)
 
       for await (const chunk of stream) {
-        const chunkWebSearchCount = hasGoogleSearchUsage(chunk)
+        const chunkWebSearchCount = calculateGoogleWebSearchCount(chunk)
         if (chunkWebSearchCount > 0 && chunkWebSearchCount > (usage.webSearchCount ?? 0)) {
           usage.webSearchCount = chunkWebSearchCount
         }
@@ -349,7 +349,7 @@ export class WrappedModels {
  * Gemini bills per request that uses grounding, not per individual query.
  * Returns 1 if grounding was used, 0 otherwise.
  */
-function hasGoogleSearchUsage(response: unknown): number {
+function calculateGoogleWebSearchCount(response: unknown): number {
   if (!response || typeof response !== 'object' || !('candidates' in response)) {
     return 0
   }
