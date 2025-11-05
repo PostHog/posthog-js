@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.286.0
+
+### Minor Changes
+
+- [#2547](https://github.com/PostHog/posthog-js/pull/2547) [`cd8bcd7`](https://github.com/PostHog/posthog-js/commit/cd8bcd79e4e41e51bcf9b40890708207ac927e72) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Fixed a bug where configuration overrides for session recording would not be applied if the recorder module was still loading
+
 ## 1.285.2
 
 ### Patch Changes
