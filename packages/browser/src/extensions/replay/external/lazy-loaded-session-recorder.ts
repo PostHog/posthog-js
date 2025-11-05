@@ -715,8 +715,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             })
         })
 
-        this._checkOverride(SESSION_RECORDING_OVERRIDE_SAMPLING, this.overrideSampling)
-        this._checkOverride(SESSION_RECORDING_OVERRIDE_LINKED_FLAG, this.overrideLinkedFlag)
+        this._checkOverride(SESSION_RECORDING_OVERRIDE_SAMPLING, () => {
+            this.overrideSampling()
+        })
+        this._checkOverride(SESSION_RECORDING_OVERRIDE_LINKED_FLAG, () => {
+            this.overrideLinkedFlag()
+        })
         this._checkOverride(SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER, () => {
             this.overrideTrigger('event')
         })
