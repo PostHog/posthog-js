@@ -150,6 +150,7 @@ let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 &&
 // NOTE²: This shouldn't ever change because we try very hard to be backwards-compatible
 export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     api_host: 'https://us.i.posthog.com',
+    flags_api_host: null,
     ui_host: null,
     token: '',
     autocapture: true,
