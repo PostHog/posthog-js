@@ -3039,6 +3039,7 @@ describe('Lazy SessionRecording', () => {
                     sessionPastMaximumLength: false,
                 },
                 lastActivityTimestamp: expect.any(Number),
+                flushed_size: 0,
             })
 
             expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_id_change', {
@@ -3089,6 +3090,7 @@ describe('Lazy SessionRecording', () => {
                     sessionPastMaximumLength: true,
                 },
                 lastActivityTimestamp: expect.any(Number),
+                flushed_size: 0,
             })
 
             expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_starting', {
@@ -3103,6 +3105,52 @@ describe('Lazy SessionRecording', () => {
             })
 
             expect(tryAddCustomEvent).toHaveBeenCalledTimes(3)
+        })
+
+        it('includes flushed_size with actual data size in session ending event', () => {
+            const tryAddCustomEvent = sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent'] as any
+
+            // emit some events to create data to flush
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            // manually flush the buffer to simulate data being sent
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // verify data was tracked
+            const flushedSize =
+                sessionRecording['_lazyLoadedSessionRecording']['_flushedSizeTracker'].currentTrackedSize
+            expect(flushedSize).toBeGreaterThan(0)
+
+            // clear the mock to only track calls from session change
+            tryAddCustomEvent.mockClear()
+
+            const newSessionId = 'new-session-id-with-flushed-data'
+            const newWindowId = 'new-window-id-with-flushed-data'
+
+            sessionManager['_sessionIdChangedHandlers'].forEach((handler) => {
+                handler(newSessionId, newWindowId, {
+                    noSessionId: false,
+                    activityTimeout: true,
+                    sessionPastMaximumLength: false,
+                })
+            })
+
+            // should capture the flushed size from the ending session
+            expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_ending', {
+                nextSessionId: newSessionId,
+                nextWindowId: newWindowId,
+                changeReason: {
+                    noSessionId: false,
+                    activityTimeout: true,
+                    sessionPastMaximumLength: false,
+                },
+                lastActivityTimestamp: undefined,
+                flushed_size: flushedSize,
+            })
+
+            // after session change, flushed size should be reset to 0
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_flushedSizeTracker'].currentTrackedSize).toBe(0)
         })
 
         it('does NOT emit linking events when only noSessionId is true (like after reset)', () => {

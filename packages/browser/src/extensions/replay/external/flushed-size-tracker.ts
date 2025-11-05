@@ -12,8 +12,8 @@ export class FlushedSizeTracker {
             throw new Error('it is not valid to not have persistence and be this far into setting up the application')
         }
 
-        this._getProperty = posthog.get_property
-        this._setProperty = posthog.persistence.set_property
+        this._getProperty = posthog.get_property.bind(posthog)
+        this._setProperty = posthog.persistence.set_property.bind(posthog.persistence)
     }
 
     trackSize(size: number) {

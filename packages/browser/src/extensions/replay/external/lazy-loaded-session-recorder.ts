@@ -763,8 +763,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _onSessionIdCallback: SessionIdChangedCallback = (sessionId, windowId, changeReason) => {
-        this._flushedSizeTracker.reset()
-
         if (!changeReason) return
 
         const wasLikelyReset = changeReason.noSessionId
@@ -783,8 +781,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 // we'll need to correct the time of this if it's captured when idle
                 // so we don't extend reported session time with a debug event
                 lastActivityTimestamp: this._lastActivityTimestamp,
-                flushed_size: this._flushedSizeTracker.currentTrackedSize,
+                flushed_size: this._flushedSizeTracker?.currentTrackedSize,
             })
+        }
+
+        // reset flushed size tracker after capturing the ending event
+        if (this._flushedSizeTracker) {
+            this._flushedSizeTracker.reset()
         }
 
         this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
@@ -1042,7 +1045,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         if (this._buffer.data.length > 0) {
             const snapshotEvents = splitBuffer(this._buffer)
             snapshotEvents.forEach((snapshotBuffer) => {
-                this._flushedSizeTracker.trackSize(snapshotBuffer.size)
+                this._flushedSizeTracker?.trackSize(snapshotBuffer.size)
                 this._captureSnapshot({
                     $snapshot_bytes: snapshotBuffer.size,
                     $snapshot_data: snapshotBuffer.data,
@@ -1315,7 +1318,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_replay_internal_buffer_size: this._buffer.size,
             $sdk_debug_current_session_duration: this._sessionDuration,
             $sdk_debug_session_start: sessionStartTimestamp,
-            $sdk_debug_replay_flushed_size: this._flushedSizeTracker.currentTrackedSize,
+            $sdk_debug_replay_flushed_size: this._flushedSizeTracker?.currentTrackedSize,
         }
     }
 
