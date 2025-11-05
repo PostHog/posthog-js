@@ -44,6 +44,7 @@
         "_checkClicks",
         "_checkFlags",
         "_checkLocalStorageForDebug",
+        "_checkOverride",
         "_checkStep",
         "_checkStepElement",
         "_checkStepEvent",
