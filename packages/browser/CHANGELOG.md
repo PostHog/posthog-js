@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.287.0
+
+### Minor Changes
+
+- [#2525](https://github.com/PostHog/posthog-js/pull/2525) [`ec65577`](https://github.com/PostHog/posthog-js/commit/ec6557796219502c8d6a04fc5943721dafef140b) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: track flushed size per session
+
 ## 1.286.0
 
 ### Minor Changes
