@@ -1,5 +1,18 @@
 # @posthog/nuxt
 
+## 1.0.0
+
+### Major Changes
+
+- [#2544](https://github.com/PostHog/posthog-js/pull/2544) [`e64445b`](https://github.com/PostHog/posthog-js/commit/e64445bb1d0f5fbc81ab2b829c88d307c79f668f) Thanks [@hpouillot](https://github.com/hpouillot)! - use provided build dir to inject sourcemaps
+
+### Patch Changes
+
+- Updated dependencies [[`d8d98c9`](https://github.com/PostHog/posthog-js/commit/d8d98c95f24b612110dbf52d228c0c3bd248cd58)]:
+  - @posthog/core@1.5.1
+  - posthog-js@1.285.2
+  - posthog-node@5.11.1
+
 ## 0.0.27
 
 ### Patch Changes

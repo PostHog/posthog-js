@@ -1,5 +1,11 @@
 # @posthog/core
 
+## 1.5.1
+
+### Patch Changes
+
+- [#2540](https://github.com/PostHog/posthog-js/pull/2540) [`d8d98c9`](https://github.com/PostHog/posthog-js/commit/d8d98c95f24b612110dbf52d228c0c3bd248cd58) Thanks [@hpouillot](https://github.com/hpouillot)! - escape cli args and path in shell mode
+
 ## 1.5.0
 
 ### Minor Changes
