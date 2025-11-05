@@ -52,6 +52,7 @@ import {
     EventName,
     FeatureFlagsCallback,
     JsonType,
+    OverrideConfig,
     PostHogConfig,
     Properties,
     Property,
@@ -2594,7 +2595,7 @@ export class PostHog {
         override?: { sampling?: boolean; linked_flag?: boolean; url_trigger?: true; event_trigger?: true } | true
     ): void {
         const overrideAll = override === true
-        const overrideConfig = {
+        const overrideConfig: OverrideConfig = {
             sampling: overrideAll || !!override?.sampling,
             linked_flag: overrideAll || !!override?.linked_flag,
             url_trigger: overrideAll || !!override?.url_trigger,

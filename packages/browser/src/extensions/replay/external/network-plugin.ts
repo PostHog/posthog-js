@@ -349,7 +349,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                 // eslint-disable-next-line posthog-js/no-add-event-listener
                 xhr.addEventListener('readystatechange', readyStateListener)
 
-                originalOpen.call(xhr, method, url, async, username, password)
+                originalOpen.call(xhr, method, url.toString(), async, username, password)
             }
         }
     )
@@ -555,7 +555,7 @@ function initFetchObserver(
 
             try {
                 const requestHeaders: Headers = {}
-                req.headers.forEach((value, header) => {
+                req.headers.forEach((value: string, header: string | number) => {
                     requestHeaders[header] = value
                 })
                 if (recordRequestHeaders) {
@@ -577,7 +577,7 @@ function initFetchObserver(
                 end = win.performance.now()
 
                 const responseHeaders: Headers = {}
-                res.headers.forEach((value, header) => {
+                res.headers.forEach((value: string, header: string | number) => {
                     responseHeaders[header] = value
                 })
                 if (recordResponseHeaders) {
