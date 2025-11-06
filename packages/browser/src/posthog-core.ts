@@ -665,6 +665,9 @@ export class PostHog {
     }
 
     private _initExtensions(startInCookielessMode: boolean): void {
+        this.historyAutocapture = new HistoryAutocapture(this)
+        this.historyAutocapture.startIfEnabled()
+
         // Build queue of extension initialization tasks
         const initTasks: Array<() => void> = []
 
@@ -716,11 +719,6 @@ export class PostHog {
         initTasks.push(() => {
             this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
             this.deadClicksAutocapture.startIfEnabled()
-        })
-
-        initTasks.push(() => {
-            this.historyAutocapture = new HistoryAutocapture(this)
-            this.historyAutocapture.startIfEnabled()
         })
 
         // Replay any pending remote config that arrived before extensions were ready
