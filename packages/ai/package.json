@@ -45,7 +45,7 @@
     "@anthropic-ai/sdk": "^0.67.0",
     "@google/genai": "^1.29.0",
     "@langchain/core": "^1.0.0",
-    "ai": "^5.0.42",
+    "ai": "^5.0.87",
     "langchain": "^1.0.0",
     "openai": "^6.8.1",
     "uuid": "^11.0.5",
