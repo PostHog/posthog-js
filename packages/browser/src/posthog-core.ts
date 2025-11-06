@@ -334,6 +334,7 @@ export class PostHog {
     _triggered_notifs: any
     compression?: Compression
     __request_queue: QueuedRequestWithOptions[]
+    _pendingRemoteConfig?: RemoteConfig
     analyticsDefaultEndpoint: string
     version = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
@@ -709,6 +710,14 @@ export class PostHog {
             this.historyAutocapture.startIfEnabled()
         })
 
+        // Replay any pending remote config that arrived before extensions were ready
+        initTasks.push(() => {
+            if (this._pendingRemoteConfig) {
+                this._onRemoteConfig(this._pendingRemoteConfig)
+                this._pendingRemoteConfig = undefined
+            }
+        })
+
         // Process tasks with time-slicing to avoid blocking
         this._processInitTaskQueue(initTasks)
     }
@@ -761,6 +770,9 @@ export class PostHog {
             }, 500)
             return
         }
+
+        // Store config in case extensions aren't initialized yet
+        this._pendingRemoteConfig = config
 
         this.compression = undefined
         if (config.supportedCompression && !this.config.disable_compression) {
