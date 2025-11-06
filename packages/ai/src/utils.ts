@@ -391,14 +391,15 @@ export function calculateWebSearchCount(result: unknown): number {
     }
   }
 
-  // Check for annotations with url_citation in choices[].message (OpenAI/Perplexity)
+  // Check for annotations with url_citation in choices[].message or choices[].delta (OpenAI/Perplexity)
   if ('choices' in result && Array.isArray(result.choices)) {
     for (const choice of result.choices) {
-      if (typeof choice === 'object' && choice !== null && 'message' in choice) {
-        const message = choice.message
+      if (typeof choice === 'object' && choice !== null) {
+        // Check both message (non-streaming) and delta (streaming) for annotations
+        const content = ('message' in choice ? choice.message : null) || ('delta' in choice ? choice.delta : null)
 
-        if (typeof message === 'object' && message !== null && 'annotations' in message) {
-          const annotations = message.annotations
+        if (typeof content === 'object' && content !== null && 'annotations' in content) {
+          const annotations = content.annotations
 
           if (Array.isArray(annotations)) {
             const hasUrlCitation = annotations.some((ann: unknown) => {
