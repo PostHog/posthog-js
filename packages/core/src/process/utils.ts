@@ -27,9 +27,16 @@ export const buildLocalBinaryPaths = (cwd: string): string[] => {
   return localPaths
 }
 
-export function resolveBinaryPath(envPath: string, cwd: string, binName: string): string {
-  const envLocations = envPath.split(path.delimiter)
-  const localLocations = buildLocalBinaryPaths(cwd)
+export function resolveBinaryPath(
+  binName: string,
+  options: {
+    path: string
+    // We start traversing the file system tree from this directory and we go up until we find the binary
+    cwd: string
+  }
+): string {
+  const envLocations = options.path.split(path.delimiter)
+  const localLocations = buildLocalBinaryPaths(options.cwd)
   const directories = [...new Set([...localLocations, ...envLocations])]
   for (const directory of directories) {
     const binaryPath = path.join(directory, binName)

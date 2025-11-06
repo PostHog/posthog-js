@@ -37,7 +37,7 @@ export class SourcemapWebpackPlugin {
     const onDone = async (_: any, callback: any): Promise<void> => {
       callback = callback || (() => {})
       try {
-        this.posthogOptions.verbose && console.log('Processing source maps from webpack plugin...')
+        console.log('Processing source maps from webpack plugin...')
         // vercel build expect server sourcemap to be present. We only delete sourcemaps for browser runtime
         const posthogOptions = {
           ...this.posthogOptions,

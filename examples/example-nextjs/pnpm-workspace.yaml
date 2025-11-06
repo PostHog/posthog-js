@@ -1,6 +1,1 @@
-packages:
-  - .
-onlyBuiltDependencies:
-  - '@posthog/cli'
-  - sharp
 pnpmfile: ../.pnpmfile.cjs
