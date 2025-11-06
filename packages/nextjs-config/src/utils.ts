@@ -14,9 +14,6 @@ export function hasCompilerHook(): boolean {
 
 export async function processSourceMaps(posthogOptions: PostHogNextConfigComplete, directory: string) {
   const cliOptions = []
-  if (posthogOptions.host) {
-    cliOptions.push('--host', posthogOptions.host)
-  }
   cliOptions.push('sourcemap', 'process')
   cliOptions.push('--directory', directory)
   if (posthogOptions.sourcemaps.project) {
@@ -28,23 +25,23 @@ export async function processSourceMaps(posthogOptions: PostHogNextConfigComplet
   if (posthogOptions.sourcemaps.deleteAfterUpload) {
     cliOptions.push('--delete-after')
   }
+
+  const logLevel = `posthog_cli=${posthogOptions.logLevel}`
   // Add env variables
   const envVars = {
     ...process.env,
+    RUST_LOG: logLevel,
+    POSTHOG_CLI_HOST: posthogOptions.host,
     POSTHOG_CLI_TOKEN: posthogOptions.personalApiKey,
     POSTHOG_CLI_ENV_ID: posthogOptions.envId,
   }
-  await callPosthogCli(cliOptions, envVars, posthogOptions.verbose)
+  await callPosthogCli(posthogOptions.cliBinaryPath, cliOptions, envVars)
 }
 
-async function callPosthogCli(args: string[], env: NodeJS.ProcessEnv, verbose: boolean): Promise<void> {
-  await spawnLocal('posthog-cli', args, {
+async function callPosthogCli(binaryPath: string, args: string[], env: NodeJS.ProcessEnv): Promise<void> {
+  await spawnLocal(binaryPath, args, {
     env,
-    stdio: verbose ? 'inherit' : 'ignore',
-    onBinaryFound: (binaryPath) => {
-      console.log(`running posthog-cli binary from ${binaryPath}`)
-    },
-    resolveFrom: __dirname,
+    stdio: 'inherit',
     cwd: process.cwd(),
   })
 }
