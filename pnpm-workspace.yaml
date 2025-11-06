@@ -16,4 +16,4 @@ catalog:
   "@types/jest": ^29.7.0
   ts-jest: 29.4.0
   "@rslib/core": ^0.10.5
-  "@posthog/cli": ~0.5.8
+  "@posthog/cli": ~0.5.9
