@@ -1,5 +1,18 @@
 # @posthog/nuxt
 
+## 1.1.0
+
+### Minor Changes
+
+- [#2552](https://github.com/PostHog/posthog-js/pull/2552) [`87f9604`](https://github.com/PostHog/posthog-js/commit/87f96047739e67b847fe22137b97fc57f405b8d9) Thanks [@hpouillot](https://github.com/hpouillot)! - expose cliBinaryPath and logLevel options
+
+### Patch Changes
+
+- Updated dependencies [[`87f9604`](https://github.com/PostHog/posthog-js/commit/87f96047739e67b847fe22137b97fc57f405b8d9)]:
+  - @posthog/core@1.5.2
+  - posthog-js@1.288.1
+  - posthog-node@5.11.2
+
 ## 1.0.3
 
 ### Patch Changes
