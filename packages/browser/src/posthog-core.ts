@@ -547,7 +547,20 @@ export class PostHog {
             }, 0)
         } else {
             // Legacy synchronous initialization (default for now)
+
+            // we don't support IE11 anymore, so performance.now is safe
+            // eslint-disable-next-line compat/compat
+            const startTime = performance.now()
+
             this._initExtensions(startInCookielessMode)
+
+            // we don't support IE11 anymore, so performance.now is safe
+            // eslint-disable-next-line compat/compat
+            const taskInitTiming = Math.round(performance.now() - startTime)
+            this.register_for_session({
+                $posthog_extensions_init_method: 'synchronous',
+                $posthog_extensions_init_time_ms: taskInitTiming,
+            })
         }
 
         // if any instance on the page has debug = true, we set the
@@ -713,8 +726,9 @@ export class PostHog {
         // Replay any pending remote config that arrived before extensions were ready
         initTasks.push(() => {
             if (this._pendingRemoteConfig) {
-                this._onRemoteConfig(this._pendingRemoteConfig)
-                this._pendingRemoteConfig = undefined
+                const config = this._pendingRemoteConfig
+                this._pendingRemoteConfig = undefined // Clear before replaying to avoid re-storing
+                this._onRemoteConfig(config)
             }
         })
 
@@ -756,10 +770,13 @@ export class PostHog {
         }
 
         // we don't support IE11 anymore, so performance.now is safe
-        logger.info(
-            // eslint-disable-next-line compat/compat
-            `PostHog extensions initialized (${tasksProcessed} tasks, ${Math.round(performance.now() - startTime)}ms)`
-        )
+        // eslint-disable-next-line compat/compat
+        const taskInitTiming = Math.round(performance.now() - startTime)
+        this.register_for_session({
+            $posthog_extensions_init_method: 'deferred',
+            $posthog_extensions_init_time_ms: taskInitTiming,
+        })
+        logger.info(`PostHog extensions initialized (${tasksProcessed} tasks, ${taskInitTiming}ms)`)
     }
 
     _onRemoteConfig(config: RemoteConfig) {
