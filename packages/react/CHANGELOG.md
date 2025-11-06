@@ -1,5 +1,16 @@
 # @posthog/react
 
+## 1.4.0
+
+### Minor Changes
+
+- [#2551](https://github.com/PostHog/posthog-js/pull/2551) [`10be1b0`](https://github.com/PostHog/posthog-js/commit/10be1b071ab30da45749b91cfdeff913912e7bbb) Thanks [@dmarticus](https://github.com/dmarticus)! - Support bootstrapping feature flags during SSR in ReactJS
+
+### Patch Changes
+
+- Updated dependencies [[`10be1b0`](https://github.com/PostHog/posthog-js/commit/10be1b071ab30da45749b91cfdeff913912e7bbb)]:
+    - posthog-js@1.289.0
+
 ## 1.3.0
 
 ### Minor Changes
