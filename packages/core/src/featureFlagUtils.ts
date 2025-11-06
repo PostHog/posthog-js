@@ -149,7 +149,7 @@ export const parsePayload = (response: any): any => {
 
 /**
  * Get the normalized flag details from the flags and payloads.
- * This is used to convert things like boostrap and stored feature flags and payloads to the v4 format.
+ * This is used to convert things like bootstrap and stored feature flags and payloads to the v4 format.
  * This helps us ensure backwards compatibility.
  * If a key exists in the featureFlagPayloads that is not in the featureFlags, we treat it as a true feature flag.
  *

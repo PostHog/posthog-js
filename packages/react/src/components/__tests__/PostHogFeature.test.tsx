@@ -59,6 +59,9 @@ describe('PostHogFeature component', () => {
                 return () => {}
             },
             capture: jest.fn(),
+            featureFlags: {
+                hasLoadedFlags: true,
+            },
         } as unknown as PostHog
     })
 
