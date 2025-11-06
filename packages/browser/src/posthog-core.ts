@@ -164,6 +164,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     capture_pageview: defaults === '2025-05-24' ? 'history_change' : true,
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     defaults: defaults ?? 'unset',
+    __preview_deferred_init_extensions: false, // Opt-in only for now
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookie_expiration: 365,
     upgrade: false,
@@ -535,37 +536,18 @@ export class PostHog {
             this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
         }
 
-        new TracingHeaders(this).startIfEnabledOrStop()
-
-        this.siteApps = new SiteApps(this)
-        this.siteApps?.init()
-
-        if (!startInCookielessMode) {
-            this.sessionRecording = new SessionRecording(this)
-            this.sessionRecording.startIfEnabledOrStop()
+        // Conditionally defer extension initialization based on config
+        if (this.config.__preview_deferred_init_extensions) {
+            // EXPERIMENTAL: Defer non-critical extension initialization to next tick
+            // This reduces main thread blocking during init
+            // while keeping critical path (persistence, sessions, capture) synchronous
+            setTimeout(() => {
+                this._initExtensions(startInCookielessMode)
+            }, 0)
+        } else {
+            // Legacy synchronous initialization (default for now)
+            this._initExtensions(startInCookielessMode)
         }
-
-        if (!this.config.disable_scroll_properties) {
-            this.scrollManager.startMeasuringScrollPosition()
-        }
-
-        this.autocapture = new Autocapture(this)
-        this.autocapture.startIfEnabled()
-        this.surveys.loadIfEnabled()
-
-        this.heatmaps = new Heatmaps(this)
-        this.heatmaps.startIfEnabled()
-
-        this.webVitalsAutocapture = new WebVitalsAutocapture(this)
-
-        this.exceptionObserver = new ExceptionObserver(this)
-        this.exceptionObserver.startIfEnabled()
-
-        this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
-        this.deadClicksAutocapture.startIfEnabled()
-
-        this.historyAutocapture = new HistoryAutocapture(this)
-        this.historyAutocapture.startIfEnabled()
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
@@ -666,6 +648,40 @@ export class PostHog {
         }
 
         return this
+    }
+
+    private _initExtensions(startInCookielessMode: boolean): void {
+        new TracingHeaders(this).startIfEnabledOrStop()
+
+        this.siteApps = new SiteApps(this)
+        this.siteApps?.init()
+
+        if (!startInCookielessMode) {
+            this.sessionRecording = new SessionRecording(this)
+            this.sessionRecording.startIfEnabledOrStop()
+        }
+
+        if (!this.config.disable_scroll_properties) {
+            this.scrollManager.startMeasuringScrollPosition()
+        }
+
+        this.autocapture = new Autocapture(this)
+        this.autocapture.startIfEnabled()
+        this.surveys.loadIfEnabled()
+
+        this.heatmaps = new Heatmaps(this)
+        this.heatmaps.startIfEnabled()
+
+        this.webVitalsAutocapture = new WebVitalsAutocapture(this)
+
+        this.exceptionObserver = new ExceptionObserver(this)
+        this.exceptionObserver.startIfEnabled()
+
+        this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
+        this.deadClicksAutocapture.startIfEnabled()
+
+        this.historyAutocapture = new HistoryAutocapture(this)
+        this.historyAutocapture.startIfEnabled()
     }
 
     _onRemoteConfig(config: RemoteConfig) {
