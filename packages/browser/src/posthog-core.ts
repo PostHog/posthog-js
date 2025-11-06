@@ -547,20 +547,7 @@ export class PostHog {
             }, 0)
         } else {
             // Legacy synchronous initialization (default for now)
-
-            // we don't support IE11 anymore, so performance.now is safe
-            // eslint-disable-next-line compat/compat
-            const startTime = performance.now()
-
             this._initExtensions(startInCookielessMode)
-
-            // we don't support IE11 anymore, so performance.now is safe
-            // eslint-disable-next-line compat/compat
-            const taskInitTiming = Math.round(performance.now() - startTime)
-            this.register_for_session({
-                $posthog_extensions_init_method: 'synchronous',
-                $posthog_extensions_init_time_ms: taskInitTiming,
-            })
         }
 
         // if any instance on the page has debug = true, we set the
@@ -665,6 +652,10 @@ export class PostHog {
     }
 
     private _initExtensions(startInCookielessMode: boolean): void {
+        // we don't support IE11 anymore, so performance.now is safe
+        // eslint-disable-next-line compat/compat
+        const initStartTime = performance.now()
+
         this.historyAutocapture = new HistoryAutocapture(this)
         this.historyAutocapture.startIfEnabled()
 
@@ -731,28 +722,28 @@ export class PostHog {
         })
 
         // Process tasks with time-slicing to avoid blocking
-        this._processInitTaskQueue(initTasks)
+        this._processInitTaskQueue(initTasks, initStartTime)
     }
 
-    private _processInitTaskQueue(queue: Array<() => void>): void {
+    private _processInitTaskQueue(queue: Array<() => void>, initStartTime: number): void {
         const TIME_BUDGET_MS = 30 // Respect frame budget (~60fps = 16ms, but we're already deferred)
-        // we don't support IE11 anymore, so performance.now is safe
-        // eslint-disable-next-line compat/compat
-        const startTime = performance.now()
         let tasksProcessed = 0
 
         while (queue.length > 0) {
-            // we don't support IE11 anymore, so performance.now is safe
-            // eslint-disable-next-line compat/compat
-            const elapsed = performance.now() - startTime
+            // Only time-slice if deferred init is enabled, otherwise run synchronously
+            if (this.config.__preview_deferred_init_extensions) {
+                // we don't support IE11 anymore, so performance.now is safe
+                // eslint-disable-next-line compat/compat
+                const elapsed = performance.now() - initStartTime
 
-            // Check if we've exceeded our time budget
-            if (elapsed >= TIME_BUDGET_MS && queue.length > 0) {
-                // Yield to browser, then continue processing
-                setTimeout(() => {
-                    this._processInitTaskQueue(queue)
-                }, 0)
-                return
+                // Check if we've exceeded our time budget
+                if (elapsed >= TIME_BUDGET_MS && queue.length > 0) {
+                    // Yield to browser, then continue processing
+                    setTimeout(() => {
+                        this._processInitTaskQueue(queue, initStartTime)
+                    }, 0)
+                    return
+                }
             }
 
             // Process next task
@@ -767,14 +758,19 @@ export class PostHog {
             }
         }
 
+        // All tasks complete - record timing for both sync and deferred modes
         // we don't support IE11 anymore, so performance.now is safe
         // eslint-disable-next-line compat/compat
-        const taskInitTiming = Math.round(performance.now() - startTime)
+        const taskInitTiming = Math.round(performance.now() - initStartTime)
         this.register_for_session({
-            $posthog_extensions_init_method: 'deferred',
+            $posthog_extensions_init_method: this.config.__preview_deferred_init_extensions
+                ? 'deferred'
+                : 'synchronous',
             $posthog_extensions_init_time_ms: taskInitTiming,
         })
-        logger.info(`PostHog extensions initialized (${tasksProcessed} tasks, ${taskInitTiming}ms)`)
+        if (this.config.__preview_deferred_init_extensions) {
+            logger.info(`PostHog extensions initialized (${tasksProcessed} tasks, ${taskInitTiming}ms)`)
+        }
     }
 
     _onRemoteConfig(config: RemoteConfig) {
@@ -786,8 +782,10 @@ export class PostHog {
             return
         }
 
-        // Store config in case extensions aren't initialized yet
-        this._pendingRemoteConfig = config
+        // Store config in case extensions aren't initialized yet (only needed for deferred init)
+        if (this.config.__preview_deferred_init_extensions) {
+            this._pendingRemoteConfig = config
+        }
 
         this.compression = undefined
         if (config.supportedCompression && !this.config.disable_compression) {

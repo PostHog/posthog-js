@@ -106,11 +106,11 @@ describe('deferred extension initialization', () => {
                 disable_session_recording: true,
             })
 
-            // With sync init, extensions are already ready
+            // With sync init, extensions are already ready, no need to store config
             posthog._onRemoteConfig(remoteConfig)
 
-            // Config should still be stored (this is the new behavior for all cases)
-            expect((posthog as any)._pendingRemoteConfig).toEqual(remoteConfig)
+            // Config should NOT be stored when deferred init is disabled
+            expect((posthog as any)._pendingRemoteConfig).toBeUndefined()
         })
 
         it('should replay pending remote config to extensions when they initialize', async () => {
