@@ -651,37 +651,106 @@ export class PostHog {
     }
 
     private _initExtensions(startInCookielessMode: boolean): void {
-        new TracingHeaders(this).startIfEnabledOrStop()
+        // Build queue of extension initialization tasks
+        const initTasks: Array<() => void> = []
 
-        this.siteApps = new SiteApps(this)
-        this.siteApps?.init()
+        initTasks.push(() => {
+            new TracingHeaders(this).startIfEnabledOrStop()
+        })
+
+        initTasks.push(() => {
+            this.siteApps = new SiteApps(this)
+            this.siteApps?.init()
+        })
 
         if (!startInCookielessMode) {
-            this.sessionRecording = new SessionRecording(this)
-            this.sessionRecording.startIfEnabledOrStop()
+            initTasks.push(() => {
+                this.sessionRecording = new SessionRecording(this)
+                this.sessionRecording.startIfEnabledOrStop()
+            })
         }
 
         if (!this.config.disable_scroll_properties) {
-            this.scrollManager.startMeasuringScrollPosition()
+            initTasks.push(() => {
+                this.scrollManager.startMeasuringScrollPosition()
+            })
         }
 
-        this.autocapture = new Autocapture(this)
-        this.autocapture.startIfEnabled()
-        this.surveys.loadIfEnabled()
+        initTasks.push(() => {
+            this.autocapture = new Autocapture(this)
+            this.autocapture.startIfEnabled()
+        })
 
-        this.heatmaps = new Heatmaps(this)
-        this.heatmaps.startIfEnabled()
+        initTasks.push(() => {
+            this.surveys.loadIfEnabled()
+        })
 
-        this.webVitalsAutocapture = new WebVitalsAutocapture(this)
+        initTasks.push(() => {
+            this.heatmaps = new Heatmaps(this)
+            this.heatmaps.startIfEnabled()
+        })
 
-        this.exceptionObserver = new ExceptionObserver(this)
-        this.exceptionObserver.startIfEnabled()
+        initTasks.push(() => {
+            this.webVitalsAutocapture = new WebVitalsAutocapture(this)
+        })
 
-        this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
-        this.deadClicksAutocapture.startIfEnabled()
+        initTasks.push(() => {
+            this.exceptionObserver = new ExceptionObserver(this)
+            this.exceptionObserver.startIfEnabled()
+        })
 
-        this.historyAutocapture = new HistoryAutocapture(this)
-        this.historyAutocapture.startIfEnabled()
+        initTasks.push(() => {
+            this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
+            this.deadClicksAutocapture.startIfEnabled()
+        })
+
+        initTasks.push(() => {
+            this.historyAutocapture = new HistoryAutocapture(this)
+            this.historyAutocapture.startIfEnabled()
+        })
+
+        // Process tasks with time-slicing to avoid blocking
+        this._processInitTaskQueue(initTasks)
+    }
+
+    private _processInitTaskQueue(queue: Array<() => void>): void {
+        const TIME_BUDGET_MS = 30 // Respect frame budget (~60fps = 16ms, but we're already deferred)
+        // we don't support IE11 anymore, so performance.now is safe
+        // eslint-disable-next-line compat/compat
+        const startTime = performance.now()
+        let tasksProcessed = 0
+
+        while (queue.length > 0) {
+            // we don't support IE11 anymore, so performance.now is safe
+            // eslint-disable-next-line compat/compat
+            const elapsed = performance.now() - startTime
+
+            // Check if we've exceeded our time budget
+            if (elapsed >= TIME_BUDGET_MS && queue.length > 0) {
+                // Yield to browser, then continue processing
+                setTimeout(() => {
+                    this._processInitTaskQueue(queue)
+                }, 0)
+                return
+            }
+
+            // Process next task
+            const task = queue.shift()
+            if (task) {
+                try {
+                    task()
+                    tasksProcessed++
+                } catch (error) {
+                    logger.error('Error initializing extension:', error)
+                }
+            }
+        }
+
+        // we don't support IE11 anymore, so performance.now is safe
+        logger.info(
+            // eslint-disable-next-line compat/compat
+            `PostHog extensions initialized (${tasksProcessed} tasks, ${Math.round(performance.now() - startTime)}ms)`
+        )
     }
 
     _onRemoteConfig(config: RemoteConfig) {
