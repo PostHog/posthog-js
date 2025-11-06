@@ -43,6 +43,7 @@ describe('useFeatureFlagPayload hook', () => {
             },
             featureFlags: {
                 getFlags: () => ACTIVE_FEATURE_FLAGS,
+                hasLoadedFlags: true,
             } as unknown as PostHog['featureFlags'],
         } as unknown as PostHog
 
