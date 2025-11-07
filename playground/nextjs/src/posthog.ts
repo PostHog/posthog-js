@@ -59,7 +59,7 @@ export const updatePostHogConsent = (consentGiven: ConsentState) => {
 }
 
 if (typeof window !== 'undefined') {
-    posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY || '', {
+    posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY || 'test-token', {
         api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com',
         session_recording: {
             recordCrossOriginIframes: true,
@@ -72,7 +72,7 @@ if (typeof window !== 'undefined') {
         scroll_root_selector: ['#scroll_element', 'html'],
         persistence: 'localStorage+cookie',
         person_profiles: PERSON_PROCESSING_MODE === 'never' ? 'identified_only' : PERSON_PROCESSING_MODE,
-        persistence_name: `${process.env.NEXT_PUBLIC_POSTHOG_KEY}_nextjs`,
+        persistence_name: `${process.env.NEXT_PUBLIC_POSTHOG_KEY || 'test'}_nextjs`,
         opt_in_site_apps: true,
         integrations: {
             intercom: true,
@@ -81,6 +81,7 @@ if (typeof window !== 'undefined') {
         __preview_remote_config: true,
         cookieless_mode: 'on_reject',
         __preview_flags_v2: true,
+        __preview_deferred_init_extensions: true, // Fixed typo!
         ...configForConsent(),
     })
     // Help with debugging

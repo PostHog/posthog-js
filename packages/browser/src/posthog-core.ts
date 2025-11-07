@@ -542,11 +542,13 @@ export class PostHog {
             // EXPERIMENTAL: Defer non-critical extension initialization to next tick
             // This reduces main thread blocking during init
             // while keeping critical path (persistence, sessions, capture) synchronous
+            logger.info('Deferring extension initialization to improve startup performance')
             setTimeout(() => {
                 this._initExtensions(startInCookielessMode)
             }, 0)
         } else {
             // Legacy synchronous initialization (default for now)
+            logger.info('Initializing extensions synchronously')
             this._initExtensions(startInCookielessMode)
         }
 
@@ -727,7 +729,6 @@ export class PostHog {
 
     private _processInitTaskQueue(queue: Array<() => void>, initStartTime: number): void {
         const TIME_BUDGET_MS = 30 // Respect frame budget (~60fps = 16ms, but we're already deferred)
-        let tasksProcessed = 0
 
         while (queue.length > 0) {
             // Only time-slice if deferred init is enabled, otherwise run synchronously
@@ -751,7 +752,6 @@ export class PostHog {
             if (task) {
                 try {
                     task()
-                    tasksProcessed++
                 } catch (error) {
                     logger.error('Error initializing extension:', error)
                 }
@@ -763,13 +763,13 @@ export class PostHog {
         // eslint-disable-next-line compat/compat
         const taskInitTiming = Math.round(performance.now() - initStartTime)
         this.register_for_session({
-            $posthog_extensions_init_method: this.config.__preview_deferred_init_extensions
+            $sdk_debug_extensions_init_method: this.config.__preview_deferred_init_extensions
                 ? 'deferred'
                 : 'synchronous',
-            $posthog_extensions_init_time_ms: taskInitTiming,
+            $sdk_debug_extensions_init_time_ms: taskInitTiming,
         })
         if (this.config.__preview_deferred_init_extensions) {
-            logger.info(`PostHog extensions initialized (${tasksProcessed} tasks, ${taskInitTiming}ms)`)
+            logger.info(`PostHog extensions initialized (${taskInitTiming}ms)`)
         }
     }
 
