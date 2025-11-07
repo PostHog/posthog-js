@@ -166,6 +166,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     capture_pageview: defaults === '2025-05-24' ? 'history_change' : true,
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     defaults: defaults ?? 'unset',
+    __preview_deferred_init_extensions: false, // Opt-in only for now
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookie_expiration: 365,
     upgrade: false,
@@ -335,6 +336,7 @@ export class PostHog {
     _triggered_notifs: any
     compression?: Compression
     __request_queue: QueuedRequestWithOptions[]
+    _pendingRemoteConfig?: RemoteConfig
     analyticsDefaultEndpoint: string
     version = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
@@ -537,37 +539,20 @@ export class PostHog {
             this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
         }
 
-        new TracingHeaders(this).startIfEnabledOrStop()
-
-        this.siteApps = new SiteApps(this)
-        this.siteApps?.init()
-
-        if (!startInCookielessMode) {
-            this.sessionRecording = new SessionRecording(this)
-            this.sessionRecording.startIfEnabledOrStop()
+        // Conditionally defer extension initialization based on config
+        if (this.config.__preview_deferred_init_extensions) {
+            // EXPERIMENTAL: Defer non-critical extension initialization to next tick
+            // This reduces main thread blocking during init
+            // while keeping critical path (persistence, sessions, capture) synchronous
+            logger.info('Deferring extension initialization to improve startup performance')
+            setTimeout(() => {
+                this._initExtensions(startInCookielessMode)
+            }, 0)
+        } else {
+            // Legacy synchronous initialization (default for now)
+            logger.info('Initializing extensions synchronously')
+            this._initExtensions(startInCookielessMode)
         }
-
-        if (!this.config.disable_scroll_properties) {
-            this.scrollManager.startMeasuringScrollPosition()
-        }
-
-        this.autocapture = new Autocapture(this)
-        this.autocapture.startIfEnabled()
-        this.surveys.loadIfEnabled()
-
-        this.heatmaps = new Heatmaps(this)
-        this.heatmaps.startIfEnabled()
-
-        this.webVitalsAutocapture = new WebVitalsAutocapture(this)
-
-        this.exceptionObserver = new ExceptionObserver(this)
-        this.exceptionObserver.startIfEnabled()
-
-        this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
-        this.deadClicksAutocapture.startIfEnabled()
-
-        this.historyAutocapture = new HistoryAutocapture(this)
-        this.historyAutocapture.startIfEnabled()
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
@@ -670,6 +655,126 @@ export class PostHog {
         return this
     }
 
+    private _initExtensions(startInCookielessMode: boolean): void {
+        // we don't support IE11 anymore, so performance.now is safe
+        // eslint-disable-next-line compat/compat
+        const initStartTime = performance.now()
+
+        this.historyAutocapture = new HistoryAutocapture(this)
+        this.historyAutocapture.startIfEnabled()
+
+        // Build queue of extension initialization tasks
+        const initTasks: Array<() => void> = []
+
+        initTasks.push(() => {
+            new TracingHeaders(this).startIfEnabledOrStop()
+        })
+
+        initTasks.push(() => {
+            this.siteApps = new SiteApps(this)
+            this.siteApps?.init()
+        })
+
+        if (!startInCookielessMode) {
+            initTasks.push(() => {
+                this.sessionRecording = new SessionRecording(this)
+                this.sessionRecording.startIfEnabledOrStop()
+            })
+        }
+
+        if (!this.config.disable_scroll_properties) {
+            initTasks.push(() => {
+                this.scrollManager.startMeasuringScrollPosition()
+            })
+        }
+
+        initTasks.push(() => {
+            this.autocapture = new Autocapture(this)
+            this.autocapture.startIfEnabled()
+        })
+
+        initTasks.push(() => {
+            this.surveys.loadIfEnabled()
+        })
+
+        initTasks.push(() => {
+            this.heatmaps = new Heatmaps(this)
+            this.heatmaps.startIfEnabled()
+        })
+
+        initTasks.push(() => {
+            this.webVitalsAutocapture = new WebVitalsAutocapture(this)
+        })
+
+        initTasks.push(() => {
+            this.exceptionObserver = new ExceptionObserver(this)
+            this.exceptionObserver.startIfEnabled()
+        })
+
+        initTasks.push(() => {
+            this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
+            this.deadClicksAutocapture.startIfEnabled()
+        })
+
+        // Replay any pending remote config that arrived before extensions were ready
+        initTasks.push(() => {
+            if (this._pendingRemoteConfig) {
+                const config = this._pendingRemoteConfig
+                this._pendingRemoteConfig = undefined // Clear before replaying to avoid re-storing
+                this._onRemoteConfig(config)
+            }
+        })
+
+        // Process tasks with time-slicing to avoid blocking
+        this._processInitTaskQueue(initTasks, initStartTime)
+    }
+
+    private _processInitTaskQueue(queue: Array<() => void>, initStartTime: number): void {
+        const TIME_BUDGET_MS = 30 // Respect frame budget (~60fps = 16ms, but we're already deferred)
+
+        while (queue.length > 0) {
+            // Only time-slice if deferred init is enabled, otherwise run synchronously
+            if (this.config.__preview_deferred_init_extensions) {
+                // we don't support IE11 anymore, so performance.now is safe
+                // eslint-disable-next-line compat/compat
+                const elapsed = performance.now() - initStartTime
+
+                // Check if we've exceeded our time budget
+                if (elapsed >= TIME_BUDGET_MS && queue.length > 0) {
+                    // Yield to browser, then continue processing
+                    setTimeout(() => {
+                        this._processInitTaskQueue(queue, initStartTime)
+                    }, 0)
+                    return
+                }
+            }
+
+            // Process next task
+            const task = queue.shift()
+            if (task) {
+                try {
+                    task()
+                } catch (error) {
+                    logger.error('Error initializing extension:', error)
+                }
+            }
+        }
+
+        // All tasks complete - record timing for both sync and deferred modes
+        // we don't support IE11 anymore, so performance.now is safe
+        // eslint-disable-next-line compat/compat
+        const taskInitTiming = Math.round(performance.now() - initStartTime)
+        this.register_for_session({
+            $sdk_debug_extensions_init_method: this.config.__preview_deferred_init_extensions
+                ? 'deferred'
+                : 'synchronous',
+            $sdk_debug_extensions_init_time_ms: taskInitTiming,
+        })
+        if (this.config.__preview_deferred_init_extensions) {
+            logger.info(`PostHog extensions initialized (${taskInitTiming}ms)`)
+        }
+    }
+
     _onRemoteConfig(config: RemoteConfig) {
         if (!(document && document.body)) {
             logger.info('document not ready yet, trying again in 500 milliseconds...')
@@ -677,6 +782,11 @@ export class PostHog {
                 this._onRemoteConfig(config)
             }, 500)
             return
+        }
+
+        // Store config in case extensions aren't initialized yet (only needed for deferred init)
+        if (this.config.__preview_deferred_init_extensions) {
+            this._pendingRemoteConfig = config
         }
 
         this.compression = undefined
