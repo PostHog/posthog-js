@@ -1,0 +1,42 @@
+{
+    "actionabilityScore": 0.15,
+    "context": "Task requests adding 'X' to README but is critically vague. The repository is a monorepo for PostHog JavaScript packages with a main README at the root and multiple package-specific READMEs. Without clarification on what 'X' refers to, which README to modify, and where/how to add it, the task cannot be confidently planned.",
+    "keyFiles": ["/Users/js/github/posthog-js/README.md"],
+    "blockers": [
+        "Task uses placeholder variable 'X' without defining what content should be added",
+        "Unclear which README should be modified (main root README or one of 7+ package READMEs)",
+        "No specification of where in the README the content should be placed",
+        "No context on the purpose or nature of the addition",
+        "Unknown if this is a documentation update, section header, link, feature description, or something else"
+    ],
+    "questions": [
+        {
+            "id": "q1",
+            "question": "What specific content should be added as 'X'?",
+            "options": [
+                "A new section (e.g., 'Installation', 'Quick Start', 'API Reference') - specify the section name and content",
+                "A link to external documentation or resource - specify the URL and link text",
+                "A new package reference or feature list item - specify what package/feature and description"
+            ]
+        },
+        {
+            "id": "q2",
+            "question": "Which README file should be modified?",
+            "options": [
+                "Root README.md (monorepo overview) - applies to all packages",
+                "A specific package README (posthog-js, posthog-node, etc.) - specify which package",
+                "All package READMEs - same content added to each"
+            ]
+        },
+        {
+            "id": "q3",
+            "question": "Where in the README should 'X' be placed?",
+            "options": [
+                "After the existing 'Packages' section",
+                "In a new section (specify section title and approximate position)",
+                "Within an existing section like 'Documentation', 'Contributing', or 'Description'"
+            ]
+        }
+    ],
+    "answered": false
+}
