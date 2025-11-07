@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.290.0
+
+### Minor Changes
+
+- [#2553](https://github.com/PostHog/posthog-js/pull/2553) [`8a2b790`](https://github.com/PostHog/posthog-js/commit/8a2b790a61611c54e5e84a2954ae19d89d754afc) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: yield to the main thread during posthog init
+
 ## 1.289.0
 
 ### Minor Changes
