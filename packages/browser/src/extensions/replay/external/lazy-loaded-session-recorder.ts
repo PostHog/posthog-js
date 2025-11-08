@@ -1086,18 +1086,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _hasPassedMinimumDuration = (): boolean => {
-        const currentSessionId = this._sessionId
-        const persistedData = this._instance.persistence?.props[SESSION_RECORDING_PAST_MINIMUM_DURATION]
-
-        if (persistedData && isObject(persistedData) && persistedData.sessionId === currentSessionId) {
-            return true
-        }
-
-        if (persistedData) {
-            this._instance.persistence?.unregister(SESSION_RECORDING_PAST_MINIMUM_DURATION)
-        }
-
-        return false
+        const persistedSessionId = this._instance.persistence?.props[SESSION_RECORDING_PAST_MINIMUM_DURATION]
+        return persistedSessionId === this._sessionId
     }
 
     private _getBufferDuration = (): number | null => {
@@ -1140,9 +1130,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         if (bufferDuration >= minimumDuration) {
             this._instance.persistence?.register({
-                [SESSION_RECORDING_PAST_MINIMUM_DURATION]: {
-                    sessionId: this._sessionId,
-                },
+                [SESSION_RECORDING_PAST_MINIMUM_DURATION]: this._sessionId,
             })
             return false
         }
@@ -1333,6 +1321,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._instance?.persistence?.unregister(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
         this._instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
         this._instance?.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
+        this._instance?.persistence?.unregister(SESSION_RECORDING_PAST_MINIMUM_DURATION)
     }
 
     private _makeSamplingDecision(sessionId: string): void {
