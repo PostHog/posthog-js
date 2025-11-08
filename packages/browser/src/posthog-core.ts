@@ -163,7 +163,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     custom_campaign_params: [],
     custom_blocked_useragents: [],
     save_referrer: true,
-    capture_pageview: defaults === '2025-05-24' ? 'history_change' : true,
+    capture_pageview: defaults === '2025-05-24' || defaults === '2025-11-08' ? 'history_change' : true,
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     defaults: defaults ?? 'unset',
     __preview_deferred_init_extensions: false, // Opt-in only for now
