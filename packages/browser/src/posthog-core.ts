@@ -192,7 +192,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     request_headers: {}, // { header: value, header2: value }
     request_batching: true,
     properties_string_max_length: 65535,
-    session_recording: {},
+    session_recording: defaults === '2025-11-08' ? { strictMinimumDuration: true } : {},
     mask_all_element_attributes: false,
     mask_all_text: false,
     mask_personal_data_properties: false,
