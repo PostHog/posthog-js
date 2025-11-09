@@ -127,11 +127,5 @@ describe('RageClick()', () => {
             const result = instance.isRageClick(0, 0, 0)
             expect(result).toBe(false)
         })
-
-        it('handles null or undefined config gracefully', () => {
-            instance = new RageClick(null)
-            const result = instance.isRageClick(0, 0, 0)
-            expect(result).toBe(false)
-        })
     })
 })

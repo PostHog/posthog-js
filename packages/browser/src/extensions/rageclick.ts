@@ -1,13 +1,13 @@
-// Naive rage click implementation: If mouse has not moved further than rageClickThresholdPx
-// over rageClickClickCount clicks with max rageClickTimeoutMs between clicks, it's
+// Naive rage click implementation: If mouse has not moved further than thresholdPx
+// over clickCount clicks with max timeoutMs between clicks, it's
 // counted as a rage click
 
 import { isObject } from '@posthog/core'
 import { RageclickConfig } from '../types'
 
-const DEFAULT_RAGE_CLICK_THRESHOLD_PX = 30
-const DEFAULT_RAGE_CLICK_TIMEOUT_MS = 1000
-const DEFAULT_RAGE_CLICK_CLICK_COUNT = 3
+const DEFAULT_THRESHOLD_PX = 30
+const DEFAULT_TIMEOUT_MS = 1000
+const DEFAULT_CLICK_COUNT = 3
 
 export default class RageClick {
     clicks: { x: number; y: number; timestamp: number }[]
@@ -16,12 +16,12 @@ export default class RageClick {
     timeoutMs: number
     clickCount: number
 
-    constructor(rageclickConfig: RageclickConfig | boolean) {
+    constructor(rageclickConfig: RageclickConfig) {
         const conf = isObject(rageclickConfig) ? rageclickConfig : {}
 
-        this.thresholdPx = conf.threshold_px || DEFAULT_RAGE_CLICK_THRESHOLD_PX
-        this.timeoutMs = conf.timeout_ms || DEFAULT_RAGE_CLICK_TIMEOUT_MS
-        this.clickCount = conf.click_count || DEFAULT_RAGE_CLICK_CLICK_COUNT
+        this.thresholdPx = conf.threshold_px || DEFAULT_THRESHOLD_PX
+        this.timeoutMs = conf.timeout_ms || DEFAULT_TIMEOUT_MS
+        this.clickCount = conf.click_count || DEFAULT_CLICK_COUNT
 
         this.clicks = []
     }
