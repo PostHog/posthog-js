@@ -1,8 +1,51 @@
 import Hls from 'hls.js'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+
+function generateBase64PNG(width: number, height: number, complexity: number): string {
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')!
+
+    const gradient = ctx.createLinearGradient(0, 0, width, height)
+    gradient.addColorStop(0, `rgb(${Math.random() * 255},${Math.random() * 255},${Math.random() * 255})`)
+    gradient.addColorStop(1, `rgb(${Math.random() * 255},${Math.random() * 255},${Math.random() * 255})`)
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, width, height)
+
+    for (let i = 0; i < complexity; i++) {
+        ctx.fillStyle = `rgba(${Math.random() * 255},${Math.random() * 255},${Math.random() * 255},${Math.random()})`
+        ctx.fillRect(Math.random() * width, Math.random() * height, Math.random() * 100, Math.random() * 100)
+    }
+
+    ctx.font = 'bold 48px Arial'
+    ctx.fillStyle = 'white'
+    ctx.strokeStyle = 'black'
+    ctx.lineWidth = 3
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    const dataUrl = canvas.toDataURL('image/png')
+    const sizeKB = Math.round((dataUrl.length * 0.75) / 1024)
+    ctx.strokeText(`${sizeKB}KB`, width / 2, height / 2)
+    ctx.fillText(`${sizeKB}KB`, width / 2, height / 2)
+
+    return canvas.toDataURL('image/png')
+}
 
 export default function Media() {
     const hlsVideoEl = useRef<HTMLVideoElement>(null)
+    const [images, setImages] = useState<Record<string, string>>({})
+
+    useEffect(() => {
+        setImages({
+            small: generateBase64PNG(400, 400, 0),
+            medium: generateBase64PNG(400, 400, 200),
+            large: generateBase64PNG(400, 400, 1000),
+            veryLarge: generateBase64PNG(800, 800, 1000),
+            extraLarge: generateBase64PNG(1200, 1200, 1000),
+            huge: generateBase64PNG(1600, 1600, 1000),
+        })
+    }, [])
 
     useEffect(() => {
         const videoEl = hlsVideoEl.current
@@ -55,67 +98,79 @@ export default function Media() {
             </div>
 
             <h1>Base64 Images</h1>
-            <p>Testing for Replay image processing with different file sizes (all 400x400px)</p>
+            <p>Testing for Replay image processing with different file sizes</p>
             <div style={{ display: 'flex', flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
                 <div style={{ margin: 10 }}>
-                    <h3>Small JPEG (~5KB)</h3>
-                    <p className="max-w-64">400x400 base64 encoded JPEG (low quality)</p>
-                    <img
-                        src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:rgb(255,0,0);stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:rgb(0,0,255);stop-opacity:1' /%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='400' height='400' fill='url(%23g)' /%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dominant-baseline='middle' font-size='24' fill='white'%3E5KB%3C/text%3E%3C/svg%3E"
-                        alt="Small test image"
-                        style={{ border: '1px solid #ccc', width: '200px', height: '200px' }}
-                    />
+                    <h3>Small PNG (~7KB)</h3>
+                    <p className="max-w-64">400x400 base64 encoded PNG</p>
+                    {images.small && (
+                        <img
+                            src={images.small}
+                            alt="Small test image"
+                            style={{ border: '1px solid #ccc', width: '200px', height: '200px' }}
+                        />
+                    )}
                     <p style={{ fontSize: '12px', color: '#666' }}>400x400px (displayed at 200x200)</p>
                 </div>
                 <div style={{ margin: 10 }}>
                     <h3>Medium PNG (~50KB)</h3>
-                    <p className="max-w-64">400x400 base64 encoded PNG (medium quality)</p>
-                    <img
-                        src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cdefs%3E%3ClinearGradient id='g2' x1='0%25' y1='0%25' x2='0%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:rgb(0,255,0);stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:rgb(255,255,0);stop-opacity:1' /%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='400' height='400' fill='url(%23g2)' /%3E%3Ccircle cx='200' cy='200' r='100' fill='rgba(255,255,255,0.3)' /%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dominant-baseline='middle' font-size='24' fill='black'%3E50KB%3C/text%3E%3C/svg%3E"
-                        alt="Medium test image"
-                        style={{ border: '1px solid #ccc', width: '200px', height: '200px' }}
-                    />
+                    <p className="max-w-64">400x400 base64 encoded PNG</p>
+                    {images.medium && (
+                        <img
+                            src={images.medium}
+                            alt="Medium test image"
+                            style={{ border: '1px solid #ccc', width: '200px', height: '200px' }}
+                        />
+                    )}
                     <p style={{ fontSize: '12px', color: '#666' }}>400x400px (displayed at 200x200)</p>
                 </div>
                 <div style={{ margin: 10 }}>
-                    <h3>Large JPEG (~200KB)</h3>
-                    <p className="max-w-64">400x400 base64 encoded JPEG (high quality)</p>
-                    <img
-                        src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cdefs%3E%3CradialGradient id='g3'%3E%3Cstop offset='0%25' style='stop-color:rgb(255,0,255);stop-opacity:1' /%3E%3Cstop offset='50%25' style='stop-color:rgb(0,255,255);stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:rgb(255,128,0);stop-opacity:1' /%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='400' height='400' fill='url(%23g3)' /%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dominant-baseline='middle' font-size='24' fill='white' stroke='black' stroke-width='1'%3E200KB%3C/text%3E%3C/svg%3E"
-                        alt="Large test image"
-                        style={{ border: '1px solid #ccc', width: '200px', height: '200px' }}
-                    />
+                    <h3>Large PNG (~200KB)</h3>
+                    <p className="max-w-64">400x400 base64 encoded PNG</p>
+                    {images.large && (
+                        <img
+                            src={images.large}
+                            alt="Large test image"
+                            style={{ border: '1px solid #ccc', width: '200px', height: '200px' }}
+                        />
+                    )}
                     <p style={{ fontSize: '12px', color: '#666' }}>400x400px (displayed at 200x200)</p>
                 </div>
                 <div style={{ margin: 10 }}>
                     <h3>Very Large (~500KB)</h3>
-                    <p className="max-w-64">400x400 base64 encoded image</p>
-                    <img
-                        src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cdefs%3E%3ClinearGradient id='g4' x1='0%25' y1='0%25' x2='100%25' y2='0%25'%3E%3Cstop offset='0%25' style='stop-color:rgb(255,128,0);stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:rgb(128,0,255);stop-opacity:1' /%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='400' height='400' fill='url(%23g4)' /%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dominant-baseline='middle' font-size='24' fill='white' stroke='black' stroke-width='1'%3E500KB%3C/text%3E%3C/svg%3E"
-                        alt="Very large test image"
-                        style={{ border: '1px solid #ccc', width: '200px', height: '200px' }}
-                    />
-                    <p style={{ fontSize: '12px', color: '#666' }}>400x400px (displayed at 200x200)</p>
+                    <p className="max-w-64">800x800 base64 encoded PNG</p>
+                    {images.veryLarge && (
+                        <img
+                            src={images.veryLarge}
+                            alt="Very large test image"
+                            style={{ border: '1px solid #ccc', width: '200px', height: '200px' }}
+                        />
+                    )}
+                    <p style={{ fontSize: '12px', color: '#666' }}>800x800px (displayed at 200x200)</p>
                 </div>
                 <div style={{ margin: 10 }}>
                     <h3>Extra Large (~999KB)</h3>
-                    <p className="max-w-64">400x400 base64 encoded image</p>
-                    <img
-                        src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cdefs%3E%3CradialGradient id='g5'%3E%3Cstop offset='0%25' style='stop-color:rgb(255,255,0);stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:rgb(255,0,0);stop-opacity:1' /%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='400' height='400' fill='url(%23g5)' /%3E%3Ccircle cx='200' cy='200' r='150' fill='none' stroke='white' stroke-width='3' /%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dominant-baseline='middle' font-size='24' fill='black' stroke='white' stroke-width='1'%3E999KB%3C/text%3E%3C/svg%3E"
-                        alt="Extra large test image"
-                        style={{ border: '1px solid #ccc', width: '200px', height: '200px' }}
-                    />
-                    <p style={{ fontSize: '12px', color: '#666' }}>400x400px (displayed at 200x200)</p>
+                    <p className="max-w-64">1200x1200 base64 encoded PNG</p>
+                    {images.extraLarge && (
+                        <img
+                            src={images.extraLarge}
+                            alt="Extra large test image"
+                            style={{ border: '1px solid #ccc', width: '200px', height: '200px' }}
+                        />
+                    )}
+                    <p style={{ fontSize: '12px', color: '#666' }}>1200x1200px (displayed at 200x200)</p>
                 </div>
                 <div style={{ margin: 10 }}>
                     <h3>Huge (~1.5MB)</h3>
-                    <p className="max-w-64">400x400 base64 encoded image</p>
-                    <img
-                        src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cdefs%3E%3ClinearGradient id='g6' x1='0%25' y1='100%25' x2='100%25' y2='0%25'%3E%3Cstop offset='0%25' style='stop-color:rgb(0,128,255);stop-opacity:1' /%3E%3Cstop offset='50%25' style='stop-color:rgb(128,255,0);stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:rgb(255,0,128);stop-opacity:1' /%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='400' height='400' fill='url(%23g6)' /%3E%3Crect x='100' y='100' width='200' height='200' fill='none' stroke='white' stroke-width='4' /%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dominant-baseline='middle' font-size='24' fill='white' stroke='black' stroke-width='2'%3E1.5MB%3C/text%3E%3C/svg%3E"
-                        alt="Huge test image"
-                        style={{ border: '1px solid #ccc', width: '200px', height: '200px' }}
-                    />
-                    <p style={{ fontSize: '12px', color: '#666' }}>400x400px (displayed at 200x200)</p>
+                    <p className="max-w-64">1600x1600 base64 encoded PNG</p>
+                    {images.huge && (
+                        <img
+                            src={images.huge}
+                            alt="Huge test image"
+                            style={{ border: '1px solid #ccc', width: '200px', height: '200px' }}
+                        />
+                    )}
+                    <p style={{ fontSize: '12px', color: '#666' }}>1600x1600px (displayed at 200x200)</p>
                 </div>
             </div>
 
