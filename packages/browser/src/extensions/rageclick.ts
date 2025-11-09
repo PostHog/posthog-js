@@ -16,7 +16,7 @@ export default class RageClick {
     timeoutMs: number
     clickCount: number
 
-    constructor(rageclickConfig: RageclickConfig) {
+    constructor(rageclickConfig: RageclickConfig | boolean) {
         const conf = isObject(rageclickConfig) ? rageclickConfig : {}
 
         this.thresholdPx = conf.threshold_px || DEFAULT_THRESHOLD_PX
