@@ -1,5 +1,11 @@
 # @posthog/nuxt
 
+## 1.1.3
+
+### Patch Changes
+
+- [#2563](https://github.com/PostHog/posthog-js/pull/2563) [`4d833a0`](https://github.com/PostHog/posthog-js/commit/4d833a036c05bb0afc1dadfa80f12c302e21a454) Thanks [@hpouillot](https://github.com/hpouillot)! - fix output directory when using presets
+
 ## 1.1.2
 
 ### Patch Changes
