@@ -2,6 +2,7 @@
   "name": "example-nuxt",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.12.4",
   "scripts": {
     "prepare": "nuxt prepare",
     "build": "nuxt build",
