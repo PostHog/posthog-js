@@ -75,7 +75,6 @@ plugins.withId('com.android.application') {
 
                         def postHogPackage = resolvePostHogReactNativeSDKPath(reactRoot)
                         def copyChunkIdScript = "$postHogPackage/tooling/copy-chunkid.js"
-                        def hasSourceMapChunkIdScript = "$postHogPackage/tooling/has-sourcemap-chunkid.js"
 
                         def injected = project.objects.newInstance(InjectedExecOps)
                         doFirst {
@@ -88,11 +87,6 @@ plugins.withId('com.android.application') {
                                 def osCompatibilityCopyCommand = Os.isFamily(Os.FAMILY_WINDOWS) ? ['cmd', '/c'] : []
                                 commandLine(*osCompatibilityCopyCommand, *args)
                             }
-
-                            // Check if Chunk ID is detected in output soruce map
-                            def process = ["node", hasSourceMapChunkIdScript, sourcemapOutput].execute(null, new File("$reactRoot"))
-                            def exitValue = process.waitFor()
-                            project.logger.lifecycle("Check generated source map for Chunk ID: ${process.text}")
                         }
 
                         doLast {
