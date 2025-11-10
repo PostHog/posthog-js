@@ -159,8 +159,8 @@ def resolvePostHogReactNativeSDKPath(reactRoot) {
     try {
         resolvedPath = new File(["node", "--print", "require.resolve('posthog-react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile();
     } catch (Throwable ignored) {} // if the resolve fails we fallback to the default path
-    def package = resolvedPath != null && resolvedPath.exists() ? resolvedPath.getAbsolutePath() : "$reactRoot/node_modules/posthog-react-native"
-    return package
+    def packagePath = resolvedPath != null && resolvedPath.exists() ? resolvedPath.getAbsolutePath() : "$reactRoot/node_modules/posthog-react-native"
+    return packagePath
 }
 
 /** Extract from arguments collection bundle and sourcemap files output names. */
