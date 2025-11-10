@@ -17,14 +17,7 @@ RN_PROJECT_ROOT="${PROJECT_DIR}/.."
 REACT_NATIVE_XCODE_DEFAULT="../node_modules/react-native/scripts/react-native-xcode.sh"
 REACT_NATIVE_XCODE="${1:-$REACT_NATIVE_XCODE_DEFAULT}"
 
-# TODO: when to call (inject): --release -- exp hermes inject --project my-app --directory $DERIVED_FILE_DIR
-# TODO: what should i set for --project?
-
-# TODO: when to call (clone): --release -- exp hermes clone --directory $DERIVED_FILE_DIR
-
-# [ -z "$SOURCEMAP_FILE" ] && export SOURCEMAP_FILE="$DERIVED_FILE_DIR/main.jsbundle.map"
-# TODO: is the CLI clever enough to pick the right file? there will be a bunch of non related files
-ARGS="--release -- exp hermes upload --directory $DERIVED_FILE_DIR"
+ARGS="exp hermes upload --directory $DERIVED_FILE_DIR"
 
 # requires posthog-cli installed
 # requires authentication (posthog-cli login) or:
