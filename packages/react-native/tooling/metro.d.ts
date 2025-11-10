@@ -1,1 +1,1 @@
-export * from './metroconfig'
+export * from './dist/tooling/metroconfig'

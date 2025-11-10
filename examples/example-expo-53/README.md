@@ -47,4 +47,8 @@ rm -rf node_modules
 ```bash
 npm install -g eas-cli
 eas build --platform android --local
+
+# or
+cd android
+./gradlew assembleRelease
 ```

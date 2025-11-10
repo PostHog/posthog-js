@@ -1,1 +1,1 @@
-module.exports = require('./metroconfig')
+module.exports = require('./dist/tooling/metroconfig')

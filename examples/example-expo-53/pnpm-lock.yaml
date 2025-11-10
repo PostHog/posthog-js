@@ -3201,7 +3201,7 @@ packages:
       react-native: '*'
 
   posthog-react-native@file:../../target/posthog-react-native.tgz:
-    resolution: {integrity: sha512-MCMclYOGVcnXJpqnbDMZCRThGMom27w6UlFmSQoMbyKXrXM3lQmdasGBNKCgaHBuZsFQ0I4e1i2ipi0lhK4ZCQ==, tarball: file:../../target/posthog-react-native.tgz}
+    resolution: {integrity: sha512-I249sC4mROJbrn3q+YnL6ARsMNgf+7y7JyhKkRIcPfKraKsHkXkZvLzTj23KyJDg+lvSMLu9FD46Y/TT8RV3YQ==, tarball: file:../../target/posthog-react-native.tgz}
     version: 4.10.8
     peerDependencies:
       '@react-native-async-storage/async-storage': '>=1.0.0'

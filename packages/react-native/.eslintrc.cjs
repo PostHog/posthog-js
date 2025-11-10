@@ -23,5 +23,5 @@ module.exports = {
       },
     },
   ],
-  ignorePatterns: ['src/version.ts', 'tooling/**'],
+  ignorePatterns: ['src/version.ts', 'src/tooling/*', 'tooling/**'],
 }
