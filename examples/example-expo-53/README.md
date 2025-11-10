@@ -41,3 +41,10 @@ If your RN SDK changes are not picked up:
 rm -rf node_modules
 # repeat Run steps
 ```
+
+# Build locally
+
+```bash
+npm install -g eas-cli
+eas build --platform android --local
+```

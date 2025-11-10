@@ -21,6 +21,7 @@
         "expo-application": "~6.1.4",
         "expo-blur": "~14.1.5",
         "expo-constants": "~17.1.6",
+        "expo-dev-client": "~5.2.4",
         "expo-device": "~7.1.4",
         "expo-file-system": "~19.0.0",
         "expo-font": "~13.3.1",

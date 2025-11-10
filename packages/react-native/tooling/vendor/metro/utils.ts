@@ -132,7 +132,7 @@ export const createDefaultMetroSerializer = (): MetroSerializer => {
       sourceMapStringFunction = (sourceMapString as NewSourceMapStringExport).sourceMapString
     } else {
       throw new Error(`
-[posthog-react-native/metro] Can't find sourceMapString function in 'metro/src/DeltaBundler/Serializers/sourceMapString'.
+[posthog-react-native/tooling/metro] Can't find sourceMapString function in 'metro/src/DeltaBundler/Serializers/sourceMapString'.
 Please check the version of Metro you are using and report the issue at https://github.com/postHog/posthog-js
 `)
     }
