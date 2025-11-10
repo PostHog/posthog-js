@@ -93,10 +93,5 @@ module.exports = {
             },
         },
     ],
-    ignorePatterns: [
-        'node_modules',
-        'dist',
-        'examples/example-expo-53/metro.config.js',
-        'examples/example-expo-53/eslint.config.js',
-    ],
+    ignorePatterns: ['node_modules', 'dist', 'packages/react-native/metro.js'],
 }
