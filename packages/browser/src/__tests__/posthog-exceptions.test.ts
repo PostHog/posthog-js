@@ -117,19 +117,59 @@ describe('PostHogExceptions', () => {
             expect(captureMock).toBeCalled()
         })
 
-        it('does not capture exceptions with frames from extensions by default', () => {
-            const frame = { filename: 'chrome-extension://', platform: 'javascript:web' }
-            const exception = { stacktrace: { frames: [frame], type: 'raw' } }
-            exceptions.sendExceptionEvent({ $exception_list: [exception] })
-            expect(captureMock).not.toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+        describe('Extension exceptions', () => {
+            it('does not capture exceptions with frames from extensions by default', () => {
+                const frame = { filename: 'chrome-extension://', platform: 'javascript:web' }
+                const exception = { stacktrace: { frames: [frame], type: 'raw' } }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).not.toBeCalledWith(
+                    '$exception',
+                    { $exception_list: [exception] },
+                    expect.anything()
+                )
+            })
+
+            it('captures extension exceptions when enabled', () => {
+                exceptions.onRemoteConfig({ errorTracking: { captureExtensionExceptions: true } } as RemoteConfig)
+                const frame = { filename: 'chrome-extension://', platform: 'javascript:web' }
+                const exception = { stacktrace: { frames: [frame], type: 'raw' } }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
         })
 
-        it('captures extension exceptions when enabled', () => {
-            exceptions.onRemoteConfig({ errorTracking: { captureExtensionExceptions: true } } as RemoteConfig)
-            const frame = { filename: 'chrome-extension://', platform: 'javascript:web' }
-            const exception = { stacktrace: { frames: [frame], type: 'raw' } }
-            exceptions.sendExceptionEvent({ $exception_list: [exception] })
-            expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+        describe('PostHog SDK exceptions', () => {
+            const inAppFrame = {
+                filename: '../src/in-app-file.js',
+                platform: 'javascript:web',
+            }
+            const posthogFrame = {
+                filename: 'https://internal-t.posthog.com/static/array.js',
+                platform: 'javascript:web',
+            }
+
+            it('does not capture exceptions thrown by the PostHog SDK', () => {
+                const exception = { stacktrace: { frames: [inAppFrame, posthogFrame], type: 'raw' } }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).not.toBeCalledWith(
+                    '$exception',
+                    { $exception_list: [exception] },
+                    expect.anything()
+                )
+            })
+
+            it('captures the exception if a frame from the PostHog SDK is not the kaboom frame', () => {
+                const exception = { stacktrace: { frames: [posthogFrame, inAppFrame], type: 'raw' } }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
+            it('captures exceptions thrown within the PostHog SDK when enabled', () => {
+                config.error_tracking.__capturePostHogExceptions = true
+                const exception = { stacktrace: { frames: [inAppFrame, posthogFrame], type: 'raw' } }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
         })
     })
 })

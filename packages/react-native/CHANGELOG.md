@@ -1,5 +1,52 @@
 # posthog-react-native
 
+## 4.10.8
+
+### Patch Changes
+
+- Updated dependencies [[`87f9604`](https://github.com/PostHog/posthog-js/commit/87f96047739e67b847fe22137b97fc57f405b8d9)]:
+  - @posthog/core@1.5.2
+
+## 4.10.7
+
+### Patch Changes
+
+- [#2541](https://github.com/PostHog/posthog-js/pull/2541) [`b3a62d0`](https://github.com/PostHog/posthog-js/commit/b3a62d01aa62cc96cd4270adf1168a219f620ee7) Thanks [@marandaneto](https://github.com/marandaneto)! - chore: deprecate navigationRef autocapture
+
+- Updated dependencies [[`d8d98c9`](https://github.com/PostHog/posthog-js/commit/d8d98c95f24b612110dbf52d228c0c3bd248cd58)]:
+  - @posthog/core@1.5.1
+
+## 4.10.6
+
+### Patch Changes
+
+- Updated dependencies [[`068d55e`](https://github.com/PostHog/posthog-js/commit/068d55ed4193e82729cd34b42d9e433f85b6e606)]:
+  - @posthog/core@1.5.0
+
+## 4.10.5
+
+### Patch Changes
+
+- Updated dependencies [[`751b440`](https://github.com/PostHog/posthog-js/commit/751b44040c4c0c55a19df2ad0e5f215943620e51)]:
+  - @posthog/core@1.4.0
+
+## 4.10.4
+
+### Patch Changes
+
+- [#2493](https://github.com/PostHog/posthog-js/pull/2493) [`7ec7be5`](https://github.com/PostHog/posthog-js/commit/7ec7be5917090ae00f988035ff1e0f6f727e6660) Thanks [@ordehi](https://github.com/ordehi)! - **Bug Fixes:**
+
+  - Fixed surveys with URL or CSS selector targeting incorrectly showing in React Native
+    - **Breaking behavior change**: Surveys configured with URL or CSS selector targeting will no longer appear in React Native apps (this was always the intended behavior)
+    - **Action required**: If you have surveys that should show in React Native, remove URL/selector conditions and use feature flags or device type targeting instead
+
+## 4.10.3
+
+### Patch Changes
+
+- Updated dependencies [[`e0a6fe0`](https://github.com/PostHog/posthog-js/commit/e0a6fe013b5a1e92a6e7685f35f715199b716b34)]:
+  - @posthog/core@1.3.1
+
 ## 4.10.2
 
 ### Patch Changes

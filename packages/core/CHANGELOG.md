@@ -1,5 +1,35 @@
 # @posthog/core
 
+## 1.5.2
+
+### Patch Changes
+
+- [#2552](https://github.com/PostHog/posthog-js/pull/2552) [`87f9604`](https://github.com/PostHog/posthog-js/commit/87f96047739e67b847fe22137b97fc57f405b8d9) Thanks [@hpouillot](https://github.com/hpouillot)! - expose binary path resolution
+
+## 1.5.1
+
+### Patch Changes
+
+- [#2540](https://github.com/PostHog/posthog-js/pull/2540) [`d8d98c9`](https://github.com/PostHog/posthog-js/commit/d8d98c95f24b612110dbf52d228c0c3bd248cd58) Thanks [@hpouillot](https://github.com/hpouillot)! - escape cli args and path in shell mode
+
+## 1.5.0
+
+### Minor Changes
+
+- [#2520](https://github.com/PostHog/posthog-js/pull/2520) [`068d55e`](https://github.com/PostHog/posthog-js/commit/068d55ed4193e82729cd34b42d9e433f85b6e606) Thanks [@lricoy](https://github.com/lricoy)! - Add bot pageview collection behind preview flag. Enables tracking bot traffic as `$bot_pageview` events when the `__preview_capture_bot_pageviews` flag is enabled.
+
+## 1.4.0
+
+### Minor Changes
+
+- [#2502](https://github.com/PostHog/posthog-js/pull/2502) [`751b440`](https://github.com/PostHog/posthog-js/commit/751b44040c4c0c55a19df2ad0e5f215943620e51) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: bucketed rate limiter can calculate tokens without a timer
+
+## 1.3.1
+
+### Patch Changes
+
+- [#2478](https://github.com/PostHog/posthog-js/pull/2478) [`e0a6fe0`](https://github.com/PostHog/posthog-js/commit/e0a6fe013b5a1e92a6e7685f35f715199b716b34) Thanks [@hpouillot](https://github.com/hpouillot)! - remove some export from main core
+
 ## 1.3.0
 
 ### Minor Changes

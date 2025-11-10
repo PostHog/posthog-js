@@ -1,5 +1,40 @@
 # posthog-js-lite
 
+## 4.1.10
+
+### Patch Changes
+
+- Updated dependencies [[`87f9604`](https://github.com/PostHog/posthog-js/commit/87f96047739e67b847fe22137b97fc57f405b8d9)]:
+  - @posthog/core@1.5.2
+
+## 4.1.9
+
+### Patch Changes
+
+- Updated dependencies [[`d8d98c9`](https://github.com/PostHog/posthog-js/commit/d8d98c95f24b612110dbf52d228c0c3bd248cd58)]:
+  - @posthog/core@1.5.1
+
+## 4.1.8
+
+### Patch Changes
+
+- Updated dependencies [[`068d55e`](https://github.com/PostHog/posthog-js/commit/068d55ed4193e82729cd34b42d9e433f85b6e606)]:
+  - @posthog/core@1.5.0
+
+## 4.1.7
+
+### Patch Changes
+
+- Updated dependencies [[`751b440`](https://github.com/PostHog/posthog-js/commit/751b44040c4c0c55a19df2ad0e5f215943620e51)]:
+  - @posthog/core@1.4.0
+
+## 4.1.6
+
+### Patch Changes
+
+- Updated dependencies [[`e0a6fe0`](https://github.com/PostHog/posthog-js/commit/e0a6fe013b5a1e92a6e7685f35f715199b716b34)]:
+  - @posthog/core@1.3.1
+
 ## 4.1.5
 
 ### Patch Changes

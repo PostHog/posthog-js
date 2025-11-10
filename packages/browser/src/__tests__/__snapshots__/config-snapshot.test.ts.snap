@@ -1,8 +1,13 @@
-// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+// Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`config snapshot for PostHogConfig 1`] = `
 "{
   "api_host": "string",
+  "flags_api_host": [
+    "undefined",
+    "null",
+    "string"
+  ],
   "ui_host": [
     "null",
     "string"
@@ -136,6 +141,25 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true"
   ],
+  "surveys": [
+    "undefined",
+    {
+      "prefillFromUrl": [
+        "undefined",
+        "false",
+        "true"
+      ],
+      "autoSubmitIfComplete": [
+        "undefined",
+        "false",
+        "true"
+      ],
+      "autoSubmitDelay": [
+        "undefined",
+        "number"
+      ]
+    }
+  ],
   "disable_web_experiments": [
     "false",
     "true"
@@ -220,6 +244,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
   "defaults": [
     "\\"2025-05-24\\"",
     "\\"unset\\""
+  ],
+  "__preview_deferred_init_extensions": [
+    "false",
+    "true"
   ],
   "session_recording": {
     "blockClass": [
@@ -335,6 +363,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
   },
   "error_tracking": {
     "captureExtensionExceptions": [
+      "undefined",
+      "false",
+      "true"
+    ],
+    "__capturePostHogExceptions": [
       "undefined",
       "false",
       "true"
@@ -570,6 +603,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "true"
   ],
   "__preview_disable_xhr_credentials": [
+    "undefined",
+    "false",
+    "true"
+  ],
+  "__preview_capture_bot_pageviews": [
     "undefined",
     "false",
     "true"

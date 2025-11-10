@@ -21,17 +21,6 @@ const rules = {
             leadingUnderscore: 'require',
         },
     ],
-    'no-restricted-imports': [
-        'error',
-        {
-            patterns: [
-                {
-                    group: ['@posthog/core/*'],
-                    message: 'Do not import from subpaths of "@posthog/core". Use "@posthog/core" instead.',
-                },
-            ],
-        },
-    ],
 }
 
 const extend = [
@@ -79,10 +68,12 @@ module.exports = {
             files: [
                 'packages/core/**',
                 'packages/nextjs-config/**',
+                'packages/nuxt/**',
                 'packages/react-native/**',
                 'packages/node/**',
                 'packages/web/**',
                 'examples/**',
+                'playground/**',
             ],
             rules: {
                 'no-console': 'off',

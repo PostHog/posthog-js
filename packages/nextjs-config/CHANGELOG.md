@@ -1,5 +1,56 @@
 # @posthog/nextjs-config
 
+## 1.4.0
+
+### Minor Changes
+
+- [#2552](https://github.com/PostHog/posthog-js/pull/2552) [`87f9604`](https://github.com/PostHog/posthog-js/commit/87f96047739e67b847fe22137b97fc57f405b8d9) Thanks [@hpouillot](https://github.com/hpouillot)! - expose cliBinaryPath and logLevel options
+
+### Patch Changes
+
+- Updated dependencies [[`87f9604`](https://github.com/PostHog/posthog-js/commit/87f96047739e67b847fe22137b97fc57f405b8d9)]:
+  - @posthog/core@1.5.2
+
+## 1.3.10
+
+### Patch Changes
+
+- Updated dependencies [[`d8d98c9`](https://github.com/PostHog/posthog-js/commit/d8d98c95f24b612110dbf52d228c0c3bd248cd58)]:
+  - @posthog/core@1.5.1
+
+## 1.3.9
+
+### Patch Changes
+
+- Updated dependencies [[`068d55e`](https://github.com/PostHog/posthog-js/commit/068d55ed4193e82729cd34b42d9e433f85b6e606)]:
+  - @posthog/core@1.5.0
+
+## 1.3.8
+
+### Patch Changes
+
+- [#2507](https://github.com/PostHog/posthog-js/pull/2507) [`1441574`](https://github.com/PostHog/posthog-js/commit/1441574da9509a5c6c131313c2ba217a60d8038c) Thanks [@daibhin](https://github.com/daibhin)! - Support NextJS 16 switching to turbopack as a default
+
+## 1.3.7
+
+### Patch Changes
+
+- Updated dependencies [[`751b440`](https://github.com/PostHog/posthog-js/commit/751b44040c4c0c55a19df2ad0e5f215943620e51)]:
+  - @posthog/core@1.4.0
+
+## 1.3.6
+
+### Patch Changes
+
+- [#2474](https://github.com/PostHog/posthog-js/pull/2474) [`5c89f78`](https://github.com/PostHog/posthog-js/commit/5c89f7828a39963b0fee23d0d9b8381bd87b0bf4) Thanks [@oliverb123](https://github.com/oliverb123)! - Bumps to depending on latest posthog-cli version, includes critical fix for sourcemap processing bug
+
+## 1.3.5
+
+### Patch Changes
+
+- Updated dependencies [[`e0a6fe0`](https://github.com/PostHog/posthog-js/commit/e0a6fe013b5a1e92a6e7685f35f715199b716b34)]:
+  - @posthog/core@1.3.1
+
 ## 1.3.4
 
 ### Patch Changes

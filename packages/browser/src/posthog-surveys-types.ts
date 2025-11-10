@@ -289,3 +289,9 @@ interface DisplaySurveyInlineOptions extends DisplaySurveyOptionsBase {
 }
 
 export type DisplaySurveyOptions = DisplaySurveyPopoverOptions | DisplaySurveyInlineOptions
+
+export interface SurveyConfig {
+    prefillFromUrl?: boolean
+    autoSubmitIfComplete?: boolean
+    autoSubmitDelay?: number
+}

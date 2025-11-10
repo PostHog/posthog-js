@@ -20,7 +20,7 @@ jobs:
 
   integration:
     name: Playwright E2E tests
-    runs-on: ubuntu-22.04
+    runs-on: depot-ubuntu-latest-8
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,7 +47,7 @@ jobs:
 
       - name: Run Playwright tests
         if: steps.is-affected.outputs.is-affected == 'true'
-        run: pnpm exec playwright test
+        run: pnpm exec playwright test --workers=5
         working-directory: packages/browser
 
       - uses: actions/upload-artifact@v4

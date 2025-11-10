@@ -40,6 +40,10 @@ describe('consentManager', () => {
     beforeEach(async () => {
         posthog = await createPostHog()
         posthog.reset()
+
+        // we don't want unexpected console errors/warnings to fail these tests
+        console.error = jest.fn()
+        console.warn = jest.fn()
     })
 
     afterEach(() => {

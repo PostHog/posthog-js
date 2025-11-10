@@ -814,6 +814,52 @@ describe('Lazy SessionRecording', () => {
                 })
             })
 
+            it.each(['$session_ending', '$session_starting'])('allows %s events when idle', (eventTag: string) => {
+                // force idle state
+                sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
+                sessionRecording['_lazyLoadedSessionRecording']['_lastActivityTimestamp'] = startingTimestamp + 100
+                // buffer is empty
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
+                    ...EMPTY_BUFFER,
+                    sessionId: sessionId,
+                    windowId: 'windowId',
+                })
+
+                const event = createCustomSnapshot(
+                    { timestamp: startingTimestamp + 5000 },
+                    { lastActivityTimestamp: startingTimestamp + 100 },
+                    eventTag
+                )
+                sessionRecording.onRRwebEmit(event as eventWithTime)
+
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(1)
+                const bufferedEvent = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data[0]
+                expect(bufferedEvent.data.tag).toBe(eventTag)
+            })
+
+            it.each(['$session_ending', '$session_starting'])(
+                'corrects timestamp for %s events when idle',
+                (eventTag: string) => {
+                    const lastActivityTime = startingTimestamp + 100
+                    const eventRecordedTime = startingTimestamp + 5000
+
+                    // force idle state
+                    sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
+                    sessionRecording['_lazyLoadedSessionRecording']['_lastActivityTimestamp'] = lastActivityTime
+
+                    const event = createCustomSnapshot(
+                        { timestamp: eventRecordedTime },
+                        { lastActivityTimestamp: lastActivityTime },
+                        eventTag
+                    )
+                    sessionRecording.onRRwebEmit(event as eventWithTime)
+
+                    const bufferedEvent = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data[0]
+                    // timestamp should be corrected to lastActivityTimestamp, not the time rrweb recorded it
+                    expect(bufferedEvent.timestamp).toBe(lastActivityTime)
+                }
+            )
+
             it("enters idle state within one session if the activity is non-user generated and there's no activity for (RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) 5 minutes", () => {
                 const firstActivityTimestamp = startingTimestamp + 100
                 const secondActivityTimestamp = startingTimestamp + 200
@@ -2953,6 +2999,217 @@ describe('Lazy SessionRecording', () => {
             expect(mockParams).not.toHaveProperty('recordCanvas')
             expect(mockParams).not.toHaveProperty('canvasFps')
             expect(mockParams).not.toHaveProperty('canvasQuality')
+        })
+    })
+
+    describe('session linking', () => {
+        beforeEach(() => {
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            jest.spyOn(sessionRecording['_lazyLoadedSessionRecording'], '_tryAddCustomEvent')
+        })
+
+        it('emits session linking events on activity timeout', () => {
+            const tryAddCustomEvent = sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent'] as any
+            tryAddCustomEvent.mockClear()
+
+            const newSessionId = 'new-session-id'
+            const newWindowId = 'new-window-id'
+
+            sessionManager['_sessionIdChangedHandlers'].forEach((handler) => {
+                handler(newSessionId, newWindowId, {
+                    noSessionId: false,
+                    activityTimeout: true,
+                    sessionPastMaximumLength: false,
+                })
+            })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_ending', {
+                nextSessionId: newSessionId,
+                nextWindowId: newWindowId,
+                changeReason: {
+                    noSessionId: false,
+                    activityTimeout: true,
+                    sessionPastMaximumLength: false,
+                },
+                lastActivityTimestamp: expect.any(Number),
+                flushed_size: 0,
+            })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_id_change', {
+                sessionId: newSessionId,
+                windowId: newWindowId,
+                changeReason: {
+                    noSessionId: false,
+                    activityTimeout: true,
+                    sessionPastMaximumLength: false,
+                },
+            })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_starting', {
+                previousSessionId: sessionId,
+                previousWindowId: 'windowId',
+                changeReason: {
+                    noSessionId: false,
+                    activityTimeout: true,
+                    sessionPastMaximumLength: false,
+                },
+                lastActivityTimestamp: expect.any(Number),
+            })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledTimes(3)
+        })
+
+        it('emits session linking events on session past maximum length', () => {
+            const tryAddCustomEvent = sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent'] as any
+            tryAddCustomEvent.mockClear()
+
+            const newSessionId = 'new-session-id-2'
+            const newWindowId = 'new-window-id-2'
+
+            sessionManager['_sessionIdChangedHandlers'].forEach((handler) => {
+                handler(newSessionId, newWindowId, {
+                    noSessionId: false,
+                    activityTimeout: false,
+                    sessionPastMaximumLength: true,
+                })
+            })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_ending', {
+                nextSessionId: newSessionId,
+                nextWindowId: newWindowId,
+                changeReason: {
+                    noSessionId: false,
+                    activityTimeout: false,
+                    sessionPastMaximumLength: true,
+                },
+                lastActivityTimestamp: expect.any(Number),
+                flushed_size: 0,
+            })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_starting', {
+                previousSessionId: sessionId,
+                previousWindowId: 'windowId',
+                changeReason: {
+                    noSessionId: false,
+                    activityTimeout: false,
+                    sessionPastMaximumLength: true,
+                },
+                lastActivityTimestamp: expect.any(Number),
+            })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledTimes(3)
+        })
+
+        it('includes flushed_size with actual data size in session ending event', () => {
+            const tryAddCustomEvent = sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent'] as any
+
+            // emit some events to create data to flush
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            // manually flush the buffer to simulate data being sent
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // verify data was tracked
+            const flushedSize =
+                sessionRecording['_lazyLoadedSessionRecording']['_flushedSizeTracker'].currentTrackedSize
+            expect(flushedSize).toBeGreaterThan(0)
+
+            // clear the mock to only track calls from session change
+            tryAddCustomEvent.mockClear()
+
+            const newSessionId = 'new-session-id-with-flushed-data'
+            const newWindowId = 'new-window-id-with-flushed-data'
+
+            sessionManager['_sessionIdChangedHandlers'].forEach((handler) => {
+                handler(newSessionId, newWindowId, {
+                    noSessionId: false,
+                    activityTimeout: true,
+                    sessionPastMaximumLength: false,
+                })
+            })
+
+            // should capture the flushed size from the ending session
+            expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_ending', {
+                nextSessionId: newSessionId,
+                nextWindowId: newWindowId,
+                changeReason: {
+                    noSessionId: false,
+                    activityTimeout: true,
+                    sessionPastMaximumLength: false,
+                },
+                lastActivityTimestamp: undefined,
+                flushed_size: flushedSize,
+            })
+
+            // after session change, flushed size should be reset to 0
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_flushedSizeTracker'].currentTrackedSize).toBe(0)
+        })
+
+        it('does NOT emit linking events when only noSessionId is true (like after reset)', () => {
+            const tryAddCustomEvent = sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent'] as any
+            tryAddCustomEvent.mockClear()
+
+            const newSessionId = 'new-session-after-reset'
+            const newWindowId = 'new-window-after-reset'
+
+            sessionManager['_sessionIdChangedHandlers'].forEach((handler) => {
+                handler(newSessionId, newWindowId, {
+                    noSessionId: true,
+                    activityTimeout: false,
+                    sessionPastMaximumLength: false,
+                })
+            })
+
+            expect(tryAddCustomEvent).not.toHaveBeenCalledWith('$session_ending', expect.anything())
+            expect(tryAddCustomEvent).not.toHaveBeenCalledWith('$session_starting', expect.anything())
+
+            expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_id_change', {
+                sessionId: newSessionId,
+                windowId: newWindowId,
+                changeReason: {
+                    noSessionId: true,
+                    activityTimeout: false,
+                    sessionPastMaximumLength: false,
+                },
+            })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledTimes(1)
+        })
+
+        it('always emits $session_id_change event regardless of change reason', () => {
+            const tryAddCustomEvent = sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent'] as any
+
+            const testCases = [
+                { noSessionId: true, activityTimeout: false, sessionPastMaximumLength: false },
+                { noSessionId: false, activityTimeout: true, sessionPastMaximumLength: false },
+                { noSessionId: false, activityTimeout: false, sessionPastMaximumLength: true },
+            ]
+
+            testCases.forEach((changeReason, index) => {
+                tryAddCustomEvent.mockClear()
+                const newSessionId = `session-${index}`
+                const newWindowId = `window-${index}`
+
+                sessionManager['_sessionIdChangedHandlers'].forEach((handler) => {
+                    handler(newSessionId, newWindowId, changeReason)
+                })
+
+                expect(tryAddCustomEvent).toHaveBeenCalledWith(
+                    '$session_id_change',
+                    expect.objectContaining({
+                        sessionId: newSessionId,
+                        windowId: newWindowId,
+                    })
+                )
+            })
         })
     })
 })

@@ -2,7 +2,7 @@ import type { recordOptions } from './extensions/replay/types/rrweb'
 import type { SegmentAnalytics } from './extensions/segment-integration'
 import { PostHog } from './posthog-core'
 import { KnownUnsafeEditableEvent } from '@posthog/core'
-import { Survey } from './posthog-surveys-types'
+import { Survey, SurveyConfig } from './posthog-surveys-types'
 // only importing types here, so won't affect the bundle
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SAMPLED } from './extensions/replay/external/triggerMatching'
@@ -286,6 +286,15 @@ export interface PostHogConfig {
     api_host: string
 
     /**
+     * URL to use for feature flag requests specifically.
+     * If not set, feature flag requests will use the URL derived from `api_host`.
+     * This is useful when you want to route feature flag requests to a different endpoint than other analytic APIs.
+     *
+     * @default null
+     */
+    flags_api_host?: string | null
+
+    /**
      * If using a reverse proxy for `api_host` then this should be the actual PostHog app URL (e.g. https://us.posthog.com).
      * This ensures that links to PostHog point to the correct host.
      *
@@ -487,6 +496,13 @@ export interface PostHogConfig {
     disable_surveys_automatic_display: boolean
 
     /**
+     * Survey-specific configuration options.
+     *
+     * @default undefined
+     */
+    surveys?: SurveyConfig
+
+    /**
      * Determines whether PostHog should disable web experiments.
      *
      * Currently disabled while we're in BETA. It will be toggled to `true` in a future release.
@@ -654,6 +670,21 @@ export interface PostHogConfig {
      * @default 'unset'
      */
     defaults: ConfigDefaults
+
+    /**
+     * EXPERIMENTAL: Defers initialization of non-critical extensions (autocapture, session recording, etc.)
+     * to the next event loop tick using setTimeout. This reduces main thread blocking during SDK
+     * initialization for better page load performance, while keeping critical functionality
+     * (persistence, sessions, capture) available immediately.
+     *
+     * When enabled:
+     * - Persistence, sessions, and basic capture work immediately
+     * - Extensions (autocapture, recording, heatmaps, etc.) start after yielding back to the browser
+     *
+     * @default false (will be true for defaults >= '2025-11-06' in the future)
+     * @experimental
+     */
+    __preview_deferred_init_extensions: boolean
 
     /**
      * Determines the session recording options.
@@ -1041,6 +1072,13 @@ export interface PostHogConfig {
      */
     __preview_disable_xhr_credentials?: boolean
 
+    /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+     * Enables collection of bot traffic as $bot_pageview events with detailed bot detection
+     * properties instead of dropping them entirely. Use it alongside opt_out_useragent_filter
+     */
+    __preview_capture_bot_pageviews?: boolean
+
     // ------- RETIRED CONFIGS - NO REPLACEMENT OR USAGE -------
 
     /**
@@ -1072,6 +1110,14 @@ export interface ErrorTrackingOptions {
      * @default false
      */
     captureExtensionExceptions?: boolean
+
+    /**
+     * UNSTABLE: determines whether exception caused by the PostHog SDK will be captured
+     *
+     * @default false
+     */
+    __capturePostHogExceptions?: boolean
+
     /**
      * ADVANCED: alters the refill rate for the token bucket mutation throttling
      * Normally only altered alongside posthog support guidance.
@@ -1839,3 +1885,10 @@ export type SessionStartReason =
     | 'session_id_changed'
     | 'url_trigger_matched'
     | 'event_trigger_matched'
+
+export type OverrideConfig = {
+    sampling: boolean
+    linked_flag: boolean
+    url_trigger: boolean
+    event_trigger: boolean
+}
