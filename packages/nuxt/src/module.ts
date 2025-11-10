@@ -3,8 +3,7 @@ import type { PostHogConfig } from 'posthog-js'
 import type { PostHogOptions } from 'posthog-node'
 import { resolveBinaryPath, spawnLocal } from '@posthog/core/process'
 import { fileURLToPath } from 'node:url'
-import path, { dirname } from 'node:path'
-import type { NuxtOptions } from 'nuxt/schema'
+import { dirname } from 'node:path'
 
 const filename = fileURLToPath(import.meta.url)
 const resolvedDirname = dirname(filename)
@@ -78,6 +77,15 @@ export default defineNuxtModule<ModuleOptions>({
     }
 
     const sourcemapsConfig = options.sourcemaps
+    let outputDir: string | undefined
+    let publicDir: string | undefined
+    let serverDir: string | undefined
+
+    nuxt.hook('nitro:init', (nitro) => {
+      publicDir = nitro.options.output?.publicDir
+      serverDir = nitro.options.output?.serverDir
+      outputDir = nitro.options.output?.dir
+    })
 
     nuxt.hook('nitro:config', (nitroConfig) => {
       nitroConfig.rollupConfig = {
@@ -96,7 +104,6 @@ export default defineNuxtModule<ModuleOptions>({
       }
     })
 
-    const outputDir = getOutputDir(nuxt.options.nitro)
     let isBuildProcess = false
 
     const posthogCliRunner = () => {
@@ -127,10 +134,11 @@ export default defineNuxtModule<ModuleOptions>({
 
     nuxt.hook('nitro:build:public-assets', async () => {
       isBuildProcess = true
+      if (!publicDir) return
       try {
         // Inject public sourcemaps
         // This cannot be done in the close hook. https://github.com/PostHog/posthog/issues/30957#issuecomment-2824545454
-        await cliRunner(getInjectArgs(path.join(outputDir, 'public'), sourcemapsConfig))
+        await cliRunner(getInjectArgs(publicDir, sourcemapsConfig))
       } catch (error) {
         console.error('Failed to process public sourcemaps:', error)
       }
@@ -138,10 +146,10 @@ export default defineNuxtModule<ModuleOptions>({
 
     nuxt.hook('close', async () => {
       // We don't want to run this process during prepare and friends
-      if (!isBuildProcess) return
+      if (!isBuildProcess || !serverDir || !outputDir) return
       try {
         // Inject server sourcemaps
-        await cliRunner(getInjectArgs(path.join(outputDir, 'server'), sourcemapsConfig))
+        await cliRunner(getInjectArgs(serverDir, sourcemapsConfig))
         // Upload all assets
         await cliRunner(getUploadArgs(outputDir, sourcemapsConfig))
       } catch (error) {
@@ -173,14 +181,4 @@ function getUploadArgs(directory: string, sourcemapsConfig: SourcemapsConfig) {
   }
 
   return processOptions
-}
-
-function getOutputDir(nitroConfig: NuxtOptions['nitro']): string {
-  if (nitroConfig.preset && nitroConfig.preset.includes('vercel')) {
-    return '.vercel/output'
-  }
-  if (nitroConfig.output && nitroConfig.output.dir) {
-    return nitroConfig.output.dir
-  }
-  return '.output'
 }
