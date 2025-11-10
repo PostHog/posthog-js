@@ -8,8 +8,8 @@ import { createDefaultMetroSerializer } from './vendor/metro/utils'
 
 type SourceMap = Record<string, unknown>
 
-const DEBUG_ID_PLACE_HOLDER = '__debug_id_place_holder__'
-const DEBUG_ID_MODULE_PATH = '__debugid__'
+const DEBUG_ID_PLACE_HOLDER = '__POSTHOG_CHUNK_ID__'
+const DEBUG_ID_MODULE_PATH = '__chunkid__'
 
 const SOURCE_MAP_COMMENT = '//# sourceMappingURL='
 const DEBUG_ID_COMMENT = '//# chunkId='
@@ -88,9 +88,8 @@ export const createPostHogMetroSerializer = (customSerializer?: MetroSerializer)
           )}`
 
     const bundleMap: SourceMap = JSON.parse(bundleMapString)
-    // For now we write both fields until we know what will become the standard - if ever.
-    bundleMap['debug_id'] = debugId
-    bundleMap['debugId'] = debugId
+
+    bundleMap['chunkId'] = debugId
 
     return {
       code: bundleCodeWithDebugId,
