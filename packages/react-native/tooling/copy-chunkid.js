@@ -31,22 +31,18 @@ const to = readFileSync(argv[3], 'utf8')
 const fromParsed = JSON.parse(from)
 const toParsed = JSON.parse(to)
 
-if (!fromParsed.chunkId && !fromParsed.chunk_id) {
+if (!fromParsed.chunkId) {
   console.log('Packager source map does not have `chunkId`.')
   exit(0)
 }
 
-if (toParsed.chunkId || toParsed.chunk_id) {
+if (toParsed.chunkId) {
   console.log('Hermes combined source map already has `chunkId`.')
   exit(0)
 }
 
 if (fromParsed.chunkId) {
   toParsed.chunkId = fromParsed.chunkId
-  toParsed.chunk_id = fromParsed.chunkId
-} else if (fromParsed.chunk_id) {
-  toParsed.chunkId = fromParsed.chunk_id
-  toParsed.chunk_id = fromParsed.chunk_id
 }
 
 writeFileSync(argv[3], JSON.stringify(toParsed))

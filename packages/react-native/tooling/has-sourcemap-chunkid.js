@@ -25,9 +25,7 @@ try {
 
 if (typeof sourceMap.chunkId === 'string' && sourceMap.chunkId.length > 0) {
   console.log(sourceMap.chunkId)
-} else if (typeof sourceMap.chunk_id === 'string' && sourceMap.chunk_id.length > 0) {
-  console.log(sourceMap.chunk_id)
 } else {
-  console.log(`${sourceMapPath} does not contain 'chunkId' nor 'chunk_id'.`)
+  console.log(`${sourceMapPath} does not contain 'chunkId'.`)
   exist(1)
 }
