@@ -103,7 +103,7 @@ plugins.withId('com.android.application') {
                                 def args = [cliPackage]
 
                                 // bundleOutput and sourcemapOutput
-                                def sourcemapDir = new File(sourcemapOutput).getParent()
+                                def sourcemapDir = sourcemapOutput.getParent()
                                 args.addAll(["exp", "hermes", "upload",
                                     "--directory", sourcemapDir        // The path to a sourcemap that should be uploaded.
                                 ])
