@@ -1,2 +1,2 @@
-const { getPostHogExpoConfig } = require('posthog-react-native/tooling/metro')
+const { getPostHogExpoConfig } = require('posthog-react-native/metro')
 const config = getPostHogExpoConfig(__dirname)

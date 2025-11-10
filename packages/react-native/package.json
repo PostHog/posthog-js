@@ -6,7 +6,9 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist/",
-    "tooling/"
+    "tooling/",
+    "metro.js",
+    "metro.d.ts"
   ],
   "repository": {
     "type": "git",
