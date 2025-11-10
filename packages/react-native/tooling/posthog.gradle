@@ -79,7 +79,7 @@ plugins.withId('com.android.application') {
 
                         def injected = project.objects.newInstance(InjectedExecOps)
                         doFirst {
-                            // Copy Debug ID from packager source map to Hermes composed source map
+                            // Copy Chunk ID from packager source map to Hermes composed source map
                             injected.execOps.exec {
                                 def args = ["node",
                                     copyChunkIdScript,
@@ -89,10 +89,10 @@ plugins.withId('com.android.application') {
                                 commandLine(*osCompatibilityCopyCommand, *args)
                             }
 
-                            // Check if Debug ID is detected in output soruce map
+                            // Check if Chunk ID is detected in output soruce map
                             def process = ["node", hasSourceMapChunkIdScript, sourcemapOutput].execute(null, new File("$reactRoot"))
                             def exitValue = process.waitFor()
-                            project.logger.lifecycle("Check generated source map for Debug ID: ${process.text}")
+                            project.logger.lifecycle("Check generated source map for Chunk ID: ${process.text}")
                         }
 
                         doLast {

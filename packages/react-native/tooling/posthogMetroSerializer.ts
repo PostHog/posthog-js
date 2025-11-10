@@ -15,7 +15,7 @@ const SOURCE_MAP_COMMENT = '//# sourceMappingURL='
 const DEBUG_ID_COMMENT = '//# chunkId='
 
 /**
- * Adds PostHog Debug ID polyfill module to the bundle.
+ * Adds PostHog Chunk ID polyfill module to the bundle.
  */
 export function unstableBeforeAssetSerializationDebugIdPlugin({
   premodules,
@@ -32,7 +32,7 @@ export function unstableBeforeAssetSerializationDebugIdPlugin({
   const debugIdModuleExists = premodules.findIndex((module) => module.path === DEBUG_ID_MODULE_PATH) != -1
   if (debugIdModuleExists) {
     // eslint-disable-next-line no-console
-    console.warn('\n\nDebug ID module found. Skipping PostHog Debug ID module...\n\n')
+    console.warn('\n\Chunk ID module found. Skipping PostHog Chunk ID module...\n\n')
     return premodules
   }
 
@@ -41,8 +41,8 @@ export function unstableBeforeAssetSerializationDebugIdPlugin({
 }
 
 /**
- * Creates a Metro serializer that adds Debug ID module to the plain bundle.
- * The Debug ID module is a virtual module that provides a debug ID in runtime.
+ * Creates a Metro serializer that adds Chunk ID module to the plain bundle.
+ * The Chunk ID module is a virtual module that provides a Chunk ID in runtime.
  *
  * RAM Bundles do not support custom serializers.
  */
@@ -56,7 +56,7 @@ export const createPostHogMetroSerializer = (customSerializer?: MetroSerializer)
     const debugIdModuleExists = preModules.findIndex((module) => module.path === DEBUG_ID_MODULE_PATH) != -1
     if (debugIdModuleExists) {
       // eslint-disable-next-line no-console
-      console.warn('Debug ID module found. Skipping PostHog Debug ID module...')
+      console.warn('Chunk ID module found. Skipping PostHog Chunk ID module...')
       return serializer(entryPoint, preModules, graph, options)
     }
 
@@ -67,22 +67,22 @@ export const createPostHogMetroSerializer = (customSerializer?: MetroSerializer)
     const serializerResult = serializer(entryPoint, modifiedPreModules, graph, options)
     const { code: bundleCode, map: bundleMapString } = await extractSerializerResult(serializerResult)
 
-    // Add debug id comment to the bundle
+    // Add Chunk ID comment to the bundle
     const debugId = determineDebugIdFromBundleSource(bundleCode)
     if (!debugId) {
-      throw new Error('Debug ID was not found in the bundle.')
+      throw new Error('Chunk ID was not found in the bundle.')
     }
-    // Only print debug id for command line builds => not hot reload from dev server
+    // Only print Chunk ID for command line builds => not hot reload from dev server
     // eslint-disable-next-line no-console
-    console.log('info ' + `Bundle Debug ID: ${debugId}`)
+    console.log('info ' + `Bundle Chunk ID: ${debugId}`)
 
     const debugIdComment = `${DEBUG_ID_COMMENT}${debugId}`
     const indexOfSourceMapComment = bundleCode.lastIndexOf(SOURCE_MAP_COMMENT)
     const bundleCodeWithDebugId =
       indexOfSourceMapComment === -1
-        ? // If source map comment is missing lets just add the debug id comment
+        ? // If source map comment is missing lets just add the Chunk ID comment
           `${bundleCode}\n${debugIdComment}`
-        : // If source map comment is present lets add the debug id comment before it
+        : // If source map comment is present lets add the Chunk ID comment before it
           `${bundleCode.substring(0, indexOfSourceMapComment) + debugIdComment}\n${bundleCode.substring(
             indexOfSourceMapComment
           )}`

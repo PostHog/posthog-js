@@ -35,7 +35,7 @@ export type MetroSerializer = (
 ) => MetroSerializerOutput
 
 /**
- * Returns minified Debug ID code snippet.
+ * Returns minified Chunk ID code snippet.
  */
 export function createDebugIdSnippet(debugId: string): string {
   return `!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="${debugId}")}catch(e){}}();`

@@ -18,7 +18,7 @@ export interface PostHogExpoConfigOptions {
 /**
  * Adds PostHog to the Metro config.
  *
- * Adds Debug ID to the output bundle and source maps.
+ * Adds Chunk ID to the output bundle and source maps.
  */
 export function withPostHogConfig(config: MetroConfig, {}: PostHogMetroConfigOptions = {}): MetroConfig {
   let newConfig = config
