@@ -60,7 +60,7 @@ function Starfield2D() {
                     let pixelY = 0
                     let pixelRadius = 0
 
-                    if (canvas.width != window.innerWidth || canvas.width != window.innerWidth) {
+                    if (canvas.width != window.innerWidth || canvas.height != window.innerHeight) {
                         canvas.width = window.innerWidth
                         canvas.height = window.innerHeight
                         initializeStars()
