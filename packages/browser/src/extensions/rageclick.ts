@@ -15,8 +15,10 @@ export default class RageClick {
     thresholdPx: number
     timeoutMs: number
     clickCount: number
+    disabled: boolean
 
     constructor(rageclickConfig: RageclickConfig | boolean) {
+        this.disabled = rageclickConfig === false
         const conf = isObject(rageclickConfig) ? rageclickConfig : {}
 
         this.thresholdPx = conf.threshold_px || DEFAULT_THRESHOLD_PX
@@ -27,6 +29,10 @@ export default class RageClick {
     }
 
     isRageClick(x: number, y: number, timestamp: number): boolean {
+        if (this.disabled) {
+            return false
+        }
+
         const lastClick = this.clicks[this.clicks.length - 1]
         if (
             lastClick &&
