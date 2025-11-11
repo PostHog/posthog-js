@@ -76,13 +76,21 @@ describe('Autocapture system', () => {
             value: new URL('https://example.com'),
         })
 
-        beforeSendMock = jest.fn().mockImplementation((...args) => args)
+        beforeSendMock = jest.fn().mockImplementation(() => {
+            // returning the event here means we actually try to send it
+            // but we just need the mock to record it
+            return null
+        })
 
         posthog = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',
             token: 'testtoken',
             autocapture: true,
             before_send: beforeSendMock,
+            // we don't want to make network calls and log to the console when they fail
+            disable_surveys: true,
+            // we don't want to make network calls and log to the console when they fail
+            disable_external_dependency_loading: true,
         })
 
         if (isUndefined(posthog.autocapture)) {
