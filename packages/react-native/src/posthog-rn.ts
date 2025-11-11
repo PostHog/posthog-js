@@ -86,8 +86,8 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * - $os_name: Operating system name
    * - $os_version: Operating system version
    * - $device_type: Device type (Mobile, Desktop, Web)
-   * - $locale: User's current locale
-   * - $timezone: User's timezone
+   * - $lib: Name of the SDK library
+   * - $lib_version: Version of the SDK library
    *
    * This ensures feature flags that rely on these properties work correctly
    * without waiting for server-side processing of identify() calls.
@@ -396,8 +396,6 @@ export class PostHog extends PostHogCore {
       '$os_name',
       '$os_version',
       '$device_type',
-      '$locale',
-      '$timezone',
     ] as const
 
     relevantKeys.forEach((key) => {
