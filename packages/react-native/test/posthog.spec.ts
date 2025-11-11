@@ -774,5 +774,119 @@ describe('PostHog React Native', () => {
         expect(posthog.getPersistedProperty(PostHogPersistedProperty.GroupProperties)).toBeUndefined()
       })
     })
+
+    describe('reloadFeatureFlags parameter', () => {
+      beforeEach(async () => {
+        ;(globalThis as any).window.fetch = jest.fn(async (url) => {
+          let res: any = { status: 'ok' }
+          if (url.includes('flags')) {
+            res = {
+              featureFlags: { 'test-flag': true },
+            }
+          }
+
+          return {
+            status: 200,
+            json: () => Promise.resolve(res),
+          }
+        })
+
+        posthog = new PostHog('test-api-key', {
+          setDefaultPersonProperties: false,
+          flushInterval: 0,
+          preloadFeatureFlags: false,
+        })
+        await posthog.ready()
+        ;(globalThis as any).window.fetch.mockClear()
+      })
+
+      it('should reload feature flags by default when calling setPersonPropertiesForFlags', async () => {
+        posthog.setPersonPropertiesForFlags({ email: 'test@example.com' })
+
+        await waitForExpect(200, () => {
+          expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/flags/'),
+            expect.any(Object)
+          )
+        })
+      })
+
+      it('should not reload feature flags when reloadFeatureFlags is false for setPersonPropertiesForFlags', async () => {
+        posthog.setPersonPropertiesForFlags({ email: 'test@example.com' }, false)
+
+        await new Promise((resolve) => setTimeout(resolve, 100))
+
+        expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
+      })
+
+      it('should reload feature flags by default when calling setGroupPropertiesForFlags', async () => {
+        posthog.setGroupPropertiesForFlags({ company: { name: 'Acme Inc' } })
+
+        await waitForExpect(200, () => {
+          expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/flags/'),
+            expect.any(Object)
+          )
+        })
+      })
+
+      it('should not reload feature flags when reloadFeatureFlags is false for setGroupPropertiesForFlags', async () => {
+        posthog.setGroupPropertiesForFlags({ company: { name: 'Acme Inc' } }, false)
+
+        await new Promise((resolve) => setTimeout(resolve, 100))
+
+        expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
+      })
+
+      it('should reload feature flags by default when calling resetPersonPropertiesForFlags', async () => {
+        posthog.setPersonPropertiesForFlags({ email: 'test@example.com' }, false)
+        ;(globalThis as any).window.fetch.mockClear()
+
+        posthog.resetPersonPropertiesForFlags()
+
+        await waitForExpect(200, () => {
+          expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/flags/'),
+            expect.any(Object)
+          )
+        })
+      })
+
+      it('should not reload feature flags when reloadFeatureFlags is false for resetPersonPropertiesForFlags', async () => {
+        posthog.setPersonPropertiesForFlags({ email: 'test@example.com' }, false)
+        ;(globalThis as any).window.fetch.mockClear()
+
+        posthog.resetPersonPropertiesForFlags(false)
+
+        await new Promise((resolve) => setTimeout(resolve, 100))
+
+        expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
+      })
+
+      it('should reload feature flags by default when calling resetGroupPropertiesForFlags', async () => {
+        posthog.setGroupPropertiesForFlags({ company: { name: 'Acme Inc' } }, false)
+        ;(globalThis as any).window.fetch.mockClear()
+
+        posthog.resetGroupPropertiesForFlags()
+
+        await waitForExpect(200, () => {
+          expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/flags/'),
+            expect.any(Object)
+          )
+        })
+      })
+
+      it('should not reload feature flags when reloadFeatureFlags is false for resetGroupPropertiesForFlags', async () => {
+        posthog.setGroupPropertiesForFlags({ company: { name: 'Acme Inc' } }, false)
+        ;(globalThis as any).window.fetch.mockClear()
+
+        posthog.resetGroupPropertiesForFlags(false)
+
+        await new Promise((resolve) => setTimeout(resolve, 100))
+
+        expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
+      })
+    })
   })
 })

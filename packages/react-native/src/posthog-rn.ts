@@ -702,9 +702,14 @@ export class PostHog extends PostHogCore {
    * @public
    *
    * @param properties The person properties to set for flag evaluation
+   * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
-  setPersonPropertiesForFlags(properties: Record<string, string>): void {
+  setPersonPropertiesForFlags(properties: Record<string, string>, reloadFeatureFlags = true): void {
     super.setPersonPropertiesForFlags(properties)
+
+    if (reloadFeatureFlags) {
+      this.reloadFeatureFlags()
+    }
   }
 
   /**
@@ -720,9 +725,15 @@ export class PostHog extends PostHogCore {
    * ```
    *
    * @public
+   *
+   * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
-  resetPersonPropertiesForFlags(): void {
+  resetPersonPropertiesForFlags(reloadFeatureFlags = true): void {
     super.resetPersonPropertiesForFlags()
+
+    if (reloadFeatureFlags) {
+      this.reloadFeatureFlags()
+    }
   }
 
   /**
@@ -742,9 +753,14 @@ export class PostHog extends PostHogCore {
    * @public
    *
    * @param properties The group properties to set for flag evaluation
+   * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
-  setGroupPropertiesForFlags(properties: Record<string, Record<string, string>>): void {
+  setGroupPropertiesForFlags(properties: Record<string, Record<string, string>>, reloadFeatureFlags = true): void {
     super.setGroupPropertiesForFlags(properties)
+
+    if (reloadFeatureFlags) {
+      this.reloadFeatureFlags()
+    }
   }
 
   /**
@@ -759,9 +775,15 @@ export class PostHog extends PostHogCore {
    * ```
    *
    * @public
+   *
+   * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
-  resetGroupPropertiesForFlags(): void {
+  resetGroupPropertiesForFlags(reloadFeatureFlags = true): void {
     super.resetGroupPropertiesForFlags()
+
+    if (reloadFeatureFlags) {
+      this.reloadFeatureFlags()
+    }
   }
 
   /**
