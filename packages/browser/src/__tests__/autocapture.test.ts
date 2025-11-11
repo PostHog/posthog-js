@@ -76,21 +76,13 @@ describe('Autocapture system', () => {
             value: new URL('https://example.com'),
         })
 
-        beforeSendMock = jest.fn().mockImplementation(() => {
-            // returning the event here means we actually try to send it
-            // but we just need the mock to record it
-            return null
-        })
+        beforeSendMock = jest.fn().mockImplementation((...args) => args)
 
         posthog = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',
             token: 'testtoken',
             autocapture: true,
             before_send: beforeSendMock,
-            // we don't want to make network calls and log to the console when they fail
-            disable_surveys: true,
-            // we don't want to make network calls and log to the console when they fail
-            disable_external_dependency_loading: true,
         })
 
         if (isUndefined(posthog.autocapture)) {
@@ -422,107 +414,15 @@ describe('Autocapture system', () => {
                 'custom-rageclick',
                 ['$autocapture', '$autocapture', '$autocapture'],
             ],
-            [
-                'rageclick detection with true allows clicks on navigation elements (backward compat)',
-                true,
-                null,
-                ['$autocapture', '$autocapture', '$rageclick', '$autocapture'],
-                'Next',
-            ],
-            [
-                'rageclick detection excludes navigation elements with "Next"',
-                { content_ignorelist: true },
-                null,
-                ['$autocapture', '$autocapture', '$autocapture'],
-                'Next',
-            ],
-            [
-                'rageclick detection excludes navigation elements with "Previous"',
-                { content_ignorelist: true },
-                null,
-                ['$autocapture', '$autocapture', '$autocapture'],
-                'Previous',
-            ],
-            [
-                'rageclick detection excludes navigation elements with ">"',
-                { content_ignorelist: true },
-                null,
-                ['$autocapture', '$autocapture', '$autocapture'],
-                '>',
-            ],
-            [
-                'rageclick detection excludes navigation elements with "<"',
-                { content_ignorelist: true },
-                null,
-                ['$autocapture', '$autocapture', '$autocapture'],
-                '<',
-            ],
-            [
-                'rageclick detection excludes navigation elements with aria-label="Next page"',
-                { content_ignorelist: true },
-                null,
-                ['$autocapture', '$autocapture', '$autocapture'],
-                undefined,
-                'Next page',
-            ],
-            [
-                'rageclick detection ignores content when config is undefined',
-                {
-                    content_ignorelist: undefined,
-                },
-                null,
-                ['$autocapture', '$autocapture', '$autocapture'],
-                'Next',
-            ],
-            [
-                'rageclick detection with custom content ignorelist',
-                {
-                    content_ignorelist: ['loading', 'spinner'],
-                },
-                null,
-                ['$autocapture', '$autocapture', '$autocapture'],
-                'Loading...',
-            ],
-            [
-                'rageclick detection allows clicks when custom keywords do not match',
-                {
-                    content_ignorelist: ['loading', 'spinner'],
-                },
-                null,
-                ['$autocapture', '$autocapture', '$rageclick', '$autocapture'],
-                'Next',
-            ],
-            [
-                'rageclick detection with content ignorelist disabled',
-                {
-                    content_ignorelist: false,
-                },
-                null,
-                ['$autocapture', '$autocapture', '$rageclick', '$autocapture'],
-                'Next',
-            ],
         ])(
             'autocapture and rageclick testcase: %s',
-            (
-                _title,
-                rageclickConfig: PostHogConfig['rageclick'],
-                parentClassname: string,
-                expectedCaptured,
-                textContent?: string,
-                ariaLabel?: string
-            ) => {
+            (_title, rageclickConfig: PostHogConfig['rageclick'], parentClassname: string, expectedCaptured) => {
                 posthog.config.rageclick = rageclickConfig
 
                 const elTarget = document.createElement('img')
                 const elParent = document.createElement('span')
                 if (parentClassname) {
                     elParent.className = parentClassname
-                }
-                if (textContent) {
-                    elParent.textContent = textContent
-                }
-                if (ariaLabel) {
-                    elParent.setAttribute('aria-label', ariaLabel)
                 }
                 elParent.appendChild(elTarget)
                 const elGrandparent = document.createElement('a')

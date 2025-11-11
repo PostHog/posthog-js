@@ -73,6 +73,12 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "timeout_ms": [
         "undefined",
         "number"
+      ],
+      "content_ignorelist": [
+        "undefined",
+        "false",
+        "true",
+        "string[]"
       ]
     }
   ],

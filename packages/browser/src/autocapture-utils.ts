@@ -154,8 +154,16 @@ export function getParentElement(curEl: Element): Element | false {
 const DEFAULT_CONTENT_IGNORELIST = ['next', 'previous', 'prev', '>', '<']
 const MAX_CONTENT_IGNORELIST_ENTRIES = 10
 
-function shouldIgnoreByContent(el: Element | null, contentIgnorelist: boolean | string[] | undefined): boolean {
-    if (!el || contentIgnorelist === false || isUndefined(contentIgnorelist)) {
+interface ElementWithText {
+    safeText: string
+    ariaLabel: string
+}
+
+function shouldIgnoreByContent(
+    contentIgnorelist: boolean | string[] | undefined,
+    elementsWithText: ElementWithText[]
+): boolean {
+    if (contentIgnorelist === false || isUndefined(contentIgnorelist)) {
         return false
     }
 
@@ -174,10 +182,7 @@ function shouldIgnoreByContent(el: Element | null, contentIgnorelist: boolean | 
         return false
     }
 
-    const { targetElementList } = getElementAndParentsForElement(el, false)
-    return targetElementList.some((element) => {
-        const safeText = getSafeText(element).toLowerCase()
-        const ariaLabel = element.getAttribute('aria-label')?.toLowerCase().trim() || ''
+    return elementsWithText.some(({ safeText, ariaLabel }) => {
         return keywords.some((keyword) => safeText.includes(keyword) || ariaLabel.includes(keyword))
     })
 }
@@ -205,11 +210,17 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
         return false
     }
 
-    if (shouldIgnoreByContent(el, contentIgnorelist)) {
+    // Traverse DOM once and cache element data to avoid redundant calls to getSafeText
+    const { targetElementList } = getElementAndParentsForElement(el, false)
+    const elementsWithText: ElementWithText[] = targetElementList.map((element) => ({
+        safeText: getSafeText(element).toLowerCase(),
+        ariaLabel: element.getAttribute('aria-label')?.toLowerCase().trim() || '',
+    }))
+
+    if (shouldIgnoreByContent(contentIgnorelist, elementsWithText)) {
         return false
     }
 
-    const { targetElementList } = getElementAndParentsForElement(el, false)
     // we don't capture if we match the ignore list
     return !checkIfElementsMatchCSSSelector(targetElementList, selectorIgnoreList)
 }
