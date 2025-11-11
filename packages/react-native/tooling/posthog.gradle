@@ -78,6 +78,27 @@ plugins.withId('com.android.application') {
 
                         def injected = project.objects.newInstance(InjectedExecOps)
                         doFirst {
+                            injected.execOps.exec {
+                                workingDir reactRoot
+
+                                def cliPackage = "posthog-cli"
+                                def args = [cliPackage]
+
+                                // bundleOutput and sourcemapOutput
+                                def sourcemapDir = sourcemapOutput.getParent()
+                                // def sourcemapDir = "/Users/manoel/Github/posthog-js/examples/example-expo-53/android/app/build/intermediates/sourcemaps/react/release"
+                                args.addAll(["exp", "hermes", "clone",
+                                    "--directory", sourcemapDir        // The path to a sourcemap that should be uploaded.
+                                ])
+
+                                args.addAll(extraArgs)
+
+                                project.logger.info("posthog-cli clone arguments: ${args}")
+                                def osCompatibility = Os.isFamily(Os.FAMILY_WINDOWS) ? ['cmd', '/c', 'node'] : []
+
+                                commandLine(*osCompatibility, *args)
+                            }
+                            
                             // Copy Chunk ID from packager source map to Hermes composed source map
                             injected.execOps.exec {
                                 def args = ["node",
@@ -100,13 +121,14 @@ plugins.withId('com.android.application') {
 
                                 // bundleOutput and sourcemapOutput
                                 def sourcemapDir = sourcemapOutput.getParent()
+                                // def sourcemapDir = "/Users/manoel/Github/posthog-js/examples/example-expo-53/android/app/build"
                                 args.addAll(["exp", "hermes", "upload",
                                     "--directory", sourcemapDir        // The path to a sourcemap that should be uploaded.
                                 ])
 
                                 args.addAll(extraArgs)
 
-                                project.logger.info("posthog-cli arguments: ${args}")
+                                project.logger.info("posthog-cli upload arguments: ${args}")
                                 def osCompatibility = Os.isFamily(Os.FAMILY_WINDOWS) ? ['cmd', '/c', 'node'] : []
 
                                 commandLine(*osCompatibility, *args)
