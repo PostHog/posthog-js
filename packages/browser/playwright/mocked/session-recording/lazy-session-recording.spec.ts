@@ -50,6 +50,12 @@ async function ensureActivitySendsSnapshots(page: Page, expectedCustomTags: stri
     expect(customEventTags).toEqual(expectedCustomTags)
 }
 
+function getSnapshotTimestamp(snapshot: any, position: 'first' | 'last'): number {
+    const snapshotData = snapshot['properties']['$snapshot_data']
+    const index = position === 'first' ? 0 : snapshotData.length - 1
+    return snapshotData[index]?.timestamp || snapshotData[index]?.data?.timestamp
+}
+
 const startOptions = {
     options: {
         session_recording: {},
@@ -285,25 +291,12 @@ test.describe('Session recording - array.js', () => {
         const capturedEventsAfter24Hours = await page.capturedEvents()
 
         expect(capturedEventsAfter24Hours[0]['properties']['$session_id']).toEqual(firstSessionId)
-
-        const oldSessionSnapshot = capturedEventsAfter24Hours[0]
-        const oldSessionSnapshotData = oldSessionSnapshot['properties']['$snapshot_data']
-        const oldSessionLastTimestamp =
-            oldSessionSnapshotData[oldSessionSnapshotData.length - 1]?.timestamp ||
-            oldSessionSnapshotData[oldSessionSnapshotData.length - 1]?.data?.timestamp
-
-        expect(oldSessionLastTimestamp).toBeLessThan(timestampAfterRotation)
+        expect(getSnapshotTimestamp(capturedEventsAfter24Hours[0], 'last')).toBeLessThan(timestampAfterRotation)
 
         expect(capturedEventsAfter24Hours[1]['properties']['$session_id']).not.toEqual(firstSessionId)
-        expect(capturedEventsAfter24Hours[1]['properties']['$snapshot_data'][0].type).toEqual(4) // meta
-        expect(capturedEventsAfter24Hours[1]['properties']['$snapshot_data'][1].type).toEqual(2) // full_snapshot
-
-        const newSessionSnapshot = capturedEventsAfter24Hours[1]
-        const newSessionSnapshotData = newSessionSnapshot['properties']['$snapshot_data']
-        const newSessionFirstTimestamp =
-            newSessionSnapshotData[0]?.timestamp || newSessionSnapshotData[0]?.data?.timestamp
-
-        expect(newSessionFirstTimestamp).toBeGreaterThan(timestampBeforeRotation)
+        expect(capturedEventsAfter24Hours[1]['properties']['$snapshot_data'][0].type).toEqual(4)
+        expect(capturedEventsAfter24Hours[1]['properties']['$snapshot_data'][1].type).toEqual(2)
+        expect(getSnapshotTimestamp(capturedEventsAfter24Hours[1], 'first')).toBeGreaterThan(timestampBeforeRotation)
 
         expect(capturedEventsAfter24Hours[2]['properties']['$session_id']).not.toEqual(firstSessionId)
         expect(capturedEventsAfter24Hours[2]['properties']['$session_recording_start_reason']).toEqual(

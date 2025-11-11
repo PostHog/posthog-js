@@ -270,7 +270,7 @@ export interface HeatmapConfig {
 
 export type BeforeSendFn = (cr: CaptureResult | null) => CaptureResult | null
 
-export type ConfigDefaults = '2025-11-08' | '2025-05-24' | 'unset'
+export type ConfigDefaults = '2025-11' | '2025-05-24' | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 

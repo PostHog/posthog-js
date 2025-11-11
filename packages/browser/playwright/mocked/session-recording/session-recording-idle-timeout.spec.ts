@@ -46,6 +46,12 @@ async function triggerForcedIdleTimeout(page: Page) {
     })
 }
 
+function getSnapshotTimestamp(snapshot: any, position: 'first' | 'last'): number {
+    const snapshotData = snapshot['properties']['$snapshot_data']
+    const index = position === 'first' ? 0 : snapshotData.length - 1
+    return snapshotData[index]?.timestamp || snapshotData[index]?.data?.timestamp
+}
+
 const startOptions = {
     options: {
         session_recording: {
@@ -144,23 +150,10 @@ test.describe('Session recording - idle timeout behavior', () => {
         const capturedEvents = await page.capturedEvents()
 
         expect(capturedEvents[0]['properties']['$session_id']).toEqual(initialSessionId)
-
-        const oldSessionSnapshot = capturedEvents[0]
-        const oldSessionSnapshotData = oldSessionSnapshot['properties']['$snapshot_data']
-        const oldSessionLastTimestamp =
-            oldSessionSnapshotData[oldSessionSnapshotData.length - 1]?.timestamp ||
-            oldSessionSnapshotData[oldSessionSnapshotData.length - 1]?.data?.timestamp
-
-        expect(oldSessionLastTimestamp).toBeLessThan(timestampAfterRestart)
+        expect(getSnapshotTimestamp(capturedEvents[0], 'last')).toBeLessThan(timestampAfterRestart)
 
         expect(capturedEvents[1]['properties']['$session_id']).toEqual(newSessionId)
-
-        const newSessionSnapshot = capturedEvents[1]
-        const newSessionSnapshotData = newSessionSnapshot['properties']['$snapshot_data']
-        const newSessionFirstTimestamp =
-            newSessionSnapshotData[0]?.timestamp || newSessionSnapshotData[0]?.data?.timestamp
-
-        expect(newSessionFirstTimestamp).toBeGreaterThan(timestampBeforeIdle)
+        expect(getSnapshotTimestamp(capturedEvents[1], 'first')).toBeGreaterThan(timestampBeforeIdle)
 
         expect(capturedEvents[2]['properties']['$session_id']).toEqual(newSessionId)
         expect(capturedEvents[2]['properties']['$session_recording_start_reason']).toEqual('session_id_changed')
