@@ -75,6 +75,26 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * Error Tracking Configuration
    */
   errorTracking?: ErrorTrackingOptions
+
+  /**
+   * Automatically include common device and app properties in feature flag evaluation.
+   *
+   * When enabled, the following properties are sent with every /flags request:
+   * - $app_version: App version
+   * - $app_build: App build number
+   * - $app_namespace: App bundle identifier / namespace
+   * - $os_name: Operating system name
+   * - $os_version: Operating system version
+   * - $device_type: Device type (Mobile, Desktop, Web)
+   * - $locale: User's current locale
+   * - $timezone: User's timezone
+   *
+   * This ensures feature flags that rely on these properties work correctly
+   * without waiting for server-side processing of identify() calls.
+   *
+   * @default true
+   */
+  setDefaultPersonProperties?: boolean
 }
 
 export class PostHog extends PostHogCore {
@@ -88,6 +108,7 @@ export class PostHog extends PostHogCore {
   private _errorTracking: ErrorTracking
   private _surveysReadyPromise: Promise<void> | null = null
   private _surveysReady: boolean = false
+  private _setDefaultPersonProperties: boolean
 
   /**
    * Creates a new PostHog instance for React Native. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
@@ -130,6 +151,7 @@ export class PostHog extends PostHogCore {
     this._disableSurveys = options?.disableSurveys ?? false
     this._disableRemoteConfig = options?.disableRemoteConfig ?? false
     this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger)
+    this._setDefaultPersonProperties = options?.setDefaultPersonProperties ?? true
 
     // Either build the app properties from the existing ones
     this._appProperties =
@@ -178,6 +200,11 @@ export class PostHog extends PostHogCore {
       }
 
       this.setupBootstrap(options)
+
+      // Set default person properties for flags if enabled
+      if (this._setDefaultPersonProperties) {
+        this._setDefaultPersonPropertiesForFlags()
+      }
 
       this._isInitialized = true
 
@@ -349,6 +376,48 @@ export class PostHog extends PostHogCore {
    */
   reset(): void {
     super.reset()
+
+    // Restore default person properties after reset if enabled
+    if (this._setDefaultPersonProperties) {
+      this._setDefaultPersonPropertiesForFlags()
+    }
+  }
+
+  /**
+   * Helper to extract and set default person properties from app properties
+   * @private
+   */
+  private _setDefaultPersonPropertiesForFlags(): void {
+    const defaultProps: Record<string, string> = {}
+    const relevantKeys = [
+      '$app_version',
+      '$app_build',
+      '$app_namespace',
+      '$os_name',
+      '$os_version',
+      '$device_type',
+      '$locale',
+      '$timezone',
+    ] as const
+
+    relevantKeys.forEach((key) => {
+      const value = this._appProperties[key]
+      if (value !== null && value !== undefined) {
+        defaultProps[key] = String(value)
+      }
+    })
+
+    const commonProps = this.getCommonEventProperties()
+    if (commonProps.$lib) {
+      defaultProps.$lib = String(commonProps.$lib)
+    }
+    if (commonProps.$lib_version) {
+      defaultProps.$lib_version = String(commonProps.$lib_version)
+    }
+
+    if (Object.keys(defaultProps).length > 0) {
+      this.setPersonPropertiesForFlags(defaultProps)
+    }
   }
 
   /**
