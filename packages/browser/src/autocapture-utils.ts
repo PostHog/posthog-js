@@ -155,12 +155,12 @@ const DEFAULT_CONTENT_IGNORELIST = ['next', 'previous', 'prev', '>', '<']
 const MAX_CONTENT_IGNORELIST_ENTRIES = 10
 
 function shouldIgnoreByContent(el: Element | null, contentIgnorelist: boolean | string[] | undefined): boolean {
-    if (!el || contentIgnorelist === false) {
+    if (!el || contentIgnorelist === false || isUndefined(contentIgnorelist)) {
         return false
     }
 
     let keywords: string[]
-    if (contentIgnorelist === true || isUndefined(contentIgnorelist)) {
+    if (contentIgnorelist === true) {
         keywords = DEFAULT_CONTENT_IGNORELIST
     } else if (isArray(contentIgnorelist)) {
         if (contentIgnorelist.length > MAX_CONTENT_IGNORELIST_ENTRIES) {
@@ -191,12 +191,14 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
     }
 
     let selectorIgnoreList: string[] | boolean
-    let contentIgnorelist: boolean | string[] | undefined = true
+    let contentIgnorelist: boolean | string[] | undefined
     if (isBoolean(_config)) {
         selectorIgnoreList = _config ? DEFAULT_RAGE_CLICK_IGNORE_LIST : false
+        // For backward compatibility, don't enable content filtering for rageclick: true
+        contentIgnorelist = undefined
     } else {
         selectorIgnoreList = _config?.css_selector_ignorelist ?? DEFAULT_RAGE_CLICK_IGNORE_LIST
-        contentIgnorelist = _config?.content_ignorelist ?? true
+        contentIgnorelist = _config?.content_ignorelist
     }
 
     if (selectorIgnoreList === false) {
