@@ -43,7 +43,10 @@ jest.mock('../../utils/globals', () => {
 
 describe('web vitals', () => {
     let posthog: PostHog
-    let beforeSendMock = jest.fn().mockImplementation((e) => e)
+    let beforeSendMock = jest.fn().mockImplementation((e) => {
+        // we don't actually need to send the event, just record it here
+        return null
+    })
     let onLCPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
     let onCLSCallback: ((metric: Record<string, any>) => void) | undefined = undefined
     let onFCPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
@@ -169,6 +172,7 @@ describe('web vitals', () => {
             it('should emit after 5 seconds even when only 1 to 3 metrics captured', async () => {
                 onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
 
+                beforeSendMock.mock.calls
                 expect(beforeSendMock).toBeCalledTimes(0)
 
                 jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)

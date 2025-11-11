@@ -8,7 +8,7 @@ describe('identify()', () => {
     let instance: PostHog
     let beforeSendMock: jest.Mock
 
-    beforeEach(() => {
+    beforeEach(async () => {
         beforeSendMock = jest.fn().mockImplementation((e) => e)
         const token = uuidv7()
         // NOTE: Temporary change whilst testing remote config
@@ -19,15 +19,18 @@ describe('identify()', () => {
             },
         } as any
 
-        const posthog = defaultPostHog().init(
-            token,
-            {
-                api_host: 'https://test.com',
-                before_send: beforeSendMock,
-                disable_surveys: true,
-            },
-            token
-        )
+        const posthog = await new Promise<PostHog>((resolve) => {
+            defaultPostHog().init(
+                token,
+                {
+                    api_host: 'https://test.com',
+                    before_send: beforeSendMock,
+                    disable_surveys: true,
+                    loaded: (ph) => resolve(ph),
+                },
+                token
+            )
+        })
 
         instance = Object.assign(posthog, {
             register: jest.fn(),

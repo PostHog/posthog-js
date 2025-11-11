@@ -673,21 +673,6 @@ export interface PostHogConfig {
     defaults: ConfigDefaults
 
     /**
-     * EXPERIMENTAL: Defers initialization of non-critical extensions (autocapture, session recording, etc.)
-     * to the next event loop tick using setTimeout. This reduces main thread blocking during SDK
-     * initialization for better page load performance, while keeping critical functionality
-     * (persistence, sessions, capture) available immediately.
-     *
-     * When enabled:
-     * - Persistence, sessions, and basic capture work immediately
-     * - Extensions (autocapture, recording, heatmaps, etc.) start after yielding back to the browser
-     *
-     * @default false (will be true for defaults >= '2025-11-06' in the future)
-     * @experimental
-     */
-    __preview_deferred_init_extensions: boolean
-
-    /**
      * Determines the session recording options.
      *
      * @see `SessionRecordingOptions`

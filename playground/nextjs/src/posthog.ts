@@ -81,7 +81,6 @@ if (typeof window !== 'undefined') {
         __preview_remote_config: true,
         cookieless_mode: 'on_reject',
         __preview_flags_v2: true,
-        __preview_deferred_init_extensions: true,
         ...configForConsent(),
     })
     // Help with debugging

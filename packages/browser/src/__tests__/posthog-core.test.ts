@@ -33,7 +33,7 @@ describe('posthog core', () => {
         console.error = jest.fn()
     })
 
-    it('exposes the version', () => {
+    it('exposes the version', async () => {
         expect(defaultPostHog().version).toMatch(/\d+\.\d+\.\d+/)
     })
 
@@ -44,7 +44,7 @@ describe('posthog core', () => {
             console.warn = jest.fn()
         })
 
-        it('log when setting debug to false', () => {
+        it('log when setting debug to false', async () => {
             const posthog = defaultPostHog().init(uuidv7(), { debug: false })!
             posthog.debug(false)
             expect(console.error).not.toHaveBeenCalled()
@@ -52,7 +52,7 @@ describe('posthog core', () => {
             expect(console.log).toHaveBeenCalledWith("You've disabled debug mode.")
         })
 
-        it('log when setting debug to undefined', () => {
+        it('log when setting debug to undefined', async () => {
             const posthog = defaultPostHog().init(uuidv7(), { debug: false })!
             posthog.debug()
             expect(console.log).toHaveBeenCalledWith(
@@ -60,7 +60,7 @@ describe('posthog core', () => {
             )
         })
 
-        it('log when setting debug to true', () => {
+        it('log when setting debug to true', async () => {
             const posthog = defaultPostHog().init(uuidv7(), { debug: false })!
             posthog.debug(true)
             expect(console.log).toHaveBeenCalledWith(
@@ -74,16 +74,28 @@ describe('posthog core', () => {
         const eventProperties = {
             event: 'prop',
         }
-        const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
+        const setup = async (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
             const beforeSendMock = jest.fn().mockImplementation((e) => e)
-            const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
-            posthog.debug()
-            return { posthog, beforeSendMock }
+            return await new Promise<{ posthog: any; beforeSendMock: jest.Mock }>((resolve) => {
+                const posthog = defaultPostHog().init(
+                    token,
+                    {
+                        ...config,
+                        before_send: beforeSendMock,
+                        loaded: (ph) => {
+                            ph.debug()
+                            config.loaded?.(ph)
+                            resolve({ posthog: ph, beforeSendMock })
+                        },
+                    },
+                    token
+                )!
+            })
         }
 
-        it('respects property_denylist and property_blacklist', () => {
+        it('respects property_denylist and property_blacklist', async () => {
             // arrange
-            const { posthog } = setup({
+            const { posthog } = await setup({
                 property_denylist: ['$lib', 'persistent', '$is_identified'],
                 property_blacklist: ['token'],
             })
@@ -100,8 +112,8 @@ describe('posthog core', () => {
         })
 
         describe('rate limiting', () => {
-            it('includes information about remaining rate limit', () => {
-                const { posthog, beforeSendMock } = setup()
+            it('includes information about remaining rate limit', async () => {
+                const { posthog, beforeSendMock } = await setup()
 
                 posthog.capture(eventName, eventProperties)
 
@@ -112,12 +124,12 @@ describe('posthog core', () => {
                 })
             })
 
-            it('does not capture if rate limit is in place', () => {
+            it('does not capture if rate limit is in place', async () => {
                 jest.useFakeTimers()
                 jest.setSystemTime(Date.now())
 
                 console.error = jest.fn()
-                const { posthog, beforeSendMock } = setup()
+                const { posthog, beforeSendMock } = await setup()
                 for (let i = 0; i < 100; i++) {
                     posthog.capture(eventName, eventProperties)
                 }
@@ -142,7 +154,7 @@ describe('posthog core', () => {
                 // arrange
                 const token = uuidv7()
                 mockReferrer.mockReturnValue('https://referrer.example.com/some/path')
-                const { posthog, beforeSendMock } = setup({
+                const { posthog, beforeSendMock } = await setup({
                     token,
                     persistence_name: token,
                     person_profiles: 'always',
@@ -159,18 +171,18 @@ describe('posthog core', () => {
                 expect(properties['$referring_domain']).toBe('referrer.example.com')
             })
 
-            it('should not update the referrer within the same session', () => {
+            it('should not update the referrer within the same session', async () => {
                 // arrange
                 const token = uuidv7()
                 mockReferrer.mockReturnValue('https://referrer1.example.com/some/path')
-                const { posthog: posthog1 } = setup({
+                const { posthog: posthog1 } = await setup({
                     token,
                     persistence_name: token,
                     person_profiles: 'always',
                 })
                 posthog1.capture(eventName, eventProperties)
                 mockReferrer.mockReturnValue('https://referrer2.example.com/some/path')
-                const { posthog: posthog2, beforeSendMock } = setup({
+                const { posthog: posthog2, beforeSendMock } = await setup({
                     token,
                     persistence_name: token,
                 })
@@ -190,18 +202,18 @@ describe('posthog core', () => {
                 expect(properties['$referring_domain']).toBe('referrer1.example.com')
             })
 
-            it('should use the new referrer in a new session', () => {
+            it('should use the new referrer in a new session', async () => {
                 // arrange
                 const token = uuidv7()
                 mockReferrer.mockReturnValue('https://referrer1.example.com/some/path')
-                const { posthog: posthog1 } = setup({
+                const { posthog: posthog1 } = await setup({
                     token,
                     persistence_name: token,
                     person_profiles: 'always',
                 })
                 posthog1.capture(eventName, eventProperties)
                 mockReferrer.mockReturnValue('https://referrer2.example.com/some/path')
-                const { posthog: posthog2, beforeSendMock: beforeSendMock2 } = setup({
+                const { posthog: posthog2, beforeSendMock: beforeSendMock2 } = await setup({
                     token,
                     persistence_name: token,
                 })
@@ -221,11 +233,11 @@ describe('posthog core', () => {
                 expect(properties['$referring_domain']).toBe('referrer2.example.com')
             })
 
-            it('should use $direct when there is no referrer', () => {
+            it('should use $direct when there is no referrer', async () => {
                 // arrange
                 const token = uuidv7()
                 mockReferrer.mockReturnValue('')
-                const { posthog, beforeSendMock } = setup({
+                const { posthog, beforeSendMock } = await setup({
                     token,
                     persistence_name: token,
                     person_profiles: 'always',
@@ -244,11 +256,11 @@ describe('posthog core', () => {
         })
 
         describe('campaign params', () => {
-            it('should not send campaign params as null if there are no non-null ones', () => {
+            it('should not send campaign params as null if there are no non-null ones', async () => {
                 // arrange
                 const token = uuidv7()
                 mockURL.mockReturnValue('https://www.example.com/some/path')
-                const { posthog, beforeSendMock } = setup({
+                const { posthog, beforeSendMock } = await setup({
                     token,
                     persistence_name: token,
                 })
@@ -261,11 +273,11 @@ describe('posthog core', () => {
                 expect(beforeSendMock.mock.calls[0][0].properties).not.toHaveProperty('utm_medium')
             })
 
-            it('should send present campaign params, and nulls for others', () => {
+            it('should send present campaign params, and nulls for others', async () => {
                 // arrange
                 const token = uuidv7()
                 mockURL.mockReturnValue('https://www.example.com/some/path?utm_source=source')
-                const { posthog, beforeSendMock } = setup({
+                const { posthog, beforeSendMock } = await setup({
                     token,
                     persistence_name: token,
                 })
@@ -280,9 +292,9 @@ describe('posthog core', () => {
         })
 
         describe('survey events', () => {
-            it('sending survey sent events should mark it as seen in localStorage and set the interaction property', () => {
+            it('sending survey sent events should mark it as seen in localStorage and set the interaction property', async () => {
                 // arrange
-                const { posthog, beforeSendMock } = setup({ debug: false })
+                const { posthog, beforeSendMock } = await setup({ debug: false })
                 const survey = {
                     id: 'testSurvey1',
                     current_iteration: 1,
@@ -308,9 +320,9 @@ describe('posthog core', () => {
                     },
                 })
             })
-            it('sending survey dismissed events should mark it as seen in localStorage and set the interaction property', () => {
+            it('sending survey dismissed events should mark it as seen in localStorage and set the interaction property', async () => {
                 // arrange
-                const { posthog, beforeSendMock } = setup({ debug: false })
+                const { posthog, beforeSendMock } = await setup({ debug: false })
                 const survey = {
                     id: 'testSurvey1',
                     current_iteration: 1,
