@@ -1,7 +1,7 @@
 // copied from https://github.com/getsentry/sentry-react-native/blob/73f2455090a375857fe115ed135e524c70324cdd/packages/core/src/js/tools/metroconfig.ts
 
 import type { MetroConfig, MixedOutput, Module, ReadOnlyGraph } from 'metro'
-import { createPostHogMetroSerializer, unstableBeforeAssetSerializationDebugIdPlugin } from './posthogMetroSerializer'
+import { unstableBeforeAssetSerializationDebugIdPlugin } from './posthogMetroSerializer'
 import type { DefaultConfigOptions } from './vendor/expo/expoconfig'
 
 export * from './posthogMetroSerializer'
@@ -13,19 +13,6 @@ export interface PostHogExpoConfigOptions {
    * Pass a custom `getDefaultConfig` function to override the default Expo configuration getter.
    */
   getDefaultConfig?: (projectRoot: string, options?: Record<string, unknown>) => Record<string, unknown>
-}
-
-/**
- * Adds PostHog to the Metro config.
- *
- * Adds Chunk ID to the output bundle and source maps.
- */
-export function withPostHogConfig(config: MetroConfig, {}: PostHogMetroConfigOptions = {}): MetroConfig {
-  let newConfig = config
-
-  newConfig = withPostHogDebugId(newConfig)
-
-  return newConfig
 }
 
 /**
@@ -64,23 +51,5 @@ function loadExpoMetroConfigModule(): {
     return require('expo/metro-config')
   } catch (e) {
     throw new Error('Unable to load `expo/metro-config`. Make sure you have Expo installed.')
-  }
-}
-
-type MetroCustomSerializer = Required<Required<MetroConfig>['serializer']>['customSerializer'] | undefined
-
-function withPostHogDebugId(config: MetroConfig): MetroConfig {
-  const customSerializer = createPostHogMetroSerializer(
-    config.serializer?.customSerializer || undefined
-  ) as MetroCustomSerializer
-  // MetroConfig types customSerializers as async only, but sync returns are also supported
-  // The default serializer is sync
-
-  return {
-    ...config,
-    serializer: {
-      ...config.serializer,
-      customSerializer,
-    },
   }
 }

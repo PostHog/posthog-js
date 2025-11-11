@@ -84,6 +84,8 @@ plugins.withId('com.android.application') {
                                     copyChunkIdScript,
                                     packagerSourcemapOutput,
                                     sourcemapOutput]
+
+                                project.logger.info("copy chunk id arguments: ${args}")
                                 def osCompatibilityCopyCommand = Os.isFamily(Os.FAMILY_WINDOWS) ? ['cmd', '/c'] : []
                                 commandLine(*osCompatibilityCopyCommand, *args)
                             }
@@ -104,7 +106,7 @@ plugins.withId('com.android.application') {
 
                                 args.addAll(extraArgs)
 
-                                project.logger.lifecycle("posthog-cli arguments: ${args}")
+                                project.logger.info("posthog-cli arguments: ${args}")
                                 def osCompatibility = Os.isFamily(Os.FAMILY_WINDOWS) ? ['cmd', '/c', 'node'] : []
 
                                 commandLine(*osCompatibility, *args)
