@@ -101,6 +101,10 @@ test.describe('Session recording - idle timeout behavior', () => {
         const verifyEvents = (await page.capturedEvents()).filter((e) => e.event === '$snapshot')
         expect(verifyEvents.length).toBeGreaterThan(0)
 
+        const timestampBeforeIdle = await page.evaluate(() => Date.now())
+
+        await page.waitForTimeout(100)
+
         // Trigger forced idle timeout
         await triggerForcedIdleTimeout(page)
 
@@ -109,6 +113,8 @@ test.describe('Session recording - idle timeout behavior', () => {
 
         await page.resetCapturedEvents()
 
+        await page.waitForTimeout(100)
+
         // User activity should start a new session and restart recording
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/ses/*'],
@@ -116,6 +122,8 @@ test.describe('Session recording - idle timeout behavior', () => {
                 await page.locator('[data-cy-input]').type('new activity after idle!')
             },
         })
+
+        const timestampAfterRestart = await page.evaluate(() => Date.now())
 
         // Should have a new session ID
         const newSessionId = await page.evaluate(() => {
@@ -132,12 +140,30 @@ test.describe('Session recording - idle timeout behavior', () => {
             ph?.capture('test_after_idle_restart')
         })
 
-        await page.expectCapturedEventsToBe(['$snapshot', 'test_after_idle_restart'])
+        await page.expectCapturedEventsToBe(['$snapshot', '$snapshot', 'test_after_idle_restart'])
         const capturedEvents = await page.capturedEvents()
 
-        expect(capturedEvents[0]['properties']['$session_id']).toEqual(newSessionId)
+        expect(capturedEvents[0]['properties']['$session_id']).toEqual(initialSessionId)
+
+        const oldSessionSnapshot = capturedEvents[0]
+        const oldSessionSnapshotData = oldSessionSnapshot['properties']['$snapshot_data']
+        const oldSessionLastTimestamp =
+            oldSessionSnapshotData[oldSessionSnapshotData.length - 1]?.timestamp ||
+            oldSessionSnapshotData[oldSessionSnapshotData.length - 1]?.data?.timestamp
+
+        expect(oldSessionLastTimestamp).toBeLessThan(timestampAfterRestart)
+
         expect(capturedEvents[1]['properties']['$session_id']).toEqual(newSessionId)
-        expect(capturedEvents[1]['properties']['$session_recording_start_reason']).toEqual('session_id_changed')
+
+        const newSessionSnapshot = capturedEvents[1]
+        const newSessionSnapshotData = newSessionSnapshot['properties']['$snapshot_data']
+        const newSessionFirstTimestamp =
+            newSessionSnapshotData[0]?.timestamp || newSessionSnapshotData[0]?.data?.timestamp
+
+        expect(newSessionFirstTimestamp).toBeGreaterThan(timestampBeforeIdle)
+
+        expect(capturedEvents[2]['properties']['$session_id']).toEqual(newSessionId)
+        expect(capturedEvents[2]['properties']['$session_recording_start_reason']).toEqual('session_id_changed')
     })
 })
 

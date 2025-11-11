@@ -215,11 +215,15 @@ test.describe('Session recording - array.js', () => {
         })
 
         const capturedEvents = await page.capturedEvents()
-        const postResetSessionIds = new Set(capturedEvents.map((c) => c['properties']['$session_id']))
-        expect(postResetSessionIds.size).toEqual(1)
-        const replayCapturedSessionId = Array.from(postResetSessionIds)[0]
+        expect(capturedEvents.length).toBeGreaterThan(1)
 
-        expect(replayCapturedSessionId).not.toEqual(startingSessionId)
+        const firstEventSessionId = capturedEvents[0]['properties']['$session_id']
+        expect(firstEventSessionId).toEqual(startingSessionId)
+
+        const remainingEventSessionIds = capturedEvents.slice(1).map((c) => c['properties']['$session_id'])
+        const newSessionId = remainingEventSessionIds[0]
+        expect(newSessionId).not.toEqual(startingSessionId)
+        expect(remainingEventSessionIds.every((id) => id === newSessionId)).toBe(true)
     })
 
     test('rotates sessions after 24 hours', async ({ page }) => {
@@ -244,7 +248,7 @@ test.describe('Session recording - array.js', () => {
         expect(capturedEvents[1]['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
 
         await page.resetCapturedEvents()
-        await page.evaluate(() => {
+        const timestampBeforeRotation = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
             const activityTs = ph?.sessionManager?.['_sessionActivityTimestamp']
             const startTs = ph?.sessionManager?.['_sessionStartTimestamp']
@@ -256,7 +260,11 @@ test.describe('Session recording - array.js', () => {
             ph.sessionManager['_sessionActivityTimestamp'] = activityTs - timeout - 1000
             // @ts-expect-error can ignore that TS thinks these things might be null
             ph.sessionManager['_sessionStartTimestamp'] = startTs - timeout - 1000
+
+            return Date.now()
         })
+
+        await page.waitForTimeout(100)
 
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/ses/*'],
@@ -266,20 +274,39 @@ test.describe('Session recording - array.js', () => {
             },
         })
 
+        const timestampAfterRotation = await page.evaluate(() => Date.now())
+
         await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
             ph?.capture('test_registered_property')
         })
 
-        await page.expectCapturedEventsToBe(['$snapshot', 'test_registered_property'])
+        await page.expectCapturedEventsToBe(['$snapshot', '$snapshot', 'test_registered_property'])
         const capturedEventsAfter24Hours = await page.capturedEvents()
 
-        expect(capturedEventsAfter24Hours[0]['properties']['$session_id']).not.toEqual(firstSessionId)
-        expect(capturedEventsAfter24Hours[0]['properties']['$snapshot_data'][0].type).toEqual(4) // meta
-        expect(capturedEventsAfter24Hours[0]['properties']['$snapshot_data'][1].type).toEqual(2) // full_snapshot
+        expect(capturedEventsAfter24Hours[0]['properties']['$session_id']).toEqual(firstSessionId)
+
+        const oldSessionSnapshot = capturedEventsAfter24Hours[0]
+        const oldSessionSnapshotData = oldSessionSnapshot['properties']['$snapshot_data']
+        const oldSessionLastTimestamp =
+            oldSessionSnapshotData[oldSessionSnapshotData.length - 1]?.timestamp ||
+            oldSessionSnapshotData[oldSessionSnapshotData.length - 1]?.data?.timestamp
+
+        expect(oldSessionLastTimestamp).toBeLessThan(timestampAfterRotation)
 
         expect(capturedEventsAfter24Hours[1]['properties']['$session_id']).not.toEqual(firstSessionId)
-        expect(capturedEventsAfter24Hours[1]['properties']['$session_recording_start_reason']).toEqual(
+        expect(capturedEventsAfter24Hours[1]['properties']['$snapshot_data'][0].type).toEqual(4) // meta
+        expect(capturedEventsAfter24Hours[1]['properties']['$snapshot_data'][1].type).toEqual(2) // full_snapshot
+
+        const newSessionSnapshot = capturedEventsAfter24Hours[1]
+        const newSessionSnapshotData = newSessionSnapshot['properties']['$snapshot_data']
+        const newSessionFirstTimestamp =
+            newSessionSnapshotData[0]?.timestamp || newSessionSnapshotData[0]?.data?.timestamp
+
+        expect(newSessionFirstTimestamp).toBeGreaterThan(timestampBeforeRotation)
+
+        expect(capturedEventsAfter24Hours[2]['properties']['$session_id']).not.toEqual(firstSessionId)
+        expect(capturedEventsAfter24Hours[2]['properties']['$session_recording_start_reason']).toEqual(
             'session_id_changed'
         )
     })
