@@ -151,6 +151,37 @@ export function getParentElement(curEl: Element): Element | false {
     return parentNode
 }
 
+const DEFAULT_CONTENT_IGNORELIST = ['next', 'previous', 'prev', '>', '<']
+const MAX_CONTENT_IGNORELIST_ENTRIES = 10
+
+function shouldIgnoreByContent(el: Element | null, contentIgnorelist: boolean | string[] | undefined): boolean {
+    if (!el || contentIgnorelist === false) {
+        return false
+    }
+
+    let keywords: string[]
+    if (contentIgnorelist === true || isUndefined(contentIgnorelist)) {
+        keywords = DEFAULT_CONTENT_IGNORELIST
+    } else if (isArray(contentIgnorelist)) {
+        if (contentIgnorelist.length > MAX_CONTENT_IGNORELIST_ENTRIES) {
+            logger.error(
+                `[PostHog] content_ignorelist array cannot exceed ${MAX_CONTENT_IGNORELIST_ENTRIES} items. Use css_selector_ignorelist for more complex matching.`
+            )
+            return false
+        }
+        keywords = contentIgnorelist.map((k) => k.toLowerCase())
+    } else {
+        return false
+    }
+
+    const { targetElementList } = getElementAndParentsForElement(el, false)
+    return targetElementList.some((element) => {
+        const safeText = getSafeText(element).toLowerCase()
+        const ariaLabel = element.getAttribute('aria-label')?.toLowerCase().trim() || ''
+        return keywords.some((keyword) => safeText.includes(keyword) || ariaLabel.includes(keyword))
+    })
+}
+
 // autocapture check will already filter for ph-no-capture,
 // but we include it here to protect against future changes accidentally removing that check
 const DEFAULT_RAGE_CLICK_IGNORE_LIST = ['.ph-no-rageclick', '.ph-no-capture']
@@ -160,13 +191,19 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
     }
 
     let selectorIgnoreList: string[] | boolean
+    let contentIgnorelist: boolean | string[] | undefined = true
     if (isBoolean(_config)) {
         selectorIgnoreList = _config ? DEFAULT_RAGE_CLICK_IGNORE_LIST : false
     } else {
         selectorIgnoreList = _config?.css_selector_ignorelist ?? DEFAULT_RAGE_CLICK_IGNORE_LIST
+        contentIgnorelist = _config?.content_ignorelist ?? true
     }
 
     if (selectorIgnoreList === false) {
+        return false
+    }
+
+    if (shouldIgnoreByContent(el, contentIgnorelist)) {
         return false
     }
 

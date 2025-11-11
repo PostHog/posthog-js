@@ -414,15 +414,100 @@ describe('Autocapture system', () => {
                 'custom-rageclick',
                 ['$autocapture', '$autocapture', '$autocapture'],
             ],
+            [
+                'rageclick detection excludes navigation elements with "Next"',
+                true,
+                null,
+                ['$autocapture', '$autocapture', '$autocapture'],
+                'Next',
+            ],
+            [
+                'rageclick detection excludes navigation elements with "Previous"',
+                true,
+                null,
+                ['$autocapture', '$autocapture', '$autocapture'],
+                'Previous',
+            ],
+            [
+                'rageclick detection excludes navigation elements with ">"',
+                true,
+                null,
+                ['$autocapture', '$autocapture', '$autocapture'],
+                '>',
+            ],
+            [
+                'rageclick detection excludes navigation elements with "<"',
+                true,
+                null,
+                ['$autocapture', '$autocapture', '$autocapture'],
+                '<',
+            ],
+            [
+                'rageclick detection excludes navigation elements with aria-label="Next page"',
+                true,
+                null,
+                ['$autocapture', '$autocapture', '$autocapture'],
+                undefined,
+                'Next page',
+            ],
+            [
+                'rageclick detection ignores content when config is undefined',
+                {
+                    content_ignorelist: undefined,
+                },
+                null,
+                ['$autocapture', '$autocapture', '$autocapture'],
+                'Next',
+            ],
+            [
+                'rageclick detection with custom content ignorelist',
+                {
+                    content_ignorelist: ['loading', 'spinner'],
+                },
+                null,
+                ['$autocapture', '$autocapture', '$autocapture'],
+                'Loading...',
+            ],
+            [
+                'rageclick detection allows clicks when custom keywords do not match',
+                {
+                    content_ignorelist: ['loading', 'spinner'],
+                },
+                null,
+                ['$autocapture', '$autocapture', '$rageclick', '$autocapture'],
+                'Next',
+            ],
+            [
+                'rageclick detection with content ignorelist disabled',
+                {
+                    content_ignorelist: false,
+                },
+                null,
+                ['$autocapture', '$autocapture', '$rageclick', '$autocapture'],
+                'Next',
+            ],
         ])(
             'autocapture and rageclick testcase: %s',
-            (_title, rageclickConfig: PostHogConfig['rageclick'], parentClassname: string, expectedCaptured) => {
+            (
+                _title,
+                rageclickConfig: PostHogConfig['rageclick'],
+                parentClassname: string,
+                expectedCaptured,
+                textContent?: string,
+                ariaLabel?: string
+            ) => {
                 posthog.config.rageclick = rageclickConfig
 
                 const elTarget = document.createElement('img')
                 const elParent = document.createElement('span')
                 if (parentClassname) {
                     elParent.className = parentClassname
+                }
+                if (textContent) {
+                    elParent.textContent = textContent
+                }
+                if (ariaLabel) {
+                    elParent.setAttribute('aria-label', ariaLabel)
                 }
                 elParent.appendChild(elTarget)
                 const elGrandparent = document.createElement('a')
