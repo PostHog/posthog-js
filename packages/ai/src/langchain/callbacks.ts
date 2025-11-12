@@ -365,6 +365,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       $ai_latency: latency,
       $ai_span_name: run.name,
       $ai_span_id: runId,
+      $ai_framework: 'langchain',
     }
     if (parentRunId) {
       eventProperties['$ai_parent_id'] = parentRunId
@@ -426,6 +427,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       $ai_http_status: 200,
       $ai_latency: latency,
       $ai_base_url: run.baseUrl,
+      $ai_framework: 'langchain',
     }
 
     if (run.tools) {
@@ -448,6 +450,9 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       }
       if (additionalTokenData.reasoningTokens) {
         eventProperties['$ai_reasoning_tokens'] = additionalTokenData.reasoningTokens
+      }
+      if (additionalTokenData.webSearchCount !== undefined) {
+        eventProperties['$ai_web_search_count'] = additionalTokenData.webSearchCount
       }
 
       // Handle generations/completions
@@ -627,6 +632,55 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       additionalTokenData.reasoningTokens = usage.output_token_details.reasoning
     } else if (usage.reasoningTokens != null) {
       additionalTokenData.reasoningTokens = usage.reasoningTokens
+    }
+
+    // Extract web search counts from various provider formats
+    let webSearchCount: number | undefined
+
+    // Priority 1: Exact Count
+    // Check Anthropic format (server_tool_use.web_search_requests)
+    if (usage.server_tool_use?.web_search_requests !== undefined) {
+      webSearchCount = usage.server_tool_use.web_search_requests
+    }
+    // Priority 2: Binary Detection (1 or 0)
+    // Check for citations array (Perplexity)
+    else if (usage.citations && Array.isArray(usage.citations) && usage.citations.length > 0) {
+      webSearchCount = 1
+    }
+    // Check for search_results array (Perplexity via OpenRouter)
+    else if (usage.search_results && Array.isArray(usage.search_results) && usage.search_results.length > 0) {
+      webSearchCount = 1
+    }
+    // Check for search_context_size (Perplexity via OpenRouter)
+    else if (usage.search_context_size) {
+      webSearchCount = 1
+    }
+    // Check for annotations with url_citation type
+    else if (usage.annotations && Array.isArray(usage.annotations)) {
+      const hasUrlCitation = usage.annotations.some((ann: unknown) => {
+        return ann && typeof ann === 'object' && 'type' in ann && ann.type === 'url_citation'
+      })
+
+      if (hasUrlCitation) {
+        webSearchCount = 1
+      }
+    }
+    // Check Gemini format (grounding metadata - binary 0 or 1)
+    else if (
+      usage.grounding_metadata?.grounding_support !== undefined ||
+      usage.grounding_metadata?.web_search_queries !== undefined
+    ) {
+      webSearchCount = 1
+    }
+
+    if (webSearchCount !== undefined) {
+      additionalTokenData.webSearchCount = webSearchCount
+    }
+
+    // In LangChain, input_tokens is the sum of input and cache read tokens.
+    // Our cost calculation expects them to be separate, for Anthropic.
+    if (parsedUsage.input && additionalTokenData.cacheReadInputTokens) {
+      parsedUsage.input = Math.max(parsedUsage.input - additionalTokenData.cacheReadInputTokens, 0)
     }
 
     return [parsedUsage.input, parsedUsage.output, additionalTokenData]

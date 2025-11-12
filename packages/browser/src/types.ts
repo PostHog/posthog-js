@@ -2,7 +2,7 @@ import type { recordOptions } from './extensions/replay/types/rrweb'
 import type { SegmentAnalytics } from './extensions/segment-integration'
 import { PostHog } from './posthog-core'
 import { KnownUnsafeEditableEvent } from '@posthog/core'
-import { Survey } from './posthog-surveys-types'
+import { Survey, SurveyConfig } from './posthog-surveys-types'
 // only importing types here, so won't affect the bundle
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SAMPLED } from './extensions/replay/external/triggerMatching'
@@ -129,6 +129,24 @@ export interface RageclickConfig {
      * If an element has .ph-no-capture, it will always be ignored by rageclick and autocapture
      */
     css_selector_ignorelist?: string[]
+
+    /**
+     * Maximum pixel distance between clicks to still be considered a rage click.
+     * @default 30
+     */
+    threshold_px?: number
+
+    /**
+     * Number of consecutive clicks within the timeout to qualify as a rage click.
+     * @default 3
+     */
+    click_count?: number
+
+    /**
+     * Maximum time window (in milliseconds) between the first and last click.
+     * @default 1000
+     */
+    timeout_ms?: number
 }
 
 export interface BootstrapConfig {
@@ -270,7 +288,7 @@ export interface HeatmapConfig {
 
 export type BeforeSendFn = (cr: CaptureResult | null) => CaptureResult | null
 
-export type ConfigDefaults = '2025-05-24' | 'unset'
+export type ConfigDefaults = '2025-11-30' | '2025-05-24' | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
@@ -284,6 +302,15 @@ export interface PostHogConfig {
      * @default 'https://us.i.posthog.com'
      */
     api_host: string
+
+    /**
+     * URL to use for feature flag requests specifically.
+     * If not set, feature flag requests will use the URL derived from `api_host`.
+     * This is useful when you want to route feature flag requests to a different endpoint than other analytic APIs.
+     *
+     * @default null
+     */
+    flags_api_host?: string | null
 
     /**
      * If using a reverse proxy for `api_host` then this should be the actual PostHog app URL (e.g. https://us.posthog.com).
@@ -487,6 +514,13 @@ export interface PostHogConfig {
     disable_surveys_automatic_display: boolean
 
     /**
+     * Survey-specific configuration options.
+     *
+     * @default undefined
+     */
+    surveys?: SurveyConfig
+
+    /**
      * Determines whether PostHog should disable web experiments.
      *
      * Currently disabled while we're in BETA. It will be toggled to `true` in a future release.
@@ -650,10 +684,26 @@ export interface PostHogConfig {
      *
      * - `'unset'`: Use legacy default behaviors
      * - `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')
+     * - `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay)
      *
      * @default 'unset'
      */
     defaults: ConfigDefaults
+
+    /**
+     * EXPERIMENTAL: Defers initialization of non-critical extensions (autocapture, session recording, etc.)
+     * to the next event loop tick using setTimeout. This reduces main thread blocking during SDK
+     * initialization for better page load performance, while keeping critical functionality
+     * (persistence, sessions, capture) available immediately.
+     *
+     * When enabled:
+     * - Persistence, sessions, and basic capture work immediately
+     * - Extensions (autocapture, recording, heatmaps, etc.) start after yielding back to the browser
+     *
+     * @default false (will be true for defaults >= '2025-11-06' in the future)
+     * @experimental
+     */
+    __preview_deferred_init_extensions: boolean
 
     /**
      * Determines the session recording options.
@@ -1041,6 +1091,13 @@ export interface PostHogConfig {
      */
     __preview_disable_xhr_credentials?: boolean
 
+    /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+     * Enables collection of bot traffic as $bot_pageview events with detailed bot detection
+     * properties instead of dropping them entirely. Use it alongside opt_out_useragent_filter
+     */
+    __preview_capture_bot_pageviews?: boolean
+
     // ------- RETIRED CONFIGS - NO REPLACEMENT OR USAGE -------
 
     /**
@@ -1256,6 +1313,15 @@ export interface SessionRecordingOptions {
      * @default 100
      */
     __mutationThrottlerBucketSize?: number
+
+    /**
+     * When true, minimum duration is checked against the actual buffer data (first to last timestamp)
+     * rather than session duration. This ensures recordings are not sent until they contain the minimum
+     * duration of actual data, even across page navigations.
+     *
+     * @default false
+     */
+    strictMinimumDuration?: boolean
 }
 
 export type SessionIdChangedCallback = (
@@ -1847,3 +1913,10 @@ export type SessionStartReason =
     | 'session_id_changed'
     | 'url_trigger_matched'
     | 'event_trigger_matched'
+
+export type OverrideConfig = {
+    sampling: boolean
+    linked_flag: boolean
+    url_trigger: boolean
+    event_trigger: boolean
+}

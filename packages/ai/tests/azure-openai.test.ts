@@ -530,7 +530,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       expect(properties['$ai_input']).toBe('Hello world')
       expect(properties['$ai_output_choices']).toBeNull() // Embeddings don't have output
       expect(properties['$ai_input_tokens']).toBe(5)
-      expect(properties['$ai_output_tokens']).toBeUndefined() // Embeddings don't send output tokens (matches Python)
+      expect(properties['$ai_output_tokens']).toBeUndefined() // Embeddings don't send output tokens
       expect(properties['$ai_http_status']).toBe(200)
       expect(properties['test']).toBe('embeddings')
       expect(typeof properties['$ai_latency']).toBe('number')
@@ -582,7 +582,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       expect(properties['$ai_input']).toEqual(arrayInput)
       expect(properties['$ai_output_choices']).toBeNull() // Embeddings don't have output
       expect(properties['$ai_input_tokens']).toBe(8)
-      expect(properties['$ai_output_tokens']).toBeUndefined() // Embeddings don't send output tokens (matches Python)
+      expect(properties['$ai_output_tokens']).toBeUndefined() // Embeddings don't send output tokens
     })
 
     conditionalTest('embeddings privacy mode', async () => {

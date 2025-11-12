@@ -1,16 +1,20 @@
 import type { NextConfig } from 'next'
 import { SourcemapWebpackPlugin } from './webpack-plugin'
 import { hasCompilerHook, isTurbopackEnabled, processSourceMaps } from './utils'
+import { resolveBinaryPath } from '@posthog/core/process'
 
 type NextFuncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => NextConfig
 type NextAsyncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => Promise<NextConfig>
 type UserProvidedConfig = NextConfig | NextFuncConfig | NextAsyncConfig
 
+type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+
 export type PostHogNextConfig = {
+  cliBinaryPath?: string
   personalApiKey: string
   envId: string
   host?: string
-  verbose?: boolean
+  logLevel?: LogLevel
   sourcemaps?: {
     enabled?: boolean
     project?: string
@@ -20,10 +24,11 @@ export type PostHogNextConfig = {
 }
 
 export type PostHogNextConfigComplete = {
+  cliBinaryPath: string
   personalApiKey: string
   envId: string
   host: string
-  verbose: boolean
+  logLevel: LogLevel
   sourcemaps: {
     enabled: boolean
     project?: string
@@ -77,12 +82,17 @@ function resolveUserConfig(
 }
 
 function resolvePostHogConfig(posthogProvidedConfig: PostHogNextConfig): PostHogNextConfigComplete {
-  const { personalApiKey, envId, host, verbose, sourcemaps = {} } = posthogProvidedConfig
+  const { personalApiKey, envId, host, logLevel, sourcemaps = {} } = posthogProvidedConfig
+  const cliBinaryPath =
+    posthogProvidedConfig.cliBinaryPath ??
+    resolveBinaryPath('posthog-cli', { path: process.env.PATH ?? '', cwd: __dirname })
+
   return {
+    cliBinaryPath,
     personalApiKey,
     envId,
-    host: host ?? 'https://us.posthog.com',
-    verbose: verbose ?? true,
+    host: host ?? 'https://us.i.posthog.com',
+    logLevel: logLevel ?? 'info',
     sourcemaps: {
       enabled: sourcemaps.enabled ?? process.env.NODE_ENV == 'production',
       project: sourcemaps.project,
@@ -128,7 +138,7 @@ function withCompilerConfig(
     const userCompilerHook = userCompilerConfig?.runAfterProductionCompile
     newConfig.runAfterProductionCompile = async (config: { distDir: string; projectDir: string }) => {
       await userCompilerHook?.(config)
-      posthogConfig.verbose && console.debug('Processing source maps from compilation hook...')
+      console.debug('Processing source maps from compilation hook...')
       await processSourceMaps(posthogConfig, config.distDir)
     }
     return newConfig

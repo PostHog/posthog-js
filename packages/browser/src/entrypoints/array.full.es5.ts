@@ -8,6 +8,15 @@
 import 'core-js/features/object/entries'
 import 'core-js/features/object/from-entries'
 
+if (typeof performance === 'undefined' || typeof performance.now !== 'function') {
+    const perf = typeof performance !== 'undefined' ? performance : ({} as any)
+    perf.now = perf.now || (() => Date.now())
+    if (typeof performance === 'undefined') {
+        // eslint-disable-next-line no-restricted-globals
+        ;(window as any).performance = perf
+    }
+}
+
 import './surveys'
 import './exception-autocapture'
 import './tracing-headers'

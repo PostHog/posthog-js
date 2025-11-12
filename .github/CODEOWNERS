@@ -19,3 +19,10 @@ packages/example-expo-53/                              @PostHog/team-mobile
 
 # AI
 /packages/ai/package.json                              @PostHog/team-llm-analytics
+
+# Web Analytics
+packages/browser/src/page-view.ts                      @PostHog/team-web-analytics
+packages/browser/src/sessionid.ts                      @PostHog/team-web-analytics
+packages/browser/src/session-props.ts                  @PostHog/team-web-analytics
+packages/browser/src/utils/blocked-uas.ts              @PostHog/team-web-analytics
+packages/browser/src/consent.ts                        @PostHog/team-web-analytics

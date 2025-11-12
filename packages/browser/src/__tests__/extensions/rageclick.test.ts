@@ -3,9 +3,9 @@ import RageClick from '../../extensions/rageclick'
 describe('RageClick()', () => {
     let instance: RageClick
 
-    describe('when enabled', () => {
+    describe('when enabled (default config)', () => {
         beforeEach(() => {
-            instance = new RageClick()
+            instance = new RageClick(true)
         })
 
         it('identifies some rage clicking', () => {
@@ -71,6 +71,61 @@ describe('RageClick()', () => {
             const rageClickDetected = instance.isRageClick(50, 10, 40)
 
             expect(rageClickDetected).toBeFalsy()
+        })
+    })
+
+    describe('when enabled (custom configuration)', () => {
+        it('respects custom click count', () => {
+            instance = new RageClick({ click_count: 2 })
+
+            const detection = [
+                instance.isRageClick(0, 0, 0),
+                instance.isRageClick(0, 0, 100), // triggers at 2 clicks
+            ]
+
+            expect(detection).toEqual([false, true])
+        })
+
+        it('respects custom timeout', () => {
+            instance = new RageClick({ timeout_ms: 100 })
+
+            instance.isRageClick(0, 0, 0)
+            instance.isRageClick(0, 0, 50)
+            // next click too late (after timeout)
+            const rageClickDetected = instance.isRageClick(0, 0, 500)
+
+            expect(rageClickDetected).toBeFalsy()
+        })
+
+        it('respects custom pixel threshold', () => {
+            instance = new RageClick({ threshold_px: 5 })
+
+            instance.isRageClick(0, 0, 0)
+            instance.isRageClick(6, 0, 50) // 6 > 5 threshold
+            const rageClickDetected = instance.isRageClick(6, 0, 80)
+
+            expect(rageClickDetected).toBeFalsy()
+        })
+
+        it('falls back to defaults when config object is empty', () => {
+            instance = new RageClick({})
+
+            const detection = [
+                instance.isRageClick(0, 0, 0),
+                instance.isRageClick(10, 10, 100),
+                instance.isRageClick(5, 5, 200),
+            ]
+
+            // Default click count = 3, triggers on third click
+            expect(detection).toEqual([false, false, true])
+        })
+    })
+
+    describe('when disabled or invalid config', () => {
+        it('handles false as input gracefully', () => {
+            instance = new RageClick(false)
+            const result = instance.isRageClick(0, 0, 0)
+            expect(result).toBe(false)
         })
     })
 })

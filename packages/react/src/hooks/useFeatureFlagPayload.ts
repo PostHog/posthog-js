@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
 import { JsonType } from 'posthog-js'
-import { usePostHog } from './usePostHog'
+import { useContext, useEffect, useState } from 'react'
+import { PostHogContext } from '../context'
 
 export function useFeatureFlagPayload(flag: string): JsonType {
-    const client = usePostHog()
+    const { client, bootstrap } = useContext(PostHogContext)
 
     const [featureFlagPayload, setFeatureFlagPayload] = useState<JsonType>(() => client.getFeatureFlagPayload(flag))
 
@@ -12,6 +12,11 @@ export function useFeatureFlagPayload(flag: string): JsonType {
             setFeatureFlagPayload(client.getFeatureFlagPayload(flag))
         })
     }, [client, flag])
+
+    // if the client is not loaded yet, use the bootstrapped value
+    if (!client.featureFlags.hasLoadedFlags && bootstrap?.featureFlagPayloads) {
+        return bootstrap.featureFlagPayloads[flag]
+    }
 
     return featureFlagPayload
 }

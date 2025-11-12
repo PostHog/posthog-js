@@ -1123,7 +1123,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(properties['$ai_input']).toBe('Hello world')
       expect(properties['$ai_output_choices']).toBeNull() // Embeddings don't have output
       expect(properties['$ai_input_tokens']).toBe(5)
-      expect(properties['$ai_output_tokens']).toBeUndefined() // Embeddings don't send output tokens (matches Python)
+      expect(properties['$ai_output_tokens']).toBeUndefined() // Embeddings don't send output tokens
       expect(properties['$ai_http_status']).toBe(200)
       expect(properties['test']).toBe('embeddings')
       expect(typeof properties['$ai_latency']).toBe('number')
@@ -1175,7 +1175,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(properties['$ai_input']).toEqual(arrayInput)
       expect(properties['$ai_output_choices']).toBeNull() // Embeddings don't have output
       expect(properties['$ai_input_tokens']).toBe(8)
-      expect(properties['$ai_output_tokens']).toBeUndefined() // Embeddings don't send output tokens (matches Python)
+      expect(properties['$ai_output_tokens']).toBeUndefined() // Embeddings don't send output tokens
     })
 
     conditionalTest('embeddings privacy mode', async () => {
@@ -1488,6 +1488,348 @@ describe('PostHogOpenAI - Jest test suite', () => {
       const posthogParams = Object.keys(actualParams).filter((key) => key.startsWith('posthog'))
       expect(posthogParams).toEqual([])
       TranscriptionsMock.prototype.create = originalCreate
+    })
+  })
+
+  describe('Web Search Tracking', () => {
+    conditionalTest('should track web search with Perplexity-style citations (binary detection)', async () => {
+      mockOpenAiChatResponse = {
+        id: 'chatcmpl-test',
+        object: 'chat.completion',
+        created: Date.now() / 1000,
+        model: 'sonar-pro',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Based on my search, PostHog is a product analytics platform.',
+              annotations: [
+                {
+                  type: 'url_citation',
+                  text: 'PostHog docs',
+                  url: 'https://posthog.com',
+                },
+              ] as any,
+            },
+            finish_reason: 'stop',
+            logprobs: null,
+          },
+        ],
+        usage: {
+          prompt_tokens: 50,
+          completion_tokens: 30,
+          total_tokens: 80,
+        },
+      } as ChatCompletion
+
+      await client.chat.completions.create({
+        model: 'sonar-pro',
+        messages: [{ role: 'user', content: 'What is PostHog?' }],
+        posthogDistinctId: 'test-user',
+      })
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      expect(properties['$ai_web_search_count']).toBe(1)
+    })
+
+    conditionalTest('should track exact count from Responses API web_search_call', async () => {
+      // Mock Responses API response with web_search_call items
+      const mockResponsesResult = {
+        id: 'resp_test',
+        output: [
+          {
+            type: 'web_search_call',
+            id: 'search_1',
+            query: 'PostHog features',
+          },
+          {
+            type: 'web_search_call',
+            id: 'search_2',
+            query: 'PostHog pricing',
+          },
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'text',
+                text: 'Based on the search results, here is what I found...',
+              },
+            ],
+          },
+        ],
+        usage: {
+          input_tokens: 60,
+          output_tokens: 40,
+          total_tokens: 100,
+        },
+      } as any
+
+      const ResponsesMock: any = openaiModule.Responses || class MockResponses {}
+      ResponsesMock.prototype.create = jest.fn().mockResolvedValue(mockResponsesResult)
+
+      await client.responses.create({
+        model: 'gpt-4',
+        input: 'Tell me about PostHog',
+        posthogDistinctId: 'test-user',
+      } as any)
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      // Should detect 2 web_search_call items (exact count)
+      expect(properties['$ai_web_search_count']).toBe(2)
+    })
+
+    conditionalTest('should track web search in streaming with citations on final chunk', async () => {
+      // Create stream chunks with citations
+      mockStreamChunks = [
+        {
+          id: 'chatcmpl-test',
+          object: 'chat.completion.chunk',
+          created: Date.now() / 1000,
+          model: 'sonar-pro',
+          choices: [
+            {
+              index: 0,
+              delta: { content: 'Search result text' },
+              finish_reason: null,
+              logprobs: null,
+            },
+          ],
+        } as ChatCompletionChunk,
+        {
+          id: 'chatcmpl-test',
+          object: 'chat.completion.chunk',
+          created: Date.now() / 1000,
+          model: 'sonar-pro',
+          choices: [
+            {
+              index: 0,
+              delta: {},
+              finish_reason: 'stop',
+              logprobs: null,
+            },
+          ],
+          usage: {
+            prompt_tokens: 40,
+            completion_tokens: 25,
+            total_tokens: 65,
+          },
+          citations: [
+            {
+              url: 'https://example.com',
+              text: 'Example citation',
+            },
+          ] as any,
+        } as any,
+      ]
+
+      const stream = await client.chat.completions.create({
+        model: 'sonar-pro',
+        messages: [{ role: 'user', content: 'Search query' }],
+        stream: true,
+        posthogDistinctId: 'test-user',
+      })
+
+      // Consume stream
+      for await (const _chunk of stream) {
+        // Just consume
+      }
+
+      await flushPromises()
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      expect(properties['$ai_web_search_count']).toBe(1)
+    })
+
+    conditionalTest('should detect web search on early chunk without usage data (CRITICAL)', async () => {
+      mockStreamChunks = [
+        {
+          id: 'chatcmpl-test',
+          object: 'chat.completion.chunk',
+          created: Date.now() / 1000,
+          model: 'gpt-4',
+          choices: [
+            {
+              index: 0,
+              delta: {
+                content: 'Search result',
+                annotations: [
+                  {
+                    type: 'url_citation',
+                    text: 'Citation',
+                    url: 'https://example.com',
+                  },
+                ] as any,
+              },
+              finish_reason: null,
+              logprobs: null,
+            },
+          ],
+          // NO usage data on this chunk!
+        } as any,
+        {
+          id: 'chatcmpl-test',
+          object: 'chat.completion.chunk',
+          created: Date.now() / 1000,
+          model: 'gpt-4',
+          choices: [
+            {
+              index: 0,
+              delta: {},
+              finish_reason: 'stop',
+              logprobs: null,
+            },
+          ],
+          usage: {
+            prompt_tokens: 30,
+            completion_tokens: 20,
+            total_tokens: 50,
+          },
+        } as ChatCompletionChunk,
+      ]
+
+      const stream = await client.chat.completions.create({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: 'Query' }],
+        stream: true,
+        posthogDistinctId: 'test-user',
+      })
+
+      // Consume stream
+      for await (const _chunk of stream) {
+        // Just consume
+      }
+
+      await flushPromises()
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      // Should detect web search from early chunk even without usage data
+      expect(properties['$ai_web_search_count']).toBe(1)
+    })
+
+    conditionalTest('should detect web search from search_results (Perplexity via OpenRouter)', async () => {
+      mockOpenAiChatResponse = {
+        id: 'chatcmpl-test',
+        object: 'chat.completion',
+        created: Date.now() / 1000,
+        model: 'sonar-pro',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Search result content',
+            },
+            finish_reason: 'stop',
+            logprobs: null,
+          },
+        ],
+        usage: {
+          prompt_tokens: 35,
+          completion_tokens: 28,
+          total_tokens: 63,
+        },
+        search_results: [
+          {
+            url: 'https://example.com',
+            title: 'Example',
+          },
+        ] as any,
+      } as any
+
+      await client.chat.completions.create({
+        model: 'sonar-pro',
+        messages: [{ role: 'user', content: 'Search' }],
+        posthogDistinctId: 'test-user',
+      })
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      expect(properties['$ai_web_search_count']).toBe(1)
+    })
+
+    conditionalTest('should detect web search from search_context_size (Perplexity via OpenRouter)', async () => {
+      mockOpenAiChatResponse = {
+        id: 'chatcmpl-test',
+        object: 'chat.completion',
+        created: Date.now() / 1000,
+        model: 'sonar-pro',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Search result',
+            },
+            finish_reason: 'stop',
+            logprobs: null,
+          },
+        ],
+        usage: {
+          prompt_tokens: 45,
+          completion_tokens: 32,
+          total_tokens: 77,
+          search_context_size: '1234',
+        } as any,
+      } as any
+
+      await client.chat.completions.create({
+        model: 'sonar-pro',
+        messages: [{ role: 'user', content: 'Query' }],
+        posthogDistinctId: 'test-user',
+      })
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      expect(properties['$ai_web_search_count']).toBe(1)
+    })
+
+    conditionalTest('should not include web search count when not present', async () => {
+      mockOpenAiChatResponse = {
+        id: 'chatcmpl-test',
+        object: 'chat.completion',
+        created: Date.now() / 1000,
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Regular response without web search',
+            },
+            finish_reason: 'stop',
+            logprobs: null,
+          },
+        ],
+        usage: {
+          prompt_tokens: 20,
+          completion_tokens: 15,
+          total_tokens: 35,
+        },
+      } as ChatCompletion
+
+      await client.chat.completions.create({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: 'Hello' }],
+        posthogDistinctId: 'test-user',
+      })
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      // Should not have web search count when not present
+      expect(properties['$ai_web_search_count']).toBeUndefined()
     })
   })
 

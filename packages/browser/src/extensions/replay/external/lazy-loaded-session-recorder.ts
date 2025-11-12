@@ -40,6 +40,7 @@ import {
     includes,
     isBoolean,
     isFunction,
+    isNull,
     isNullish,
     isNumber,
     isObject,
@@ -49,6 +50,11 @@ import {
 import {
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_OVERRIDE_SAMPLING,
+    SESSION_RECORDING_OVERRIDE_LINKED_FLAG,
+    SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER,
+    SESSION_RECORDING_OVERRIDE_URL_TRIGGER,
+    SESSION_RECORDING_PAST_MINIMUM_DURATION,
     SESSION_RECORDING_REMOTE_CONFIG,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
 } from '../../../constants'
@@ -66,6 +72,7 @@ import {
 import { isLocalhost } from '../../../utils/request-utils'
 import Config from '../../../config'
 import { sampleOnProperty } from '../../sampling'
+import { FlushedSizeTracker } from './flushed-size-tracker'
 
 const BASE_ENDPOINT = '/s/'
 const DEFAULT_CANVAS_QUALITY = 0.4
@@ -79,7 +86,6 @@ const ONE_MINUTE = 1000 * 60
 const FIVE_MINUTES = ONE_MINUTE * 5
 
 export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
-
 export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
@@ -219,8 +225,24 @@ function compressEvent(event: eventWithTime): eventWithTime | compressedEventWit
     return event
 }
 
+function isCustomEvent(e: eventWithTime, tag: string): e is eventWithTime & customEvent {
+    return e.type === EventType.Custom && e.data.tag === tag
+}
+
 function isSessionIdleEvent(e: eventWithTime): e is eventWithTime & customEvent {
-    return e.type === EventType.Custom && e.data.tag === 'sessionIdle'
+    return isCustomEvent(e, 'sessionIdle')
+}
+
+function isSessionEndingEvent(e: eventWithTime): e is eventWithTime & customEvent {
+    return isCustomEvent(e, '$session_ending')
+}
+
+function isSessionStartingEvent(e: eventWithTime): e is eventWithTime & customEvent {
+    return isCustomEvent(e, '$session_starting')
+}
+
+function isAllowedWhenIdle(e: eventWithTime): boolean {
+    return isSessionIdleEvent(e) || isSessionEndingEvent(e) || isSessionStartingEvent(e)
 }
 
 /** When we put the recording into a paused state, we add a custom event.
@@ -300,6 +322,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _removeEventTriggerCaptureHook: (() => void) | undefined = undefined
 
+    private _flushedSizeTracker: FlushedSizeTracker
+
     private get _sessionManager() {
         if (!this._instance.sessionManager) {
             throw new Error(LOGGER_PREFIX + ' must be started with a valid sessionManager.')
@@ -354,6 +378,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 `session_idle_threshold_ms (${this._sessionIdleThresholdMilliseconds}) is greater than the session timeout (${this._sessionManager.sessionTimeoutMs}). Session will never be detected as idle`
             )
         }
+
+        this._flushedSizeTracker = new FlushedSizeTracker(this._instance)
     }
 
     private get _masking():
@@ -643,6 +669,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         return parsedConfig as SessionRecordingPersistedConfig
     }
 
+    private _checkOverride(key: string, overrideFunction: () => void): void {
+        const overrideFlag: boolean = this._instance.get_property(key) as boolean
+        if (overrideFlag) {
+            overrideFunction()
+
+            // Clean up the override flag after applying it
+            this._instance.persistence?.unregister(key)
+        }
+    }
+
     start(startReason?: SessionStartReason) {
         const config = this._remoteConfig
         if (!config) {
@@ -651,7 +687,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         // We want to ensure the sessionManager is reset if necessary on loading the recorder
-        this._sessionManager.checkAndGetSessionAndWindowId()
+        const { sessionId, windowId } = this._sessionManager.checkAndGetSessionAndWindowId()
+        this._sessionId = sessionId
+        this._windowId = windowId
 
         if (config?.endpoint) {
             this._endpoint = config?.endpoint
@@ -681,6 +719,19 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 flag,
                 variant,
             })
+        })
+
+        this._checkOverride(SESSION_RECORDING_OVERRIDE_SAMPLING, () => {
+            this.overrideSampling()
+        })
+        this._checkOverride(SESSION_RECORDING_OVERRIDE_LINKED_FLAG, () => {
+            this.overrideLinkedFlag()
+        })
+        this._checkOverride(SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER, () => {
+            this.overrideTrigger('event')
+        })
+        this._checkOverride(SESSION_RECORDING_OVERRIDE_URL_TRIGGER, () => {
+            this.overrideTrigger('url')
         })
 
         this._makeSamplingDecision(this.sessionId)
@@ -741,18 +792,54 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _onSessionIdCallback: SessionIdChangedCallback = (sessionId, windowId, changeReason) => {
-        if (changeReason) {
-            this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
+        if (!changeReason) return
 
-            this._clearConditionalRecordingPersistence()
+        const wasLikelyReset = changeReason.noSessionId
+        const shouldLinkSessions =
+            !wasLikelyReset && (changeReason.activityTimeout || changeReason.sessionPastMaximumLength)
 
-            if (!this._stopRrweb) {
-                this.start('session_id_changed')
-            }
+        let oldSessionId, oldWindowId
 
-            if (isNumber(this._sampleRate) && isNullish(this._samplingSessionListener)) {
-                this._makeSamplingDecision(sessionId)
-            }
+        if (shouldLinkSessions) {
+            oldSessionId = this._sessionId
+            oldWindowId = this._windowId
+            this._tryAddCustomEvent('$session_ending', {
+                nextSessionId: sessionId,
+                nextWindowId: windowId,
+                changeReason,
+                // we'll need to correct the time of this if it's captured when idle
+                // so we don't extend reported session time with a debug event
+                lastActivityTimestamp: this._lastActivityTimestamp,
+                flushed_size: this._flushedSizeTracker?.currentTrackedSize,
+            })
+        }
+
+        // reset flushed size tracker after capturing the ending event
+        if (this._flushedSizeTracker) {
+            this._flushedSizeTracker.reset()
+        }
+
+        this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
+
+        this._clearConditionalRecordingPersistence()
+
+        if (!this._stopRrweb) {
+            this.start('session_id_changed')
+        }
+
+        if (shouldLinkSessions) {
+            this._tryAddCustomEvent('$session_starting', {
+                previousSessionId: oldSessionId,
+                previousWindowId: oldWindowId,
+                changeReason,
+                // we'll need to correct the time of this if it's captured when idle
+                // so we don't extend reported session time with a debug event
+                lastActivityTimestamp: this._lastActivityTimestamp,
+            })
+        }
+
+        if (isNumber(this._sampleRate) && isNullish(this._samplingSessionListener)) {
+            this._makeSamplingDecision(sessionId)
         }
     }
 
@@ -762,6 +849,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         window?.removeEventListener('online', this._onOnline)
         window?.removeEventListener('visibilitychange', this._onVisibilityChange)
 
+        this._flushBuffer()
         this._clearBuffer()
         clearInterval(this._fullSnapshotTimer)
         this._clearFlushBufferTimer()
@@ -853,7 +941,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // When in an idle state we keep recording but don't capture the events,
         // we don't want to return early if idle is 'unknown'
-        if (this._isIdle === true && !isSessionIdleEvent(event)) {
+        if (this._isIdle === true && !isAllowedWhenIdle(event)) {
             return
         }
 
@@ -866,6 +954,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 const lastActivity = payload.lastActivityTimestamp
                 const threshold = payload.threshold
                 event.timestamp = lastActivity + threshold
+            }
+        }
+
+        if (isSessionEndingEvent(event) || isSessionStartingEvent(event)) {
+            // session ending/starting events have a timestamp when rrweb sees them
+            // which can artificially lengthen a session
+            // we know when the last activity was based on the payload and can correct the timestamp
+            const payload = event.data.payload as { lastActivityTimestamp?: number }
+            if (payload?.lastActivityTimestamp) {
+                event.timestamp = payload.lastActivityTimestamp
             }
         }
 
@@ -959,13 +1057,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _flushBuffer(): SnapshotBuffer {
         this._clearFlushBufferTimer()
 
-        const minimumDuration = this._minimumDuration
-        const sessionDuration = this._sessionDuration
-        // if we have old data in the buffer but the session has rotated, then the
-        // session duration might be negative. In that case we want to flush the buffer
-        const isPositiveSessionDuration = isNumber(sessionDuration) && sessionDuration >= 0
-        const isBelowMinimumDuration =
-            isNumber(minimumDuration) && isPositiveSessionDuration && sessionDuration < minimumDuration
+        const isBelowMinimumDuration = this._isBelowMinimumDuration()
 
         if (this.status === BUFFERING || this.status === PAUSED || this.status === DISABLED || isBelowMinimumDuration) {
             this._flushBufferTimer = setTimeout(() => {
@@ -977,6 +1069,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         if (this._buffer.data.length > 0) {
             const snapshotEvents = splitBuffer(this._buffer)
             snapshotEvents.forEach((snapshotBuffer) => {
+                this._flushedSizeTracker?.trackSize(snapshotBuffer.size)
                 this._captureSnapshot({
                     $snapshot_bytes: snapshotBuffer.size,
                     $snapshot_data: snapshotBuffer.data,
@@ -990,6 +1083,59 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // buffer is empty, we clear it in case the session id has changed
         return this._clearBuffer()
+    }
+
+    private _hasPassedMinimumDuration = (): boolean => {
+        const persistedSessionId = this._instance.persistence?.props[SESSION_RECORDING_PAST_MINIMUM_DURATION]
+        return persistedSessionId === this._sessionId
+    }
+
+    private _getBufferDuration = (): number | null => {
+        if (this._buffer.data.length === 0) {
+            return null
+        }
+
+        const firstTimestamp = this._buffer.data[0]?.timestamp
+        const lastTimestamp = this._buffer.data[this._buffer.data.length - 1]?.timestamp
+
+        if (!isNumber(firstTimestamp) || !isNumber(lastTimestamp)) {
+            return null
+        }
+
+        return lastTimestamp - firstTimestamp
+    }
+
+    private _isBelowMinimumDuration = (): boolean => {
+        const minimumDuration = this._minimumDuration
+        if (!isNumber(minimumDuration)) {
+            return false
+        }
+
+        const strictMode = this._instance.config.session_recording?.strictMinimumDuration ?? false
+
+        if (!strictMode) {
+            const sessionDuration = this._sessionDuration
+            const isPositiveSessionDuration = isNumber(sessionDuration) && sessionDuration >= 0
+            return isPositiveSessionDuration && sessionDuration < minimumDuration
+        }
+
+        if (this._hasPassedMinimumDuration()) {
+            return false
+        }
+
+        const bufferDuration = this._getBufferDuration()
+        if (isNull(bufferDuration)) {
+            return true
+        }
+
+        if (bufferDuration >= minimumDuration) {
+            this._instance.persistence?.register({
+                [SESSION_RECORDING_PAST_MINIMUM_DURATION]: this._sessionId,
+            })
+            return false
+        }
+
+        return true
     }
 
     private _captureSnapshotBuffered(properties: Properties) {
@@ -1175,6 +1321,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._instance?.persistence?.unregister(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
         this._instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
         this._instance?.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
+        this._instance?.persistence?.unregister(SESSION_RECORDING_PAST_MINIMUM_DURATION)
     }
 
     private _makeSamplingDecision(sessionId: string): void {
@@ -1249,6 +1396,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_replay_internal_buffer_size: this._buffer.size,
             $sdk_debug_current_session_duration: this._sessionDuration,
             $sdk_debug_session_start: sessionStartTimestamp,
+            $sdk_debug_replay_flushed_size: this._flushedSizeTracker?.currentTrackedSize,
         }
     }
 

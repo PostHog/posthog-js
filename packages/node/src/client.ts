@@ -11,6 +11,7 @@ import {
   Logger,
   PostHogCaptureOptions,
   isPlainObject,
+  isBlockedUA,
 } from '@posthog/core'
 import {
   EventMessage,
@@ -1498,6 +1499,18 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         } as PostHogEventProperties
         return props
       })
+
+    // Handle bot pageview collection based on preview flag
+    if (
+      eventMessage.event === '$pageview' &&
+      this.options.__preview_capture_bot_pageviews &&
+      typeof eventProperties.$raw_user_agent === 'string'
+    ) {
+      if (isBlockedUA(eventProperties.$raw_user_agent, this.options.custom_blocked_useragents || [])) {
+        eventMessage.event = '$bot_pageview'
+        eventProperties.$browser_type = 'bot'
+      }
+    }
 
     return {
       distinctId: eventMessage.distinctId,

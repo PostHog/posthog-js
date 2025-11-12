@@ -1,5 +1,125 @@
 # @posthog/nuxt
 
+## 1.1.4
+
+### Patch Changes
+
+- Updated dependencies [[`c8c7de2`](https://github.com/PostHog/posthog-js/commit/c8c7de247eae0a688c6eca49d364b89243b2bac8)]:
+  - posthog-js@1.291.0
+
+## 1.1.3
+
+### Patch Changes
+
+- [#2563](https://github.com/PostHog/posthog-js/pull/2563) [`4d833a0`](https://github.com/PostHog/posthog-js/commit/4d833a036c05bb0afc1dadfa80f12c302e21a454) Thanks [@hpouillot](https://github.com/hpouillot)! - fix output directory when using presets
+
+## 1.1.2
+
+### Patch Changes
+
+- Updated dependencies [[`8a2b790`](https://github.com/PostHog/posthog-js/commit/8a2b790a61611c54e5e84a2954ae19d89d754afc)]:
+  - posthog-js@1.290.0
+
+## 1.1.1
+
+### Patch Changes
+
+- Updated dependencies [[`10be1b0`](https://github.com/PostHog/posthog-js/commit/10be1b071ab30da45749b91cfdeff913912e7bbb)]:
+  - posthog-js@1.289.0
+
+## 1.1.0
+
+### Minor Changes
+
+- [#2552](https://github.com/PostHog/posthog-js/pull/2552) [`87f9604`](https://github.com/PostHog/posthog-js/commit/87f96047739e67b847fe22137b97fc57f405b8d9) Thanks [@hpouillot](https://github.com/hpouillot)! - expose cliBinaryPath and logLevel options
+
+### Patch Changes
+
+- Updated dependencies [[`87f9604`](https://github.com/PostHog/posthog-js/commit/87f96047739e67b847fe22137b97fc57f405b8d9)]:
+  - @posthog/core@1.5.2
+  - posthog-js@1.288.1
+  - posthog-node@5.11.2
+
+## 1.0.3
+
+### Patch Changes
+
+- Updated dependencies [[`392b190`](https://github.com/PostHog/posthog-js/commit/392b19061bcee86926d165ce3cd7742df1c474d5)]:
+  - posthog-js@1.288.0
+
+## 1.0.2
+
+### Patch Changes
+
+- Updated dependencies [[`ec65577`](https://github.com/PostHog/posthog-js/commit/ec6557796219502c8d6a04fc5943721dafef140b)]:
+  - posthog-js@1.287.0
+
+## 1.0.1
+
+### Patch Changes
+
+- Updated dependencies [[`cd8bcd7`](https://github.com/PostHog/posthog-js/commit/cd8bcd79e4e41e51bcf9b40890708207ac927e72)]:
+  - posthog-js@1.286.0
+
+## 1.0.0
+
+### Major Changes
+
+- [#2544](https://github.com/PostHog/posthog-js/pull/2544) [`e64445b`](https://github.com/PostHog/posthog-js/commit/e64445bb1d0f5fbc81ab2b829c88d307c79f668f) Thanks [@hpouillot](https://github.com/hpouillot)! - use provided build dir to inject sourcemaps
+
+### Patch Changes
+
+- Updated dependencies [[`d8d98c9`](https://github.com/PostHog/posthog-js/commit/d8d98c95f24b612110dbf52d228c0c3bd248cd58)]:
+  - @posthog/core@1.5.1
+  - posthog-js@1.285.2
+  - posthog-node@5.11.1
+
+## 0.0.27
+
+### Patch Changes
+
+- Updated dependencies [[`c26a12c`](https://github.com/PostHog/posthog-js/commit/c26a12cc55932ff5a014c57a01a25c06715a24a1)]:
+  - posthog-js@1.285.1
+
+## 0.0.26
+
+### Patch Changes
+
+- Updated dependencies [[`e95a9d5`](https://github.com/PostHog/posthog-js/commit/e95a9d5075891861982e69ddcf09f1d6241ae088)]:
+  - posthog-js@1.285.0
+
+## 0.0.25
+
+### Patch Changes
+
+- Updated dependencies [[`882d823`](https://github.com/PostHog/posthog-js/commit/882d823ca7bf9b31aa5bdcb0512d9109096bcba7)]:
+  - posthog-js@1.284.0
+
+## 0.0.24
+
+### Patch Changes
+
+- Updated dependencies [[`068d55e`](https://github.com/PostHog/posthog-js/commit/068d55ed4193e82729cd34b42d9e433f85b6e606)]:
+  - posthog-js@1.283.0
+  - @posthog/core@1.5.0
+  - posthog-node@5.11.0
+
+## 0.0.23
+
+### Patch Changes
+
+- Updated dependencies [[`46e3ca6`](https://github.com/PostHog/posthog-js/commit/46e3ca600ca478db1b319b36695dea090aa60f98), [`46e3ca6`](https://github.com/PostHog/posthog-js/commit/46e3ca600ca478db1b319b36695dea090aa60f98)]:
+  - posthog-js@1.282.0
+
+## 0.0.22
+
+### Patch Changes
+
+- Updated dependencies [[`71ae0d2`](https://github.com/PostHog/posthog-js/commit/71ae0d2a55cbf69a2b60ac3ee29906f379408898), [`751b440`](https://github.com/PostHog/posthog-js/commit/751b44040c4c0c55a19df2ad0e5f215943620e51)]:
+  - posthog-js@1.281.0
+  - @posthog/core@1.4.0
+  - posthog-node@5.10.4
+
 ## 0.0.21
 
 ### Patch Changes
