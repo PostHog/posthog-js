@@ -270,7 +270,7 @@ export interface HeatmapConfig {
 
 export type BeforeSendFn = (cr: CaptureResult | null) => CaptureResult | null
 
-export type ConfigDefaults = '2025-05-24' | 'unset'
+export type ConfigDefaults = '2025-11-30' | '2025-05-24' | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
@@ -666,6 +666,7 @@ export interface PostHogConfig {
      *
      * - `'unset'`: Use legacy default behaviors
      * - `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')
+     * - `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay)
      *
      * @default 'unset'
      */
@@ -1294,6 +1295,15 @@ export interface SessionRecordingOptions {
      * @default 100
      */
     __mutationThrottlerBucketSize?: number
+
+    /**
+     * When true, minimum duration is checked against the actual buffer data (first to last timestamp)
+     * rather than session duration. This ensures recordings are not sent until they contain the minimum
+     * duration of actual data, even across page navigations.
+     *
+     * @default false
+     */
+    strictMinimumDuration?: boolean
 }
 
 export type SessionIdChangedCallback = (

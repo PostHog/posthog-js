@@ -163,7 +163,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     custom_campaign_params: [],
     custom_blocked_useragents: [],
     save_referrer: true,
-    capture_pageview: defaults === '2025-05-24' ? 'history_change' : true,
+    capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     defaults: defaults ?? 'unset',
     __preview_deferred_init_extensions: false, // Opt-in only for now
@@ -192,7 +192,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     request_headers: {}, // { header: value, header2: value }
     request_batching: true,
     properties_string_max_length: 65535,
-    session_recording: {},
+    session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
     mask_all_element_attributes: false,
     mask_all_text: false,
     mask_personal_data_properties: false,
