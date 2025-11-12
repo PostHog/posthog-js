@@ -148,7 +148,7 @@ let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 &&
 const defaultsThatVaryByConfig = (
     defaults?: ConfigDefaults
 ): Pick<PostHogConfig, 'rageclick' | 'capture_pageview' | 'session_recording'> => ({
-    rageclick: defaults && defaults >= '2025-11' ? { content_ignorelist: true } : true,
+    rageclick: defaults && defaults >= '2025-11-30' ? { content_ignorelist: true } : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
 })
