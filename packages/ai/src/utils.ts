@@ -98,6 +98,9 @@ export const getModelParams = (
     'stop',
     'stream',
     'streaming',
+    'language',
+    'response_format',
+    'timestamp_granularities',
   ] as const
 
   for (const key of paramKeys) {
