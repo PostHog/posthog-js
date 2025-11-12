@@ -112,7 +112,7 @@ import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
 import { SessionRecording } from './extensions/replay/session-recording'
-import { FeedbackRecordingManager } from './feedback-recording'
+import { FeedbackRecordingManager } from './extensions/feedback-recording'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -339,13 +339,13 @@ export class PostHog implements PostHogInterface {
     toolbar: Toolbar
     exceptions: PostHogExceptions
     consent: ConsentManager
+    feedbackManager: FeedbackRecordingManager
 
     // These are instance-specific state created after initialisation
     persistence?: PostHogPersistence
     sessionPersistence?: PostHogPersistence
     sessionManager?: SessionIdManager
     sessionPropsManager?: SessionPropsManager
-    feedbackManager?: FeedbackRecordingManager
     requestRouter: RequestRouter
     siteApps?: SiteApps
     autocapture?: Autocapture
@@ -420,6 +420,7 @@ export class PostHog implements PostHogInterface {
         this.requestRouter = new RequestRouter(this)
         this.consent = new ConsentManager(this)
         this.externalIntegrations = new ExternalIntegrations(this)
+        this.feedbackManager = new FeedbackRecordingManager(this)
         // NOTE: See the property definition for deprecation notice
         this.people = {
             set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
@@ -2983,49 +2984,12 @@ export class PostHog implements PostHogInterface {
      * @returns void
      */
     startUserFeedbackRecording(handleRecordingEnded: (result: UserFeedbackRecordingResult) => void): void {
-        if (this.feedbackManager?.isFeedbackRecordingActive()) {
+        if (this.feedbackManager.isFeedbackRecordingActive()) {
             logger.warn('A user feedback recording session is already active.')
             return
         }
 
-        const _handleRecordingEnded = (feedback_id: string) => {
-            const result = this._handle_stopped(feedback_id)
-            handleRecordingEnded(result)
-        }
-
-        const feedback_recording_id = this.feedbackManager?.startFeedbackRecording(_handleRecordingEnded)
-
-        this.capture('$user_feedback_recording_started', { $feedback_recording_id: feedback_recording_id })
-
-        //TODO: at the moment always just start recording - we can mess with this later
-        // by storing whether reocrding is already in progress so we know whether to stop it later
-        this.startSessionRecording(true)
-    }
-
-    /**
-     *
-     * @returns An object containing the feedback ID and session ID for the stopped user feedback recording session, or null if no session was active.
-     */
-    stopUserFeedbackRecording(): UserFeedbackRecordingResult | null {
-        if (this.feedbackManager?.isFeedbackRecordingActive()) {
-            logger.warn('No user feedback recording session active.')
-            return null
-        }
-
-        const feedback_recording_id = this.feedbackManager?.getCurrentFeedbackRecordingId()
-
-        //TODO: decide whether to stop session recording based on whether it was already in progress before starting feedback recording
-        this.stopSessionRecording()
-
-        return this._handle_stopped(feedback_recording_id!)
-    }
-
-    private _handle_stopped(feedback_recording_id: string): UserFeedbackRecordingResult {
-        this.capture('$user_feedback_recording_stopped', {
-            $feedback_recording_id: feedback_recording_id,
-        })
-
-        return { feedback_id: feedback_recording_id, session_id: this.get_session_id() }
+        this.feedbackManager.launchFeedbackRecordingUI(handleRecordingEnded)
     }
 
     /**

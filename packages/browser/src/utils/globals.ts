@@ -174,6 +174,7 @@ export type PostHogExtensionKind =
     | 'product-tours'
     | 'dead-clicks-autocapture'
     | 'remote-config'
+    | 'feedback-recording'
     | ExternalExtensionKind
 
 export interface LazyLoadedSessionRecordingInterface {
@@ -231,6 +232,7 @@ interface PostHogExtensions {
     rrweb?: { record: any; version: string; wasMaxDepthReached?: () => boolean; resetMaxDepthState?: () => void }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
     generateSurveys?: (posthog: PostHog, isSurveysEnabled: boolean) => any | undefined
+    generateFeedbackRecording?: (posthog: PostHog) => any | undefined
     generateProductTours?: (posthog: PostHog, isEnabled: boolean) => any | undefined
     logs?: {
         initializeLogs?: (posthog: PostHog) => any | undefined
