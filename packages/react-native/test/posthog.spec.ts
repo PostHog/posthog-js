@@ -730,6 +730,33 @@ describe('PostHog React Native', () => {
         const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
         expect(cachedProps === undefined || Object.keys(cachedProps).length === 0).toBe(true)
       })
+
+      it('should cache properties from $set when provided', async () => {
+        posthog.identify('user-123', {
+          $set: { email: 'test@example.com', plan: 'premium' },
+        })
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+        expect(cachedProps).toEqual({ email: 'test@example.com', plan: 'premium' })
+      })
+
+      it('should ignore $set_once when caching properties', async () => {
+        posthog.identify('user-123', {
+          $set: { email: 'test@example.com' },
+          $set_once: { created_at: '2024-01-01' },
+        })
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+        expect(cachedProps).toEqual({ email: 'test@example.com' })
+      })
+
+      it('should merge properties from multiple identify() calls with $set', async () => {
+        posthog.identify('user-123', { $set: { email: 'test@example.com' } })
+        posthog.identify('user-123', { $set: { plan: 'premium' } })
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+        expect(cachedProps).toEqual({ email: 'test@example.com', plan: 'premium' })
+      })
     })
 
     describe('group properties auto-caching from group()', () => {

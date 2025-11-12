@@ -922,10 +922,11 @@ export class PostHog extends PostHogCore {
     super.identify(distinctId, properties, options)
 
     // Automatically cache person properties for feature flag evaluation
-    if (properties && Object.keys(properties).length > 0) {
+    // Use $set if provided, otherwise use top-level properties
+    const userProps = properties?.$set || properties
+    if (userProps && Object.keys(userProps).length > 0) {
       const propsToCache: Record<string, string> = {}
-      Object.keys(properties).forEach((key) => {
-        const value = properties[key]
+      Object.entries(userProps).forEach(([key, value]) => {
         if (value !== null && value !== undefined) {
           propsToCache[key] = String(value)
         }
