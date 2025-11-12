@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.292.0
+
+### Minor Changes
+
+- [#2519](https://github.com/PostHog/posthog-js/pull/2519) [`7c16ff7`](https://github.com/PostHog/posthog-js/commit/7c16ff7f3d7d8152ffbdde6839fee6fc513a8c55) Thanks [@rodrigomarcolin](https://github.com/rodrigomarcolin)! - Made rageclick detection fully parametrizable with configurable threshold_px, timeout_ms, and click_count, while preserving previous default behavior.
+
 ## 1.291.0
 
 ### Minor Changes

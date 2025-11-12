@@ -1,5 +1,13 @@
 # posthog-react-native
 
+## 4.11.0
+
+### Minor Changes
+
+- [#2564](https://github.com/PostHog/posthog-js/pull/2564) [`ee01b17`](https://github.com/PostHog/posthog-js/commit/ee01b1727c5d4fb5cf2e2c8bb57062907e498445) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Properties sent via `identify` and `group` are cached for flags calls
+
+- [#2564](https://github.com/PostHog/posthog-js/pull/2564) [`ee01b17`](https://github.com/PostHog/posthog-js/commit/ee01b1727c5d4fb5cf2e2c8bb57062907e498445) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: `setDefaultPersonProperties` config option (default true) automatically includes common device and app properties in feature flag evaluation.
+
 ## 4.10.8
 
 ### Patch Changes
