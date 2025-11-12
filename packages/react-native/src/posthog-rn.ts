@@ -203,7 +203,7 @@ export class PostHog extends PostHogCore {
 
       // Set default person properties for flags if enabled
       if (this._setDefaultPersonProperties) {
-        this._setDefaultPersonPropertiesForFlags()
+        this._setDefaultPersonPropertiesForFlags(false)
       }
 
       this._isInitialized = true
@@ -377,17 +377,22 @@ export class PostHog extends PostHogCore {
   reset(): void {
     super.reset()
 
-    // Restore default person properties after reset if enabled
     if (this._setDefaultPersonProperties) {
-      this._setDefaultPersonPropertiesForFlags()
+      // Reset reloads flags asyncrhonously, but doesn't wait for it.
+      // As a result, we can synchronously set the default person properties without
+      // reloading, and allow the super.reset() call to reload the flags.
+      this._setDefaultPersonPropertiesForFlags(false)
     }
   }
 
   /**
    * Helper to extract and set default person properties from app properties
+   *
    * @private
+   *
+   * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
-  private _setDefaultPersonPropertiesForFlags(): void {
+  private _setDefaultPersonPropertiesForFlags(reloadFeatureFlags = true): void {
     const defaultProps: Record<string, string> = {}
     const relevantKeys = [
       '$app_version',
@@ -414,7 +419,7 @@ export class PostHog extends PostHogCore {
     }
 
     if (Object.keys(defaultProps).length > 0) {
-      this.setPersonPropertiesForFlags(defaultProps)
+      this.setPersonPropertiesForFlags(defaultProps, reloadFeatureFlags)
     }
   }
 

@@ -677,6 +677,41 @@ describe('PostHog React Native', () => {
         expect(cachedProps).toHaveProperty('$device_type', 'Mobile')
       })
 
+      it('should set default properties synchronously during reset without extra reload', async () => {
+        jest.spyOn(PostHog.prototype, 'getCommonEventProperties').mockReturnValue({
+          $lib: 'posthog-react-native',
+          $lib_version: '1.2.3',
+        })
+        posthog = new PostHog('test-api-key', {
+          setDefaultPersonProperties: true,
+          customAppProperties: {
+            $device_type: 'Mobile',
+            $os_name: 'iOS',
+          },
+        })
+        await posthog.ready()
+        ;(globalThis as any).window.fetch.mockClear()
+
+        posthog.reset()
+
+        // `reset` reloads flags asynchronously but does not wait for it
+        // we wait for the next tick to allow the event loop to process it
+        await new Promise((resolve) => setImmediate(resolve))
+
+        const flagsCalls = (globalThis as any).window.fetch.mock.calls.filter((call: any) =>
+          call[0].includes('/flags/')
+        )
+        expect(flagsCalls.length).toBe(1)
+
+        const flagsCallBody = JSON.parse(flagsCalls[0][1].body)
+        expect(flagsCallBody.person_properties).toEqual({
+          $device_type: 'Mobile',
+          $os_name: 'iOS',
+          $lib: 'posthog-react-native',
+          $lib_version: '1.2.3',
+        })
+      })
+
       it('should merge user properties with default properties', async () => {
         posthog = new PostHog('test-api-key', {
           setDefaultPersonProperties: true,
