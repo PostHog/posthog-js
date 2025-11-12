@@ -66,15 +66,16 @@ plugins.withId('com.android.application') {
 
                     def nameCliTask = "${bundleTask.name}_PostHogUpload_${releaseName}_${versionCode}"
 
+                    // If several outputs have the same releaseName and versionCode, we'd do the exact same
+                    // upload for each of them.  No need to repeat.
+                    try { tasks.named(nameCliTask); return } catch (Exception e) {}
+
                     /** Upload source map file to the PostHog server via CLI call. */
                     def cliTask = tasks.register(nameCliTask) {
                         description = "upload sourcemaps to PostHog"
                         group = 'posthog.com'
 
                         def extraArgs = []
-
-                        def postHogPackage = resolvePostHogReactNativeSDKPath(reactRoot)
-                        def copyChunkIdScript = "$postHogPackage/tooling/copy-chunkid.js"
 
                         def injected = project.objects.newInstance(InjectedExecOps)
                         doFirst {
@@ -84,11 +85,9 @@ plugins.withId('com.android.application') {
                                 def cliPackage = "posthog-cli"
                                 def args = [cliPackage]
 
-                                // bundleOutput and sourcemapOutput
-                                def sourcemapDir = sourcemapOutput.getParent()
-                                // def sourcemapDir = "/Users/manoel/Github/posthog-js/examples/example-expo-53/android/app/build/intermediates/sourcemaps/react/release"
                                 args.addAll(["exp", "hermes", "clone",
-                                    "--directory", sourcemapDir        // The path to a sourcemap that should be uploaded.
+                                    "--minified-map-path", packagerSourcemapOutput, // The path to a sourcemap
+                                    "--composed-map-path", sourcemapOutput          // The path of the composed source map
                                 ])
 
                                 args.addAll(extraArgs)
@@ -97,18 +96,6 @@ plugins.withId('com.android.application') {
                                 def osCompatibility = Os.isFamily(Os.FAMILY_WINDOWS) ? ['cmd', '/c', 'node'] : []
 
                                 commandLine(*osCompatibility, *args)
-                            }
-                            
-                            // Copy Chunk ID from packager source map to Hermes composed source map
-                            injected.execOps.exec {
-                                def args = ["node",
-                                    copyChunkIdScript,
-                                    packagerSourcemapOutput,
-                                    sourcemapOutput]
-
-                                project.logger.info("copy chunk id arguments: ${args}")
-                                def osCompatibilityCopyCommand = Os.isFamily(Os.FAMILY_WINDOWS) ? ['cmd', '/c'] : []
-                                commandLine(*osCompatibilityCopyCommand, *args)
                             }
                         }
 
@@ -119,9 +106,7 @@ plugins.withId('com.android.application') {
                                 def cliPackage = "posthog-cli"
                                 def args = [cliPackage]
 
-                                // bundleOutput and sourcemapOutput
                                 def sourcemapDir = sourcemapOutput.getParent()
-                                // def sourcemapDir = "/Users/manoel/Github/posthog-js/examples/example-expo-53/android/app/build"
                                 args.addAll(["exp", "hermes", "upload",
                                     "--directory", sourcemapDir        // The path to a sourcemap that should be uploaded.
                                 ])
