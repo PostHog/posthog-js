@@ -10,7 +10,7 @@ import {
 } from '../autocapture'
 import { shouldCaptureDomEvent } from '../autocapture-utils'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
-import { AutocaptureConfig, FlagsResponse, PostHogConfig } from '../types'
+import { AutocaptureConfig, FlagsResponse, PostHogConfig, RageclickConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
@@ -39,7 +39,7 @@ const simulateClick = function (el: Node) {
 }
 
 export function makeMouseEvent(partialEvent: Partial<MouseEvent>) {
-    return { type: 'click', ...partialEvent } as unknown as MouseEvent
+    return { type: 'click', timeStamp: Date.now(), ...partialEvent } as unknown as MouseEvent
 }
 
 export function makeCopyEvent(partialEvent: Partial<ClipboardEvent>) {
@@ -443,13 +443,18 @@ describe('Autocapture system', () => {
         )
 
         describe('when rageclick is configured with custom thresholds', () => {
-            test.each([
+            const testCases: [
+                string,
+                boolean | RageclickConfig,
+                { target: string; clientX: number; clientY: number; timestamp: number }[],
+                string[],
+            ][] = [
                 [
                     'custom click_count threshold of 2',
                     { click_count: 2 },
                     [
-                        { target: 'button', clientX: 5, clientY: 5, timeStamp: 0 },
-                        { target: 'button', clientX: 5, clientY: 5, timeStamp: 100 },
+                        { target: 'button', clientX: 5, clientY: 5, timestamp: 0 },
+                        { target: 'button', clientX: 5, clientY: 5, timestamp: 100 },
                     ],
                     ['$autocapture', '$rageclick', '$autocapture'],
                 ],
@@ -457,10 +462,10 @@ describe('Autocapture system', () => {
                     'custom click_count threshold of 5',
                     { click_count: 5 },
                     [
-                        { target: 'button', clientX: 5, clientY: 5, timeStamp: 0 },
-                        { target: 'button', clientX: 5, clientY: 5, timeStamp: 100 },
-                        { target: 'button', clientX: 5, clientY: 5, timeStamp: 200 },
-                        { target: 'button', clientX: 5, clientY: 5, timeStamp: 300 },
+                        { target: 'button', clientX: 5, clientY: 5, timestamp: 0 },
+                        { target: 'button', clientX: 5, clientY: 5, timestamp: 100 },
+                        { target: 'button', clientX: 5, clientY: 5, timestamp: 200 },
+                        { target: 'button', clientX: 5, clientY: 5, timestamp: 300 },
                     ],
                     ['$autocapture', '$autocapture', '$autocapture', '$autocapture'],
                 ],
@@ -468,9 +473,9 @@ describe('Autocapture system', () => {
                     'custom timeout_ms of 10ms - clicks too far apart',
                     { timeout_ms: 10 },
                     [
-                        { target: 'button', clientX: 5, clientY: 5, timeStamp: 0 },
-                        { target: 'button', clientX: 5, clientY: 5, timeStamp: 100 },
-                        { target: 'button', clientX: 5, clientY: 5, timeStamp: 200 },
+                        { target: 'button', clientX: 5, clientY: 5, timestamp: 0 },
+                        { target: 'button', clientX: 5, clientY: 5, timestamp: 100 },
+                        { target: 'button', clientX: 5, clientY: 5, timestamp: 200 },
                     ],
                     ['$autocapture', '$autocapture', '$autocapture'],
                 ],
@@ -478,9 +483,9 @@ describe('Autocapture system', () => {
                     'custom timeout_ms of 500ms - clicks within window',
                     { timeout_ms: 500 },
                     [
-                        { target: 'button', clientX: 5, clientY: 5, timeStamp: 0 },
-                        { target: 'button', clientX: 5, clientY: 5, timeStamp: 100 },
-                        { target: 'button', clientX: 5, clientY: 5, timeStamp: 200 },
+                        { target: 'button', clientX: 5, clientY: 5, timestamp: 0 },
+                        { target: 'button', clientX: 5, clientY: 5, timestamp: 100 },
+                        { target: 'button', clientX: 5, clientY: 5, timestamp: 200 },
                     ],
                     ['$autocapture', '$autocapture', '$rageclick', '$autocapture'],
                 ],
@@ -488,9 +493,9 @@ describe('Autocapture system', () => {
                     'custom threshold_px of 5 - clicks beyond threshold',
                     { threshold_px: 5 },
                     [
-                        { target: 'button', clientX: 0, clientY: 0, timeStamp: 0 },
-                        { target: 'button', clientX: 10, clientY: 0, timeStamp: 100 },
-                        { target: 'button', clientX: 10, clientY: 0, timeStamp: 200 },
+                        { target: 'button', clientX: 0, clientY: 0, timestamp: 0 },
+                        { target: 'button', clientX: 10, clientY: 0, timestamp: 100 },
+                        { target: 'button', clientX: 10, clientY: 0, timestamp: 200 },
                     ],
                     ['$autocapture', '$autocapture', '$autocapture'],
                 ],
@@ -498,9 +503,9 @@ describe('Autocapture system', () => {
                     'custom threshold_px of 50 - clicks within threshold',
                     { threshold_px: 50 },
                     [
-                        { target: 'button', clientX: 0, clientY: 0, timeStamp: 0 },
-                        { target: 'button', clientX: 10, clientY: 0, timeStamp: 100 },
-                        { target: 'button', clientX: 10, clientY: 0, timeStamp: 200 },
+                        { target: 'button', clientX: 0, clientY: 0, timestamp: 0 },
+                        { target: 'button', clientX: 10, clientY: 0, timestamp: 100 },
+                        { target: 'button', clientX: 10, clientY: 0, timestamp: 200 },
                     ],
                     ['$autocapture', '$autocapture', '$rageclick', '$autocapture'],
                 ],
@@ -508,54 +513,58 @@ describe('Autocapture system', () => {
                     'combined custom thresholds',
                     { click_count: 2, timeout_ms: 500, threshold_px: 20 },
                     [
-                        { target: 'button', clientX: 5, clientY: 5, timeStamp: 0 },
-                        { target: 'button', clientX: 8, clientY: 8, timeStamp: 100 },
+                        { target: 'button', clientX: 5, clientY: 5, timestamp: 0 },
+                        { target: 'button', clientX: 8, clientY: 8, timestamp: 100 },
                     ],
                     ['$autocapture', '$rageclick', '$autocapture'],
                 ],
-            ])('respects %s', async (_title, rageclickConfig, clickEvents, expectedCaptured) => {
-                // Create fresh instance with custom config, since
-                // rageclick behaviour is set on construction
-                const customPosthog = await createPosthogInstance(uuidv7(), {
-                    api_host: 'https://test.com',
-                    token: 'testtoken',
-                    autocapture: true,
-                    before_send: beforeSendMock,
-                    rageclick: rageclickConfig,
-                })
-
-                if (isUndefined(customPosthog.autocapture)) {
-                    throw new Error('helping TS by confirming this is created by now')
-                }
-
-                const customAutocapture = customPosthog.autocapture
-                customAutocapture.onRemoteConfig({} as FlagsResponse)
-
-                // Create element and simulate clicks
-                const el = document.createElement(clickEvents[0].target)
-                document.body.appendChild(el)
-
-                for (const clickEvent of clickEvents) {
-                    const fakeEvent = makeMouseEvent({
-                        target: el,
-                        clientX: clickEvent.clientX,
-                        clientY: clickEvent.clientY,
+            ]
+            test.each(testCases)(
+                'respects %s',
+                async (_title, rageclickConfig: boolean | RageclickConfig, clickEvents, expectedCaptured) => {
+                    // Create fresh instance with custom config, since
+                    // rageclick behaviour is set on construction
+                    const customPosthog = await createPosthogInstance(uuidv7(), {
+                        api_host: 'https://test.com',
+                        token: 'testtoken',
+                        autocapture: true,
+                        before_send: beforeSendMock,
+                        rageclick: rageclickConfig,
                     })
-                    // Override timestamp if provided
-                    Object.defineProperty(fakeEvent, 'timeStamp', {
-                        value: clickEvent.timeStamp,
-                    })
-                    Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
-                    customAutocapture['_captureEvent'](fakeEvent)
+
+                    if (isUndefined(customPosthog.autocapture)) {
+                        throw new Error('helping TS by confirming this is created by now')
+                    }
+
+                    const customAutocapture = customPosthog.autocapture
+                    customAutocapture.onRemoteConfig({} as FlagsResponse)
+
+                    // Create element and simulate clicks
+                    const el = document.createElement(clickEvents[0].target)
+                    document.body.appendChild(el)
+
+                    for (const clickEvent of clickEvents) {
+                        const fakeEvent = makeMouseEvent({
+                            target: el,
+                            clientX: clickEvent.clientX,
+                            clientY: clickEvent.clientY,
+                        })
+                        // Override timestamp if provided
+                        Object.defineProperty(fakeEvent, 'timeStamp', {
+                            value: clickEvent.timestamp,
+                        })
+                        Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
+                        customAutocapture['_captureEvent'](fakeEvent)
+                    }
+
+                    const captured = beforeSendMock.mock.calls.map((args) => args[0].event)
+                    expect(captured).toEqual(expectedCaptured)
+
+                    // Cleanup
+                    beforeSendMock.mockClear()
+                    document.body.removeChild(el)
                 }
-
-                const captured = beforeSendMock.mock.calls.map((args) => args[0].event)
-                expect(captured).toEqual(expectedCaptured)
-
-                // Cleanup
-                beforeSendMock.mockClear()
-                document.body.removeChild(el)
-            })
+            )
         })
 
         describe('clipboard autocapture', () => {
