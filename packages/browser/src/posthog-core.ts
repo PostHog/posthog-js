@@ -2784,8 +2784,11 @@ export class PostHog {
     }
 
     /**
+     * Starts a user feedback recording session with screen recording and audio capture.
+     * Calling this method will prompt the user for permission to record their audio
+     * and display a UI. A user may still opt to cancel the recording.
      *
-     * @returns void
+     * @param handleRecordingEnded - Callback function invoked when the recording ends with the recording result.
      */
     startUserFeedbackRecording(handleRecordingEnded: (result: UserFeedbackRecordingResult) => void): void {
         if (this.feedbackManager.isFeedbackRecordingActive()) {
