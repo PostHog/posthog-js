@@ -4,6 +4,7 @@ import { filterActiveFeatureFlags, parseFlagsResponse, PostHogFeatureFlags } fro
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { PostHogConfig } from '../types'
+import { createMockPostHog } from './helpers/posthog-instance'
 
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
@@ -2173,7 +2174,7 @@ describe('getRemoteConfigPayload', () => {
     let featureFlags: PostHogFeatureFlags
 
     beforeEach(() => {
-        instance = {
+        instance = createMockPostHog({
             config: {
                 token: 'test-token',
                 api_host: 'https://test.com',
@@ -2183,7 +2184,7 @@ describe('getRemoteConfigPayload', () => {
             requestRouter: {
                 endpointFor: jest.fn().mockImplementation((endpoint, path) => `${endpoint}${path}`),
             },
-        } as unknown as PostHog
+        })
 
         featureFlags = new PostHogFeatureFlags(instance)
     })
@@ -2253,7 +2254,7 @@ describe('getRemoteConfigPayload', () => {
                 api_host: 'https://app.posthog.com',
                 flags_api_host: 'https://example.com/feature-flags',
             }
-            const customInstance = {
+            const customInstance = createMockPostHog({
                 config: {
                     token: 'test-token',
                     ...apiConfig,
@@ -2261,7 +2262,7 @@ describe('getRemoteConfigPayload', () => {
                 get_distinct_id: () => 'test-distinct-id',
                 _send_request: jest.fn(),
                 requestRouter: new RequestRouter({ config: apiConfig } as any),
-            } as unknown as PostHog
+            })
 
             const customFeatureFlags = new PostHogFeatureFlags(customInstance)
             const callback = jest.fn()
@@ -2276,7 +2277,7 @@ describe('getRemoteConfigPayload', () => {
         })
 
         it('should fall back to api_host when flags_api_host is not configured', () => {
-            const customInstance = {
+            const customInstance = createMockPostHog({
                 config: {
                     token: 'test-token',
                     api_host: 'https://app.posthog.com',
@@ -2288,7 +2289,7 @@ describe('getRemoteConfigPayload', () => {
                         api_host: 'https://app.posthog.com',
                     },
                 } as any),
-            } as unknown as PostHog
+            })
 
             const customFeatureFlags = new PostHogFeatureFlags(customInstance)
             const callback = jest.fn()
