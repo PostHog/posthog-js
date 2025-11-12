@@ -81,7 +81,7 @@ describe('config', () => {
 
         it('should set expected values when defaults is 2025-11', () => {
             const posthog = new PostHog()
-            posthog._init('test-token', { defaults: '2025-11' })
+            posthog._init('test-token', { defaults: '2025-11-30' })
             expect(posthog.config.capture_pageview).toBe('history_change')
             expect(posthog.config.session_recording.strictMinimumDuration).toBe(true)
         })
