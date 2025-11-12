@@ -133,8 +133,19 @@ export class FeedbackRecordingManager {
             this._stream = await navigator.mediaDevices.getUserMedia({ audio: true })
             this._audioChunks = []
 
+            // Determine the best supported MIME type for this browser
+            const supportedTypes = ['audio/webm', 'audio/mp4']
+            let selectedMimeType = 'audio/webm' // fallback
+
+            for (const mimeType of supportedTypes) {
+                if (MediaRecorder.isTypeSupported(mimeType)) {
+                    selectedMimeType = mimeType
+                    break
+                }
+            }
+
             // eslint-disable-next-line compat/compat
-            this._mediaRecorder = new MediaRecorder(this._stream)
+            this._mediaRecorder = new MediaRecorder(this._stream, { mimeType: selectedMimeType })
 
             this._mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
@@ -156,7 +167,8 @@ export class FeedbackRecordingManager {
         }
 
         this._mediaRecorder.onstop = () => {
-            const audioBlob = new Blob(this._audioChunks, { type: 'audio/webm' })
+            const mimeType = this._audioChunks.length > 0 ? this._audioChunks[0].type : 'audio/webm'
+            const audioBlob = new Blob(this._audioChunks, { type: mimeType })
             this._audioChunks = []
 
             if (this._stream) {
@@ -325,7 +337,7 @@ export function FeedbackRecordingUI({
             const audioElement = document.createElement('audio')
             audioElement.id = `posthog-feedback-audio-${feedbackId}`
             audioElement.style.display = 'none'
-            audioElement.src = `/api/feedback_audio/${encodeURIComponent(feedbackId)}/download?token=${encodeURIComponent(posthogInstance.config?.token || '')}`
+            audioElement.src = `/api/feedback/audio/${encodeURIComponent(feedbackId)}/download?token=${encodeURIComponent(posthogInstance.config?.token || '')}`
             audioElement.autoplay = true
             audioElement.setAttribute('data-feedback-id', feedbackId)
             audioElement.setAttribute('data-posthog-recording', 'true')
