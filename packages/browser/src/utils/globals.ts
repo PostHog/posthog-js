@@ -161,6 +161,7 @@ export type PostHogExtensionKind =
     | 'surveys'
     | 'dead-clicks-autocapture'
     | 'remote-config'
+    | 'feedback-recording'
     | ExternalExtensionKind
 
 export interface LazyLoadedSessionRecordingInterface {
@@ -200,6 +201,7 @@ interface PostHogExtensions {
     rrweb?: { record: any; version: string }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
     generateSurveys?: (posthog: PostHog, isSurveysEnabled: boolean) => any | undefined
+    generateFeedbackRecording?: (posthog: PostHog) => any | undefined
     postHogWebVitalsCallbacks?: {
         onLCP: (metric: any) => void
         onCLS: (metric: any) => void
