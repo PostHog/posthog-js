@@ -61,6 +61,18 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "css_selector_ignorelist": [
         "undefined",
         "string[]"
+      ],
+      "threshold_px": [
+        "undefined",
+        "number"
+      ],
+      "click_count": [
+        "undefined",
+        "number"
+      ],
+      "timeout_ms": [
+        "undefined",
+        "number"
       ]
     }
   ],
