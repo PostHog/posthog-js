@@ -932,7 +932,12 @@ export class PostHog extends PostHogCore {
         }
       })
       if (Object.keys(propsToCache).length > 0) {
-        this.setPersonPropertiesForFlags(propsToCache)
+        // `identify` will already reload flags if the distinctId changed,
+        // so we only need to reload if the distinctId is the same. The
+        // reload is async but not awaited, so by synchronously setting the
+        // properties here, we ensure they are set before the reload happens.
+        const shouldReloadFlags = distinctId === previousDistinctId
+        this.setPersonPropertiesForFlags(propsToCache, shouldReloadFlags)
       }
     }
 

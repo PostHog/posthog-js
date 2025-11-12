@@ -757,6 +757,49 @@ describe('PostHog React Native', () => {
         const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
         expect(cachedProps).toEqual({ email: 'test@example.com', plan: 'premium' })
       })
+
+      it('should reload flags once when identify() is called with same distinctId and new properties', async () => {
+        ;(globalThis as any).window.fetch = jest.fn().mockResolvedValue({ status: 200 })
+        posthog = new PostHog('test-api-key', {
+          setDefaultPersonProperties: false,
+          flushInterval: 0,
+          preloadFeatureFlags: false,
+        })
+        const distinctId = 'user-123'
+        jest.spyOn(posthog, 'getDistinctId').mockReturnValue(distinctId)
+        await posthog.ready()
+        ;(globalThis as any).window.fetch.mockClear()
+
+        posthog.identify(distinctId, { email: 'test@example.com' })
+
+        await new Promise((resolve) => setImmediate(resolve))
+
+        const flagsCalls = (globalThis as any).window.fetch.mock.calls.filter((call: any) =>
+          call[0].includes('/flags/')
+        )
+        expect(flagsCalls.length).toBe(1)
+      })
+
+      it('should reload flags once when identify() is called with different distinctId', async () => {
+        ;(globalThis as any).window.fetch = jest.fn().mockResolvedValue({ status: 200 })
+        posthog = new PostHog('test-api-key', {
+          setDefaultPersonProperties: false,
+          flushInterval: 0,
+          preloadFeatureFlags: false,
+        })
+        await posthog.ready()
+        jest.spyOn(posthog, 'getDistinctId').mockReturnValue('user-123')
+        ;(globalThis as any).window.fetch.mockClear()
+
+        posthog.identify('some-new-distinct-id', { email: 'different@example.com' })
+
+        await new Promise((resolve) => setImmediate(resolve))
+
+        const flagsCalls = (globalThis as any).window.fetch.mock.calls.filter((call: any) =>
+          call[0].includes('/flags/')
+        )
+        expect(flagsCalls.length).toBe(1)
+      })
     })
 
     describe('group properties auto-caching from group()', () => {
