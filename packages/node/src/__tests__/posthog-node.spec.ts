@@ -171,33 +171,28 @@ describe('PostHog Node.js', () => {
       ])
     })
 
-    it('should handle identify using $set and $set_once', async () => {
-      expect(mockedFetch).toHaveBeenCalledTimes(0)
-      posthog.identify({ distinctId: '123', properties: { $set: { foo: 'bar' }, $set_once: { vip: true } } })
-
-      await waitForFlushTimer()
-
-      const batchEvents = getLastBatchEvents()
-      expect(batchEvents).toMatchObject([
-        {
-          distinct_id: '123',
-          event: '$identify',
-          properties: {
-            $set: {
-              foo: 'bar',
-            },
-            $set_once: {
-              vip: true,
-            },
-            $geoip_disable: true,
-          },
+    it.each([
+      {
+        description: '$set and $set_once',
+        properties: { $set: { foo: 'bar' }, $set_once: { vip: true } },
+        expectedProperties: {
+          $set: { foo: 'bar' },
+          $set_once: { vip: true },
+          $geoip_disable: true,
         },
-      ])
-    })
-
-    it('should handle identify using $set_once', async () => {
+      },
+      {
+        description: '$set_once with regular properties',
+        properties: { foo: 'bar', $set_once: { vip: true } },
+        expectedProperties: {
+          $set: { foo: 'bar' },
+          $set_once: { vip: true },
+          $geoip_disable: true,
+        },
+      },
+    ])('should handle identify using $description', async ({ properties, expectedProperties }) => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
-      posthog.identify({ distinctId: '123', properties: { foo: 'bar', $set_once: { vip: true } } })
+      posthog.identify({ distinctId: '123', properties })
 
       await waitForFlushTimer()
 
@@ -206,15 +201,7 @@ describe('PostHog Node.js', () => {
         {
           distinct_id: '123',
           event: '$identify',
-          properties: {
-            $set: {
-              foo: 'bar',
-            },
-            $set_once: {
-              vip: true,
-            },
-            $geoip_disable: true,
-          },
+          properties: expectedProperties,
         },
       ])
     })
@@ -238,33 +225,30 @@ describe('PostHog Node.js', () => {
       ])
     })
 
-    it('should allow overriding timestamp', async () => {
+    it.each([
+      {
+        field: 'timestamp',
+        value: new Date('2021-02-03'),
+        expectedValue: '2021-02-03T00:00:00.000Z',
+        otherFieldMatcher: { uuid: expect.any(String) },
+      },
+      {
+        field: 'uuid',
+        value: randomUUID(),
+        expectedValue: null, // will use actual value
+        otherFieldMatcher: { timestamp: expect.any(String) },
+      },
+    ])('should allow overriding $field', async ({ field, value, expectedValue, otherFieldMatcher }) => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
-      posthog.capture({ event: 'custom-time', distinctId: '123', timestamp: new Date('2021-02-03') })
+      posthog.capture({ event: 'custom-time', distinctId: '123', [field]: value })
       await waitForFlushTimer()
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toMatchObject([
         {
           distinct_id: '123',
-          timestamp: '2021-02-03T00:00:00.000Z',
           event: 'custom-time',
-          uuid: expect.any(String),
-        },
-      ])
-    })
-
-    it('should allow overriding uuid', async () => {
-      expect(mockedFetch).toHaveBeenCalledTimes(0)
-      const uuid = randomUUID()
-      posthog.capture({ event: 'custom-time', distinctId: '123', uuid })
-      await waitForFlushTimer()
-      const batchEvents = getLastBatchEvents()
-      expect(batchEvents).toMatchObject([
-        {
-          distinct_id: '123',
-          timestamp: expect.any(String),
-          event: 'custom-time',
-          uuid: uuid,
+          [field]: expectedValue ?? value,
+          ...otherFieldMatcher,
         },
       ])
     })
@@ -362,21 +346,12 @@ describe('PostHog Node.js', () => {
   })
 
   describe('before_send', () => {
-    describe('capture', () => {
-      it('should allow events through when before_send returns the event', async () => {
-        const beforeSendFn = jest.fn((event) => event)
-        const ph = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          fetchRetryCount: 0,
-          disableCompression: true,
-          before_send: beforeSendFn,
-        })
-
-        ph.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
-        await waitForFlushTimer()
-
-        expect(beforeSendFn).toHaveBeenCalledTimes(1)
-        expect(beforeSendFn).toHaveBeenCalledWith({
+    describe.each([
+      {
+        method: 'capture',
+        methodCall: (ph: PostHog) => ph.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } }),
+        expectedEventName: 'test-event',
+        expectedBeforeSendCall: {
           distinctId: '123',
           event: 'test-event',
           properties: { foo: 'bar' },
@@ -385,80 +360,224 @@ describe('PostHog Node.js', () => {
           timestamp: undefined,
           disableGeoip: undefined,
           uuid: undefined,
-        })
-
-        const batchEvents = getLastBatchEvents()
-        expect(batchEvents).toHaveLength(1)
-        expect(batchEvents![0]).toMatchObject({
+        },
+        expectedBatchEvent: {
           distinct_id: '123',
           event: 'test-event',
           properties: expect.objectContaining({ foo: 'bar' }),
-        })
-      })
-
-      it('should drop events when before_send returns null', async () => {
-        const beforeSendFn = jest.fn(() => null)
-        const ph = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          fetchRetryCount: 0,
-          disableCompression: true,
-          before_send: beforeSendFn,
-        })
-
-        ph.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
-        await waitForFlushTimer()
-
-        expect(beforeSendFn).toHaveBeenCalledTimes(1)
-        expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
-      })
-
-      it('should support array of before_send functions', async () => {
-        const beforeSend1 = jest.fn((event) => ({ ...event, properties: { ...event.properties, added1: true } }))
-        const beforeSend2 = jest.fn((event) => ({ ...event, properties: { ...event.properties, added2: true } }))
-
-        const ph = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          fetchRetryCount: 0,
-          disableCompression: true,
-          before_send: [beforeSend1, beforeSend2],
-        })
-
-        ph.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
-        await waitForFlushTimer()
-
-        expect(beforeSend1).toHaveBeenCalledTimes(1)
-        expect(beforeSend2).toHaveBeenCalledTimes(1)
-
-        const batchEvents = getLastBatchEvents()
-        expect(batchEvents).toHaveLength(1)
-        expect(batchEvents![0]).toMatchObject({
+        },
+        modifyProperties: (event: any) => ({ ...event, properties: { ...event.properties, added1: true } }),
+        immediateMethod: 'captureImmediate',
+      },
+      {
+        method: 'identify',
+        methodCall: (ph: PostHog) => ph.identify({ distinctId: '123', properties: { email: 'user@example.com' } }),
+        expectedEventName: '$identify',
+        expectedBeforeSendCall: {
+          distinctId: '123',
+          event: '$identify',
+          properties: {
+            $set: { email: 'user@example.com' },
+          },
+          groups: undefined,
+          sendFeatureFlags: undefined,
+          timestamp: undefined,
+          disableGeoip: undefined,
+          uuid: undefined,
+        },
+        expectedBatchEvent: {
           distinct_id: '123',
-          event: 'test-event',
-          properties: expect.objectContaining({ foo: 'bar', added1: true, added2: true }),
+          event: '$identify',
+          properties: expect.objectContaining({
+            $set: { email: 'user@example.com' },
+          }),
+        },
+        modifyProperties: (event: any) => ({
+          ...event,
+          properties: { ...event.properties, $set: { ...event.properties.$set, added1: true } },
+        }),
+        immediateMethod: 'identifyImmediate',
+      },
+      {
+        method: 'groupIdentify',
+        methodCall: (ph: PostHog) =>
+          ph.groupIdentify({
+            groupType: 'company',
+            groupKey: 'acme-corp',
+            properties: {
+              name: 'Acme Corp',
+              industry: 'Technology',
+              employee_count: 500,
+            },
+            distinctId: 'user_123',
+          }),
+        expectedEventName: '$groupidentify',
+        expectedBeforeSendCall: {
+          distinctId: 'user_123',
+          event: '$groupidentify',
+          properties: {
+            $group_type: 'company',
+            $group_key: 'acme-corp',
+            $group_set: {
+              name: 'Acme Corp',
+              industry: 'Technology',
+              employee_count: 500,
+            },
+          },
+          groups: undefined,
+          sendFeatureFlags: undefined,
+          timestamp: undefined,
+          disableGeoip: undefined,
+          uuid: undefined,
+        },
+        expectedBatchEvent: {
+          distinct_id: 'user_123',
+          event: '$groupidentify',
+          properties: expect.objectContaining({
+            $group_type: 'company',
+            $group_key: 'acme-corp',
+            $group_set: {
+              name: 'Acme Corp',
+              industry: 'Technology',
+              employee_count: 500,
+            },
+          }),
+        },
+        modifyProperties: (event: any) => ({
+          ...event,
+          properties: {
+            ...event.properties,
+            $group_set: {
+              ...event.properties.$group_set,
+              added1: true,
+            },
+          },
+        }),
+        immediateMethod: null,
+      },
+    ])(
+      '$method',
+      ({
+        method,
+        methodCall,
+        expectedEventName,
+        expectedBeforeSendCall,
+        expectedBatchEvent,
+        modifyProperties,
+        immediateMethod,
+      }) => {
+        it('should allow events through when before_send returns the event', async () => {
+          const beforeSendFn = jest.fn((event) => event)
+          const ph = new PostHog('TEST_API_KEY', {
+            host: 'http://example.com',
+            fetchRetryCount: 0,
+            disableCompression: true,
+            before_send: beforeSendFn,
+          })
+
+          methodCall(ph)
+          await waitForFlushTimer()
+
+          expect(beforeSendFn).toHaveBeenCalledTimes(1)
+          expect(beforeSendFn).toHaveBeenCalledWith(expectedBeforeSendCall)
+
+          const batchEvents = getLastBatchEvents()
+          expect(batchEvents).toHaveLength(1)
+          expect(batchEvents![0]).toMatchObject(expectedBatchEvent)
         })
-      })
 
-      it('should stop processing if any before_send returns null', async () => {
-        const beforeSend1 = jest.fn((event) => event)
-        const beforeSend2 = jest.fn(() => null)
-        const beforeSend3 = jest.fn((event) => event)
+        it('should drop events when before_send returns null', async () => {
+          const beforeSendFn = jest.fn(() => null)
+          const ph = new PostHog('TEST_API_KEY', {
+            host: 'http://example.com',
+            fetchRetryCount: 0,
+            disableCompression: true,
+            before_send: beforeSendFn,
+          })
 
-        const ph = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          fetchRetryCount: 0,
-          disableCompression: true,
-          before_send: [beforeSend1, beforeSend2, beforeSend3],
+          methodCall(ph)
+          await waitForFlushTimer()
+
+          expect(beforeSendFn).toHaveBeenCalledTimes(1)
+          expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
         })
 
-        ph.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
-        await waitForFlushTimer()
+        it('should support array of before_send functions', async () => {
+          const beforeSend1 = jest.fn((event) => modifyProperties(event))
+          const beforeSend2 = jest.fn((event) => {
+            const modified = modifyProperties(event)
+            // Check if the first modification was already applied (meaning this is the second pass)
+            // If so, add 'added2', otherwise just apply the first modification
+            const hasAdded1 =
+              modified.properties.added1 || modified.properties?.$set?.added1 || modified.properties?.$group_set?.added1
+            if (hasAdded1) {
+              if (modified.properties.$set) {
+                return {
+                  ...modified,
+                  properties: { ...modified.properties, $set: { ...modified.properties.$set, added2: true } },
+                }
+              } else if (modified.properties.$group_set) {
+                return {
+                  ...modified,
+                  properties: {
+                    ...modified.properties,
+                    $group_set: { ...modified.properties.$group_set, added2: true },
+                  },
+                }
+              } else {
+                return { ...modified, properties: { ...modified.properties, added2: true } }
+              }
+            }
+            return modified
+          })
 
-        expect(beforeSend1).toHaveBeenCalledTimes(1)
-        expect(beforeSend2).toHaveBeenCalledTimes(1)
-        expect(beforeSend3).not.toHaveBeenCalled()
-        expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
-      })
+          const ph = new PostHog('TEST_API_KEY', {
+            host: 'http://example.com',
+            fetchRetryCount: 0,
+            disableCompression: true,
+            before_send: [beforeSend1, beforeSend2],
+          })
 
+          methodCall(ph)
+          await waitForFlushTimer()
+
+          expect(beforeSend1).toHaveBeenCalledTimes(1)
+          expect(beforeSend2).toHaveBeenCalledTimes(1)
+
+          const batchEvents = getLastBatchEvents()
+          expect(batchEvents).toHaveLength(1)
+          // For capture: properties have added1 and added2
+          // For identify: properties.$set has added1 and added2
+          // For groupIdentify: properties.$group_set has added1 and added2
+          const props = batchEvents![0].properties
+          const targetObj = props.$set || props.$group_set || props
+          expect(targetObj).toMatchObject(expect.objectContaining({ added1: true, added2: true }))
+        })
+
+        it('should stop processing if any before_send returns null', async () => {
+          const beforeSend1 = jest.fn((event) => event)
+          const beforeSend2 = jest.fn(() => null)
+          const beforeSend3 = jest.fn((event) => event)
+
+          const ph = new PostHog('TEST_API_KEY', {
+            host: 'http://example.com',
+            fetchRetryCount: 0,
+            disableCompression: true,
+            before_send: [beforeSend1, beforeSend2, beforeSend3],
+          })
+
+          methodCall(ph)
+          await waitForFlushTimer()
+
+          expect(beforeSend1).toHaveBeenCalledTimes(1)
+          expect(beforeSend2).toHaveBeenCalledTimes(1)
+          expect(beforeSend3).not.toHaveBeenCalled()
+          expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
+        })
+      }
+    )
+
+    describe('capture - specific tests', () => {
       it('should work with captureImmediate', async () => {
         const beforeSendFn = jest.fn((event) => ({ ...event, event: 'modified-event' }))
         const ph = new PostHog('TEST_API_KEY', {
@@ -498,121 +617,7 @@ describe('PostHog Node.js', () => {
       })
     })
 
-    describe('identify', () => {
-      it('should allow events through when before_send returns the event', async () => {
-        const beforeSendFn = jest.fn((event) => event)
-        const ph = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          fetchRetryCount: 0,
-          disableCompression: true,
-          before_send: beforeSendFn,
-        })
-
-        ph.identify({ distinctId: '123', properties: { email: 'user@example.com' } })
-        await waitForFlushTimer()
-
-        expect(beforeSendFn).toHaveBeenCalledTimes(1)
-        expect(beforeSendFn).toHaveBeenCalledWith({
-          distinctId: '123',
-          event: '$identify',
-          properties: {
-            $set: { email: 'user@example.com' },
-          },
-          groups: undefined,
-          sendFeatureFlags: undefined,
-          timestamp: undefined,
-          disableGeoip: undefined,
-          uuid: undefined,
-        })
-
-        const batchEvents = getLastBatchEvents()
-        expect(batchEvents).toHaveLength(1)
-        expect(batchEvents![0]).toMatchObject({
-          distinct_id: '123',
-          event: '$identify',
-          properties: expect.objectContaining({
-            $set: { email: 'user@example.com' },
-          }),
-        })
-      })
-
-      it('should drop events when before_send returns null', async () => {
-        const beforeSendFn = jest.fn(() => null)
-        const ph = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          fetchRetryCount: 0,
-          disableCompression: true,
-          before_send: beforeSendFn,
-        })
-
-        ph.identify({ distinctId: '123', properties: { email: 'user@example.com' } })
-        await waitForFlushTimer()
-
-        expect(beforeSendFn).toHaveBeenCalledTimes(1)
-        expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
-      })
-
-      it('should support array of before_send functions', async () => {
-        const beforeSend1 = jest.fn((event) => ({
-          ...event,
-          properties: { ...event.properties, $set: { ...event.properties.$set, added1: true } },
-        }))
-        const beforeSend2 = jest.fn((event) => ({
-          ...event,
-          properties: { ...event.properties, $set: { ...event.properties.$set, added2: true } },
-        }))
-
-        const ph = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          fetchRetryCount: 0,
-          disableCompression: true,
-          before_send: [beforeSend1, beforeSend2],
-        })
-
-        ph.identify({
-          distinctId: '123',
-          properties: { $set: { email: 'user@example.com' } },
-        })
-        await waitForFlushTimer()
-
-        expect(beforeSend1).toHaveBeenCalledTimes(1)
-        expect(beforeSend2).toHaveBeenCalledTimes(1)
-
-        const batchEvents = getLastBatchEvents()
-        expect(batchEvents).toHaveLength(1)
-        expect(batchEvents![0]).toMatchObject({
-          event: '$identify',
-          properties: expect.objectContaining({
-            $set: {
-              added1: true,
-              added2: true,
-              email: 'user@example.com',
-            },
-          }),
-        })
-      })
-
-      it('should stop processing if any before_send returns null', async () => {
-        const beforeSend1 = jest.fn((event) => event)
-        const beforeSend2 = jest.fn(() => null)
-        const beforeSend3 = jest.fn((event) => event)
-
-        const ph = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          fetchRetryCount: 0,
-          disableCompression: true,
-          before_send: [beforeSend1, beforeSend2, beforeSend3],
-        })
-
-        ph.identify({ distinctId: '123', properties: { email: 'user@example.com' } })
-        await waitForFlushTimer()
-
-        expect(beforeSend1).toHaveBeenCalledTimes(1)
-        expect(beforeSend2).toHaveBeenCalledTimes(1)
-        expect(beforeSend3).not.toHaveBeenCalled()
-        expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
-      })
-
+    describe('identify - specific tests', () => {
       it('should handle $set and $set_once correctly in before_send', async () => {
         const beforeSendFn = jest.fn((event) => event)
         const ph = new PostHog('TEST_API_KEY', {
@@ -686,203 +691,7 @@ describe('PostHog Node.js', () => {
       })
     })
 
-    describe('groupIdentify', () => {
-      it('should allow events through when before_send returns the event', async () => {
-        const beforeSendFn = jest.fn((event) => event)
-        const ph = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          fetchRetryCount: 0,
-          disableCompression: true,
-          before_send: beforeSendFn,
-        })
-
-        ph.groupIdentify({
-          groupType: 'company',
-          groupKey: 'acme-corp',
-          properties: {
-            name: 'Acme Corp',
-            industry: 'Technology',
-            employee_count: 500,
-          },
-          distinctId: 'user_123',
-        })
-        await waitForFlushTimer()
-
-        expect(beforeSendFn).toHaveBeenCalledTimes(1)
-        expect(beforeSendFn).toHaveBeenCalledWith({
-          distinctId: 'user_123',
-          event: '$groupidentify',
-          properties: {
-            $group_type: 'company',
-            $group_key: 'acme-corp',
-            $group_set: {
-              name: 'Acme Corp',
-              industry: 'Technology',
-              employee_count: 500,
-            },
-          },
-          groups: undefined,
-          sendFeatureFlags: undefined,
-          timestamp: undefined,
-          disableGeoip: undefined,
-          uuid: undefined,
-        })
-
-        const batchEvents = getLastBatchEvents()
-        expect(batchEvents).toHaveLength(1)
-        expect(batchEvents![0]).toMatchObject({
-          distinct_id: 'user_123',
-          event: '$groupidentify',
-          properties: expect.objectContaining({
-            $group_type: 'company',
-            $group_key: 'acme-corp',
-            $group_set: {
-              name: 'Acme Corp',
-              industry: 'Technology',
-              employee_count: 500,
-            },
-          }),
-        })
-      })
-
-      it('should drop events when before_send returns null', async () => {
-        const beforeSendFn = jest.fn(() => null)
-        const ph = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          fetchRetryCount: 0,
-          disableCompression: true,
-          before_send: beforeSendFn,
-        })
-
-        ph.groupIdentify({
-          groupType: 'organization',
-          groupKey: 'org-456',
-          properties: {
-            plan: 'enterprise',
-            region: 'US-West',
-          },
-        })
-        await waitForFlushTimer()
-
-        expect(beforeSendFn).toHaveBeenCalledTimes(1)
-        expect(beforeSendFn).toHaveBeenCalledWith(
-          expect.objectContaining({
-            event: '$groupidentify',
-            properties: expect.objectContaining({
-              $group_type: 'organization',
-              $group_key: 'org-456',
-              $group_set: {
-                plan: 'enterprise',
-                region: 'US-West',
-              },
-            }),
-          })
-        )
-        expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
-      })
-
-      it('should support array of before_send functions', async () => {
-        const beforeSend1 = jest.fn((event) => ({
-          ...event,
-          properties: {
-            ...event.properties,
-            $group_set: {
-              ...event.properties.$group_set,
-              added1: true,
-            },
-          },
-        }))
-        const beforeSend2 = jest.fn((event) => ({
-          ...event,
-          properties: {
-            ...event.properties,
-            $group_set: {
-              ...event.properties.$group_set,
-              added2: true,
-            },
-          },
-        }))
-
-        const ph = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          fetchRetryCount: 0,
-          disableCompression: true,
-          before_send: [beforeSend1, beforeSend2],
-        })
-
-        ph.groupIdentify({
-          groupType: 'organization',
-          groupKey: 'org-456',
-          properties: {
-            plan: 'enterprise',
-            region: 'US-West',
-          },
-        })
-        await waitForFlushTimer()
-
-        expect(beforeSend1).toHaveBeenCalledTimes(1)
-        expect(beforeSend2).toHaveBeenCalledTimes(1)
-
-        const batchEvents = getLastBatchEvents()
-        expect(batchEvents).toHaveLength(1)
-        expect(batchEvents![0]).toMatchObject({
-          event: '$groupidentify',
-          properties: expect.objectContaining({
-            $group_type: 'organization',
-            $group_key: 'org-456',
-            $group_set: {
-              plan: 'enterprise',
-              region: 'US-West',
-              added1: true,
-              added2: true,
-            },
-          }),
-        })
-      })
-
-      it('should stop processing if any before_send returns null', async () => {
-        const beforeSend1 = jest.fn((event) => event)
-        const beforeSend2 = jest.fn(() => null)
-        const beforeSend3 = jest.fn((event) => event)
-
-        const ph = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          fetchRetryCount: 0,
-          disableCompression: true,
-          before_send: [beforeSend1, beforeSend2],
-        })
-
-        ph.groupIdentify({
-          groupType: 'company',
-          groupKey: 'acme-corp',
-          properties: {
-            name: 'Acme Corp',
-            industry: 'Technology',
-            employee_count: 500,
-          },
-        })
-        await waitForFlushTimer()
-
-        expect(beforeSend1).toHaveBeenCalledTimes(1)
-        expect(beforeSend1).toHaveBeenCalledWith(
-          expect.objectContaining({
-            event: '$groupidentify',
-            properties: expect.objectContaining({
-              $group_type: 'company',
-              $group_key: 'acme-corp',
-              $group_set: {
-                name: 'Acme Corp',
-                industry: 'Technology',
-                employee_count: 500,
-              },
-            }),
-          })
-        )
-        expect(beforeSend2).toHaveBeenCalledTimes(1)
-        expect(beforeSend3).not.toHaveBeenCalled()
-        expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
-      })
-
+    describe('groupIdentify - specific tests', () => {
       it('should allow before_send to modify groupIdentify properties', async () => {
         const beforeSendFn = jest.fn((event) => ({
           ...event,
@@ -2929,84 +2738,47 @@ describe('PostHog Node.js', () => {
       mockedFetch.mockClear()
     })
 
-    it('should send evaluation environments when configured', async () => {
-      mockedFetch.mockImplementation(
-        apiImplementation({
-          decideFlags: { 'test-flag': true },
-          flagsPayloads: {},
-        })
-      )
-
-      const posthogWithEnvs = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
+    it.each([
+      {
+        description: 'when configured',
         evaluationEnvironments: ['production', 'backend'],
-        ...posthogImmediateResolveOptions,
-      })
-
-      await posthogWithEnvs.getAllFlags('some-distinct-id')
-
-      expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('"evaluation_environments":["production","backend"]'),
-        })
-      )
-
-      await posthogWithEnvs.shutdown()
-    })
-
-    it('should not send evaluation environments when not configured', async () => {
-      mockedFetch.mockImplementation(
-        apiImplementation({
-          decideFlags: { 'test-flag': true },
-          flagsPayloads: {},
-        })
-      )
-
-      const posthogWithoutEnvs = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
-
-      await posthogWithoutEnvs.getAllFlags('some-distinct-id')
-
-      expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.not.stringContaining('evaluation_environments'),
-        })
-      )
-
-      await posthogWithoutEnvs.shutdown()
-    })
-
-    it('should not send evaluation environments when configured as empty array', async () => {
-      mockedFetch.mockImplementation(
-        apiImplementation({
-          decideFlags: { 'test-flag': true },
-          flagsPayloads: {},
-        })
-      )
-
-      const posthogWithEmptyEnvs = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
+        expectedMatcher: expect.stringContaining('"evaluation_environments":["production","backend"]'),
+      },
+      {
+        description: 'when not configured',
+        evaluationEnvironments: undefined,
+        expectedMatcher: expect.not.stringContaining('evaluation_environments'),
+      },
+      {
+        description: 'when configured as empty array',
         evaluationEnvironments: [],
+        expectedMatcher: expect.not.stringContaining('evaluation_environments'),
+      },
+    ])('should send evaluation environments $description', async ({ evaluationEnvironments, expectedMatcher }) => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          decideFlags: { 'test-flag': true },
+          flagsPayloads: {},
+        })
+      )
+
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        ...(evaluationEnvironments !== undefined && { evaluationEnvironments }),
         ...posthogImmediateResolveOptions,
       })
 
-      await posthogWithEmptyEnvs.getAllFlags('some-distinct-id')
+      await ph.getAllFlags('some-distinct-id')
 
       expect(mockedFetch).toHaveBeenCalledWith(
         'http://example.com/flags/?v=2&config=true',
         expect.objectContaining({
           method: 'POST',
-          body: expect.not.stringContaining('evaluation_environments'),
+          body: expectedMatcher,
         })
       )
 
-      await posthogWithEmptyEnvs.shutdown()
+      await ph.shutdown()
     })
   })
 
@@ -3051,27 +2823,24 @@ describe('PostHog Node.js', () => {
       expect(requestRemoteConfigPayloadSpy).toHaveBeenCalledWith('test-flag')
     })
 
-    it('should handle double-encoded JSON payload', async () => {
-      const doubleEncodedPayload = '{ "foo":["bar","baz"]}'
+    it.each([
+      {
+        description: 'double-encoded JSON payload',
+        mockPayload: '{ "foo":["bar","baz"]}',
+        expectedResult: { foo: ['bar', 'baz'] },
+      },
+      {
+        description: 'simple JSON payload',
+        mockPayload: { foo: ['bar', 'baz'] },
+        expectedResult: { foo: ['bar', 'baz'] },
+      },
+    ])('should handle $description', async ({ mockPayload, expectedResult }) => {
       requestRemoteConfigPayloadSpy.mockResolvedValue({
-        json: () => Promise.resolve(doubleEncodedPayload),
+        json: () => Promise.resolve(mockPayload),
       })
 
       const payload = await posthog.getRemoteConfigPayload('test-flag')
-      expect(payload).toEqual({
-        foo: ['bar', 'baz'],
-      })
-      expect(requestRemoteConfigPayloadSpy).toHaveBeenCalledWith('test-flag')
-    })
-
-    it('should handle simple JSON payload', async () => {
-      const simplePayload = { foo: ['bar', 'baz'] }
-      requestRemoteConfigPayloadSpy.mockResolvedValue({
-        json: () => Promise.resolve(simplePayload),
-      })
-
-      const payload = await posthog.getRemoteConfigPayload('test-flag')
-      expect(payload).toEqual(simplePayload)
+      expect(payload).toEqual(expectedResult)
       expect(requestRemoteConfigPayloadSpy).toHaveBeenCalledWith('test-flag')
     })
 
