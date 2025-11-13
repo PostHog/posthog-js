@@ -1,6 +1,5 @@
 import { AudioRecorder } from '../../../extensions/feedback-recording/audio-recorder'
 
-// Properly typed mock for MediaRecorder
 interface MockMediaRecorderClass extends jest.MockedClass<typeof MediaRecorder> {
     isTypeSupported: jest.MockedFunction<typeof MediaRecorder.isTypeSupported>
 }
@@ -12,12 +11,10 @@ describe('AudioRecorder', () => {
     let MockMediaRecorderClass: MockMediaRecorderClass
 
     beforeEach(() => {
-        // Mock MediaStream
         mockMediaStream = {
             getTracks: jest.fn(() => [{ stop: jest.fn() }]),
         } as unknown as MediaStream
 
-        // Mock MediaRecorder instance
         mockMediaRecorder = {
             start: jest.fn(),
             stop: jest.fn(),
@@ -26,7 +23,6 @@ describe('AudioRecorder', () => {
             onstop: null,
         } as unknown as MediaRecorder
 
-        // Mock MediaRecorder class
         MockMediaRecorderClass = Object.assign(
             jest.fn().mockImplementation(() => mockMediaRecorder),
             {
@@ -34,7 +30,6 @@ describe('AudioRecorder', () => {
             }
         ) as MockMediaRecorderClass
 
-        // Mock MediaDevices
         mockMediaDevices = {
             getUserMedia: jest.fn().mockResolvedValue(mockMediaStream),
         } as unknown as MediaDevices
