@@ -11,6 +11,7 @@ import {
     SurveyQuestionBranchingType,
     SurveyQuestionType,
     SurveySchedule,
+    SurveyTabPosition,
     SurveyType,
     SurveyWidgetType,
     SurveyWithTypeAndAppearance,
@@ -1057,6 +1058,23 @@ function getPopoverPosition(
     }
 }
 
+function getTabPositionStyles(
+    position: SurveyTabPosition = SurveyTabPosition.Right
+): React.CSSProperties {
+    switch (position) {
+        case SurveyTabPosition.Top:
+            return { top: '0', left: '50%', transform: 'translateX(-50%)' }
+        case SurveyTabPosition.Left:
+            return { top: '50%', left: '0', transform: 'rotate(90deg) translateY(-100%)', transformOrigin: 'left top' }
+        case SurveyTabPosition.Bottom: // bottom center
+            return { bottom: '0', left: '50%', transform: 'translateX(-50%)' }
+        default:
+        case SurveyTabPosition.Right:
+            // not perfectly centered vertically, to avoid a "breaking" change
+            return { top: '50%', right: '0', transform: 'rotate(-90deg) translateY(-100%)', transformOrigin: 'right top' }
+    }
+}
+
 export function SurveyPopup({
     survey,
     forceDisableHtml,
@@ -1335,7 +1353,14 @@ export function FeedbackWidget({
     return (
         <Preact.Fragment>
             {survey.appearance?.widgetType === 'tab' && (
-                <button className="ph-survey-widget-tab" onClick={toggleSurvey} disabled={readOnly}>
+                <button
+                    className={`ph-survey-widget-tab ${survey.appearance?.tabPosition === SurveyTabPosition.Top ? 'widget-tab-top' : ''}`}
+                    onClick={toggleSurvey}
+                    disabled={readOnly}
+                    style={
+                        getTabPositionStyles(survey.appearance?.tabPosition)
+                    }
+                >
                     {survey.appearance?.widgetLabel || ''}
                 </button>
             )}

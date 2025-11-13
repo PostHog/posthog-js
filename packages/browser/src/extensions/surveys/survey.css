@@ -152,23 +152,27 @@
 
 .ph-survey-widget-tab {
     position: fixed;
-    top: 50%;
-    right: 0;
     background: var(--ph-widget-color);
     color: var(--ph-widget-text-color);
-    transform: rotate(-90deg) translateY(-100%);
-    transform-origin: right top;
     padding: 10px 12px;
     border-radius: 3px 3px 0 0;
     text-align: center;
     cursor: pointer;
     z-index: var(--ph-survey-z-index);
-    transition: padding-bottom 0.2s ease-out;
+    transition: padding 0.2s ease-out;
     border: none;
 }
 
-.ph-survey-widget-tab:hover {
+.ph-survey-widget-tab:hover:not(.widget-tab-top) {
     padding-bottom: 16px;
+}
+
+.ph-survey-widget-tab.widget-tab-top {
+    border-radius: 0 0 3px 3px;
+}
+
+.ph-survey-widget-tab.widget-tab-top:hover {
+    padding-top: 16px;
 }
 
 /* --- Animations --- */
