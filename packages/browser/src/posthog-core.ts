@@ -720,10 +720,6 @@ export class PostHog {
             this.deadClicksAutocapture.startIfEnabled()
         })
 
-        initTasks.push(() => {
-            this.feedbackManager = new FeedbackRecordingManager(this)
-        })
-
         // Replay any pending remote config that arrived before extensions were ready
         initTasks.push(() => {
             if (this._pendingRemoteConfig) {
