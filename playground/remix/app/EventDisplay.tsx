@@ -5,7 +5,7 @@ export function EventDisplay({ events }: { events: CaptureResult[] }) {
         <div
             style={{
                 position: 'fixed',
-                top: 0,
+                bottom: 0,
                 right: 0,
                 width: '300px',
                 maxHeight: '100vh',
