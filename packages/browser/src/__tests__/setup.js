@@ -7,4 +7,6 @@ beforeEach(() => {
     console.warn = (...args) => {
         throw new Error(`Unexpected console.warn: ${args}`)
     }
+
+    console.log = () => {}
 })

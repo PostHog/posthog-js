@@ -16,7 +16,7 @@ import {
     makeSafeText,
 } from '../autocapture-utils'
 import { document } from '../utils/globals'
-import { makeMouseEvent } from './autocapture.test'
+import { makeMouseEvent } from './helpers/events'
 import { AutocaptureConfig } from '../types'
 
 describe(`Autocapture utility functions`, () => {

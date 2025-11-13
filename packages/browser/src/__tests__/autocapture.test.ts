@@ -16,6 +16,21 @@ import { window } from '../utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { isUndefined } from '@posthog/core'
+import { makeCopyEvent, makeCutEvent, makeMouseEvent, simulateClick } from './helpers/events'
+import { setupServer } from 'msw/node'
+import { rest } from 'msw'
+
+const server = setupServer(
+    rest.get('https://test.com/*', (req, res, ctx) => {
+        return res(ctx.json({}))
+    }),
+    rest.post('https://test.com/flags', (req, res, ctx) => {
+        return res(ctx.json({}))
+    }),
+    rest.post('https://test.com/e', (req, res, ctx) => {
+        return res(ctx.json({}))
+    })
+)
 
 // JS DOM doesn't have ClipboardEvent, so we need to mock it
 // see https://github.com/jsdom/jsdom/issues/1568
@@ -24,31 +39,6 @@ class MockClipboardEvent extends Event implements ClipboardEvent {
     type: 'copy' | 'cut' | 'paste' = 'copy'
 }
 window!.ClipboardEvent = MockClipboardEvent
-
-const triggerMouseEvent = function (node: Node, eventType: string) {
-    node.dispatchEvent(
-        new MouseEvent(eventType, {
-            bubbles: true,
-            cancelable: true,
-        })
-    )
-}
-
-const simulateClick = function (el: Node) {
-    triggerMouseEvent(el, 'click')
-}
-
-export function makeMouseEvent(partialEvent: Partial<MouseEvent>) {
-    return { type: 'click', ...partialEvent } as unknown as MouseEvent
-}
-
-export function makeCopyEvent(partialEvent: Partial<ClipboardEvent>) {
-    return { type: 'copy', ...partialEvent } as unknown as ClipboardEvent
-}
-
-export function makeCutEvent(partialEvent: Partial<ClipboardEvent>) {
-    return { type: 'cut', ...partialEvent } as unknown as ClipboardEvent
-}
 
 function setWindowTextSelection(s: string): void {
     window!.getSelection = () => {
@@ -64,6 +54,10 @@ describe('Autocapture system', () => {
     let autocapture: Autocapture
     let posthog: PostHog
     let beforeSendMock: jest.Mock
+
+    beforeAll(() => server.listen())
+
+    afterAll(() => server.close())
 
     beforeEach(async () => {
         jest.spyOn(window!.console, 'log').mockImplementation()
@@ -93,7 +87,7 @@ describe('Autocapture system', () => {
 
     afterEach(() => {
         document.getElementsByTagName('html')[0].innerHTML = ''
-
+        server.resetHandlers()
         Object.defineProperty(window, 'location', {
             configurable: true,
             enumerable: true,
@@ -536,6 +530,7 @@ describe('Autocapture system', () => {
                 document.body.appendChild(el)
 
                 for (const clickEvent of clickEvents) {
+                    await new Promise((resolve) => setTimeout(resolve, clickEvent.timeStamp))
                     const fakeEvent = makeMouseEvent({
                         target: el,
                         clientX: clickEvent.clientX,
@@ -550,6 +545,7 @@ describe('Autocapture system', () => {
                 }
 
                 const captured = beforeSendMock.mock.calls.map((args) => args[0].event)
+                expectedCaptured.unshift('$pageview', '$pageview')
                 expect(captured).toEqual(expectedCaptured)
 
                 // Cleanup
