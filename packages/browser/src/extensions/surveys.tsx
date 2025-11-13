@@ -1058,9 +1058,7 @@ function getPopoverPosition(
     }
 }
 
-function getTabPositionStyles(
-    position: SurveyTabPosition = SurveyTabPosition.Right
-): React.CSSProperties {
+function getTabPositionStyles(position: SurveyTabPosition = SurveyTabPosition.Right): React.CSSProperties {
     switch (position) {
         case SurveyTabPosition.Top:
             return { top: '0', left: '50%', transform: 'translateX(-50%)' }
@@ -1071,7 +1069,12 @@ function getTabPositionStyles(
         default:
         case SurveyTabPosition.Right:
             // not perfectly centered vertically, to avoid a "breaking" change
-            return { top: '50%', right: '0', transform: 'rotate(-90deg) translateY(-100%)', transformOrigin: 'right top' }
+            return {
+                top: '50%',
+                right: '0',
+                transform: 'rotate(-90deg) translateY(-100%)',
+                transformOrigin: 'right top',
+            }
     }
 }
 
@@ -1357,9 +1360,7 @@ export function FeedbackWidget({
                     className={`ph-survey-widget-tab ${survey.appearance?.tabPosition === SurveyTabPosition.Top ? 'widget-tab-top' : ''}`}
                     onClick={toggleSurvey}
                     disabled={readOnly}
-                    style={
-                        getTabPositionStyles(survey.appearance?.tabPosition)
-                    }
+                    style={getTabPositionStyles(survey.appearance?.tabPosition)}
                 >
                     {survey.appearance?.widgetLabel || ''}
                 </button>
