@@ -21,7 +21,7 @@
     z-index: var(--ph-feedback-z-index);
     font-family: var(--ph-feedback-font-family);
     pointer-events: none;
-    
+
     * {
         box-sizing: border-box;
         font-family: var(--ph-feedback-font-family);
@@ -264,7 +264,8 @@
 }
 
 @keyframes ph-feedback-pulse {
-    0%, 100% {
+    0%,
+    100% {
         opacity: 1;
         transform: scale(1);
     }
@@ -275,7 +276,9 @@
 }
 
 @keyframes ph-feedback-wave {
-    0%, 40%, 100% {
+    0%,
+    40%,
+    100% {
         height: 4px;
         opacity: 0.6;
     }
@@ -292,11 +295,11 @@
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
     }
-    
+
     .feedback-recording-border {
         animation: none !important;
     }
-    
+
     .wave-bar {
         animation: none !important;
         height: 8px;
@@ -310,23 +313,23 @@
         width: calc(100% - 32px);
         max-width: none;
     }
-    
+
     .feedback-recording-buttons {
         flex-direction: column;
         align-items: stretch;
     }
-    
+
     .feedback-recording-button {
         min-width: auto;
         font-size: 16px;
     }
-    
+
     .feedback-recording-toolbar {
         top: 12px;
         right: 12px;
         padding: 10px 12px;
     }
-    
+
     .stop-button {
         width: 28px;
         height: 28px;
