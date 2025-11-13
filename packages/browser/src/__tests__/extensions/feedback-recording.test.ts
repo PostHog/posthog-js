@@ -2,8 +2,7 @@ import { FeedbackRecordingManager, generateFeedbackRecording } from '../../exten
 import * as FeedbackUI from '../../extensions/feedback-recording/components/FeedbackRecordingUI'
 import { PostHog } from '../../posthog-core'
 import { assignableWindow } from '../../utils/globals'
-import { createPosthogInstance } from '../helpers/posthog-instance'
-import { uuidv7 } from '../../uuidv7'
+import { createMockPostHog } from '../helpers/posthog-instance'
 import { AudioRecorder } from '../../extensions/feedback-recording/audio-recorder'
 import '@testing-library/jest-dom'
 
@@ -14,10 +13,10 @@ describe('FeedbackRecordingManager', () => {
     let manager: FeedbackRecordingManager
     let audioRecorderMock: jest.Mocked<AudioRecorder>
     let loadScriptMock: jest.Mock
+    let originalFileReader: typeof FileReader
 
-    beforeEach(async () => {
-        // mock the renderFeedbackRecordingUI function
-
+    beforeEach(() => {
+        originalFileReader = global.FileReader
         loadScriptMock = jest.fn()
         loadScriptMock.mockImplementation((_ph, _path, callback) => {
             assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
@@ -29,12 +28,20 @@ describe('FeedbackRecordingManager', () => {
             loadExternalDependency: loadScriptMock,
         }
 
-        instance = await createPosthogInstance(uuidv7(), {
-            api_host: 'https://test.com',
-            token: 'test-token',
+        instance = createMockPostHog({
+            config: {
+                api_host: 'https://test.com',
+                token: 'test-token',
+            },
+            capture: jest.fn(),
+            startSessionRecording: jest.fn(),
+            get_session_id: jest.fn().mockReturnValue('mock-session-id'),
+            _send_request: jest.fn(),
+            requestRouter: {
+                endpointFor: jest.fn().mockReturnValue('https://test.com/api/feedback/audio'),
+            },
         })
 
-        // Create a properly mocked AudioRecorder
         audioRecorderMock = {
             startRecording: jest.fn().mockResolvedValue(undefined),
             stopRecording: jest.fn().mockResolvedValue(null),
@@ -45,11 +52,18 @@ describe('FeedbackRecordingManager', () => {
         } as unknown as jest.Mocked<AudioRecorder>
 
         manager = new FeedbackRecordingManager(instance, audioRecorderMock)
+    })
 
-        // Mock instance methods
-        jest.spyOn(instance, 'capture').mockImplementation(jest.fn())
-        jest.spyOn(instance, 'startSessionRecording').mockImplementation(jest.fn())
-        jest.spyOn(instance, 'get_session_id').mockReturnValue('mock-session-id')
+    afterEach(() => {
+        global.FileReader = originalFileReader
+
+        if (assignableWindow.__PosthogExtensions__) {
+            delete assignableWindow.__PosthogExtensions__.generateFeedbackRecording
+        }
+
+        jest.clearAllTimers()
+        jest.useRealTimers()
+        jest.restoreAllMocks()
     })
 
     it('should initialize with PostHog instance', () => {
@@ -58,15 +72,8 @@ describe('FeedbackRecordingManager', () => {
         expect(manager.isFeedbackRecordingActive()).toBe(false)
     })
 
-    describe('renderFeedbackRecordingUI', () => {
-        it('should call renderFeedbackRecordingUI with correct props', () => {
-            //TODO: this should probably test the call made to Preact
-        })
-    })
-
     describe('launchFeedbackRecordingUI', () => {
         beforeEach(() => {
-            // reset mocks
             jest.clearAllMocks()
         })
 
@@ -129,67 +136,197 @@ describe('FeedbackRecordingManager', () => {
             expect(assignableWindow.__PosthogExtensions__?.loadExternalDependency).toHaveBeenCalledTimes(1)
         })
 
-        describe('returning a callback which starts a recording', () => {
-            it('calls the correct audio recording methods', async () => {
-                await manager.launchFeedbackRecordingUI()
+        it('should not launch UI when recording is already in progress', async () => {
+            const callback1 = jest.fn()
+            const callback2 = jest.fn()
 
-                const handleStartRecording = FeedbackUI.renderFeedbackRecordingUI.mock.lastCall[0].handleStartRecording
+            // First launch should succeed
+            await manager.launchFeedbackRecordingUI(callback1)
 
-                await handleStartRecording()
+            // Start a recording to make it active
+            const handleStartRecording = (
+                FeedbackUI.renderFeedbackRecordingUI as jest.MockedFunction<typeof FeedbackUI.renderFeedbackRecordingUI>
+            ).mock.lastCall![0].handleStartRecording
+            await handleStartRecording()
 
-                expect(audioRecorderMock.startRecording).toHaveBeenCalledTimes(1)
-                expect(manager.isFeedbackRecordingActive()).toBe(true)
-                expect(manager.getCurrentFeedbackRecordingId()).not.toBeNull()
-            })
+            expect(manager.isFeedbackRecordingActive()).toBe(true)
 
-            it('captures an event when recording starts', async () => {
-                await manager.launchFeedbackRecordingUI()
+            // Second launch should be ignored
+            await manager.launchFeedbackRecordingUI(callback2)
 
-                const handleStartRecording = FeedbackUI.renderFeedbackRecordingUI.mock.lastCall[0].handleStartRecording
-
-                const feedbackId = await handleStartRecording()
-
-                expect(instance.capture).toHaveBeenCalledWith('$user_feedback_recording_started', {
-                    $feedback_recording_id: feedbackId,
-                })
-            })
+            // Should only have called renderFeedbackRecordingUI once (from first launch)
+            expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledTimes(1)
         })
 
-        describe('onRecordingEnded can be used to stop and upload the recording', () => {
-            it('returns a callback which stops a recording', async () => {
-                const onRecordingEnded = jest.fn()
+        describe('recording workflow', () => {
+            let handleStartRecording: () => Promise<string>
+            let stopCallback: (feedbackId: string) => Promise<void>
+            let feedbackId: string
+            let onRecordingEnded: jest.Mock
 
+            beforeEach(async () => {
+                onRecordingEnded = jest.fn()
                 await manager.launchFeedbackRecordingUI(onRecordingEnded)
 
-                const handleStartRecording = FeedbackUI.renderFeedbackRecordingUI.mock.lastCall[0].handleStartRecording
-
-                const feedbackId = await handleStartRecording()
-
-                const stopCallback = FeedbackUI.renderFeedbackRecordingUI.mock.lastCall[0].onRecordingEnded
-
-                await stopCallback(feedbackId)
-
-                expect(audioRecorderMock.stopRecording).toHaveBeenCalledTimes(1)
-                expect(onRecordingEnded).toHaveBeenCalledTimes(1)
-                expect(manager.isFeedbackRecordingActive()).toBe(false)
-                expect(manager.getCurrentFeedbackRecordingId()).toBeNull()
+                handleStartRecording = (
+                    FeedbackUI.renderFeedbackRecordingUI as jest.MockedFunction<
+                        typeof FeedbackUI.renderFeedbackRecordingUI
+                    >
+                ).mock.lastCall![0].handleStartRecording
+                stopCallback = (
+                    FeedbackUI.renderFeedbackRecordingUI as jest.MockedFunction<
+                        typeof FeedbackUI.renderFeedbackRecordingUI
+                    >
+                ).mock.lastCall![0].onRecordingEnded
             })
 
-            it('captures an event when recording stops', async () => {
-                const onRecordingEnded = jest.fn()
+            describe('start', () => {
+                it('calls the correct audio recording methods when starting', async () => {
+                    feedbackId = await handleStartRecording()
 
-                await manager.launchFeedbackRecordingUI(onRecordingEnded)
+                    expect(audioRecorderMock.startRecording).toHaveBeenCalledTimes(1)
+                    expect(manager.isFeedbackRecordingActive()).toBe(true)
+                    expect(manager.getCurrentFeedbackRecordingId()).toBe(feedbackId)
+                })
 
-                const handleStartRecording = FeedbackUI.renderFeedbackRecordingUI.mock.lastCall[0].handleStartRecording
+                it('captures an event when recording starts', async () => {
+                    feedbackId = await handleStartRecording()
 
-                const feedbackId = await handleStartRecording()
+                    expect(instance.capture).toHaveBeenCalledWith('$user_feedback_recording_started', {
+                        $feedback_recording_id: feedbackId,
+                    })
+                })
 
-                const stopCallback = FeedbackUI.renderFeedbackRecordingUI.mock.lastCall[0].onRecordingEnded
+                it('continues recording even if audio recording fails', async () => {
+                    audioRecorderMock.startRecording.mockRejectedValue(new Error('Audio not supported'))
 
-                await stopCallback(feedbackId)
+                    feedbackId = await handleStartRecording()
 
-                expect(instance.capture).toHaveBeenCalledWith('$user_feedback_recording_stopped', {
-                    $feedback_recording_id: feedbackId,
+                    expect(manager.isFeedbackRecordingActive()).toBe(true)
+                    expect(instance.startSessionRecording).toHaveBeenCalledWith(true)
+                    expect(instance.capture).toHaveBeenCalledWith('$user_feedback_recording_started', {
+                        $feedback_recording_id: feedbackId,
+                    })
+                })
+            })
+
+            describe('stop', () => {
+                beforeEach(() => {
+                    jest.spyOn(instance, '_send_request')
+                })
+
+                it('stops recording and calls callback when ended', async () => {
+                    feedbackId = await handleStartRecording()
+                    await stopCallback(feedbackId)
+
+                    expect(audioRecorderMock.stopRecording).toHaveBeenCalledTimes(1)
+                    expect(onRecordingEnded).toHaveBeenCalledTimes(1)
+                    expect(manager.isFeedbackRecordingActive()).toBe(false)
+                    expect(manager.getCurrentFeedbackRecordingId()).toBeNull()
+                })
+
+                it('captures an event when recording stops', async () => {
+                    feedbackId = await handleStartRecording()
+                    await stopCallback(feedbackId)
+
+                    expect(instance.capture).toHaveBeenCalledWith('$user_feedback_recording_stopped', {
+                        $feedback_recording_id: feedbackId,
+                    })
+                })
+
+                it('uploads the audio when recording stops', async () => {
+                    const mockBlob = new Blob(['audio data'], { type: 'audio/webm' })
+                    audioRecorderMock.stopRecording.mockResolvedValue({
+                        blob: mockBlob,
+                        mimeType: 'audio/webm',
+                        durationMs: 5000,
+                    })
+
+                    const mockFileReader = {
+                        readAsDataURL: jest.fn(),
+                        result: 'data:audio/webm;base64,rest_of_data',
+                        onload: null as any,
+                        onerror: null as any,
+                    }
+                    global.FileReader = jest.fn(() => mockFileReader) as any
+
+                    feedbackId = await handleStartRecording()
+                    await stopCallback(feedbackId)
+
+                    if (mockFileReader.onload) {
+                        mockFileReader.onload()
+                    }
+
+                    expect(instance._send_request).toHaveBeenCalledWith({
+                        method: 'POST',
+                        url: 'https://test.com/api/feedback/audio',
+                        callback: expect.any(Function),
+                        data: {
+                            token: instance.config.token,
+                            feedback_id: feedbackId,
+                            audio_data: 'rest_of_data',
+                            audio_mime_type: 'audio/webm',
+                            audio_size: mockBlob.size,
+                        },
+                    })
+                })
+
+                it('does not upload when no audio blob is returned', async () => {
+                    audioRecorderMock.stopRecording.mockResolvedValue({
+                        blob: null,
+                        mimeType: 'audio/webm',
+                        durationMs: 0,
+                    } as any)
+
+                    feedbackId = await handleStartRecording()
+                    await stopCallback(feedbackId)
+
+                    expect(instance._send_request).not.toHaveBeenCalled()
+                    expect(onRecordingEnded).toHaveBeenCalledTimes(1)
+                    expect(manager.isFeedbackRecordingActive()).toBe(false)
+                })
+
+                it('does not upload when audio blob is too large', async () => {
+                    const largeMockBlob = { size: 11 * 1024 * 1024, type: 'audio/webm' } as Blob
+                    audioRecorderMock.stopRecording.mockResolvedValue({
+                        blob: largeMockBlob,
+                        mimeType: 'audio/webm',
+                        durationMs: 5000,
+                    })
+
+                    feedbackId = await handleStartRecording()
+                    await stopCallback(feedbackId)
+
+                    expect(instance._send_request).not.toHaveBeenCalled()
+                    expect(onRecordingEnded).toHaveBeenCalledTimes(1)
+                })
+
+                it('handles FileReader errors during upload', async () => {
+                    const mockBlob = new Blob(['audio data'], { type: 'audio/webm' })
+                    audioRecorderMock.stopRecording.mockResolvedValue({
+                        blob: mockBlob,
+                        mimeType: 'audio/webm',
+                        durationMs: 5000,
+                    })
+
+                    const mockFileReader = {
+                        readAsDataURL: jest.fn(),
+                        result: 'data:audio/webm;base64,rest_of_data',
+                        onload: null as any,
+                        onerror: null as any,
+                        error: new Error('FileReader failed'),
+                    }
+                    global.FileReader = jest.fn(() => mockFileReader) as any
+
+                    feedbackId = await handleStartRecording()
+                    await stopCallback(feedbackId)
+
+                    if (mockFileReader.onerror) {
+                        mockFileReader.onerror()
+                    }
+
+                    expect(instance._send_request).not.toHaveBeenCalled()
+                    expect(onRecordingEnded).toHaveBeenCalledTimes(1)
                 })
             })
         })
