@@ -42,11 +42,11 @@
   },
   "dependencies": {
     "@ai-sdk/provider": "^2.0.0",
-    "@anthropic-ai/sdk": "^0.67.0",
-    "@google/genai": "^1.29.0",
-    "@langchain/core": "^1.0.0",
-    "ai": "^5.0.87",
-    "langchain": "^1.0.0",
+    "@anthropic-ai/sdk": "^0.68.0",
+    "@google/genai": "^1.29.1",
+    "@langchain/core": "^1.0.4",
+    "ai": "^5.0.93",
+    "langchain": "^1.0.4",
     "openai": "^6.8.1",
     "uuid": "^11.0.5",
     "zod": "^4.1.8"
