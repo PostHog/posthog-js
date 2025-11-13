@@ -47,7 +47,11 @@ export class ErrorTracking {
         new CoreErrorTracking.StringCoercer(),
         new CoreErrorTracking.PrimitiveCoercer(),
       ],
-      [CoreErrorTracking.chromeStackLineParser, CoreErrorTracking.geckoStackLineParser]
+      CoreErrorTracking.createStackParser(
+        'hermes',
+        CoreErrorTracking.chromeStackLineParser,
+        CoreErrorTracking.geckoStackLineParser
+      )
     )
     this.logger = logger.createLogger('[ErrorTracking]')
     this.options = this.resolveOptions(options)
