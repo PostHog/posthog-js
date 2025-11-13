@@ -2,7 +2,7 @@ import { FlushedSizeTracker } from '../../../extensions/replay/external/flushed-
 import { PostHog } from '../../../posthog-core'
 import { jest } from '@jest/globals'
 import { PostHogPersistence } from '../../../posthog-persistence'
-import { PostHogConfig } from '../../../types'
+import { createMockPostHog, createMockConfig } from '../../helpers/posthog-instance'
 
 describe('FlushedSizeTracker', () => {
     let mockPostHog: PostHog
@@ -11,9 +11,9 @@ describe('FlushedSizeTracker', () => {
 
     beforeEach(() => {
         persistence = new PostHogPersistence(
-            {
+            createMockConfig({
                 persistence: 'memory',
-            } as unknown as PostHogConfig,
+            }),
             false
         )
 
@@ -21,10 +21,10 @@ describe('FlushedSizeTracker', () => {
         persistence.get_property = persistence.get_property.bind(persistence)
         persistence.set_property = persistence.set_property.bind(persistence)
 
-        mockPostHog = {
+        mockPostHog = createMockPostHog({
             get_property: persistence.get_property,
             persistence,
-        } as unknown as PostHog
+        })
 
         tracker = new FlushedSizeTracker(mockPostHog)
     })
@@ -40,10 +40,10 @@ describe('FlushedSizeTracker', () => {
         })
 
         it('throws error when persistence is missing', () => {
-            const invalidPostHog = {
+            const invalidPostHog = createMockPostHog({
                 get_property: () => {},
                 persistence: undefined,
-            } as unknown as PostHog
+            })
 
             expect(() => new FlushedSizeTracker(invalidPostHog)).toThrow(
                 'it is not valid to not have persistence and be this far into setting up the application'
@@ -51,10 +51,10 @@ describe('FlushedSizeTracker', () => {
         })
 
         it('throws error when persistence is null', () => {
-            const invalidPostHog = {
+            const invalidPostHog = createMockPostHog({
                 get_property: () => {},
                 persistence: null,
-            } as unknown as PostHog
+            })
 
             expect(() => new FlushedSizeTracker(invalidPostHog)).toThrow(
                 'it is not valid to not have persistence and be this far into setting up the application'

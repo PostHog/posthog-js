@@ -26,6 +26,7 @@ import { assignableWindow, window } from '../utils/globals'
 import { RequestRouter } from '../utils/request-router'
 import { SurveyEventReceiver } from '../utils/survey-event-receiver'
 import { SURVEY_LOGGER as logger } from '../utils/survey-utils'
+import { createMockPostHog, createMockConfig } from './helpers/posthog-instance'
 
 describe('surveys', () => {
     let config: PostHogConfig
@@ -182,14 +183,14 @@ describe('surveys', () => {
             callback()
         })
 
-        config = {
+        config = createMockConfig({
             token: 'testtoken',
             api_host: 'https://app.posthog.com',
             persistence: 'memory',
             surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
-        } as unknown as PostHogConfig
+        })
 
-        instance = {
+        instance = createMockPostHog({
             config: config,
             persistence: new PostHogPersistence(config),
             requestRouter: new RequestRouter({ config } as any),
@@ -209,7 +210,7 @@ describe('surveys', () => {
                     .fn()
                     .mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
             },
-        } as unknown as PostHog
+        })
 
         assignableWindow.__PosthogExtensions__ = {
             loadExternalDependency: loadScriptMock,

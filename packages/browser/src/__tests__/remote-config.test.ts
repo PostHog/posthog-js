@@ -4,6 +4,7 @@ import { PostHog } from '../posthog-core'
 import { PostHogConfig, RemoteConfig } from '../types'
 import '../entrypoints/external-scripts-loader'
 import { assignableWindow } from '../utils/globals'
+import { createMockPostHog } from './helpers/posthog-instance'
 
 describe('RemoteConfigLoader', () => {
     let posthog: PostHog
@@ -19,7 +20,7 @@ describe('RemoteConfigLoader', () => {
         document.head.innerHTML = ''
         jest.spyOn(window.console, 'error').mockImplementation()
 
-        posthog = {
+        posthog = createMockPostHog({
             config: { ...defaultConfig },
             _onRemoteConfig: jest.fn(),
             _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
@@ -28,8 +29,8 @@ describe('RemoteConfigLoader', () => {
             featureFlags: {
                 ensureFlagsLoaded: jest.fn(),
             },
-            requestRouter: new RequestRouter({ config: defaultConfig } as unknown as PostHog),
-        } as unknown as PostHog
+            requestRouter: new RequestRouter(createMockPostHog({ config: defaultConfig })),
+        })
     })
 
     describe('remote config', () => {

@@ -11,7 +11,7 @@ describe('identify', () => {
     it('should persist the distinct_id', async () => {
         // arrange
         const token = uuidv7()
-        const posthog = await createPosthogInstance(token)
+        const posthog = await createPosthogInstance(token, { before_send: (cr) => cr })
         const distinctId = '123'
 
         // act
@@ -26,7 +26,7 @@ describe('identify', () => {
     it('should convert a numeric distinct_id to a string', async () => {
         // arrange
         const token = uuidv7()
-        const posthog = await createPosthogInstance(token)
+        const posthog = await createPosthogInstance(token, { before_send: (cr) => cr })
         const distinctIdNum = 123
         const distinctIdString = '123'
 
@@ -36,7 +36,9 @@ describe('identify', () => {
         // assert
         expect(posthog.persistence!.properties()['$user_id']).toEqual(distinctIdString)
         expect(mockLogger.error).toBeCalledTimes(0)
-        expect(mockLogger.warn).toBeCalledTimes(1)
+        expect(mockLogger.warn).toBeCalledWith(
+            'The first argument to posthog.identify was a number, but it should be a string. It has been converted to a string.'
+        )
     })
 
     it('should send $is_identified = true with the identify event and following events', async () => {

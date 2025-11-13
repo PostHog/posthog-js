@@ -1,10 +1,11 @@
 import { Toolbar } from '../../extensions/toolbar'
 import { isString, isUndefined } from '@posthog/core'
 import { PostHog } from '../../posthog-core'
-import { PostHogConfig, ToolbarParams } from '../../types'
+import { ToolbarParams } from '../../types'
 import { assignableWindow, window } from '../../utils/globals'
 import { RequestRouter } from '../../utils/request-router'
 import { TOOLBAR_ID } from '../../constants'
+import { createMockPostHog, createMockConfig } from '../helpers/posthog-instance'
 
 const makeToolbarParams = (overrides: Partial<ToolbarParams>): ToolbarParams => ({
     token: 'test_token',
@@ -17,15 +18,14 @@ describe('Toolbar', () => {
     const toolbarParams = makeToolbarParams({})
 
     beforeEach(() => {
-        instance = {
-            config: {
+        instance = createMockPostHog({
+            config: createMockConfig({
                 api_host: 'http://api.example.com',
                 token: 'test_token',
-            } as unknown as PostHogConfig,
-            requestRouter: new RequestRouter(instance),
-
+            }),
             set_config: jest.fn(),
-        } as unknown as PostHog
+        })
+        instance.requestRouter = new RequestRouter(instance)
 
         assignableWindow.__PosthogExtensions__ = {
             loadExternalDependency: jest.fn((_ph, _path: any, callback: any) => callback()),

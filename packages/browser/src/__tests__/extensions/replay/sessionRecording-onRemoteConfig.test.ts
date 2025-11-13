@@ -23,6 +23,7 @@ import {
     OrTriggerMatching,
 } from '../../../extensions/replay/external/triggerMatching'
 import { LazyLoadedSessionRecording } from '../../../extensions/replay/external/lazy-loaded-session-recorder'
+import { createMockPostHog, createMockConfig } from '../../helpers/posthog-instance'
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -94,7 +95,7 @@ describe('SessionRecording', () => {
         removePageviewCaptureHookMock = jest.fn()
         sessionId = 'sessionId' + uuidv7()
 
-        config = {
+        config = createMockConfig({
             api_host: 'https://test.com',
             disable_session_recording: false,
             enable_recording_console_log: false,
@@ -104,7 +105,7 @@ describe('SessionRecording', () => {
                 compress_events: false,
             },
             persistence: 'memory',
-        } as unknown as PostHogConfig
+        })
 
         assignableWindow.__PosthogExtensions__ = {
             rrweb: undefined,
@@ -121,7 +122,7 @@ describe('SessionRecording', () => {
         postHogPersistence.clear()
 
         sessionManager = new SessionIdManager(
-            { config, persistence: postHogPersistence, register: jest.fn() } as unknown as PostHog,
+            createMockPostHog({ config, persistence: postHogPersistence, register: jest.fn() }),
             sessionIdGeneratorMock,
             windowIdGeneratorMock
         )

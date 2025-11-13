@@ -19,7 +19,7 @@ describe('FunctionalTests / Feature Flags', () => {
     })
 
     test('person properties set in identify() with new distinct_id are sent to /flags', async () => {
-        const posthog = await createPosthogInstance(token, { advanced_disable_flags: false })
+        const posthog = await createPosthogInstance(token, { advanced_disable_flags: false, before_send: (cr) => cr })
 
         const anonymousId = posthog.get_distinct_id()
 
@@ -94,7 +94,7 @@ describe('FunctionalTests / Feature Flags', () => {
     })
 
     test('person properties set in identify() with the same distinct_id are sent to flags', async () => {
-        const posthog = await createPosthogInstance(token, { advanced_disable_flags: false })
+        const posthog = await createPosthogInstance(token, { advanced_disable_flags: false, before_send: (cr) => cr })
 
         const anonymousId = posthog.get_distinct_id()
 
@@ -213,7 +213,7 @@ describe('FunctionalTests / Feature Flags', () => {
     })
 
     test('identify() triggers new request in queue after first request', async () => {
-        const posthog = await createPosthogInstance(token, { advanced_disable_flags: false })
+        const posthog = await createPosthogInstance(token, { advanced_disable_flags: false, before_send: (cr) => cr })
 
         const anonymousId = posthog.get_distinct_id()
 
@@ -292,6 +292,7 @@ describe('FunctionalTests / Feature Flags', () => {
         await createPosthogInstance(token, {
             advanced_disable_flags: false,
             bootstrap: { distinctID: 'anon-id' },
+            before_send: (cr) => cr,
             loaded: (ph) => {
                 ph.identify('test-id', { email: 'test3@email.com' })
                 ph.group('playlist', 'id:77', { length: 8 })
@@ -361,6 +362,7 @@ describe('feature flags v2', () => {
             __preview_flags_v2: true,
             __preview_remote_config: true,
             advanced_disable_flags: false,
+            before_send: (cr) => cr,
         })
 
         await waitFor(() => {
@@ -378,6 +380,7 @@ describe('feature flags v2', () => {
             __preview_flags_v2: false,
             __preview_remote_config: true,
             advanced_disable_flags: false,
+            before_send: (cr) => cr,
         })
 
         await waitFor(() => {
@@ -396,6 +399,7 @@ describe('feature flags v2', () => {
             __preview_flags_v2: true,
             __preview_remote_config: false,
             advanced_disable_flags: false,
+            before_send: (cr) => cr,
         })
 
         await waitFor(() => {
