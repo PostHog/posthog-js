@@ -6,9 +6,10 @@ This is a basic Remix application demonstrating PostHog integration following th
 
 - Automatic pageview tracking with `capture_pageview: 'history_change'`
 - Custom event capture using PostHog React hooks
-- Event display panel showing recent captured events
 - PostHog React Provider integration
 - Proper Vite configuration for SSR support
+- Navigation header for multi-page testing
+- Media page with base64 images for replay testing
 
 ## Setup
 
@@ -52,6 +53,11 @@ pnpm dev
 ```
 
 4. Open http://localhost:5173 in your browser
+
+## Example Pages
+
+- **Home (`/`)** - Main page with custom event capture button
+- **Media (`/media`)** - Base64 image generation and testing for session replay
 
 ## Key Integration Points
 

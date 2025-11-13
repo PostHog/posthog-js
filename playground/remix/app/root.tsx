@@ -1,5 +1,6 @@
 import { Links, Meta, Outlet, Scripts, ScrollRestoration } from '@remix-run/react'
 import { PHProvider } from './providers'
+import { Header } from './components/Header'
 
 export function Layout({ children }: { children: React.ReactNode }) {
     return (
@@ -10,8 +11,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <Meta />
                 <Links />
             </head>
-            <body>
+            <body style={{ margin: 0, padding: 0 }}>
                 <PHProvider>
+                    <Header />
                     {children}
                     <ScrollRestoration />
                     <Scripts />

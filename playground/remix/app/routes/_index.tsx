@@ -20,7 +20,6 @@ export default function Index() {
 
     return (
         <div style={{ fontFamily: 'system-ui, sans-serif', lineHeight: '1.8', padding: '2rem' }}>
-            <h1>PostHog Remix Playground</h1>
             <p>This is a basic Remix application with PostHog integration.</p>
 
             <div style={{ marginTop: '2rem' }}>
@@ -46,8 +45,17 @@ export default function Index() {
                 <ul>
                     <li>Automatic pageview tracking</li>
                     <li>Custom event capture</li>
-                    <li>Event display panel (top right)</li>
                     <li>PostHog React hooks integration</li>
+                    <li>Multiple example pages</li>
+                </ul>
+            </div>
+
+            <div style={{ marginTop: '2rem' }}>
+                <h2>Example Pages</h2>
+                <ul>
+                    <li>
+                        <a href="/media">Media</a> - Base64 image testing for session replay
+                    </li>
                 </ul>
             </div>
 
@@ -61,7 +69,7 @@ export default function Index() {
                         Run <code>pnpm dev</code> to start the development server
                     </li>
                     <li>Open the browser console to see PostHog events</li>
-                    <li>Check the event display panel on the right for recent events</li>
+                    <li>Navigate between pages to see pageview tracking</li>
                 </ol>
             </div>
         </div>
