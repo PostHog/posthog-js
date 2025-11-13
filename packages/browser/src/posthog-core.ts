@@ -166,7 +166,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     defaults: defaults ?? 'unset',
-    __preview_deferred_init_extensions: false, // Opt-in only for now
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookie_expiration: 365,
     upgrade: false,
@@ -539,20 +538,12 @@ export class PostHog {
             this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
         }
 
-        // Conditionally defer extension initialization based on config
-        if (this.config.__preview_deferred_init_extensions) {
-            // EXPERIMENTAL: Defer non-critical extension initialization to next tick
-            // This reduces main thread blocking during init
-            // while keeping critical path (persistence, sessions, capture) synchronous
-            logger.info('Deferring extension initialization to improve startup performance')
-            setTimeout(() => {
-                this._initExtensions(startInCookielessMode)
-            }, 0)
-        } else {
-            // Legacy synchronous initialization (default for now)
-            logger.info('Initializing extensions synchronously')
+        // Defer non-critical extension initialization to next tick
+        // This reduces main thread blocking during init
+        // while keeping critical path (persistence, sessions, capture) synchronous
+        setTimeout(() => {
             this._initExtensions(startInCookielessMode)
-        }
+        }, 0)
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
@@ -632,15 +623,6 @@ export class PostHog {
             passive: false,
         })
 
-        this.toolbar.maybeLoadToolbar()
-
-        // We want to avoid promises for IE11 compatibility, so we use callbacks here
-        if (config.segment) {
-            setupSegmentIntegration(this, () => this._loaded())
-        } else {
-            this._loaded()
-        }
-
         if (isFunction(this.config._onCapture) && this.config._onCapture !== __NOOP) {
             logger.warn('onCapture is deprecated. Please use `before_send` instead')
             this.on('eventCaptured', (data) => this.config._onCapture(data.event, data))
@@ -716,6 +698,10 @@ export class PostHog {
             this.deadClicksAutocapture.startIfEnabled()
         })
 
+        initTasks.push(() => {
+            this.toolbar.maybeLoadToolbar()
+        })
+
         // Replay any pending remote config that arrived before extensions were ready
         initTasks.push(() => {
             if (this._pendingRemoteConfig) {
@@ -726,27 +712,32 @@ export class PostHog {
         })
 
         // Process tasks with time-slicing to avoid blocking
-        this._processInitTaskQueue(initTasks, initStartTime)
+        // After all extensions are initialized, setup segment (if needed) then call _loaded()
+        this._processInitTaskQueue(initTasks, initStartTime, () => {
+            // We want to avoid promises for IE11 compatibility, so we use callbacks here
+            if (this.config.segment) {
+                setupSegmentIntegration(this, () => this._loaded())
+            } else {
+                this._loaded()
+            }
+        })
     }
 
-    private _processInitTaskQueue(queue: Array<() => void>, initStartTime: number): void {
-        const TIME_BUDGET_MS = 30 // Respect frame budget (~60fps = 16ms, but we're already deferred)
+    private _processInitTaskQueue(queue: Array<() => void>, initStartTime: number, onComplete?: () => void): void {
+        const TIME_BUDGET_MS = 16 // Respect frame budget (~60fps = 16ms)
 
         while (queue.length > 0) {
-            // Only time-slice if deferred init is enabled, otherwise run synchronously
-            if (this.config.__preview_deferred_init_extensions) {
-                // we don't support IE11 anymore, so performance.now is safe
-                // eslint-disable-next-line compat/compat
-                const elapsed = performance.now() - initStartTime
+            // we don't support IE11 anymore, so performance.now is safe
+            // eslint-disable-next-line compat/compat
+            const elapsed = performance.now() - initStartTime
 
-                // Check if we've exceeded our time budget
-                if (elapsed >= TIME_BUDGET_MS && queue.length > 0) {
-                    // Yield to browser, then continue processing
-                    setTimeout(() => {
-                        this._processInitTaskQueue(queue, initStartTime)
-                    }, 0)
-                    return
-                }
+            // Check if we've exceeded our time budget
+            if (elapsed >= TIME_BUDGET_MS && queue.length > 0) {
+                // Yield to browser, then continue processing
+                setTimeout(() => {
+                    this._processInitTaskQueue(queue, initStartTime, onComplete)
+                }, 0)
+                return
             }
 
             // Process next task
@@ -760,18 +751,9 @@ export class PostHog {
             }
         }
 
-        // All tasks complete - record timing for both sync and deferred modes
-        // we don't support IE11 anymore, so performance.now is safe
-        // eslint-disable-next-line compat/compat
-        const taskInitTiming = Math.round(performance.now() - initStartTime)
-        this.register_for_session({
-            $sdk_debug_extensions_init_method: this.config.__preview_deferred_init_extensions
-                ? 'deferred'
-                : 'synchronous',
-            $sdk_debug_extensions_init_time_ms: taskInitTiming,
-        })
-        if (this.config.__preview_deferred_init_extensions) {
-            logger.info(`PostHog extensions initialized (${taskInitTiming}ms)`)
+        // All tasks complete, call completion callback
+        if (onComplete) {
+            onComplete()
         }
     }
 
@@ -785,9 +767,7 @@ export class PostHog {
         }
 
         // Store config in case extensions aren't initialized yet (only needed for deferred init)
-        if (this.config.__preview_deferred_init_extensions) {
-            this._pendingRemoteConfig = config
-        }
+        this._pendingRemoteConfig = config
 
         this.compression = undefined
         if (config.supportedCompression && !this.config.disable_compression) {

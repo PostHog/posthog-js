@@ -7,16 +7,28 @@ describe('ai', () => {
         console.error = jest.fn()
     })
 
-    const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
+    const setup = async (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
         const beforeSendMock = jest.fn().mockImplementation((e) => e)
-        const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
-        posthog.debug()
-        return { posthog, beforeSendMock }
+        return await new Promise<{ posthog: any; beforeSendMock: jest.Mock }>((resolve) => {
+            const posthog = defaultPostHog().init(
+                token,
+                {
+                    ...config,
+                    before_send: beforeSendMock,
+                    loaded: (ph) => {
+                        ph.debug()
+                        config.loaded?.(ph)
+                        resolve({ posthog: ph, beforeSendMock })
+                    },
+                },
+                token
+            )!
+        })
     }
 
     describe('captureTraceMetric()', () => {
-        it('should capture metric', () => {
-            const { posthog, beforeSendMock } = setup()
+        it('should capture metric', async () => {
+            const { posthog, beforeSendMock } = await setup()
 
             posthog.captureTraceMetric('123', 'test', 'test')
 
@@ -27,8 +39,8 @@ describe('ai', () => {
             expect(properties['$ai_metric_value']).toBe('test')
         })
 
-        it('should convert numeric values', () => {
-            const { posthog, beforeSendMock } = setup()
+        it('should convert numeric values', async () => {
+            const { posthog, beforeSendMock } = await setup()
 
             posthog.captureTraceMetric(123, 'test', 1)
 
@@ -39,8 +51,8 @@ describe('ai', () => {
             expect(properties['$ai_metric_value']).toBe('1')
         })
 
-        it('should convert boolean metric_value', () => {
-            const { posthog, beforeSendMock } = setup()
+        it('should convert boolean metric_value', async () => {
+            const { posthog, beforeSendMock } = await setup()
 
             posthog.captureTraceMetric('test', 'test', false)
 
@@ -53,8 +65,8 @@ describe('ai', () => {
     })
 
     describe('captureTraceFeedback()', () => {
-        it('should capture feedback', () => {
-            const { posthog, beforeSendMock } = setup()
+        it('should capture feedback', async () => {
+            const { posthog, beforeSendMock } = await setup()
 
             posthog.captureTraceFeedback('123', 'feedback')
 
@@ -64,8 +76,8 @@ describe('ai', () => {
             expect(properties['$ai_feedback_text']).toBe('feedback')
         })
 
-        it('should convert numeric values', () => {
-            const { posthog, beforeSendMock } = setup()
+        it('should convert numeric values', async () => {
+            const { posthog, beforeSendMock } = await setup()
 
             posthog.captureTraceFeedback(123, 'feedback')
 

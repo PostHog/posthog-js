@@ -1,7 +1,7 @@
 import { mockLogger } from './helpers/mock-logger'
 
 import { uuidv7 } from '../uuidv7'
-import { defaultPostHog } from './helpers/posthog-instance'
+import { initPosthogWith } from './helpers/posthog-instance'
 import { CaptureResult, PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { knownUnsafeEditableEvent } from '@posthog/core'
@@ -28,9 +28,8 @@ describe('posthog core - before send', () => {
     const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
     const eventName = '$event'
 
-    const posthogWith = (configOverride: Pick<Partial<PostHogConfig>, 'before_send'>): PostHog => {
-        const posthog = defaultPostHog().init('testtoken', configOverride, uuidv7())
-        return Object.assign(posthog, {
+    const posthogWith = (configOverride: Pick<Partial<PostHogConfig>, 'before_send'>) => {
+        return initPosthogWith('testtoken', configOverride, uuidv7(), {
             _send_request: jest.fn(),
         })
     }
@@ -43,8 +42,8 @@ describe('posthog core - before send', () => {
         jest.useRealTimers()
     })
 
-    it('can reject an event', () => {
-        const posthog = posthogWith({
+    it('can reject an event', async () => {
+        const posthog = await posthogWith({
             before_send: rejectingEventFn,
         })
         ;(posthog._send_request as jest.Mock).mockClear()
@@ -56,8 +55,8 @@ describe('posthog core - before send', () => {
         expect(mockLogger.info).toHaveBeenCalledWith(`Event '${eventName}' was rejected in beforeSend function`)
     })
 
-    it('can edit an event', () => {
-        const posthog = posthogWith({
+    it('can edit an event', async () => {
+        const posthog = await posthogWith({
             before_send: editingEventFn,
         })
         ;(posthog._send_request as jest.Mock).mockClear()
@@ -76,8 +75,8 @@ describe('posthog core - before send', () => {
         })
     })
 
-    it('can take an array of fns', () => {
-        const posthog = posthogWith({
+    it('can take an array of fns', async () => {
+        const posthog = await posthogWith({
             before_send: [
                 (cr) => {
                     cr.properties = { ...cr.properties, edited_one: true }
@@ -112,8 +111,8 @@ describe('posthog core - before send', () => {
         })
     })
 
-    it('can sanitize $set event', () => {
-        const posthog = posthogWith({
+    it('can sanitize $set event', async () => {
+        const posthog = await posthogWith({
             before_send: (cr) => {
                 cr.$set = { value: 'edited' }
                 return cr
@@ -134,8 +133,8 @@ describe('posthog core - before send', () => {
         })
     })
 
-    it('warned when making arbitrary event invalid', () => {
-        const posthog = posthogWith({
+    it('warned when making arbitrary event invalid', async () => {
+        const posthog = await posthogWith({
             before_send: (cr) => {
                 cr.properties = undefined
                 return cr
@@ -159,8 +158,8 @@ describe('posthog core - before send', () => {
         )
     })
 
-    it('logs a warning when rejecting an unsafe to edit event', () => {
-        const posthog = posthogWith({
+    it('logs a warning when rejecting an unsafe to edit event', async () => {
+        const posthog = await posthogWith({
             before_send: rejectingEventFn,
         })
         ;(posthog._send_request as jest.Mock).mockClear()
