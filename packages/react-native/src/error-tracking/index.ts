@@ -38,6 +38,7 @@ export class ErrorTracking {
     options: ErrorTrackingOptions = {},
     logger: Logger
   ) {
+    const isHermes = typeof HermesInternal !== 'undefined'
     this.errorPropertiesBuilder = new CoreErrorTracking.ErrorPropertiesBuilder(
       [
         new CoreErrorTracking.PromiseRejectionEventCoercer(),
@@ -48,7 +49,7 @@ export class ErrorTracking {
         new CoreErrorTracking.PrimitiveCoercer(),
       ],
       CoreErrorTracking.createStackParser(
-        'hermes',
+        isHermes ? 'hermes' : 'web:javascript',
         CoreErrorTracking.chromeStackLineParser,
         CoreErrorTracking.geckoStackLineParser
       )
