@@ -1,6 +1,7 @@
 import type { PostHog } from '../posthog-rn'
 import { Logger, PostHogEventProperties, ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { trackConsole, trackUncaughtExceptions, trackUnhandledRejections } from './utils'
+import { isHermes } from '../utils'
 
 type LogLevel = 'debug' | 'log' | 'info' | 'warn' | 'error'
 
@@ -38,7 +39,6 @@ export class ErrorTracking {
     options: ErrorTrackingOptions = {},
     logger: Logger
   ) {
-    const isHermes = typeof HermesInternal !== 'undefined'
     this.errorPropertiesBuilder = new CoreErrorTracking.ErrorPropertiesBuilder(
       [
         new CoreErrorTracking.PromiseRejectionEventCoercer(),
@@ -49,7 +49,7 @@ export class ErrorTracking {
         new CoreErrorTracking.PrimitiveCoercer(),
       ],
       CoreErrorTracking.createStackParser(
-        isHermes ? 'hermes' : 'web:javascript',
+        isHermes() ? 'hermes' : 'web:javascript',
         CoreErrorTracking.chromeStackLineParser,
         CoreErrorTracking.geckoStackLineParser
       )
