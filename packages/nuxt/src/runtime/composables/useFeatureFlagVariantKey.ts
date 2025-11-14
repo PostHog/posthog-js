@@ -1,4 +1,4 @@
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { usePostHog } from './usePostHog'
 
 /**
@@ -24,11 +24,11 @@ export function useFeatureFlagVariantKey(flag: string) {
       featureFlagVariantKey.value = posthog.getFeatureFlag(flag)
     })
 
-    return () => {
+    onUnmounted(() => {
       if (unsubscribe) {
         unsubscribe()
       }
-    }
+    })
   })
 
   return featureFlagVariantKey

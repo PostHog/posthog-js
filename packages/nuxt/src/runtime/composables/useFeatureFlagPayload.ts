@@ -1,4 +1,4 @@
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { usePostHog } from './usePostHog'
 import type { JsonType } from 'posthog-js'
 
@@ -15,8 +15,7 @@ import type { JsonType } from 'posthog-js'
  */
 export function useFeatureFlagPayload(flag: string) {
   const posthog = usePostHog()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const featureFlagPayload = ref<JsonType>(posthog?.getFeatureFlagPayload?.(flag))
+  const featureFlagPayload = ref<JsonType | undefined>(posthog?.getFeatureFlagPayload?.(flag))
 
   onMounted(() => {
     if (!posthog) return
@@ -26,11 +25,11 @@ export function useFeatureFlagPayload(flag: string) {
       featureFlagPayload.value = posthog.getFeatureFlagPayload(flag)
     })
 
-    return () => {
+    onUnmounted(() => {
       if (unsubscribe) {
         unsubscribe()
       }
-    }
+    })
   })
 
   return featureFlagPayload
