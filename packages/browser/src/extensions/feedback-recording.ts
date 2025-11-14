@@ -17,6 +17,7 @@ export class FeedbackRecordingManager {
     private _isLoaded: boolean = false
     private _isLoading: boolean = false
     private _isUIActive: boolean = false
+    private _didStartSessionRecording: boolean = false
 
     constructor(
         private _instance: PostHog,
@@ -37,6 +38,11 @@ export class FeedbackRecordingManager {
     public cleanup(): void {
         if (this._audioRecorder.isRecording()) {
             this._audioRecorder.cancelRecording()
+        }
+
+        if (this._didStartSessionRecording) {
+            this._instance.stopSessionRecording()
+            logger.info('Stopped session recording during cleanup')
         }
 
         this._resetState()
@@ -127,9 +133,16 @@ export class FeedbackRecordingManager {
             logger.warn('Failed to start audio recording:', error)
         }
 
-        //TODO: at the moment always just start recording - we can mess with this later
-        // by storing whether reocrding is already in progress so we know whether to stop it later
-        this._instance.startSessionRecording(true)
+        // Start session recording if it's not already active
+        const wasSessionRecordingActive = this._instance.sessionRecordingStarted()
+        if (!wasSessionRecordingActive) {
+            this._instance.startSessionRecording(true)
+            this._didStartSessionRecording = true
+            logger.info('Started session recording for feedback')
+        } else {
+            this._didStartSessionRecording = false
+            logger.info('Session recording already active, reusing existing recording')
+        }
 
         return feedbackId
     }
@@ -187,6 +200,11 @@ export class FeedbackRecordingManager {
         feedbackId: string,
         onRecordingEnded: (result: UserFeedbackRecordingResult) => void
     ): Promise<void> {
+        if (this._didStartSessionRecording) {
+            this._instance.stopSessionRecording()
+            logger.info('Stopped session recording after feedback recording ended')
+        }
+
         const recordingResult = await this._audioRecorder.stopRecording()
 
         if (recordingResult?.blob) {
@@ -221,6 +239,7 @@ export class FeedbackRecordingManager {
     private _resetState(): void {
         this._feedbackRecordingId = null
         this._isUIActive = false
+        this._didStartSessionRecording = false
     }
 }
 
