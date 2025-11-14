@@ -16,6 +16,7 @@ export class FeedbackRecordingManager {
     private _feedbackRecordingId: string | null = null
     private _isLoaded: boolean = false
     private _isLoading: boolean = false
+    private _isUIActive: boolean = false
 
     constructor(
         private _instance: PostHog,
@@ -33,8 +34,23 @@ export class FeedbackRecordingManager {
         return !isNull(this._feedbackRecordingId)
     }
 
+    public cleanup(): void {
+        if (this._audioRecorder.isRecording()) {
+            this._audioRecorder.cancelRecording()
+        }
+
+        this._resetState()
+        removeFeedbackRecordingUIFromDOM()
+
+        logger.info('Feedback recording cleaned up')
+    }
+
     async launchFeedbackRecordingUI(onRecordingEnded?: (result: UserFeedbackRecordingResult) => void): Promise<void> {
-        // Check for active recording first
+        if (this._isUIActive) {
+            logger.warn('Feedback recording UI is already active. Request to launch a new UI will be ignored.')
+            return
+        }
+
         if (this._feedbackRecordingId) {
             logger.warn(
                 `Feedback recording is already in progress with id ${this._feedbackRecordingId}. Request to start a new recording will be ignored.`
@@ -57,6 +73,7 @@ export class FeedbackRecordingManager {
             }
         }
 
+        this._isUIActive = true
         this._showFeedbackRecordingUI(onRecordingEnded || (() => {}))
     }
 
@@ -180,7 +197,7 @@ export class FeedbackRecordingManager {
         removeFeedbackRecordingUIFromDOM()
         onRecordingEnded(this._handleStopped(feedbackId))
 
-        this._feedbackRecordingId = null
+        this._resetState()
     }
 
     private _showFeedbackRecordingUI(onRecordingEnded: (result: UserFeedbackRecordingResult) => void) {
@@ -188,11 +205,22 @@ export class FeedbackRecordingManager {
             await this._stopFeedbackRecording(feedbackId, onRecordingEnded)
         }
 
+        const _onCancel = () => {
+            this._resetState()
+            logger.info('Feedback recording UI cancelled')
+        }
+
         renderFeedbackRecordingUI({
             posthogInstance: this._instance,
             handleStartRecording: () => this._startFeedbackRecording(),
             onRecordingEnded: _onRecordingEnded,
+            onCancel: _onCancel,
         })
+    }
+
+    private _resetState(): void {
+        this._feedbackRecordingId = null
+        this._isUIActive = false
     }
 }
 
