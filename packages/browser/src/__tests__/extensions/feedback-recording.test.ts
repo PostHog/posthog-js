@@ -32,14 +32,16 @@ describe('FeedbackRecordingManager', () => {
             config: {
                 api_host: 'https://test.com',
                 token: 'test-token',
-            },
+            } as any,
             capture: jest.fn(),
             startSessionRecording: jest.fn(),
+            stopSessionRecording: jest.fn(),
+            sessionRecordingStarted: jest.fn(),
             get_session_id: jest.fn().mockReturnValue('mock-session-id'),
             _send_request: jest.fn(),
             requestRouter: {
                 endpointFor: jest.fn().mockReturnValue('https://test.com/api/feedback/audio'),
-            },
+            } as any,
         })
 
         audioRecorderMock = {
@@ -166,6 +168,8 @@ describe('FeedbackRecordingManager', () => {
             let onRecordingEnded: jest.Mock
 
             beforeEach(async () => {
+                jest.spyOn(instance, 'sessionRecordingStarted').mockReturnValue(false)
+
                 onRecordingEnded = jest.fn()
                 await manager.launchFeedbackRecordingUI(onRecordingEnded)
 
@@ -213,6 +217,22 @@ describe('FeedbackRecordingManager', () => {
                     expect(instance.capture).toHaveBeenCalledWith('$user_feedback_recording_started', {
                         $feedback_recording_id: feedbackId,
                     })
+                })
+
+                it('starts session recording if not already active', async () => {
+                    jest.spyOn(instance, 'sessionRecordingStarted').mockReturnValue(false)
+
+                    feedbackId = await handleStartRecording()
+
+                    expect(instance.startSessionRecording).toHaveBeenCalledWith(true)
+                })
+
+                it('does not start session recording if already active', async () => {
+                    jest.spyOn(instance, 'sessionRecordingStarted').mockReturnValue(true)
+
+                    feedbackId = await handleStartRecording()
+
+                    expect(instance.startSessionRecording).not.toHaveBeenCalled()
                 })
             })
 
@@ -334,6 +354,24 @@ describe('FeedbackRecordingManager', () => {
                     expect(instance._send_request).not.toHaveBeenCalled()
                     expect(onRecordingEnded).toHaveBeenCalledTimes(1)
                 })
+
+                it('stops session recording when stopping if we started it', async () => {
+                    jest.spyOn(instance, 'sessionRecordingStarted').mockReturnValue(false)
+
+                    feedbackId = await handleStartRecording()
+                    await stopCallback(feedbackId)
+
+                    expect(instance.stopSessionRecording).toHaveBeenCalled()
+                })
+
+                it('does not stop session recording if we did not start it', async () => {
+                    jest.spyOn(instance, 'sessionRecordingStarted').mockReturnValue(true)
+
+                    feedbackId = await handleStartRecording()
+                    await stopCallback(feedbackId)
+
+                    expect(instance.stopSessionRecording).not.toHaveBeenCalled()
+                })
             })
 
             describe('cleanup', () => {
@@ -356,6 +394,26 @@ describe('FeedbackRecordingManager', () => {
 
                     expect(manager.isFeedbackRecordingActive()).toBe(false)
                     expect(manager.getCurrentFeedbackRecordingId()).toBeNull()
+                })
+
+                it('stops session recording when stopping if we started it', async () => {
+                    jest.spyOn(instance, 'sessionRecordingStarted').mockReturnValue(false)
+
+                    feedbackId = await handleStartRecording()
+
+                    manager.cleanup()
+
+                    expect(instance.stopSessionRecording).toHaveBeenCalled()
+                })
+
+                it('does not stop session recording if we did not start it', async () => {
+                    jest.spyOn(instance, 'sessionRecordingStarted').mockReturnValue(true)
+
+                    feedbackId = await handleStartRecording()
+
+                    manager.cleanup()
+
+                    expect(instance.stopSessionRecording).not.toHaveBeenCalled()
                 })
             })
 
