@@ -12,7 +12,7 @@ import type posthog from 'posthog-js'
  *
  * @returns The PostHog client instance
  */
-export function usePostHog(): typeof posthog {
+export function usePostHog(): typeof posthog | undefined {
   const { $posthog } = useNuxtApp()
-  return $posthog()
+  return ($posthog as () => typeof posthog | undefined)?.()
 }
