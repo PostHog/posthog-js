@@ -1168,6 +1168,136 @@ describe('featureflags', () => {
         })
     })
 
+    describe('device_id in flags requests', () => {
+        beforeEach(() => {
+            // Clear persistence before each test in this suite
+            instance.persistence.unregister('$device_id')
+            instance.persistence.unregister('$stored_person_properties')
+            instance.persistence.unregister('$stored_group_properties')
+
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 200,
+                    json: {
+                        featureFlags: {
+                            first: 'variant-1',
+                            second: true,
+                        },
+                    },
+                })
+            )
+        })
+
+        afterEach(() => {
+            // Clean up after each test
+            instance.persistence.unregister('$device_id')
+            instance.persistence.unregister('$stored_person_properties')
+            instance.persistence.unregister('$stored_group_properties')
+        })
+
+        it('should include device_id in flags request when available', () => {
+            instance.persistence.register({
+                $device_id: 'test-device-uuid-123',
+            })
+
+            featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                $device_id: 'test-device-uuid-123',
+                person_properties: {},
+            })
+        })
+
+        it('should omit device_id when it is null (cookieless mode)', () => {
+            instance.persistence.register({
+                $device_id: null,
+            })
+
+            featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                person_properties: {},
+            })
+            expect(instance._send_request.mock.calls[0][0].data).not.toHaveProperty('$device_id')
+        })
+
+        it('should omit device_id when it is undefined', () => {
+            // Don't register device_id at all
+            featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                person_properties: {},
+            })
+            expect(instance._send_request.mock.calls[0][0].data).not.toHaveProperty('$device_id')
+        })
+
+        it('should include device_id along with $anon_distinct_id on identify', () => {
+            instance.persistence.register({
+                $device_id: 'device-uuid-456',
+            })
+
+            featureFlags.setAnonymousDistinctId('anon_id_789')
+            featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                $device_id: 'device-uuid-456',
+                $anon_distinct_id: 'anon_id_789',
+                person_properties: {},
+            })
+        })
+
+        it('should include device_id with person_properties', () => {
+            instance.persistence.register({
+                $device_id: 'device-uuid-999',
+            })
+
+            featureFlags.setPersonPropertiesForFlags({ plan: 'pro', beta_tester: true })
+            jest.runAllTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                $device_id: 'device-uuid-999',
+                person_properties: { plan: 'pro', beta_tester: true },
+            })
+        })
+
+        it('should include device_id with group_properties', () => {
+            instance.persistence.register({
+                $device_id: 'device-uuid-888',
+            })
+
+            featureFlags.setGroupPropertiesForFlags({ company: { name: 'Acme', seats: 50 } })
+            jest.runAllTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                $device_id: 'device-uuid-888',
+                person_properties: {},
+                group_properties: { company: { name: 'Acme', seats: 50 } },
+            })
+        })
+    })
+
     describe('reloadFeatureFlags', () => {
         beforeEach(() => {
             instance._send_request = jest.fn().mockImplementation(({ callback }) =>

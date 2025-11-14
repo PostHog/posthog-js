@@ -394,6 +394,8 @@ export class PostHogFeatureFlags {
             return
         }
         const token = this._instance.config.token
+        const deviceId = this._instance.get_property('$device_id')
+
         const data: Record<string, any> = {
             token: token,
             distinct_id: this._instance.get_distinct_id(),
@@ -404,6 +406,11 @@ export class PostHogFeatureFlags {
                 ...(this._instance.get_property(STORED_PERSON_PROPERTIES_KEY) || {}),
             },
             group_properties: this._instance.get_property(STORED_GROUP_PROPERTIES_KEY),
+        }
+
+        // Add device_id if available (handle cookieless mode where it's null)
+        if (deviceId !== null && deviceId !== undefined) {
+            data.$device_id = deviceId
         }
 
         if (options?.disableFlags || this._instance.config.advanced_disable_feature_flags) {
