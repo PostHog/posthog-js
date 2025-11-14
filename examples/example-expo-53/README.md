@@ -42,13 +42,15 @@ rm -rf node_modules
 # repeat Run steps
 ```
 
-# Build locally
+# Build Release mode locally
 
 ```bash
-npm install -g eas-cli
-eas build --platform android --local
-
-# or
+# android
 cd android
 ./gradlew assembleRelease
+
+# ios
+set -o pipefail && xcrun xcodebuild clean build -workspace ios/exampleexpo53.xcworkspace -scheme exampleexpo53 -configuration Release -destination generic/platform=ios | xcpretty
+
+# Also: Xcode -> Product -> Archive
 ```
