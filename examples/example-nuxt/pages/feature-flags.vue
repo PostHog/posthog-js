@@ -72,6 +72,6 @@ const captureEvent = () => {
 }
 
 const getAllFlags = () => {
-  allFlags.value = posthog?.getFeatureFlags()
+  allFlags.value = posthog?.featureFlags.getFlagVariants()
 }
 </script>
