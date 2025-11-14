@@ -8,6 +8,7 @@ import { PostHogConfig, Properties, CaptureResult, RemoteConfig } from '../types
 import { assignableWindow } from '../utils/globals'
 import '../entrypoints/external-scripts-loader'
 import { isFunction } from '@posthog/core'
+import { createMockPostHog } from './helpers/posthog-instance'
 
 describe('SiteApps', () => {
     let posthog: PostHog
@@ -47,7 +48,7 @@ describe('SiteApps', () => {
 
         removeCaptureHook = jest.fn()
 
-        posthog = {
+        posthog = createMockPostHog({
             config: { ...defaultConfig, opt_in_site_apps: true },
             persistence: new PostHogPersistence(defaultConfig as PostHogConfig),
             register: (props: Properties) => posthog.persistence!.register(props),
@@ -66,11 +67,11 @@ describe('SiteApps', () => {
                 setReloadingPaused: jest.fn(),
                 _startReloadTimer: jest.fn(),
             },
-            requestRouter: new RequestRouter({ config: defaultConfig } as unknown as PostHog),
+            requestRouter: new RequestRouter(createMockPostHog({ config: defaultConfig })),
             _hasBootstrappedFeatureFlags: jest.fn(),
             getGroups: () => ({ organization: '5' }),
             on: jest.fn(),
-        } as unknown as PostHog
+        })
 
         siteAppsInstance = new SiteApps(posthog)
     })

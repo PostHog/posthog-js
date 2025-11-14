@@ -118,9 +118,13 @@ test.describe('Session Recording - Session Linking', () => {
         expect(firstSessionId).not.toEqual(newSessionId)
 
         const capturedEventsAfterChange = await page.capturedEvents()
-        const snapshot = capturedEventsAfterChange?.find((e: any) => e.event === '$snapshot')
+        const snapshots = capturedEventsAfterChange?.filter((e: any) => e.event === '$snapshot')
 
-        const snapshotData = snapshot?.properties?.$snapshot_data
+        expect(snapshots.length).toBeGreaterThan(1)
+        const newSessionSnapshot = snapshots.find((s: any) => s.properties?.$session_id === newSessionId)
+        expect(newSessionSnapshot).toBeDefined()
+
+        const snapshotData = newSessionSnapshot?.properties?.$snapshot_data
 
         const sessionEndingEvent = snapshotData?.find((s: any) => s.data?.tag === '$session_ending')
         const sessionStartingEvent = snapshotData?.find((s: any) => s.data?.tag === '$session_starting')

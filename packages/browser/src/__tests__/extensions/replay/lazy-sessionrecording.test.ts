@@ -10,6 +10,7 @@ import {
     SESSION_RECORDING_REMOTE_CONFIG,
 } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
+import { createMockPostHog, createMockConfig } from '../../helpers/posthog-instance'
 import {
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
@@ -213,7 +214,7 @@ describe('Lazy SessionRecording', () => {
         removePageviewCaptureHookMock = jest.fn()
         sessionId = 'sessionId' + uuidv7()
 
-        config = {
+        config = createMockConfig({
             api_host: 'https://test.com',
             disable_session_recording: false,
             enable_recording_console_log: false,
@@ -224,7 +225,7 @@ describe('Lazy SessionRecording', () => {
                 compress_events: false,
             },
             persistence: 'memory',
-        } as unknown as PostHogConfig
+        })
 
         assignableWindow.__PosthogExtensions__ = {
             rrweb: undefined,
@@ -241,7 +242,7 @@ describe('Lazy SessionRecording', () => {
         postHogPersistence.clear()
 
         sessionManager = new SessionIdManager(
-            { config, persistence: postHogPersistence, register: jest.fn() } as unknown as PostHog,
+            createMockPostHog({ config, persistence: postHogPersistence, register: jest.fn() }),
             sessionIdGeneratorMock,
             windowIdGeneratorMock
         )
@@ -1732,11 +1733,13 @@ describe('Lazy SessionRecording', () => {
                 let unsubscribeCallback: () => void
 
                 beforeEach(() => {
-                    sessionManager = new SessionIdManager({
-                        config,
-                        persistence: new PostHogPersistence(config),
-                        register: jest.fn(),
-                    } as unknown as PostHog)
+                    sessionManager = new SessionIdManager(
+                        createMockPostHog({
+                            config,
+                            persistence: new PostHogPersistence(config),
+                            register: jest.fn(),
+                        })
+                    )
                     posthog.sessionManager = sessionManager
 
                     mockCallback = jest.fn()
@@ -1828,11 +1831,13 @@ describe('Lazy SessionRecording', () => {
 
             describe('with a real session id manager', () => {
                 beforeEach(() => {
-                    sessionManager = new SessionIdManager({
-                        config,
-                        persistence: new PostHogPersistence(config),
-                        register: jest.fn(),
-                    } as unknown as PostHog)
+                    sessionManager = new SessionIdManager(
+                        createMockPostHog({
+                            config,
+                            persistence: new PostHogPersistence(config),
+                            register: jest.fn(),
+                        })
+                    )
                     posthog.sessionManager = sessionManager
 
                     sessionRecording.onRemoteConfig(

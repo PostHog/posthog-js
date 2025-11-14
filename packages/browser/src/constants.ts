@@ -41,6 +41,7 @@ export const SESSION_RECORDING_OVERRIDE_URL_TRIGGER = '$replay_override_url_trig
 export const SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER = '$replay_override_event_trigger'
 export const SESSION_ID = '$sesid'
 export const SESSION_RECORDING_IS_SAMPLED = '$session_is_sampled'
+export const SESSION_RECORDING_PAST_MINIMUM_DURATION = '$session_past_minimum_duration'
 export const SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION = '$session_recording_url_trigger_activated_session'
 export const SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION = '$session_recording_event_trigger_activated_session'
 export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'

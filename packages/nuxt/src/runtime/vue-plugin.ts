@@ -3,36 +3,39 @@ import { defineNuxtPlugin, useRuntimeConfig } from '#app'
 import posthog from 'posthog-js'
 import type { PostHogClientConfig, PostHogCommon } from '../module'
 
-export default defineNuxtPlugin((nuxtApp) => {
-  const runtimeConfig = useRuntimeConfig()
-  const posthogCommon = runtimeConfig.public.posthog as PostHogCommon
-  const posthogClientConfig = runtimeConfig.public.posthogClientConfig as PostHogClientConfig
+export default defineNuxtPlugin({
+  name: 'posthog-client',
+  setup(nuxtApp) {
+    const runtimeConfig = useRuntimeConfig()
+    const posthogCommon = runtimeConfig.public.posthog as PostHogCommon
+    const posthogClientConfig = runtimeConfig.public.posthogClientConfig as PostHogClientConfig
 
-  // prevent nitro from trying to load this
-  if (!window || posthog.__loaded) {
-    return
-  }
+    // prevent nitro from trying to load this
+    if (!window || posthog.__loaded) {
+      return
+    }
 
-  posthog.init(posthogCommon.publicKey, {
-    api_host: posthogCommon.host,
-    ...posthogClientConfig,
-  })
-
-  if (posthogCommon.debug) {
-    posthog.debug(true)
-  }
-
-  if (autocaptureEnabled(posthogClientConfig)) {
-    nuxtApp.hook('vue:error', (error, info) => {
-      posthog.captureException(error, { info })
+    posthog.init(posthogCommon.publicKey, {
+      api_host: posthogCommon.host,
+      ...posthogClientConfig,
     })
-  }
 
-  return {
-    provide: {
-      posthog: () => posthog,
-    },
-  }
+    if (posthogCommon.debug) {
+      posthog.debug(true)
+    }
+
+    if (autocaptureEnabled(posthogClientConfig)) {
+      nuxtApp.hook('vue:error', (error, info) => {
+        posthog.captureException(error, { info })
+      })
+    }
+
+    return {
+      provide: {
+        posthog: () => posthog,
+      },
+    }
+  },
 })
 
 function autocaptureEnabled(config: PostHogClientConfig): boolean {

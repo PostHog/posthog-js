@@ -2,18 +2,19 @@
 import '@testing-library/jest-dom'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact'
 import { FeedbackWidget } from '../../../extensions/surveys'
-import { PostHog } from '../../../posthog-core' // Import PostHog type for mocking
 import { Survey, SurveyQuestionType, SurveyType, SurveyWidgetType } from '../../../posthog-surveys-types'
+import { createMockPostHog } from '../../helpers/posthog-instance'
+import { PostHogFeatureFlags } from '../../../posthog-featureflags'
 
 // Mock PostHog instance
-const mockPosthog = {
+const mockPosthog = createMockPostHog({
     capture: jest.fn(),
     getActiveMatchingSurveys: jest.fn(),
     featureFlags: {
         isFeatureEnabled: jest.fn().mockReturnValue(true),
-    },
+    } as Partial<PostHogFeatureFlags> as unknown as PostHogFeatureFlags,
     get_session_replay_url: jest.fn().mockReturnValue('http://example.com/replay'),
-} as unknown as PostHog
+})
 
 // Base mock survey for widget type
 const baseWidgetSurvey: Survey = {

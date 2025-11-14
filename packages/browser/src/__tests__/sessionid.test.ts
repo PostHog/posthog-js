@@ -5,7 +5,7 @@ import { uuid7ToTimestampMs, uuidv7 } from '../uuidv7'
 import { BootstrapConfig, PostHogConfig, Properties } from '../types'
 import { PostHogPersistence } from '../posthog-persistence'
 import { assignableWindow } from '../utils/globals'
-import { PostHog } from '../posthog-core'
+import { createMockPostHog } from './helpers/posthog-instance'
 
 jest.mock('../uuidv7')
 jest.mock('../storage')
@@ -24,11 +24,13 @@ describe('Session ID manager', () => {
 
     const sessionIdMgr = (phPersistence: Partial<PostHogPersistence>) => {
         registerMock = jest.fn()
-        return new SessionIdManager({
-            config,
-            persistence: phPersistence as PostHogPersistence,
-            register: registerMock,
-        } as unknown as PostHog)
+        return new SessionIdManager(
+            createMockPostHog({
+                config,
+                persistence: phPersistence as PostHogPersistence,
+                register: registerMock,
+            })
+        )
     }
 
     const originalDate = Date
@@ -83,11 +85,13 @@ describe('Session ID manager', () => {
             const bootstrap: BootstrapConfig = {
                 sessionID: bootstrapSessionId,
             }
-            const sessionIdManager = new SessionIdManager({
-                config: { ...config, bootstrap },
-                persistence: persistence as PostHogPersistence,
-                register: jest.fn(),
-            } as unknown as PostHog)
+            const sessionIdManager = new SessionIdManager(
+                createMockPostHog({
+                    config: { ...config, bootstrap },
+                    persistence: persistence as PostHogPersistence,
+                    register: jest.fn(),
+                })
+            )
 
             // act
             const { sessionId, sessionStartTimestamp } = sessionIdManager.checkAndGetSessionAndWindowId(false, now)
@@ -343,13 +347,15 @@ describe('Session ID manager', () => {
 
     describe('custom session_idle_timeout_seconds', () => {
         const mockSessionManager = (timeout: number | undefined) =>
-            new SessionIdManager({
-                config: {
-                    session_idle_timeout_seconds: timeout,
-                },
-                persistence: persistence as PostHogPersistence,
-                register: jest.fn(),
-            } as unknown as PostHog)
+            new SessionIdManager(
+                createMockPostHog({
+                    config: {
+                        session_idle_timeout_seconds: timeout,
+                    },
+                    persistence: persistence as PostHogPersistence,
+                    register: jest.fn(),
+                })
+            )
 
         beforeEach(() => {
             console.warn = jest.fn()

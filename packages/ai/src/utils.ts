@@ -14,6 +14,7 @@ type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatComplet
 type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
 type ResponseCreateParams = OpenAIOrignal.Responses.ResponseCreateParams
 type EmbeddingCreateParams = OpenAIOrignal.EmbeddingCreateParams
+type TranscriptionCreateParams = OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateParams
 type AnthropicTool = AnthropicOriginal.Tool
 
 // limit large outputs by truncating to 200kb (approx 200k bytes)
@@ -77,6 +78,7 @@ export const getModelParams = (
         | ResponseCreateParams
         | ResponseCreateParamsWithTools
         | EmbeddingCreateParams
+        | TranscriptionCreateParams
       ) &
         MonitoringParams)
     | null
@@ -96,6 +98,9 @@ export const getModelParams = (
     'stop',
     'stream',
     'streaming',
+    'language',
+    'response_format',
+    'timestamp_granularities',
   ] as const
 
   for (const key of paramKeys) {
@@ -520,6 +525,7 @@ export type SendEventToPosthogParams = {
     | ResponseCreateParams
     | ResponseCreateParamsWithTools
     | EmbeddingCreateParams
+    | TranscriptionCreateParams
   ) &
     MonitoringParams
   isError?: boolean
