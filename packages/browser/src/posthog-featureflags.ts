@@ -29,6 +29,7 @@ import { createLogger } from './utils/logger'
 import { getTimezone } from './utils/event-utils'
 
 const logger = createLogger('[FeatureFlags]')
+const forceDebugLogger = createLogger('[FeatureFlags]', { debugEnabled: true })
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
@@ -703,7 +704,7 @@ export class PostHogFeatureFlags {
             this._instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
             this._fireFeatureFlagsCallbacks()
 
-            return logger.info('All overrides cleared')
+            return forceDebugLogger.info('All overrides cleared')
         }
 
         if (
@@ -718,7 +719,7 @@ export class PostHogFeatureFlags {
             if ('flags' in options) {
                 if (options.flags === false) {
                     this._instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
-                    logger.info('Flag overrides cleared')
+                    forceDebugLogger.info('Flag overrides cleared')
                 } else if (options.flags) {
                     if (isArray(options.flags)) {
                         const flagsObj: Record<string, string | boolean> = {}
@@ -730,7 +731,7 @@ export class PostHogFeatureFlags {
                         this._instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: options.flags })
                     }
 
-                    logger.info('Flag overrides set', { flags: options.flags })
+                    forceDebugLogger.info('Flag overrides set', { flags: options.flags })
                 }
             }
 
@@ -738,12 +739,12 @@ export class PostHogFeatureFlags {
             if ('payloads' in options) {
                 if (options.payloads === false) {
                     this._instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
-                    logger.info('Payload overrides cleared')
+                    forceDebugLogger.info('Payload overrides cleared')
                 } else if (options.payloads) {
                     this._instance.persistence.register({
                         [PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS]: options.payloads,
                     })
-                    logger.info('Payload overrides set', { payloads: options.payloads })
+                    forceDebugLogger.info('Payload overrides set', { payloads: options.payloads })
                 }
             }
 
