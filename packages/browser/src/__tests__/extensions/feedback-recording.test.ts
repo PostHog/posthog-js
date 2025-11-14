@@ -161,6 +161,7 @@ describe('FeedbackRecordingManager', () => {
         describe('recording workflow', () => {
             let handleStartRecording: () => Promise<string>
             let stopCallback: (feedbackId: string) => Promise<void>
+            let onCancel: (() => void) | undefined
             let feedbackId: string
             let onRecordingEnded: jest.Mock
 
@@ -178,6 +179,11 @@ describe('FeedbackRecordingManager', () => {
                         typeof FeedbackUI.renderFeedbackRecordingUI
                     >
                 ).mock.lastCall![0].onRecordingEnded
+                onCancel = (
+                    FeedbackUI.renderFeedbackRecordingUI as jest.MockedFunction<
+                        typeof FeedbackUI.renderFeedbackRecordingUI
+                    >
+                ).mock.lastCall![0].onCancel
             })
 
             describe('start', () => {
@@ -329,6 +335,70 @@ describe('FeedbackRecordingManager', () => {
                     expect(onRecordingEnded).toHaveBeenCalledTimes(1)
                 })
             })
+
+            describe('cleanup', () => {
+                it('should cancel audio recording if in progress', async () => {
+                    feedbackId = await handleStartRecording()
+
+                    audioRecorderMock.isRecording.mockReturnValue(true)
+
+                    manager.cleanup()
+
+                    expect(audioRecorderMock.cancelRecording).toHaveBeenCalled()
+                })
+
+                it('should clear feedback recording state', async () => {
+                    feedbackId = await handleStartRecording()
+
+                    expect(manager.isFeedbackRecordingActive()).toBe(true)
+
+                    manager.cleanup()
+
+                    expect(manager.isFeedbackRecordingActive()).toBe(false)
+                    expect(manager.getCurrentFeedbackRecordingId()).toBeNull()
+                })
+            })
+
+            describe('UI focus after completion', () => {
+                it('should allow launching UI again after recording completes', async () => {
+                    feedbackId = await handleStartRecording()
+                    await stopCallback(feedbackId)
+
+                    await manager.launchFeedbackRecordingUI(jest.fn())
+
+                    expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledTimes(2)
+                })
+
+                it('should allow launching UI again after cancellation', async () => {
+                    onCancel?.()
+
+                    await manager.launchFeedbackRecordingUI(jest.fn())
+
+                    expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledTimes(2)
+                })
+            })
+        })
+    })
+
+    describe('cleanup without recording', () => {
+        it('should clear UI active state when called before recording starts', async () => {
+            await manager.launchFeedbackRecordingUI(jest.fn())
+
+            manager.cleanup()
+
+            await manager.launchFeedbackRecordingUI(jest.fn())
+
+            expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledTimes(2)
+        })
+    })
+
+    describe('UI focus management', () => {
+        it('should prevent multiple simultaneous UIs from being launched', async () => {
+            await manager.launchFeedbackRecordingUI(jest.fn())
+
+            await manager.launchFeedbackRecordingUI(jest.fn())
+
+            expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledTimes(1)
         })
     })
 

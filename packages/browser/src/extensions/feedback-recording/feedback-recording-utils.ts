@@ -1,20 +1,27 @@
 import { document as _document } from '../../utils/globals'
 import feedbackRecordingStyles from './feedback-recording.css'
+import * as Preact from 'preact'
+import { createLogger } from '../../utils/logger'
 
 const document = _document as Document
+const logger = createLogger('[PostHog FeedbackRecordingUtils]')
+const FEEDBACK_RECORDING_WIDGET_CLASS = 'PostHogFeedbackRecordingWidget'
 
 export const removeFeedbackRecordingUIFromDOM = () => {
-    const existingDiv = document.querySelector('div.PostHogFeedbackRecordingWidget')
-    if (existingDiv && existingDiv.parentNode) {
-        existingDiv.parentNode.removeChild(existingDiv)
+    try {
+        const existingDiv = document.querySelector(`.${FEEDBACK_RECORDING_WIDGET_CLASS}`)
+        if (existingDiv?.shadowRoot) {
+            Preact.render(null, existingDiv.shadowRoot)
+        }
+        existingDiv?.remove()
+    } catch (error) {
+        logger.warn('Failed to remove feedback recording UI from DOM:', error)
     }
 }
 
 export const retrieveFeedbackRecordingUIShadow = (element?: Element) => {
-    const className = 'PostHogFeedbackRecordingWidget'
-
     const div = document.createElement('div')
-    div.className = className
+    div.className = FEEDBACK_RECORDING_WIDGET_CLASS
     const shadow = div.attachShadow({ mode: 'open' })
     const stylesheet = getStylesheet()
     if (stylesheet) {

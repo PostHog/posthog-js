@@ -14,12 +14,14 @@ export interface FeedbackRecordingUIProps {
     posthogInstance: PostHog
     handleStartRecording: () => Promise<string>
     onRecordingEnded: (feedbackId: string) => void
+    onCancel?: () => void
 }
 
 export function FeedbackRecordingUI({
     posthogInstance,
     handleStartRecording,
     onRecordingEnded,
+    onCancel,
 }: FeedbackRecordingUIProps) {
     const [seconds, setSeconds] = useState(0)
     const [isRecording, setRecording] = useState(false)
@@ -52,7 +54,7 @@ export function FeedbackRecordingUI({
         }
 
         if (isRecording && feedbackId && !audioElementRef.current) {
-            // Create audio element for playback (outside shadow DOM)
+            // Create audio element for playback (outside shadow DOM to avoid rrweb quirks)
             const audioElement = document.createElement('audio')
             audioElement.id = `posthog-feedback-audio-${feedbackId}`
             audioElement.style.display = 'none'
@@ -118,7 +120,10 @@ export function FeedbackRecordingUI({
                 </div>
             ) : (
                 <StartFeedbackRecordingUI
-                    handleCancel={() => removeFeedbackRecordingUIFromDOM()}
+                    handleCancel={() => {
+                        removeFeedbackRecordingUIFromDOM()
+                        onCancel?.()
+                    }}
                     handleStart={handleStart}
                 />
             )}
@@ -130,10 +135,12 @@ export const renderFeedbackRecordingUI = ({
     posthogInstance,
     handleStartRecording,
     onRecordingEnded,
+    onCancel,
 }: {
     posthogInstance: PostHog
     handleStartRecording: () => Promise<string>
     onRecordingEnded: (feedbackId: string) => Promise<void>
+    onCancel?: () => void
 }): void => {
     const { shadow } = retrieveFeedbackRecordingUIShadow()
     return Preact.render(
@@ -141,6 +148,7 @@ export const renderFeedbackRecordingUI = ({
             posthogInstance={posthogInstance}
             handleStartRecording={handleStartRecording}
             onRecordingEnded={onRecordingEnded}
+            onCancel={onCancel}
         />,
         shadow
     )
