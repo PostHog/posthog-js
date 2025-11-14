@@ -1,4 +1,4 @@
-import { defineNuxtModule, addPlugin, createResolver, addServerPlugin } from '@nuxt/kit'
+import { defineNuxtModule, addPlugin, createResolver, addServerPlugin, addImportsDir } from '@nuxt/kit'
 import type { PostHogConfig } from 'posthog-js'
 import type { PostHogOptions } from 'posthog-node'
 import { resolveBinaryPath, spawnLocal } from '@posthog/core/process'
@@ -58,6 +58,7 @@ export default defineNuxtModule<ModuleOptions>({
     const resolver = createResolver(import.meta.url)
     addPlugin(resolver.resolve('./runtime/vue-plugin'))
     addServerPlugin(resolver.resolve('./runtime/nitro-plugin'))
+    addImportsDir(resolver.resolve(`./runtime/composables`))
 
     Object.assign(nuxt.options.runtimeConfig.public, {
       posthog: {
