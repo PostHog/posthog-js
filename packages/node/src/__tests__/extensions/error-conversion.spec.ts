@@ -11,7 +11,7 @@ describe('error conversion', () => {
       new CoreErrorTracking.StringCoercer(),
       new CoreErrorTracking.PrimitiveCoercer(),
     ],
-    [CoreErrorTracking.nodeStackLineParser],
+    CoreErrorTracking.createStackParser('node:javascript', CoreErrorTracking.nodeStackLineParser),
     [createModulerModifier(), addSourceContext]
   )
 

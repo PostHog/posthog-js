@@ -28,7 +28,7 @@
 // CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 // OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import { StackFrame, StackLineParser, StackParser } from '../types'
+import { Platform, StackFrame, StackLineParser, StackParser } from '../types'
 import { UNKNOWN_FUNCTION } from './base'
 export { chromeStackLineParser } from './chrome'
 export { winjsStackLineParser } from './winjs'
@@ -59,9 +59,7 @@ function getLastStackFrame(arr: StackFrame[]): StackFrame {
   return arr[arr.length - 1] || {}
 }
 
-export function createStackParser(...parsers: StackLineParser[]): StackParser {
-  // const sortedParsers = parsers.sort((a, b) => a[0] - b[0]).map((p) => p[1])
-
+export function createStackParser(platform: Platform, ...parsers: StackLineParser[]): StackParser {
   return (stack: string, skipFirstLines: number = 0): StackFrame[] => {
     const frames: StackFrame[] = []
     const lines = stack.split('\n')
@@ -87,7 +85,7 @@ export function createStackParser(...parsers: StackLineParser[]): StackParser {
       }
 
       for (const parser of parsers) {
-        const frame = parser(cleanedLine)
+        const frame = parser(cleanedLine, platform)
         if (frame) {
           frames.push(frame)
           break

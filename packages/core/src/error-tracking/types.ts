@@ -47,12 +47,14 @@ export interface Mechanism {
 export type GetModuleFn = (filename: string | undefined) => string | undefined
 
 export type StackParser = (stack: string, skipFirstLines?: number) => StackFrame[]
-export type StackLineParser = (line: string) => StackFrame | undefined
+export type StackLineParser = (line: string, platform: Platform) => StackFrame | undefined
 
 export type StackFrameModifierFn = (frames: StackFrame[]) => Promise<StackFrame[]>
 
+export type Platform = 'node:javascript' | 'web:javascript' | 'hermes'
+
 export interface StackFrame {
-  platform: string
+  platform: Platform
   filename?: string
   function?: string
   module?: string

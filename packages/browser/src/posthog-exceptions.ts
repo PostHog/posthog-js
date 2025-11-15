@@ -19,7 +19,11 @@ export function buildErrorPropertiesBuilder() {
             new ErrorTracking.StringCoercer(),
             new ErrorTracking.PrimitiveCoercer(),
         ],
-        [ErrorTracking.chromeStackLineParser, ErrorTracking.geckoStackLineParser]
+        ErrorTracking.createStackParser(
+            'web:javascript',
+            ErrorTracking.chromeStackLineParser,
+            ErrorTracking.geckoStackLineParser
+        )
     )
 }
 export class PostHogExceptions {

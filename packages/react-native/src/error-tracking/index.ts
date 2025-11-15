@@ -1,6 +1,7 @@
 import type { PostHog } from '../posthog-rn'
 import { Logger, PostHogEventProperties, ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { trackConsole, trackUncaughtExceptions, trackUnhandledRejections } from './utils'
+import { isHermes } from '../utils'
 
 type LogLevel = 'debug' | 'log' | 'info' | 'warn' | 'error'
 
@@ -47,7 +48,11 @@ export class ErrorTracking {
         new CoreErrorTracking.StringCoercer(),
         new CoreErrorTracking.PrimitiveCoercer(),
       ],
-      [CoreErrorTracking.chromeStackLineParser, CoreErrorTracking.geckoStackLineParser]
+      CoreErrorTracking.createStackParser(
+        isHermes() ? 'hermes' : 'web:javascript',
+        CoreErrorTracking.chromeStackLineParser,
+        CoreErrorTracking.geckoStackLineParser
+      )
     )
     this.logger = logger.createLogger('[ErrorTracking]')
     this.options = this.resolveOptions(options)
