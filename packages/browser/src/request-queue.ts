@@ -3,6 +3,7 @@ import { each } from './utils'
 
 import { isArray, isUndefined, clampToRange } from '@posthog/core'
 import { logger } from './utils/logger'
+import { scheduler } from './utils/scheduler'
 
 export const DEFAULT_FLUSH_INTERVAL_MS = 3000
 
@@ -57,22 +58,27 @@ export class RequestQueue {
         if (this._isPaused) {
             return
         }
-        this._flushTimeout = setTimeout(() => {
+        this._flushTimeout = setTimeout(async () => {
             this._clearFlushTimeout()
             if (this._queue.length > 0) {
                 const requests = this._formatQueue()
-                for (const key in requests) {
-                    const req = requests[key]
-                    const now = new Date().getTime()
+                const requestEntries = Object.entries(requests)
+                const now = new Date().getTime()
 
-                    if (req.data && isArray(req.data)) {
-                        each(req.data, (data) => {
-                            data['offset'] = Math.abs(data['timestamp'] - now)
-                            delete data['timestamp']
-                        })
-                    }
-                    this._sendRequest(req)
-                }
+                // Process timestamp updates with yielding for large batches
+                await scheduler.processEach(
+                    requestEntries,
+                    ([, req]) => {
+                        if (req.data && isArray(req.data)) {
+                            each(req.data, (data) => {
+                                data['offset'] = Math.abs(data['timestamp'] - now)
+                                delete data['timestamp']
+                            })
+                        }
+                        this._sendRequest(req)
+                    },
+                    { priority: 'high' }
+                )
             }
         }, this._flushTimeoutMs)
     }

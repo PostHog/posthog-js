@@ -41,6 +41,7 @@ import {
 } from '../../../extensions/replay/types/rrweb-types'
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
+import { scheduler } from '../../../utils/scheduler'
 import Mock = jest.Mock
 import { SessionRecording } from '../../../extensions/replay/session-recording'
 import {
@@ -211,6 +212,9 @@ describe('Lazy SessionRecording', () => {
     }
 
     beforeEach(() => {
+        jest.useFakeTimers()
+        scheduler._reset()
+
         removePageviewCaptureHookMock = jest.fn()
         sessionId = 'sessionId' + uuidv7()
 
@@ -295,6 +299,7 @@ describe('Lazy SessionRecording', () => {
     })
 
     afterEach(() => {
+        jest.useRealTimers()
         // @ts-expect-error this is a test, it's safe to write to location like this
         window!.location = originalLocation
     })
@@ -903,6 +908,8 @@ describe('Lazy SessionRecording', () => {
 
                 // this triggers idle state and isn't a user interaction so does not take a full snapshot
                 emitInactiveEvent(thirdActivityTimestamp, true)
+                // Run only the scheduler's setTimeout(0), not all timers which would advance system time
+                jest.advanceTimersByTime(1)
 
                 // event was not active so activity timestamp is not updated
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_lastActivityTimestamp']).toEqual(
@@ -1000,6 +1007,7 @@ describe('Lazy SessionRecording', () => {
                 // this triggers idle state and isn't a user interaction so does not take a full snapshot
 
                 emitInactiveEvent(thirdActivityTimestamp, true)
+                jest.runAllTimers()
 
                 // event was not active so activity timestamp is not updated
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_lastActivityTimestamp']).toEqual(
@@ -1039,7 +1047,7 @@ describe('Lazy SessionRecording', () => {
                 // this triggers exit from idle state as it is a user interaction
                 // this will restart the session so the activity timestamp won't match
                 // restarting the session checks the id with "now" so we need to freeze that, or we'll start a second new session
-                jest.useFakeTimers().setSystemTime(new Date(fourthActivityTimestamp))
+                jest.setSystemTime(new Date(fourthActivityTimestamp))
                 const fourthSnapshot = emitActiveEvent(fourthActivityTimestamp, false)
                 expect(sessionIdGeneratorMock).toHaveBeenCalledTimes(1)
                 const endingSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
@@ -1207,6 +1215,7 @@ describe('Lazy SessionRecording', () => {
                     })
                 )
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+                jest.runAllTimers()
 
                 expect(posthog.capture).toHaveBeenCalledWith(
                     '$snapshot',
@@ -1231,6 +1240,7 @@ describe('Lazy SessionRecording', () => {
             it('compresses incremental snapshot mutation data', () => {
                 _emit(createIncrementalMutationEvent({ texts: [Array(30).fill(uuidv7()).join('')] }))
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+                jest.runAllTimers()
 
                 expect(posthog.capture).toHaveBeenCalledWith(
                     '$snapshot',
@@ -1262,6 +1272,7 @@ describe('Lazy SessionRecording', () => {
             it('compresses incremental snapshot style data', () => {
                 _emit(createIncrementalStyleSheetEvent({ adds: [Array(30).fill(uuidv7()).join('')] }))
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+                jest.runAllTimers()
 
                 expect(posthog.capture).toHaveBeenCalledWith(
                     '$snapshot',
@@ -1297,6 +1308,7 @@ describe('Lazy SessionRecording', () => {
                 const mouseEvent = createIncrementalMouseEvent()
                 _emit(mouseEvent)
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+                jest.runAllTimers()
 
                 expect(posthog.capture).toHaveBeenCalledWith(
                     '$snapshot',
@@ -1315,6 +1327,7 @@ describe('Lazy SessionRecording', () => {
             it('does not compress custom events', () => {
                 _emit(createCustomSnapshot(undefined, { tag: 'wat' }))
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+                jest.runAllTimers()
 
                 expect(posthog.capture).toHaveBeenCalledWith(
                     '$snapshot',
@@ -1341,6 +1354,7 @@ describe('Lazy SessionRecording', () => {
             it('does not compress meta events', () => {
                 _emit(createMetaSnapshot())
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+                jest.runAllTimers()
 
                 expect(posthog.capture).toHaveBeenCalledWith(
                     '$snapshot',
@@ -1430,6 +1444,7 @@ describe('Lazy SessionRecording', () => {
 
             // access private method 🤯so we don't need to wait for the timer
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+            jest.runAllTimers()
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toEqual(0)
 
             expect(posthog.capture).toHaveBeenCalledTimes(1)
@@ -1473,6 +1488,7 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_flushBufferTimer']).not.toBeUndefined()
 
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+            jest.runAllTimers()
             expect(sessionRecording['_lazyLoadedSessionRecording']['_flushBufferTimer']).toBeUndefined()
 
             expect(posthog.capture).toHaveBeenCalledTimes(1)
@@ -1519,6 +1535,8 @@ describe('Lazy SessionRecording', () => {
 
             // Another big event means the old data will be flushed
             _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
+            // Run only the scheduler's setTimeout(0), not the full flush timer
+            jest.advanceTimersByTime(1)
             expect(posthog.capture).toHaveBeenCalled()
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toEqual(1) // The new event
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toMatchObject({ size: 755017 })
@@ -1583,6 +1601,8 @@ describe('Lazy SessionRecording', () => {
             // i.e. the data in the buffer should be sent with 'otherSessionId'
             sessionRecording['_lazyLoadedSessionRecording']['_buffer']!.sessionId = 'otherSessionId'
             _emit(createIncrementalSnapshot({ emit: 2 }))
+            // Run only the scheduler's setTimeout(0), not the full flush timer
+            jest.advanceTimersByTime(1)
 
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
@@ -2196,6 +2216,8 @@ describe('Lazy SessionRecording', () => {
             _emit(createIncrementalSnapshot({ data: { source: 2 } }))
 
             simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+            // Run only the scheduler's setTimeout(0), not all timers which would advance system time
+            jest.advanceTimersByTime(1)
             expect(sessionRecording.status).toBe('active')
             expect(posthog.capture).toHaveBeenCalled()
         })
@@ -2469,6 +2491,7 @@ describe('Lazy SessionRecording', () => {
 
             // don't wait two seconds for the flush timer
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+            jest.runAllTimers()
 
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
             expect(posthog.capture).toHaveBeenCalled()
@@ -2909,6 +2932,7 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(1) // the emitted incremental event
             // call the private method to avoid waiting for the timer
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+            jest.runAllTimers()
 
             expect(posthog.capture).toHaveBeenCalled()
         })
@@ -2929,6 +2953,8 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(1) // the emitted incremental event
             // call the private method to avoid waiting for the timer
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+            // Run only the scheduler's setTimeout(0), not all timers which would advance system time
+            jest.advanceTimersByTime(1)
 
             expect(posthog.capture).not.toHaveBeenCalled()
 
@@ -2937,6 +2963,8 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(2) // two emitted incremental events
             // call the private method to avoid waiting for the timer
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+            // Run only the scheduler's setTimeout(0), not all timers which would advance system time
+            jest.advanceTimersByTime(1)
 
             expect(posthog.capture).toHaveBeenCalled()
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(0)
@@ -2946,6 +2974,7 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionDuration']).toBe(1502)
             // call the private method to avoid waiting for the timer
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+            jest.runAllTimers()
 
             expect(posthog.capture).toHaveBeenCalled()
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(0)
@@ -3125,6 +3154,7 @@ describe('Lazy SessionRecording', () => {
 
             // manually flush the buffer to simulate data being sent
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+            jest.runAllTimers()
 
             // verify data was tracked
             const flushedSize =

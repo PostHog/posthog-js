@@ -1,6 +1,7 @@
 import { mockLogger } from './helpers/mock-logger'
 
 import { SiteApps } from '../site-apps'
+import { scheduler } from '../utils/scheduler'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { PostHog } from '../posthog-core'
@@ -25,6 +26,9 @@ describe('SiteApps', () => {
     }
 
     beforeEach(() => {
+        jest.useFakeTimers()
+        scheduler._reset()
+
         // Clean the JSDOM to prevent interdependencies between tests
         document.body.innerHTML = ''
         document.head.innerHTML = ''
@@ -78,6 +82,7 @@ describe('SiteApps', () => {
 
     afterEach(() => {
         jest.clearAllMocks()
+        jest.useRealTimers()
     })
 
     describe('constructor', () => {
@@ -409,6 +414,7 @@ describe('SiteApps', () => {
             emitCaptureEvent?.('test_event2', { event: 'test_event2' } as any)
             expect(siteAppsInstance['_bufferedInvocations'].length).toBe(2)
             appConfigs[0].callback(true)
+            jest.runAllTimers()
 
             expect(siteAppsInstance.apps['1'].processEvent).toHaveBeenCalledTimes(2)
             expect(siteAppsInstance.apps['1'].processEvent).toHaveBeenCalledWith(
@@ -419,7 +425,7 @@ describe('SiteApps', () => {
             )
         })
 
-        it('clears the buffer after all apps are loaded, when succeeding async', () => {
+        it('clears the buffer after all apps are loaded, when succeeding async', async () => {
             init()
             emitCaptureEvent?.('test_event1', { event: 'test_event1' } as any)
             emitCaptureEvent?.('test_event2', { event: 'test_event2' } as any)
@@ -427,15 +433,21 @@ describe('SiteApps', () => {
 
             siteAppsInstance.onRemoteConfig({} as RemoteConfig)
             appConfigs[0].callback(true)
+            jest.runAllTimers()
+            // eslint-disable-next-line compat/compat
+            await Promise.resolve()
             expect(siteAppsInstance['_bufferedInvocations'].length).toBe(2)
             appConfigs[1].callback(true)
+            jest.runAllTimers()
+            // eslint-disable-next-line compat/compat
+            await Promise.resolve()
             expect(siteAppsInstance['_bufferedInvocations'].length).toBe(0)
 
             expect(siteAppsInstance.apps['1'].processEvent).toHaveBeenCalledTimes(2)
             expect(siteAppsInstance.apps['2'].processEvent).toHaveBeenCalledTimes(2)
         })
 
-        it('clears the buffer after all apps are loaded, when succeeding sync', () => {
+        it('clears the buffer after all apps are loaded, when succeeding sync', async () => {
             init(({ callback }) => {
                 callback(true)
             })
@@ -444,6 +456,9 @@ describe('SiteApps', () => {
             expect(siteAppsInstance['_bufferedInvocations'].length).toBe(2)
 
             siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            jest.runAllTimers()
+            // eslint-disable-next-line compat/compat
+            await Promise.resolve()
             expect(siteAppsInstance['_bufferedInvocations'].length).toBe(0)
 
             expect(siteAppsInstance.apps['1'].processEvent).toHaveBeenCalledTimes(2)

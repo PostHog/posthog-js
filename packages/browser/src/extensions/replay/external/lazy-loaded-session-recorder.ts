@@ -35,6 +35,7 @@ import { assignableWindow, LazyLoadedSessionRecordingInterface, window, document
 import { addEventListener } from '../../../utils'
 import { MutationThrottler } from './mutation-throttler'
 import { createLogger } from '../../../utils/logger'
+import { scheduler } from '../../../utils/scheduler'
 import {
     clampToRange,
     includes,
@@ -1101,7 +1102,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         if (this._buffer.data.length > 0) {
             const snapshotEvents = splitBuffer(this._buffer)
-            snapshotEvents.forEach((snapshotBuffer) => {
+            void scheduler.processEach(snapshotEvents, (snapshotBuffer) => {
                 this._flushedSizeTracker?.trackSize(snapshotBuffer.size)
                 this._captureSnapshot({
                     $snapshot_bytes: snapshotBuffer.size,

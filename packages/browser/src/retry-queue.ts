@@ -6,6 +6,7 @@ import { window } from './utils/globals'
 import { PostHog } from './posthog-core'
 import { extendURLParams } from './request'
 import { addEventListener } from './utils'
+import { scheduler } from './utils/scheduler'
 
 const thirtyMinutes = 30 * 60 * 1000
 
@@ -120,15 +121,15 @@ export class RetryQueue {
             return
         }
 
-        this._poller = setTimeout(() => {
+        this._poller = setTimeout(async () => {
             if (this._areWeOnline && this._queue.length > 0) {
-                this._flush()
+                await this._flush()
             }
             this._poll()
         }, this._pollIntervalMs) as any as number
     }
 
-    private _flush(): void {
+    private async _flush(): Promise<void> {
         const now = Date.now()
         const notToFlush: RetryQueueElement[] = []
         const toFlush = this._queue.filter((item) => {
@@ -142,9 +143,9 @@ export class RetryQueue {
         this._queue = notToFlush
 
         if (toFlush.length > 0) {
-            for (const { requestOptions } of toFlush) {
-                this.retriableRequest(requestOptions)
-            }
+            await scheduler.processEach(toFlush, ({ requestOptions }) => this.retriableRequest(requestOptions), {
+                priority: 'high',
+            })
         }
     }
 

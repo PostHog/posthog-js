@@ -10,17 +10,17 @@
         "typecheck": "tsc"
     },
     "dependencies": {
-        "@posthog/react": "*",
-        "@remix-run/node": "^2.15.2",
-        "@remix-run/react": "^2.15.2",
-        "@remix-run/serve": "^2.15.2",
+        "@posthog/react": "1.4.0",
+        "@remix-run/node": "2.16.8",
+        "@remix-run/react": "2.16.8",
+        "@remix-run/serve": "2.16.8",
         "isbot": "^4.1.0",
-        "posthog-js": "*",
+        "posthog-js": "1.290.0",
         "react": "^18.3.1",
         "react-dom": "^18.3.1"
     },
     "devDependencies": {
-        "@remix-run/dev": "^2.15.2",
+        "@remix-run/dev": "2.16.8",
         "@types/react": "^18.3.16",
         "@types/react-dom": "^18.3.5",
         "typescript": "^5.7.2",
