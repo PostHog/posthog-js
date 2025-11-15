@@ -1,6 +1,7 @@
 import { DEFAULT_FLUSH_INTERVAL_MS, RequestQueue } from '../request-queue'
 import { QueuedRequestWithOptions } from '../types'
 import { createPosthogInstance } from './helpers/posthog-instance'
+import { scheduler } from '../utils/scheduler'
 
 const EPOCH = 1_600_000_000
 
@@ -48,6 +49,7 @@ describe('RequestQueue', () => {
             jest.useFakeTimers()
             jest.setSystemTime(EPOCH - 3000) // Running the timers will add 3 seconds
             jest.spyOn(console, 'warn').mockImplementation(() => {})
+            scheduler._reset()
         })
 
         it('handles poll after enqueueing requests', () => {
@@ -74,7 +76,7 @@ describe('RequestQueue', () => {
 
             expect(sendRequest).toHaveBeenCalledTimes(0)
 
-            jest.runOnlyPendingTimers()
+            jest.runAllTimers()
 
             expect(sendRequest).toHaveBeenCalledTimes(3)
             expect(jest.mocked(sendRequest).mock.calls).toEqual([
