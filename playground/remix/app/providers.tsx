@@ -8,8 +8,8 @@ export function PHProvider({ children }: { children: React.ReactNode }) {
     const [events, setEvents] = useState<CaptureResult[]>([])
 
     useEffect(() => {
-        posthog.init('phc_test_key_for_playground', {
-            api_host: '/ph-relay-xyz123',
+        posthog.init('sTMFPsFhdP1Ssg', {
+            api_host: 'https://us.i.posthog.com',
             ui_host: 'https://us.posthog.com',
             defaults: '2025-05-24',
             before_send: (cr) => {
