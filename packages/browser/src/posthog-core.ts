@@ -62,6 +62,7 @@ import {
     SessionIdChangedCallback,
     SnippetArrayItem,
     ToolbarParams,
+    UserFeedbackRecordingResult,
 } from './types'
 import {
     _copyAndTruncateStrings,
@@ -104,6 +105,7 @@ import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
 import { SessionRecording } from './extensions/replay/session-recording'
+import { FeedbackRecordingManager } from './extensions/feedback-recording'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -316,6 +318,7 @@ export class PostHog {
     toolbar: Toolbar
     exceptions: PostHogExceptions
     consent: ConsentManager
+    feedbackManager: FeedbackRecordingManager
 
     // These are instance-specific state created after initialisation
     persistence?: PostHogPersistence
@@ -393,6 +396,7 @@ export class PostHog {
         this.requestRouter = new RequestRouter(this)
         this.consent = new ConsentManager(this)
         this.externalIntegrations = new ExternalIntegrations(this)
+        this.feedbackManager = new FeedbackRecordingManager(this)
         // NOTE: See the property definition for deprecation notice
         this.people = {
             set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
@@ -2780,6 +2784,22 @@ export class PostHog {
      */
     sessionRecordingStarted(): boolean {
         return !!this.sessionRecording?.started
+    }
+
+    /**
+     * Starts a user feedback recording session with screen recording and audio capture.
+     * Calling this method will prompt the user for permission to record their audio
+     * and display a UI. A user may still opt to cancel the recording.
+     *
+     * @param handleRecordingEnded - Callback function invoked when the recording ends with the recording result.
+     */
+    startUserFeedbackRecording(handleRecordingEnded: (result: UserFeedbackRecordingResult) => void): void {
+        if (this.feedbackManager.isFeedbackRecordingActive()) {
+            logger.warn('A user feedback recording session is already active.')
+            return
+        }
+
+        this.feedbackManager.launchFeedbackRecordingUI(handleRecordingEnded)
     }
 
     /**
