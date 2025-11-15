@@ -11,6 +11,7 @@ import {
     SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
 } from './constants'
+import { scheduler } from './utils/scheduler'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { ExceptionObserver } from './extensions/exception-autocapture'
 import { HistoryAutocapture } from './extensions/history-autocapture'
@@ -664,10 +665,6 @@ export class PostHog {
     }
 
     private _initExtensions(startInCookielessMode: boolean): void {
-        // we don't support IE11 anymore, so performance.now is safe
-        // eslint-disable-next-line compat/compat
-        const initStartTime = performance.now()
-
         this.historyAutocapture = new HistoryAutocapture(this)
         this.historyAutocapture.startIfEnabled()
 
@@ -734,52 +731,44 @@ export class PostHog {
         })
 
         // Process tasks with time-slicing to avoid blocking
-        this._processInitTaskQueue(initTasks, initStartTime)
-    }
-
-    private _processInitTaskQueue(queue: Array<() => void>, initStartTime: number): void {
-        const TIME_BUDGET_MS = 30 // Respect frame budget (~60fps = 16ms, but we're already deferred)
-
-        while (queue.length > 0) {
-            // Only time-slice if deferred init is enabled, otherwise run synchronously
-            if (this.config.__preview_deferred_init_extensions) {
-                // we don't support IE11 anymore, so performance.now is safe
-                // eslint-disable-next-line compat/compat
-                const elapsed = performance.now() - initStartTime
-
-                // Check if we've exceeded our time budget
-                if (elapsed >= TIME_BUDGET_MS && queue.length > 0) {
-                    // Yield to browser, then continue processing
-                    setTimeout(() => {
-                        this._processInitTaskQueue(queue, initStartTime)
-                    }, 0)
-                    return
-                }
-            }
-
-            // Process next task
-            const task = queue.shift()
-            if (task) {
+        // Only use time-slicing if deferred init is enabled, otherwise process synchronously
+        if (this.config.__preview_deferred_init_extensions) {
+            // we don't support IE11 anymore, so performance.now is safe
+            // eslint-disable-next-line compat/compat
+            const startTime = performance.now()
+            scheduler
+                .processEach(initTasks, (task) => task())
+                .then(
+                    () => {
+                        // eslint-disable-next-line compat/compat
+                        const totalTimeMs = Math.round(performance.now() - startTime)
+                        this.register_for_session({
+                            $sdk_debug_extensions_init_method: 'deferred',
+                            $sdk_debug_extensions_init_time_ms: totalTimeMs,
+                        })
+                        logger.info(`PostHog extensions initialized (${totalTimeMs}ms)`)
+                    },
+                    (error) => {
+                        logger.error('Error initializing extension:', error)
+                    }
+                )
+        } else {
+            // we don't support IE11 anymore, so performance.now is safe
+            // eslint-disable-next-line compat/compat
+            const startTime = performance.now()
+            initTasks.forEach((task) => {
                 try {
                     task()
                 } catch (error) {
                     logger.error('Error initializing extension:', error)
                 }
-            }
-        }
-
-        // All tasks complete - record timing for both sync and deferred modes
-        // we don't support IE11 anymore, so performance.now is safe
-        // eslint-disable-next-line compat/compat
-        const taskInitTiming = Math.round(performance.now() - initStartTime)
-        this.register_for_session({
-            $sdk_debug_extensions_init_method: this.config.__preview_deferred_init_extensions
-                ? 'deferred'
-                : 'synchronous',
-            $sdk_debug_extensions_init_time_ms: taskInitTiming,
-        })
-        if (this.config.__preview_deferred_init_extensions) {
-            logger.info(`PostHog extensions initialized (${taskInitTiming}ms)`)
+            })
+            // eslint-disable-next-line compat/compat
+            const totalTimeMs = Math.round(performance.now() - startTime)
+            this.register_for_session({
+                $sdk_debug_extensions_init_method: 'synchronous',
+                $sdk_debug_extensions_init_time_ms: totalTimeMs,
+            })
         }
     }
 
