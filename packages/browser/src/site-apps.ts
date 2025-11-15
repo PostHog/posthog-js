@@ -2,6 +2,7 @@ import { PostHog } from './posthog-core'
 import { CaptureResult, Properties, RemoteConfig, SiteApp, SiteAppGlobals, SiteAppLoader } from './types'
 import { assignableWindow } from './utils/globals'
 import { createLogger } from './utils/logger'
+import { scheduler } from './utils/scheduler'
 
 const logger = createLogger('[SiteApps]')
 
@@ -18,13 +19,17 @@ export class SiteApps {
     }
 
     public get isEnabled(): boolean {
-        return !!this._instance.config.opt_in_site_apps
+        return this._instance.config.opt_in_site_apps
     }
 
     private _eventCollector(_eventName: string, eventPayload?: CaptureResult | undefined) {
         if (!eventPayload) {
             return
         }
+        if (eventPayload.event === '$snapshot') {
+            return
+        }
+
         const globals = this.globalsForEvent(eventPayload)
         this._bufferedInvocations.push(globals)
         if (this._bufferedInvocations.length > 1000) {
@@ -59,7 +64,8 @@ export class SiteApps {
             groups[type] = { id: groupIds[type], type, properties }
         }
         const { $set_once, $set, ..._event } = event
-        const globals = {
+
+        return {
             event: {
                 ..._event,
                 properties: {
@@ -80,7 +86,6 @@ export class SiteApps {
             },
             groups,
         }
-        return globals
     }
 
     setupSiteApp(loader: SiteAppLoader) {
@@ -88,8 +93,14 @@ export class SiteApps {
         const processBufferedEvents = () => {
             if (!app.errored && this._bufferedInvocations.length) {
                 logger.info(`Processing ${this._bufferedInvocations.length} events for site app with id ${loader.id}`)
-                this._bufferedInvocations.forEach((globals) => app.processEvent?.(globals))
-                app.processedBuffer = true
+                void scheduler
+                    .processEach(this._bufferedInvocations, (globals) => app.processEvent?.(globals))
+                    .then(() => {
+                        app.processedBuffer = true
+                        if (Object.values(this.apps).every((app) => app.processedBuffer || app.errored)) {
+                            this._stopBuffering?.()
+                        }
+                    })
             }
 
             if (Object.values(this.apps).every((app) => app.processedBuffer || app.errored)) {
@@ -154,6 +165,10 @@ export class SiteApps {
 
     private _onCapturedEvent(event: CaptureResult) {
         if (Object.keys(this.apps).length === 0) {
+            return
+        }
+
+        if (event.event === '$snapshot') {
             return
         }
 
