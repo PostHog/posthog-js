@@ -39,10 +39,12 @@ describe('HistoryAutocapture', () => {
             },
             pageViewManager: {
                 doPageView: pageViewManagerDoPageView,
+                doPageLeave: jest.fn().mockReturnValue({ $pageview_id: 'prev-id' }),
             },
             scrollManager: {
                 resetContext: scrollManagerResetContext,
             },
+            _shouldCapturePageleaveOnNavigation: jest.fn().mockReturnValue(false),
         }
 
         historyAutocapture = new HistoryAutocapture(posthog)
@@ -427,6 +429,170 @@ describe('HistoryAutocapture', () => {
 
             addEventListenerSpy.mockRestore()
             removeEventListenerSpy.mockRestore()
+        })
+    })
+
+    describe('Pageleave on navigation (capture_pageleave: "on_navigation")', () => {
+        beforeEach(() => {
+            historyAutocapture.stop()
+
+            // Reset history methods to allow re-patching
+            window.history.pushState = originalPushState
+            window.history.replaceState = originalReplaceState
+
+            posthog.config.capture_pageleave = 'on_navigation'
+            posthog._shouldCapturePageleaveOnNavigation = jest.fn().mockReturnValue(true)
+
+            // Update doPageLeave mock to simulate real behavior - track if there's a previous page
+            let hasNavigated = false
+            posthog.pageViewManager.doPageLeave = jest.fn().mockImplementation(() => {
+                if (!hasNavigated) {
+                    hasNavigated = true
+                    return { $pageview_id: 'prev-id' }
+                }
+                return {
+                    $pageview_id: 'prev-id',
+                    $prev_pageview_id: 'previous-page-id',
+                    $prev_pageview_pathname: '/previous-path',
+                }
+            })
+
+            historyAutocapture = new HistoryAutocapture(posthog)
+            historyAutocapture.startIfEnabled()
+            capture.mockClear()
+        })
+
+        it('should capture pageleave before pageview on pushState navigation', () => {
+            // Navigate to first page
+            mockLocation.pathname = '/page-a'
+            window.history.pushState({ page: 1 }, 'Page A', '/page-a')
+
+            capture.mockClear()
+
+            // Navigate to second page - should capture pageleave for /page-a first
+            mockLocation.pathname = '/page-b'
+            window.history.pushState({ page: 2 }, 'Page B', '/page-b')
+
+            expect(capture).toHaveBeenCalledTimes(2)
+            expect(capture).toHaveBeenNthCalledWith(
+                1,
+                '$pageleave',
+                expect.objectContaining({ navigation_type: 'pushState' })
+            )
+            expect(capture).toHaveBeenNthCalledWith(2, '$pageview', { navigation_type: 'pushState' })
+        })
+
+        it('should capture pageleave before pageview on replaceState navigation', () => {
+            // Navigate to first page
+            mockLocation.pathname = '/page-a'
+            window.history.replaceState({ page: 1 }, 'Page A', '/page-a')
+
+            capture.mockClear()
+
+            // Navigate to second page - should capture pageleave for /page-a first
+            mockLocation.pathname = '/page-b'
+            window.history.replaceState({ page: 2 }, 'Page B', '/page-b')
+
+            expect(capture).toHaveBeenCalledTimes(2)
+            expect(capture).toHaveBeenNthCalledWith(
+                1,
+                '$pageleave',
+                expect.objectContaining({ navigation_type: 'replaceState' })
+            )
+            expect(capture).toHaveBeenNthCalledWith(2, '$pageview', { navigation_type: 'replaceState' })
+        })
+
+        it('should capture pageleave before pageview on popstate navigation', () => {
+            // Navigate to first page
+            mockLocation.pathname = '/page-a'
+            window.history.pushState({ page: 1 }, 'Page A', '/page-a')
+
+            // Navigate to second page
+            mockLocation.pathname = '/page-b'
+            window.history.pushState({ page: 2 }, 'Page B', '/page-b')
+
+            capture.mockClear()
+
+            // Simulate back navigation - pathname changes back to /page-a
+            mockLocation.pathname = '/page-a'
+            window.dispatchEvent(new PopStateEvent('popstate', { state: { page: 1 } }))
+
+            expect(capture).toHaveBeenCalledTimes(2)
+            expect(capture).toHaveBeenNthCalledWith(
+                1,
+                '$pageleave',
+                expect.objectContaining({ navigation_type: 'popstate' })
+            )
+            expect(capture).toHaveBeenNthCalledWith(2, '$pageview', { navigation_type: 'popstate' })
+        })
+
+        it('should capture full navigation sequence: A -> B -> C', () => {
+            // Visit page A (no pageleave on first visit)
+            mockLocation.pathname = '/page-a'
+            window.history.pushState({ page: 1 }, 'Page A', '/page-a')
+
+            expect(capture).toHaveBeenCalledTimes(1)
+            expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'pushState' })
+
+            capture.mockClear()
+
+            // Visit page B (pageleave A + pageview B)
+            mockLocation.pathname = '/page-b'
+            window.history.pushState({ page: 2 }, 'Page B', '/page-b')
+
+            expect(capture).toHaveBeenCalledTimes(2)
+            expect(capture).toHaveBeenNthCalledWith(
+                1,
+                '$pageleave',
+                expect.objectContaining({ navigation_type: 'pushState' })
+            )
+            expect(capture).toHaveBeenNthCalledWith(2, '$pageview', { navigation_type: 'pushState' })
+
+            capture.mockClear()
+
+            // Visit page C (pageleave B + pageview C)
+            mockLocation.pathname = '/page-c'
+            window.history.pushState({ page: 3 }, 'Page C', '/page-c')
+
+            expect(capture).toHaveBeenCalledTimes(2)
+            expect(capture).toHaveBeenNthCalledWith(
+                1,
+                '$pageleave',
+                expect.objectContaining({ navigation_type: 'pushState' })
+            )
+            expect(capture).toHaveBeenNthCalledWith(2, '$pageview', { navigation_type: 'pushState' })
+        })
+
+        it('should NOT capture pageleave when option is not set', () => {
+            historyAutocapture.stop()
+            posthog.config.capture_pageleave = 'if_capture_pageview'
+            posthog._shouldCapturePageleaveOnNavigation = jest.fn().mockReturnValue(false)
+            historyAutocapture = new HistoryAutocapture(posthog)
+            historyAutocapture.startIfEnabled()
+            capture.mockClear()
+
+            // Navigate to first page
+            mockLocation.pathname = '/page-a'
+            window.history.pushState({ page: 1 }, 'Page A', '/page-a')
+
+            capture.mockClear()
+
+            // Navigate to second page - should NOT capture pageleave
+            mockLocation.pathname = '/page-b'
+            window.history.pushState({ page: 2 }, 'Page B', '/page-b')
+
+            expect(capture).toHaveBeenCalledTimes(1)
+            expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'pushState' })
+        })
+
+        it('should not capture pageleave on first pageview (no previous page)', () => {
+            // First navigation - no previous page to leave
+            mockLocation.pathname = '/page-a'
+            window.history.pushState({ page: 1 }, 'Page A', '/page-a')
+
+            expect(capture).toHaveBeenCalledTimes(1)
+            expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'pushState' })
+            expect(capture).not.toHaveBeenCalledWith('$pageleave', expect.anything())
         })
     })
 })

@@ -131,7 +131,8 @@ exports[`config snapshot for PostHogConfig 1`] = `
   "capture_pageleave": [
     "false",
     "true",
-    "\\"if_capture_pageview\\""
+    "\\"if_capture_pageview\\"",
+    "\\"on_navigation\\""
   ],
   "cookie_expiration": "number",
   "upgrade": [
