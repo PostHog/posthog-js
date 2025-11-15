@@ -4,6 +4,7 @@ import {
   GenerateContentParameters,
   Part,
   GenerateContentResponseUsageMetadata,
+  GoogleGenAIOptions,
 } from '@google/genai'
 import { PostHog } from 'posthog-node'
 import {
@@ -18,7 +19,7 @@ import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
 import { isString } from '../typeGuards'
 
-interface MonitoringGeminiConfig {
+interface MonitoringGeminiConfig extends GoogleGenAIOptions {
   apiKey?: string
   vertexai?: boolean
   project?: string
