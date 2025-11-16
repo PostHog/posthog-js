@@ -38,6 +38,96 @@ describe('exception autocapture', () => {
     }
   }
 
+  async function expectExceptionCaptured({
+    globalAutocapture,
+    contextOverride,
+    errorType,
+  }: {
+    globalAutocapture: boolean
+    contextOverride?: boolean
+    errorType: 'exception' | 'rejection'
+  }) {
+    jest.useRealTimers()
+    const workerFilename =
+      __dirname +
+      (globalAutocapture
+        ? '/exception-autocapture-globally-enabled.worker.mjs'
+        : '/exception-autocapture-globally-disabled.worker.mjs')
+    const worker = new Worker(workerFilename)
+
+    let action: string
+    if (contextOverride === undefined) {
+      action = errorType === 'exception' ? 'throw_error' : 'reject_promise'
+    } else if (contextOverride === true) {
+      action = errorType === 'exception' ? 'throw_with_context_enabled' : 'reject_with_context_enabled'
+    } else {
+      action = errorType === 'exception' ? 'throw_with_context_disabled' : 'reject_with_context_disabled'
+    }
+
+    const capturePromise = new Promise<void>((res, rej) => {
+      const timeout = setTimeout(() => {
+        rej(new Error('Exception was not captured within timeout'))
+      }, 1000)
+
+      worker.on('message', (message) => {
+        if (message.method === 'capture') {
+          clearTimeout(timeout)
+          expect(message.event.event).toBe('$exception')
+          res()
+        }
+      })
+    })
+
+    worker.postMessage({ action, data: 'Test Error' })
+    await capturePromise
+    worker.terminate()
+    jest.useFakeTimers()
+  }
+
+  async function expectExceptionNotCaptured({
+    globalAutocapture,
+    contextOverride,
+    errorType,
+  }: {
+    globalAutocapture: boolean
+    contextOverride?: boolean
+    errorType: 'exception' | 'rejection'
+  }) {
+    jest.useRealTimers()
+    const workerFilename =
+      __dirname +
+      (globalAutocapture
+        ? '/exception-autocapture-globally-enabled.worker.mjs'
+        : '/exception-autocapture-globally-disabled.worker.mjs')
+    const worker = new Worker(workerFilename)
+
+    let action: string
+    if (contextOverride === undefined) {
+      action = errorType === 'exception' ? 'throw_error' : 'reject_promise'
+    } else if (contextOverride === true) {
+      action = errorType === 'exception' ? 'throw_with_context_enabled' : 'reject_with_context_enabled'
+    } else {
+      action = errorType === 'exception' ? 'throw_with_context_disabled' : 'reject_with_context_disabled'
+    }
+
+    const timeoutPromise = new Promise<void>((res) => {
+      setTimeout(() => res(), 500)
+    })
+
+    const capturePromise = new Promise<void>((res, rej) => {
+      worker.on('message', (message) => {
+        if (message.method === 'capture') {
+          rej(new Error('Exception was captured when it should not have been'))
+        }
+      })
+    })
+
+    worker.postMessage({ action, data: 'Test Error' })
+    await Promise.race([timeoutPromise, capturePromise])
+    worker.terminate()
+    jest.useFakeTimers()
+  }
+
   it('should capture uncaught exception', () => {
     global.process.on = jest.fn()
     addUncaughtExceptionListener(
@@ -54,7 +144,7 @@ describe('exception autocapture', () => {
   })
 
   it('should listen to uncaught errors', async () => {
-    const workerFilename = __dirname + '/exception-autocapture.worker.mjs'
+    const workerFilename = __dirname + '/exception-autocapture-globally-enabled.worker.mjs'
     const worker = new Worker(workerFilename)
     const exceptionMessage = 'Uncaught Error'
     const capturePromise = new Promise<void>((res, rej) => {
@@ -81,7 +171,7 @@ describe('exception autocapture', () => {
 
   it('should listen to unhandled rejections', async () => {
     const exceptionMessage = 'Unhandled Promise'
-    const workerFilename = __dirname + '/exception-autocapture.worker.mjs'
+    const workerFilename = __dirname + '/exception-autocapture-globally-enabled.worker.mjs'
     const worker = new Worker(workerFilename)
     const capturePromise = new Promise<void>((res, rej) => {
       worker.on('message', (message) => {
@@ -118,6 +208,7 @@ describe('exception autocapture', () => {
       host: 'http://example.com',
       fetchRetryCount: 0,
       disableCompression: true,
+      enableExceptionAutocapture: true,
     })
 
     const mockedCapture = jest.spyOn(ph, 'capture').mockImplementation()
@@ -127,5 +218,51 @@ describe('exception autocapture', () => {
 
     // captures until rate limited
     expect(mockedCapture).toHaveBeenCalledTimes(9)
+  })
+
+  describe('context', () => {
+    describe('with autocapture globally disabled', () => {
+      describe('with autocapture in context enabled', () => {
+        it('should capture exception', async () => {
+          await expectExceptionCaptured({ globalAutocapture: false, contextOverride: true, errorType: 'exception' })
+        })
+
+        it('should capture unhandled rejection', async () => {
+          await expectExceptionCaptured({ globalAutocapture: false, contextOverride: true, errorType: 'rejection' })
+        })
+      })
+
+      describe('with no context override', () => {
+        it('should not capture exception', async () => {
+          await expectExceptionNotCaptured({ globalAutocapture: false, errorType: 'exception' })
+        })
+
+        it('should not capture unhandled rejection', async () => {
+          await expectExceptionNotCaptured({ globalAutocapture: false, errorType: 'rejection' })
+        })
+      })
+    })
+
+    describe('with autocapture globally enabled', () => {
+      describe('with autocapture in context disabled', () => {
+        it('should not capture exception', async () => {
+          await expectExceptionNotCaptured({ globalAutocapture: true, contextOverride: false, errorType: 'exception' })
+        })
+
+        it('should not capture unhandled rejection', async () => {
+          await expectExceptionNotCaptured({ globalAutocapture: true, contextOverride: false, errorType: 'rejection' })
+        })
+      })
+
+      describe('with no context override', () => {
+        it('should capture exception', async () => {
+          await expectExceptionCaptured({ globalAutocapture: true, errorType: 'exception' })
+        })
+
+        it('should capture unhandled rejection', async () => {
+          await expectExceptionCaptured({ globalAutocapture: true, errorType: 'rejection' })
+        })
+      })
+    })
   })
 })

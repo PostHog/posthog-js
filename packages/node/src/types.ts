@@ -5,6 +5,7 @@ import type {
   PostHogFetchOptions,
   PostHogFetchResponse,
 } from '@posthog/core'
+import type { ContextData, ContextOptions } from './context'
 
 export interface IdentifyMessage {
   distinctId: string
@@ -19,11 +20,14 @@ export interface SendFeatureFlagsOptions {
   flagKeys?: string[]
 }
 
-export interface EventMessage extends IdentifyMessage {
+export interface EventMessage {
+  distinctId?: string // Optional - can be provided via context
   event: string
+  properties?: Record<string | number, any>
   groups?: Record<string, string | number> // Mapping of group type to group id
   sendFeatureFlags?: boolean | SendFeatureFlagsOptions
   timestamp?: Date
+  disableGeoip?: boolean
   uuid?: string
 }
 
@@ -306,6 +310,21 @@ export interface IPostHog {
    * already polled automatically at a regular interval.
    */
   reloadFeatureFlags(): Promise<void>
+
+  /**
+   * @description Run a function with specific context that will be applied to all events captured within that context.
+   * @param contextData Context data to apply (tags, sessionId, distinctId, enableExceptionAutocapture)
+   * @param fn Function to run with the context
+   * @param options Options for context management (fresh: true to replace, false to merge)
+   * @returns The return value of the function
+   */
+  withContext<T>(contextData: Partial<ContextData>, fn: () => T, options?: ContextOptions): T
+
+  /**
+   * @description Get the current context data.
+   * @returns The current context data, or undefined if no context is set
+   */
+  getContext(): ContextData | undefined
 
   /**
    * @description Flushes the events still in the queue and clears the feature flags poller to allow for

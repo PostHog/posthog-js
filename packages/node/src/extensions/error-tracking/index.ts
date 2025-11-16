@@ -64,13 +64,29 @@ export default class ErrorTracking {
   }
 
   private startAutocaptureIfEnabled(): void {
-    if (this.isEnabled()) {
-      addUncaughtExceptionListener(this.onException.bind(this), this.onFatalError.bind(this))
-      addUnhandledRejectionListener(this.onException.bind(this))
-    }
+    // Always enable listeners so context can override global settings
+    addUncaughtExceptionListener(this.onException.bind(this), this.onFatalError.bind(this))
+    addUnhandledRejectionListener(this.onException.bind(this))
   }
 
   private onException(exception: unknown, hint: CoreErrorTracking.EventHint): void {
+    // Capture context synchronously before entering async context
+    const context = this.client.getContext()
+    const contextAutocaptureEnabled = context?.enableExceptionAutocapture
+
+    // Determine if autocapture is enabled: context takes precedence over global setting
+    const shouldCapture =
+      contextAutocaptureEnabled !== undefined ? contextAutocaptureEnabled : this._exceptionAutocaptureEnabled
+
+    // If autocapture is disabled (either by context or global setting), skip immediately
+    if (!shouldCapture) {
+      this._logger.info('Skipping exception capture because it is disabled.', {
+        contextSetting: contextAutocaptureEnabled,
+        globalSetting: this._exceptionAutocaptureEnabled,
+      })
+      return
+    }
+
     this.client.addPendingPromise(
       (async () => {
         const eventMessage = await ErrorTracking.buildEventMessage(exception, hint)
