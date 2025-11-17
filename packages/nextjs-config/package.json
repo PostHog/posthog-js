@@ -44,7 +44,8 @@
   "dependencies": {
     "@posthog/cli": "catalog:",
     "semver": "^7.7.2",
-    "@posthog/core": "workspace:*"
+    "@posthog/core": "workspace:*",
+    "@posthog/webpack-plugin": "workspace:*"
   },
   "keywords": [
     "posthog",
