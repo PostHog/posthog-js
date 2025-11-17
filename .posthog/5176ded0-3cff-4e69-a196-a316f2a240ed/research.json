@@ -1,0 +1,29 @@
+{
+  "actionabilityScore": 0.95,
+  "context": "Task is to add R to the README.md file in the posthog-js monorepo. The README currently lists 7 JavaScript/TypeScript SDK packages. The task requires adding R (presumably a new R SDK package) to this list following the existing format and conventions.",
+  "keyFiles": [
+    "/Users/lucasfaria/src/array-workspace/posthog-js/README.md"
+  ],
+  "blockers": [],
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Where should the R package entry be added in the Packages section?",
+      "options": [
+        "Add as the last entry after [@posthog/ai](./packages/ai/README.md) to maintain chronological order",
+        "Add in alphabetical order (between [@posthog/nextjs-config] and [posthog-node])",
+        "Add as the first entry to highlight R as a new/featured package"
+      ]
+    },
+    {
+      "id": "q2",
+      "question": "What is the exact package name and path for the R SDK package?",
+      "options": [
+        "posthog-r with path ./packages/r/README.md (matches naming convention like posthog-js, posthog-node)",
+        "@posthog/r with path ./packages/r/README.md (matches scoped naming like @posthog/react, @posthog/ai)",
+        "A different name/path (specify exact package name and relative path)"
+      ]
+    }
+  ],
+  "answered": false
+}
