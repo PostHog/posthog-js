@@ -1,10 +1,10 @@
 import { WebExperiments } from '../web-experiments'
 import { PostHog } from '../posthog-core'
-import { PostHogConfig } from '../types'
 import { PostHogPersistence } from '../posthog-persistence'
 import { WebExperiment } from '../web-experiments-types'
 import { RequestRouter } from '../utils/request-router'
 import { ConsentManager } from '../consent'
+import { createMockPostHog, createMockConfig, createMockPersistence } from './helpers/posthog-instance'
 
 describe('Web Experimentation', () => {
     let webExperiment: WebExperiments
@@ -109,15 +109,15 @@ describe('Web Experimentation', () => {
 
     beforeEach(() => {
         let cachedFlags = {}
-        persistence = { props: {}, register: jest.fn() } as unknown as PostHogPersistence
+        persistence = createMockPersistence({ props: {}, register: jest.fn() })
         posthog = makePostHog({
-            config: {
+            config: createMockConfig({
                 disable_web_experiments: false,
                 api_host: 'https://test.com',
                 token: 'testtoken',
                 autocapture: true,
                 region: 'us-east-1',
-            } as unknown as PostHogConfig,
+            }),
             persistence: persistence,
             get_property: jest.fn(),
             capture: jest.fn(),
@@ -247,13 +247,13 @@ describe('Web Experimentation', () => {
                 experiments: [signupButtonWebExperimentWithFeatureFlag],
             }
             const disabledPostHog = makePostHog({
-                config: {
+                config: createMockConfig({
                     api_host: 'https://test.com',
                     token: 'testtoken',
                     autocapture: true,
                     region: 'us-east-1',
-                    // no disable_web_experiments set to false here, so it’s implicitly enabled
-                } as unknown as PostHogConfig,
+                    // no disable_web_experiments set to false here, so it's implicitly enabled
+                }),
                 persistence: persistence,
                 get_property: jest.fn(),
                 _send_request: jest
@@ -328,11 +328,11 @@ describe('Web Experimentation', () => {
     })
 
     function makePostHog(ph: Partial<PostHog>): PostHog {
-        return {
+        return createMockPostHog({
             get_distinct_id() {
                 return 'distinctid'
             },
             ...ph,
-        } as unknown as PostHog
+        })
     }
 })

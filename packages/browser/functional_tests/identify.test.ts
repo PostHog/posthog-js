@@ -15,7 +15,7 @@ describe('FunctionalTests / Identify', () => {
 
     beforeEach(async () => {
         token = uuidv7()
-        posthog = await createPosthogInstance(token, { disable_surveys: true })
+        posthog = await createPosthogInstance(token, { disable_surveys: true, before_send: (cr) => cr })
         anonymousId = posthog.get_distinct_id()
     })
 

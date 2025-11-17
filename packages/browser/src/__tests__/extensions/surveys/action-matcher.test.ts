@@ -5,23 +5,24 @@ import { PostHogPersistence } from '../../../posthog-persistence'
 import { PostHog } from '../../../posthog-core'
 import { CaptureResult, PostHogConfig } from '../../../types'
 import { ActionMatcher } from '../../../extensions/surveys/action-matcher'
+import { createMockPostHog, createMockConfig } from '../../helpers/posthog-instance'
 
 describe('action-matcher', () => {
     let config: PostHogConfig
     let instance: PostHog
 
     beforeEach(() => {
-        config = {
+        config = createMockConfig({
             token: 'testtoken',
             api_host: 'https://app.posthog.com',
             persistence: 'memory',
-        } as unknown as PostHogConfig
+        })
 
-        instance = {
+        instance = createMockPostHog({
             config: config,
             persistence: new PostHogPersistence(config),
             _addCaptureHook: jest.fn(),
-        } as unknown as PostHog
+        })
     })
 
     afterEach(() => {

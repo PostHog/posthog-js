@@ -1,5 +1,16 @@
 # @posthog/nuxt
 
+## 1.2.0
+
+### Minor Changes
+
+- [#2560](https://github.com/PostHog/posthog-js/pull/2560) [`905f748`](https://github.com/PostHog/posthog-js/commit/905f748bc0d429fc497a9ca08f411c8d8b4c5fa2) Thanks [@geferon](https://github.com/geferon)! - added name to nuxt client plugin
+
+### Patch Changes
+
+- Updated dependencies [[`f2426db`](https://github.com/PostHog/posthog-js/commit/f2426dbd3dca3ac5ffc1934553b4bcff76af0d77), [`de80a41`](https://github.com/PostHog/posthog-js/commit/de80a419a49cb26ee21147bc2241d3c0fec67909)]:
+  - posthog-js@1.293.0
+
 ## 1.1.5
 
 ### Patch Changes
