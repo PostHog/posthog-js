@@ -25,6 +25,13 @@ export enum SurveyPosition {
     NextToTrigger = 'next_to_trigger',
 }
 
+export enum SurveyTabPosition {
+    Top = 'top',
+    Left = 'left',
+    Right = 'right',
+    Bottom = 'bottom',
+}
+
 export interface SurveyAppearance {
     // keep in sync with frontend/src/types.ts -> SurveyAppearance
     backgroundColor?: string
@@ -47,6 +54,7 @@ export interface SurveyAppearance {
     thankYouMessageCloseButtonText?: string
     borderColor?: string
     position?: SurveyPosition
+    tabPosition?: SurveyTabPosition
     placeholder?: string
     shuffleQuestions?: boolean
     surveyPopupDelaySeconds?: number
