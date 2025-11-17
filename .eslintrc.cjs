@@ -72,6 +72,7 @@ module.exports = {
                 'packages/react-native/**',
                 'packages/node/**',
                 'packages/web/**',
+                'packages/webpack-plugin/**',
                 'examples/**',
                 'playground/**',
             ],
