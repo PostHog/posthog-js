@@ -5,6 +5,7 @@
         "moduleResolution": "NodeNext",
         "declaration": true,
         "emitDeclarationOnly": true,
+        "resolveJsonModule": true,
         "allowImportingTsExtensions": true
     }
 }

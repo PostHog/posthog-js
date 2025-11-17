@@ -2,13 +2,13 @@ import type { Plugin, OutputOptions, OutputAsset, OutputChunk } from 'rollup'
 import { spawnLocal, resolveBinaryPath, LogLevel } from '@posthog/core/process'
 import path from 'node:path'
 
-export type PostHogRollupPluginOptions = {
+export interface PostHogRollupPluginOptions {
     personalApiKey: string
     envId: string
     host?: string
     cliBinaryPath?: string
     logLevel?: LogLevel
-    sourcemaps: {
+    sourcemaps?: {
         enabled?: boolean
         project?: string
         version?: string
@@ -16,7 +16,7 @@ export type PostHogRollupPluginOptions = {
     }
 }
 
-type ResolvedPostHogRollupPluginOptions = {
+interface ResolvedPostHogRollupPluginOptions {
     personalApiKey: string
     envId: string
     host: string
@@ -61,6 +61,12 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                 const parentDirectory = path.dirname(filePath)
                 args.push('--directory', parentDirectory)
                 args.push('--include', filePath)
+            }
+            if (posthogOptions.sourcemaps.project) {
+                args.push('--project', posthogOptions.sourcemaps.project)
+            }
+            if (posthogOptions.sourcemaps.version) {
+                args.push('--version', posthogOptions.sourcemaps.version)
             }
             if (posthogOptions.sourcemaps.deleteAfterUpload) {
                 args.push('--delete-after')
