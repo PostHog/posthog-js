@@ -215,4 +215,94 @@ describe('PostHog Context', () => {
 
     expect(capturedIndices).toEqual(expectedIndices)
   })
+
+  it('should properly inherit and restore context through nested enter/exit operations', async () => {
+    // Enter context A
+    posthog.withContext({ tags: { contextA: 'valueA', level: 'A' } }, () => {
+      // Enter context B (inherits from A)
+      posthog.withContext(
+        { tags: { contextB: 'valueB', level: 'B' } },
+        () => {
+          // Enter context C1 (inherits from B, which has A's stuff)
+          posthog.withContext(
+            { tags: { contextC1: 'valueC1', level: 'C1' } },
+            () => {
+              // Event 1: Should have A, B, and C1 context
+              posthog.capture({ distinctId: 'user-nested', event: 'event_in_C1' })
+            },
+            { fresh: false }
+          )
+
+          // Exit C1 - Event 2: Should have A and B, but not C1
+          posthog.capture({ distinctId: 'user-nested', event: 'event_after_C1' })
+
+          // Enter context C2 (inherits from B, which still has A's stuff)
+          posthog.withContext(
+            { tags: { contextC2: 'valueC2', level: 'C2' } },
+            () => {
+              // Event 3: Should have A, B, and C2 (but not C1)
+              posthog.capture({ distinctId: 'user-nested', event: 'event_in_C2' })
+            },
+            { fresh: false }
+          )
+
+          // Exit C2 - Event 4: Should have A and B again (no C1 or C2)
+          posthog.capture({ distinctId: 'user-nested', event: 'event_after_C2' })
+        },
+        { fresh: false }
+      )
+    })
+
+    await waitForFlush()
+
+    const allEvents: any[] = []
+    mockedFetch.mock.calls.forEach((call) => {
+      if ((call[0] as string).includes('/batch/')) {
+        const batch = JSON.parse((call[1] as any).body as any).batch
+        allEvents.push(...batch)
+      }
+    })
+
+    expect(allEvents).toHaveLength(4)
+
+    // Event 1: In context C1 (has A, B, C1)
+    const eventInC1 = allEvents.find((e) => e.event === 'event_in_C1')
+    expect(eventInC1?.properties).toMatchObject({
+      contextA: 'valueA',
+      contextB: 'valueB',
+      contextC1: 'valueC1',
+      level: 'C1', // C1 overrides level
+    })
+    expect(eventInC1?.properties.contextC2).toBeUndefined()
+
+    // Event 2: After exiting C1 (has A, B, but not C1)
+    const eventAfterC1 = allEvents.find((e) => e.event === 'event_after_C1')
+    expect(eventAfterC1?.properties).toMatchObject({
+      contextA: 'valueA',
+      contextB: 'valueB',
+      level: 'B', // Back to B's level
+    })
+    expect(eventAfterC1?.properties.contextC1).toBeUndefined()
+    expect(eventAfterC1?.properties.contextC2).toBeUndefined()
+
+    // Event 3: In context C2 (has A, B, C2, but not C1)
+    const eventInC2 = allEvents.find((e) => e.event === 'event_in_C2')
+    expect(eventInC2?.properties).toMatchObject({
+      contextA: 'valueA',
+      contextB: 'valueB',
+      contextC2: 'valueC2',
+      level: 'C2', // C2 overrides level
+    })
+    expect(eventInC2?.properties.contextC1).toBeUndefined()
+
+    // Event 4: After exiting C2 (has A, B again, no C1 or C2)
+    const eventAfterC2 = allEvents.find((e) => e.event === 'event_after_C2')
+    expect(eventAfterC2?.properties).toMatchObject({
+      contextA: 'valueA',
+      contextB: 'valueB',
+      level: 'B', // Back to B's level again
+    })
+    expect(eventAfterC2?.properties.contextC1).toBeUndefined()
+    expect(eventAfterC2?.properties.contextC2).toBeUndefined()
+  })
 })
