@@ -1495,18 +1495,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     const contextData = this.context.get()
 
-    // Enrich the distinctId with the context distinctId if not explicitly provided
-    let finalDistinctId = distinctId || contextData?.distinctId
+    let mergedDistinctId = distinctId || contextData?.distinctId
 
     const mergedProperties = {
       ...(contextData?.tags || {}),
       ...(properties || {}),
     }
 
-    // Given stateless nature of Node SDK we capture events using personless processing when no
-    // user can be determined because a distinct_id is not provided
-    if (!finalDistinctId) {
-      finalDistinctId = uuidv7()
+    if (!mergedDistinctId) {
+      mergedDistinctId = uuidv7()
       mergedProperties.$process_person_profile = false
     }
 
@@ -1516,7 +1513,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     // Run before_send if configured
     const eventMessage = this._runBeforeSend({
-      distinctId: finalDistinctId,
+      distinctId: mergedDistinctId,
       event,
       properties: mergedProperties,
       groups,
