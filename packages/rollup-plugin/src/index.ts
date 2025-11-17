@@ -1,7 +1,4 @@
-import MagicString from 'magic-string'
-import { v5 as uuidv5 } from 'uuid'
 import type { Plugin, OutputOptions, OutputAsset, OutputChunk } from 'rollup'
-import crypto from 'node:crypto'
 import { spawnLocal, resolveBinaryPath, LogLevel } from '@posthog/core/process'
 import path from 'node:path'
 
@@ -19,10 +16,24 @@ export type PostHogRollupPluginOptions = {
     }
 }
 
+type ResolvedPostHogRollupPluginOptions = {
+    personalApiKey: string
+    envId: string
+    host: string
+    cliBinaryPath: string
+    logLevel: LogLevel
+    sourcemaps: {
+        enabled: boolean
+        project?: string
+        version?: string
+        deleteAfterUpload: boolean
+    }
+}
+
 export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOptions) {
     const posthogOptions = resolveOptions(userOptions)
     return {
-        name: 'posthog-inject-chunk-ids',
+        name: 'posthog-rollup-plugin',
         outputOptions: {
             order: 'post',
             handler(options) {
@@ -32,31 +43,17 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                 }
             },
         },
-        renderChunk(code, chunk) {
-            if (isJavascriptFile(chunk.fileName)) {
-                const chunkId = generateChunkId(code)
-                const codeToInject = getChunkIdSnippet(chunkId)
-                const magicCode = new MagicString(code)
-                // TODO: Inject after use directives
-                magicCode.prepend(codeToInject)
-                magicCode.append(`\n//# chunkId=${chunkId}\n`)
-                return {
-                    code: magicCode.toString(),
-                    map: magicCode.generateMap({ file: chunk.fileName, hires: 'boundary' }),
-                }
-            } else {
-                return null
-            }
-        },
         async writeBundle(options: OutputOptions, bundle: { [fileName: string]: OutputAsset | OutputChunk }) {
-            const args = ['sourcemap', 'upload']
+            if (!posthogOptions.sourcemaps.enabled) return
+            const args = ['sourcemap', 'process']
             const cliPath = posthogOptions.cliBinaryPath
             if (options.dir) {
                 const directory = path.resolve(options.dir)
                 args.push('--directory', directory)
-                for (const chunk of Object.values(bundle)) {
+                for (const fileName in bundle) {
+                    const chunk = bundle[fileName]
                     if (chunk.type === 'chunk') {
-                        args.push('--include', chunk.fileName)
+                        args.push('--include', `**/${fileName}`)
                     }
                 }
             } else if (options.file) {
@@ -71,6 +68,7 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
             await spawnLocal(cliPath, args, {
                 env: {
                     ...process.env,
+                    RUST_LOG: `posthog_cli=${posthogOptions.logLevel}`,
                     POSTHOG_CLI_HOST: posthogOptions.host,
                     POSTHOG_CLI_TOKEN: posthogOptions.personalApiKey,
                     POSTHOG_CLI_ENV_ID: posthogOptions.envId,
@@ -80,34 +78,6 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
             })
         },
     } as Plugin
-}
-
-function isJavascriptFile(fileName: string) {
-    return ['.js', '.mjs', '.cjs'].some((ext) => fileName.endsWith(ext))
-}
-
-function getChunkIdSnippet(chunkId: string) {
-    return `;!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="${chunkId}")}catch(e){}}();\n`
-}
-
-const debugIdNamespace = '4ed1c858-f40e-4b92-b3ff-541d185bb87f'
-function generateChunkId(code: string) {
-    const hash = crypto.createHash('sha256').update(code).digest('hex')
-    return uuidv5(hash, debugIdNamespace)
-}
-
-type ResolvedPostHogRollupPluginOptions = {
-    personalApiKey: string
-    envId: string
-    host: string
-    cliBinaryPath: string
-    logLevel: LogLevel
-    sourcemaps: {
-        enabled: boolean
-        project?: string
-        version?: string
-        deleteAfterUpload: boolean
-    }
 }
 
 function resolveOptions(userOptions: PostHogRollupPluginOptions): ResolvedPostHogRollupPluginOptions {

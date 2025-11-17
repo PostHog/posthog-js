@@ -1,4 +1,5 @@
 import posthog from '@posthog/rollup-plugin'
+import packageJson from './package.json'
 
 export default {
     input: './src/index.ts',
@@ -22,9 +23,11 @@ export default {
             envId: process.env.POSTHOG_API_PROJECT,
             host: process.env.POSTHOG_API_HOST,
             cliBinaryPath: process.env.POSTHOG_CLI_BINARY_PATH,
+            logLevel: 'info',
             sourcemap: {
-                project: 'my-project',
-                version: '1.0.0',
+                enabled: true,
+                project: packageJson.name,
+                version: packageJson.version,
             },
         }),
     ],

@@ -20,9 +20,7 @@
     ],
     "dependencies": {
         "@posthog/cli": "catalog:",
-        "@posthog/core": "workspace:*",
-        "magic-string": "^0.30.21",
-        "uuid": "^11.1.0"
+        "@posthog/core": "workspace:*"
     },
     "peerDependencies": {
         "rollup": ">= 4.0.0"
