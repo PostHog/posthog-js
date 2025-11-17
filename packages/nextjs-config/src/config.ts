@@ -1,13 +1,11 @@
 import type { NextConfig } from 'next'
 import { SourcemapWebpackPlugin } from './webpack-plugin'
 import { hasCompilerHook, isTurbopackEnabled, processSourceMaps } from './utils'
-import { resolveBinaryPath } from '@posthog/core/process'
+import { resolveBinaryPath, LogLevel } from '@posthog/core/process'
 
 type NextFuncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => NextConfig
 type NextAsyncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => Promise<NextConfig>
 type UserProvidedConfig = NextConfig | NextFuncConfig | NextAsyncConfig
-
-type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
 export type PostHogNextConfig = {
   cliBinaryPath?: string

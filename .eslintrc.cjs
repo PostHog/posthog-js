@@ -72,6 +72,7 @@ module.exports = {
                 'packages/react-native/**',
                 'packages/node/**',
                 'packages/web/**',
+                'packages/rollup-plugin/**',
                 'examples/**',
                 'playground/**',
             ],

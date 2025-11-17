@@ -1,0 +1,35 @@
+{
+    "name": "@posthog/rollup-plugin",
+    "version": "1.0.0",
+    "description": "PostHog Rollup plugin",
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "build": "rslib build",
+        "clean": "rimraf dist",
+        "lint": "eslint src",
+        "lint:fix": "eslint src --fix",
+        "test:unit": "jest --passWithNoTests",
+        "dev": "rslib build --watch",
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+    },
+    "files": [
+        "src",
+        "dist"
+    ],
+    "dependencies": {
+        "@posthog/cli": "catalog:",
+        "@posthog/core": "workspace:*",
+        "magic-string": "^0.30.21",
+        "uuid": "^11.1.0"
+    },
+    "peerDependencies": {
+        "rollup": ">= 4.0.0"
+    },
+    "devDependencies": {
+        "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@rslib/core": "catalog:",
+        "rollup": "~4.53.2"
+    }
+}
