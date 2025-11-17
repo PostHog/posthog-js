@@ -92,9 +92,7 @@ function resolveOptions(userOptions: PostHogRollupPluginOptions): ResolvedPostHo
     } else if (!userOptions.personalApiKey) {
         throw new Error('personalApiKey is required')
     }
-    const userSourcemaps = userOptions.sourcemaps ?? {
-        enabled: false,
-    }
+    const userSourcemaps = userOptions.sourcemaps ?? {}
     const posthogOptions: ResolvedPostHogRollupPluginOptions = {
         host: userOptions.host || 'https://us.i.posthog.com',
         personalApiKey: userOptions.personalApiKey,
@@ -107,7 +105,7 @@ function resolveOptions(userOptions: PostHogRollupPluginOptions): ResolvedPostHo
             }),
         logLevel: userOptions.logLevel ?? 'info',
         sourcemaps: {
-            enabled: userSourcemaps.enabled ?? false,
+            enabled: userSourcemaps.enabled ?? true,
             deleteAfterUpload: userSourcemaps.deleteAfterUpload ?? true,
         },
     }
