@@ -1,0 +1,14 @@
+{
+    "name": "@posthog-playground/rollup",
+    "version": "1.0.0",
+    "type": "module",
+    "scripts": {
+        "build": "rollup -c"
+    },
+    "dependencies": {
+        "@posthog/rollup-plugin": "file:../../target/posthog-rollup-plugin.tgz"
+    },
+    "devDependencies": {
+        "rollup": "4.53.2"
+    }
+}

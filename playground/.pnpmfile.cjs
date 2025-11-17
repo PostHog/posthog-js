@@ -25,11 +25,8 @@ module.exports = {
         },
         updateConfig(config) {
             return Object.assign(config, {
-                lockfile: false,
                 packages: ['.'],
-                preferFrozenLockfile: false,
-                verifyDepsBeforeRun: true,
-                nodeLinker: 'hoisted',
+                nodeLinker: 'pnp',
             })
         },
     },
