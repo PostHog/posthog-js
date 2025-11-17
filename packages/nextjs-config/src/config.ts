@@ -50,27 +50,6 @@ function resolveUserConfig(
   }
 }
 
-// function resolvePostHogConfig(posthogProvidedConfig: PostHogNextConfig): PostHogNextConfigComplete {
-//   const { personalApiKey, envId, host, logLevel, sourcemaps = {} } = posthogProvidedConfig
-//   const cliBinaryPath =
-//     posthogProvidedConfig.cliBinaryPath ??
-//     resolveBinaryPath('posthog-cli', { path: process.env.PATH ?? '', cwd: __dirname })
-
-//   return {
-//     cliBinaryPath,
-//     personalApiKey,
-//     envId,
-//     host: host ?? 'https://us.i.posthog.com',
-//     logLevel: logLevel ?? 'info',
-//     sourcemaps: {
-//       enabled: sourcemaps.enabled ?? process.env.NODE_ENV == 'production',
-//       project: sourcemaps.project,
-//       version: sourcemaps.version,
-//       deleteAfterUpload: sourcemaps.deleteAfterUpload ?? true,
-//     },
-//   }
-// }
-
 function withWebpackConfig(userWebpackConfig: NextConfig['webpack'], posthogConfig: ResolvedPluginConfig) {
   const defaultWebpackConfig = userWebpackConfig || ((config: any) => config)
   const sourceMapEnabled = posthogConfig.sourcemaps.enabled
