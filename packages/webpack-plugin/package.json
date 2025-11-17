@@ -1,0 +1,48 @@
+{
+    "name": "@posthog/webpack-plugin",
+    "version": "0.0.0",
+    "description": "Webpack plugin for Posthog 🦔",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/PostHog/posthog-js.git",
+        "directory": "packages/webpack-plugin"
+    },
+    "author": {
+        "name": "PostHog",
+        "email": "hey@posthog.com",
+        "url": "https://posthog.com"
+    },
+    "main": "./dist/index.js",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.ts",
+    "dependencies": {
+        "@posthog/cli": "catalog:",
+        "@posthog/core": "workspace:*"
+    },
+    "files": [
+        "dist",
+        "src"
+    ],
+    "devDependencies": {
+        "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@rslib/core": "catalog:",
+        "jest": "catalog:",
+        "webpack": "^5.102.1"
+    },
+    "scripts": {
+        "clean": "rimraf dist",
+        "lint": "eslint src",
+        "lint:fix": "eslint src --fix",
+        "build": "rslib build",
+        "test:unit": "jest --passWithNoTests",
+        "dev": "rslib build --watch",
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+    },
+    "exports": {
+        ".": {
+            "require": "./dist/index.js",
+            "import": "./dist/index.mjs",
+            "types": "./dist/index.d.ts"
+        }
+    }
+}
