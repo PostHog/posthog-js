@@ -6,7 +6,7 @@
         "build": "rollup -c"
     },
     "dependencies": {
-        "@posthog/rollup-plugin": "file:../../target/posthog-rollup-plugin.tgz"
+        "@posthog/rollup-plugin": "*"
     },
     "devDependencies": {
         "rollup": "4.53.2"
