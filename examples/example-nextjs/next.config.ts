@@ -10,8 +10,10 @@ export default withPostHogConfig(nextConfig, {
     envId: process.env.POSTHOG_API_PROJECT!,
     host: process.env.NEXT_PUBLIC_POSTHOG_API_HOST!,
     logLevel: 'debug',
+    cliBinaryPath: process.env.POSTHOG_CLI_PATH,
     sourcemaps: {
         project: 'example-nextjs',
         version: packageJson.version,
+        deleteAfterUpload: true,
     },
 })
