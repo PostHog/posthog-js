@@ -20,7 +20,13 @@ export default function ErrorTrackingScreen() {
             </ThemedView>
             <ThemedText>Examples on how to use error tracking in your app.</ThemedText>
             <Button
-                onPress={() => posthog.captureException(new Error('User clicked Capture Error'))}
+                onPress={() => {
+                    try {
+                        throw new Error('User clicked Capture Error')
+                    } catch (error) {
+                        posthog.captureException(error)
+                    }
+                }}
                 title="Capture error manually"
             />
             <Button
