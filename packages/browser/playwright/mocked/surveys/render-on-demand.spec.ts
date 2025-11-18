@@ -1,3 +1,4 @@
+import { SurveyType } from '@posthog/core'
 import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
 
@@ -245,49 +246,58 @@ test.describe('surveys - displaySurvey on demand', () => {
         await expect(page.locator('.PostHogSurvey-test-survey-123')).not.toBeVisible()
     })
 
-    test('displaySurvey can be called multiple times for the same survey', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [testSurvey],
-                },
+    Object.values(SurveyType)
+        .filter((type) => type !== SurveyType.ExternalSurvey)
+        .forEach((surveyType: string) => {
+            test(`displaySurvey can be called with popover displayType multiple times for the same ${surveyType} survey`, async ({
+                page,
+                context,
+            }) => {
+                const surveysAPICall = page.route('**/surveys/**', async (route) => {
+                    await route.fulfill({
+                        json: {
+                            surveys: [{ ...testSurvey, type: surveyType }],
+                        },
+                    })
+                })
+
+                await start(startOptions, page, context)
+                await surveysAPICall
+
+                // Call displaySurvey first time
+                await page.evaluate(() => {
+                    // @ts-expect-error - posthog is added to window in test setup
+                    window.posthog.onSurveysLoaded(() => {
+                        // @ts-expect-error - posthog is added to window in test setup
+                        window.posthog.displaySurvey('test-survey-123')
+                    })
+                })
+
+                // Survey should be visible
+                await expect(page.locator('.PostHogSurvey-test-survey-123').locator('.survey-form')).toBeVisible()
+
+                // Dismiss the survey
+                await page.locator('.PostHogSurvey-test-survey-123').locator('.form-cancel').click()
+                await expect(
+                    page.locator('.PostHogSurvey-test-survey-123').locator('.survey-form')
+                ).not.toBeInViewport()
+
+                // Wait for 1 second so survey is dismissed internally
+                await page.waitForTimeout(1000)
+
+                // Call displaySurvey again
+                await page.evaluate(() => {
+                    // @ts-expect-error - posthog is added to window in test setup
+                    window.posthog.displaySurvey('test-survey-123', {
+                        displayType: 'popover',
+                        ignoreConditions: true,
+                    })
+                })
+
+                // Survey should be visible again (ignoring normal dismissal logic)
+                await expect(page.locator('.PostHogSurvey-test-survey-123').locator('.survey-form')).toBeVisible()
             })
         })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
-
-        // Call displaySurvey first time
-        await page.evaluate(() => {
-            // @ts-expect-error - posthog is added to window in test setup
-            window.posthog.onSurveysLoaded(() => {
-                // @ts-expect-error - posthog is added to window in test setup
-                window.posthog.displaySurvey('test-survey-123')
-            })
-        })
-
-        // Survey should be visible
-        await expect(page.locator('.PostHogSurvey-test-survey-123').locator('.survey-form')).toBeVisible()
-
-        // Dismiss the survey
-        await page.locator('.PostHogSurvey-test-survey-123').locator('.form-cancel').click()
-        await expect(page.locator('.PostHogSurvey-test-survey-123').locator('.survey-form')).not.toBeInViewport()
-
-        // Wait for 1 second so survey is dismissed internally
-        await page.waitForTimeout(1000)
-
-        // Call displaySurvey again
-        await page.evaluate(() => {
-            // @ts-expect-error - posthog is added to window in test setup
-            window.posthog.displaySurvey('test-survey-123', {
-                displayType: 'popover',
-                ignoreConditions: true,
-            })
-        })
-
-        // Survey should be visible again (ignoring normal dismissal logic)
-        await expect(page.locator('.PostHogSurvey-test-survey-123').locator('.survey-form')).toBeVisible()
-    })
 
     test('displaySurvey fails gracefully when surveys are not initialized', async ({ page, context }) => {
         // Start without surveys enabled

@@ -899,6 +899,7 @@ export function usePopupVisibility(
     millisecondDelay: number,
     isPreviewMode: boolean,
     removeSurveyFromFocus: (survey: SurveyWithTypeAndAppearance) => void,
+    isPopup: boolean,
     surveyContainerRef?: React.RefObject<HTMLDivElement>
 ) {
     const [isPopupVisible, setIsPopupVisible] = useState(
@@ -908,7 +909,7 @@ export function usePopupVisibility(
 
     const hidePopupWithViewTransition = () => {
         const removeDOMAndHidePopup = () => {
-            if (survey.type === SurveyType.Popover) {
+            if (isPopup) {
                 removeSurveyFromFocus(survey)
             }
             setIsPopupVisible(false)
@@ -1102,6 +1103,7 @@ export function SurveyPopup({
         surveyPopupDelayMilliseconds,
         isPreviewMode,
         removeSurveyFromFocus,
+        isPopup,
         surveyContainerRef
     )
 
