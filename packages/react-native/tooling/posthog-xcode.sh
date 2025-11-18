@@ -44,9 +44,15 @@ else
   if [ -n "$NPM_GLOBAL_PATH" ] && [ -f "$NPM_GLOBAL_PATH/@posthog/cli/bin/posthog-cli" ]; then
     PH_CLI_PATH="$NPM_GLOBAL_PATH/@posthog/cli/bin/posthog-cli"
   else
-    # Fallback to searching common locations
-    export PATH="/usr/local/bin:/opt/homebrew/bin:$HOME/.cargo/bin:$HOME/.local/bin:$HOME/.posthog:$PATH"
-    PH_CLI_PATH=$(command -v posthog-cli 2>/dev/null)
+    # Check if installed as local dependency
+    NPM_LOCAL_BIN=$(npm bin 2>/dev/null)
+    if [ -n "$NPM_LOCAL_BIN" ] && [ -f "$NPM_LOCAL_BIN/posthog-cli" ]; then
+      PH_CLI_PATH="$NPM_LOCAL_BIN/posthog-cli"
+    else
+      # Fallback to searching common locations
+      export PATH="/usr/local/bin:/opt/homebrew/bin:$HOME/.cargo/bin:$HOME/.local/bin:$HOME/.posthog:$PATH"
+      PH_CLI_PATH=$(command -v posthog-cli 2>/dev/null)
+    fi
   fi
 fi
 
