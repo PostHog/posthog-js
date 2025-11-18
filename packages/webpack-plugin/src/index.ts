@@ -83,7 +83,7 @@ export class PosthogWebpackPlugin {
     }
 }
 
-async function assertValue(value: any, message: string): Promise<void> {
+function assertValue(value: any, message: string): void {
     if (!value) {
         throw new Error(message)
     }

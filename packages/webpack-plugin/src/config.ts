@@ -47,7 +47,7 @@ export function resolveConfig(options: PluginConfig): ResolvedPluginConfig {
         logLevel,
         cliBinaryPath,
         sourcemaps: {
-            enabled: sourcemaps.enabled ?? process.env.NODE_ENV == 'production',
+            enabled: sourcemaps.enabled ?? process.env.NODE_ENV === 'production',
             project: sourcemaps.project,
             version: sourcemaps.version,
             deleteAfterUpload: sourcemaps.deleteAfterUpload ?? true,
