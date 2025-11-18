@@ -1,5 +1,11 @@
 # posthog-react-native
 
+## 4.12.0
+
+### Minor Changes
+
+- [#2484](https://github.com/PostHog/posthog-js/pull/2484) [`d143cc4`](https://github.com/PostHog/posthog-js/commit/d143cc4606079ced995f41594e770addf87d0a7f) Thanks [@marandaneto](https://github.com/marandaneto)! - chore: add hermes symbolication support for react native and error tracking
+
 ## 4.11.0
 
 ### Minor Changes
