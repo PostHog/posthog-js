@@ -817,14 +817,6 @@ export interface PostHogConfig {
     feature_flag_request_timeout_ms: number
 
     /**
-     * Determines whether PostHog should listen to real-time feature flag updates via Server-Sent Events (SSE).
-     * When enabled, the SDK will maintain a persistent connection to receive flag updates without polling.
-     *
-     * @default false
-     */
-    realtime_flags: boolean
-
-    /**
      * Sets timeout for fetching surveys
      *
      * @default 10000
