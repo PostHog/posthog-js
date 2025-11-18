@@ -53,4 +53,7 @@ cd android
 set -o pipefail && xcrun xcodebuild clean build -workspace ios/exampleexpo53.xcworkspace -scheme exampleexpo53 -configuration Release -destination generic/platform=ios | xcpretty
 
 # Also: Xcode -> Product -> Archive
+
+# web
+npx expo export --clear --source-maps --platform web
 ```
