@@ -220,6 +220,27 @@
     opacity: 0.8;
 }
 
+/* --- Constrain user-supplied HTML content --- */
+.survey-question-description,
+.thank-you-message-body {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+
+    & img,
+    & video,
+    & iframe,
+    & embed,
+    & object {
+        max-width: 100%;
+        height: auto;
+    }
+
+    & svg {
+        max-width: 100%;
+        height: auto;
+    }
+}
+
 /* --- Open Text Question --- */
 .question-textarea-wrapper {
     display: flex;
