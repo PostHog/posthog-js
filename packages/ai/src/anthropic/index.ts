@@ -226,7 +226,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 tools: availableTools,
               })
             } catch (error: unknown) {
-              throw await sendEventWithErrorToPosthog({
+              const enrichedError = await sendEventWithErrorToPosthog({
                 client: this.phClient,
                 ...posthogParams,
                 model: anthropicParams.model,
@@ -242,6 +242,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 },
                 error: error,
               })
+              throw enrichedError
             }
           })()
 

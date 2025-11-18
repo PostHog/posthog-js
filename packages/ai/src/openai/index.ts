@@ -257,7 +257,7 @@ export class WrappedCompletions extends Completions {
                 tools: availableTools,
               })
             } catch (error: unknown) {
-              await sendEventWithErrorToPosthog({
+              const enrichedError = await sendEventWithErrorToPosthog({
                 client: this.phClient,
                 ...posthogParams,
                 model: openAIParams.model,
@@ -270,7 +270,7 @@ export class WrappedCompletions extends Completions {
                 usage: { inputTokens: 0, outputTokens: 0 },
                 error,
               })
-              throw error
+              throw enrichedError
             }
           })()
 
@@ -449,7 +449,7 @@ export class WrappedResponses extends Responses {
                 tools: availableTools,
               })
             } catch (error: unknown) {
-              await sendEventWithErrorToPosthog({
+              const enrichedError = await sendEventWithErrorToPosthog({
                 client: this.phClient,
                 ...posthogParams,
                 //@ts-expect-error
@@ -463,7 +463,7 @@ export class WrappedResponses extends Responses {
                 usage: { inputTokens: 0, outputTokens: 0 },
                 error: error,
               })
-              throw error
+              throw enrichedError
             }
           })()
 
@@ -572,7 +572,7 @@ export class WrappedResponses extends Responses {
           return result
         },
         async (error: Error) => {
-          await sendEventWithErrorToPosthog({
+          const enrichedError = await sendEventWithErrorToPosthog({
             client: this.phClient,
             ...posthogParams,
             model: String(openAIParams.model ?? ''),
@@ -588,7 +588,7 @@ export class WrappedResponses extends Responses {
             },
             error: JSON.stringify(error),
           })
-          throw error
+          throw enrichedError
         }
       )
 
@@ -803,7 +803,7 @@ export class WrappedTranscriptions extends Transcriptions {
                 tools: availableTools,
               })
             } catch (error: unknown) {
-              await sendEventWithErrorToPosthog({
+              const enrichedError = await sendEventWithErrorToPosthog({
                 client: this.phClient,
                 ...posthogParams,
                 model: openAIParams.model,
@@ -816,7 +816,7 @@ export class WrappedTranscriptions extends Transcriptions {
                 usage: { inputTokens: 0, outputTokens: 0 },
                 error: error,
               })
-              throw error
+              throw enrichedError
             }
           })()
 
@@ -849,7 +849,7 @@ export class WrappedTranscriptions extends Transcriptions {
           }
         },
         async (error: unknown) => {
-          await sendEventWithErrorToPosthog({
+          const enrichedError = await sendEventWithErrorToPosthog({
             client: this.phClient,
             ...posthogParams,
             model: String(openAIParams.model ?? ''),
@@ -865,7 +865,7 @@ export class WrappedTranscriptions extends Transcriptions {
             },
             error: error,
           })
-          throw error
+          throw enrichedError
         }
       ) as APIPromise<OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateResponse>
 

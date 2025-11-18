@@ -227,7 +227,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 usage,
               })
             } catch (error: unknown) {
-              await sendEventWithErrorToPosthog({
+              const enrichedError = await sendEventWithErrorToPosthog({
                 client: this.phClient,
                 ...posthogParams,
                 model: openAIParams.model,
@@ -240,7 +240,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 usage: { inputTokens: 0, outputTokens: 0 },
                 error: error,
               })
-              throw error
+              throw enrichedError
             }
           })()
 
@@ -397,7 +397,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 usage,
               })
             } catch (error: unknown) {
-              await sendEventWithErrorToPosthog({
+              const enrichedError = await sendEventWithErrorToPosthog({
                 client: this.phClient,
                 ...posthogParams,
                 //@ts-expect-error
@@ -411,7 +411,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 usage: { inputTokens: 0, outputTokens: 0 },
                 error: error,
               })
-              throw error
+              throw enrichedError
             }
           })()
 

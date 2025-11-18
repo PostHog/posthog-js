@@ -211,7 +211,7 @@ export class WrappedModels {
       })
     } catch (error: unknown) {
       const latency = (Date.now() - startTime) / 1000
-      await sendEventWithErrorToPosthog({
+      const enrichedError = await sendEventWithErrorToPosthog({
         client: this.phClient,
         ...posthogParams,
         model: geminiParams.model,
@@ -227,7 +227,7 @@ export class WrappedModels {
         },
         error: error,
       })
-      throw error
+      throw enrichedError
     }
   }
 

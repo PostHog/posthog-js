@@ -356,7 +356,7 @@ export const createInstrumentationMiddleware = (
         return result
       } catch (error: unknown) {
         const modelId = model.modelId
-        await sendEventWithErrorToPosthog({
+        const enrichedError = await sendEventWithErrorToPosthog({
           client: phClient,
           distinctId: options.posthogDistinctId,
           traceId: options.posthogTraceId ?? uuidv4(),
@@ -375,7 +375,7 @@ export const createInstrumentationMiddleware = (
           tools: availableTools,
           captureImmediate: options.posthogCaptureImmediate,
         })
-        throw error
+        throw enrichedError
       }
     },
 
@@ -578,7 +578,7 @@ export const createInstrumentationMiddleware = (
           ...rest,
         }
       } catch (error: unknown) {
-        await sendEventWithErrorToPosthog({
+        const enrichedError = await sendEventWithErrorToPosthog({
           client: phClient,
           distinctId: options.posthogDistinctId,
           traceId: options.posthogTraceId ?? uuidv4(),
@@ -597,7 +597,7 @@ export const createInstrumentationMiddleware = (
           tools: availableTools,
           captureImmediate: options.posthogCaptureImmediate,
         })
-        throw error
+        throw enrichedError
       }
     },
   }
