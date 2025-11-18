@@ -16,6 +16,7 @@ import {
   extractAvailableToolCalls,
   toContentString,
   calculateWebSearchCount,
+  sendEventWithErrorToPosthog,
 } from '../utils'
 import { Buffer } from 'buffer'
 import { redactBase64DataUrl } from '../sanitization'
@@ -353,9 +354,9 @@ export const createInstrumentationMiddleware = (
         })
 
         return result
-      } catch (error: any) {
+      } catch (error: unknown) {
         const modelId = model.modelId
-        await sendEventToPosthog({
+        await sendEventWithErrorToPosthog({
           client: phClient,
           distinctId: options.posthogDistinctId,
           traceId: options.posthogTraceId ?? uuidv4(),
@@ -366,13 +367,11 @@ export const createInstrumentationMiddleware = (
           latency: 0,
           baseURL: '',
           params: mergedParams as any,
-          httpStatus: error?.status ? error.status : 500,
           usage: {
             inputTokens: 0,
             outputTokens: 0,
           },
-          isError: true,
-          error: truncate(JSON.stringify(error)),
+          error: error,
           tools: availableTools,
           captureImmediate: options.posthogCaptureImmediate,
         })
@@ -578,8 +577,8 @@ export const createInstrumentationMiddleware = (
           stream: stream.pipeThrough(transformStream),
           ...rest,
         }
-      } catch (error: any) {
-        await sendEventToPosthog({
+      } catch (error: unknown) {
+        await sendEventWithErrorToPosthog({
           client: phClient,
           distinctId: options.posthogDistinctId,
           traceId: options.posthogTraceId ?? uuidv4(),
@@ -590,13 +589,11 @@ export const createInstrumentationMiddleware = (
           latency: 0,
           baseURL: '',
           params: mergedParams as any,
-          httpStatus: error?.status ? error.status : 500,
           usage: {
             inputTokens: 0,
             outputTokens: 0,
           },
-          isError: true,
-          error: truncate(JSON.stringify(error)),
+          error: error,
           tools: availableTools,
           captureImmediate: options.posthogCaptureImmediate,
         })

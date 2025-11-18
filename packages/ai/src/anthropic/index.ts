@@ -7,6 +7,7 @@ import {
   sendEventToPosthog,
   extractAvailableToolCalls,
   extractPosthogParams,
+  sendEventWithErrorToPosthog,
 } from '../utils'
 import type { FormattedContentItem, FormattedTextContent, FormattedFunctionCall, FormattedMessage } from '../types'
 
@@ -224,9 +225,8 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 usage,
                 tools: availableTools,
               })
-            } catch (error: any) {
-              // error handling
-              await sendEventToPosthog({
+            } catch (error: unknown) {
+              throw await sendEventWithErrorToPosthog({
                 client: this.phClient,
                 ...posthogParams,
                 model: anthropicParams.model,
@@ -236,13 +236,11 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 latency: 0,
                 baseURL: this.baseURL,
                 params: body,
-                httpStatus: error?.status ? error.status : 500,
                 usage: {
                   inputTokens: 0,
                   outputTokens: 0,
                 },
-                isError: true,
-                error: JSON.stringify(error),
+                error: error,
               })
             }
           })()
@@ -299,7 +297,6 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
               inputTokens: 0,
               outputTokens: 0,
             },
-            isError: true,
             error: JSON.stringify(error),
           })
           throw error

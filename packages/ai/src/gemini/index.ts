@@ -13,6 +13,7 @@ import {
   formatResponseGemini,
   extractPosthogParams,
   toContentString,
+  sendEventWithErrorToPosthog,
 } from '../utils'
 import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
@@ -86,7 +87,7 @@ export class WrappedModels {
       return response
     } catch (error: unknown) {
       const latency = (Date.now() - startTime) / 1000
-      await sendEventToPosthog({
+      const enrichedError = await sendEventWithErrorToPosthog({
         client: this.phClient,
         ...posthogParams,
         model: geminiParams.model,
@@ -96,15 +97,13 @@ export class WrappedModels {
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         params: params as GenerateContentParameters & MonitoringParams,
-        httpStatus: (error as { status?: number })?.status ?? 500,
         usage: {
           inputTokens: 0,
           outputTokens: 0,
         },
-        isError: true,
-        error: JSON.stringify(error),
+        error: error,
       })
-      throw error
+      throw enrichedError
     }
   }
 
@@ -212,7 +211,7 @@ export class WrappedModels {
       })
     } catch (error: unknown) {
       const latency = (Date.now() - startTime) / 1000
-      await sendEventToPosthog({
+      await sendEventWithErrorToPosthog({
         client: this.phClient,
         ...posthogParams,
         model: geminiParams.model,
@@ -222,13 +221,11 @@ export class WrappedModels {
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         params: params as GenerateContentParameters & MonitoringParams,
-        httpStatus: (error as { status?: number })?.status ?? 500,
         usage: {
           inputTokens: 0,
           outputTokens: 0,
         },
-        isError: true,
-        error: JSON.stringify(error),
+        error: error,
       })
       throw error
     }

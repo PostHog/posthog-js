@@ -1,4 +1,4 @@
-import { PostHog } from 'posthog-node'
+import { EventMessage, PostHog } from 'posthog-node'
 import { Buffer } from 'buffer'
 import OpenAIOrignal from 'openai'
 import AnthropicOriginal from '@anthropic-ai/sdk'
@@ -9,6 +9,7 @@ import type { FormattedMessage, FormattedContent, TokenUsage } from './types'
 import { version } from '../package.json'
 import { v4 as uuidv4 } from 'uuid'
 import { isString } from './typeGuards'
+import { uuidv7, ErrorTracking as CoreErrorTracking } from '@posthog/core'
 
 type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatCompletionCreateParams
 type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
@@ -528,8 +529,8 @@ export type SendEventToPosthogParams = {
     | TranscriptionCreateParams
   ) &
     MonitoringParams
-  isError?: boolean
-  error?: string
+  error?: unknown
+  exceptionId?: string
   tools?: ChatCompletionTool[] | AnthropicTool[] | GeminiTool[] | null
   captureImmediate?: boolean
 }
@@ -592,6 +593,32 @@ function addDefaults(params: MonitoringEventProperties): MonitoringEventProperti
   }
 }
 
+export const sendEventWithErrorToPosthog = async ({
+  client,
+  traceId,
+  error,
+  ...args
+}: Omit<SendEventToPosthogParams, 'error' | 'httpStatus'> &
+  Required<Pick<SendEventToPosthogParams, 'error'>>): Promise<unknown> => {
+  const httpStatus =
+    error && typeof error === 'object' && 'status' in error ? ((error as { status?: number }).status ?? 500) : 500
+
+  const properties = { client, traceId, httpStatus, error: JSON.stringify(error), ...args }
+  const enrichedError = error as CoreErrorTracking.PreviouslyCapturedError
+
+  if (client.options.enableExceptionAutocapture) {
+    // assign a uuid that can be used to link the trace and exception events
+    const exceptionId = uuidv7()
+    client.captureException(error, undefined, { $ai_trace_id: traceId }, exceptionId)
+    enrichedError.__posthog_previously_captured_error = true
+    properties.exceptionId = exceptionId
+  }
+
+  await sendEventToPosthog(properties)
+
+  return enrichedError
+}
+
 export const sendEventToPosthog = async ({
   client,
   eventType = AIEvent.Generation,
@@ -606,8 +633,8 @@ export const sendEventToPosthog = async ({
   params,
   httpStatus = 200,
   usage = {},
-  isError = false,
   error,
+  exceptionId,
   tools,
   captureImmediate = false,
 }: SendEventToPosthogParams): Promise<void> => {
@@ -620,10 +647,11 @@ export const sendEventToPosthog = async ({
   const safeError = sanitizeValues(error)
 
   let errorData = {}
-  if (isError) {
+  if (error) {
     errorData = {
       $ai_is_error: true,
       $ai_error: safeError,
+      $exception_event_id: exceptionId,
     }
   }
   let costOverrideData = {}
@@ -666,7 +694,7 @@ export const sendEventToPosthog = async ({
     ...costOverrideData,
   }
 
-  const event = {
+  const event: EventMessage = {
     distinctId: distinctId ?? traceId,
     event: eventType,
     properties,
@@ -679,6 +707,8 @@ export const sendEventToPosthog = async ({
   } else {
     client.capture(event)
   }
+
+  return Promise.resolve()
 }
 
 export function formatOpenAIResponsesInput(input: unknown, instructions?: string | null): FormattedMessage[] {
