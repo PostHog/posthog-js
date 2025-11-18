@@ -32,7 +32,7 @@ export function unstableBeforeAssetSerializationDebugIdPlugin({
   const debugIdModuleExists = premodules.some((module) => module.path === DEBUG_ID_MODULE_PATH)
   if (debugIdModuleExists) {
     // eslint-disable-next-line no-console
-    console.warn('\n\Chunk ID module found. Skipping PostHog Chunk ID module...\n\n')
+    console.warn('\n\nChunk ID module found. Skipping PostHog Chunk ID module...\n\n')
     return premodules
   }
 
