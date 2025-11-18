@@ -29,7 +29,7 @@ export function unstableBeforeAssetSerializationDebugIdPlugin({
     return premodules
   }
 
-  const debugIdModuleExists = premodules.findIndex((module) => module.path === DEBUG_ID_MODULE_PATH) != -1
+  const debugIdModuleExists = premodules.some((module) => module.path === DEBUG_ID_MODULE_PATH)
   if (debugIdModuleExists) {
     // eslint-disable-next-line no-console
     console.warn('\n\Chunk ID module found. Skipping PostHog Chunk ID module...\n\n')
@@ -48,23 +48,23 @@ export function unstableBeforeAssetSerializationDebugIdPlugin({
  */
 export const createPostHogMetroSerializer = (customSerializer?: MetroSerializer): MetroSerializer => {
   const serializer = customSerializer || createDefaultMetroSerializer()
-  return async function (entryPoint, preModules, graph, options) {
+  return async function (entryPoint, premodules, graph, options) {
     if (graph.transformOptions.hot) {
-      return serializer(entryPoint, preModules, graph, options)
+      return serializer(entryPoint, premodules, graph, options)
     }
 
-    const debugIdModuleExists = preModules.findIndex((module) => module.path === DEBUG_ID_MODULE_PATH) != -1
+    const debugIdModuleExists = premodules.some((module) => module.path === DEBUG_ID_MODULE_PATH)
     if (debugIdModuleExists) {
       // eslint-disable-next-line no-console
       console.warn('Chunk ID module found. Skipping PostHog Chunk ID module...')
-      return serializer(entryPoint, preModules, graph, options)
+      return serializer(entryPoint, premodules, graph, options)
     }
 
     const debugIdModule = createDebugIdModule(DEBUG_ID_PLACE_HOLDER)
-    const modifiedPreModules = prependModule(preModules, debugIdModule)
+    const modifiedPremodules = prependModule(premodules, debugIdModule)
 
     // Run wrapped serializer
-    const serializerResult = serializer(entryPoint, modifiedPreModules, graph, options)
+    const serializerResult = serializer(entryPoint, modifiedPremodules, graph, options)
     const { code: bundleCode, map: bundleMapString } = await extractSerializerResult(serializerResult)
 
     // Add Chunk ID comment to the bundle

@@ -110,9 +110,9 @@ export const getSortedModules = (
  * https://github.com/facebook/metro/blob/9b85f83c9cc837d8cd897aa7723be7da5b296067/packages/metro/src/Server.js#L244-L277
  */
 export const createDefaultMetroSerializer = (): MetroSerializer => {
-  return (entryPoint, preModules, graph, options) => {
+  return (entryPoint, premodules, graph, options) => {
     // baseJSBundle assigns IDs to modules in a consistent order
-    let bundle = (baseJSBundle.default || baseJSBundle)(entryPoint, preModules, graph, options)
+    let bundle = (baseJSBundle.default || baseJSBundle)(entryPoint, premodules, graph, options)
 
     const { code } = (bundleToString.default || bundleToString)(bundle)
     if (graph.transformOptions.hot) {
@@ -139,7 +139,7 @@ Please check the version of Metro you are using and report the issue at https://
 
     // Always generate source maps
     const map = (sourceMapStringFunction.default || sourceMapStringFunction)(
-      [...preModules, ...getSortedModules(graph, options)],
+      [...premodules, ...getSortedModules(graph, options)],
       {
         processModuleFilter: options.processModuleFilter,
         shouldAddToIgnoreList: options.shouldAddToIgnoreList || (() => false),

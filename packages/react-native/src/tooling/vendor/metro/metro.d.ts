@@ -31,7 +31,7 @@ declare module 'metro/private/DeltaBundler/Serializers/baseJSBundle' {
   // https://github.com/facebook/metro/blob/9b85f83c9cc837d8cd897aa7723be7da5b296067/packages/metro/src/DeltaBundler/Serializers/baseJSBundle.js#L25
   const baseJSBundle: (
     entryPoint: string,
-    preModules: ReadonlyArray<Module>,
+    premodules: ReadonlyArray<Module>,
     graph: ReadOnlyGraph,
     options: SerializerOptions
   ) => {

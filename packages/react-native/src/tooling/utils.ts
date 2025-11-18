@@ -29,7 +29,7 @@ export type MetroSerializerOutput = string | SerializedBundle | Promise<string |
 
 export type MetroSerializer = (
   entryPoint: string,
-  preModules: ReadonlyArray<Module>,
+  premodules: ReadonlyArray<Module>,
   graph: ReadOnlyGraph,
   options: SerializerOptions
 ) => MetroSerializerOutput
@@ -132,19 +132,19 @@ export function prependModule(
   modules: readonly Module<MixedOutput>[],
   module: Module<VirtualJSOutput>
 ): Module<MixedOutput>[] {
-  const modifiedPreModules = [...modules]
+  const modifiedPremodules = [...modules]
   if (
-    modifiedPreModules.length > 0 &&
-    modifiedPreModules[0] !== undefined &&
-    modifiedPreModules[0].path === PRELUDE_MODULE_PATH
+    modifiedPremodules.length > 0 &&
+    modifiedPremodules[0] !== undefined &&
+    modifiedPremodules[0].path === PRELUDE_MODULE_PATH
   ) {
     // prelude module must be first as it measures the bundle startup time
-    modifiedPreModules.unshift(modules[0] as Module<VirtualJSOutput>)
-    modifiedPreModules[1] = module
+    modifiedPremodules.unshift(modules[0] as Module<VirtualJSOutput>)
+    modifiedPremodules[1] = module
   } else {
-    modifiedPreModules.unshift(module)
+    modifiedPremodules.unshift(module)
   }
-  return modifiedPreModules
+  return modifiedPremodules
 }
 
 /**

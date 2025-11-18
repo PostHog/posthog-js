@@ -98,7 +98,7 @@ if [ $UPLOAD_EXIT_CODE -eq 0 ]; then
   echo "$CLI_UPLOAD_OUTPUT" | awk '{print "output: posthog-cli - " $0}'
 else
   echo "error: posthog-cli - $CLI_UPLOAD_OUTPUT"
-  exitCode=$UPLOAD_EXIT_CODE
+  exit $UPLOAD_EXIT_CODE
 fi
 set -x -e
 
