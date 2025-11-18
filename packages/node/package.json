@@ -43,6 +43,7 @@
     "@types/node": "^20.0.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "jest": "catalog:",
+    "@types/jest": "catalog:",
     "@rslib/core": "catalog:"
   },
   "keywords": [
