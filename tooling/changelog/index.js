@@ -15,10 +15,4 @@ async function getChangelogEntry(release, options) {
     return githubEntry.replace(`## ${release.newVersion}`, `## ${release.newVersion} - ${date}`)
 }
 
-const defaultChangelogFunctions = {
-    getReleaseLine,
-    getDependencyReleaseLine,
-    getChangelogEntry,
-}
-
-export default defaultChangelogFunctions
+export { getReleaseLine, getDependencyReleaseLine, getChangelogEntry }

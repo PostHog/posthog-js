@@ -1,0 +1,5 @@
+---
+'@posthog/ai': minor
+---
+
+test
