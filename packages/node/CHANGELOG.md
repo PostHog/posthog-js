@@ -1,5 +1,11 @@
 # posthog-node
 
+## 5.12.0
+
+### Minor Changes
+
+- [#2594](https://github.com/PostHog/posthog-js/pull/2594) [`4ad3678`](https://github.com/PostHog/posthog-js/commit/4ad3678b8ab575923fe703bd4066f2ca8be4de98) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Add `FlagDefinitionCacheProvider` interface and client configuration option
+
 ## 5.11.2
 
 ### Patch Changes
