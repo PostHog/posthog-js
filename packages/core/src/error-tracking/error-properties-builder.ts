@@ -22,15 +22,11 @@ import {
 const MAX_CAUSE_RECURSION = 4
 
 export class ErrorPropertiesBuilder {
-  stackParser: StackParser
-
   constructor(
-    private coercers: ErrorTrackingCoercer<any>[] = [],
-    parsers: StackLineParser[] = [],
+    private coercers: ErrorTrackingCoercer<any>[],
+    private stackParser: StackParser,
     private modifiers: StackFrameModifierFn[] = []
-  ) {
-    this.stackParser = createStackParser(...parsers)
-  }
+  ) {}
 
   buildFromUnknown(input: unknown, hint: EventHint = {}): ErrorProperties {
     const providedMechanism = hint && hint.mechanism

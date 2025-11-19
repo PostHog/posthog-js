@@ -1,11 +1,11 @@
-import { StackLineParser } from '../types'
+import { Platform, StackLineParser } from '../types'
 import { UNKNOWN_FUNCTION } from './base'
 
 /** Node Stack line parser */
 const FILENAME_MATCH = /^\s*[-]{4,}$/
 const FULL_MATCH = /at (?:async )?(?:(.+?)\s+\()?(?:(.+):(\d+):(\d+)?|([^)]+))\)?/
 
-export const nodeStackLineParser: StackLineParser = (line: string) => {
+export const nodeStackLineParser: StackLineParser = (line: string, platform: Platform) => {
   const lineMatch = line.match(FULL_MATCH)
 
   if (lineMatch) {
@@ -69,14 +69,14 @@ export const nodeStackLineParser: StackLineParser = (line: string) => {
       lineno: _parseIntOrUndefined(lineMatch[3]),
       colno: _parseIntOrUndefined(lineMatch[4]),
       in_app: filenameIsInApp(filename || '', isNative),
-      platform: 'node:javascript',
+      platform: platform,
     }
   }
 
   if (line.match(FILENAME_MATCH)) {
     return {
       filename: line,
-      platform: 'node:javascript',
+      platform: platform,
     }
   }
 

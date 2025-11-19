@@ -12,7 +12,7 @@ ErrorTracking.errorPropertiesBuilder = new CoreErrorTracking.ErrorPropertiesBuil
     new CoreErrorTracking.StringCoercer(),
     new CoreErrorTracking.PrimitiveCoercer(),
   ],
-  [CoreErrorTracking.nodeStackLineParser]
+  CoreErrorTracking.createStackParser('node:javascript', CoreErrorTracking.nodeStackLineParser)
 )
 
 export class PostHog extends PostHogBackendClient {
