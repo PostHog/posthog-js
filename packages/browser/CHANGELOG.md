@@ -1,5 +1,41 @@
 # posthog-js
 
+## 1.296.1
+
+### Patch Changes
+
+- [#2590](https://github.com/PostHog/posthog-js/pull/2590) [`ab85422`](https://github.com/PostHog/posthog-js/commit/ab85422d2bc0c92658f49faad1f4d938f0282d8b) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: don't rely on order of method calls to gate calling url
+
+## 1.296.0
+
+### Minor Changes
+
+- [#2595](https://github.com/PostHog/posthog-js/pull/2595) [`17d12f5`](https://github.com/PostHog/posthog-js/commit/17d12f5dd076b46a732c2667a2a42429f8c77120) Thanks [@adboio](https://github.com/adboio)! - fix(surveys): clean up popover surveys from dom on close
+
+## 1.295.0
+
+### Minor Changes
+
+- [#2572](https://github.com/PostHog/posthog-js/pull/2572) [`ab6cc9e`](https://github.com/PostHog/posthog-js/commit/ab6cc9e7c7edd876f4ab005b964a75a808545ce0) Thanks [@adboio](https://github.com/adboio)! - survey html rendering bugfix
+
+## 1.294.0
+
+### Minor Changes
+
+- [#2573](https://github.com/PostHog/posthog-js/pull/2573) [`f9260de`](https://github.com/PostHog/posthog-js/commit/f9260de5a66f6df6b32761d31cb2d0224ba2eedf) Thanks [@adboio](https://github.com/adboio)! - feat: add survey feedback button custom positions
+
+## 1.293.0
+
+### Minor Changes
+
+- [#2565](https://github.com/PostHog/posthog-js/pull/2565) [`f2426db`](https://github.com/PostHog/posthog-js/commit/f2426dbd3dca3ac5ffc1934553b4bcff76af0d77) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: ignore rageclicks by content.
+
+### Patch Changes
+
+- [#2570](https://github.com/PostHog/posthog-js/pull/2570) [`de80a41`](https://github.com/PostHog/posthog-js/commit/de80a419a49cb26ee21147bc2241d3c0fec67909) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: rageclick detection should use event timestamp not current time
+
+- [#2561](https://github.com/PostHog/posthog-js/pull/2561) [`4418d60 `](https://github.com/PostHog/posthog-js/commit/4418d605f1846f12824de0e82b42235700512eb6) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: upgrades posthog-rrweb to 0.0.30
+
 ## 1.292.0
 
 ### Minor Changes

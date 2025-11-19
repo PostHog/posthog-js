@@ -77,6 +77,7 @@ describe('config', () => {
             posthog._init('test-token', { defaults: '2025-05-24' })
             expect(posthog.config.capture_pageview).toBe('history_change')
             expect(posthog.config.session_recording).toStrictEqual({})
+            expect(posthog.config.rageclick).toBe(true)
         })
 
         it('should set expected values when defaults is 2025-11', () => {
@@ -84,6 +85,7 @@ describe('config', () => {
             posthog._init('test-token', { defaults: '2025-11-30' })
             expect(posthog.config.capture_pageview).toBe('history_change')
             expect(posthog.config.session_recording.strictMinimumDuration).toBe(true)
+            expect(posthog.config.rageclick).toStrictEqual({ content_ignorelist: true })
         })
 
         it('should preserve other default config values when setting defaults', () => {

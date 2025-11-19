@@ -1,5 +1,51 @@
 # @posthog/nuxt
 
+## 1.2.5
+
+### Patch Changes
+
+- Updated dependencies [[`ab85422`](https://github.com/PostHog/posthog-js/commit/ab85422d2bc0c92658f49faad1f4d938f0282d8b)]:
+  - posthog-js@1.296.1
+
+## 1.2.4
+
+### Patch Changes
+
+- Updated dependencies [[`17d12f5`](https://github.com/PostHog/posthog-js/commit/17d12f5dd076b46a732c2667a2a42429f8c77120)]:
+  - posthog-js@1.296.0
+
+## 1.2.3
+
+### Patch Changes
+
+- Updated dependencies [[`4ad3678`](https://github.com/PostHog/posthog-js/commit/4ad3678b8ab575923fe703bd4066f2ca8be4de98)]:
+  - posthog-node@5.12.0
+
+## 1.2.2
+
+### Patch Changes
+
+- Updated dependencies [[`ab6cc9e`](https://github.com/PostHog/posthog-js/commit/ab6cc9e7c7edd876f4ab005b964a75a808545ce0)]:
+  - posthog-js@1.295.0
+
+## 1.2.1
+
+### Patch Changes
+
+- Updated dependencies [[`f9260de`](https://github.com/PostHog/posthog-js/commit/f9260de5a66f6df6b32761d31cb2d0224ba2eedf)]:
+  - posthog-js@1.294.0
+
+## 1.2.0
+
+### Minor Changes
+
+- [#2560](https://github.com/PostHog/posthog-js/pull/2560) [`905f748`](https://github.com/PostHog/posthog-js/commit/905f748bc0d429fc497a9ca08f411c8d8b4c5fa2) Thanks [@geferon](https://github.com/geferon)! - added name to nuxt client plugin
+
+### Patch Changes
+
+- Updated dependencies [[`f2426db`](https://github.com/PostHog/posthog-js/commit/f2426dbd3dca3ac5ffc1934553b4bcff76af0d77), [`de80a41`](https://github.com/PostHog/posthog-js/commit/de80a419a49cb26ee21147bc2241d3c0fec67909)]:
+  - posthog-js@1.293.0
+
 ## 1.1.5
 
 ### Patch Changes

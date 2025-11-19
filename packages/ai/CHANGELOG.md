@@ -1,5 +1,11 @@
 # posthog-ai
 
+## 7.1.0
+
+### Minor Changes
+
+- [#2498](https://github.com/PostHog/posthog-js/pull/2498) [`aa9f637`](https://github.com/PostHog/posthog-js/commit/aa9f63715d70428c8773c0c6e3d334497ffd3ad4) Thanks [@Tehnix](https://github.com/Tehnix)! - Added support for OpenAI audio transcriptions API. You can now track and monitor OpenAI Whisper transcription requests through the @posthog/ai SDK, with support for both streaming and non-streaming transcriptions, verbose JSON responses, and all standard transcription parameters (language, response_format, timestamp_granularities).
+
 ## 7.0.0
 
 ### Major Changes

@@ -145,6 +145,14 @@ const PRIMARY_INSTANCE_NAME = 'posthog'
 // should only be true for Opera<12
 let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
 
+const defaultsThatVaryByConfig = (
+    defaults?: ConfigDefaults
+): Pick<PostHogConfig, 'rageclick' | 'capture_pageview' | 'session_recording'> => ({
+    rageclick: defaults && defaults >= '2025-11-30' ? { content_ignorelist: true } : true,
+    capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
+    session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
+})
+
 // NOTE: Remember to update `types.ts` when changing a default value
 // to guarantee documentation is up to date, make sure to also update our website docs
 // NOTE²: This shouldn't ever change because we try very hard to be backwards-compatible
@@ -154,7 +162,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     ui_host: null,
     token: '',
     autocapture: true,
-    rageclick: true,
     cross_subdomain_cookie: isCrossDomainCookie(document?.location),
     persistence: 'localStorage+cookie', // up to 1.92.0 this was 'cookie'. It's easy to migrate as 'localStorage+cookie' will migrate data from cookie storage
     persistence_name: '',
@@ -163,7 +170,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     custom_campaign_params: [],
     custom_blocked_useragents: [],
     save_referrer: true,
-    capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     defaults: defaults ?? 'unset',
     __preview_deferred_init_extensions: false, // Opt-in only for now
@@ -192,7 +198,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     request_headers: {}, // { header: value, header2: value }
     request_batching: true,
     properties_string_max_length: 65535,
-    session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
     mask_all_element_attributes: false,
     mask_all_text: false,
     mask_personal_data_properties: false,
@@ -226,6 +231,8 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
 
     // make the default be lazy loading replay
     __preview_eager_load_replay: false,
+
+    ...defaultsThatVaryByConfig(defaults),
 })
 
 export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {

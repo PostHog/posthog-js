@@ -1,6 +1,6 @@
 {
   "name": "@posthog/ai",
-  "version": "7.0.0",
+  "version": "7.1.0",
   "description": "PostHog Node.js AI integrations",
   "repository": {
     "type": "git",
@@ -24,6 +24,7 @@
   "devDependencies": {
     "@posthog-tooling/rollup-utils": "workspace:*",
     "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@types/jest": "catalog:",
     "jest": "catalog:",
     "node-fetch": "^3.3.2",
     "posthog-node": "workspace:*"
