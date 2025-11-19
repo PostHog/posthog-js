@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.296.0
+
+### Minor Changes
+
+- [#2595](https://github.com/PostHog/posthog-js/pull/2595) [`17d12f5`](https://github.com/PostHog/posthog-js/commit/17d12f5dd076b46a732c2667a2a42429f8c77120) Thanks [@adboio](https://github.com/adboio)! - fix(surveys): clean up popover surveys from dom on close
+
 ## 1.295.0
 
 ### Minor Changes
