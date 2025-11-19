@@ -17,7 +17,6 @@
         "wrangler": "^4.49.0"
     },
     "dependencies": {
-        "ioredis": "^5.8.2",
         "posthog-node": "*"
     }
 }
