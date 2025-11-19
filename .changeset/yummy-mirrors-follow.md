@@ -1,5 +1,5 @@
 ---
-'@posthog/ai': minor
+'@posthog/ai': patch
 ---
 
-test
+update something

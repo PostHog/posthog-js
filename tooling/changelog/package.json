@@ -1,7 +1,10 @@
 {
     "name": "@posthog-tooling/changelog",
-    "main": "./index.js",
+    "main": "./dist/index.js",
     "type": "module",
+    "scripts": {
+        "build": "tsc"
+    },
     "dependencies": {
         "@changesets/changelog-github": "^0.5.1"
     }
