@@ -25,7 +25,7 @@ jobs:
           build: false
 
       - name: Build @posthog-tooling/changelog
-        run: turbo --filter=@posthog-tooling/changelog build
+        run: pnpm turbo --filter=@posthog-tooling/changelog build
 
       - name: Update versions and changelogs
         id: versions
