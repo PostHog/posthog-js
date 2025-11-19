@@ -1,18 +1,15 @@
 import githubChangelog from '@changesets/changelog-github'
 
-const getReleaseLine = async (changeset, type, options) => {
-    return githubChangelog.getReleaseLine(changeset, type, options)
-}
-
-const getDependencyReleaseLine = async (changesets, dependenciesUpdated, options) => {
-    return githubChangelog.getDependencyReleaseLine(changesets, dependenciesUpdated, options)
-}
-
-async function getChangelogEntry(release, options) {
+const getReleaseLine = async (...args) => {
     const date = new Date().toISOString().split('T')[0]
-    const githubEntry = await githubChangelog.getChangelogEntry(release, options)
-
-    return githubEntry.replace(`## ${release.newVersion}`, `## ${release.newVersion} - ${date}`)
+    const line = await githubChangelog.getReleaseLine(...args)
+    return `${line} - ${date}`
 }
 
-export { getReleaseLine, getDependencyReleaseLine, getChangelogEntry }
+const getDependencyReleaseLine = async (...args) => {
+    const date = new Date().toISOString().split('T')[0]
+    const line = await githubChangelog.getDependencyReleaseLine(...args)
+    return `${line} - ${date}`
+}
+
+export default { getReleaseLine, getDependencyReleaseLine }
