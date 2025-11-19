@@ -1,0 +1,14 @@
+name = "example-cloudeflare-kv-cache"
+main = "src/worker.ts"
+compatibility_date = "2024-11-19"
+
+[[kv_namespaces]]
+binding = "POSTHOG_CACHE"
+preview_id = "posthog_local_eval"
+
+[build]
+command = "npm run build"
+node_compat = true
+
+[triggers]
+crons = ["*/5 * * * *"] # Every five minutes
