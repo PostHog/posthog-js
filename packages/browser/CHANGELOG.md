@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.296.1
+
+### Patch Changes
+
+- [#2590](https://github.com/PostHog/posthog-js/pull/2590) [`ab85422`](https://github.com/PostHog/posthog-js/commit/ab85422d2bc0c92658f49faad1f4d938f0282d8b) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: don't rely on order of method calls to gate calling url
+
 ## 1.296.0
 
 ### Minor Changes
