@@ -7,8 +7,13 @@ settings:
 catalogs:
   default:
     '@posthog/cli':
+<<<<<<< Updated upstream
       specifier: ~0.5.9
       version: 0.5.12
+=======
+      specifier: ~0.5.13
+      version: 0.5.13
+>>>>>>> Stashed changes
     '@rslib/core':
       specifier: ^0.10.5
       version: 0.10.6
@@ -423,7 +428,11 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
+<<<<<<< Updated upstream
         version: 0.5.12
+=======
+        version: 0.5.13
+>>>>>>> Stashed changes
       '@posthog/core':
         specifier: workspace:*
         version: link:../core
@@ -488,7 +497,11 @@ importers:
         version: 4.1.3(magicast@0.3.5)
       '@posthog/cli':
         specifier: 'catalog:'
+<<<<<<< Updated upstream
         version: 0.5.12
+=======
+        version: 0.5.13
+>>>>>>> Stashed changes
       '@posthog/core':
         specifier: workspace:*
         version: link:../core
@@ -681,6 +694,34 @@ importers:
         specifier: 'catalog:'
         version: 5.8.2
 
+<<<<<<< Updated upstream
+=======
+  packages/rollup-plugin:
+    dependencies:
+      '@posthog/cli':
+        specifier: 'catalog:'
+        version: 0.5.13
+      '@posthog/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@posthog-tooling/tsconfig-base':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig-base
+      '@rslib/core':
+        specifier: 'catalog:'
+        version: 0.10.6(@microsoft/api-extractor@7.52.8(@types/node@22.17.0))(typescript@5.8.2)
+      '@types/jest':
+        specifier: 'catalog:'
+        version: 29.5.14
+      jest:
+        specifier: 'catalog:'
+        version: 29.7.0(@types/node@22.17.0)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.17.0)(typescript@5.8.2))
+      rollup:
+        specifier: ~4.53.2
+        version: 4.53.2
+
+>>>>>>> Stashed changes
   packages/web:
     dependencies:
       '@posthog/core':
@@ -702,6 +743,12 @@ importers:
       jest-environment-jsdom:
         specifier: 'catalog:'
         version: 29.7.0
+
+  tooling/changelog:
+    dependencies:
+      '@changesets/changelog-github':
+        specifier: ^0.5.1
+        version: 0.5.1
 
   tooling/eslint-plugin-posthog-js: {}
 
@@ -3282,8 +3329,13 @@ packages:
   '@poppinss/exception@1.2.2':
     resolution: {integrity: sha512-m7bpKCD4QMlFCjA/nKTs23fuvoVFoA83brRKmObCUNmi/9tVu8Ve3w4YQAnJu4q3Tjf5fr685HYIC/IA2zHRSg==}
 
+<<<<<<< Updated upstream
   '@posthog/cli@0.5.12':
     resolution: {integrity: sha512-woMmA4ChCzpJUa939SKfc11bYDNSkqHvhcvPn+EarV1ivIkmBu9gBOAZW1S/MfH76LCJE7tesuR0EOxo0zYjvw==}
+=======
+  '@posthog/cli@0.5.13':
+    resolution: {integrity: sha512-35vPzwa1lxE51ZU2N7no3wiDl87JYv/lUEGpFHZtc38h7z/7DhRgjBb021v8AWVo1wpfTht51OWXQpLqpBvZww==}
+>>>>>>> Stashed changes
     engines: {node: '>=14', npm: '>=6'}
     hasBin: true
 
@@ -14639,7 +14691,7 @@ snapshots:
   '@changesets/get-github-info@0.6.0':
     dependencies:
       dataloader: 1.4.0
-      node-fetch: 2.6.11
+      node-fetch: 2.7.0
     transitivePeerDependencies:
       - encoding
 
@@ -16852,7 +16904,11 @@ snapshots:
 
   '@poppinss/exception@1.2.2': {}
 
+<<<<<<< Updated upstream
   '@posthog/cli@0.5.12':
+=======
+  '@posthog/cli@0.5.13':
+>>>>>>> Stashed changes
     dependencies:
       axios: 1.12.2
       axios-proxy-builder: 0.1.2

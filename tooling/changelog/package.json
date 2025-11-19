@@ -1,0 +1,8 @@
+{
+    "name": "@posthog-tooling/changelog",
+    "main": "./index.js",
+    "type": "module",
+    "dependencies": {
+        "@changesets/changelog-github": "^0.5.1"
+    }
+}

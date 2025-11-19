@@ -1,4 +1,4 @@
-const githubChangelog = require('@changesets/changelog-github')
+import githubChangelog from '@changesets/changelog-github'
 
 const getReleaseLine = async (changeset, type, options) => {
     return githubChangelog.getReleaseLine(changeset, type, options)
@@ -21,4 +21,4 @@ const defaultChangelogFunctions = {
     getChangelogEntry,
 }
 
-module.exports = defaultChangelogFunctions
+export default defaultChangelogFunctions
