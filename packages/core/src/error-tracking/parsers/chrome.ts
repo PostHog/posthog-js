@@ -17,13 +17,13 @@ const chromeEvalRegex = /\((\S*)(?::(\d+))(?::(\d+))\)/
 // Chromium based browsers: Chrome, Brave, new Opera, new Edge
 // We cannot call this variable `chrome` because it can conflict with global `chrome` variable in certain environments
 // See: https://github.com/getsentry/sentry-javascript/issues/6880
-export const chromeStackLineParser: StackLineParser = (line) => {
+export const chromeStackLineParser: StackLineParser = (line, platform) => {
   // If the stack line has no function name, we need to parse it differently
   const noFnParts = chromeRegexNoFnName.exec(line) as null | [string, string, string, string]
 
   if (noFnParts) {
     const [, filename, line, col] = noFnParts
-    return createFrame(filename, UNKNOWN_FUNCTION, +line, +col)
+    return createFrame(platform, filename, UNKNOWN_FUNCTION, +line, +col)
   }
 
   const parts = chromeRegex.exec(line) as null | [string, string, string, string, string]
@@ -46,7 +46,7 @@ export const chromeStackLineParser: StackLineParser = (line) => {
     // would be way too time consuming. (TODO: Rewrite whole RegExp to be more readable)
     const [func, filename] = extractSafariExtensionDetails(parts[1] || UNKNOWN_FUNCTION, parts[2])
 
-    return createFrame(filename, func, parts[3] ? +parts[3] : undefined, parts[4] ? +parts[4] : undefined)
+    return createFrame(platform, filename, func, parts[3] ? +parts[3] : undefined, parts[4] ? +parts[4] : undefined)
   }
 
   return
