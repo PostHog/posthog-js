@@ -1,5 +1,20 @@
 # posthog-node
 
+## 5.13.0
+
+### Minor Changes
+
+- [#2600](https://github.com/PostHog/posthog-js/pull/2600) [`8972000`](https://github.com/PostHog/posthog-js/commit/89720003c495d7813c3117da42a3e2f73cc92d96) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: `fetch` is called without a bound context
+
+  This prevents issues in edge runtimes such as Cloudflare (2025-11-19)
+
+### Patch Changes
+
+- [#2575](https://github.com/PostHog/posthog-js/pull/2575) [`8acd88f`](https://github.com/PostHog/posthog-js/commit/8acd88f1b71d2c7e1222c43dd121abce78ef2bab) Thanks [@hpouillot](https://github.com/hpouillot)! - fix frame platform property for $exception events
+  (2025-11-19)
+- Updated dependencies [[`8acd88f`](https://github.com/PostHog/posthog-js/commit/8acd88f1b71d2c7e1222c43dd121abce78ef2bab)]:
+  - @posthog/core@1.5.3
+
 ## 5.12.0
 
 ### Minor Changes

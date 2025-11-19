@@ -1,5 +1,19 @@
 # posthog-js
 
+## 1.297.0
+
+### Minor Changes
+
+- [#2578](https://github.com/PostHog/posthog-js/pull/2578) [`91f41ee`](https://github.com/PostHog/posthog-js/commit/91f41ee39ce1973ed3094e12f279c126b55414b3) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Output confirmation log message to the user when overriding feature flags to improve user feedback on whether the action actually did something or not
+  (2025-11-19)
+
+### Patch Changes
+
+- [#2575](https://github.com/PostHog/posthog-js/pull/2575) [`8acd88f`](https://github.com/PostHog/posthog-js/commit/8acd88f1b71d2c7e1222c43dd121abce78ef2bab) Thanks [@hpouillot](https://github.com/hpouillot)! - fix frame platform property for $exception events
+  (2025-11-19)
+- Updated dependencies [[`8acd88f`](https://github.com/PostHog/posthog-js/commit/8acd88f1b71d2c7e1222c43dd121abce78ef2bab)]:
+    - @posthog/core@1.5.3
+
 ## 1.296.1
 
 ### Patch Changes
