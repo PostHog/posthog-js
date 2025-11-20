@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.5.5
+
+### Patch Changes
+
+- [#2589](https://github.com/PostHog/posthog-js/pull/2589) [`83f5d07`](https://github.com/PostHog/posthog-js/commit/83f5d07e4ae8c2ae5c6926858b6095ebbfaf319f) Thanks [@hpouillot](https://github.com/hpouillot)! - export logger creation
+  (2025-11-20)
+
 ## 1.5.4
 
 ### Patch Changes
