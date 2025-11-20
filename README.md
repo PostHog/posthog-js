@@ -13,9 +13,11 @@
 This is a monorepo containing multiple packages to integrate with Posthog using JavaScript.
 
 ## Documentation
+
 - [Posthog JS Documentation](https://posthog.com/docs/libraries/js)
 
 ## Packages
+
 - [posthog-js](./packages/browser/README.md)
 - [posthog-js-lite](./packages/web/README.md)
 - [posthog-node](./packages/node/README.md)
@@ -23,6 +25,9 @@ This is a monorepo containing multiple packages to integrate with Posthog using 
 - [@posthog/react](./packages/react/README.md)
 - [@posthog/ai](./packages/ai/README.md)
 - [@posthog/nextjs-config](./packages/nextjs-config/README.md)
+- [@posthog/nuxt](./packages/nuxt/README.md)
+- [@posthog/rollup-plugin](./packages/rollup-plugin/README.md)
+- [@posthog/webpack-plugin](./packages/webpack-plugin/README.md)
 
 ## Contributing
 
