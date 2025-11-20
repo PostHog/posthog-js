@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.12.4
+
+### Patch Changes
+
+- [#2608](https://github.com/PostHog/posthog-js/pull/2608) [`bef494e`](https://github.com/PostHog/posthog-js/commit/bef494e55a711bc66e13cf94fe8e39a1f8bf72d1) Thanks [@ioannisj](https://github.com/ioannisj)! - fix: latest release on posthog-cli lookup when installed via npm for iOS source map uploads
+  (2025-11-20)
+
 ## 4.12.3
 
 ### Patch Changes
