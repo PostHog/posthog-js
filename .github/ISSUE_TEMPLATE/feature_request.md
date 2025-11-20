@@ -24,6 +24,7 @@ _Please describe._
 - [ ] @posthog/nextjs-config
 - [ ] @posthog/nuxt
 - [ ] @posthog/rollup-plugin
+- [ ] @posthog/webpack-plugin
 
 ## Additional context
 

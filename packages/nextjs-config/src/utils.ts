@@ -1,7 +1,8 @@
 import nextPackage from 'next/package.json' with { type: 'json' }
 import semver from 'semver'
-import { PostHogNextConfigComplete } from './config'
+
 import { spawnLocal } from '@posthog/core/process'
+import { ResolvedPluginConfig } from '@posthog/webpack-plugin'
 
 export function getNextJsVersion(): string {
   return nextPackage.version
@@ -12,7 +13,7 @@ export function hasCompilerHook(): boolean {
   return semver.gte(nextJsVersion, '15.4.1')
 }
 
-export async function processSourceMaps(posthogOptions: PostHogNextConfigComplete, directory: string) {
+export async function processSourceMaps(posthogOptions: ResolvedPluginConfig, directory: string) {
   const cliOptions = []
   cliOptions.push('sourcemap', 'process')
   cliOptions.push('--directory', directory)

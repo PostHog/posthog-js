@@ -27,6 +27,7 @@ jobs:
           - name: "@posthog/nextjs-config"
           - name: "@posthog/nuxt"
           - name: "@posthog/rollup-plugin"
+          - name: "@posthog/webpack-plugin"
 
     steps:
       - name: Checkout the repository
