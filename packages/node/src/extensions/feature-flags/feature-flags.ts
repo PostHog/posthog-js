@@ -796,7 +796,10 @@ class FeatureFlagsPoller {
     }
 
     try {
-      return this.fetch(url, options)
+      // Unbind fetch from `this` to avoid potential issues in edge environments, e.g., Cloudflare Workers:
+      // https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors
+      const fetch = this.fetch
+      return fetch(url, options)
     } finally {
       clearTimeout(abortTimeout)
     }
