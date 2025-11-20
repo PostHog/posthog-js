@@ -109,6 +109,7 @@ describe('PostHog Feature Flags v4', () => {
               Promise.resolve({
                 flags: createMockFeatureFlags(),
                 requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+                evaluatedAt: 1640995200000,
               }),
           })
         }
@@ -678,6 +679,7 @@ describe('PostHog Feature Flags v4', () => {
         const expectedFeatureFlags = {
           flags: createMockFeatureFlags(),
           requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+          evaluatedAt: 1640995200000,
         }
         const normalizedFeatureFlags = normalizeFlagsResponse(expectedFeatureFlags as PostHogV2FlagsResponse)
         expect(posthog.getPersistedProperty(PostHogPersistedProperty.FeatureFlagDetails)).toEqual(
