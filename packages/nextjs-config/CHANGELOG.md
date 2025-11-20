@@ -1,5 +1,12 @@
 # @posthog/nextjs-config
 
+## 1.4.2
+
+### Patch Changes
+
+- Updated dependencies [[`c242702`](https://github.com/PostHog/posthog-js/commit/c2427029d75cba71b78e9822f18f5e73f7442288)]:
+  - @posthog/core@1.5.4
+
 ## 1.4.1
 
 ### Patch Changes
