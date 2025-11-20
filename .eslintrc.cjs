@@ -73,6 +73,7 @@ module.exports = {
                 'packages/node/**',
                 'packages/web/**',
                 'packages/webpack-plugin/**',
+                'packages/rollup-plugin/**',
                 'examples/**',
                 'playground/**',
             ],

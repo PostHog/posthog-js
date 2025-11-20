@@ -41,3 +41,19 @@ If your RN SDK changes are not picked up:
 rm -rf node_modules
 # repeat Run steps
 ```
+
+# Build Release mode locally
+
+```bash
+# android
+cd android
+./gradlew assembleRelease
+
+# ios
+set -o pipefail && xcrun xcodebuild clean build -workspace ios/exampleexpo53.xcworkspace -scheme exampleexpo53 -configuration Release -destination generic/platform=ios | xcpretty
+
+# Also: Xcode -> Product -> Archive
+
+# web
+npx expo export --clear --source-maps --platform web
+```

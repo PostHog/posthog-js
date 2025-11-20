@@ -1,6 +1,6 @@
 {
   "name": "@posthog/nextjs-config",
-  "version": "1.4.0",
+  "version": "1.4.2",
   "description": "NextJS configuration helper for Posthog 🦔",
   "repository": {
     "type": "git",
@@ -57,6 +57,7 @@
     "@rslib/core": "catalog:",
     "@types/node": "^22.15.23",
     "@types/semver": "^7.7.0",
+    "@types/jest": "catalog:",
     "jest": "catalog:",
     "next": "^15.4.1",
     "ts-jest": "catalog:"

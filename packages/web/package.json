@@ -1,6 +1,6 @@
 {
   "name": "posthog-js-lite",
-  "version": "4.1.10",
+  "version": "4.1.12",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -31,6 +31,7 @@
   "devDependencies": {
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@posthog-tooling/rollup-utils": "workspace:*",
+    "@types/jest": "catalog:",
     "jest": "catalog:",
     "jest-environment-jsdom": "catalog:"
   }

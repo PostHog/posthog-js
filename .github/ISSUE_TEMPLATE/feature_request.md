@@ -23,6 +23,7 @@ _Please describe._
 - [ ] @posthog/ai
 - [ ] @posthog/nextjs-config
 - [ ] @posthog/nuxt
+- [ ] @posthog/rollup-plugin
 - [ ] @posthog/webpack-plugin
 
 ## Additional context

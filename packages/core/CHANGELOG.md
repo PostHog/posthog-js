@@ -1,5 +1,19 @@
 # @posthog/core
 
+## 1.5.4
+
+### Patch Changes
+
+- [#2587](https://github.com/PostHog/posthog-js/pull/2587) [`c242702`](https://github.com/PostHog/posthog-js/commit/c2427029d75cba71b78e9822f18f5e73f7442288) Thanks [@hpouillot](https://github.com/hpouillot)! - export log level type
+  (2025-11-20)
+
+## 1.5.3
+
+### Patch Changes
+
+- [#2575](https://github.com/PostHog/posthog-js/pull/2575) [`8acd88f`](https://github.com/PostHog/posthog-js/commit/8acd88f1b71d2c7e1222c43dd121abce78ef2bab) Thanks [@hpouillot](https://github.com/hpouillot)! - fix frame platform property for $exception events
+  (2025-11-19)
+
 ## 1.5.2
 
 ### Patch Changes

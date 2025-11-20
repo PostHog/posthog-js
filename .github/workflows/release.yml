@@ -26,6 +26,7 @@ jobs:
           - name: "@posthog/ai"
           - name: "@posthog/nextjs-config"
           - name: "@posthog/nuxt"
+          - name: "@posthog/rollup-plugin"
           - name: "@posthog/webpack-plugin"
 
     steps:
