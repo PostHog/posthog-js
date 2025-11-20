@@ -9,11 +9,11 @@ catalog:
   typescript: 5.8.2
   rollup: ^4.44.1
   tslib: ^2.5.0
-  jest: ^29.7.0
+  jest: 29.7.0
   jest-environment-jsdom: ^29.7.0
   jest-environment-node: ^29.7.0
   jest-expo: ^47.0.1
-  "@types/jest": ^29.5.0
+  "@types/jest": ^29.5.14
   ts-jest: 29.4.0
-  "@rslib/core": ^0.10.5
-  "@posthog/cli": ~0.5.9
+  "@rslib/core": 0.10.6
+  "@posthog/cli": ~0.5.13

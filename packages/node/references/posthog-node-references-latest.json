@@ -1238,12 +1238,5 @@
       "example": "{\n    organization?: string;\n    projectId?: number;\n    prefix?: string;\n    severityAllowList?: CoreErrorTracking.SeverityLevel[] | '*';\n    sendExceptionsToPostHog?: boolean;\n}"
     }
   ],
-  "categories": [
-    "Initialization",
-    "Identification",
-    "Capture",
-    "Error tracking",
-    "Privacy",
-    "Feature flags"
-  ]
+  "categories": ["Initialization", "Identification", "Capture", "Error tracking", "Privacy", "Feature flags"]
 }

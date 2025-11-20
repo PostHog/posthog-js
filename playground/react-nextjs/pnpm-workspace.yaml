@@ -1,1 +1,1 @@
-# this file is intentionally empty, so that running `pnpm install` in this directory doesn't install dependencies for the workspace at the repo root
+pnpmfile: ../.pnpmfile.cjs
