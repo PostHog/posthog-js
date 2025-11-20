@@ -1704,8 +1704,9 @@ describe('featureflags', () => {
         })
     })
 
-    describe('Feature Flag Request ID', () => {
+    describe('Feature Flag Request ID and Evaluated At', () => {
         const TEST_REQUEST_ID = 'test-request-id-123'
+        const TEST_EVALUATED_AT = 1234567890
 
         it('saves requestId from /flags response', () => {
             featureFlags.receivedFeatureFlags({
@@ -1715,6 +1716,16 @@ describe('featureflags', () => {
             })
 
             expect(instance.get_property('$feature_flag_request_id')).toEqual(TEST_REQUEST_ID)
+        })
+
+        it('saves evaluatedAt from /flags response', () => {
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                evaluatedAt: TEST_EVALUATED_AT,
+            })
+
+            expect(instance.get_property('$feature_flag_evaluated_at')).toEqual(TEST_EVALUATED_AT)
         })
 
         it('includes requestId in feature flag called event', () => {
@@ -1740,12 +1751,36 @@ describe('featureflags', () => {
             )
         })
 
+        it('includes evaluatedAt in feature flag called event', () => {
+            // Setup flags with evaluatedAt
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                evaluatedAt: TEST_EVALUATED_AT,
+            })
+            featureFlags._hasLoadedFlags = true
+
+            // Test flag call
+            featureFlags.getFeatureFlag('test-flag')
+
+            // Verify capture call includes evaluatedAt
+            expect(instance.capture).toHaveBeenCalledWith(
+                '$feature_flag_called',
+                expect.objectContaining({
+                    $feature_flag: 'test-flag',
+                    $feature_flag_response: true,
+                    $feature_flag_evaluated_at: TEST_EVALUATED_AT,
+                })
+            )
+        })
+
         it('includes version in feature flag called event', () => {
-            // Setup flags with requestId
+            // Setup flags with requestId and evaluatedAt
             featureFlags.receivedFeatureFlags({
                 featureFlags: { 'test-flag': true },
                 featureFlagPayloads: {},
                 requestId: TEST_REQUEST_ID,
+                evaluatedAt: TEST_EVALUATED_AT,
                 flags: {
                     'test-flag': {
                         key: 'test-flag',
@@ -1769,13 +1804,14 @@ describe('featureflags', () => {
             // Test flag call
             featureFlags.getFeatureFlag('test-flag')
 
-            // Verify capture call includes requestId
+            // Verify capture call includes requestId and evaluatedAt
             expect(instance.capture).toHaveBeenCalledWith(
                 '$feature_flag_called',
                 expect.objectContaining({
                     $feature_flag: 'test-flag',
                     $feature_flag_response: 'variant-1',
                     $feature_flag_request_id: TEST_REQUEST_ID,
+                    $feature_flag_evaluated_at: TEST_EVALUATED_AT,
                     $feature_flag_version: 42,
                     $feature_flag_reason: 'Matched condition set 1',
                     $feature_flag_id: 23,
@@ -1811,6 +1847,38 @@ describe('featureflags', () => {
                 '$feature_flag_called',
                 expect.objectContaining({
                     $feature_flag_request_id: NEW_REQUEST_ID,
+                })
+            )
+        })
+
+        it('updates evaluatedAt when new /flags response is received', () => {
+            // First /flags response
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                evaluatedAt: TEST_EVALUATED_AT,
+            })
+
+            expect(instance.get_property('$feature_flag_evaluated_at')).toEqual(TEST_EVALUATED_AT)
+
+            // Second /flags response with new timestamp
+            const NEW_EVALUATED_AT = 9876543210
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                evaluatedAt: NEW_EVALUATED_AT,
+            })
+
+            expect(instance.get_property('$feature_flag_evaluated_at')).toEqual(NEW_EVALUATED_AT)
+
+            // Verify new timestamp is used in events
+            featureFlags._hasLoadedFlags = true
+            featureFlags.getFeatureFlag('test-flag')
+
+            expect(instance.capture).toHaveBeenCalledWith(
+                '$feature_flag_called',
+                expect.objectContaining({
+                    $feature_flag_evaluated_at: NEW_EVALUATED_AT,
                 })
             )
         })
