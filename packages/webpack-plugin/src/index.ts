@@ -32,7 +32,7 @@ export class PosthogWebpackPlugin {
                 await this.processSourceMaps(stats.compilation, this.resolvedConfig)
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : error
-                return this.logger.error('Error running PostHog sourcemap plugin:', errorMessage)
+                this.logger.error('Error running PostHog sourcemap plugin:', errorMessage)
             }
             return callback()
         }
