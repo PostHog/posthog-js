@@ -600,4 +600,107 @@ describe('FlagDefinitionCacheProvider Integration', () => {
       expect(flagValue).toBe(false)
     })
   })
+
+  describe('initialization behavior', () => {
+    it('avoids double cache check when cache misses on initial load', async () => {
+      mockCacheProvider.getFlagDefinitions.mockReturnValue(false)
+      mockCacheProvider.shouldFetchFlagDefinitions.mockResolvedValue(false)
+
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: testFlagDataApiResponse }))
+
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        flagDefinitionCacheProvider: mockCacheProvider,
+        fetchRetryCount: 0,
+      })
+
+      await posthog.waitForLocalEvaluationReady()
+
+      expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalledTimes(1)
+      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+      expect(mockedFetch).toHaveBeenCalledTimes(1)
+      expect(posthog.isLocalEvaluationReady()).toBe(true)
+    })
+
+    it('handles multiple flag evaluation calls efficiently with single cache check', async () => {
+      mockCacheProvider.getFlagDefinitions.mockReturnValue(testFlagData)
+      mockCacheProvider.shouldFetchFlagDefinitions.mockResolvedValue(false)
+
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        flagDefinitionCacheProvider: mockCacheProvider,
+        fetchRetryCount: 0,
+      })
+
+      const results = await Promise.all([
+        posthog.getFeatureFlag('test-flag', 'user-1'),
+        posthog.getFeatureFlag('test-flag', 'user-2'),
+        posthog.getFeatureFlag('test-flag', 'user-3'),
+        posthog.getAllFlags('user-4'),
+        posthog.getFeatureFlag('test-flag', 'user-5'),
+      ])
+
+      await posthog.waitForLocalEvaluationReady()
+
+      expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalledTimes(1)
+      results.forEach((result) => {
+        expect(result).toBeDefined()
+      })
+
+      expect(mockedFetch).not.toHaveBeenCalled()
+    })
+
+    it('multiple calls during cache miss trigger single API fetch', async () => {
+      mockCacheProvider.getFlagDefinitions.mockReturnValue(undefined)
+      mockCacheProvider.shouldFetchFlagDefinitions.mockResolvedValue(true)
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: testFlagDataApiResponse }))
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        flagDefinitionCacheProvider: mockCacheProvider,
+        fetchRetryCount: 0,
+      })
+
+      const results = await Promise.all([
+        posthog.getFeatureFlag('test-flag', 'user-1'),
+        posthog.getFeatureFlag('test-flag', 'user-2'),
+        posthog.getAllFlags('user-3'),
+      ])
+
+      await posthog.waitForLocalEvaluationReady()
+
+      expect(mockedFetch).toHaveBeenCalledTimes(1)
+      results.forEach((result) => {
+        expect(result).toBeDefined()
+      })
+    })
+
+    it('subsequent calls after successful load skip cache and API checks entirely', async () => {
+      mockCacheProvider.getFlagDefinitions.mockReturnValue(testFlagData)
+      mockCacheProvider.shouldFetchFlagDefinitions.mockResolvedValue(false)
+
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        flagDefinitionCacheProvider: mockCacheProvider,
+        fetchRetryCount: 0,
+      })
+
+      await posthog.waitForLocalEvaluationReady()
+
+      mockCacheProvider.getFlagDefinitions.mockClear()
+      mockCacheProvider.shouldFetchFlagDefinitions.mockClear()
+      mockedFetch.mockClear()
+
+      await posthog.getFeatureFlag('test-flag', 'user-1')
+      await posthog.getAllFlags('user-2')
+      await posthog.getFeatureFlag('test-flag', 'user-3')
+
+      expect(mockCacheProvider.getFlagDefinitions).not.toHaveBeenCalled()
+      expect(mockCacheProvider.shouldFetchFlagDefinitions).not.toHaveBeenCalled()
+      expect(mockedFetch).not.toHaveBeenCalled()
+    })
+  })
 })
