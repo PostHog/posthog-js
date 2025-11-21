@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 7.1.1
+
+### Patch Changes
+
+- [#2591](https://github.com/PostHog/posthog-js/pull/2591) [`3dbf325`](https://github.com/PostHog/posthog-js/commit/3dbf325e21387cb704142c0f0592ad4616e49f8b) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Fixes a bug that incorrectly calculated cache costs for non-Anthropic Langchain providers
+  (2025-11-21)
+
 ## 7.1.0
 
 ### Minor Changes
