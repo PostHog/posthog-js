@@ -1,4 +1,5 @@
 {
+    "globalDependencies": ["package.json", "turbo.json"],
     "tasks": {
         "clean": {
             "cache": false
