@@ -592,7 +592,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
 
   describe('initialization behavior', () => {
     it('avoids double cache check when cache misses on initial load', async () => {
-      mockCacheProvider.getFlagDefinitions.mockReturnValue(false)
+      mockCacheProvider.getFlagDefinitions.mockReturnValue(undefined)
       mockCacheProvider.shouldFetchFlagDefinitions.mockResolvedValue(false)
 
       mockedFetch.mockImplementation(apiImplementation({ localFlags: testFlagDataApiResponse }))
