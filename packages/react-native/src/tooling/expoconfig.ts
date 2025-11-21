@@ -1,4 +1,9 @@
+// inspired from https://github.com/getsentry/sentry-react-native/blob/c1981913a90fad31d8e98ec4a7dcb35c7af46a04/packages/core/plugin/src/withSentryIOS.ts#L18
+
 const { withAppBuildGradle, withXcodeProject } = require('@expo/config-plugins')
+
+const resolvePostHogReactNativePackageJsonPath =
+  "[\"node\", \"--print\", \"require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog.gradle')\"].execute().text.trim()"
 
 const withAndroidPlugin = (config: any) => {
   return withAppBuildGradle(config, (config: any) => {
@@ -7,9 +12,9 @@ const withAndroidPlugin = (config: any) => {
     }
 
     const buildGradle = config.modResults.contents
-    const lineToAdd = 'apply from: "../../node_modules/posthog-react-native/tooling/posthog.gradle"'
+    const applyFrom = `apply from: new File(${resolvePostHogReactNativePackageJsonPath})`
 
-    if (buildGradle.includes(lineToAdd)) {
+    if (buildGradle.includes(applyFrom)) {
       return config
     }
 
@@ -17,7 +22,7 @@ const withAndroidPlugin = (config: any) => {
     const pattern = /^android\s*\{/m
 
     if (buildGradle.match(pattern)) {
-      config.modResults.contents = buildGradle.replace(pattern, `${lineToAdd}\n\nandroid {`)
+      config.modResults.contents = buildGradle.replace(pattern, `${applyFrom}\n\nandroid {`)
     } else {
       console.warn('PostHog: Could not find "android {" block in build.gradle')
     }
@@ -73,7 +78,8 @@ const withIosPlugin = (config: any) => {
 
 const withPostHogPlugin = (config: any) => {
   config = withAndroidPlugin(config)
-  return withIosPlugin(config)
+  return config
+  // return withIosPlugin(config)
 }
 
 module.exports = (config: any) => {
