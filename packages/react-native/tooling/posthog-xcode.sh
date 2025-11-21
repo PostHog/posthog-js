@@ -90,11 +90,6 @@ if [[ "$SKIP_BUNDLING" ]]; then
   echo "SKIP_BUNDLING enabled; skipping posthog-cli upload calls."
   exit 0;
 fi
-
-if [[ ! "$FORCE_BUNDLING" ]]; then
-  echo "Skipping bundling in Debug for the Simulator (since the packager bundles for you). skipping posthog-cli upload calls."
-  exit 0;
-fi
 set -x -e
 
 # Execute posthog cli clone
