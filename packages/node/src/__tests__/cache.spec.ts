@@ -141,6 +141,37 @@ describe('FlagDefinitionCacheProvider Integration', () => {
 
       expect(onLoadMock).toHaveBeenCalledWith(1)
     })
+
+    it('waits for cache load to finish before triggering a fetch on concurrent calls', async () => {
+      let resolveCacheLoad: ((value: FlagDefinitionCacheData) => void) | undefined
+
+      mockCacheProvider.getFlagDefinitions.mockImplementation(
+        () =>
+          new Promise<FlagDefinitionCacheData>((resolve) => {
+            resolveCacheLoad = resolve
+          })
+      )
+      mockCacheProvider.shouldFetchFlagDefinitions.mockResolvedValue(true)
+
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: testFlagDataApiResponse }))
+
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        flagDefinitionCacheProvider: mockCacheProvider,
+        fetchRetryCount: 0,
+      })
+
+      const concurrentLoad = (posthog as any).featureFlagsPoller.loadFeatureFlags()
+
+      resolveCacheLoad?.(testFlagData)
+
+      await concurrentLoad
+      await jest.runOnlyPendingTimersAsync()
+
+      expect(mockedFetch).not.toHaveBeenCalled()
+      expect(posthog.isLocalEvaluationReady()).toBe(true)
+    })
   })
 
   describe('Fetch Coordination', () => {
