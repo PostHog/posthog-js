@@ -56,4 +56,7 @@ set -o pipefail && xcrun xcodebuild clean build -workspace ios/exampleexpo53.xcw
 
 # web
 npx expo export --clear --source-maps --platform web
+
+# eject expo (delete and recreate android and ios folders) and test expo plugins
+npx expo prebuild --clean
 ```

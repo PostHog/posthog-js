@@ -64,8 +64,7 @@ const withIosPlugin = (config: any) => {
 const withPostHogPlugin = (config: any) => {
   console.log('test plugin called')
   config = withAndroidPlugin(config)
-  //   return withIosPlugin(config);
-  return config
+  return withIosPlugin(config)
 }
 
 module.exports = (config: any) => {
