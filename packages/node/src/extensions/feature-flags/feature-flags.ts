@@ -79,6 +79,7 @@ class FeatureFlagsPoller {
   private cacheProvider?: FlagDefinitionCacheProvider
   private hasAttemptedCacheLoad: boolean = false
   private loadingPromise?: Promise<void>
+  private cacheLoadPromise?: Promise<boolean>
 
   constructor({
     pollingInterval,
@@ -583,9 +584,17 @@ class FeatureFlagsPoller {
 
   async loadFeatureFlags(forceReload = false): Promise<void> {
     // On first load, try to initialize from cache (if a cache provider is configured)
-    if (this.cacheProvider && !this.hasAttemptedCacheLoad) {
+    if (this.cacheProvider && !this.hasAttemptedCacheLoad && !this.cacheLoadPromise) {
       this.hasAttemptedCacheLoad = true
-      await this.loadFromCache('Loaded flags from cache')
+      this.cacheLoadPromise = this.loadFromCache('Loaded flags from cache')
+    }
+
+    if (this.cacheLoadPromise) {
+      const cacheLoadPromise = this.cacheLoadPromise
+      await cacheLoadPromise
+      if (this.cacheLoadPromise === cacheLoadPromise) {
+        this.cacheLoadPromise = undefined
+      }
     }
 
     // If a fetch is already in progress, wait for it
