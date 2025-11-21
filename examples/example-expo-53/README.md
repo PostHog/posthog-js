@@ -52,6 +52,8 @@ cd android
 # ios
 set -o pipefail && xcrun xcodebuild clean build -workspace ios/exampleexpo53.xcworkspace -scheme exampleexpo53 -configuration Release -destination generic/platform=ios | xcpretty
 
+# Xcode
+# Signing and Capabilities -> assign a team
 # Also: Xcode -> Product -> Archive
 
 # web
