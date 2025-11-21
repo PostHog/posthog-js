@@ -26,43 +26,52 @@ const withAndroidPlugin = (config: any) => {
   })
 }
 
+type BuildPhase = { shellScript: string }
+
+export function modifyExistingXcodeBuildScript(script: BuildPhase): void {
+  if (!script.shellScript.match(/(packager|scripts)\/react-native-xcode\.sh\b/)) {
+    return
+  }
+
+  if (script.shellScript.includes('posthog-xcode.sh')) {
+    return
+  }
+
+  if (script.shellScript.includes('posthog-react-native')) {
+    return
+  }
+
+  const code = JSON.parse(script.shellScript)
+  script.shellScript = JSON.stringify(addPostHogWithBundledScriptsToBundleShellScript(code))
+}
+
+const POSTHOG_REACT_NATIVE_XCODE_PATH =
+  "`\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('posthog-react-native/package.json')) + '/tooling/posthog-xcode.sh'\"`"
+
+export function addPostHogWithBundledScriptsToBundleShellScript(script: string): string {
+  return script.replace(
+    /^.*?(packager|scripts)\/react-native-xcode\.sh\s*(\\'\\\\")?/m,
+    // eslint-disable-next-line no-useless-escape
+    (match: string) => `/bin/sh ${POSTHOG_REACT_NATIVE_XCODE_PATH} ${match}`
+  )
+}
+
 const withIosPlugin = (config: any) => {
   return withXcodeProject(config, (config: any) => {
     const xcodeProject = config.modResults
-    const buildPhases = xcodeProject.hash.project.objects.PBXShellScriptBuildPhase
 
-    for (const key in buildPhases) {
-      const buildPhase = buildPhases[key]
-      const name = buildPhase.name ? buildPhase.name.replace(/"/g, '') : ''
+    const bundleReactNativePhase = xcodeProject.pbxItemByComment(
+      'Bundle React Native code and images',
+      'PBXShellScriptBuildPhase'
+    )
 
-      if (name === 'Bundle React Native code and images') {
-        let script = buildPhase.shellScript
+    modifyExistingXcodeBuildScript(bundleReactNativePhase)
 
-        const oldSearch =
-          "require('path').dirname(require.resolve('react-native/package.json')) + '/scripts/react-native-xcode.sh'"
-
-        const newReplace =
-          "require('path').dirname(require.resolve('posthog-react-native')) + '/../tooling/posthog-xcode.sh'"
-
-        if (!script.includes('posthog-xcode.sh')) {
-          if (script.includes(oldSearch)) {
-            script = script.replace(oldSearch, newReplace)
-            buildPhase.shellScript = script
-          } else {
-            console.warn(
-              'PostHog: Could not find exact match for React Native script path. Verify your build phase script content.'
-            )
-          }
-        }
-        break
-      }
-    }
     return config
   })
 }
 
 const withPostHogPlugin = (config: any) => {
-  console.log('test plugin called')
   config = withAndroidPlugin(config)
   return withIosPlugin(config)
 }
