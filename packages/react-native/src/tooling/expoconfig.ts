@@ -51,7 +51,7 @@ export function modifyExistingXcodeBuildScript(script: BuildPhase): void {
 }
 
 const POSTHOG_REACT_NATIVE_XCODE_PATH =
-  "`\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('posthog-react-native/package.json')) + '/tooling/posthog-xcode.sh'\"`"
+  "`\"$NODE_BINARY\" --print \"require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog-xcode.sh')\"`"
 
 export function addPostHogWithBundledScriptsToBundleShellScript(script: string): string {
   return script.replace(
@@ -78,8 +78,8 @@ const withIosPlugin = (config: any) => {
 
 const withPostHogPlugin = (config: any) => {
   config = withAndroidPlugin(config)
-  return config
-  // return withIosPlugin(config)
+  // return config
+  return withIosPlugin(config)
 }
 
 module.exports = (config: any) => {
