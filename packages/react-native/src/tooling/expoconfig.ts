@@ -78,7 +78,6 @@ const withIosPlugin = (config: any) => {
 
 const withPostHogPlugin = (config: any) => {
   config = withAndroidPlugin(config)
-  // return config
   return withIosPlugin(config)
 }
 
