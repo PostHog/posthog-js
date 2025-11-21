@@ -56,6 +56,25 @@ jobs:
           RETRY_TIMES: 20
           RETRY_WAIT_SECONDS: 5
 
+      - name: Install new package version in hedgebox-dummy
+        shell: bash
+        run: |
+          if [ -d "hedgebox-dummy" ]; then
+              cd hedgebox-dummy
+              for i in $(seq 1 $RETRY_TIMES); do
+                  if pnpm upgrade ${{ github.event.inputs.package_name }}@${{ github.event.inputs.package_version }}; then
+                      break
+                  else
+                      [ $i -ne $RETRY_TIMES ] && sleep $RETRY_WAIT_SECONDS || false
+                  fi
+              done
+          else
+              echo "hedgebox-dummy folder not found, skipping"
+          fi
+        env:
+          RETRY_TIMES: 20
+          RETRY_WAIT_SECONDS: 5
+
       - name: Generate branch name
         id: generate-branch-name
         shell: bash
