@@ -77,7 +77,6 @@ class FeatureFlagsPoller {
   backOffCount: number = 0
   onLoad?: (count: number) => void
   private cacheProvider?: FlagDefinitionCacheProvider
-  private hasAttemptedCacheLoad: boolean = false
   private loadingPromise?: Promise<void>
 
   constructor({
@@ -582,21 +581,25 @@ class FeatureFlagsPoller {
   }
 
   async loadFeatureFlags(forceReload = false): Promise<void> {
-    // On first load, try to initialize from cache (if a cache provider is configured)
-    if (this.cacheProvider && !this.hasAttemptedCacheLoad) {
-      this.hasAttemptedCacheLoad = true
-      await this.loadFromCache('Loaded flags from cache')
+    if (this.loadedSuccessfullyOnce && !forceReload) {
+      return
     }
 
-    // If a fetch is already in progress, wait for it
-    if (this.loadingPromise) {
-      return this.loadingPromise
+    if (!this.loadingPromise) {
+      this.loadingPromise = (async () => {
+        if (this.cacheProvider) {
+          const cacheHit = await this.loadFromCache('Loaded flags from cache')
+          if (cacheHit) {
+            return
+          }
+        }
+        await this._loadFeatureFlags(true)
+      })().finally(() => {
+        this.loadingPromise = undefined
+      })
     }
 
-    if (!this.loadedSuccessfullyOnce || forceReload) {
-      this.loadingPromise = this._loadFeatureFlags()
-      await this.loadingPromise
-    }
+    return this.loadingPromise
   }
 
   /**
@@ -621,7 +624,7 @@ class FeatureFlagsPoller {
     return Math.min(SIXTY_SECONDS, this.pollingInterval * 2 ** this.backOffCount)
   }
 
-  async _loadFeatureFlags(): Promise<void> {
+  async _loadFeatureFlags(skipCache?: boolean): Promise<void> {
     if (this.poller) {
       clearTimeout(this.poller)
       this.poller = undefined
@@ -644,9 +647,11 @@ class FeatureFlagsPoller {
       if (!shouldFetch) {
         // If we're not supposed to fetch, we assume another instance
         // is handling it. In this case, we'll just reload from cache.
-        const loaded = await this.loadFromCache('Loaded flags from cache (skipped fetch)')
-        if (loaded) {
-          return
+        if (!skipCache) {
+          const loaded = await this.loadFromCache('Loaded flags from cache (skipped fetch)')
+          if (loaded) {
+            return
+          }
         }
 
         if (this.loadedSuccessfullyOnce) {
