@@ -12,6 +12,10 @@
     "./metro": {
       "types": "./dist/tooling/metroconfig.d.ts",
       "default": "./dist/tooling/metroconfig.js"
+    },
+    "./expo": {
+      "types": "./dist/tooling/expoconfig.d.ts",
+      "default": "./dist/tooling/expoconfig.js"
     }
   },
   "files": [

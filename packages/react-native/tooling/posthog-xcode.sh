@@ -84,6 +84,14 @@ else
 fi
 set -x -e # re-enable
 
+# files wont exist if skip bundling
+set +x +e
+if [[ "$SKIP_BUNDLING" ]]; then
+  echo "SKIP_BUNDLING enabled; skipping posthog-cli upload calls."
+  exit 0;
+fi
+set -x -e
+
 # Execute posthog cli clone
 set +x +e
 CLI_CLONE_OUTPUT=$(/bin/sh -c "$PH_CLI_PATH exp hermes clone --minified-map-path $SOURCEMAP_PACKAGER_FILE --composed-map-path $SOURCEMAP_FILE" 2>&1)
