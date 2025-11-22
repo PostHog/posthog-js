@@ -1,6 +1,6 @@
 import { addUncaughtExceptionListener, addUnhandledRejectionListener } from './autocapture'
 import { PostHogBackendClient } from '@/client'
-import { uuidv7 } from '@posthog/core'
+import { isObject, uuidv7 } from '@posthog/core'
 import { EventMessage, PostHogOptions } from '@/types'
 import type { Logger } from '@posthog/core'
 import { BucketedRateLimiter } from '@posthog/core'
@@ -32,6 +32,10 @@ export default class ErrorTracking {
     })
 
     this.startAutocaptureIfEnabled()
+  }
+
+  static isPreviouslyCapturedError(x: unknown): boolean {
+    return isObject(x) && '__posthog_previously_captured_error' in x && x.__posthog_previously_captured_error === true
   }
 
   static async buildEventMessage(
@@ -73,17 +77,19 @@ export default class ErrorTracking {
   private onException(exception: unknown, hint: CoreErrorTracking.EventHint): void {
     this.client.addPendingPromise(
       (async () => {
-        const eventMessage = await ErrorTracking.buildEventMessage(exception, hint)
-        const exceptionProperties = eventMessage.properties
-        const exceptionType = exceptionProperties?.$exception_list[0]?.type ?? 'Exception'
-        const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
-        if (isRateLimited) {
-          this._logger.info('Skipping exception capture because of client rate limiting.', {
-            exception: exceptionType,
-          })
-          return
+        if (!ErrorTracking.isPreviouslyCapturedError(exception)) {
+          const eventMessage = await ErrorTracking.buildEventMessage(exception, hint)
+          const exceptionProperties = eventMessage.properties
+          const exceptionType = exceptionProperties?.$exception_list[0]?.type ?? 'Exception'
+          const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
+          if (isRateLimited) {
+            this._logger.info('Skipping exception capture because of client rate limiting.', {
+              exception: exceptionType,
+            })
+            return
+          }
+          return this.client.capture(eventMessage)
         }
-        return this.client.capture(eventMessage)
       })()
     )
   }

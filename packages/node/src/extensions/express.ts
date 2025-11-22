@@ -32,9 +32,11 @@ export function setupExpressErrorHandler(
     const hint: CoreErrorTracking.EventHint = { mechanism: { type: 'middleware', handled: false } }
     // Given stateless nature of Node SDK we capture exceptions using personless processing
     // when no user can be determined e.g. in the case of exception autocapture
-    ErrorTracking.buildEventMessage(error, hint, uuidv7(), { $process_person_profile: false }).then((msg) =>
-      _posthog.capture(msg)
-    )
+    if (!ErrorTracking.isPreviouslyCapturedError(error)) {
+      ErrorTracking.buildEventMessage(error, hint, uuidv7(), { $process_person_profile: false }).then((msg) =>
+        _posthog.capture(msg)
+      )
+    }
     next(error)
   })
 }
