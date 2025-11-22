@@ -36,6 +36,7 @@ const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
 const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
 const PERSISTENCE_FEATURE_FLAG_REQUEST_ID = '$feature_flag_request_id'
+const PERSISTENCE_FEATURE_FLAG_EVALUATED_AT = '$feature_flag_evaluated_at'
 
 export const filterActiveFeatureFlags = (featureFlags?: Record<string, string | boolean>) => {
     const activeFeatureFlags: Record<string, string | boolean> = {}
@@ -64,6 +65,7 @@ export const parseFlagsResponse = (
     }
 
     const requestId = response['requestId']
+    const evaluatedAt = response['evaluatedAt']
 
     // using the v1 api
     if (isArray(featureFlags)) {
@@ -100,6 +102,7 @@ export const parseFlagsResponse = (
             [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
             [PERSISTENCE_FEATURE_FLAG_DETAILS]: newFeatureFlagDetails || {},
             ...(requestId ? { [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: requestId } : {}),
+            ...(evaluatedAt ? { [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: evaluatedAt } : {}),
         })
 }
 
@@ -506,6 +509,7 @@ export class PostHogFeatureFlags {
         const flagValue = this.getFlagVariants()[key]
         const flagReportValue = `${flagValue}`
         const requestId = this._instance.get_property(PERSISTENCE_FEATURE_FLAG_REQUEST_ID) || undefined
+        const evaluatedAt = this._instance.get_property(PERSISTENCE_FEATURE_FLAG_EVALUATED_AT) || undefined
         const flagCallReported: Record<string, string[]> = this._instance.get_property(FLAG_CALL_REPORTED) || {}
 
         if (options.send_event || !('send_event' in options)) {
@@ -524,6 +528,7 @@ export class PostHogFeatureFlags {
                     $feature_flag_response: flagValue,
                     $feature_flag_payload: this.getFeatureFlagPayload(key) || null,
                     $feature_flag_request_id: requestId,
+                    $feature_flag_evaluated_at: evaluatedAt,
                     $feature_flag_bootstrapped_response: this._instance.config.bootstrap?.featureFlags?.[key] || null,
                     $feature_flag_bootstrapped_payload:
                         this._instance.config.bootstrap?.featureFlagPayloads?.[key] || null,
