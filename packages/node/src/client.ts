@@ -8,7 +8,6 @@ import {
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
   PostHogPersistedProperty,
-  Logger,
   PostHogCaptureOptions,
   isPlainObject,
   isBlockedUA,
@@ -30,6 +29,8 @@ import {
 import ErrorTracking from './extensions/error-tracking'
 import { safeSetTimeout, PostHogEventProperties } from '@posthog/core'
 import { PostHogMemoryStorage } from './storage-memory'
+import { PostHogContext, ContextData, ContextOptions } from './context'
+import { uuidv7 } from '@posthog/core'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -45,6 +46,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   protected errorTracking: ErrorTracking
   private maxCacheSize: number
   public readonly options: PostHogOptions
+  private readonly context: PostHogContext
 
   distinctIdHasSentFlagCalls: Record<string, string[]>
 
@@ -81,6 +83,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     super(apiKey, options)
 
     this.options = options
+    this.context = new PostHogContext()
 
     this.options.featureFlagsPollingInterval =
       typeof options.featureFlagsPollingInterval === 'number'
@@ -1160,6 +1163,58 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * Run a function with specific context that will be applied to all events captured within that context.
+   * It propagates the context to all subsequent calls down the call stack.
+   * Context properties like tags and sessionId will be automatically attached to all events.
+   *
+   * @example
+   * ```ts
+   * // Set context tags for all events in a request handler
+   * app.get('/api/data', (req, res) => {
+   *   posthog.withContext(
+   *     {
+   *       tags: { plan: 'premium', region: 'us-east' },
+   *       sessionId: req.sessionId
+   *     },
+   *     () => {
+   *       // All events here (and any nested calls) will have the context tags attached
+   *     }
+   *   )
+   * })
+   * ```
+   *
+   * {@label Context}
+   *
+   * @param contextData - Context data to apply (tags, sessionId, distinctId)
+   * @param fn - Function to run with the context
+   * @param options - Options for context management (fresh: true to replace, false to merge)
+   * @returns The return value of the function
+   */
+  withContext<T>(contextData: Partial<ContextData>, fn: () => T, options?: ContextOptions): T {
+    return this.context.run(contextData, fn, options)
+  }
+
+  /**
+   * Get the current context data.
+   *
+   * @example
+   * ```ts
+   * // Get current context within a withContext block
+   * posthog.withContext({ distinctId: 'user_123' }, () => {
+   *   const context = posthog.getContext()
+   *   console.log(context?.distinctId) // 'user_123'
+   * })
+   * ```
+   *
+   * {@label Context}
+   *
+   * @returns The current context data, or undefined if no context is set
+   */
+  getContext(): ContextData | undefined {
+    return this.context.get()
+  }
+
+  /**
    * Shutdown the PostHog client gracefully.
    *
    * @example
@@ -1439,11 +1494,29 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const { distinctId, event, properties, groups, sendFeatureFlags, timestamp, disableGeoip, uuid }: EventMessage =
       props
 
+    const contextData = this.context.get()
+
+    let mergedDistinctId = distinctId || contextData?.distinctId
+
+    const mergedProperties = {
+      ...(contextData?.tags || {}),
+      ...(properties || {}),
+    }
+
+    if (!mergedDistinctId) {
+      mergedDistinctId = uuidv7()
+      mergedProperties.$process_person_profile = false
+    }
+
+    if (contextData?.sessionId && !mergedProperties.$session_id) {
+      mergedProperties.$session_id = contextData.sessionId
+    }
+
     // Run before_send if configured
     const eventMessage = this._runBeforeSend({
-      distinctId,
+      distinctId: mergedDistinctId,
       event,
-      properties,
+      properties: mergedProperties,
       groups,
       sendFeatureFlags,
       timestamp,
@@ -1461,10 +1534,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         if (sendFeatureFlags) {
           // If we are sending feature flags, we evaluate them locally if the user prefers it, otherwise we fall back to remote evaluation
           const sendFeatureFlagsOptions = typeof sendFeatureFlags === 'object' ? sendFeatureFlags : undefined
-          return await this.getFeatureFlagsForEvent(distinctId, groups, disableGeoip, sendFeatureFlagsOptions)
+          return await this.getFeatureFlagsForEvent(
+            eventMessage.distinctId!,
+            groups,
+            disableGeoip,
+            sendFeatureFlagsOptions
+          )
         }
 
-        if (event === '$feature_flag_called') {
+        if (eventMessage.event === '$feature_flag_called') {
           // If we're capturing a $feature_flag_called event, we don't want to enrich the event with cached flags that may be out of date.
           return {}
         }
@@ -1514,7 +1592,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     return {
-      distinctId: eventMessage.distinctId,
+      distinctId: eventMessage.distinctId!,
       event: eventMessage.event,
       properties: eventProperties,
       options: {
