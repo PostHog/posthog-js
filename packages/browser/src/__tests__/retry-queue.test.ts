@@ -18,10 +18,10 @@ describe('RetryQueue', () => {
         jest.spyOn(assignableWindow.console, 'warn').mockImplementation()
     })
 
-    const fastForwardTimeAndRunTimer = (time = 3500) => {
+    const fastForwardTimeAndRunTimer = async (time = 3500) => {
         now += time
         jest.setSystemTime(now)
-        jest.runOnlyPendingTimers()
+        await jest.runOnlyPendingTimersAsync()
     }
 
     const enqueueRequests = () => {
@@ -55,7 +55,7 @@ describe('RetryQueue', () => {
         mockPosthog._send_request.mockClear()
     }
 
-    it('processes retry requests', () => {
+    it('processes retry requests', async () => {
         enqueueRequests()
 
         expect(retryQueue.length).toEqual(4)
@@ -95,7 +95,7 @@ describe('RetryQueue', () => {
         ])
 
         // Fast forward enough time to clear the jitter
-        fastForwardTimeAndRunTimer(3500)
+        await fastForwardTimeAndRunTimer(3500)
 
         // clears queue
         expect(retryQueue.length).toEqual(0)
@@ -109,9 +109,9 @@ describe('RetryQueue', () => {
         ])
     })
 
-    it('adds the retry_count to the url', () => {
+    it('adds the retry_count to the url', async () => {
         enqueueRequests()
-        fastForwardTimeAndRunTimer(3500)
+        await fastForwardTimeAndRunTimer(3500)
 
         expect(mockPosthog._send_request.mock.calls.map(([arg1]) => arg1.url)).toEqual([
             '/e?retry_count=1',
@@ -136,12 +136,12 @@ describe('RetryQueue', () => {
         ])
     })
 
-    it('enqueues requests when offline and flushes immediately when online again', () => {
+    it('enqueues requests when offline and flushes immediately when online again', async () => {
         retryQueue['_areWeOnline'] = false
         expect(retryQueue['_areWeOnline']).toEqual(false)
 
         enqueueRequests()
-        fastForwardTimeAndRunTimer()
+        await fastForwardTimeAndRunTimer()
 
         // requests aren't attempted when we're offline
         expect(mockPosthog._send_request).toHaveBeenCalledTimes(0)
@@ -166,7 +166,7 @@ describe('RetryQueue', () => {
         expect(retryQueue.length).toEqual(0)
     })
 
-    it('only calls the callback when successful', () => {
+    it('only calls the callback when successful', async () => {
         const cb = jest.fn()
         mockPosthog._send_request.mockImplementation(({ callback }) => {
             callback?.({ statusCode: 500 })
@@ -182,7 +182,7 @@ describe('RetryQueue', () => {
             callback?.({ statusCode: 200, text: 'it worked!' })
         })
 
-        fastForwardTimeAndRunTimer()
+        await fastForwardTimeAndRunTimer()
 
         expect(retryQueue.length).toEqual(0)
         expect(cb).toHaveBeenCalledTimes(1)
@@ -254,23 +254,23 @@ describe('RetryQueue', () => {
     })
 
     describe('memory management', () => {
-        it('stops polling when queue becomes empty', () => {
+        it('stops polling when queue becomes empty', async () => {
             enqueueRequests()
 
             expect(retryQueue['_isPolling']).toBe(true)
             expect(retryQueue['_poller']).toBeDefined()
             expect(retryQueue.length).toEqual(4)
 
-            fastForwardTimeAndRunTimer(3500)
+            await fastForwardTimeAndRunTimer(3500)
 
             expect(retryQueue.length).toEqual(0)
             expect(retryQueue['_isPolling']).toBe(false)
             expect(retryQueue['_poller']).toBeUndefined()
         })
 
-        it('restarts polling when items are added after stopping', () => {
+        it('restarts polling when items are added after stopping', async () => {
             enqueueRequests()
-            fastForwardTimeAndRunTimer(3500)
+            await fastForwardTimeAndRunTimer(3500)
 
             expect(retryQueue['_isPolling']).toBe(false)
             expect(retryQueue['_poller']).toBeUndefined()
