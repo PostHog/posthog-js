@@ -1,7 +1,7 @@
 // gecko regex: `(?:bundle|\d+\.js)`: `bundle` is for react native, `\d+\.js` also but specifically for ram bundles because it
 // generates filenames without a prefix like `file://` the filenames in the stacktrace are just 42.js
 
-import { StackLineParser } from '../types'
+import { Platform, StackLineParser } from '../types'
 import { createFrame, UNKNOWN_FUNCTION } from './base'
 import { extractSafariExtensionDetails } from './safari'
 
@@ -10,7 +10,7 @@ const geckoREgex =
   /^\s*(.*?)(?:\((.*?)\))?(?:^|@)?((?:[-a-z]+)?:\/.*?|\[native code\]|[^@]*(?:bundle|\d+\.js)|\/[\w\-. /=]+)(?::(\d+))?(?::(\d+))?\s*$/i
 const geckoEvalRegex = /(\S+) line (\d+)(?: > eval line \d+)* > eval/i
 
-export const geckoStackLineParser: StackLineParser = (line) => {
+export const geckoStackLineParser: StackLineParser = (line: string, platform: Platform) => {
   const parts = geckoREgex.exec(line) as null | [string, string, string, string, string, string]
 
   if (parts) {
@@ -31,7 +31,7 @@ export const geckoStackLineParser: StackLineParser = (line) => {
     let func = parts[1] || UNKNOWN_FUNCTION
     ;[func, filename] = extractSafariExtensionDetails(func, filename)
 
-    return createFrame(filename, func, parts[4] ? +parts[4] : undefined, parts[5] ? +parts[5] : undefined)
+    return createFrame(platform, filename, func, parts[4] ? +parts[4] : undefined, parts[5] ? +parts[5] : undefined)
   }
 
   return

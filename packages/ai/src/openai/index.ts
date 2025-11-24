@@ -8,6 +8,7 @@ import {
   withPrivacyMode,
   AIEvent,
   formatOpenAIResponsesInput,
+  calculateWebSearchCount,
 } from '../utils'
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
@@ -21,6 +22,8 @@ const Chat = OpenAIOrignal.Chat
 const Completions = Chat.Completions
 const Responses = OpenAIOrignal.Responses
 const Embeddings = OpenAIOrignal.Embeddings
+const Audio = OpenAIOrignal.Audio
+const Transcriptions = OpenAIOrignal.Audio.Transcriptions
 
 type ChatCompletion = OpenAIOrignal.ChatCompletion
 type ChatCompletionChunk = OpenAIOrignal.ChatCompletionChunk
@@ -39,13 +42,14 @@ interface MonitoringOpenAIConfig extends ClientOptions {
   baseURL?: string
 }
 
-type RequestOptions = Record<string, any>
+type RequestOptions = Record<string, unknown>
 
 export class PostHogOpenAI extends OpenAIOrignal {
   private readonly phClient: PostHog
   public chat: WrappedChat
   public responses: WrappedResponses
   public embeddings: WrappedEmbeddings
+  public audio: WrappedAudio
 
   constructor(config: MonitoringOpenAIConfig) {
     const { posthog, ...openAIConfig } = config
@@ -54,6 +58,7 @@ export class PostHogOpenAI extends OpenAIOrignal {
     this.chat = new WrappedChat(this, this.phClient)
     this.responses = new WrappedResponses(this, this.phClient)
     this.embeddings = new WrappedEmbeddings(this, this.phClient)
+    this.audio = new WrappedAudio(this, this.phClient)
   }
 }
 
@@ -117,9 +122,11 @@ export class WrappedCompletions extends Completions {
                 outputTokens?: number
                 reasoningTokens?: number
                 cacheReadInputTokens?: number
+                webSearchCount?: number
               } = {
                 inputTokens: 0,
                 outputTokens: 0,
+                webSearchCount: 0,
               }
 
               // Map to track in-progress tool calls
@@ -134,6 +141,11 @@ export class WrappedCompletions extends Completions {
 
               for await (const chunk of stream1) {
                 const choice = chunk?.choices?.[0]
+
+                const chunkWebSearchCount = calculateWebSearchCount(chunk)
+                if (chunkWebSearchCount > 0 && chunkWebSearchCount > (usage.webSearchCount ?? 0)) {
+                  usage.webSearchCount = chunkWebSearchCount
+                }
 
                 // Handle text content
                 const deltaContent = choice?.delta?.content
@@ -177,6 +189,7 @@ export class WrappedCompletions extends Completions {
                 // Handle usage information
                 if (chunk.usage) {
                   usage = {
+                    ...usage,
                     inputTokens: chunk.usage.prompt_tokens ?? 0,
                     outputTokens: chunk.usage.completion_tokens ?? 0,
                     reasoningTokens: chunk.usage.completion_tokens_details?.reasoning_tokens ?? 0,
@@ -233,7 +246,13 @@ export class WrappedCompletions extends Completions {
                 baseURL: this.baseURL,
                 params: body,
                 httpStatus: 200,
-                usage,
+                usage: {
+                  inputTokens: usage.inputTokens,
+                  outputTokens: usage.outputTokens,
+                  reasoningTokens: usage.reasoningTokens,
+                  cacheReadInputTokens: usage.cacheReadInputTokens,
+                  webSearchCount: usage.webSearchCount,
+                },
                 tools: availableTools,
               })
             } catch (error: unknown) {
@@ -271,13 +290,14 @@ export class WrappedCompletions extends Completions {
           if ('choices' in result) {
             const latency = (Date.now() - startTime) / 1000
             const availableTools = extractAvailableToolCalls('openai', openAIParams)
+            const formattedOutput = formatResponseOpenAI(result)
             await sendEventToPosthog({
               client: this.phClient,
               ...posthogParams,
               model: openAIParams.model,
               provider: 'openai',
               input: sanitizeOpenAI(openAIParams.messages),
-              output: formatResponseOpenAI(result),
+              output: formattedOutput,
               latency,
               baseURL: this.baseURL,
               params: body,
@@ -287,6 +307,7 @@ export class WrappedCompletions extends Completions {
                 outputTokens: result.usage?.completion_tokens ?? 0,
                 reasoningTokens: result.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+                webSearchCount: calculateWebSearchCount(result),
               },
               tools: availableTools,
             })
@@ -366,22 +387,31 @@ export class WrappedResponses extends Responses {
 
     if (openAIParams.stream) {
       return parentPromise.then((value) => {
-        if ('tee' in value && typeof (value as any).tee === 'function') {
-          const [stream1, stream2] = (value as any).tee()
+        if ('tee' in value && typeof value.tee === 'function') {
+          const [stream1, stream2] = value.tee()
           ;(async () => {
             try {
-              let finalContent: any[] = []
+              let finalContent: unknown[] = []
               let usage: {
                 inputTokens?: number
                 outputTokens?: number
                 reasoningTokens?: number
                 cacheReadInputTokens?: number
+                webSearchCount?: number
               } = {
                 inputTokens: 0,
                 outputTokens: 0,
+                webSearchCount: 0,
               }
 
               for await (const chunk of stream1) {
+                if ('response' in chunk && chunk.response) {
+                  const chunkWebSearchCount = calculateWebSearchCount(chunk.response)
+                  if (chunkWebSearchCount > 0 && chunkWebSearchCount > (usage.webSearchCount ?? 0)) {
+                    usage.webSearchCount = chunkWebSearchCount
+                  }
+                }
+
                 if (
                   chunk.type === 'response.completed' &&
                   'response' in chunk &&
@@ -392,6 +422,7 @@ export class WrappedResponses extends Responses {
                 }
                 if ('response' in chunk && chunk.response?.usage) {
                   usage = {
+                    ...usage,
                     inputTokens: chunk.response.usage.input_tokens ?? 0,
                     outputTokens: chunk.response.usage.output_tokens ?? 0,
                     reasoningTokens: chunk.response.usage.output_tokens_details?.reasoning_tokens ?? 0,
@@ -416,7 +447,13 @@ export class WrappedResponses extends Responses {
                 baseURL: this.baseURL,
                 params: body,
                 httpStatus: 200,
-                usage,
+                usage: {
+                  inputTokens: usage.inputTokens,
+                  outputTokens: usage.outputTokens,
+                  reasoningTokens: usage.reasoningTokens,
+                  cacheReadInputTokens: usage.cacheReadInputTokens,
+                  webSearchCount: usage.webSearchCount,
+                },
                 tools: availableTools,
               })
             } catch (error: unknown) {
@@ -456,6 +493,7 @@ export class WrappedResponses extends Responses {
           if ('output' in result) {
             const latency = (Date.now() - startTime) / 1000
             const availableTools = extractAvailableToolCalls('openai', openAIParams)
+            const formattedOutput = formatResponseOpenAI({ output: result.output })
             await sendEventToPosthog({
               client: this.phClient,
               ...posthogParams,
@@ -463,7 +501,7 @@ export class WrappedResponses extends Responses {
               model: openAIParams.model,
               provider: 'openai',
               input: sanitizeOpenAIResponse(formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions)),
-              output: formatResponseOpenAI({ output: result.output }),
+              output: formattedOutput,
               latency,
               baseURL: this.baseURL,
               params: body,
@@ -473,6 +511,7 @@ export class WrappedResponses extends Responses {
                 outputTokens: result.usage?.output_tokens ?? 0,
                 reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
+                webSearchCount: calculateWebSearchCount(result),
               },
               tools: availableTools,
             })
@@ -519,9 +558,9 @@ export class WrappedResponses extends Responses {
     const startTime = Date.now()
 
     const originalCreate = super.create.bind(this)
-    const originalSelf = this as any
-    const tempCreate = originalSelf.create
-    originalSelf.create = originalCreate
+    const originalSelfRecord = this as Record<string, unknown>
+    const tempCreate = originalSelfRecord['create']
+    originalSelfRecord['create'] = originalCreate
 
     try {
       const parentPromise = super.parse(openAIParams, options)
@@ -580,7 +619,7 @@ export class WrappedResponses extends Responses {
       return wrappedPromise as APIPromise<ParsedResponse<ParsedT>>
     } finally {
       // Restore our wrapped create method
-      originalSelf.create = tempCreate
+      originalSelfRecord['create'] = tempCreate
     }
   }
 }
@@ -652,6 +691,224 @@ export class WrappedEmbeddings extends Embeddings {
     ) as APIPromise<CreateEmbeddingResponse>
 
     return wrappedPromise
+  }
+}
+
+export class WrappedAudio extends Audio {
+  constructor(parentClient: PostHogOpenAI, phClient: PostHog) {
+    super(parentClient)
+    this.transcriptions = new WrappedTranscriptions(parentClient, phClient)
+  }
+
+  public transcriptions: WrappedTranscriptions
+}
+
+export class WrappedTranscriptions extends Transcriptions {
+  private readonly phClient: PostHog
+  private readonly baseURL: string
+
+  constructor(client: OpenAIOrignal, phClient: PostHog) {
+    super(client)
+    this.phClient = phClient
+    this.baseURL = client.baseURL
+  }
+
+  // --- Overload #1: Non-streaming
+  public create(
+    body: OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateParamsNonStreaming<'json' | undefined> &
+      MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<OpenAIOrignal.Audio.Transcriptions.Transcription>
+
+  // --- Overload #2: Non-streaming
+  public create(
+    body: OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateParamsNonStreaming<'verbose_json'> & MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<OpenAIOrignal.Audio.Transcriptions.TranscriptionVerbose>
+
+  // --- Overload #3: Non-streaming
+  public create(
+    body: OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateParamsNonStreaming<'srt' | 'vtt' | 'text'> &
+      MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<string>
+
+  // --- Overload #4: Non-streaming
+  public create(
+    body: OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateParamsNonStreaming,
+    options?: RequestOptions
+  ): APIPromise<OpenAIOrignal.Audio.Transcriptions.Transcription>
+
+  // --- Overload #5: Streaming
+  public create(
+    body: OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateParamsStreaming & MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<Stream<OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent>>
+
+  // --- Overload #6: Streaming
+  public create(
+    body: OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateParamsStreaming & MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<
+    | OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateResponse
+    | string
+    | Stream<OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent>
+  >
+
+  // --- Overload #7: Generic base
+  public create(
+    body: OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateParams & MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<
+    | OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateResponse
+    | string
+    | Stream<OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent>
+  >
+
+  // --- Implementation Signature
+  public create(
+    body: OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateParams & MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<
+    | OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateResponse
+    | string
+    | Stream<OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent>
+  > {
+    const { providerParams: openAIParams, posthogParams } =
+      extractPosthogParams<OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateParams>(body)
+    const startTime = Date.now()
+
+    const parentPromise = openAIParams.stream
+      ? super.create(openAIParams, options)
+      : super.create(openAIParams, options)
+
+    if (openAIParams.stream) {
+      return parentPromise.then((value) => {
+        if ('tee' in value && typeof (value as any).tee === 'function') {
+          const [stream1, stream2] = (value as any).tee()
+          ;(async () => {
+            try {
+              let finalContent: string = ''
+              let usage: {
+                inputTokens?: number
+                outputTokens?: number
+              } = {
+                inputTokens: 0,
+                outputTokens: 0,
+              }
+
+              const doneEvent: OpenAIOrignal.Audio.Transcriptions.TranscriptionTextDoneEvent['type'] =
+                'transcript.text.done'
+              for await (const chunk of stream1) {
+                if (chunk.type === doneEvent && 'text' in chunk && chunk.text && chunk.text.length > 0) {
+                  finalContent = chunk.text
+                }
+                if ('usage' in chunk && chunk.usage) {
+                  usage = {
+                    inputTokens: chunk.usage?.type === 'tokens' ? (chunk.usage.input_tokens ?? 0) : 0,
+                    outputTokens: chunk.usage?.type === 'tokens' ? (chunk.usage.output_tokens ?? 0) : 0,
+                  }
+                }
+              }
+
+              const latency = (Date.now() - startTime) / 1000
+              const availableTools = extractAvailableToolCalls('openai', openAIParams)
+              await sendEventToPosthog({
+                client: this.phClient,
+                ...posthogParams,
+                model: openAIParams.model,
+                provider: 'openai',
+                input: openAIParams.prompt,
+                output: finalContent,
+                latency,
+                baseURL: this.baseURL,
+                params: body,
+                httpStatus: 200,
+                usage,
+                tools: availableTools,
+              })
+            } catch (error: unknown) {
+              const httpStatus =
+                error && typeof error === 'object' && 'status' in error
+                  ? ((error as { status?: number }).status ?? 500)
+                  : 500
+
+              await sendEventToPosthog({
+                client: this.phClient,
+                ...posthogParams,
+                model: openAIParams.model,
+                provider: 'openai',
+                input: openAIParams.prompt,
+                output: [],
+                latency: 0,
+                baseURL: this.baseURL,
+                params: body,
+                httpStatus,
+                usage: { inputTokens: 0, outputTokens: 0 },
+                isError: true,
+                error: JSON.stringify(error),
+              })
+            }
+          })()
+
+          return stream2
+        }
+        return value
+      }) as APIPromise<Stream<OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent>>
+    } else {
+      const wrappedPromise = parentPromise.then(
+        async (result) => {
+          if ('text' in result) {
+            const latency = (Date.now() - startTime) / 1000
+            await sendEventToPosthog({
+              client: this.phClient,
+              ...posthogParams,
+              model: String(openAIParams.model ?? ''),
+              provider: 'openai',
+              input: openAIParams.prompt,
+              output: result.text,
+              latency,
+              baseURL: this.baseURL,
+              params: body,
+              httpStatus: 200,
+              usage: {
+                inputTokens: result.usage?.type === 'tokens' ? (result.usage.input_tokens ?? 0) : 0,
+                outputTokens: result.usage?.type === 'tokens' ? (result.usage.output_tokens ?? 0) : 0,
+              },
+            })
+            return result
+          }
+        },
+        async (error: unknown) => {
+          const httpStatus =
+            error && typeof error === 'object' && 'status' in error
+              ? ((error as { status?: number }).status ?? 500)
+              : 500
+
+          await sendEventToPosthog({
+            client: this.phClient,
+            ...posthogParams,
+            model: String(openAIParams.model ?? ''),
+            provider: 'openai',
+            input: openAIParams.prompt,
+            output: [],
+            latency: 0,
+            baseURL: this.baseURL,
+            params: body,
+            httpStatus,
+            usage: {
+              inputTokens: 0,
+              outputTokens: 0,
+            },
+            isError: true,
+            error: JSON.stringify(error),
+          })
+          throw error
+        }
+      ) as APIPromise<OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateResponse>
+
+      return wrappedPromise
+    }
   }
 }
 

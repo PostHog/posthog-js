@@ -20,6 +20,7 @@
 - [ ] @posthog/react
 - [ ] @posthog/ai
 - [ ] @posthog/nextjs-config
+- [ ] @posthog/nuxt
 
 ## Checklist
 

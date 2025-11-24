@@ -1,0 +1,10 @@
+{
+  "extends": "@tsconfig/recommended/tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "moduleResolution": "node16",
+    "module": "node16",
+    "types": ["@cloudflare/workers-types", "node"]
+  },
+  "include": ["src/*.ts", "src/cache.ts"]
+}

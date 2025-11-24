@@ -39,6 +39,13 @@ const appearanceWithThanks = {
     thankyouMessageBody: 'We appreciate your feedback.',
 }
 
+const tabPositions = [
+    { position: 'top', cssProperty: 'top', expectedValue: '0px', hasClass: 'widget-tab-top' },
+    { position: 'bottom', cssProperty: 'bottom', expectedValue: '0px', hasClass: null },
+    { position: 'left', cssProperty: 'left', expectedValue: '0px', hasClass: null },
+    { position: 'right', cssProperty: 'right', expectedValue: '0px', hasClass: null },
+]
+
 const black = 'rgb(2, 6, 23)'
 const white = 'rgb(255, 255, 255)'
 
@@ -88,6 +95,65 @@ test.describe('surveys - feedback widget', () => {
         await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('textarea').fill('hello posthog!')
         await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('.form-submit').click()
         await pollUntilEventCaptured(page, 'survey sent')
+    })
+
+    tabPositions.forEach(({ position, cssProperty, expectedValue, hasClass }) => {
+        test(`displays feedback tab with ${position} positioning`, async ({ page, context }) => {
+            const surveysAPICall = page.route('**/surveys/**', async (route) => {
+                await route.fulfill({
+                    json: {
+                        surveys: [
+                            {
+                                id: '123',
+                                name: 'Test survey',
+                                type: 'widget',
+                                start_date: '2021-01-01T00:00:00Z',
+                                questions: [
+                                    {
+                                        type: 'open',
+                                        question: 'Feedback for us?',
+                                        description: 'tab feedback widget',
+                                        id: 'feedback_tab_1',
+                                    },
+                                ],
+                                appearance: {
+                                    widgetLabel: 'Feedback',
+                                    tabPosition: position,
+                                    widgetType: 'tab',
+                                    displayThankYouMessage: true,
+                                    thankyouMessageHeader: 'Thanks!',
+                                    thankyouMessageBody: 'We appreciate your feedback.',
+                                },
+                            },
+                        ],
+                    },
+                })
+            })
+
+            await start(startOptions, page, context)
+            await surveysAPICall
+
+            const tabButton = page.locator('.PostHogSurvey-123').locator('.ph-survey-widget-tab')
+            await expect(tabButton).toBeVisible()
+
+            await expect(tabButton).toHaveCSS(cssProperty, expectedValue)
+            if (hasClass) {
+                await expect(tabButton).toHaveClass(new RegExp(hasClass))
+            }
+
+            await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeVisible()
+
+            await tabButton.click()
+            await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
+            await expect(page.locator('.PostHogSurvey-123').locator('.survey-question')).toHaveText('Feedback for us?')
+            await expect(page.locator('.PostHogSurvey-123').locator('.survey-question-description')).toHaveText(
+                'tab feedback widget'
+            )
+
+            await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('textarea').fill('hello posthog!')
+            await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('.form-submit').click()
+            await pollUntilEventCaptured(page, 'survey sent')
+        })
     })
 
     test('displays feedback tab in a responsive manner ', async ({ page, context }) => {

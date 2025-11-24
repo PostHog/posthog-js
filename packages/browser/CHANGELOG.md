@@ -1,5 +1,231 @@
 # posthog-js
 
+## 1.298.0
+
+### Minor Changes
+
+- [#2619](https://github.com/PostHog/posthog-js/pull/2619) [`86dab38`](https://github.com/PostHog/posthog-js/commit/86dab38e49eeac9819b1ab5f7f0c8b5df88d9f86) Thanks [@hpouillot](https://github.com/hpouillot)! - package deprecation
+  (2025-11-24)
+
+### Patch Changes
+
+- Updated dependencies [[`86dab38`](https://github.com/PostHog/posthog-js/commit/86dab38e49eeac9819b1ab5f7f0c8b5df88d9f86)]:
+    - @posthog/core@1.6.0
+
+## 1.297.3
+
+### Patch Changes
+
+- [#2618](https://github.com/PostHog/posthog-js/pull/2618) [`3eed1a4`](https://github.com/PostHog/posthog-js/commit/3eed1a42a50bff310fde3a91308a0f091b39e3fe) Thanks [@marandaneto](https://github.com/marandaneto)! - last version was compromised
+  (2025-11-24)
+- Updated dependencies [[`3eed1a4`](https://github.com/PostHog/posthog-js/commit/3eed1a42a50bff310fde3a91308a0f091b39e3fe)]:
+    - @posthog/core@1.5.6
+
+## 1.297.2
+
+### Patch Changes
+
+- Updated dependencies [[`83f5d07`](https://github.com/PostHog/posthog-js/commit/83f5d07e4ae8c2ae5c6926858b6095ebbfaf319f)]:
+    - @posthog/core@1.5.5
+
+## 1.297.1
+
+### Patch Changes
+
+- Updated dependencies [[`c242702`](https://github.com/PostHog/posthog-js/commit/c2427029d75cba71b78e9822f18f5e73f7442288)]:
+    - @posthog/core@1.5.4
+
+## 1.297.0
+
+### Minor Changes
+
+- [#2578](https://github.com/PostHog/posthog-js/pull/2578) [`91f41ee`](https://github.com/PostHog/posthog-js/commit/91f41ee39ce1973ed3094e12f279c126b55414b3) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Output confirmation log message to the user when overriding feature flags to improve user feedback on whether the action actually did something or not
+  (2025-11-19)
+
+### Patch Changes
+
+- [#2575](https://github.com/PostHog/posthog-js/pull/2575) [`8acd88f`](https://github.com/PostHog/posthog-js/commit/8acd88f1b71d2c7e1222c43dd121abce78ef2bab) Thanks [@hpouillot](https://github.com/hpouillot)! - fix frame platform property for $exception events
+  (2025-11-19)
+- Updated dependencies [[`8acd88f`](https://github.com/PostHog/posthog-js/commit/8acd88f1b71d2c7e1222c43dd121abce78ef2bab)]:
+    - @posthog/core@1.5.3
+
+## 1.296.1
+
+### Patch Changes
+
+- [#2590](https://github.com/PostHog/posthog-js/pull/2590) [`ab85422`](https://github.com/PostHog/posthog-js/commit/ab85422d2bc0c92658f49faad1f4d938f0282d8b) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: don't rely on order of method calls to gate calling url
+
+## 1.296.0
+
+### Minor Changes
+
+- [#2595](https://github.com/PostHog/posthog-js/pull/2595) [`17d12f5`](https://github.com/PostHog/posthog-js/commit/17d12f5dd076b46a732c2667a2a42429f8c77120) Thanks [@adboio](https://github.com/adboio)! - fix(surveys): clean up popover surveys from dom on close
+
+## 1.295.0
+
+### Minor Changes
+
+- [#2572](https://github.com/PostHog/posthog-js/pull/2572) [`ab6cc9e`](https://github.com/PostHog/posthog-js/commit/ab6cc9e7c7edd876f4ab005b964a75a808545ce0) Thanks [@adboio](https://github.com/adboio)! - survey html rendering bugfix
+
+## 1.294.0
+
+### Minor Changes
+
+- [#2573](https://github.com/PostHog/posthog-js/pull/2573) [`f9260de`](https://github.com/PostHog/posthog-js/commit/f9260de5a66f6df6b32761d31cb2d0224ba2eedf) Thanks [@adboio](https://github.com/adboio)! - feat: add survey feedback button custom positions
+
+## 1.293.0
+
+### Minor Changes
+
+- [#2565](https://github.com/PostHog/posthog-js/pull/2565) [`f2426db`](https://github.com/PostHog/posthog-js/commit/f2426dbd3dca3ac5ffc1934553b4bcff76af0d77) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: ignore rageclicks by content.
+
+### Patch Changes
+
+- [#2570](https://github.com/PostHog/posthog-js/pull/2570) [`de80a41`](https://github.com/PostHog/posthog-js/commit/de80a419a49cb26ee21147bc2241d3c0fec67909) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: rageclick detection should use event timestamp not current time
+
+- [#2561](https://github.com/PostHog/posthog-js/pull/2561) [`4418d60 `](https://github.com/PostHog/posthog-js/commit/4418d605f1846f12824de0e82b42235700512eb6) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: upgrades posthog-rrweb to 0.0.30
+
+## 1.292.0
+
+### Minor Changes
+
+- [#2519](https://github.com/PostHog/posthog-js/pull/2519) [`7c16ff7`](https://github.com/PostHog/posthog-js/commit/7c16ff7f3d7d8152ffbdde6839fee6fc513a8c55) Thanks [@rodrigomarcolin](https://github.com/rodrigomarcolin)! - Made rageclick detection fully parametrizable with configurable threshold_px, timeout_ms, and click_count, while preserving previous default behavior.
+
+## 1.291.0
+
+### Minor Changes
+
+- [#2557](https://github.com/PostHog/posthog-js/pull/2557) [`c8c7de2`](https://github.com/PostHog/posthog-js/commit/c8c7de247eae0a688c6eca49d364b89243b2bac8) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: support strict minimum duration (more accurate on full page load)
+
+## 1.290.0
+
+### Minor Changes
+
+- [#2553](https://github.com/PostHog/posthog-js/pull/2553) [`8a2b790`](https://github.com/PostHog/posthog-js/commit/8a2b790a61611c54e5e84a2954ae19d89d754afc) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: yield to the main thread during posthog init
+
+## 1.289.0
+
+### Minor Changes
+
+- [#2551](https://github.com/PostHog/posthog-js/pull/2551) [`10be1b0`](https://github.com/PostHog/posthog-js/commit/10be1b071ab30da45749b91cfdeff913912e7bbb) Thanks [@dmarticus](https://github.com/dmarticus)! - Support bootstrapping feature flags during SSR in ReactJS
+
+## 1.288.1
+
+### Patch Changes
+
+- Updated dependencies [[`87f9604`](https://github.com/PostHog/posthog-js/commit/87f96047739e67b847fe22137b97fc57f405b8d9)]:
+    - @posthog/core@1.5.2
+
+## 1.288.0
+
+### Minor Changes
+
+- [#2433](https://github.com/PostHog/posthog-js/pull/2433) [`392b190`](https://github.com/PostHog/posthog-js/commit/392b19061bcee86926d165ce3cd7742df1c474d5) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Add `flags_api_host` config option
+
+## 1.287.0
+
+### Minor Changes
+
+- [#2525](https://github.com/PostHog/posthog-js/pull/2525) [`ec65577`](https://github.com/PostHog/posthog-js/commit/ec6557796219502c8d6a04fc5943721dafef140b) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: track flushed size per session
+
+## 1.286.0
+
+### Minor Changes
+
+- [#2547](https://github.com/PostHog/posthog-js/pull/2547) [`cd8bcd7`](https://github.com/PostHog/posthog-js/commit/cd8bcd79e4e41e51bcf9b40890708207ac927e72) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Fixed a bug where configuration overrides for session recording would not be applied if the recorder module was still loading
+
+## 1.285.2
+
+### Patch Changes
+
+- Updated dependencies [[`d8d98c9`](https://github.com/PostHog/posthog-js/commit/d8d98c95f24b612110dbf52d228c0c3bd248cd58)]:
+    - @posthog/core@1.5.1
+
+## 1.285.1
+
+### Patch Changes
+
+- [#2545](https://github.com/PostHog/posthog-js/pull/2545) [`c26a12c`](https://github.com/PostHog/posthog-js/commit/c26a12cc55932ff5a014c57a01a25c06715a24a1) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: allow session ending payload when recording is idle
+
+## 1.285.0
+
+### Minor Changes
+
+- [#2503](https://github.com/PostHog/posthog-js/pull/2503) [`e95a9d5`](https://github.com/PostHog/posthog-js/commit/e95a9d5075891861982e69ddcf09f1d6241ae088) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: store previous and next session id in session recording
+
+## 1.284.0
+
+### Minor Changes
+
+- [#2529](https://github.com/PostHog/posthog-js/pull/2529) [`882d823`](https://github.com/PostHog/posthog-js/commit/882d823ca7bf9b31aa5bdcb0512d9109096bcba7) Thanks [@MattBro](https://github.com/MattBro)! - feat(surveys): add URL prefill and auto-submit support
+
+    Surveys can now be prefilled and automatically submitted via URL parameters.
+
+    **New configuration options:**
+
+    ```javascript
+    posthog.init('token', {
+        surveys: {
+            prefillFromUrl: true,
+            autoSubmitIfComplete: true,
+            autoSubmitDelay: 800,
+        },
+    })
+    ```
+
+    **URL format:** `?q0=1&q1=8&auto_submit=true`
+
+    - `q{N}` = question index (0-based)
+    - Value = choice index or rating value
+    - `auto_submit=true` enables auto-submission
+
+    **Supported question types:**
+
+    - Single choice (choice index)
+    - Multiple choice (multiple q{N} params)
+    - Rating (numeric value, validated against scale)
+
+    **Use cases:**
+
+    - Pre-filled NPS surveys from email campaigns
+    - One-click survey responses from notifications
+    - SMS surveys with embedded feedback
+    - QR code surveys at events
+
+## 1.283.0
+
+### Minor Changes
+
+- [#2520](https://github.com/PostHog/posthog-js/pull/2520) [`068d55e`](https://github.com/PostHog/posthog-js/commit/068d55ed4193e82729cd34b42d9e433f85b6e606) Thanks [@lricoy](https://github.com/lricoy)! - Add bot pageview collection behind preview flag. Enables tracking bot traffic as `$bot_pageview` events when the `__preview_capture_bot_pageviews` flag is enabled.
+
+### Patch Changes
+
+- Updated dependencies [[`068d55e`](https://github.com/PostHog/posthog-js/commit/068d55ed4193e82729cd34b42d9e433f85b6e606)]:
+    - @posthog/core@1.5.0
+
+## 1.282.0
+
+### Minor Changes
+
+- [#2517](https://github.com/PostHog/posthog-js/pull/2517) [`46e3ca6`](https://github.com/PostHog/posthog-js/commit/46e3ca600ca478db1b319b36695dea090aa60f98) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: add a component that will wrap your components and capture an event when they are in view in the browser
+
+### Patch Changes
+
+- [#2517](https://github.com/PostHog/posthog-js/pull/2517) [`46e3ca6`](https://github.com/PostHog/posthog-js/commit/46e3ca600ca478db1b319b36695dea090aa60f98) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: complete react sdk featureflag component refactor
+
+## 1.281.0
+
+### Minor Changes
+
+- [#2502](https://github.com/PostHog/posthog-js/pull/2502) [`751b440`](https://github.com/PostHog/posthog-js/commit/751b44040c4c0c55a19df2ad0e5f215943620e51) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: bucketed rate limiter can calculate tokens without a timer
+
+### Patch Changes
+
+- [#2500](https://github.com/PostHog/posthog-js/pull/2500) [`71ae0d2`](https://github.com/PostHog/posthog-js/commit/71ae0d2a55cbf69a2b60ac3ee29906f379408898) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: don't poll surveys while the page is hidden
+
+- Updated dependencies [[`751b440`](https://github.com/PostHog/posthog-js/commit/751b44040c4c0c55a19df2ad0e5f215943620e51)]:
+    - @posthog/core@1.4.0
+
 ## 1.280.1
 
 ### Patch Changes

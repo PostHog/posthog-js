@@ -1,4 +1,11 @@
-import { SESSION_RECORDING_IS_SAMPLED, SESSION_RECORDING_REMOTE_CONFIG } from '../../constants'
+import {
+    SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_OVERRIDE_SAMPLING,
+    SESSION_RECORDING_OVERRIDE_LINKED_FLAG,
+    SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER,
+    SESSION_RECORDING_OVERRIDE_URL_TRIGGER,
+    SESSION_RECORDING_REMOTE_CONFIG,
+} from '../../constants'
 import { PostHog } from '../../posthog-core'
 import { Properties, RemoteConfig, SessionRecordingPersistedConfig, SessionStartReason } from '../../types'
 import { type eventWithTime } from './types/rrweb-types'
@@ -243,7 +250,12 @@ export class SessionRecording {
      * instead call `posthog.startSessionRecording({linked_flag: true})`
      * */
     public overrideLinkedFlag() {
-        // TODO what if this gets called before lazy loading is done
+        if (!this._lazyLoadedSessionRecording) {
+            this._instance.persistence?.register({
+                [SESSION_RECORDING_OVERRIDE_LINKED_FLAG]: true,
+            })
+        }
+
         this._lazyLoadedSessionRecording?.overrideLinkedFlag()
     }
 
@@ -254,7 +266,12 @@ export class SessionRecording {
      * instead call `posthog.startSessionRecording({sampling: true})`
      * */
     public overrideSampling() {
-        // TODO what if this gets called before lazy loading is done
+        if (!this._lazyLoadedSessionRecording) {
+            this._instance.persistence?.register({
+                [SESSION_RECORDING_OVERRIDE_SAMPLING]: true,
+            })
+        }
+
         this._lazyLoadedSessionRecording?.overrideSampling()
     }
 
@@ -265,7 +282,14 @@ export class SessionRecording {
      * instead call `posthog.startSessionRecording({trigger: 'url' | 'event'})`
      * */
     public overrideTrigger(triggerType: TriggerType) {
-        // TODO what if this gets called before lazy loading is done
+        if (!this._lazyLoadedSessionRecording) {
+            this._instance.persistence?.register({
+                [triggerType === 'url'
+                    ? SESSION_RECORDING_OVERRIDE_URL_TRIGGER
+                    : SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER]: true,
+            })
+        }
+
         this._lazyLoadedSessionRecording?.overrideTrigger(triggerType)
     }
 

@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
-import { usePostHog } from './usePostHog'
+import { useContext, useEffect, useState } from 'react'
+import { PostHogContext } from '../context'
 
 export function useFeatureFlagVariantKey(flag: string): string | boolean | undefined {
-    const client = usePostHog()
+    const { client, bootstrap } = useContext(PostHogContext)
 
     const [featureFlagVariantKey, setFeatureFlagVariantKey] = useState<string | boolean | undefined>(() =>
         client.getFeatureFlag(flag)
@@ -13,6 +13,10 @@ export function useFeatureFlagVariantKey(flag: string): string | boolean | undef
             setFeatureFlagVariantKey(client.getFeatureFlag(flag))
         })
     }, [client, flag])
+
+    if (!client.featureFlags.hasLoadedFlags && bootstrap?.featureFlags) {
+        return bootstrap.featureFlags[flag]
+    }
 
     return featureFlagVariantKey
 }

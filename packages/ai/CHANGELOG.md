@@ -1,5 +1,92 @@
 # posthog-ai
 
+## 7.2.0
+
+### Minor Changes
+
+- [#2619](https://github.com/PostHog/posthog-js/pull/2619) [`86dab38`](https://github.com/PostHog/posthog-js/commit/86dab38e49eeac9819b1ab5f7f0c8b5df88d9f86) Thanks [@hpouillot](https://github.com/hpouillot)! - package deprecation
+  (2025-11-24)
+
+### Patch Changes
+
+- Updated dependencies [[`86dab38`](https://github.com/PostHog/posthog-js/commit/86dab38e49eeac9819b1ab5f7f0c8b5df88d9f86)]:
+  - posthog-node@5.14.0
+
+## 7.1.2
+
+### Patch Changes
+
+- [#2618](https://github.com/PostHog/posthog-js/pull/2618) [`3eed1a4`](https://github.com/PostHog/posthog-js/commit/3eed1a42a50bff310fde3a91308a0f091b39e3fe) Thanks [@marandaneto](https://github.com/marandaneto)! - last version was compromised
+  (2025-11-24)
+- Updated dependencies [[`3eed1a4`](https://github.com/PostHog/posthog-js/commit/3eed1a42a50bff310fde3a91308a0f091b39e3fe)]:
+  - posthog-node@5.13.3
+
+## 7.1.1
+
+### Patch Changes
+
+- [#2591](https://github.com/PostHog/posthog-js/pull/2591) [`3dbf325`](https://github.com/PostHog/posthog-js/commit/3dbf325e21387cb704142c0f0592ad4616e49f8b) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Fixes a bug that incorrectly calculated cache costs for non-Anthropic Langchain providers
+  (2025-11-21)
+
+## 7.1.0
+
+### Minor Changes
+
+- [#2498](https://github.com/PostHog/posthog-js/pull/2498) [`aa9f637`](https://github.com/PostHog/posthog-js/commit/aa9f63715d70428c8773c0c6e3d334497ffd3ad4) Thanks [@Tehnix](https://github.com/Tehnix)! - Added support for OpenAI audio transcriptions API. You can now track and monitor OpenAI Whisper transcription requests through the @posthog/ai SDK, with support for both streaming and non-streaming transcriptions, verbose JSON responses, and all standard transcription parameters (language, response_format, timestamp_granularities).
+
+## 7.0.0
+
+### Major Changes
+
+- [#2554](https://github.com/PostHog/posthog-js/pull/2554) [`8e8d2f5`](https://github.com/PostHog/posthog-js/commit/8e8d2f530f0676463b6e36a710f4301119960e2e) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Update LLM provider SDKs to latest versions
+
+  - `openai`: **5.20.1 → 6.8.1**
+  - `@anthropic-ai/sdk`: 0.63.1 → 0.67.0
+  - `@google/genai`: 1.19.0 → 1.29.0
+  - `langchain`: **0.3.33 → 1.0.0**
+  - `@langchain/core`: **0.3.75 → 1.0.0**
+  - `ai`: 5.0.42 → 5.0.87
+  - `zod`: 4.1.5 → 4.1.8
+
+## 6.6.0
+
+### Minor Changes
+
+- [#2518](https://github.com/PostHog/posthog-js/pull/2518) [`aca2775`](https://github.com/PostHog/posthog-js/commit/aca27758b350966ace7b7f051148b47d345a9f9c) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - feat(llma): send number of web searches calls
+
+## 6.5.1
+
+### Patch Changes
+
+- [#2537](https://github.com/PostHog/posthog-js/pull/2537) [`fb2fa06`](https://github.com/PostHog/posthog-js/commit/fb2fa06d50fe6527c77d84305dc9ddeb69a30438) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - fix(llma): cache cost calculation in the LangChain callback
+
+## 6.5.0
+
+### Minor Changes
+
+- [#2496](https://github.com/PostHog/posthog-js/pull/2496) [`7253bb3`](https://github.com/PostHog/posthog-js/commit/7253bb30b6305b29f885eed2c542f2f6686efb0f) Thanks [@andrewm4894](https://github.com/andrewm4894)! - feat: add $ai_framework property for framework integrations
+
+  Adds a simple `$ai_framework` property to AI events when using framework layers (LangChain, Vercel AI SDK). Direct provider calls (OpenAI, Anthropic, Gemini) do not include this property, eliminating redundant data where framework would duplicate the provider name.
+
+  **Example with framework:**
+
+  ```json
+  {
+    "$ai_framework": "langchain",
+    "$ai_provider": "openai",
+    "$ai_model": "gpt-4"
+  }
+  ```
+
+  **Example without framework:**
+
+  ```json
+  {
+    "$ai_provider": "openai",
+    "$ai_model": "gpt-4"
+  }
+  ```
+
 ## 6.4.4
 
 ### Patch Changes

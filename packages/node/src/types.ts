@@ -6,6 +6,8 @@ import type {
   PostHogFetchResponse,
 } from '@posthog/core'
 
+import type { FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
+
 export interface IdentifyMessage {
   distinctId: string
   properties?: Record<string | number, any>
@@ -73,6 +75,32 @@ export type PostHogOptions = PostHogCoreOptions & {
   // We recommend setting this to false if you are only using the personalApiKey for evaluating remote config payloads via `getRemoteConfigPayload` and not using local evaluation.
   enableLocalEvaluation?: boolean
   /**
+   * @experimental This API is experimental and may change in minor versions.
+   *
+   * Optional cache provider for feature flag definitions.
+   *
+   * Allows custom caching strategies (Redis, database, etc.) for flag definitions
+   * in multi-worker environments. If not provided, defaults to in-memory cache.
+   *
+   * This enables distributed coordination where only one worker fetches flags while
+   * others use cached data, reducing API calls and improving performance.
+   *
+   * @example
+   * ```typescript
+   * import { FlagDefinitionCacheProvider } from 'posthog-node/experimental'
+   *
+   * class RedisCacheProvider implements FlagDefinitionCacheProvider {
+   *   // ... implementation
+   * }
+   *
+   * const client = new PostHog('api-key', {
+   *   personalApiKey: 'personal-key',
+   *   flagDefinitionCacheProvider: new RedisCacheProvider(redis)
+   * })
+   * ```
+   */
+  flagDefinitionCacheProvider?: FlagDefinitionCacheProvider
+  /**
    * Allows modification or dropping of events before they're sent to PostHog.
    * If an array is provided, the functions are run in order.
    * If a function returns null, the event will be dropped.
@@ -89,6 +117,31 @@ export type PostHogOptions = PostHogCoreOptions & {
    * @default undefined
    */
   evaluationEnvironments?: readonly string[]
+  /**
+   * Additional user agent strings to block from being tracked.
+   * These are combined with the default list of blocked user agents.
+   *
+   * @default []
+   */
+  custom_blocked_useragents?: string[]
+  /**
+   * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+   * Enables collection of bot traffic as $bot_pageview events instead of dropping them.
+   * When enabled, events with a $raw_user_agent property that matches the bot detection list
+   * will have their $pageview event renamed to $bot_pageview.
+   *
+   * To use this feature, pass the user agent in event properties:
+   * ```ts
+   * client.capture({
+   *   distinctId: 'user_123',
+   *   event: '$pageview',
+   *   properties: {
+   *     $raw_user_agent: req.headers['user-agent']
+   *   }
+   * })
+   * ```
+   */
+  __preview_capture_bot_pageviews?: boolean
 }
 
 export type PostHogFeatureFlag = {

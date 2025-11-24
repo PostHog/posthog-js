@@ -3,6 +3,11 @@
 exports[`config snapshot for PostHogConfig 1`] = `
 "{
   "api_host": "string",
+  "flags_api_host": [
+    "undefined",
+    "null",
+    "string"
+  ],
   "ui_host": [
     "null",
     "string"
@@ -56,6 +61,24 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "css_selector_ignorelist": [
         "undefined",
         "string[]"
+      ],
+      "content_ignorelist": [
+        "undefined",
+        "false",
+        "true",
+        "string[]"
+      ],
+      "threshold_px": [
+        "undefined",
+        "number"
+      ],
+      "click_count": [
+        "undefined",
+        "number"
+      ],
+      "timeout_ms": [
+        "undefined",
+        "number"
       ]
     }
   ],
@@ -135,6 +158,25 @@ exports[`config snapshot for PostHogConfig 1`] = `
   "disable_surveys_automatic_display": [
     "false",
     "true"
+  ],
+  "surveys": [
+    "undefined",
+    {
+      "prefillFromUrl": [
+        "undefined",
+        "false",
+        "true"
+      ],
+      "autoSubmitIfComplete": [
+        "undefined",
+        "false",
+        "true"
+      ],
+      "autoSubmitDelay": [
+        "undefined",
+        "number"
+      ]
+    }
   ],
   "disable_web_experiments": [
     "false",
@@ -218,8 +260,13 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   "properties_string_max_length": "number",
   "defaults": [
+    "\\"2025-11-30\\"",
     "\\"2025-05-24\\"",
     "\\"unset\\""
+  ],
+  "__preview_deferred_init_extensions": [
+    "false",
+    "true"
   ],
   "session_recording": {
     "blockClass": [
@@ -331,6 +378,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "__mutationThrottlerBucketSize": [
       "undefined",
       "number"
+    ],
+    "strictMinimumDuration": [
+      "undefined",
+      "false",
+      "true"
     ]
   },
   "error_tracking": {
@@ -575,6 +627,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "true"
   ],
   "__preview_disable_xhr_credentials": [
+    "undefined",
+    "false",
+    "true"
+  ],
+  "__preview_capture_bot_pageviews": [
     "undefined",
     "false",
     "true"

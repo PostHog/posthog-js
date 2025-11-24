@@ -151,6 +151,42 @@ export function getParentElement(curEl: Element): Element | false {
     return parentNode
 }
 
+const DEFAULT_CONTENT_IGNORELIST = ['next', 'previous', 'prev', '>', '<']
+const MAX_CONTENT_IGNORELIST_ENTRIES = 10
+
+interface ElementWithText {
+    safeText: string
+    ariaLabel: string
+}
+
+function shouldIgnoreByContent(
+    contentIgnorelist: boolean | string[] | undefined,
+    elementsWithText: ElementWithText[]
+): boolean {
+    if (contentIgnorelist === false || isUndefined(contentIgnorelist)) {
+        return false
+    }
+
+    let keywords: string[]
+    if (contentIgnorelist === true) {
+        keywords = DEFAULT_CONTENT_IGNORELIST
+    } else if (isArray(contentIgnorelist)) {
+        if (contentIgnorelist.length > MAX_CONTENT_IGNORELIST_ENTRIES) {
+            logger.error(
+                `[PostHog] content_ignorelist array cannot exceed ${MAX_CONTENT_IGNORELIST_ENTRIES} items. Use css_selector_ignorelist for more complex matching.`
+            )
+            return false
+        }
+        keywords = contentIgnorelist.map((k) => k.toLowerCase())
+    } else {
+        return false
+    }
+
+    return elementsWithText.some(({ safeText, ariaLabel }) => {
+        return keywords.some((keyword) => safeText.includes(keyword) || ariaLabel.includes(keyword))
+    })
+}
+
 // autocapture check will already filter for ph-no-capture,
 // but we include it here to protect against future changes accidentally removing that check
 const DEFAULT_RAGE_CLICK_IGNORE_LIST = ['.ph-no-rageclick', '.ph-no-capture']
@@ -160,17 +196,31 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
     }
 
     let selectorIgnoreList: string[] | boolean
+    let contentIgnorelist: boolean | string[] | undefined
     if (isBoolean(_config)) {
         selectorIgnoreList = _config ? DEFAULT_RAGE_CLICK_IGNORE_LIST : false
+        // For backward compatibility, don't enable content filtering for rageclick: true
+        contentIgnorelist = undefined
     } else {
         selectorIgnoreList = _config?.css_selector_ignorelist ?? DEFAULT_RAGE_CLICK_IGNORE_LIST
+        contentIgnorelist = _config?.content_ignorelist
     }
 
     if (selectorIgnoreList === false) {
         return false
     }
 
+    // Traverse DOM once and cache element data to avoid redundant calls to getSafeText
     const { targetElementList } = getElementAndParentsForElement(el, false)
+    const elementsWithText: ElementWithText[] = targetElementList.map((element) => ({
+        safeText: getSafeText(element).toLowerCase(),
+        ariaLabel: element.getAttribute('aria-label')?.toLowerCase().trim() || '',
+    }))
+
+    if (shouldIgnoreByContent(contentIgnorelist, elementsWithText)) {
+        return false
+    }
+
     // we don't capture if we match the ignore list
     return !checkIfElementsMatchCSSSelector(targetElementList, selectorIgnoreList)
 }

@@ -11,6 +11,7 @@ import { PostHogPersistence } from '../../posthog-persistence'
 import { PostHog } from '../../posthog-core'
 import { CaptureResult, PostHogConfig, PropertyMatchType } from '../../types'
 import { SurveyEventReceiver } from '../../utils/survey-event-receiver'
+import { createMockPostHog, createMockConfig } from '../helpers/posthog-instance'
 
 describe('survey-event-receiver', () => {
     describe('event based surveys', () => {
@@ -77,18 +78,18 @@ describe('survey-event-receiver', () => {
 
         beforeEach(() => {
             mockAddCaptureHook = jest.fn()
-            config = {
+            config = createMockConfig({
                 token: 'testtoken',
                 api_host: 'https://app.posthog.com',
                 persistence: 'memory',
-            } as unknown as PostHogConfig
+            })
 
-            instance = {
+            instance = createMockPostHog({
                 config: config,
                 persistence: new PostHogPersistence(config),
                 _addCaptureHook: mockAddCaptureHook,
                 getSurveys: jest.fn((callback) => callback(surveysWithEvents)),
-            } as unknown as PostHog
+            })
         })
 
         afterEach(() => {
@@ -210,18 +211,18 @@ describe('survey-event-receiver', () => {
 
         beforeEach(() => {
             mockAddCaptureHook = jest.fn()
-            config = {
+            config = createMockConfig({
                 token: 'testtoken',
                 api_host: 'https://app.posthog.com',
                 persistence: 'memory',
-            } as unknown as PostHogConfig
+            })
 
-            instance = {
+            instance = createMockPostHog({
                 config: config,
                 persistence: new PostHogPersistence(config),
                 _addCaptureHook: mockAddCaptureHook,
                 getSurveys: jest.fn((callback) => callback([])),
-            } as unknown as PostHog
+            })
         })
 
         afterEach(() => {
@@ -369,18 +370,18 @@ describe('survey-event-receiver', () => {
         let instance: PostHog
 
         beforeEach(() => {
-            config = {
+            config = createMockConfig({
                 token: 'testtoken',
                 api_host: 'https://app.posthog.com',
                 persistence: 'memory',
-            } as unknown as PostHogConfig
+            })
 
-            instance = {
+            instance = createMockPostHog({
                 config: config,
                 persistence: new PostHogPersistence(config),
                 _addCaptureHook: jest.fn(),
                 getSurveys: jest.fn((callback) => callback([])),
-            } as unknown as PostHog
+            })
         })
 
         afterEach(() => {

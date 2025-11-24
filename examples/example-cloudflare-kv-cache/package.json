@@ -1,0 +1,22 @@
+{
+    "name": "example-cloudflare-kv-cache",
+    "version": "1.0.0",
+    "main": "dist/index.js",
+    "license": "MIT",
+    "scripts": {
+        "build": "pnpm exec tsc",
+        "dev": "wrangler dev",
+        "dev:local": "node dist/index.js",
+        "kv:create": "wrangler kv:namespace create POSTHOG_CACHE"
+    },
+    "devDependencies": {
+        "@cloudflare/workers-types": "^4.20251119.0",
+        "@tsconfig/recommended": "^1.0.13",
+        "@types/node": "^24.10.1",
+        "typescript": "^5.9.3",
+        "wrangler": "^4.49.0"
+    },
+    "dependencies": {
+        "posthog-node": "*"
+    }
+}

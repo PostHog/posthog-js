@@ -16,6 +16,7 @@ import { Survey, SurveySchedule, SurveyType } from '../posthog-surveys-types'
 import { FlagsResponse } from '../types'
 import { assignableWindow } from '../utils/globals'
 import { SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
+import { createMockPostHog } from './helpers/posthog-instance'
 
 describe('posthog-surveys', () => {
     describe('PostHogSurveys Class', () => {
@@ -85,7 +86,7 @@ describe('posthog-surveys', () => {
             localStorage.clear()
 
             // Mock PostHog instance
-            mockPostHog = {
+            mockPostHog = createMockPostHog({
                 config: {
                     disable_surveys: false,
                     token: 'test-token',
@@ -124,7 +125,7 @@ describe('posthog-surveys', () => {
                         .fn()
                         .mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
                 },
-            } as unknown as PostHog & {
+            }) as PostHog & {
                 get_property: jest.Mock
                 _send_request: jest.Mock
             }

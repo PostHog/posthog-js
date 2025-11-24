@@ -2,6 +2,7 @@ import { FeatureFlagCondition, FlagProperty, FlagPropertyValue, PostHogFeatureFl
 import type { FeatureFlagValue, JsonType, PostHogFetchOptions, PostHogFetchResponse } from '@posthog/core'
 import { safeSetTimeout } from '@posthog/core'
 import { hashSHA1 } from './crypto'
+import { FlagDefinitionCacheProvider, FlagDefinitionCacheData } from './cache'
 
 const SIXTY_SECONDS = 60 * 1000
 
@@ -53,6 +54,7 @@ type FeatureFlagsPollerOptions = {
   onError?: (error: Error) => void
   onLoad?: (count: number) => void
   customHeaders?: { [key: string]: string }
+  cacheProvider?: FlagDefinitionCacheProvider
 }
 
 class FeatureFlagsPoller {
@@ -74,6 +76,9 @@ class FeatureFlagsPoller {
   shouldBeginExponentialBackoff: boolean = false
   backOffCount: number = 0
   onLoad?: (count: number) => void
+  private cacheProvider?: FlagDefinitionCacheProvider
+  private hasAttemptedCacheLoad: boolean = false
+  private loadingPromise?: Promise<void>
 
   constructor({
     pollingInterval,
@@ -99,6 +104,7 @@ class FeatureFlagsPoller {
     this.onError = options.onError
     this.customHeaders = customHeaders
     this.onLoad = options.onLoad
+    this.cacheProvider = options.cacheProvider
     void this.loadFeatureFlags()
   }
 
@@ -537,9 +543,59 @@ class FeatureFlagsPoller {
     return lookupTable
   }
 
+  /**
+   * Updates the internal flag state with the provided flag data.
+   */
+  private updateFlagState(flagData: FlagDefinitionCacheData): void {
+    this.featureFlags = flagData.flags
+    this.featureFlagsByKey = flagData.flags.reduce(
+      (acc, curr) => ((acc[curr.key] = curr), acc),
+      <Record<string, PostHogFeatureFlag>>{}
+    )
+    this.groupTypeMapping = flagData.groupTypeMapping
+    this.cohorts = flagData.cohorts
+    this.loadedSuccessfullyOnce = true
+  }
+
+  /**
+   * Attempts to load flags from cache and update internal state.
+   * Returns true if flags were successfully loaded from cache, false otherwise.
+   */
+  private async loadFromCache(debugMessage: string): Promise<boolean> {
+    if (!this.cacheProvider) {
+      return false
+    }
+
+    try {
+      const cached = await this.cacheProvider.getFlagDefinitions()
+      if (cached) {
+        this.updateFlagState(cached)
+        this.logMsgIfDebug(() => console.debug(`[FEATURE FLAGS] ${debugMessage} (${cached.flags.length} flags)`))
+        this.onLoad?.(this.featureFlags.length)
+        return true
+      }
+      return false
+    } catch (err) {
+      this.onError?.(new Error(`Failed to load from cache: ${err}`))
+      return false
+    }
+  }
+
   async loadFeatureFlags(forceReload = false): Promise<void> {
+    // On first load, try to initialize from cache (if a cache provider is configured)
+    if (this.cacheProvider && !this.hasAttemptedCacheLoad) {
+      this.hasAttemptedCacheLoad = true
+      await this.loadFromCache('Loaded flags from cache')
+    }
+
+    // If a fetch is already in progress, wait for it
+    if (this.loadingPromise) {
+      return this.loadingPromise
+    }
+
     if (!this.loadedSuccessfullyOnce || forceReload) {
-      await this._loadFeatureFlags()
+      this.loadingPromise = this._loadFeatureFlags()
+      await this.loadingPromise
     }
   }
 
@@ -574,6 +630,42 @@ class FeatureFlagsPoller {
     this.poller = setTimeout(() => this._loadFeatureFlags(), this.getPollingInterval())
 
     try {
+      let shouldFetch = true
+      if (this.cacheProvider) {
+        try {
+          shouldFetch = await this.cacheProvider.shouldFetchFlagDefinitions()
+        } catch (err) {
+          this.onError?.(new Error(`Error in shouldFetchFlagDefinitions: ${err}`))
+          // Important: if `shouldFetchFlagDefinitions` throws, we
+          // default to fetching.
+        }
+      }
+
+      if (!shouldFetch) {
+        // If we're not supposed to fetch, we assume another instance
+        // is handling it. In this case, we'll just reload from cache.
+        const loaded = await this.loadFromCache('Loaded flags from cache (skipped fetch)')
+        if (loaded) {
+          return
+        }
+
+        if (this.loadedSuccessfullyOnce) {
+          // Respect the decision to not fetch, even if it means
+          // keeping stale feature flags.
+          return
+        }
+
+        // If we've gotten here:
+        // - A cache provider is configured
+        // - We've been asked not to fetch
+        // - We failed to load from cache
+        // - We have no feature flag definitions to work with.
+        //
+        // This is the only case where we'll ignore the shouldFetch
+        // decision and proceed to fetch, because the alternative is
+        // worse: local evaluation is impossible.
+      }
+
       const res = await this._requestFeatureFlagDefinitions()
 
       // Handle undefined res case, this shouldn't happen, but it doesn't hurt to handle it anyway
@@ -637,16 +729,28 @@ class FeatureFlagsPoller {
             return
           }
 
-          this.featureFlags = (responseJson.flags as PostHogFeatureFlag[]) ?? []
-          this.featureFlagsByKey = this.featureFlags.reduce(
-            (acc, curr) => ((acc[curr.key] = curr), acc),
-            <Record<string, PostHogFeatureFlag>>{}
-          )
-          this.groupTypeMapping = (responseJson.group_type_mapping as Record<string, string>) || {}
-          this.cohorts = (responseJson.cohorts as Record<string, PropertyGroup>) || {}
-          this.loadedSuccessfullyOnce = true
+          const flagData: FlagDefinitionCacheData = {
+            flags: (responseJson.flags as PostHogFeatureFlag[]) ?? [],
+            groupTypeMapping: (responseJson.group_type_mapping as Record<string, string>) || {},
+            cohorts: (responseJson.cohorts as Record<string, PropertyGroup>) || {},
+          }
+
+          this.updateFlagState(flagData)
           this.shouldBeginExponentialBackoff = false
           this.backOffCount = 0
+
+          if (this.cacheProvider && shouldFetch) {
+            // Only notify the cache if it's actually expecting new data
+            // E.g., if we weren't supposed to fetch but we missed the
+            // cache, we may not have a lock, so we skip this step
+            try {
+              await this.cacheProvider.onFlagDefinitionsReceived(flagData)
+            } catch (err) {
+              this.onError?.(new Error(`Failed to store in cache: ${err}`))
+              // Continue anyway, the data at least made it to memory
+            }
+          }
+
           this.onLoad?.(this.featureFlags.length)
           break
         }
@@ -660,6 +764,8 @@ class FeatureFlagsPoller {
       if (err instanceof ClientError) {
         this.onError?.(err)
       }
+    } finally {
+      this.loadingPromise = undefined
     }
   }
 
@@ -674,7 +780,7 @@ class FeatureFlagsPoller {
     }
   }
 
-  async _requestFeatureFlagDefinitions(): Promise<PostHogFetchResponse> {
+  _requestFeatureFlagDefinitions(): Promise<PostHogFetchResponse> {
     const url = `${this.host}/api/feature_flag/local_evaluation?token=${this.projectApiKey}&send_cohorts`
 
     const options = this.getPersonalApiKeyRequestOptions()
@@ -690,14 +796,37 @@ class FeatureFlagsPoller {
     }
 
     try {
-      return await this.fetch(url, options)
+      // Unbind fetch from `this` to avoid potential issues in edge environments, e.g., Cloudflare Workers:
+      // https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors
+      const fetch = this.fetch
+      return fetch(url, options)
     } finally {
       clearTimeout(abortTimeout)
     }
   }
 
-  stopPoller(): void {
+  async stopPoller(timeoutMs: number = 30000): Promise<void> {
     clearTimeout(this.poller)
+
+    if (this.cacheProvider) {
+      try {
+        const shutdownResult = this.cacheProvider.shutdown()
+
+        if (shutdownResult instanceof Promise) {
+          // This follows the same timeout logic defined in _shutdown.
+          // We time out after some period of time to avoid hanging the entire
+          // shutdown process if the cache provider misbehaves.
+          await Promise.race([
+            shutdownResult,
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error(`Cache shutdown timeout after ${timeoutMs}ms`)), timeoutMs)
+            ),
+          ])
+        }
+      } catch (err) {
+        this.onError?.(new Error(`Error during cache shutdown: ${err}`))
+      }
+    }
   }
 }
 

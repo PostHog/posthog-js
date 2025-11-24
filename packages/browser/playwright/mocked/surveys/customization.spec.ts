@@ -17,6 +17,14 @@ const openTextQuestion = {
     id: 'open_text_1',
 }
 
+const questionWithLargeHtmlContent = {
+    type: 'open',
+    question: 'What feedback do you have for us?',
+    description: `<p>ThisShouldWrapProperly${'a'.repeat(100)}</p><svg width="1000" height="100"><rect width="1000" height="100" fill="#DC9300"/></svg>`,
+    descriptionContentType: 'html',
+    id: 'open_text_2',
+}
+
 const linkQuestionWithHTMLContentType = {
     type: 'link',
     question: 'Book an interview with us',
@@ -298,5 +306,55 @@ test.describe('surveys - customization', () => {
             '<h3>html thank you message!</h3>'
         )
         await pollUntilEventCaptured(page, 'survey sent')
+    })
+
+    test('properly wraps long html content in question description', async ({ page, context }) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: '123',
+                            name: 'Test survey',
+                            type: 'popover',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [questionWithLargeHtmlContent],
+                            appearance: {
+                                backgroundColor: '#000000',
+                                submitButtonColor: '#ffffff',
+                            },
+                        },
+                    ],
+                },
+            })
+        })
+
+        await start(startOptions, page, context)
+        await surveysAPICall
+
+        const questionDesc = page.locator('.PostHogSurvey-123 .survey-question-description')
+        const svg = page.locator('.PostHogSurvey-123 .survey-question-description svg')
+        const paragraph = page.locator('.PostHogSurvey-123 .survey-question-description p')
+
+        await expect(questionDesc).toBeVisible()
+        await expect(svg).toBeVisible()
+        await expect(paragraph).toBeVisible()
+
+        await expect(questionDesc).toHaveCSS('word-wrap', 'break-word')
+        await expect(questionDesc).toHaveCSS('overflow-wrap', 'break-word')
+
+        const descBox = await questionDesc.boundingBox()
+        const svgBox = await svg.boundingBox()
+        const surveyFormBox = await page.locator('.PostHogSurvey-123 .survey-form').boundingBox()
+
+        expect(descBox).not.toBeNull()
+        expect(svgBox).not.toBeNull()
+        expect(surveyFormBox).not.toBeNull()
+
+        if (descBox && svgBox && surveyFormBox) {
+            expect(descBox.width).toBeLessThanOrEqual(surveyFormBox.width)
+            expect(svgBox.width).toBeLessThanOrEqual(descBox.width)
+            expect(svgBox.width).toBeLessThan(1000)
+        }
     })
 })

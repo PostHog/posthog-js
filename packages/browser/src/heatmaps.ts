@@ -52,7 +52,7 @@ function shouldPoll(document: Document | undefined): boolean {
 
 export class Heatmaps {
     instance: PostHog
-    rageclicks = new RageClick()
+    rageclicks: RageClick
     _enabledServerSide: boolean = false
     _initialized = false
     _mouseMoveTimeout: ReturnType<typeof setTimeout> | undefined
@@ -68,6 +68,7 @@ export class Heatmaps {
     constructor(instance: PostHog) {
         this.instance = instance
         this._enabledServerSide = !!this.instance.persistence?.props[HEATMAPS_ENABLED_SERVER_SIDE]
+        this.rageclicks = new RageClick(instance.config.rageclick)
     }
 
     public get flushIntervalMilliseconds(): number {

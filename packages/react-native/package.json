@@ -1,11 +1,22 @@
 {
   "name": "posthog-react-native",
-  "version": "4.10.4",
+  "version": "4.13.0",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./metro": {
+      "types": "./dist/tooling/metroconfig.d.ts",
+      "default": "./dist/tooling/metroconfig.js"
+    }
+  },
   "files": [
-    "dist/"
+    "dist/",
+    "tooling/"
   ],
   "repository": {
     "type": "git",
@@ -36,6 +47,7 @@
     "@react-navigation/native": "^5.0.10",
     "@types/react": "^17.0.87",
     "@types/react-native": "^0.69.1",
+    "@types/jest": "catalog:",
     "expo": "^45.0.6",
     "expo-application": "^4.0.0",
     "expo-device": "^4.0.0",
@@ -44,6 +56,8 @@
     "jest": "catalog:",
     "jest-environment-node": "catalog:",
     "jest-expo": "catalog:",
+    "metro": "0.83.1",
+    "@expo/metro-config": "~0.20.0",
     "posthog-react-native-session-replay": "^1.2.0",
     "react": "18.2.0",
     "react-native": "^0.69.1",

@@ -4,6 +4,7 @@ import { filterActiveFeatureFlags, parseFlagsResponse, PostHogFeatureFlags } fro
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { PostHogConfig } from '../types'
+import { createMockPostHog } from './helpers/posthog-instance'
 
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
@@ -2173,7 +2174,7 @@ describe('getRemoteConfigPayload', () => {
     let featureFlags: PostHogFeatureFlags
 
     beforeEach(() => {
-        instance = {
+        instance = createMockPostHog({
             config: {
                 token: 'test-token',
                 api_host: 'https://test.com',
@@ -2183,7 +2184,7 @@ describe('getRemoteConfigPayload', () => {
             requestRouter: {
                 endpointFor: jest.fn().mockImplementation((endpoint, path) => `${endpoint}${path}`),
             },
-        } as unknown as PostHog
+        })
 
         featureFlags = new PostHogFeatureFlags(instance)
     })
@@ -2197,7 +2198,7 @@ describe('getRemoteConfigPayload', () => {
         expect(instance._send_request).toHaveBeenCalledWith(
             expect.objectContaining({
                 method: 'POST',
-                url: 'api/flags/?v=2&config=true',
+                url: 'flags/flags/?v=2&config=true',
                 data: expect.objectContaining({
                     distinct_id: 'test-distinct-id',
                     token: 'test-token',
@@ -2214,7 +2215,7 @@ describe('getRemoteConfigPayload', () => {
         expect(instance._send_request).toHaveBeenCalledWith(
             expect.objectContaining({
                 method: 'POST',
-                url: 'api/flags/?v=2&config=true',
+                url: 'flags/flags/?v=2&config=true',
                 data: expect.objectContaining({
                     distinct_id: 'test-distinct-id',
                     token: 'test-token',
@@ -2235,7 +2236,7 @@ describe('getRemoteConfigPayload', () => {
         expect(instance._send_request).toHaveBeenCalledWith(
             expect.objectContaining({
                 method: 'POST',
-                url: 'api/flags/?v=2&config=true',
+                url: 'flags/flags/?v=2&config=true',
                 data: expect.objectContaining({
                     distinct_id: 'test-distinct-id',
                     token: 'test-token',
@@ -2245,5 +2246,61 @@ describe('getRemoteConfigPayload', () => {
 
         // Verify evaluation_environments is not in the data
         expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toBeUndefined()
+    })
+
+    describe('flags_api_host configuration', () => {
+        it('should use flags_api_host when configured', () => {
+            const apiConfig = {
+                api_host: 'https://app.posthog.com',
+                flags_api_host: 'https://example.com/feature-flags',
+            }
+            const customInstance = createMockPostHog({
+                config: {
+                    token: 'test-token',
+                    ...apiConfig,
+                } as PostHogConfig,
+                get_distinct_id: () => 'test-distinct-id',
+                _send_request: jest.fn(),
+                requestRouter: new RequestRouter({ config: apiConfig } as any),
+            })
+
+            const customFeatureFlags = new PostHogFeatureFlags(customInstance)
+            const callback = jest.fn()
+            customFeatureFlags.getRemoteConfigPayload('test-flag', callback)
+
+            expect(customInstance._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    method: 'POST',
+                    url: 'https://example.com/feature-flags/flags/?v=2&config=true',
+                })
+            )
+        })
+
+        it('should fall back to api_host when flags_api_host is not configured', () => {
+            const customInstance = createMockPostHog({
+                config: {
+                    token: 'test-token',
+                    api_host: 'https://app.posthog.com',
+                } as PostHogConfig,
+                get_distinct_id: () => 'test-distinct-id',
+                _send_request: jest.fn(),
+                requestRouter: new RequestRouter({
+                    config: {
+                        api_host: 'https://app.posthog.com',
+                    },
+                } as any),
+            })
+
+            const customFeatureFlags = new PostHogFeatureFlags(customInstance)
+            const callback = jest.fn()
+            customFeatureFlags.getRemoteConfigPayload('test-flag', callback)
+
+            expect(customInstance._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    method: 'POST',
+                    url: 'https://us.i.posthog.com/flags/?v=2&config=true',
+                })
+            )
+        })
     })
 })
