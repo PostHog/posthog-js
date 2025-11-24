@@ -1,4 +1,4 @@
-minimumReleaseAge: 10080 # 3 days
+minimumReleaseAge: 4320 # 3 days
 
 packages:
   - packages/*
