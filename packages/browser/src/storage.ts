@@ -255,9 +255,22 @@ export const localStore: PersistentStore = {
     },
 }
 
-// Use localstorage for most data but still use cookie for COOKIE_PERSISTED_PROPERTIES
-// This solves issues with cookies having too much data in them causing headers too large
-// Also makes sure we don't have to send a ton of data to the server
+/**
+ *
+ * Use localStorage for most data but still use cookie for COOKIE_PERSISTED_PROPERTIES.
+ * This solves issues with cookies having too much data in them causing headers too large
+ * and makes sure we don't have to send a ton of data to the server.
+ *
+ * By default, PostHog uses cookie + localStorage to store data:
+ *
+ * - Cookie: Cross-subdomain, limited to ~4kB
+ *   - Stores ONLY critical properties: distinct_id, session_id, window_id, and a small subset of properties
+ *   - Limited to the properties listed in COOKIE_PERSISTED_PROPERTIES below
+ *
+ * - localStorage: Subdomain-specific, larger capacity
+ *   - Stores ALL properties (including a copy of those in the cookie)
+ *   - Everything else goes here: other properties, feature flags, etc.
+ */
 const COOKIE_PERSISTED_PROPERTIES = [
     DISTINCT_ID,
     SESSION_ID,
