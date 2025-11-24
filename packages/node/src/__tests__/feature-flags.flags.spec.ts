@@ -18,6 +18,7 @@ describe('flags v2', () => {
         flags: {},
         errorsWhileComputingFlags: false,
         requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+        evaluatedAt: 1640995200000,
       }
       mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
 
@@ -133,6 +134,7 @@ describe('flags v2', () => {
           },
           errorsWhileComputingFlags: false,
           requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+          evaluatedAt: 1640995200000,
         }
         mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
 
