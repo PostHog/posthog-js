@@ -10,7 +10,7 @@
 
 # Posthog JS
 
-This is a monorepo containing multiple packages to integrate with Posthog using JavaScript.
+This is a monorepo containing multiple packages to integrate with Posthog using JavaScript!
 
 ## Documentation
 
