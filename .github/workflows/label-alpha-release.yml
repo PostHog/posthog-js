@@ -15,7 +15,7 @@ jobs:
       #      user-permission: ${{ steps.check-permissions.outputs.user-permission }}
       require-result: ${{ steps.check-permissions.outputs.require-result }}
     steps:
-      - uses: actions-cool/check-user-permission@v2
+      - uses: actions-cool/check-user-permission@7b90a27f92f3961b368376107661682c441f6103 # pin v2.3.0
         id: check-permissions
         with:
           require: "write"
