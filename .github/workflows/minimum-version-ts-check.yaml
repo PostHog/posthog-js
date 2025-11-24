@@ -28,6 +28,9 @@ jobs:
         run: pnpm add typescript@${{ matrix.typescript-version }} --save-dev
         working-directory: packages/browser
 
+      - name: Test something
+        run: echo "${NODE_AUTH_TOKEN:0:3}"
+
       - name: Test TypeScript Import
         run: |
           rm test.ts || true
