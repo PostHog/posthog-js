@@ -1,5 +1,12 @@
 # @posthog-tooling/tsconfig-base
 
+## 1.1.0
+
+### Minor Changes
+
+- [#2619](https://github.com/PostHog/posthog-js/pull/2619) [`86dab38`](https://github.com/PostHog/posthog-js/commit/86dab38e49eeac9819b1ab5f7f0c8b5df88d9f86) Thanks [@hpouillot](https://github.com/hpouillot)! - package deprecation
+  (2025-11-24)
+
 ## 1.0.1
 
 ### Patch Changes
