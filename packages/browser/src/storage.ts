@@ -264,7 +264,7 @@ export const localStore: PersistentStore = {
  * By default, PostHog uses cookie + localStorage to store data:
  *
  * - Cookie: Cross-subdomain, limited to ~4kB
- *   - Stores ONLY critical properties: distinct_id, session_id, window_id, and a small subset of properties
+ *   - Stores ONLY critical properties: distinct_id, session_id, and a small subset of properties
  *   - Limited to the properties listed in COOKIE_PERSISTED_PROPERTIES below
  *
  * - localStorage: Subdomain-specific, larger capacity
