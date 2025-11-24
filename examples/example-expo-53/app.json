@@ -36,7 +36,8 @@
                     "backgroundColor": "#ffffff"
                 }
             ],
-            "expo-localization"
+            "expo-localization",
+            "posthog-react-native/expo"
         ],
         "experiments": {
             "typedRoutes": true
