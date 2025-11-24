@@ -19,7 +19,7 @@ runs:
   using: "composite"
   steps:
     - name: Install pnpm
-      uses: pnpm/action-setup@v4
+      uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin v4.2.0
 
     - name: Get pnpm cache directory path
       id: pnpm-cache-dir

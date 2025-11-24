@@ -11,7 +11,6 @@ export default withPostHogConfig(nextConfig, {
     host: process.env.NEXT_PUBLIC_POSTHOG_API_HOST!,
     cliBinaryPath: process.env.POSTHOG_CLI_PATH, // Optional
     logLevel: 'debug',
-    cliBinaryPath: process.env.POSTHOG_CLI_PATH,
     sourcemaps: {
         project: 'example-nextjs',
         version: packageJson.version,
