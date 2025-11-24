@@ -2,7 +2,7 @@
 
 > 🚧 This is a reduced feature set package. Currently the only officially supported feature complete way of using PostHog on the web is [posthog-js](https://github.com/PostHog/posthog-js)
 
-This package is currently published to npm as [posthog-js-lite](https://www.npmjs.com/package/posthog-js-lite) and is a simplified version of the recommended and officially supported `posthog-js`.
+This package is currently published to npm as [posthog-js-lite](https://www.npmjs.com/package/posthog-js-lite) and is a simplified version of the recommended and officially supported `posthog-js`
 
 You'd want to use this only if you're very conscious about package sizes, and this reduced feature set (only analytics and feature flags) works for your use case. The most common use case is in chrome extensions.
 

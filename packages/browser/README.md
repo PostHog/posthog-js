@@ -8,9 +8,9 @@ This README is intended for developing the library itself.
 
 ## Dependencies
 
-we use pnpm.
+We use pnpm.
 
-it's best to install using `npm install -g pnpm@latest-9`
+It's best to install using `npm install -g pnpm@latest-9`
 and then `pnpm` commands as usual
 
 ### Optional Dependencies
