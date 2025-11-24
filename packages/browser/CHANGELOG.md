@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.298.1
+
+### Patch Changes
+
+- [#2592](https://github.com/PostHog/posthog-js/pull/2592) [`7782dd9`](https://github.com/PostHog/posthog-js/commit/7782dd97a7093582bf169bd1ad0aec3ed58e1556) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: session replay on react native web
+  (2025-11-24)
+
 ## 1.298.0
 
 ### Minor Changes
