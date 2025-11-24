@@ -1,6 +1,6 @@
 {
     "name": "@posthog/react",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "description": "Provides components and hooks for React integrations of PostHog.",
     "repository": {
         "type": "git",
