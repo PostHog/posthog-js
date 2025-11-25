@@ -11,9 +11,6 @@ inputs:
   package_version:
     description: "Package version to publish"
     required: true
-  npm_token:
-    description: "NPM token to publish package"
-    required: true
   github_token:
     description: "GitHub token to create release"
     required: true
@@ -44,8 +41,6 @@ runs:
       shell: bash
       run: |
         pnpm publish --filter=${{ inputs.package_name }} --access public
-      env:
-        NODE_AUTH_TOKEN: ${{ inputs.npm_token }}
 
     - name: Push tag to GitHub
       shell: bash
