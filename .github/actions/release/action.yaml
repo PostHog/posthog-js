@@ -41,6 +41,8 @@ runs:
       shell: bash
       run: |
         pnpm publish --filter=${{ inputs.package_name }} --access public
+      env:
+        NPM_CONFIG_PROVENANCE: true
 
     - name: Push tag to GitHub
       shell: bash
