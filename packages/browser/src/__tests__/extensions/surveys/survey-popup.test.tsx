@@ -16,13 +16,10 @@ jest.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
 // Mock uuidv7
 jest.mock('../../../uuidv7')
 
-// Mock PostHog instance needed by event handlers
-const mockPosthog = {
-    capture: jest.fn(),
-    get_session_replay_url: jest.fn().mockReturnValue('http://example.com/replay'),
-}
-
 describe('SurveyPopup', () => {
+    let persistedBucket = {}
+    let mockPosthog: any
+
     const mockSurvey: Survey = {
         id: 'test-survey-partial',
         name: 'Test Partial Survey',
@@ -89,6 +86,20 @@ describe('SurveyPopup', () => {
 
         // Mock form.submit to prevent JSDOM error
         HTMLFormElement.prototype.submit = jest.fn()
+
+        persistedBucket = {}
+
+        mockPosthog = {
+            capture: jest.fn(),
+            get_session_replay_url: jest.fn().mockReturnValue('http://example.com/replay'),
+            persistence: {
+                get_property: jest.fn((key) => persistedBucket[key]),
+                set_property: jest.fn((key, value) => {
+                    persistedBucket[key] = value
+                }),
+                isDisabled: jest.fn().mockReturnValue(false),
+            },
+        }
     })
 
     afterEach(() => {
@@ -141,7 +152,7 @@ describe('SurveyPopup', () => {
         )
         expect(screen.getByText('Question 1')).toBeVisible()
         expect(screen.getByRole('textbox')).toHaveValue('')
-        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey)
+        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey, mockPosthog)
         expect(mockedUuidv7).toHaveBeenCalledTimes(1)
     })
 
@@ -161,7 +172,7 @@ describe('SurveyPopup', () => {
         )
         expect(screen.getByText('Question 1')).toBeVisible()
         expect(screen.getByRole('textbox')).toHaveValue('Previous answer')
-        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey)
+        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey, mockPosthog)
         expect(mockedUuidv7).not.toHaveBeenCalled()
     })
 

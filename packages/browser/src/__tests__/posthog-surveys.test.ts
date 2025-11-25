@@ -27,6 +27,7 @@ describe('posthog-surveys', () => {
         let surveys: PostHogSurveys
         let mockGenerateSurveys: jest.Mock
         let mockLoadExternalDependency: jest.Mock
+        let persistedBucket = {}
 
         const survey: Survey = {
             id: 'completed-survey',
@@ -82,8 +83,8 @@ describe('posthog-surveys', () => {
             // Reset mocks
             jest.clearAllMocks()
 
-            // Clear localStorage
-            localStorage.clear()
+            // Reset in-memory persistence bucket
+            persistedBucket = {}
 
             // Mock PostHog instance
             mockPostHog = createMockPostHog({
@@ -91,10 +92,16 @@ describe('posthog-surveys', () => {
                     disable_surveys: false,
                     token: 'test-token',
                     surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
+                    persistence: 'localStorage+cookie',
                 },
                 persistence: {
                     register: jest.fn(),
                     props: {},
+                    get_property: jest.fn((key) => persistedBucket[key]),
+                    set_property: jest.fn((key, value) => {
+                        persistedBucket[key] = value
+                    }),
+                    isDisabled: jest.fn().mockReturnValue(false),
                 },
                 requestRouter: {
                     endpointFor: jest.fn().mockReturnValue('https://test.com/api/surveys'),
@@ -147,7 +154,6 @@ describe('posthog-surveys', () => {
         afterEach(() => {
             // Clean up
             delete assignableWindow.__PosthogExtensions__
-            localStorage.clear()
         })
 
         describe('canRenderSurvey', () => {
@@ -264,12 +270,9 @@ describe('posthog-surveys', () => {
                 flagsResponse.featureFlags[survey.targeting_flag_key] = true
                 flagsResponse.featureFlags[survey.linked_flag_key] = true
                 flagsResponse.featureFlags[survey.internal_targeting_flag_key] = false
-                localStorage.setItem(
-                    `${SURVEY_IN_PROGRESS_PREFIX}${survey.id}`,
-                    JSON.stringify({
-                        surveySubmissionId: '123',
-                    })
-                )
+                persistedBucket[`${SURVEY_IN_PROGRESS_PREFIX}${survey.id}`] = JSON.stringify({
+                    surveySubmissionId: '123',
+                })
                 const result = surveys['_checkSurveyEligibility'](survey.id)
                 expect(result.eligible).toBeTruthy()
             })
@@ -301,7 +304,7 @@ describe('posthog-surveys', () => {
                     // Set last seen survey date to 3 days ago (less than 7 day wait period)
                     const threeDaysAgo = new Date()
                     threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
-                    localStorage.setItem('lastSeenSurveyDate', threeDaysAgo.toISOString())
+                    persistedBucket['lastSeenSurveyDate'] = threeDaysAgo.toISOString()
 
                     const result = surveys['_checkSurveyEligibility'](surveyWithWaitPeriod.id)
                     expect(result.eligible).toBeFalsy()
@@ -310,7 +313,7 @@ describe('posthog-surveys', () => {
 
                 it('integrates survey seen check with other eligibility criteria', () => {
                     // Mark survey as seen
-                    localStorage.setItem(`${SURVEY_SEEN_PREFIX}${survey.id}`, 'true')
+                    persistedBucket[`${SURVEY_SEEN_PREFIX}${survey.id}`] = 'true'
 
                     const result = surveys['_checkSurveyEligibility'](survey.id)
                     expect(result.eligible).toBeFalsy()
@@ -319,7 +322,7 @@ describe('posthog-surveys', () => {
 
                 it('allows repeatable surveys even when seen', () => {
                     // Use repeatable survey (has SurveySchedule.Always)
-                    localStorage.setItem(`${SURVEY_SEEN_PREFIX}${repeatableSurvey.id}`, 'true')
+                    persistedBucket[`${SURVEY_SEEN_PREFIX}${repeatableSurvey.id}`] = 'true'
 
                     const result = surveys['_checkSurveyEligibility'](repeatableSurvey.id)
                     expect(result.eligible).toBeTruthy()
@@ -349,10 +352,10 @@ describe('posthog-surveys', () => {
                     // Set last seen survey date to 2 days ago (less than 5 day wait period)
                     const twoDaysAgo = new Date()
                     twoDaysAgo.setDate(twoDaysAgo.getDate() - 2)
-                    localStorage.setItem('lastSeenSurveyDate', twoDaysAgo.toISOString())
+                    persistedBucket['lastSeenSurveyDate'] = twoDaysAgo.toISOString()
 
                     // Also mark survey as seen (but this should not be checked since wait period fails first)
-                    localStorage.setItem(`${SURVEY_SEEN_PREFIX}${surveyWithBothConditions.id}`, 'true')
+                    persistedBucket[`${SURVEY_SEEN_PREFIX}${surveyWithBothConditions.id}`] = 'true'
 
                     const result = surveys['_checkSurveyEligibility'](surveyWithBothConditions.id)
                     expect(result.eligible).toBeFalsy()
@@ -363,10 +366,10 @@ describe('posthog-surveys', () => {
                     // Set last seen survey date to 10 days ago (more than 5 day wait period)
                     const tenDaysAgo = new Date()
                     tenDaysAgo.setDate(tenDaysAgo.getDate() - 10)
-                    localStorage.setItem('lastSeenSurveyDate', tenDaysAgo.toISOString())
+                    persistedBucket['lastSeenSurveyDate'] = tenDaysAgo.toISOString()
 
                     // Mark survey as seen and cannot repeat
-                    localStorage.setItem(`${SURVEY_SEEN_PREFIX}${surveyWithBothConditions.id}`, 'true')
+                    persistedBucket[`${SURVEY_SEEN_PREFIX}${surveyWithBothConditions.id}`] = 'true'
 
                     const result = surveys['_checkSurveyEligibility'](surveyWithBothConditions.id)
                     expect(result.eligible).toBeFalsy()
@@ -389,10 +392,10 @@ describe('posthog-surveys', () => {
                     // Set last seen survey date to 10 days ago (more than 5 day wait period)
                     const tenDaysAgo = new Date()
                     tenDaysAgo.setDate(tenDaysAgo.getDate() - 10)
-                    localStorage.setItem('lastSeenSurveyDate', tenDaysAgo.toISOString())
+                    persistedBucket['lastSeenSurveyDate'] = tenDaysAgo.toISOString()
 
                     // Mark survey as seen but can repeat (due to SurveySchedule.Always)
-                    localStorage.setItem(`${SURVEY_SEEN_PREFIX}${repeatableSurveyWithWaitPeriod.id}`, 'true')
+                    persistedBucket[`${SURVEY_SEEN_PREFIX}${repeatableSurveyWithWaitPeriod.id}`] = 'true'
 
                     const result = surveys['_checkSurveyEligibility'](repeatableSurveyWithWaitPeriod.id)
                     expect(result.eligible).toBeTruthy()

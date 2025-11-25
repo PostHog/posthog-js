@@ -12,10 +12,13 @@ import { RemoteConfig } from './types'
 import { assignableWindow, document } from './utils/globals'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import {
+    clearFromPersistenceWithLocalStorageFallback,
     doesSurveyActivateByAction,
     doesSurveyActivateByEvent,
     IN_APP_SURVEY_TYPES,
+    isPersistenceEnabledWithLocalStorage,
     isSurveyRunning,
+    LAST_SEEN_SURVEY_DATE_KEY,
     SURVEY_LOGGER as logger,
     SURVEY_IN_PROGRESS_PREFIX,
     SURVEY_SEEN_PREFIX,
@@ -57,16 +60,14 @@ export class PostHogSurveys {
     }
 
     reset(): void {
-        localStorage.removeItem('lastSeenSurveyDate')
-        const surveyKeys = []
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i)
-            if (key?.startsWith(SURVEY_SEEN_PREFIX) || key?.startsWith(SURVEY_IN_PROGRESS_PREFIX)) {
-                surveyKeys.push(key)
-            }
+        clearFromPersistenceWithLocalStorageFallback(LAST_SEEN_SURVEY_DATE_KEY, this._instance)
+        if (!this._instance.persistence?.props || this._instance.persistence?.props.length === 0) {
+            return
         }
-
-        surveyKeys.forEach((key) => localStorage.removeItem(key))
+        const surveyKeys = Object.keys(this._instance.persistence?.props).filter(
+            (key) => key.startsWith(SURVEY_SEEN_PREFIX) || key.startsWith(SURVEY_IN_PROGRESS_PREFIX)
+        )
+        surveyKeys.forEach((key) => clearFromPersistenceWithLocalStorageFallback(key, this._instance))
     }
 
     loadIfEnabled() {
@@ -144,6 +145,11 @@ export class PostHogSurveys {
     ): void {
         this._surveyManager = generateSurveysFn(this._instance, isSurveysEnabled)
         this._surveyEventReceiver = new SurveyEventReceiver(this._instance)
+        if (!isPersistenceEnabledWithLocalStorage(this._instance)) {
+            logger.warn(
+                "Surveys require localStorage to maintain full functionality. Please set the PostHog config.persistence to 'localStorage' or 'localStorage+cookie' to avoid this warning. localStorage will be used directly to maintain backwards compatibility."
+            )
+        }
         logger.info('Surveys loaded successfully')
         this._notifySurveyCallbacks({ isLoaded: true })
     }
