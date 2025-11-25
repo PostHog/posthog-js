@@ -112,6 +112,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             this._events.emit('localEvaluationFlagsLoaded', count)
           },
           customHeaders: this.getCustomHeaders(),
+          cacheProvider: options.flagDefinitionCacheProvider,
         })
       }
     }
@@ -1179,7 +1180,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns Promise that resolves when shutdown is complete
    */
   async _shutdown(shutdownTimeoutMs?: number): Promise<void> {
-    this.featureFlagsPoller?.stopPoller()
+    this.featureFlagsPoller?.stopPoller(shutdownTimeoutMs)
     this.errorTracking.shutdown()
     return super._shutdown(shutdownTimeoutMs)
   }

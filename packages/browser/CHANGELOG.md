@@ -1,5 +1,97 @@
 # posthog-js
 
+## 1.298.1
+
+### Patch Changes
+
+- [#2592](https://github.com/PostHog/posthog-js/pull/2592) [`7782dd9`](https://github.com/PostHog/posthog-js/commit/7782dd97a7093582bf169bd1ad0aec3ed58e1556) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: session replay on react native web
+  (2025-11-24)
+
+## 1.298.0
+
+### Minor Changes
+
+- [#2619](https://github.com/PostHog/posthog-js/pull/2619) [`86dab38`](https://github.com/PostHog/posthog-js/commit/86dab38e49eeac9819b1ab5f7f0c8b5df88d9f86) Thanks [@hpouillot](https://github.com/hpouillot)! - package deprecation
+  (2025-11-24)
+
+### Patch Changes
+
+- Updated dependencies [[`86dab38`](https://github.com/PostHog/posthog-js/commit/86dab38e49eeac9819b1ab5f7f0c8b5df88d9f86)]:
+    - @posthog/core@1.6.0
+
+## 1.297.3
+
+### Patch Changes
+
+- [#2618](https://github.com/PostHog/posthog-js/pull/2618) [`3eed1a4`](https://github.com/PostHog/posthog-js/commit/3eed1a42a50bff310fde3a91308a0f091b39e3fe) Thanks [@marandaneto](https://github.com/marandaneto)! - last version was compromised
+  (2025-11-24)
+- Updated dependencies [[`3eed1a4`](https://github.com/PostHog/posthog-js/commit/3eed1a42a50bff310fde3a91308a0f091b39e3fe)]:
+    - @posthog/core@1.5.6
+
+## 1.297.2
+
+### Patch Changes
+
+- Updated dependencies [[`83f5d07`](https://github.com/PostHog/posthog-js/commit/83f5d07e4ae8c2ae5c6926858b6095ebbfaf319f)]:
+    - @posthog/core@1.5.5
+
+## 1.297.1
+
+### Patch Changes
+
+- Updated dependencies [[`c242702`](https://github.com/PostHog/posthog-js/commit/c2427029d75cba71b78e9822f18f5e73f7442288)]:
+    - @posthog/core@1.5.4
+
+## 1.297.0
+
+### Minor Changes
+
+- [#2578](https://github.com/PostHog/posthog-js/pull/2578) [`91f41ee`](https://github.com/PostHog/posthog-js/commit/91f41ee39ce1973ed3094e12f279c126b55414b3) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Output confirmation log message to the user when overriding feature flags to improve user feedback on whether the action actually did something or not
+  (2025-11-19)
+
+### Patch Changes
+
+- [#2575](https://github.com/PostHog/posthog-js/pull/2575) [`8acd88f`](https://github.com/PostHog/posthog-js/commit/8acd88f1b71d2c7e1222c43dd121abce78ef2bab) Thanks [@hpouillot](https://github.com/hpouillot)! - fix frame platform property for $exception events
+  (2025-11-19)
+- Updated dependencies [[`8acd88f`](https://github.com/PostHog/posthog-js/commit/8acd88f1b71d2c7e1222c43dd121abce78ef2bab)]:
+    - @posthog/core@1.5.3
+
+## 1.296.1
+
+### Patch Changes
+
+- [#2590](https://github.com/PostHog/posthog-js/pull/2590) [`ab85422`](https://github.com/PostHog/posthog-js/commit/ab85422d2bc0c92658f49faad1f4d938f0282d8b) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: don't rely on order of method calls to gate calling url
+
+## 1.296.0
+
+### Minor Changes
+
+- [#2595](https://github.com/PostHog/posthog-js/pull/2595) [`17d12f5`](https://github.com/PostHog/posthog-js/commit/17d12f5dd076b46a732c2667a2a42429f8c77120) Thanks [@adboio](https://github.com/adboio)! - fix(surveys): clean up popover surveys from dom on close
+
+## 1.295.0
+
+### Minor Changes
+
+- [#2572](https://github.com/PostHog/posthog-js/pull/2572) [`ab6cc9e`](https://github.com/PostHog/posthog-js/commit/ab6cc9e7c7edd876f4ab005b964a75a808545ce0) Thanks [@adboio](https://github.com/adboio)! - survey html rendering bugfix
+
+## 1.294.0
+
+### Minor Changes
+
+- [#2573](https://github.com/PostHog/posthog-js/pull/2573) [`f9260de`](https://github.com/PostHog/posthog-js/commit/f9260de5a66f6df6b32761d31cb2d0224ba2eedf) Thanks [@adboio](https://github.com/adboio)! - feat: add survey feedback button custom positions
+
+## 1.293.0
+
+### Minor Changes
+
+- [#2565](https://github.com/PostHog/posthog-js/pull/2565) [`f2426db`](https://github.com/PostHog/posthog-js/commit/f2426dbd3dca3ac5ffc1934553b4bcff76af0d77) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: ignore rageclicks by content.
+
+### Patch Changes
+
+- [#2570](https://github.com/PostHog/posthog-js/pull/2570) [`de80a41`](https://github.com/PostHog/posthog-js/commit/de80a419a49cb26ee21147bc2241d3c0fec67909) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: rageclick detection should use event timestamp not current time
+
+- [#2561](https://github.com/PostHog/posthog-js/pull/2561) [`4418d60 `](https://github.com/PostHog/posthog-js/commit/4418d605f1846f12824de0e82b42235700512eb6) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: upgrades posthog-rrweb to 0.0.30
+
 ## 1.292.0
 
 ### Minor Changes

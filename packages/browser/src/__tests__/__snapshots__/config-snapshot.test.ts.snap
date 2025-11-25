@@ -62,6 +62,12 @@ exports[`config snapshot for PostHogConfig 1`] = `
         "undefined",
         "string[]"
       ],
+      "content_ignorelist": [
+        "undefined",
+        "false",
+        "true",
+        "string[]"
+      ],
       "threshold_px": [
         "undefined",
         "number"

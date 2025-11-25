@@ -1,5 +1,61 @@
 # posthog-node
 
+## 5.14.0
+
+### Minor Changes
+
+- [#2619](https://github.com/PostHog/posthog-js/pull/2619) [`86dab38`](https://github.com/PostHog/posthog-js/commit/86dab38e49eeac9819b1ab5f7f0c8b5df88d9f86) Thanks [@hpouillot](https://github.com/hpouillot)! - package deprecation
+  (2025-11-24)
+
+### Patch Changes
+
+- Updated dependencies [[`86dab38`](https://github.com/PostHog/posthog-js/commit/86dab38e49eeac9819b1ab5f7f0c8b5df88d9f86)]:
+  - @posthog/core@1.6.0
+
+## 5.13.3
+
+### Patch Changes
+
+- [#2618](https://github.com/PostHog/posthog-js/pull/2618) [`3eed1a4`](https://github.com/PostHog/posthog-js/commit/3eed1a42a50bff310fde3a91308a0f091b39e3fe) Thanks [@marandaneto](https://github.com/marandaneto)! - last version was compromised
+  (2025-11-24)
+- Updated dependencies [[`3eed1a4`](https://github.com/PostHog/posthog-js/commit/3eed1a42a50bff310fde3a91308a0f091b39e3fe)]:
+  - @posthog/core@1.5.6
+
+## 5.13.2
+
+### Patch Changes
+
+- Updated dependencies [[`83f5d07`](https://github.com/PostHog/posthog-js/commit/83f5d07e4ae8c2ae5c6926858b6095ebbfaf319f)]:
+  - @posthog/core@1.5.5
+
+## 5.13.1
+
+### Patch Changes
+
+- Updated dependencies [[`c242702`](https://github.com/PostHog/posthog-js/commit/c2427029d75cba71b78e9822f18f5e73f7442288)]:
+  - @posthog/core@1.5.4
+
+## 5.13.0
+
+### Minor Changes
+
+- [#2600](https://github.com/PostHog/posthog-js/pull/2600) [`8972000`](https://github.com/PostHog/posthog-js/commit/89720003c495d7813c3117da42a3e2f73cc92d96) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: `fetch` is called without a bound context
+
+  This prevents issues in edge runtimes such as Cloudflare (2025-11-19)
+
+### Patch Changes
+
+- [#2575](https://github.com/PostHog/posthog-js/pull/2575) [`8acd88f`](https://github.com/PostHog/posthog-js/commit/8acd88f1b71d2c7e1222c43dd121abce78ef2bab) Thanks [@hpouillot](https://github.com/hpouillot)! - fix frame platform property for $exception events
+  (2025-11-19)
+- Updated dependencies [[`8acd88f`](https://github.com/PostHog/posthog-js/commit/8acd88f1b71d2c7e1222c43dd121abce78ef2bab)]:
+  - @posthog/core@1.5.3
+
+## 5.12.0
+
+### Minor Changes
+
+- [#2594](https://github.com/PostHog/posthog-js/pull/2594) [`4ad3678`](https://github.com/PostHog/posthog-js/commit/4ad3678b8ab575923fe703bd4066f2ca8be4de98) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Add `FlagDefinitionCacheProvider` interface and client configuration option
+
 ## 5.11.2
 
 ### Patch Changes

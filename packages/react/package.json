@@ -1,6 +1,6 @@
 {
     "name": "@posthog/react",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "description": "Provides components and hooks for React integrations of PostHog.",
     "repository": {
         "type": "git",
@@ -47,6 +47,7 @@
         "@testing-library/react": "^11.2.2",
         "@testing-library/react-hooks": "^8.0.1",
         "@types/react": "^17.0.0",
+        "@types/jest": "catalog:",
         "cross-env": "^7.0.3",
         "jest": "catalog:",
         "jest-environment-jsdom": "catalog:",

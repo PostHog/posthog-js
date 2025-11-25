@@ -2238,16 +2238,14 @@ describe('PostHog Node.js', () => {
         disableCompression: true,
       })
 
+      expect(mockedFetch).toHaveBeenCalledTimes(1)
+      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
       mockedFetch.mockClear()
-      expect(mockedFetch).toHaveBeenCalledTimes(0)
 
       await expect(
         posthog.getFeatureFlagPayload('feature-array', '123', true, { onlyEvaluateLocally: true })
       ).resolves.toEqual([1])
-      expect(mockedFetch).toHaveBeenCalledTimes(1)
-      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
-
-      mockedFetch.mockClear()
+      expect(mockedFetch).toHaveBeenCalledTimes(0)
 
       await expect(posthog.getFeatureFlagPayload('feature-array', '123')).resolves.toEqual([1])
       expect(mockedFetch).toHaveBeenCalledTimes(0)

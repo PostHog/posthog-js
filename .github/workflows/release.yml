@@ -26,6 +26,8 @@ jobs:
           - name: "@posthog/ai"
           - name: "@posthog/nextjs-config"
           - name: "@posthog/nuxt"
+          - name: "@posthog/rollup-plugin"
+          - name: "@posthog/webpack-plugin"
 
     steps:
       - name: Checkout the repository
@@ -58,7 +60,7 @@ jobs:
           package_version: ${{ steps.check-package-version.outputs.committed-version }}
           npm_token: ${{ secrets.NPM_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Dispatch generate-references for ${{ matrix.package.name }}
         if: steps.check-package-version.outputs.is-new-version == 'true'
         env:
@@ -104,15 +106,15 @@ jobs:
         if: ${{ failure() }}
         uses: PostHog/posthog-github-action@v0.1
         with:
-            posthog-token: '${{ secrets.POSTHOG_API_TOKEN }}'
-            event: 'posthog-js-github-release-workflow-failure'
-            properties: >-
-                {
-                  "commitSha": "${{ github.sha }}",
-                  "jobStatus": "${{ job.status }}",
-                  "commitMessage": "${{ github.event.head_commit.message }}",
-                  "commitAuthor": "${{ github.event.head_commit.author.name }}",
-                  "ref": "${{ github.ref }}",
-                  "matrixPackage": "${{ matrix.package.name }}",
-                  "packageVersion": "${{ steps.check-package-version.outputs.committed-version }}"
-                }
+          posthog-token: "${{ secrets.POSTHOG_API_TOKEN }}"
+          event: "posthog-js-github-release-workflow-failure"
+          properties: >-
+            {
+              "commitSha": "${{ github.sha }}",
+              "jobStatus": "${{ job.status }}",
+              "commitMessage": "${{ github.event.head_commit.message }}",
+              "commitAuthor": "${{ github.event.head_commit.author.name }}",
+              "ref": "${{ github.ref }}",
+              "matrixPackage": "${{ matrix.package.name }}",
+              "packageVersion": "${{ steps.check-package-version.outputs.committed-version }}"
+            }

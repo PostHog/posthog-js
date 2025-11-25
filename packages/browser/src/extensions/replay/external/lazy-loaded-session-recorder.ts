@@ -904,7 +904,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._urlTriggerMatching.checkUrlTriggerConditions(
             () => this._pauseRecording(),
             () => this._resumeRecording(),
-            (triggerType) => this._activateTrigger(triggerType)
+            (triggerType) => this._activateTrigger(triggerType),
+            this.sessionId
         )
         // always have to check if the URL is blocked really early,
         // or you risk getting stuck in a loop

@@ -356,7 +356,7 @@ export class Autocapture {
         if (eventName === '$autocapture' && e.type === 'click' && e instanceof MouseEvent) {
             if (
                 !!this.instance.config.rageclick &&
-                this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime())
+                this.rageclicks?.isRageClick(e.clientX, e.clientY, e.timeStamp || new Date().getTime())
             ) {
                 if (shouldCaptureRageclick(target, this.instance.config.rageclick)) {
                     this._captureEvent(e, '$rageclick')

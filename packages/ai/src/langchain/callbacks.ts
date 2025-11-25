@@ -440,7 +440,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       eventProperties['$ai_is_error'] = true
     } else {
       // Handle token usage
-      const [inputTokens, outputTokens, additionalTokenData] = this.parseUsage(output)
+      const [inputTokens, outputTokens, additionalTokenData] = this.parseUsage(output, run.provider, run.model)
       eventProperties['$ai_input_tokens'] = inputTokens
       eventProperties['$ai_output_tokens'] = outputTokens
 
@@ -585,7 +585,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     return sanitizeLangChain(messageDict) as Record<string, any>
   }
 
-  private _parseUsageModel(usage: any): [number, number, Record<string, any>] {
+  private _parseUsageModel(usage: any, provider?: string, model?: string): [number, number, Record<string, any>] {
     const conversionList: Array<[string, 'input' | 'output']> = [
       ['promptTokens', 'input'],
       ['completionTokens', 'output'],
@@ -677,23 +677,32 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       additionalTokenData.webSearchCount = webSearchCount
     }
 
-    // In LangChain, input_tokens is the sum of input and cache read tokens.
-    // Our cost calculation expects them to be separate, for Anthropic.
-    if (parsedUsage.input && additionalTokenData.cacheReadInputTokens) {
+    // For Anthropic providers, LangChain reports input_tokens as the sum of input and cache read tokens.
+    // Our cost calculation expects them to be separate for Anthropic, so we subtract cache tokens.
+    // For other providers (OpenAI, etc.), input_tokens already excludes cache tokens as expected.
+    // Match logic consistent with plugin-server: exact match on provider OR substring match on model
+    let isAnthropic = false
+    if (provider && provider.toLowerCase() === 'anthropic') {
+      isAnthropic = true
+    } else if (model && model.toLowerCase().includes('anthropic')) {
+      isAnthropic = true
+    }
+
+    if (isAnthropic && parsedUsage.input && additionalTokenData.cacheReadInputTokens) {
       parsedUsage.input = Math.max(parsedUsage.input - additionalTokenData.cacheReadInputTokens, 0)
     }
 
     return [parsedUsage.input, parsedUsage.output, additionalTokenData]
   }
 
-  private parseUsage(response: LLMResult): [number, number, Record<string, any>] {
+  private parseUsage(response: LLMResult, provider?: string, model?: string): [number, number, Record<string, any>] {
     let llmUsage: [number, number, Record<string, any>] = [0, 0, {}]
     const llmUsageKeys = ['token_usage', 'usage', 'tokenUsage']
 
     if (response.llmOutput != null) {
       const key = llmUsageKeys.find((k) => response.llmOutput?.[k] != null)
       if (key) {
-        llmUsage = this._parseUsageModel(response.llmOutput[key])
+        llmUsage = this._parseUsageModel(response.llmOutput[key], provider, model)
       }
     }
 
@@ -703,7 +712,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
         for (const genChunk of generation) {
           // Check other paths for usage information
           if (genChunk.generationInfo?.usage_metadata) {
-            llmUsage = this._parseUsageModel(genChunk.generationInfo.usage_metadata)
+            llmUsage = this._parseUsageModel(genChunk.generationInfo.usage_metadata, provider, model)
             return llmUsage
           }
 
@@ -714,7 +723,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
             responseMetadata['amazon-bedrock-invocationMetrics'] ??
             messageChunk.usage_metadata
           if (chunkUsage) {
-            llmUsage = this._parseUsageModel(chunkUsage)
+            llmUsage = this._parseUsageModel(chunkUsage, provider, model)
             return llmUsage
           }
         }

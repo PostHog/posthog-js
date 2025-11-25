@@ -134,6 +134,17 @@ export interface RageclickConfig {
      * If an element has .ph-no-capture, it will always be ignored by rageclick and autocapture
      */
     css_selector_ignorelist?: string[]
+    /**
+     * Controls automatic exclusion of elements by text content from rageclick detection.
+     * Useful for pagination buttons, loading spinners, and other repeatedly-clicked UI elements.
+     * - `true` (default): Use default keywords ['next', 'previous', 'prev', '>', '<']
+     * - `false`: Disable content-based exclusion
+     * - `string[]`: Use custom keywords (max 10 items, otherwise use css_selector_ignorelist)
+     *
+     * Checks if element text content or aria-label contains any of the keywords (case-insensitive)
+     * @default true
+     */
+    content_ignorelist?: boolean | string[]
 
     /**
      * Maximum pixel distance between clicks to still be considered a rage click.
@@ -689,7 +700,7 @@ export interface PostHogConfig {
      *
      * - `'unset'`: Use legacy default behaviors
      * - `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')
-     * - `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay)
+     * - `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)
      *
      * @default 'unset'
      */

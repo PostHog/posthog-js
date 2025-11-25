@@ -4867,3 +4867,31 @@ describe('quota limiting', () => {
     consoleSpy.mockRestore()
   })
 })
+
+describe('fetch context handling', () => {
+  it('should call fetch without bound context to avoid illegal invocation errors in edge environments', async () => {
+    let fetchContext: any
+    const mockFetch = jest.fn(function (this: any, ..._args: unknown[]) {
+      fetchContext = this
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            flags: [],
+            featureFlagPayloads: {},
+          })
+        )
+      )
+    })
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await posthog.reloadFeatureFlags()
+    expect(mockFetch).toHaveBeenCalled()
+    expect(fetchContext).toBeUndefined()
+  })
+})

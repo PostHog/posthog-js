@@ -10,35 +10,36 @@ import { useColorScheme } from '@/hooks/useColorScheme'
 import { posthog } from './posthog'
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme()
-  const [loaded] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-  })
+    const colorScheme = useColorScheme()
+    const [loaded] = useFonts({
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+    })
 
-  if (!loaded) {
-    // Async font loading only occurs in development.
-    return null
-  }
+    if (!loaded) {
+        // Async font loading only occurs in development.
+        return null
+    }
 
-  return (
-    <PostHogProvider
-      client={posthog}
-      autocapture={{
-        captureScreens: false, // expo-router requires this to be false and capture screens manually
-        captureTouches: true,
-        customLabelProp: 'ph-my-label',
-      }}
-      debug={true}
-    >
-      <PostHogSurveyProvider client={posthog}>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="+not-found" />
-          </Stack>
-          <StatusBar style="auto" />
-        </ThemeProvider>
-      </PostHogSurveyProvider>
-    </PostHogProvider>
-  )
+    return (
+        <PostHogProvider
+            client={posthog}
+            autocapture={{
+                captureScreens: false, // expo-router requires this to be false and capture screens manually
+                captureTouches: true,
+                customLabelProp: 'ph-my-label',
+            }}
+            debug={true}
+        >
+            <PostHogSurveyProvider client={posthog}>
+                <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+                    <Stack>
+                        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                        <Stack.Screen name="+not-found" />
+                    </Stack>
+                    <StatusBar style="auto" />
+                </ThemeProvider>
+            </PostHogSurveyProvider>
+        </PostHogProvider>
+    )
 }

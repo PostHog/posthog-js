@@ -6,6 +6,8 @@ import type {
   PostHogFetchResponse,
 } from '@posthog/core'
 
+import type { FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
+
 export interface IdentifyMessage {
   distinctId: string
   properties?: Record<string | number, any>
@@ -72,6 +74,32 @@ export type PostHogOptions = PostHogCoreOptions & {
   // Whether to enable feature flag polling for local evaluation by default. Defaults to true when personalApiKey is provided.
   // We recommend setting this to false if you are only using the personalApiKey for evaluating remote config payloads via `getRemoteConfigPayload` and not using local evaluation.
   enableLocalEvaluation?: boolean
+  /**
+   * @experimental This API is experimental and may change in minor versions.
+   *
+   * Optional cache provider for feature flag definitions.
+   *
+   * Allows custom caching strategies (Redis, database, etc.) for flag definitions
+   * in multi-worker environments. If not provided, defaults to in-memory cache.
+   *
+   * This enables distributed coordination where only one worker fetches flags while
+   * others use cached data, reducing API calls and improving performance.
+   *
+   * @example
+   * ```typescript
+   * import { FlagDefinitionCacheProvider } from 'posthog-node/experimental'
+   *
+   * class RedisCacheProvider implements FlagDefinitionCacheProvider {
+   *   // ... implementation
+   * }
+   *
+   * const client = new PostHog('api-key', {
+   *   personalApiKey: 'personal-key',
+   *   flagDefinitionCacheProvider: new RedisCacheProvider(redis)
+   * })
+   * ```
+   */
+  flagDefinitionCacheProvider?: FlagDefinitionCacheProvider
   /**
    * Allows modification or dropping of events before they're sent to PostHog.
    * If an array is provided, the functions are run in order.

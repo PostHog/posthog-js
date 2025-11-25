@@ -1,6 +1,6 @@
 {
   "name": "@posthog/nextjs-config",
-  "version": "1.4.0",
+  "version": "1.6.0",
   "description": "NextJS configuration helper for Posthog 🦔",
   "repository": {
     "type": "git",
@@ -44,7 +44,8 @@
   "dependencies": {
     "@posthog/cli": "catalog:",
     "semver": "^7.7.2",
-    "@posthog/core": "workspace:*"
+    "@posthog/core": "workspace:*",
+    "@posthog/webpack-plugin": "workspace:*"
   },
   "keywords": [
     "posthog",
@@ -56,6 +57,7 @@
     "@rslib/core": "catalog:",
     "@types/node": "^22.15.23",
     "@types/semver": "^7.7.0",
+    "@types/jest": "catalog:",
     "jest": "catalog:",
     "next": "^15.4.1",
     "ts-jest": "catalog:"

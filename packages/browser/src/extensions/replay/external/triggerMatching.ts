@@ -181,7 +181,8 @@ export class URLTriggerMatching implements TriggerStatusMatching {
     checkUrlTriggerConditions(
         onPause: () => void,
         onResume: () => void,
-        onActivate: (triggerType: TriggerType) => void
+        onActivate: (triggerType: TriggerType) => void,
+        sessionId: string
     ) {
         if (typeof window === 'undefined' || !window.location.href) {
             return
@@ -193,15 +194,19 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         const isNowBlocked = sessionRecordingUrlTriggerMatches(url, this._urlBlocklist)
 
         if (wasBlocked && isNowBlocked) {
-            // if the url is blocked and was already blocked, do nothing
             return
-        } else if (isNowBlocked && !wasBlocked) {
+        }
+
+        if (isNowBlocked && !wasBlocked) {
             onPause()
         } else if (!isNowBlocked && wasBlocked) {
             onResume()
         }
 
-        if (sessionRecordingUrlTriggerMatches(url, this._urlTriggers)) {
+        const isActivated = this._urlTriggerStatus(sessionId) === TRIGGER_ACTIVATED
+        const urlMatches = sessionRecordingUrlTriggerMatches(url, this._urlTriggers)
+
+        if (!isActivated && urlMatches) {
             onActivate('url')
         }
     }

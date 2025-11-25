@@ -224,6 +224,14 @@ interface PostHogExtensions {
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win
 
+// React Native polyfills for posthog-js compatibility
+if (typeof self === 'undefined') {
+    ;(global as any).self = global
+}
+if (typeof File === 'undefined') {
+    ;(global as any).File = function () {}
+}
+
 export const ArrayProto = Array.prototype
 export const nativeForEach = ArrayProto.forEach
 export const nativeIndexOf = ArrayProto.indexOf

@@ -1,6 +1,6 @@
 {
     "$schema": "https://unpkg.com/@changesets/config@3.1.1/schema.json",
-    "changelog": ["@changesets/changelog-github", { "repo": "PostHog/posthog-js" }],
+    "changelog": ["@posthog-tooling/changelog", { "repo": "PostHog/posthog-js" }],
     "commit": false,
     "fixed": [],
     "linked": [],
