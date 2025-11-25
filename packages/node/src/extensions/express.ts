@@ -28,13 +28,24 @@ export function setupExpressErrorHandler(
     use: (middleware: ExpressMiddleware | ExpressErrorMiddleware) => unknown
   }
 ): void {
-  app.use((error: MiddlewareError, _, __, next: (error: MiddlewareError) => void): void => {
-    const hint: CoreErrorTracking.EventHint = { mechanism: { type: 'middleware', handled: false } }
-    // Given stateless nature of Node SDK we capture exceptions using personless processing
-    // when no user can be determined e.g. in the case of exception autocapture
-    ErrorTracking.buildEventMessage(error, hint, uuidv7(), { $process_person_profile: false }).then((msg) =>
-      _posthog.capture(msg)
+  app.use(posthogErrorHandler(_posthog))
+}
+
+function posthogErrorHandler(posthog: PostHogBackendClient): ExpressErrorMiddleware {
+  return (error: MiddlewareError, req, res, next: (error: MiddlewareError) => void): void => {
+    const sessionId: string | undefined = req.headers['x-posthog-session-id'] as string | undefined
+    const distinctId: string | undefined = req.headers['x-posthog-distinct-id'] as string | undefined
+    const syntheticException = new Error('Synthetic exception')
+    const hint: CoreErrorTracking.EventHint = { mechanism: { type: 'middleware', handled: false }, syntheticException }
+    posthog.addPendingPromise(
+      ErrorTracking.buildEventMessage(error, hint, distinctId ?? uuidv7(), {
+        $process_person_profile: distinctId != undefined,
+        $session_id: sessionId,
+        $current_url: req.url,
+        method: req.method,
+        status_code: res.statusCode,
+      }).then((msg) => posthog.capture(msg))
     )
     next(error)
-  })
+  }
 }
