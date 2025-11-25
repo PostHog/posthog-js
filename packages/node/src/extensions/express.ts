@@ -1,15 +1,14 @@
-import type * as http from 'node:http'
-import { uuidv7 } from '@posthog/core'
 import ErrorTracking from './error-tracking'
 import { PostHogBackendClient } from '../client'
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
+import type { Request, Response } from 'express'
 
-type ExpressMiddleware = (req: http.IncomingMessage, res: http.ServerResponse, next: () => void) => void
+type ExpressMiddleware = (req: Request, res: Response, next: () => void) => void
 
 type ExpressErrorMiddleware = (
   error: MiddlewareError,
-  req: http.IncomingMessage,
-  res: http.ServerResponse,
+  req: Request,
+  res: Response,
   next: (error: MiddlewareError) => void
 ) => void
 
@@ -37,13 +36,17 @@ function posthogErrorHandler(posthog: PostHogBackendClient): ExpressErrorMiddlew
     const distinctId: string | undefined = req.headers['x-posthog-distinct-id'] as string | undefined
     const syntheticException = new Error('Synthetic exception')
     const hint: CoreErrorTracking.EventHint = { mechanism: { type: 'middleware', handled: false }, syntheticException }
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress
+    const path = req.path // Gets the path of the request
     posthog.addPendingPromise(
-      ErrorTracking.buildEventMessage(error, hint, distinctId ?? uuidv7(), {
-        $process_person_profile: distinctId != undefined,
+      ErrorTracking.buildEventMessage(error, hint, distinctId, {
         $session_id: sessionId,
         $current_url: req.url,
-        method: req.method,
-        status_code: res.statusCode,
+        $request_method: req.method,
+        $request_path: path,
+        $user_agent: req.headers['user-agent'],
+        $response_status_code: res.statusCode,
+        $ip: ip,
       }).then((msg) => posthog.capture(msg))
     )
     next(error)
