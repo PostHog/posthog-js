@@ -9,7 +9,7 @@ import fetch from 'node-fetch'
 const currentEnv = process.env
 export const {
     POSTHOG_PROJECT_KEY,
-    POSTHOG_API_KEY,
+    POSTHOG_PERSONAL_API_KEY,
     POSTHOG_API_HOST = 'https://us.i.posthog.com',
     POSTHOG_API_PROJECT = '11213',
     BRANCH_NAME,
@@ -17,7 +17,7 @@ export const {
     BROWSER,
 } = currentEnv
 
-const HEADERS = { Authorization: `Bearer ${POSTHOG_API_KEY}` }
+const HEADERS = { Authorization: `Bearer ${POSTHOG_PERSONAL_API_KEY}` }
 
 export const captureLogger = RequestLogger(/ip=0/, {
     logRequestHeaders: true,

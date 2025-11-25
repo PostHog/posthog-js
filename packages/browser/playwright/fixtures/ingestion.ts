@@ -4,7 +4,7 @@ import { PosthogPage, testPostHog } from './posthog'
 const INGESTION_TIMEOUT = 10 * 60 * 1000 // 10 min
 const currentEnv = process.env
 const {
-    POSTHOG_API_KEY = 'private_key',
+    POSTHOG_PERSONAL_API_KEY = 'private_key',
     POSTHOG_API_HOST = 'http://localhost:2345',
     POSTHOG_API_PROJECT = '1',
 } = currentEnv
@@ -51,8 +51,8 @@ export class IngestionPage {
     }
 
     checkEnv() {
-        if (!POSTHOG_API_HOST || !POSTHOG_API_PROJECT || !POSTHOG_API_KEY) {
-            throw new Error('POSTHOG_API_HOST, POSTHOG_API_PROJECT and POSTHOG_API_KEY env variables must be set')
+        if (!POSTHOG_API_HOST || !POSTHOG_API_PROJECT || !POSTHOG_PERSONAL_API_KEY) {
+            throw new Error('POSTHOG_API_HOST, POSTHOG_API_PROJECT and POSTHOG_PERSONAL_API_KEY env variables must be set')
         }
     }
 
@@ -130,7 +130,7 @@ export async function retryUntilResults(
 }
 
 export async function queryAPI(testSessionId: string) {
-    const HEADERS = { Authorization: `Bearer ${POSTHOG_API_KEY}` }
+    const HEADERS = { Authorization: `Bearer ${POSTHOG_PERSONAL_API_KEY}` }
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
     const url = `${POSTHOG_API_HOST}/api/projects/${POSTHOG_API_PROJECT}/events?properties=[{"key":"testSessionId","value":["${testSessionId}"],"operator":"exact","type":"event"}]&after=${yesterday}`
     const response = await fetch(url, {

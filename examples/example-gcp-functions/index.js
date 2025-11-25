@@ -1,7 +1,7 @@
 const functions = require('@google-cloud/functions-framework')
 const { PostHog } = require('posthog-node')
 
-const posthog = new PostHog(process.env.POSTHOG_API_KEY, {
+const posthog = new PostHog(process.env.POSTHOG_PROJECT_KEY, {
   // works as well if you uncomment the following lines
   // flushAt: 1,
   // flushInterval: 0

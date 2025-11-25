@@ -49,7 +49,7 @@ cp .env.example .env
 Edit `.env` and set:
 
 ```
-POSTHOG_API_KEY=your_project_api_key
+POSTHOG_PROJECT_KEY=your_project_api_key
 POSTHOG_PERSONAL_API_KEY=your_posthog_personal_api_key
 POSTHOG_HOST=https://us.i.posthog.com
 ```

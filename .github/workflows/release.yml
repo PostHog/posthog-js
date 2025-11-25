@@ -106,7 +106,7 @@ jobs:
         if: ${{ failure() }}
         uses: PostHog/posthog-github-action@v0.1
         with:
-          posthog-token: "${{ secrets.POSTHOG_API_TOKEN }}"
+          posthog-token: "${{ secrets.POSTHOG_PROJECT_KEY }}"
           event: "posthog-js-github-release-workflow-failure"
           properties: >-
             {
