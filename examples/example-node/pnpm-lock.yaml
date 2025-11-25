@@ -4,7 +4,7 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-pnpmfileChecksum: sha256-yfpGjq0znENhKW1iI3G9Z2t5P3Tm3nxthj83jvlbMuk=
+pnpmfileChecksum: sha256-51V53DYAleXHgPrntlBZSmeS8lOCPoT1zhKZkbvcJZs=
 
 importers:
 
@@ -106,8 +106,8 @@ packages:
     engines: {node: '>= 8'}
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-X4YAwNuvsxrXb7I741ulhJpHMg7RXiB2DN7hL5H2Bdb0KTEfyZI87xH5ns33FKee6O0Hjqw2mzpz5/K94+BcOw==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.1.0
+    resolution: {integrity: sha512-KoEq+q0wuyI36rYRnR05L73SJF/uNlWUT4c4dpyb7/ruU5WZwx7jvFB/mHuhWrKx9aEDVtNpuEj8k3Ng/oe9rg==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.6.0
 
   '@tsconfig/node10@1.0.11':
     resolution: {integrity: sha512-DcRjDCujK/kCk/cUe8Xz8ZSpm8mS3mNNpta+jGCA6USEDfktlNvm1+IuZ9eTcDbNk41BHwpHHeW+N1lKCz4zOw==}
@@ -623,8 +623,8 @@ packages:
     resolution: {integrity: sha512-RA1GjUVMnvYFxuqovrEqZoxxW5NUZqbwKtYz/Tt7nXerk0LbLblQmrsgdeOxV5SFHf0UDggjS/bSeOZwt1pmEQ==}
 
   posthog-node@file:../../target/posthog-node.tgz:
-    resolution: {integrity: sha512-E1cOcbo8c6kO8RKE9HjzGLkBxjqbGf6QThrjgT/wux36DWgDmwyZ4+jysk0QoPhMxQP6DHtb9z1UUY7PBBM59w==, tarball: file:../../target/posthog-node.tgz}
-    version: 5.8.8
+    resolution: {integrity: sha512-ppOeec7hEfjCfmPQ8nNyUG13WDxkc/HsnKeaH5sTRL31CDOw8q7B9Uu38b+duY4EmATWjtMD5kgOgGz2XA2J9w==, tarball: file:../../target/posthog-node.tgz}
+    version: 5.14.0
     engines: {node: '>=20'}
 
   prelude-ls@1.2.1:
@@ -879,7 +879,9 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.19.1
 
-  '@posthog/core@file:../../target/posthog-core.tgz': {}
+  '@posthog/core@file:../../target/posthog-core.tgz':
+    dependencies:
+      cross-spawn: 7.0.6
 
   '@tsconfig/node10@1.0.11': {}
 

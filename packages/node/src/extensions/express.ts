@@ -36,19 +36,21 @@ function posthogErrorHandler(posthog: PostHogBackendClient): ExpressErrorMiddlew
     const distinctId: string | undefined = req.headers['x-posthog-distinct-id'] as string | undefined
     const syntheticException = new Error('Synthetic exception')
     const hint: CoreErrorTracking.EventHint = { mechanism: { type: 'middleware', handled: false }, syntheticException }
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress
-    const path = req.path // Gets the path of the request
+
     posthog.addPendingPromise(
       ErrorTracking.buildEventMessage(error, hint, distinctId, {
         $session_id: sessionId,
         $current_url: req.url,
         $request_method: req.method,
-        $request_path: path,
+        $request_path: req.path,
         $user_agent: req.headers['user-agent'],
         $response_status_code: res.statusCode,
-        $ip: ip,
-      }).then((msg) => posthog.capture(msg))
+        $ip: req.headers['x-forwarded-for'] || req?.socket?.remoteAddress,
+      }).then((msg) => {
+        posthog.capture(msg)
+      })
     )
+
     next(error)
   }
 }
