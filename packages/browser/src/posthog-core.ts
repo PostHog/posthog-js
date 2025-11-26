@@ -1966,6 +1966,15 @@ export class PostHog {
     }
 
     /**
+     * Cancels a pending survey that is waiting to be displayed (e.g., due to a popup delay).
+     *
+     * {@label Surveys}
+     */
+    cancelPendingSurvey(surveyId: string): void {
+        this.surveys.cancelPendingSurvey(surveyId)
+    }
+
+    /**
      * Checks the feature flags associated with this Survey to see if the survey can be rendered.
      * This method is deprecated because it's synchronous and won't return the correct result if surveys are not loaded.
      * Use `canRenderSurveyAsync` instead.

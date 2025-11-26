@@ -708,6 +708,27 @@ describe('SurveyManager', () => {
             expect(firstTimeoutId).not.toEqual(secondTimeoutId)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(mockSurvey2.id)
         })
+
+        test('cancelSurvey should clear timeout and release focus for pending survey', () => {
+            surveyManager.getTestAPI().handlePopoverSurvey(mockSurvey)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(true)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(mockSurvey.id)
+
+            const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
+            surveyManager.cancelSurvey(mockSurvey.id)
+
+            expect(clearTimeoutSpy).toHaveBeenCalled()
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBeNull()
+        })
+
+        test('cancelSurvey should do nothing if survey has no pending timeout', () => {
+            // Don't schedule the survey, just try to cancel it
+            const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
+            surveyManager.cancelSurvey('non-existent-survey')
+
+            expect(clearTimeoutSpy).not.toHaveBeenCalled()
+        })
     })
 
     describe('checkFlags', () => {

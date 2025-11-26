@@ -515,4 +515,82 @@ describe('survey-event-receiver', () => {
             expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
         })
     })
+
+    describe('cancel events', () => {
+        let config: PostHogConfig
+        let instance: PostHog
+        let mockAddCaptureHook: jest.Mock
+        let mockCancelPendingSurvey: jest.Mock
+
+        const surveyWithCancelEvent: Survey = {
+            name: 'survey with cancel',
+            id: 'survey-with-cancel',
+            description: 'survey with cancel event',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'test?' }],
+            appearance: { surveyPopupDelaySeconds: 5 },
+            conditions: {
+                events: { values: [{ name: 'trigger_event' }] },
+                cancelEvents: { values: [{ name: 'cancel_event' }] },
+            },
+        } as unknown as Survey
+
+        beforeEach(() => {
+            mockAddCaptureHook = jest.fn()
+            mockCancelPendingSurvey = jest.fn()
+            config = createMockConfig({
+                token: 'testtoken',
+                api_host: 'https://app.posthog.com',
+                persistence: 'memory',
+            })
+
+            instance = createMockPostHog({
+                config: config,
+                persistence: new PostHogPersistence(config),
+                _addCaptureHook: mockAddCaptureHook,
+                getSurveys: jest.fn((callback) => callback([surveyWithCancelEvent])),
+                cancelPendingSurvey: mockCancelPendingSurvey,
+            })
+        })
+
+        afterEach(() => {
+            instance.persistence?.clear()
+        })
+
+        it('calls cancelPendingSurvey when cancel event fires', () => {
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([surveyWithCancelEvent])
+            const registeredHook = mockAddCaptureHook.mock.calls[0][0]
+
+            // Trigger the survey first
+            registeredHook('trigger_event')
+            expect(surveyEventReceiver.getSurveys()).toContain('survey-with-cancel')
+
+            // Fire cancel event
+            registeredHook('cancel_event')
+            expect(mockCancelPendingSurvey).toHaveBeenCalledWith('survey-with-cancel')
+        })
+
+        it('removes cancelled survey from activated surveys', () => {
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([surveyWithCancelEvent])
+            const registeredHook = mockAddCaptureHook.mock.calls[0][0]
+
+            // Trigger then cancel
+            registeredHook('trigger_event')
+            expect(surveyEventReceiver.getSurveys()).toContain('survey-with-cancel')
+
+            registeredHook('cancel_event')
+            expect(surveyEventReceiver.getSurveys()).not.toContain('survey-with-cancel')
+        })
+
+        it('does not call cancelPendingSurvey for unrelated events', () => {
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([surveyWithCancelEvent])
+            const registeredHook = mockAddCaptureHook.mock.calls[0][0]
+
+            registeredHook('some_other_event')
+            expect(mockCancelPendingSurvey).not.toHaveBeenCalled()
+        })
+    })
 })

@@ -58,6 +58,17 @@ export default function SurveyForm() {
                 </div>
             </div>
 
+            <div className='flex flex-col border border-2 p-2 items-center'>
+                <h2>test survey delay &amp; cancellation</h2>
+                <div className='flex flex-col items-center gap-6'>
+                    <div className='flex gap-2'>
+                        <button onClick={() => posthog.capture('survey trigger event')}>trigger <pre>survey trigger event</pre></button>
+                        <button onClick={() => posthog.capture('survey cancel event')}>trigger <pre>survey cancel event</pre></button>
+                    </div>
+                    <p>create a survey with a pop-up delay and triggers on "survey trigger event" and/or "survey cancel event" to test</p>
+                </div>
+            </div>
+
             {/* Add spacer to push the bottom button down */}
             <div style={{ height: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <p>Scroll down to see the bottom feedback button</p>
