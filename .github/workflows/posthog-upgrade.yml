@@ -106,7 +106,7 @@ jobs:
 
       - name: Get deployer token
         id: deployer
-        uses: getsentry/action-github-app-token@v2
+        uses: getsentry/action-github-app-token@97c9e23528286821f97fba885c1b1123284b29cc # v2
         with:
           app_id: ${{ secrets.DEPLOYER_APP_ID }}
           private_key: ${{ secrets.DEPLOYER_APP_PRIVATE_KEY }}
