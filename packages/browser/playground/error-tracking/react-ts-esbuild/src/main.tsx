@@ -6,6 +6,7 @@ import { posthog } from 'posthog-js'
 posthog.init(import.meta.env.VITE_POSTHOG_KEY || '', {
     api_host: import.meta.env.VITE_POSTHOG_HOST || 'http://localhost:8010',
     autocapture: true,
+    defaults: '2025-11-30',
 })
 
 createRoot(document.getElementById('root')!).render(
