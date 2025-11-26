@@ -87,14 +87,6 @@ export const isKnownUnsafeEditableEvent = (x: unknown): x is KnownUnsafeEditable
   return includes(knownUnsafeEditableEvent as unknown as string[], x)
 }
 
-export function isInstanceOf(candidate: unknown, base: any): boolean {
-  try {
-    return candidate instanceof base
-  } catch {
-    return false
-  }
-}
-
 export function isPrimitive(value: unknown): boolean {
   return value === null || typeof value !== 'object'
 }
@@ -126,6 +118,14 @@ export function isEvent(candidate: unknown): candidate is Event {
 
 export function isPlainObject(candidate: unknown): candidate is Record<string, unknown> {
   return isBuiltin(candidate, 'Object')
+}
+
+function isInstanceOf(candidate: unknown, base: any): boolean {
+  try {
+    return candidate instanceof base
+  } catch {
+    return false
+  }
 }
 
 export const yesLikeValues = [true, 'true', 1, '1', 'yes']

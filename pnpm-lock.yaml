@@ -145,6 +145,9 @@ importers:
       '@langchain/core':
         specifier: ^1.0.0
         version: 1.0.3(@opentelemetry/api@1.9.0)(openai@6.8.1(ws@8.18.3)(zod@4.1.12))
+      '@posthog/core':
+        specifier: workspace:*
+        version: link:../core
       ai:
         specifier: ^5.0.87
         version: 5.0.88(zod@4.1.12)
