@@ -8,7 +8,7 @@ import {
     getPropertiesFromElement,
     previousElementSibling,
 } from '../autocapture'
-import { shouldCaptureDomEvent } from '../autocapture-utils'
+import { shouldAutocaptureEvent } from '../autocapture-utils'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import { AutocaptureConfig, FlagsResponse, PostHogConfig, RageclickConfig } from '../types'
 import { PostHog } from '../posthog-core'
@@ -232,6 +232,7 @@ describe('Autocapture system', () => {
         let div2: HTMLDivElement
         let input: HTMLInputElement
         let sensitiveInput: HTMLInputElement
+        let noCaptureInput: HTMLInputElement
         let hidden: HTMLInputElement
         let password: HTMLInputElement
 
@@ -253,6 +254,14 @@ describe('Autocapture system', () => {
             sensitiveInput.setAttribute('data-ph-capture-attribute-on-the-sensitive-input', 'is on the sensitive-input')
             sensitiveInput.className = 'ph-sensitive'
 
+            noCaptureInput = document.createElement('input')
+            noCaptureInput.value = 'test val'
+            noCaptureInput.setAttribute(
+                'data-ph-capture-attribute-on-the-no-capture-input',
+                'is on the no-capture-input'
+            )
+            noCaptureInput.className = 'ph-no-capture'
+
             hidden = document.createElement('input')
             hidden.setAttribute('type', 'hidden')
             hidden.setAttribute('data-ph-capture-attribute-on-the-hidden', 'is on the hidden')
@@ -273,6 +282,7 @@ describe('Autocapture system', () => {
             div2.appendChild(div)
             div2.appendChild(input)
             div2.appendChild(sensitiveInput)
+            div2.appendChild(noCaptureInput)
             div2.appendChild(hidden)
             div2.appendChild(password)
         })
@@ -292,22 +302,28 @@ describe('Autocapture system', () => {
             expect(props['on-the-input']).toBe('is on the input')
         })
 
-        it('should collect augment from input with class "ph-sensitive"', () => {
+        it('should not collect augment from input with class "ph-sensitive"', () => {
             const props = getAugmentPropertiesFromElement(sensitiveInput)
 
-            expect(props['on-the-sensitive-input']).toBeUndefined()
+            expect(props).toStrictEqual({})
         })
 
-        it('should not collect augment from the hidden element value', () => {
-            const props = getAugmentPropertiesFromElement(hidden)
+        it('should not collect augment from input with class "ph-no-capture"', () => {
+            const props = getAugmentPropertiesFromElement(noCaptureInput)
 
             expect(props).toStrictEqual({})
+        })
+
+        it('should collect augment from the hidden element value', () => {
+            const props = getAugmentPropertiesFromElement(hidden)
+
+            expect(props).toStrictEqual({ 'on-the-hidden': 'is on the hidden' })
         })
 
         it('should collect augment from the password element value', () => {
             const props = getAugmentPropertiesFromElement(password)
 
-            expect(props).toStrictEqual({})
+            expect(props).toStrictEqual({ 'on-the-password': 'is on the password' })
         })
     })
 
@@ -866,6 +882,49 @@ describe('Autocapture system', () => {
             expect(beforeSendMock.mock.calls[0][0].properties['$elements'][0]).not.toHaveProperty('attr__href')
         })
 
+        it.each([
+            ['password', 'Reset password'],
+            ['ccnum', 'Update card'],
+            ['ssn-field', 'Social security'],
+        ])(
+            'captures href and text content from anchors with IDs containing sensitive substrings like %s',
+            (id, textContent) => {
+                // this is a test to prove some earlier behavior where we would've blocked
+                // capture for elements like this.
+                const elAnchor = document.createElement('a')
+                elAnchor.setAttribute('id', id)
+                elAnchor.setAttribute('href', 'https://example.com')
+                elAnchor.textContent = textContent
+                document.body.appendChild(elAnchor)
+
+                autocapture['_captureEvent'](
+                    makeMouseEvent({
+                        target: elAnchor,
+                    })
+                )
+
+                const properties = beforeSendMock.mock.calls[0][0].properties
+                expect(properties['$elements'][0]).toHaveProperty('attr__href', 'https://example.com')
+                expect(properties['$el_text']).toBe(textContent)
+            }
+        )
+
+        it.each(['ph-no-capture', 'ph-sensitive'])('does not capture event from anchors with %s class', (className) => {
+            const elAnchor = document.createElement('a')
+            elAnchor.classList.add(className)
+            elAnchor.setAttribute('href', 'https://example.com')
+            elAnchor.textContent = 'Click here'
+            document.body.appendChild(elAnchor)
+
+            autocapture['_captureEvent'](
+                makeMouseEvent({
+                    target: elAnchor,
+                })
+            )
+
+            expect(beforeSendMock).not.toHaveBeenCalled()
+        })
+
         it('correctly identifies and formats text content', () => {
             document.body.innerHTML = `
       <div>
@@ -1024,6 +1083,7 @@ describe('Autocapture system', () => {
             const a = document.createElement('a')
             const span = document.createElement('span')
             a.appendChild(span)
+            document.body.appendChild(a)
             autocapture['_captureEvent'](makeMouseEvent({ target: a }))
             expect(beforeSendMock).toHaveBeenCalledTimes(1)
 
@@ -1267,10 +1327,10 @@ describe('Autocapture system', () => {
 
             window!.location = new URL('https://posthog.com/test/matching') as unknown as string & Location
 
-            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
+            expect(shouldAutocaptureEvent(button, e, autocapture_config)).toBe(true)
 
             window!.location = new URL('https://posthog.com/docs/not-matching') as unknown as string & Location
-            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
+            expect(shouldAutocaptureEvent(button, e, autocapture_config)).toBe(false)
         })
 
         it('not capture urls which match the url regex ignorelist', () => {
@@ -1288,10 +1348,10 @@ describe('Autocapture system', () => {
 
             window!.location = new URL('https://posthog.com/test/matching') as unknown as string & Location
 
-            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
+            expect(shouldAutocaptureEvent(button, e, autocapture_config)).toBe(false)
 
             window!.location = new URL('https://posthog.com/docs/not-matching') as unknown as string & Location
-            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
+            expect(shouldAutocaptureEvent(button, e, autocapture_config)).toBe(true)
         })
 
         it('an empty url regex allowlist does not match any url', () => {
@@ -1309,7 +1369,7 @@ describe('Autocapture system', () => {
 
             window!.location = new URL('https://posthog.com/test/captured') as unknown as string & Location
 
-            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
+            expect(shouldAutocaptureEvent(button, e, autocapture_config)).toBe(false)
         })
 
         it('only capture event types which match the allowlist', () => {
@@ -1324,12 +1384,12 @@ describe('Autocapture system', () => {
             const autocapture_config: AutocaptureConfig = {
                 dom_event_allowlist: ['click'],
             }
-            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
+            expect(shouldAutocaptureEvent(button, e, autocapture_config)).toBe(true)
 
             const autocapture_config_change: AutocaptureConfig = {
                 dom_event_allowlist: ['change'],
             }
-            expect(shouldCaptureDomEvent(button, e, autocapture_config_change)).toBe(false)
+            expect(shouldAutocaptureEvent(button, e, autocapture_config_change)).toBe(false)
         })
 
         it('an empty event type allowlist matches no events', () => {
@@ -1344,7 +1404,7 @@ describe('Autocapture system', () => {
             const autocapture_config = {
                 dom_event_allowlist: [],
             }
-            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
+            expect(shouldAutocaptureEvent(button, e, autocapture_config)).toBe(false)
         })
 
         it('only capture elements which match the allowlist', () => {
@@ -1359,12 +1419,12 @@ describe('Autocapture system', () => {
             const autocapture_config: AutocaptureConfig = {
                 element_allowlist: ['button'],
             }
-            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
+            expect(shouldAutocaptureEvent(button, e, autocapture_config)).toBe(true)
 
             const autocapture_config_change: AutocaptureConfig = {
                 element_allowlist: ['a'],
             }
-            expect(shouldCaptureDomEvent(button, e, autocapture_config_change)).toBe(false)
+            expect(shouldAutocaptureEvent(button, e, autocapture_config_change)).toBe(false)
         })
 
         it('an empty event allowlist means we capture no elements', () => {
@@ -1379,7 +1439,7 @@ describe('Autocapture system', () => {
             const autocapture_config: AutocaptureConfig = {
                 element_allowlist: [],
             }
-            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
+            expect(shouldAutocaptureEvent(button, e, autocapture_config)).toBe(false)
         })
 
         it('only capture elements which match the css allowlist', () => {
@@ -1395,12 +1455,12 @@ describe('Autocapture system', () => {
             const autocapture_config: AutocaptureConfig = {
                 css_selector_allowlist: ['[data-track="yes"]'],
             }
-            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
+            expect(shouldAutocaptureEvent(button, e, autocapture_config)).toBe(true)
 
             const autocapture_config_change = {
                 css_selector_allowlist: ['[data-track="no"]'],
             }
-            expect(shouldCaptureDomEvent(button, e, autocapture_config_change)).toBe(false)
+            expect(shouldAutocaptureEvent(button, e, autocapture_config_change)).toBe(false)
         })
 
         it('an empty css selector list captures no elements', () => {
@@ -1416,7 +1476,7 @@ describe('Autocapture system', () => {
             const autocapture_config: AutocaptureConfig = {
                 css_selector_allowlist: [],
             }
-            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
+            expect(shouldAutocaptureEvent(button, e, autocapture_config)).toBe(false)
         })
 
         it('If a user sets dom_event_allowlist and element_allowlist with css_selector_allowlist it us a union so only the dom events on the element allow list with the css selector', () => {
@@ -1449,7 +1509,7 @@ describe('Autocapture system', () => {
                     })
 
                     // check if we allow capture only as a union of allowlists
-                    expect(shouldCaptureDomEvent(element, fakeEvent, autocapture_config)).toBe(expectedCapturable)
+                    expect(shouldAutocaptureEvent(element, fakeEvent, autocapture_config)).toBe(expectedCapturable)
                 })
             })
         })

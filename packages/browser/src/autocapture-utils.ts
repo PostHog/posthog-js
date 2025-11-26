@@ -73,7 +73,11 @@ export function makeSafeText(s: string | null | undefined): string | null {
 export function getSafeText(el: Element): string {
     let elText = ''
 
-    if (shouldCaptureElement(el) && !isSensitiveElement(el) && el.childNodes && el.childNodes.length) {
+    if (
+        (isExplicitCapture(el) || (!isExplicitNoCapture(el) && !isSensitiveElement(el))) &&
+        el.childNodes &&
+        el.childNodes.length
+    ) {
         each(el.childNodes, function (child) {
             if (isTextNode(child) && child.textContent) {
                 elText += makeSafeText(child.textContent) ?? ''
@@ -262,8 +266,7 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
 }
 
 /*
- * Check whether a DOM event should be "captured" or if it may contain sensitive data
- * using a variety of heuristics.
+ * Check whether a DOM event should be "captured" using a variety of heuristics.
  * @param {Element} el - element to check
  * @param {Event} event - event to check
  * @param {Object} autocaptureConfig - autocapture config
@@ -271,7 +274,7 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
  * @param {string[]} allowedEventTypes - event types to capture, normally just 'click', but some autocapture types react to different events, some elements have fixed events (e.g., form has "submit")
  * @returns {boolean} whether the event should be captured
  */
-export function shouldCaptureDomEvent(
+export function shouldAutocaptureEvent(
     el: Element,
     event: Event,
     autocaptureConfig: AutocaptureConfig | undefined = undefined,
@@ -338,56 +341,35 @@ export function shouldCaptureDomEvent(
 }
 
 /*
- * Check whether a DOM element should be "captured" or if it may contain sensitive data
- * using a variety of heuristics.
+ * Check whether an element or its parents have been explicitly marked to not capture.
+ * Looks for 'ph-sensitive' or 'ph-no-capture' classes.
  * @param {Element} el - element to check
- * @returns {boolean} whether the element should be captured
+ * @returns {boolean} whether the element is marked as no-capture
  */
-export function shouldCaptureElement(el: Element): boolean {
+export function isExplicitNoCapture(el: Element): boolean {
     for (let curEl = el; curEl.parentNode && !isTag(curEl, 'body'); curEl = curEl.parentNode as Element) {
         const classes = getClassNames(curEl)
         if (includes(classes, 'ph-sensitive') || includes(classes, 'ph-no-capture')) {
-            return false
+            return true
         }
     }
-
-    if (includes(getClassNames(el), 'ph-include')) {
-        return true
-    }
-
-    // don't include hidden or password fields
-    const type = (el as HTMLInputElement).type || ''
-    if (isString(type)) {
-        // it's possible for el.type to be a DOM element if el is a form with a child input[name="type"]
-        switch (type.toLowerCase()) {
-            case 'hidden':
-                return false
-            case 'password':
-                return false
-        }
-    }
-
-    // filter out data from fields that look like sensitive fields
-    const name = (el as HTMLInputElement).name || el.id || ''
-    // See https://github.com/posthog/posthog-js/issues/165
-    // Under specific circumstances a bug caused .replace to be called on a DOM element
-    // instead of a string, removing the element from the page. Ensure this issue is mitigated.
-    if (isString(name)) {
-        // it's possible for el.name or el.id to be a DOM element if el is a form with a child input[name="name"]
-        const sensitiveNameRegex =
-            /^cc|cardnum|ccnum|creditcard|csc|cvc|cvv|exp|pass|pwd|routing|seccode|securitycode|securitynum|socialsec|socsec|ssn/i
-        if (sensitiveNameRegex.test(name.replace(/[^a-zA-Z0-9]/g, ''))) {
-            return false
-        }
-    }
-
-    return true
+    return false
 }
 
 /*
- * Check whether a DOM element is 'sensitive' and we should only capture limited data
+ * Check whether an element has been explicitly marked to capture via 'ph-include' class.
  * @param {Element} el - element to check
- * @returns {boolean} whether the element should be captured
+ * @returns {boolean} whether the element is marked for capture
+ */
+export function isExplicitCapture(el: Element): boolean {
+    return includes(getClassNames(el), 'ph-include')
+}
+
+/*
+ * Check whether a DOM element is 'sensitive' and we should only capture limited data.
+ * This includes form elements that could contain user input.
+ * @param {Element} el - element to check
+ * @returns {boolean} whether the element is sensitive
  */
 export function isSensitiveElement(el: Element): boolean {
     // don't send data from inputs or similar elements since there will always be
@@ -419,11 +401,10 @@ const anchoredSSNRegex = new RegExp(`^(${coreSSNPattern})$`)
 const unanchoredSSNRegex = new RegExp(`(${coreSSNPattern})`)
 
 /*
- * Check whether a string value should be "captured" or if it may contain sensitive data
- * using a variety of heuristics.
+ * Check whether a string value should be "captured" or if it may contain sensitive data.
  * @param {string} value - string value to check
  * @param {boolean} anchorRegexes - whether to anchor the regexes to the start and end of the string
- * @returns {boolean} whether the element should be captured
+ * @returns {boolean} whether the value should be captured
  */
 export function shouldCaptureValue(value: string, anchorRegexes = true): boolean {
     if (isNullish(value)) {
