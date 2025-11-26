@@ -40,11 +40,12 @@
     "@posthog/core": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
-    "jest": "catalog:",
+    "@rslib/core": "catalog:",
+    "@types/express": "^5.0.5",
     "@types/jest": "catalog:",
-    "@rslib/core": "catalog:"
+    "@types/node": "^20.0.0",
+    "jest": "catalog:"
   },
   "keywords": [
     "posthog",
