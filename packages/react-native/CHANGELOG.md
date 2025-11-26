@@ -4,7 +4,7 @@
 
 ### Minor Changes
 
-- [#2613](https://github.com/PostHog/posthog-js/pull/2613) [`81781ba`](https://github.com/PostHog/posthog-js/commit/81781ba593be58fcd9c0f31c8fa8ef2693fd765c) Thanks [@marandaneto](https://github.com/marandaneto)! - chore: expo plugin for react native error tracking
+- [#2613](https://github.com/PostHog/posthog-js/pull/2613) [`81781ba`](https://github.com/PostHog/posthog-js/commit/81781ba593be58fcd9c0f31c8fa8ef2693fd765c) Thanks [@marandaneto](https://github.com/marandaneto)! - chore: expo plugin for react native error tracking.
   (2025-11-24)
 
 ## 4.13.0

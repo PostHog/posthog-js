@@ -3,6 +3,7 @@ name: "Release"
 permissions:
   contents: write
   actions: write
+  id-token: write
 
 on:
   push:
@@ -58,7 +59,6 @@ jobs:
           package_path: ${{ steps.get-package-path.outputs.path }}
           package_name: ${{ matrix.package.name }}
           package_version: ${{ steps.check-package-version.outputs.committed-version }}
-          npm_token: ${{ secrets.NPM_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Dispatch generate-references for ${{ matrix.package.name }}
