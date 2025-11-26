@@ -35,7 +35,7 @@ export function resolveConfig(options: PluginConfig): ResolvedPluginConfig {
         options.cliBinaryPath ??
         resolveBinaryPath('posthog-cli', {
             path: process.env.PATH ?? '',
-            cwd: process.cwd(),
+            cwd: __dirname,
         })
 
     const sourcemaps = options.sourcemaps ?? {}
