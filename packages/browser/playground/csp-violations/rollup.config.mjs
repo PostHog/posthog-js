@@ -17,7 +17,7 @@ export default {
     plugins: [
         replace({
             preventAssignment: true,
-            'process.env.POSTHOG_TOKEN': JSON.stringify(process.env.POSTHOG_TOKEN),
+            'process.env.POSTHOG_PROJECT_API_KEY': JSON.stringify(process.env.POSTHOG_PROJECT_API_KEY),
             'process.env.POSTHOG_API_HOST': JSON.stringify(process.env.POSTHOG_API_HOST),
             'process.env.POSTHOG_UI_HOST': JSON.stringify(process.env.POSTHOG_UI_HOST),
         }),
