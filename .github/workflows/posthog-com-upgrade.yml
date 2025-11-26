@@ -31,7 +31,7 @@ jobs:
           token: ${{ secrets.POSTHOG_BOT_PAT }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin v4.2.0
         with:
           node-version: 22
           cache: yarn
