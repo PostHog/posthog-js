@@ -375,7 +375,7 @@ export function shouldCaptureElement(el: Element): boolean {
     if (isString(name)) {
         // it's possible for el.name or el.id to be a DOM element if el is a form with a child input[name="name"]
         const sensitiveNameRegex =
-            /^cc|cardnum|ccnum|creditcard|csc|cvc|cvv|exp|pass|pwd|routing|seccode|securitycode|securitynum|socialsec|socsec|ssn/i
+            /^(cc|cardnum|ccnum|creditcard|csc|cvc|cvv|exp|pass|pwd|routing|seccode|securitycode|securitynum|socialsec|socsec|ssn)/i
         if (sensitiveNameRegex.test(name.replace(/[^a-zA-Z0-9]/g, ''))) {
             return false
         }
