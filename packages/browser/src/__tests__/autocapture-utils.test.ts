@@ -398,34 +398,36 @@ describe(`Autocapture utility functions`, () => {
             expect(shouldCaptureElement(input)).toBe(false)
         })
 
-        it(`should not include fields with sensitive names`, () => {
-            const sensitiveNames = [
-                `cc_name`,
-                `card-num`,
-                `ccnum`,
-                `credit-card_number`,
-                `credit_card[number]`,
-                `csc num`,
-                `CVC`,
-                `Expiration`,
-                `password`,
-                `pwd`,
-                `routing`,
-                `routing-number`,
-                `security code`,
-                `seccode`,
-                `security number`,
-                `social sec`,
-                `SsN`,
-            ]
-            sensitiveNames.forEach((name) => {
-                input.name = ''
-                expect(shouldCaptureElement(input)).toBe(true)
-
-                input.name = name
-                expect(shouldCaptureElement(input)).toBe(false)
-            })
+        it.each([
+            'cc_name',
+            'card-num',
+            'ccnum',
+            'credit-card_number',
+            'credit_card[number]',
+            'csc num',
+            'CVC',
+            'Expiration',
+            'password',
+            'pwd',
+            'routing',
+            'routing-number',
+            'security code',
+            'seccode',
+            'security number',
+            'social sec',
+            'SsN',
+        ])(`should not include fields with sensitive name: %s`, (name) => {
+            input.name = name
+            expect(shouldCaptureElement(input)).toBe(false)
         })
+
+        it.each(['document-expiry', 'success_message', 'account-settings', 'compass-icon'])(
+            `should include fields with sensitive substrings that are not prefixes: %s`,
+            (name) => {
+                input.name = name
+                expect(shouldCaptureElement(input)).toBe(true)
+            }
+        )
 
         // See https://github.com/posthog/posthog-js/issues/165
         // Under specific circumstances a bug caused .replace to be called on a DOM element
