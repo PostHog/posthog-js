@@ -11,7 +11,7 @@ export function PHProvider({ children }: { children: React.ReactNode }) {
         posthog.init('phc_test_key_for_playground', {
             api_host: '/ph-relay-xyz123',
             ui_host: 'https://us.posthog.com',
-            defaults: '2025-05-24',
+            defaults: '2025-11-30',
             before_send: (cr) => {
                 setEvents((prev) => [cr!, ...prev].slice(0, 10))
                 return cr

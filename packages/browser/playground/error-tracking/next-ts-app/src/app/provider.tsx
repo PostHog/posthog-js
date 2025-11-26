@@ -10,6 +10,7 @@ export default function LocalProvider({ debug, children }: { debug: boolean; chi
     useEffect(() => {
         const posthog = posthogJs.init(process.env.NEXT_PUBLIC_POSTHOG_KEY || '', {
             api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST,
+            defaults: '2025-11-30',
         })
         if (debug) {
             posthog.debug()
