@@ -52,7 +52,9 @@ export class IngestionPage {
 
     checkEnv() {
         if (!POSTHOG_API_HOST || !POSTHOG_API_PROJECT || !POSTHOG_PERSONAL_API_KEY) {
-            throw new Error('POSTHOG_API_HOST, POSTHOG_API_PROJECT and POSTHOG_PERSONAL_API_KEY env variables must be set')
+            throw new Error(
+                'POSTHOG_API_HOST, POSTHOG_API_PROJECT and POSTHOG_PERSONAL_API_KEY env variables must be set'
+            )
         }
     }
 
