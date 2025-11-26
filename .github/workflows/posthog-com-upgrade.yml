@@ -14,6 +14,10 @@ on:
         required: true
         type: string
 
+permissions:
+  actions: write
+  contents: read
+
 jobs:
   posthog-com-upgrade:
     name: Upgrade PostHog.com Package
