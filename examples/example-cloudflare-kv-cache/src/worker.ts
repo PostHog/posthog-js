@@ -3,7 +3,7 @@ import { CloudflareKVFlagCacheReader, CloudflareKVFlagCacheWriter } from './cach
 
 export interface Env {
     POSTHOG_CACHE: KVNamespace
-    POSTHOG_PROJECT_KEY: string
+    POSTHOG_PROJECT_API_KEY: string
     POSTHOG_HOST: string
     POSTHOG_PERSONAL_API_KEY: string
 }
@@ -12,8 +12,8 @@ export default {
     async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
         // This cache is initialized as **read-only**. It won't attempt to
         // refresh flag definitions itself. We leave that to the scheduled handler.
-        const cache = new CloudflareKVFlagCacheReader(env.POSTHOG_CACHE, env.POSTHOG_PROJECT_KEY)
-        const posthog = new PostHog(env.POSTHOG_PROJECT_KEY, {
+        const cache = new CloudflareKVFlagCacheReader(env.POSTHOG_CACHE, env.POSTHOG_PROJECT_API_KEY)
+        const posthog = new PostHog(env.POSTHOG_PROJECT_API_KEY, {
             host: env.POSTHOG_HOST,
             personalApiKey: env.POSTHOG_PERSONAL_API_KEY,
             enableLocalEvaluation: true,
@@ -42,8 +42,8 @@ export default {
     // Scheduled handler to refresh flag definitions via cron job.
     // See wrangler.toml triggers for schedule.
     async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-        const cache = new CloudflareKVFlagCacheWriter(env.POSTHOG_CACHE, env.POSTHOG_PROJECT_KEY)
-        const posthog = new PostHog(env.POSTHOG_PROJECT_KEY, {
+        const cache = new CloudflareKVFlagCacheWriter(env.POSTHOG_CACHE, env.POSTHOG_PROJECT_API_KEY)
+        const posthog = new PostHog(env.POSTHOG_PROJECT_API_KEY, {
             host: env.POSTHOG_HOST,
             personalApiKey: env.POSTHOG_PERSONAL_API_KEY,
             enableLocalEvaluation: true,

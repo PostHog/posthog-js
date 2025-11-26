@@ -1,8 +1,10 @@
+/* eslint-disable no-console */
+/* eslint-disable no-undef */
 import * as child_process from 'child_process'
 
 const currentEnv = process.env
 export const {
-    POSTHOG_PROJECT_KEY,
+    POSTHOG_PROJECT_API_KEY,
     POSTHOG_PERSONAL_API_KEY,
     POSTHOG_API_HOST = 'http://localhost:8000',
     POSTHOG_API_PROJECT = '1',
@@ -13,10 +15,14 @@ const args = process.argv.slice(3)
 
 async function main() {
     if (!POSTHOG_PERSONAL_API_KEY) {
-        throw new Error('POSTHOG_PERSONAL_API_KEY env variable is required (create a new all access API key at http://localhost:8000/project/1/settings/user-api-keys)')
+        throw new Error(
+            'POSTHOG_PERSONAL_API_KEY env variable is required (create a new all access API key at http://localhost:8000/project/1/settings/user-api-keys)'
+        )
     }
-     if (!POSTHOG_PROJECT_KEY) {
-        throw new Error('POSTHOG_PROJECT_KEY env variable is required (see Project API Key http://localhost:8000/project/1/settings/project)')
+    if (!POSTHOG_PROJECT_API_KEY) {
+        throw new Error(
+            'POSTHOG_PROJECT_API_KEY env variable is required (see Project API Key http://localhost:8000/project/1/settings/project)'
+        )
     }
 
     console.log('Running testcafe tests on localhost')
@@ -24,7 +30,7 @@ async function main() {
         env: {
             ...currentEnv,
             POSTHOG_PERSONAL_API_KEY,
-            POSTHOG_PROJECT_KEY,
+            POSTHOG_PROJECT_API_KEY,
             POSTHOG_API_HOST,
             POSTHOG_API_PROJECT,
         },

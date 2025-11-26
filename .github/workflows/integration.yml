@@ -1,7 +1,7 @@
 name: Playwright Integration Tests
 on: [pull_request]
 env:
-  POSTHOG_PROJECT_KEY: "${{ secrets.POSTHOG_PROJECT_KEY }}"
+  POSTHOG_PROJECT_API_KEY: "${{ secrets.POSTHOG_PROJECT_API_KEY }}"
   POSTHOG_PERSONAL_API_KEY: "${{ secrets.POSTHOG_PERSONAL_API_KEY }}"
   POSTHOG_API_HOST: https://us.i.posthog.com
   POSTHOG_API_PROJECT: 11213
