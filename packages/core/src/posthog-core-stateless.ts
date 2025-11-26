@@ -1,7 +1,6 @@
 import { SimpleEventEmitter } from './eventemitter'
 import { getFeatureFlagValue, normalizeFlagsResponse } from './featureFlagUtils'
 import { gzipCompress, isGzipSupported } from './gzip'
-import { createLogger } from './logger'
 import {
   PostHogFlagsResponse,
   PostHogCoreOptions,
@@ -31,6 +30,7 @@ import {
   RetriableOptions,
   safeSetTimeout,
   STRING_FORMAT,
+  createLogger,
 } from './utils'
 import { uuidv7 } from './vendor/uuidv7'
 

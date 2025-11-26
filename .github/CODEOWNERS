@@ -26,3 +26,9 @@ packages/browser/src/sessionid.ts                      @PostHog/team-web-analyti
 packages/browser/src/session-props.ts                  @PostHog/team-web-analytics
 packages/browser/src/utils/blocked-uas.ts              @PostHog/team-web-analytics
 packages/browser/src/consent.ts                        @PostHog/team-web-analytics
+
+# Error tracking
+packages/rollup-plugin/                                @PostHog/team-error-tracking
+packages/nuxt/                                         @PostHog/team-error-tracking
+packages/nextjs-config/                                @PostHog/team-error-tracking
+packages/core/src/process/                             @PostHog/team-error-tracking

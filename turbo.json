@@ -5,7 +5,15 @@
         },
         "build": {
             "dependsOn": ["^build"],
-            "inputs": ["src/**", "tsconfig.json", "package.json", ".babelrc", "babel.config.js", "rollup.config.mjs"],
+            "inputs": [
+                "src/**",
+                "tsconfig.json",
+                "package.json",
+                ".babelrc",
+                "babel.config.js",
+                "rollup.config.mjs",
+                "rslib.config.mjs"
+            ],
             "outputs": ["dist/**", "lib/**", "react/**"],
             "env": ["WRITE_MANGLED_PROPERTIES"]
         },

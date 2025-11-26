@@ -1,0 +1,15 @@
+{
+    "extends": "@posthog-tooling/tsconfig-base",
+    "compilerOptions": {
+        "incremental": false,
+        "rootDir": "./src",
+        "baseUrl": "./src",
+        "target": "ES6",
+        "module": "node16",
+        "moduleResolution": "node16",
+        "skipLibCheck": true,
+        "declaration": true,
+        "declarationMap": true,
+        "lib": ["DOM"]
+    }
+}

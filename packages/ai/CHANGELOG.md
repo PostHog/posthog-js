@@ -1,5 +1,33 @@
 # posthog-ai
 
+## 7.2.0
+
+### Minor Changes
+
+- [#2619](https://github.com/PostHog/posthog-js/pull/2619) [`86dab38`](https://github.com/PostHog/posthog-js/commit/86dab38e49eeac9819b1ab5f7f0c8b5df88d9f86) Thanks [@hpouillot](https://github.com/hpouillot)! - package deprecation
+  (2025-11-24)
+
+### Patch Changes
+
+- Updated dependencies [[`86dab38`](https://github.com/PostHog/posthog-js/commit/86dab38e49eeac9819b1ab5f7f0c8b5df88d9f86)]:
+  - posthog-node@5.14.0
+
+## 7.1.2
+
+### Patch Changes
+
+- [#2618](https://github.com/PostHog/posthog-js/pull/2618) [`3eed1a4`](https://github.com/PostHog/posthog-js/commit/3eed1a42a50bff310fde3a91308a0f091b39e3fe) Thanks [@marandaneto](https://github.com/marandaneto)! - last version was compromised
+  (2025-11-24)
+- Updated dependencies [[`3eed1a4`](https://github.com/PostHog/posthog-js/commit/3eed1a42a50bff310fde3a91308a0f091b39e3fe)]:
+  - posthog-node@5.13.3
+
+## 7.1.1
+
+### Patch Changes
+
+- [#2591](https://github.com/PostHog/posthog-js/pull/2591) [`3dbf325`](https://github.com/PostHog/posthog-js/commit/3dbf325e21387cb704142c0f0592ad4616e49f8b) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Fixes a bug that incorrectly calculated cache costs for non-Anthropic Langchain providers
+  (2025-11-21)
+
 ## 7.1.0
 
 ### Minor Changes

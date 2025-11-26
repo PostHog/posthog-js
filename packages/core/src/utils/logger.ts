@@ -1,4 +1,4 @@
-import { Logger } from './types'
+import { Logger } from '../types'
 
 // We want to make sure to get the original console methods as soon as possible
 type ConsoleLike = {
@@ -53,6 +53,8 @@ export const _createLogger = (
   return logger
 }
 
-export function createLogger(prefix: string, maybeCall: (fn: () => void) => void) {
+const passThrough = (fn: () => void) => fn()
+
+export function createLogger(prefix: string, maybeCall: (fn: () => void) => void = passThrough) {
   return _createLogger(prefix, maybeCall, createConsole())
 }
