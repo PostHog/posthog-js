@@ -6,16 +6,12 @@ import { PostHog, setupExpressErrorHandler } from 'posthog-node'
 
 const app = express()
 
-const {
-    PH_API_KEY = 'YOUR API KEY',
-    PH_HOST = 'http://127.0.0.1:8000',
-    PH_PERSONAL_API_KEY = 'YOUR PERSONAL API KEY',
-} = process.env
+const { POSTHOG_PROJECT_API_KEY, POSTHOG_API_HOST, POSTHOG_PERSONAL_API_KEY } = process.env
 
-const posthog = new PostHog(PH_API_KEY, {
-    host: PH_HOST,
-    flushAt: 10,
-    personalApiKey: PH_PERSONAL_API_KEY,
+const posthog = new PostHog(POSTHOG_PROJECT_API_KEY!, {
+    host: POSTHOG_API_HOST,
+    flushAt: 1,
+    personalApiKey: POSTHOG_PERSONAL_API_KEY,
     // By default PostHog uses node fetch but you can specify your own implementation if preferred
     // fetch(url, options) {
     //   console.log(url, options)
@@ -30,8 +26,6 @@ posthog.on('localEvaluationFlagsLoaded', (count) => {
 })
 
 posthog.debug()
-
-setupExpressErrorHandler(posthog, app)
 
 app.get('/', (req, res) => {
     posthog.capture({ distinctId: 'EXAMPLE_APP_GLOBAL', event: 'legacy capture' })
@@ -72,6 +66,9 @@ app.get('/user/:userId/flags', async (req, res) => {
     const allFlags = await posthog.getAllFlagsAndPayloads(req.params.userId).catch((e) => console.error(e))
     res.send(allFlags)
 })
+
+// Error handling middleware must be placed at the END of your application stack
+setupExpressErrorHandler(posthog, app)
 
 const server = app.listen(8020, () => {
     console.log('⚡: Server is running at http://localhost:8020')
