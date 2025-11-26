@@ -11,7 +11,7 @@ export const {
     POSTHOG_PROJECT_API_KEY,
     POSTHOG_PERSONAL_API_KEY,
     POSTHOG_API_HOST = 'https://us.i.posthog.com',
-    POSTHOG_API_PROJECT = '11213',
+    POSTHOG_PROJECT_ID = '11213',
     BRANCH_NAME,
     RUN_ID,
     BROWSER,
@@ -158,7 +158,7 @@ export async function retryUntilResults(
 
 export async function queryAPI(testSessionId) {
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-    const url = `${POSTHOG_API_HOST}/api/projects/${POSTHOG_API_PROJECT}/events?properties=[{"key":"testSessionId","value":["${testSessionId}"],"operator":"exact","type":"event"}]&after=${yesterday}`
+    const url = `${POSTHOG_API_HOST}/api/projects/${POSTHOG_PROJECT_ID}/events?properties=[{"key":"testSessionId","value":["${testSessionId}"],"operator":"exact","type":"event"}]&after=${yesterday}`
     const response = await fetch(url, {
         headers: HEADERS,
     })

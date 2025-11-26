@@ -6,7 +6,7 @@ const currentEnv = process.env
 const {
     POSTHOG_PERSONAL_API_KEY = 'private_key',
     POSTHOG_API_HOST = 'http://localhost:2345',
-    POSTHOG_API_PROJECT = '1',
+    POSTHOG_PROJECT_ID = '1',
 } = currentEnv
 
 export const testIngestion = testPostHog.extend<{}, { ingestion: IngestionPage }>({
@@ -18,7 +18,7 @@ export const testIngestion = testPostHog.extend<{}, { ingestion: IngestionPage }
             // eslint-disable-next-line no-console
             console.log(`
             Waiting for events from tests to appear in PostHog.
-            You can manually confirm whether the events have shown up at ${POSTHOG_API_HOST}/project/${POSTHOG_API_PROJECT}/activity/explore
+            You can manually confirm whether the events have shown up at ${POSTHOG_API_HOST}/project/${POSTHOG_PROJECT_ID}/activity/explore
             If they seem to be failing unexpectedly, check grafana for ingestion lag at https://grafana.prod-us.posthog.dev/d/homepage/homepage
             `)
             await ingestion.processSessionChecks()
@@ -51,9 +51,9 @@ export class IngestionPage {
     }
 
     checkEnv() {
-        if (!POSTHOG_API_HOST || !POSTHOG_API_PROJECT || !POSTHOG_PERSONAL_API_KEY) {
+        if (!POSTHOG_API_HOST || !POSTHOG_PROJECT_ID || !POSTHOG_PERSONAL_API_KEY) {
             throw new Error(
-                'POSTHOG_API_HOST, POSTHOG_API_PROJECT and POSTHOG_PERSONAL_API_KEY env variables must be set'
+                'POSTHOG_API_HOST, POSTHOG_PROJECT_ID and POSTHOG_PERSONAL_API_KEY env variables must be set'
             )
         }
     }
@@ -134,7 +134,7 @@ export async function retryUntilResults(
 export async function queryAPI(testSessionId: string) {
     const HEADERS = { Authorization: `Bearer ${POSTHOG_PERSONAL_API_KEY}` }
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-    const url = `${POSTHOG_API_HOST}/api/projects/${POSTHOG_API_PROJECT}/events?properties=[{"key":"testSessionId","value":["${testSessionId}"],"operator":"exact","type":"event"}]&after=${yesterday}`
+    const url = `${POSTHOG_API_HOST}/api/projects/${POSTHOG_PROJECT_ID}/events?properties=[{"key":"testSessionId","value":["${testSessionId}"],"operator":"exact","type":"event"}]&after=${yesterday}`
     const response = await fetch(url, {
         headers: HEADERS,
     })

@@ -7,7 +7,7 @@ export const {
     POSTHOG_PROJECT_API_KEY,
     POSTHOG_PERSONAL_API_KEY,
     POSTHOG_API_HOST = 'http://localhost:8000',
-    POSTHOG_API_PROJECT = '1',
+    POSTHOG_PROJECT_ID = '1',
 } = currentEnv
 
 const browser = process.argv[2] || 'chrome'
@@ -32,7 +32,7 @@ async function main() {
             POSTHOG_PERSONAL_API_KEY,
             POSTHOG_PROJECT_API_KEY,
             POSTHOG_API_HOST,
-            POSTHOG_API_PROJECT,
+            POSTHOG_PROJECT_ID,
         },
         stdio: 'inherit',
     })
