@@ -25,7 +25,7 @@ import {
 } from './e2e.spec'
 // end of hackiness
 
-import { getResultsJsonFiles, log, error, POSTHOG_API_PROJECT } from './helpers'
+import { getResultsJsonFiles, log, error, POSTHOG_PROJECT_ID } from './helpers'
 const asserts = {
     assertConfigOptionsChangeAutocaptureBehaviourAccordingly,
     assertAutocapturedEventsWorkAndAreAccessibleViaApi,
@@ -34,7 +34,7 @@ const asserts = {
 async function main() {
     log(`
 Waiting for events from tests to appear in PostHog.
-You can manually confirm whether the events have shown up at https://us.posthog.com/project/${POSTHOG_API_PROJECT}/activity/explore
+You can manually confirm whether the events have shown up at https://us.posthog.com/project/${POSTHOG_PROJECT_ID}/activity/explore
 If they seem to be failing unexpectedly, check grafana for ingestion lag at https://grafana.prod-us.posthog.dev/d/homepage/homepage
 `)
     // each test will put a results.json file in this folder, so let's list all the files in this folder

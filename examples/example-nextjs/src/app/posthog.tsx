@@ -14,7 +14,7 @@ export default function PHProvider({
     children: React.ReactNode
 }>) {
     return (
-        <PostHogProvider apiKey={process.env.NEXT_PUBLIC_POSTHOG_PROJECT_KEY!} options={posthogConfig}>
+        <PostHogProvider apiKey={process.env.NEXT_PUBLIC_POSTHOG_PROJECT_API_KEY!} options={posthogConfig}>
             {children}
         </PostHogProvider>
     )

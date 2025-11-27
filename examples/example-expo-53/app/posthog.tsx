@@ -5,14 +5,14 @@ import PostHog from 'posthog-react-native'
 //
 // import posthog from 'posthog-js'
 //
-// posthog.init(process.env.EXPO_PUBLIC_POSTHOG_PROJECT_KEY!, {
+// posthog.init(process.env.EXPO_PUBLIC_POSTHOG_PROJECT_API_KEY!, {
 //     host: process.env.EXPO_PUBLIC_POSTHOG_API_HOST,
 //     debug: true,
 // })
 //
 // export { posthog }
 
-export const posthog = new PostHog(process.env.EXPO_PUBLIC_POSTHOG_PROJECT_KEY!, {
+export const posthog = new PostHog(process.env.EXPO_PUBLIC_POSTHOG_PROJECT_API_KEY!, {
     host: process.env.EXPO_PUBLIC_POSTHOG_API_HOST,
     flushAt: 1,
     enableSessionReplay: true,

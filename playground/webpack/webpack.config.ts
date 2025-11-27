@@ -13,7 +13,7 @@ const config: webpack.Configuration = {
     plugins: [
         new PosthogWebpackPlugin({
             personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY,
-            envId: process.env.POSTHOG_API_PROJECT,
+            envId: process.env.POSTHOG_PROJECT_ID,
             host: process.env.POSTHOG_API_HOST,
             logLevel: 'error',
             cliBinaryPath: process.env.POSTHOG_CLI_PATH,

@@ -29,7 +29,6 @@ These dependencies are marked as optional to reduce installation size for users 
 > [!NOTE]
 > Run `pnpm build` at least once before running tests.
 
-
 - Unit tests: run `pnpm test`.
 - Cypress: run `pnpm start` to have a test server running and separately `pnpm cypress` to launch Cypress test engine.
 - Playwright: run e.g. `pnpm exec playwright test --ui --project webkit --project firefox` to run with UI and in webkit and firefox
@@ -42,8 +41,8 @@ also verify that the events emitted during the testing of playground are loaded
 into the PostHog app. By default it uses https://us.i.posthog.com and the
 project with ID 11213. See the testcafe tests to see how to override these if
 needed. For PostHog internal users ask @benjackwhite or @hazzadous to invite you
-to the Project. You'll need to set `POSTHOG_API_KEY` to your personal API key, and
-`POSTHOG_PROJECT_KEY` to the key for the project you are using.
+to the Project. You'll need to set `POSTHOG_PERSONAL_API_KEY` to your personal API key (Personal API keys), and
+`POSTHOG_PROJECT_API_KEY` to the key for the project you are using (Project API key).
 
 You'll also need to sign up to [BrowserStack](https://www.browserstack.com/).
 Note that if you are using CodeSpaces, these variables will already be available

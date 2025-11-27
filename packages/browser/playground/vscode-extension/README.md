@@ -26,7 +26,7 @@ The PostHog project key and API host are loaded from a `.env` file in the root o
 1.  If you don't already have one, create a `.env` file at the root of the `posthog-js` project.
 2.  Add your PostHog Project Key to the `.env` file:
     ```
-    POSTHOG_PROJECT_KEY=<your-project-key>
+    POSTHOG_PROJECT_API_KEY=<your-project-key>
     POSTHOG_API_HOST=<your-api-host>
     ```
-    If `POSTHOG_API_HOST` is not set, it will default to `http://localhost:8010`. 
+    If `POSTHOG_API_HOST` is not set, it will default to `http://localhost:8010`.
