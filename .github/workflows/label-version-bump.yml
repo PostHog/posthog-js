@@ -1,45 +1,46 @@
 name: Autobump
 
 on:
-  pull_request:
-    types: [closed]
+    pull_request:
+        types: [closed]
 
 jobs:
-  label-version-bump:
-    name: Bump versions based on PR label
-    runs-on: ubuntu-22.04
-    if: |
-      github.event.pull_request.merged
-      && contains(github.event.pull_request.labels.*.name, 'release')
-      && github.event.pull_request.base.ref == 'main'
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.ref }}
-          token: ${{ secrets.POSTHOG_BOT_PAT }}
-          fetch-depth: 0
+    label-version-bump:
+        name: Bump versions based on PR label
+        runs-on: ubuntu-22.04
+        permissions:
+            contents: write
+        if: |
+            github.event.pull_request.merged
+            && contains(github.event.pull_request.labels.*.name, 'release')
+            && github.event.pull_request.base.ref == 'main'
+        steps:
+            - name: Check out repository
+              uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.pull_request.base.ref }}
+                  token: ${{ secrets.POSTHOG_BOT_PAT }}
+                  fetch-depth: 0
 
-      - uses: ./.github/actions/setup
-        with:
-          build: false
+            - uses: ./.github/actions/setup
+              with:
+                  build: false
 
-      - name: Build @posthog-tooling/changelog
-        run: pnpm turbo --filter=@posthog-tooling/changelog build
+            - name: Build @posthog-tooling/changelog
+              run: pnpm turbo --filter=@posthog-tooling/changelog build
 
-      - name: Update versions and changelogs
-        id: versions
-        run: pnpm changeset version
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Update versions and changelogs
+              id: versions
+              run: pnpm changeset version
+              env:
+                  GITHUB_TOKEN: ${{ secrets.POSTHOG_BOT_PAT }}
 
-      - name: Update lockfile
-        run: pnpm install
+            - name: Update lockfile
+              run: pnpm install
 
-      - name: Commit updated lockfile
-        uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5 # pin v9.1.4
-        with:
-          add: "."
-          branch: ${{ github.event.pull_request.base.ref }}
-          message: "chore: update versions and lockfile"
-          github_token: ${{ secrets.POSTHOG_BOT_PAT }}
+            - name: Commit updated lockfile
+              uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5 # pin v9.1.4
+              with:
+                  add: '.'
+                  message: 'chore: update versions and lockfile'
+                  github_token: ${{ secrets.POSTHOG_BOT_PAT }}
