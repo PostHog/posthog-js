@@ -13,7 +13,7 @@ export function useActiveFeatureFlags(): string[] {
     }, [client])
 
     // if the client is not loaded yet and we have a bootstrapped value, use it
-    if (!client.featureFlags.hasLoadedFlags && bootstrap?.featureFlags) {
+    if (!client?.featureFlags?.hasLoadedFlags && bootstrap?.featureFlags) {
         return Object.keys(bootstrap.featureFlags)
     }
 
