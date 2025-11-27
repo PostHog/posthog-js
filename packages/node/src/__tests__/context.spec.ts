@@ -118,9 +118,13 @@ describe('PostHog Context', () => {
 
   it('should merge contexts when fresh: false', async () => {
     posthog.withContext({ properties: { outer: 'value1', shared: 'parent' } }, () => {
-      posthog.withContext({ properties: { inner: 'value2', shared: 'child' } }, () => {
-        posthog.capture({ distinctId: 'user-5', event: 'test_event' })
-      }, { fresh: false })
+      posthog.withContext(
+        { properties: { inner: 'value2', shared: 'child' } },
+        () => {
+          posthog.capture({ distinctId: 'user-5', event: 'test_event' })
+        },
+        { fresh: false }
+      )
     })
 
     await waitForPromises()
@@ -137,9 +141,13 @@ describe('PostHog Context', () => {
 
   it('should merge sessionId from parent context', async () => {
     posthog.withContext({ sessionId: 'session-parent', properties: { level: '1' } }, () => {
-      posthog.withContext({ properties: { level: '2' } }, () => {
-        posthog.capture({ distinctId: 'user-6', event: 'test_event' })
-      }, { fresh: false })
+      posthog.withContext(
+        { properties: { level: '2' } },
+        () => {
+          posthog.capture({ distinctId: 'user-6', event: 'test_event' })
+        },
+        { fresh: false }
+      )
     })
 
     await waitForFlush()
@@ -212,25 +220,37 @@ describe('PostHog Context', () => {
     // Enter context A
     posthog.withContext({ properties: { contextA: 'valueA', level: 'A' } }, () => {
       // Enter context B (inherits from A)
-      posthog.withContext({ properties: { contextB: 'valueB', level: 'B' } }, () => {
-        // Enter context C1 (inherits from B, which has A's stuff)
-        posthog.withContext({ properties: { contextC1: 'valueC1', level: 'C1' } }, () => {
-          // Event 1: Should have A, B, and C1 context
-          posthog.capture({ distinctId: 'user-nested', event: 'event_in_C1' })
-        }, { fresh: false })
+      posthog.withContext(
+        { properties: { contextB: 'valueB', level: 'B' } },
+        () => {
+          // Enter context C1 (inherits from B, which has A's stuff)
+          posthog.withContext(
+            { properties: { contextC1: 'valueC1', level: 'C1' } },
+            () => {
+              // Event 1: Should have A, B, and C1 context
+              posthog.capture({ distinctId: 'user-nested', event: 'event_in_C1' })
+            },
+            { fresh: false }
+          )
 
-        // Exit C1 - Event 2: Should have A and B, but not C1
-        posthog.capture({ distinctId: 'user-nested', event: 'event_after_C1' })
+          // Exit C1 - Event 2: Should have A and B, but not C1
+          posthog.capture({ distinctId: 'user-nested', event: 'event_after_C1' })
 
-        // Enter context C2 (inherits from B, which still has A's stuff)
-        posthog.withContext({ properties: { contextC2: 'valueC2', level: 'C2' } }, () => {
-          // Event 3: Should have A, B, and C2 (but not C1)
-          posthog.capture({ distinctId: 'user-nested', event: 'event_in_C2' })
-        }, { fresh: false })
+          // Enter context C2 (inherits from B, which still has A's stuff)
+          posthog.withContext(
+            { properties: { contextC2: 'valueC2', level: 'C2' } },
+            () => {
+              // Event 3: Should have A, B, and C2 (but not C1)
+              posthog.capture({ distinctId: 'user-nested', event: 'event_in_C2' })
+            },
+            { fresh: false }
+          )
 
-        // Exit C2 - Event 4: Should have A and B again (no C1 or C2)
-        posthog.capture({ distinctId: 'user-nested', event: 'event_after_C2' })
-      }, { fresh: false })
+          // Exit C2 - Event 4: Should have A and B again (no C1 or C2)
+          posthog.capture({ distinctId: 'user-nested', event: 'event_after_C2' })
+        },
+        { fresh: false }
+      )
     })
 
     await waitForFlush()
