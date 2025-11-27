@@ -9,7 +9,7 @@ jobs:
         name: Bump versions based on PR label
         runs-on: ubuntu-22.04
         permissions:
-            contents: write
+            contents: read
         if: |
             github.event.pull_request.merged
             && contains(github.event.pull_request.labels.*.name, 'release')
@@ -19,7 +19,6 @@ jobs:
               uses: actions/checkout@v4
               with:
                   ref: ${{ github.event.pull_request.base.ref }}
-                  token: ${{ secrets.POSTHOG_BOT_PAT }}
                   fetch-depth: 0
 
             - uses: ./.github/actions/setup
@@ -30,17 +29,22 @@ jobs:
               run: pnpm turbo --filter=@posthog-tooling/changelog build
 
             - name: Update versions and changelogs
-              id: versions
               run: pnpm changeset version
-              env:
-                  GITHUB_TOKEN: ${{ secrets.POSTHOG_BOT_PAT }}
 
             - name: Update lockfile
               run: pnpm install
+
+            # We need a deployer token to commit the changes because we need to override the CodeQL requirement
+            - name: Get deployer token
+              id: deployer
+              uses: getsentry/action-github-app-token@97c9e23528286821f97fba885c1b1123284b29cc # v2
+              with:
+                  app_id: ${{ secrets.DEPLOYER_APP_ID }}
+                  private_key: ${{ secrets.DEPLOYER_APP_PRIVATE_KEY }}
 
             - name: Commit updated lockfile
               uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5 # pin v9.1.4
               with:
                   add: '.'
                   message: 'chore: update versions and lockfile'
-                  github_token: ${{ secrets.POSTHOG_BOT_PAT }}
+                  github_token: ${{ steps.deployer.outputs.token }}
