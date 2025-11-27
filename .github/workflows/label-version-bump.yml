@@ -8,6 +8,8 @@ jobs:
     label-version-bump:
         name: Bump versions based on PR label
         runs-on: ubuntu-22.04
+        permissions:
+            contents: write
         if: |
             github.event.pull_request.merged
             && contains(github.event.pull_request.labels.*.name, 'release')
