@@ -1,4 +1,3 @@
-/* eslint-disable compat/compat */
 import { scheduler } from '../scheduler'
 
 describe('Scheduler', () => {
@@ -11,92 +10,168 @@ describe('Scheduler', () => {
         jest.useRealTimers()
     })
 
-    describe('processEach', () => {
-        it.each([
-            { items: [1, 2, 3, 4, 5], expected: [2, 4, 6, 8, 10] },
-            { items: [10], expected: [20] },
-        ])('returns results in order for $items', async ({ items, expected }) => {
-            const promise = scheduler.processEach(items, (x) => x * 2)
-            jest.runAllTimers()
-            expect(await promise).toEqual(expected)
-        })
-
-        it('provides index to callback', async () => {
-            const promise = scheduler.processEach(['a', 'b', 'c'], (item, index) => `${index}:${item}`)
-            jest.runAllTimers()
-            expect(await promise).toEqual(['0:a', '1:b', '2:c'])
-        })
-
-        it('handles empty array', async () => {
-            const results = await scheduler.processEach([], (x) => x)
-            expect(results).toEqual([])
-        })
-
-        it('continues processing after task error', async () => {
+    describe('when inactive (default)', () => {
+        it('runs tasks immediately and synchronously', () => {
             const results: number[] = []
-            const promise = scheduler.processEach([1, 2, 3], (x) => {
+            scheduler.processEach([1, 2, 3], (x) => {
+                results.push(x)
+                return x
+            })
+            expect(results).toEqual([1, 2, 3])
+        })
+
+        it('calls onComplete synchronously', () => {
+            let completedResults: number[] | undefined
+            scheduler.processEach([1, 2, 3], (x) => x * 2, {
+                onComplete: (results) => {
+                    completedResults = results
+                },
+            })
+            expect(completedResults).toEqual([2, 4, 6])
+        })
+
+        it('handles empty array synchronously', () => {
+            let completedResults: unknown[] | undefined
+            scheduler.processEach([], (x) => x, {
+                onComplete: (results) => {
+                    completedResults = results
+                },
+            })
+            expect(completedResults).toEqual([])
+        })
+
+        it('continues processing after task error', () => {
+            const results: number[] = []
+            scheduler.processEach([1, 2, 3], (x) => {
                 if (x === 2) throw new Error('fail')
                 results.push(x)
                 return x
             })
-            jest.runAllTimers()
-            await promise
             expect(results).toEqual([1, 3])
         })
     })
 
-    describe('priority', () => {
-        it('processes high priority before normal priority', async () => {
-            const order: string[] = []
+    describe('when active', () => {
+        beforeEach(() => {
+            scheduler.setActive(true)
+        })
 
-            scheduler.processEach(['n1', 'n2'], (x) => {
-                order.push(x)
-                return x
+        describe('processEach', () => {
+            it.each([
+                { items: [1, 2, 3, 4, 5], expected: [2, 4, 6, 8, 10] },
+                { items: [10], expected: [20] },
+            ])('returns results in order for $items', ({ items, expected }) => {
+                let completedResults: number[] | undefined
+                scheduler.processEach(items, (x) => x * 2, {
+                    onComplete: (results) => {
+                        completedResults = results
+                    },
+                })
+                jest.runAllTimers()
+                expect(completedResults).toEqual(expected)
             })
 
-            scheduler.processEach(
-                ['h1', 'h2'],
-                (x) => {
+            it('provides index to callback', () => {
+                let completedResults: string[] | undefined
+                scheduler.processEach(['a', 'b', 'c'], (item, index) => `${index}:${item}`, {
+                    onComplete: (results) => {
+                        completedResults = results
+                    },
+                })
+                jest.runAllTimers()
+                expect(completedResults).toEqual(['0:a', '1:b', '2:c'])
+            })
+
+            it('handles empty array', () => {
+                let completedResults: unknown[] | undefined
+                scheduler.processEach([], (x) => x, {
+                    onComplete: (results) => {
+                        completedResults = results
+                    },
+                })
+                expect(completedResults).toEqual([])
+            })
+
+            it('continues processing after task error', () => {
+                const results: number[] = []
+                scheduler.processEach([1, 2, 3], (x) => {
+                    if (x === 2) throw new Error('fail')
+                    results.push(x)
+                    return x
+                })
+                jest.runAllTimers()
+                expect(results).toEqual([1, 3])
+            })
+        })
+
+        describe('priority', () => {
+            it('processes high priority before normal priority', () => {
+                const order: string[] = []
+
+                scheduler.processEach(['n1', 'n2'], (x) => {
                     order.push(x)
                     return x
-                },
-                { priority: 'high' }
-            )
+                })
 
-            jest.runAllTimers()
-            // eslint-disable-next-line compat/compat
-            await Promise.resolve()
+                scheduler.processEach(
+                    ['h1', 'h2'],
+                    (x) => {
+                        order.push(x)
+                        return x
+                    },
+                    { priority: 'high' }
+                )
 
-            expect(order).toEqual(['h1', 'h2', 'n1', 'n2'])
+                jest.runAllTimers()
+
+                expect(order).toEqual(['h1', 'h2', 'n1', 'n2'])
+            })
         })
-    })
 
-    describe('yielding', () => {
-        it('yields to browser after time budget exceeded', async () => {
-            let mockTime = 0
-            jest.spyOn(performance, 'now').mockImplementation(() => mockTime)
-            scheduler._reset(30)
+        describe('yielding', () => {
+            it('yields to browser after time budget exceeded (high priority)', () => {
+                let mockTime = 0
+                jest.spyOn(performance, 'now').mockImplementation(() => mockTime)
 
-            const results: number[] = []
-            const items = new Array(100).fill(0).map((_, i) => i)
+                const results: number[] = []
+                const items = new Array(100).fill(0).map((_, i) => i)
 
-            scheduler.processEach(items, (x) => {
-                mockTime += 1
-                results.push(x)
-                return x
+                scheduler.processEach(
+                    items,
+                    (x) => {
+                        mockTime += 1
+                        results.push(x)
+                        return x
+                    },
+                    { priority: 'high' }
+                )
+
+                jest.advanceTimersByTime(0)
+                expect(results.length).toBeLessThan(100)
+
+                jest.runAllTimers()
+                expect(results).toHaveLength(100)
             })
 
-            // First tick - should process ~30 items then yield
-            jest.advanceTimersByTime(0)
-            // eslint-disable-next-line compat/compat
-            await Promise.resolve()
-            expect(results.length).toBeLessThan(100)
+            it('yields to browser after time budget exceeded (normal priority)', () => {
+                let mockTime = 0
+                jest.spyOn(Date, 'now').mockImplementation(() => mockTime)
 
-            // Complete all
-            jest.runAllTimers()
-            // eslint-disable-next-line compat/compat
-            await Promise.resolve()
-            expect(results).toHaveLength(100)
+                const results: number[] = []
+                const items = new Array(100).fill(0).map((_, i) => i)
+
+                scheduler.processEach(items, (x) => {
+                    mockTime += 2
+                    results.push(x)
+                    return x
+                })
+
+                jest.advanceTimersByTime(0)
+                expect(results.length).toBeLessThan(100)
+
+                jest.runAllTimers()
+                expect(results).toHaveLength(100)
+            })
         })
     })
 })

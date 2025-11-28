@@ -1,6 +1,7 @@
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
-import { RemoteConfig } from '../types'
+import { Compression, RemoteConfig } from '../types'
+import { scheduler } from '../utils/scheduler'
 
 jest.mock('../utils/globals', () => {
     const orig = jest.requireActual('../utils/globals')
@@ -39,14 +40,15 @@ describe('deferred extension initialization', () => {
         console.error = jest.fn()
         mockReferrerGetter.mockReturnValue('https://referrer.com')
         mockURLGetter.mockReturnValue('https://example.com')
+        scheduler._reset()
     })
 
     describe('race condition handling', () => {
         it('should store pending remote config when it arrives before extensions initialize', async () => {
             const token = uuidv7()
             const remoteConfig: RemoteConfig = {
-                supportedCompression: ['gzip'],
-            } as RemoteConfig
+                supportedCompression: [Compression.GZipJS],
+            } as Partial<RemoteConfig> as RemoteConfig
 
             const posthog = await createPosthogInstance(token, {
                 __preview_deferred_init_extensions: true,
@@ -73,8 +75,8 @@ describe('deferred extension initialization', () => {
         it('should handle remote config arriving after extensions initialize', async () => {
             const token = uuidv7()
             const remoteConfig: RemoteConfig = {
-                supportedCompression: ['gzip'],
-            } as RemoteConfig
+                supportedCompression: [Compression.GZipJS],
+            } as Partial<RemoteConfig> as RemoteConfig
 
             const posthog = await createPosthogInstance(token, {
                 __preview_deferred_init_extensions: true,
@@ -96,8 +98,8 @@ describe('deferred extension initialization', () => {
         it('should not store pending config when deferred init is disabled', async () => {
             const token = uuidv7()
             const remoteConfig: RemoteConfig = {
-                supportedCompression: ['gzip'],
-            } as RemoteConfig
+                supportedCompression: [Compression.GZipJS],
+            } as Partial<RemoteConfig> as RemoteConfig
 
             const posthog = await createPosthogInstance(token, {
                 __preview_deferred_init_extensions: false, // sync init
@@ -116,12 +118,12 @@ describe('deferred extension initialization', () => {
         it('should replay pending remote config to extensions when they initialize', async () => {
             const token = uuidv7()
             const remoteConfig: RemoteConfig = {
-                supportedCompression: ['gzip'],
-            } as RemoteConfig
+                supportedCompression: [Compression.GZipJS],
+            } as Partial<RemoteConfig> as RemoteConfig
 
             const posthog = await createPosthogInstance(token, {
                 __preview_deferred_init_extensions: true,
-                advanced_disable_decide: false,
+                advanced_disable_decide: true,
                 capture_pageview: false,
                 disable_session_recording: true,
             })

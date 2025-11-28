@@ -3281,6 +3281,7 @@ describe('Lazy SessionRecording', () => {
                 })
             )
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+            jest.runAllTimers()
 
             // Verify the masking function was called with 'name' property
             expect(maskFn).toHaveBeenCalledWith(
@@ -3330,6 +3331,7 @@ describe('Lazy SessionRecording', () => {
                 })
             )
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+            jest.runAllTimers()
 
             // Verify the deprecated masking function was called
             expect(deprecatedMaskFn).toHaveBeenCalledWith(
@@ -3375,6 +3377,7 @@ describe('Lazy SessionRecording', () => {
                 })
             )
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+            jest.runAllTimers()
 
             // Should only call the new function, not the deprecated one
             expect(newMaskFn).toHaveBeenCalled()
@@ -3421,6 +3424,7 @@ describe('Lazy SessionRecording', () => {
                 })
             )
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+            jest.runAllTimers()
 
             // Verify the masking function was called with 'name' property
             expect(maskFn).toHaveBeenCalledWith(

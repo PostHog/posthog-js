@@ -13,7 +13,7 @@ import type { ConversationsRemoteConfig } from '../posthog-conversations-types'
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SessionRecordingStatus, TriggerType } from '../extensions/replay/external/triggerMatching'
 import { eventWithTime } from '../extensions/replay/types/rrweb-types'
-import { ErrorTracking } from '@posthog/core'
+import { ErrorTracking, isNumber } from '@posthog/core'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
@@ -254,6 +254,41 @@ export const XMLHttpRequest =
     global?.XMLHttpRequest && 'withCredentials' in new global.XMLHttpRequest() ? global.XMLHttpRequest : undefined
 export const AbortController = global?.AbortController
 export const userAgent = navigator?.userAgent
+
+type IdleDeadline = {
+    didTimeout: boolean
+    timeRemaining: () => number
+}
+
+type IdleCallbackHandle = number | ReturnType<typeof setTimeout>
+
+export const _requestIdleCallback = (
+    callback: (deadline: IdleDeadline) => void,
+    options?: { timeout?: number }
+): IdleCallbackHandle => {
+    if (global?.requestIdleCallback) {
+        // eslint-disable-next-line posthog-js/no-direct-request-idle-callback
+        return global.requestIdleCallback(callback, options)
+    }
+
+    const start = Date.now()
+    return setTimeout(() => {
+        callback({
+            didTimeout: false,
+            timeRemaining: () => Math.max(0, 50 - (Date.now() - start)),
+        })
+    }, 0) as ReturnType<typeof setTimeout>
+}
+
+export const _cancelIdleCallback = (handle: IdleCallbackHandle): void => {
+    if (global?.cancelIdleCallback && isNumber(handle)) {
+        // eslint-disable-next-line posthog-js/no-direct-request-idle-callback
+        global.cancelIdleCallback(handle)
+    } else {
+        clearTimeout(handle as ReturnType<typeof setTimeout>)
+    }
+}
+
 export const assignableWindow: AssignableWindow = win ?? ({} as any)
 
 export { win as window }

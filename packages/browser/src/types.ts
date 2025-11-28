@@ -742,6 +742,16 @@ export interface PostHogConfig {
     __preview_deferred_init_extensions: boolean
 
     /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+     * Enables extra scheduling via requestIdleCallback for non-critical processing.
+     * When false (default), tasks run immediately for backwards compatibility.
+     * When true, tasks are scheduled to avoid blocking the main thread.
+     *
+     * @default false
+     */
+    __preview_extra_scheduling?: boolean
+
+    /**
      * Determines the session recording options.
      *
      * @see `SessionRecordingOptions`
