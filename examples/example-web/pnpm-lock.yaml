@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  node-forge: 1.3.2
+
 pnpmfileChecksum: sha256-51V53DYAleXHgPrntlBZSmeS8lOCPoT1zhKZkbvcJZs=
 
 importers:
@@ -1049,8 +1052,8 @@ packages:
         optional: true
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-7nPDTJPXjXh04WMQI5m24EE1ldT05vH336BZ11Kfdd/eyvKpNHoHWFrVIqlVvuRHcS2Bo5mnvoHAG1ph7wXUeg==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.2.2
+    resolution: {integrity: sha512-2vLzAcFT1l9nhpOFBz7pBuhE4sc1jA2fTSxcZ2aR1o/Qc+pUJTc0nlsPdqwf7lC6PoaJenjZEDrsolHzAlA9IQ==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.5.2
 
   '@rollup/plugin-babel@5.3.1':
     resolution: {integrity: sha512-WFfdLWU/xVWKeRQnKmIAQULUI7Il0gZnBIH/ZFO069wYIfPu+8zrfp/KMW0atmELoRDq8FbiP3VCss9MhCut7Q==}
@@ -3744,8 +3747,8 @@ packages:
   no-case@3.0.4:
     resolution: {integrity: sha512-fgAN3jGAh+RoxUGZHTSOLJIqUc2wmoBwGR4tbpNAKmmovFoWq0OdRkb0VkldReO2a2iBT/OEulG9XSUc10r3zg==}
 
-  node-forge@1.3.1:
-    resolution: {integrity: sha512-dPEtOeMvF9VMcYV/1Wb8CPoVAXtp6MKMlcbAt4ddqmGqUJ6fQZFXkNZNkNlfevtNkGtaSoXf/vNNNSvgrdXwtA==}
+  node-forge@1.3.2:
+    resolution: {integrity: sha512-6xKiQ+cph9KImrRh0VsjH2d8/GXA4FIMlgU4B757iI1ApvcyA9VlouP0yZJha01V+huImO+kKMU7ih+2+E14fw==}
     engines: {node: '>= 6.13.0'}
 
   node-int64@0.4.0:
@@ -4409,8 +4412,8 @@ packages:
     engines: {node: ^10 || ^12 || >=14}
 
   posthog-js-lite@file:../../target/posthog-js-lite.tgz:
-    resolution: {integrity: sha512-4FIUpfT5qi7dZ92WTMP3Y9m/n+9XZGRjce0Uq2PUm0m7SQ0VT19kthSXRC+L8+WMumyxjqsgTmhqgX/MdWvqQg==, tarball: file:../../target/posthog-js-lite.tgz}
-    version: 4.1.1
+    resolution: {integrity: sha512-v3odkuY0/bg0+r1qSN86vP5UZBFGf/Vgws1FxOdEyWQIup9nXBibotVSVUi8n/mkBD7MuLr7c8b7bq8b4J3F3w==, tarball: file:../../target/posthog-js-lite.tgz}
+    version: 4.1.10
 
   prelude-ls@1.1.2:
     resolution: {integrity: sha512-ESF23V4SKG6lVSGZgYNpbsiaAkdab6ZgOxe52p7+Kid3W3u3bxR4Vfd/o21dmN7jSt0IwgZ4v5MUd26FEtXE9w==}
@@ -6837,7 +6840,9 @@ snapshots:
       type-fest: 0.21.3
       webpack-dev-server: 4.15.2(webpack@5.102.0)
 
-  '@posthog/core@file:../../target/posthog-core.tgz': {}
+  '@posthog/core@file:../../target/posthog-core.tgz':
+    dependencies:
+      cross-spawn: 7.0.6
 
   '@rollup/plugin-babel@5.3.1(@babel/core@7.28.4)(@types/babel__core@7.20.5)(rollup@2.79.2)':
     dependencies:
@@ -10170,7 +10175,7 @@ snapshots:
       lower-case: 2.0.2
       tslib: 2.8.1
 
-  node-forge@1.3.1: {}
+  node-forge@1.3.2: {}
 
   node-int64@0.4.0: {}
 
@@ -11281,7 +11286,7 @@ snapshots:
   selfsigned@2.4.1:
     dependencies:
       '@types/node-forge': 1.3.14
-      node-forge: 1.3.1
+      node-forge: 1.3.2
 
   semver@6.3.1: {}
 
