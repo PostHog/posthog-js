@@ -736,22 +736,17 @@ export class PostHog {
             // we don't support IE11 anymore, so performance.now is safe
             // eslint-disable-next-line compat/compat
             const startTime = performance.now()
-            scheduler
-                .processEach(initTasks, (task) => task())
-                .then(
-                    () => {
-                        // eslint-disable-next-line compat/compat
-                        const totalTimeMs = Math.round(performance.now() - startTime)
-                        this.register_for_session({
-                            $sdk_debug_extensions_init_method: 'deferred',
-                            $sdk_debug_extensions_init_time_ms: totalTimeMs,
-                        })
-                        logger.info(`PostHog extensions initialized (${totalTimeMs}ms)`)
-                    },
-                    (error) => {
-                        logger.error('Error initializing extension:', error)
-                    }
-                )
+            scheduler.processEach(initTasks, (task) => task(), {
+                onComplete: () => {
+                    // eslint-disable-next-line compat/compat
+                    const totalTimeMs = Math.round(performance.now() - startTime)
+                    this.register_for_session({
+                        $sdk_debug_extensions_init_method: 'deferred',
+                        $sdk_debug_extensions_init_time_ms: totalTimeMs,
+                    })
+                    logger.info(`PostHog extensions initialized (${totalTimeMs}ms)`)
+                },
+            })
         } else {
             // we don't support IE11 anymore, so performance.now is safe
             // eslint-disable-next-line compat/compat

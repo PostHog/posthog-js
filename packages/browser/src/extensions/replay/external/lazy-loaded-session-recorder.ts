@@ -1099,17 +1099,21 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         if (this._buffer.data.length > 0) {
             const snapshotEvents = splitBuffer(this._buffer)
-            void scheduler.processEach(snapshotEvents, (snapshotBuffer) => {
-                this._flushedSizeTracker?.trackSize(snapshotBuffer.size)
-                this._captureSnapshot({
-                    $snapshot_bytes: snapshotBuffer.size,
-                    $snapshot_data: snapshotBuffer.data,
-                    $session_id: snapshotBuffer.sessionId,
-                    $window_id: snapshotBuffer.windowId,
-                    $lib: 'web',
-                    $lib_version: Config.LIB_VERSION,
-                })
-            })
+            scheduler.processEach(
+                snapshotEvents,
+                (snapshotBuffer) => {
+                    this._flushedSizeTracker?.trackSize(snapshotBuffer.size)
+                    this._captureSnapshot({
+                        $snapshot_bytes: snapshotBuffer.size,
+                        $snapshot_data: snapshotBuffer.data,
+                        $session_id: snapshotBuffer.sessionId,
+                        $window_id: snapshotBuffer.windowId,
+                        $lib: 'web',
+                        $lib_version: Config.LIB_VERSION,
+                    })
+                },
+                { priority: 'high' }
+            )
         }
 
         // buffer is empty, we clear it in case the session id has changed

@@ -121,15 +121,15 @@ export class RetryQueue {
             return
         }
 
-        this._poller = setTimeout(async () => {
+        this._poller = setTimeout(() => {
             if (this._areWeOnline && this._queue.length > 0) {
-                await this._flush()
+                this._flush()
             }
             this._poll()
         }, this._pollIntervalMs) as any as number
     }
 
-    private async _flush(): Promise<void> {
+    private _flush(): void {
         const now = Date.now()
         const notToFlush: RetryQueueElement[] = []
         const toFlush = this._queue.filter((item) => {
@@ -143,7 +143,7 @@ export class RetryQueue {
         this._queue = notToFlush
 
         if (toFlush.length > 0) {
-            await scheduler.processEach(toFlush, ({ requestOptions }) => this.retriableRequest(requestOptions), {
+            scheduler.processEach(toFlush, ({ requestOptions }) => this.retriableRequest(requestOptions), {
                 priority: 'high',
             })
         }

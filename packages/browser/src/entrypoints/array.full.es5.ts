@@ -7,7 +7,6 @@
 
 import 'core-js/features/object/entries'
 import 'core-js/features/object/from-entries'
-import 'core-js/features/promise'
 
 if (typeof performance === 'undefined' || typeof performance.now !== 'function') {
     const perf = typeof performance !== 'undefined' ? performance : ({} as any)
