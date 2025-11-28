@@ -1,4 +1,6 @@
+import { isNull, isUndefined } from '@posthog/core'
 import { jsonStringify } from '../request'
+import { PropertyFilters } from '../posthog-surveys-types'
 import type { Properties, PropertyMatchType } from '../types'
 import { isMatchingRegex } from './regex-utils'
 
@@ -22,3 +24,31 @@ export const propertyComparisons: Record<PropertyMatchType, (targets: string[], 
 }
 
 const toLowerCase = (v: string): string => v.toLowerCase()
+
+export function matchPropertyFilters(
+    propertyFilters: PropertyFilters | undefined,
+    eventProperties: Properties | undefined
+): boolean {
+    // if there are no property filters, it means we're only matching on event name
+    if (!propertyFilters) {
+        return true
+    }
+
+    return Object.entries(propertyFilters).every(([propertyName, filter]) => {
+        const eventPropertyValue = eventProperties?.[propertyName]
+
+        if (isUndefined(eventPropertyValue) || isNull(eventPropertyValue)) {
+            return false
+        }
+
+        // convert event property to string array for comparison
+        const eventValues = [String(eventPropertyValue)]
+
+        const comparisonFunction = propertyComparisons[filter.operator]
+        if (!comparisonFunction) {
+            return false
+        }
+
+        return comparisonFunction(filter.values, eventValues)
+    })
+}

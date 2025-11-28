@@ -3,7 +3,7 @@
 import { SurveyActionType, ActionStepStringMatching } from '../../../posthog-surveys-types'
 import { PostHogPersistence } from '../../../posthog-persistence'
 import { PostHog } from '../../../posthog-core'
-import { CaptureResult, PostHogConfig } from '../../../types'
+import { CaptureResult, PostHogConfig, Properties, PropertyMatchType } from '../../../types'
 import { ActionMatcher } from '../../../extensions/surveys/action-matcher'
 import { createMockPostHog, createMockConfig } from '../../helpers/posthog-instance'
 
@@ -29,12 +29,17 @@ describe('action-matcher', () => {
         instance.persistence?.clear()
     })
 
-    const createCaptureResult = (eventName: string, currentUrl?: string): CaptureResult => {
+    const createCaptureResult = (
+        eventName: string,
+        currentUrl?: string,
+        additionalProperties?: Properties
+    ): CaptureResult => {
         return {
             $set: undefined,
             $set_once: undefined,
             properties: {
                 $current_url: currentUrl,
+                ...additionalProperties,
             },
             timestamp: undefined,
             uuid: '0C984DA5-761F-4F75-9582-D2F95B43B04A',
@@ -45,7 +50,12 @@ describe('action-matcher', () => {
         id: number,
         eventName: string,
         currentUrl?: string,
-        urlMatch?: ActionStepStringMatching
+        urlMatch?: ActionStepStringMatching,
+        properties?: {
+            key: string
+            value: string | number | boolean | (string | number | boolean)[]
+            operator?: PropertyMatchType
+        }[]
     ): SurveyActionType => {
         return {
             id: id,
@@ -59,12 +69,9 @@ describe('action-matcher', () => {
                     href_matching: null,
                     url: currentUrl,
                     url_matching: urlMatch || 'exact',
+                    properties: properties,
                 },
             ],
-            created_at: '2024-06-20T14:39:23.616676Z',
-            deleted: false,
-            is_action: true,
-            tags: [],
         }
     }
 
@@ -155,5 +162,24 @@ describe('action-matcher', () => {
 
         actionMatcher.on('$autocapture', result)
         expect(buttonClickedActionMatched).toBeTruthy()
+    })
+
+    it('can match action with property filters', () => {
+        const action = createAction(1, '$pageview', undefined, undefined, [
+            { key: 'plan', value: 'pro', operator: 'exact' },
+        ])
+        const actionMatcher = new ActionMatcher(instance)
+        actionMatcher.register([action])
+
+        let matched = false
+        actionMatcher._addActionHook(() => {
+            matched = true
+        })
+
+        actionMatcher.on('$pageview', createCaptureResult('$pageview', undefined, { plan: 'free' }))
+        expect(matched).toBeFalsy()
+
+        actionMatcher.on('$pageview', createCaptureResult('$pageview', undefined, { plan: 'pro' }))
+        expect(matched).toBeTruthy()
     })
 })

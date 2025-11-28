@@ -1,10 +1,17 @@
 import { PostHog } from '../../posthog-core'
-import { ActionStepStringMatching, ActionStepType, SurveyActionType, SurveyElement } from '../../posthog-surveys-types'
+import {
+    ActionStepStringMatching,
+    ActionStepType,
+    PropertyFilters,
+    SurveyActionType,
+    SurveyElement,
+} from '../../posthog-surveys-types'
 import { SimpleEventEmitter } from '../../utils/simple-event-emitter'
-import { CaptureResult } from '../../types'
-import { isUndefined } from '@posthog/core'
+import { CaptureResult, PropertyMatchType } from '../../types'
+import { isArray, isUndefined } from '@posthog/core'
 import { window } from '../../utils/globals'
 import { isMatchingRegex } from '../../utils/regex-utils'
+import { matchPropertyFilters } from '../../utils/property-utils'
 
 export class ActionMatcher {
     private readonly _actionRegistry?: Set<SurveyActionType>
@@ -94,7 +101,10 @@ export class ActionMatcher {
 
     private _checkStep = (event?: CaptureResult, step?: ActionStepType): boolean => {
         return (
-            this._checkStepEvent(event, step) && this._checkStepUrl(event, step) && this._checkStepElement(event, step)
+            this._checkStepEvent(event, step) &&
+            this._checkStepUrl(event, step) &&
+            this._checkStepElement(event, step) &&
+            this._checkStepProperties(event, step)
         )
     }
 
@@ -204,5 +214,28 @@ export class ActionMatcher {
         }
 
         return event?.properties.$elements as unknown as SurveyElement[]
+    }
+
+    private _checkStepProperties(event?: CaptureResult, step?: ActionStepType): boolean {
+        if (!step?.properties || step.properties.length === 0) {
+            return true
+        }
+
+        // transform to match same property format as normal events
+        const propertyFilters: PropertyFilters = step.properties.reduce<PropertyFilters>((acc, filter) => {
+            const values = isArray(filter.value)
+                ? filter.value.map(String)
+                : filter.value != null
+                  ? [String(filter.value)]
+                  : []
+
+            acc[filter.key] = {
+                values,
+                operator: (filter.operator || 'exact') as PropertyMatchType,
+            }
+            return acc
+        }, {})
+
+        return matchPropertyFilters(propertyFilters, event?.properties)
     }
 }

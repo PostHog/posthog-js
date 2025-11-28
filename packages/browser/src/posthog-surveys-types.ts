@@ -11,14 +11,16 @@ export enum SurveyEventType {
     Cancellation = 'cancelEvents',
 }
 
+export type PropertyFilters = {
+    [propertyName: string]: {
+        values: string[]
+        operator: PropertyMatchType
+    }
+}
+
 export interface SurveyEventWithFilters {
     name: string
-    propertyFilters?: {
-        [propertyName: string]: {
-            values: string[]
-            operator: PropertyMatchType
-        }
-    }
+    propertyFilters?: PropertyFilters
 }
 
 export enum SurveyWidgetType {
@@ -267,6 +269,13 @@ export interface ActionStepType {
     url?: string | null
     /** @default StringMatching.Contains */
     url_matching?: ActionStepStringMatching | null
+    /** Property filters for action step matching */
+    properties?: {
+        key: string
+        value?: string | number | boolean | (string | number | boolean)[] | null
+        operator?: PropertyMatchType
+        type?: string
+    }[]
 }
 
 export enum SurveyEventName {
