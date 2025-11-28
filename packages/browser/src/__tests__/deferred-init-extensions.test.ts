@@ -1,6 +1,7 @@
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { RemoteConfig } from '../types'
+import { scheduler } from '../utils/scheduler'
 
 jest.mock('../utils/globals', () => {
     const orig = jest.requireActual('../utils/globals')
@@ -39,6 +40,7 @@ describe('deferred extension initialization', () => {
         console.error = jest.fn()
         mockReferrerGetter.mockReturnValue('https://referrer.com')
         mockURLGetter.mockReturnValue('https://example.com')
+        scheduler._reset()
     })
 
     describe('race condition handling', () => {
