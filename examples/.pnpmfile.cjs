@@ -31,7 +31,7 @@ module.exports = {
                 verifyDepsBeforeRun: true,
                 nodeLinker: 'hoisted',
                 minimumReleaseAge: 4320,
-                minimumReleaseAgeExclude: ['node-forge@1.3.1'],
+                minimumReleaseAgeExclude: ['node-forge@1.3.2'],
             })
         },
     },
