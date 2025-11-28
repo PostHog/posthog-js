@@ -2,6 +2,7 @@ import { Logger, createLogger } from '@posthog/core'
 import { PluginConfig, resolveConfig, ResolvedPluginConfig } from './config'
 import { Compilation, Stats } from 'webpack'
 import { spawnLocal } from '@posthog/core/process'
+import path from 'path'
 
 export * from './config'
 
@@ -23,9 +24,6 @@ export class PosthogWebpackPlugin {
     }
 
     apply(compiler: any): void {
-        compiler.options.devtool =
-            compiler.options.devtool ?? (this.resolvedConfig.sourcemaps.enabled ? 'source-map' : undefined)
-
         const onDone = async (stats: Stats, callback: any): Promise<void> => {
             callback = callback || (() => {})
             try {
@@ -46,13 +44,24 @@ export class PosthogWebpackPlugin {
 
     async processSourceMaps(compilation: Compilation, config: ResolvedPluginConfig): Promise<void> {
         const outputDirectory = compilation.outputOptions.path
-        const args = ['sourcemap', 'process', '--directory', outputDirectory]
 
-        for (const chunk of compilation.chunks) {
-            // chunk.files is a Set in webpack 5
-            for (const file of chunk.files) {
-                args.push('--include', `**/${file}`)
-            }
+        // chunks are output outside of the output directory for server chunks
+        const args = ['sourcemap', 'process']
+
+        if (compilation.chunks.size == 0) {
+            // No chunks generated, skipping sourcemap processing.
+            return
+        }
+
+        const filePaths = Array.from(compilation.chunks).flatMap((chunk) =>
+            Array.from(chunk.files).map((file) => path.resolve(outputDirectory, file))
+        )
+        const [commonDirectory, relativeFilePaths] = splitFilePaths(filePaths)
+
+        args.push('--directory', commonDirectory)
+
+        for (const chunkPath of relativeFilePaths) {
+            args.push('--include', `**/${chunkPath}`)
         }
 
         if (config.sourcemaps.project) {
@@ -66,8 +75,6 @@ export class PosthogWebpackPlugin {
         if (config.sourcemaps.deleteAfterUpload) {
             args.push('--delete-after')
         }
-
-        this.logger.info(args)
 
         await spawnLocal(config.cliBinaryPath, args, {
             cwd: process.cwd(),
@@ -87,4 +94,37 @@ function assertValue(value: any, message: string): void {
     if (!value) {
         throw new Error(message)
     }
+}
+
+// Convert a list of absolute file path to a common absolute directory ancestor path and relative path
+function splitFilePaths(absolutePaths: string[]): [string, string[]] {
+    if (!absolutePaths || absolutePaths.length === 0) {
+        return [process.cwd(), []]
+    }
+
+    // Start with the directory of the first path and walk up until we find a common ancestor
+    let commonDir = path.dirname(absolutePaths[0])
+
+    const isCommonAncestor = (candidate: string): boolean => {
+        return absolutePaths.every((p) => {
+            const rel = path.relative(candidate, p)
+            // If rel starts with '..' or is absolute, p is not inside candidate
+            return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
+        })
+    }
+
+    // If the first candidate isn't a common ancestor, walk up the directory tree
+    while (!isCommonAncestor(commonDir)) {
+        const parent = path.dirname(commonDir)
+        if (parent === commonDir) {
+            // reached filesystem root
+            break
+        }
+        commonDir = parent
+    }
+
+    // Compute relative paths from the common directory, normalize to forward slashes for globs
+    const relativePaths = absolutePaths.map((p) => path.relative(commonDir, p).replace(/\\/g, '/'))
+
+    return [commonDir, relativePaths]
 }
