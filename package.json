@@ -21,6 +21,9 @@
         "patchedDependencies": {
             "@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17": "patches/@rrweb__rrweb-plugin-console-record@2.0.0-alpha.17.patch",
             "@rrweb/record@2.0.0-alpha.17": "patches/@rrweb__record@2.0.0-alpha.17.patch"
+        },
+        "overrides": {
+            "node-forge": "1.3.2"
         }
     },
     "devDependencies": {
