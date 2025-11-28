@@ -63,17 +63,19 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Req
                     (isResourceTiming(entry) && options.initiatorTypes.includes(entry.initiatorType as InitiatorType))
             )
 
-        // Process initial performance entries with yielding for large sets
-        scheduler
-            .processEach(initialPerformanceEntries, (entry) =>
-                prepareRequest({ entry, method: undefined, status: undefined, networkRequest: {}, isInitial: true })
-            )
-            .then((requests) => {
-                cb({
-                    requests: requests.flat(),
-                    isInitial: true,
-                })
-            })
+        scheduler.processEach(
+            initialPerformanceEntries,
+            (entry) =>
+                prepareRequest({ entry, method: undefined, status: undefined, networkRequest: {}, isInitial: true }),
+            {
+                onComplete: (requests) => {
+                    cb({
+                        requests: requests.flat(),
+                        isInitial: true,
+                    })
+                },
+            }
+        )
     }
     const observer = new win.PerformanceObserver((entries) => {
         // if recordBody or recordHeaders is true then we don't want to record fetch or xhr here

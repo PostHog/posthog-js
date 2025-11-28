@@ -1070,7 +1070,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         if (this._buffer.data.length > 0) {
             const snapshotEvents = splitBuffer(this._buffer)
-            void scheduler.processEach(snapshotEvents, (snapshotBuffer) => {
+            scheduler.processEach(snapshotEvents, (snapshotBuffer) => {
                 this._flushedSizeTracker?.trackSize(snapshotBuffer.size)
                 this._captureSnapshot({
                     $snapshot_bytes: snapshotBuffer.size,

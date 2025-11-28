@@ -3,6 +3,11 @@ import { isNullish } from '@posthog/core'
 
 export type Priority = 'high' | 'normal'
 
+export interface ProcessEachOptions<R> {
+    priority?: Priority
+    onComplete?: (results: R[]) => void
+}
+
 const DEFAULT_TIME_BUDGET_MS = 30
 
 class Scheduler {
@@ -11,34 +16,31 @@ class Scheduler {
     private _scheduled: ReturnType<typeof setTimeout> | null = null
     private _timeBudgetMs = DEFAULT_TIME_BUDGET_MS
 
-    processEach<T, R>(items: T[], fn: (item: T, index: number) => R, options?: { priority?: Priority }): Promise<R[]> {
+    processEach<T, R>(items: T[], fn: (item: T, index: number) => R, options?: ProcessEachOptions<R>): void {
         if (items.length === 0) {
-            // eslint-disable-next-line compat/compat
-            return Promise.resolve([])
+            options?.onComplete?.([])
+            return
         }
 
         const results: R[] = new Array(items.length)
         let completedCount = 0
         const queue = options?.priority === 'high' ? this._highQueue : this._normalQueue
 
-        // eslint-disable-next-line compat/compat
-        return new Promise((resolve) => {
-            items.forEach((item, index) => {
-                queue.push(() => {
-                    try {
-                        results[index] = fn(item, index)
-                    } finally {
-                        if (++completedCount === items.length) {
-                            resolve(results)
-                        }
+        items.forEach((item, index) => {
+            queue.push(() => {
+                try {
+                    results[index] = fn(item, index)
+                } finally {
+                    if (++completedCount === items.length) {
+                        options?.onComplete?.(results)
                     }
-                })
+                }
             })
-
-            if (isNullish(this._scheduled)) {
-                this._scheduled = setTimeout(() => this._process(), 0)
-            }
         })
+
+        if (isNullish(this._scheduled)) {
+            this._scheduled = setTimeout(() => this._process(), 0)
+        }
     }
 
     private _process(): void {
