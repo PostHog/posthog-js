@@ -6,6 +6,7 @@ import ErrorTracking from '../extensions/error-tracking'
 
 import { PostHogBackendClient } from '../client'
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
+import { PostHogContext } from '../extensions/context/context'
 
 ErrorTracking.errorPropertiesBuilder = new CoreErrorTracking.ErrorPropertiesBuilder(
   [
@@ -22,5 +23,9 @@ ErrorTracking.errorPropertiesBuilder = new CoreErrorTracking.ErrorPropertiesBuil
 export class PostHog extends PostHogBackendClient {
   getLibraryId(): string {
     return 'posthog-node'
+  }
+
+  protected initializeContext(): PostHogContext {
+    return new PostHogContext()
   }
 }

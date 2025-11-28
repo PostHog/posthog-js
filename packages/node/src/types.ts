@@ -5,23 +5,25 @@ import type {
   PostHogFetchOptions,
   PostHogFetchResponse,
 } from '@posthog/core'
+import { ContextData, ContextOptions } from './extensions/context/types'
 
 import type { FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
 
-export interface IdentifyMessage {
+export type IdentifyMessage = {
   distinctId: string
   properties?: Record<string | number, any>
   disableGeoip?: boolean
 }
 
-export interface SendFeatureFlagsOptions {
+export type SendFeatureFlagsOptions = {
   onlyEvaluateLocally?: boolean
   personProperties?: Record<string, any>
   groupProperties?: Record<string, Record<string, any>>
   flagKeys?: string[]
 }
 
-export interface EventMessage extends IdentifyMessage {
+export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
+  distinctId?: string // Optional - can be provided via context
   event: string
   groups?: Record<string, string | number> // Mapping of group type to group id
   sendFeatureFlags?: boolean | SendFeatureFlagsOptions
@@ -29,7 +31,7 @@ export interface EventMessage extends IdentifyMessage {
   uuid?: string
 }
 
-export interface GroupIdentifyMessage {
+export type GroupIdentifyMessage = {
   groupType: string
   groupKey: string // Unique identifier for the group
   properties?: Record<string | number, any>
@@ -334,6 +336,21 @@ export interface IPostHog {
    * already polled automatically at a regular interval.
    */
   reloadFeatureFlags(): Promise<void>
+
+  /**
+   * @description Run a function with specific context that will be applied to all events captured within that context.
+   * @param data Context data to apply (sessionId, distinctId, properties, enableExceptionAutocapture)
+   * @param fn Function to run with the context
+   * @param options Context options (fresh)
+   * @returns The return value of the function
+   */
+  withContext<T>(data: Partial<ContextData>, fn: () => T, options?: ContextOptions): T
+
+  /**
+   * @description Get the current context data.
+   * @returns The current context data, or undefined if no context is set
+   */
+  getContext(): ContextData | undefined
 
   /**
    * @description Flushes the events still in the queue and clears the feature flags poller to allow for

@@ -19,4 +19,8 @@ export class PostHog extends PostHogBackendClient {
   getLibraryId(): string {
     return 'posthog-edge'
   }
+
+  protected initializeContext(): undefined {
+    return undefined
+  }
 }
