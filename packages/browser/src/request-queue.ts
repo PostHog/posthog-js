@@ -58,20 +58,19 @@ export class RequestQueue {
         if (this._isPaused) {
             return
         }
-        this._flushTimeout = setTimeout(async () => {
+        this._flushTimeout = setTimeout(() => {
             this._clearFlushTimeout()
             if (this._queue.length > 0) {
                 const requests = this._formatQueue()
                 const requestEntries = Object.entries(requests)
-                const now = new Date().getTime()
+                const flushStartTime = new Date().getTime()
 
-                // Process timestamp updates with yielding for large batches
-                await scheduler.processEach(
+                scheduler.processEach(
                     requestEntries,
                     ([, req]) => {
                         if (req.data && isArray(req.data)) {
                             each(req.data, (data) => {
-                                data['offset'] = Math.abs(data['timestamp'] - now)
+                                data['offset'] = Math.abs(data['timestamp'] - flushStartTime)
                                 delete data['timestamp']
                             })
                         }

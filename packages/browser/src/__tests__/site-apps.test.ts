@@ -382,7 +382,7 @@ describe('SiteApps', () => {
             expect(siteAppsInstance.apps['1']).toEqual({
                 errored: false,
                 loaded: true,
-                processedBuffer: false,
+                processedBuffer: true, // true because there are no buffered events to process
                 id: '1',
                 processEvent: expect.any(Function),
             })

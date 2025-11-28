@@ -1,4 +1,4 @@
-import { window } from './utils/globals'
+import { window, _requestIdleCallback } from './utils/globals'
 import { PostHog } from './posthog-core'
 import { addEventListener } from './utils'
 import { isArray } from '@posthog/core'
@@ -29,9 +29,7 @@ export class ScrollManager {
     resetContext(): ScrollContext | undefined {
         const ctx = this._context
 
-        // update the scroll properties for the new page, but wait until the next tick
-        // of the event loop
-        setTimeout(this._updateScrollData, 0)
+        _requestIdleCallback(this._updateScrollData)
 
         return ctx
     }

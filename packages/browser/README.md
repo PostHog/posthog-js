@@ -84,7 +84,7 @@ We have 2 options for linking this project to your local version: via [pnpm link
 - run `pnpm build` and `pnpm package` in the root of this repo to generate a tarball of this project.
 - run `pnpm -r update posthog-js@file:[ABSOLUTE_PATH_TO_POSTHOG_JS_REPO]/target/posthog-js.tgz` in the root of the repo that you want to link to (e.g. the posthog main repo).
 - run `pnpm install` in that same repo
-- run `cd frontend && pnpm run copy-scripts` if the repo that you want to link to is the posthog main repo.
+- run `pnpm --filter=frontend copy-scripts` if the repo that you want to link to is the posthog main repo.
 
 Then, once this link has been created, any time you need to make a change to `posthog-js`, you can run `pnpm build && pnpm package` from the `posthog-js` root and the changes will appear in the other repo.
 

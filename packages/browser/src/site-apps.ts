@@ -93,16 +93,21 @@ export class SiteApps {
         const processBufferedEvents = () => {
             if (!app.errored && this._bufferedInvocations.length) {
                 logger.info(`Processing ${this._bufferedInvocations.length} events for site app with id ${loader.id}`)
-                void scheduler
-                    .processEach(this._bufferedInvocations, (globals) => app.processEvent?.(globals))
-                    .then(() => {
+                scheduler.processEach(this._bufferedInvocations, (globals) => app.processEvent?.(globals), {
+                    onComplete: () => {
                         app.processedBuffer = true
                         if (Object.values(this.apps).every((app) => app.processedBuffer || app.errored)) {
                             this._stopBuffering?.()
                         }
-                    })
+                    },
+                })
+                return
             }
 
+            // Either app errored or no buffered invocations - handle synchronously
+            if (!app.errored) {
+                app.processedBuffer = true
+            }
             if (Object.values(this.apps).every((app) => app.processedBuffer || app.errored)) {
                 this._stopBuffering?.()
             }
