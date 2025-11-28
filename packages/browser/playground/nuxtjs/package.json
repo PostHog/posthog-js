@@ -15,5 +15,10 @@
     "dependencies": {
         "posthog-js": "file:../../dist/"
     },
-    "packageManager": "pnpm@10.12.4"
+    "packageManager": "pnpm@10.12.4",
+    "pnpm": {
+        "overrides": {
+            "node-forge": "1.3.2"
+        }
+    }
 }
