@@ -1,6 +1,6 @@
 minimumReleaseAge: 4320 # 3 days
 minimumReleaseAgeExclude:
-  - node-forge
+  - node-forge@1.3.2
 
 packages:
   - packages/*

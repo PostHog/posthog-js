@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.14.1
+
+### Patch Changes
+
+- [#2636](https://github.com/PostHog/posthog-js/pull/2636) [`922afaf`](https://github.com/PostHog/posthog-js/commit/922afaf977fccabc20fac873e16046ce4fdefda5) Thanks [@hpouillot](https://github.com/hpouillot)! - forward session and distinct id in express error handler
+  (2025-11-28)
+
 ## 5.14.0
 
 ### Minor Changes
