@@ -245,6 +245,26 @@ export class SurveyManager {
         }
     }
 
+    /**
+     * cancel a "pending" survey, i.e. one that is waiting to be displayed in
+     * the _surveyTimeouts queue
+     */
+    public cancelSurvey(surveyId: string): void {
+        // only works for surveys in the _surveyTimeouts queue...
+        if (!this._surveyTimeouts.has(surveyId)) {
+            return
+        }
+
+        logger.info(`Cancelled pending survey ${surveyId}`)
+        this._clearSurveyTimeout(surveyId)
+
+        // release focus - it was claimed when the delay timer started.
+        // "focus" != "survey is displayed"
+        if (this._surveyInFocus === surveyId) {
+            this._surveyInFocus = null
+        }
+    }
+
     public handlePopoverSurvey = (survey: Survey): void => {
         this._clearSurveyTimeout(survey.id)
         this._addSurveyToFocus(survey)
@@ -261,6 +281,9 @@ export class SurveyManager {
             )
         }
         const timeoutId = setTimeout(() => {
+            // remove survey to keep `_surveyTimeouts` as a true list of "pending" surveys
+            this._surveyTimeouts.delete(survey.id)
+
             if (!doesSurveyUrlMatch(survey)) {
                 return this._removeSurveyFromFocus(survey)
             }

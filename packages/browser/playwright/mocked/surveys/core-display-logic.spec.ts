@@ -205,4 +205,99 @@ test.describe('surveys - core display logic', () => {
         await page.locator('.PostHogSurvey-123').locator('textarea').type('some feedback')
         await expect(page.locator('.PostHogSurvey-123').locator('.form-submit')).not.toHaveAttribute('disabled')
     })
+
+    test('survey popup delay is respected', async ({ page, context }) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: 'delay-test-survey',
+                            name: 'Survey with cancel event',
+                            description: 'description',
+                            type: 'popover',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [openTextQuestion],
+                            appearance: { surveyPopupDelaySeconds: 3 },
+                            conditions: {
+                                events: {
+                                    values: [{ name: 'trigger_event' }],
+                                },
+                            },
+                        },
+                    ],
+                },
+            })
+        })
+
+        // Wait for the surveys API response to ensure the event receiver is registered
+        const surveysResponse = page.waitForResponse('**/surveys/**')
+        await start(startOptions, page, context)
+        await surveysAPICall
+        await surveysResponse
+
+        const surveyLocator = page.locator('.PostHogSurvey-delay-test-survey').locator('.survey-form')
+
+        await expect(surveyLocator).not.toBeVisible()
+
+        await page.evaluate(() => {
+            ;(window as any).posthog.capture('trigger_event')
+        })
+
+        await page.waitForTimeout(2000)
+        await expect(surveyLocator).not.toBeVisible()
+
+        await expect(surveyLocator).toBeVisible({ timeout: 10000 })
+    })
+
+    test('cancels a pending survey when cancel event fires during delay', async ({ page, context }) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: 'cancel-test-survey',
+                            name: 'Survey with cancel event',
+                            description: 'description',
+                            type: 'popover',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [openTextQuestion],
+                            appearance: { surveyPopupDelaySeconds: 5 },
+                            conditions: {
+                                events: {
+                                    values: [{ name: 'trigger_event' }],
+                                },
+                                cancelEvents: {
+                                    values: [{ name: 'cancel_event' }],
+                                },
+                            },
+                        },
+                    ],
+                },
+            })
+        })
+
+        // Wait for the surveys API response to ensure the event receiver is registered
+        const surveysResponse = page.waitForResponse('**/surveys/**')
+        await start(startOptions, page, context)
+        await surveysAPICall
+        await surveysResponse
+
+        const surveyLocator = page.locator('.PostHogSurvey-cancel-test-survey').locator('.survey-form')
+
+        await expect(surveyLocator).not.toBeVisible()
+
+        await page.evaluate(() => {
+            ;(window as any).posthog.capture('trigger_event')
+        })
+
+        await page.waitForTimeout(2000)
+        await page.evaluate(() => {
+            ;(window as any).posthog.capture('cancel_event')
+        })
+
+        await page.waitForTimeout(5000)
+
+        await expect(surveyLocator).not.toBeVisible()
+    })
 })

@@ -55,6 +55,7 @@ describe('posthog-surveys', () => {
             conditions: {
                 seenSurveyWaitPeriodInDays: 7,
                 events: null,
+                cancelEvents: null,
                 actions: null,
             },
         }
@@ -333,6 +334,7 @@ describe('posthog-surveys', () => {
                     conditions: {
                         seenSurveyWaitPeriodInDays: 5,
                         events: null,
+                        cancelEvents: null,
                         actions: null,
                     },
                 }
@@ -381,6 +383,7 @@ describe('posthog-surveys', () => {
                         conditions: {
                             seenSurveyWaitPeriodInDays: 5,
                             events: null,
+                            cancelEvents: null,
                             actions: null,
                         },
                     }

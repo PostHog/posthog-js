@@ -21,7 +21,7 @@
         "check-react": "[ -d 'react/dist' ] || { echo '@posthog/react has not been built'; exit 1; }",
         "test": "pnpm test:unit && pnpm test:functional",
         "test:unit": "jest src",
-        "test:unit:surveys": "jest '.*surveys.*.test.'",
+        "test:unit:surveys": "jest '.*survey.*.test.'",
         "test:functional": "jest functional_tests",
         "test-watch": "jest --watch src",
         "test:typecheck": "cd src/__tests__ && tsc --noEmit --project tsconfig.json",
