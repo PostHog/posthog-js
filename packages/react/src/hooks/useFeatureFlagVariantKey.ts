@@ -14,7 +14,7 @@ export function useFeatureFlagVariantKey(flag: string): string | boolean | undef
         })
     }, [client, flag])
 
-    if (!client.featureFlags.hasLoadedFlags && bootstrap?.featureFlags) {
+    if (!client?.featureFlags?.hasLoadedFlags && bootstrap?.featureFlags) {
         return bootstrap.featureFlags[flag]
     }
 

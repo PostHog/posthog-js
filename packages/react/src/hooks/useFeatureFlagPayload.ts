@@ -14,7 +14,7 @@ export function useFeatureFlagPayload(flag: string): JsonType {
     }, [client, flag])
 
     // if the client is not loaded yet, use the bootstrapped value
-    if (!client.featureFlags.hasLoadedFlags && bootstrap?.featureFlagPayloads) {
+    if (!client?.featureFlags?.hasLoadedFlags && bootstrap?.featureFlagPayloads) {
         return bootstrap.featureFlagPayloads[flag]
     }
 
