@@ -7,10 +7,10 @@ import {
     getEventTarget,
     getSafeText,
     isAngularStyleAttr,
+    isExplicitNoCapture,
     isSensitiveElement,
     makeSafeText,
-    shouldCaptureDomEvent,
-    shouldCaptureElement,
+    shouldAutocaptureEvent,
     shouldCaptureRageclick,
     shouldCaptureValue,
     splitClassString,
@@ -26,7 +26,6 @@ import { createLogger } from './utils/logger'
 import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
 import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
-import { includes } from '@posthog/core'
 
 const logger = createLogger('[AutoCapture]')
 
@@ -38,8 +37,7 @@ function limitText(length: number, text: string): string {
 }
 
 export function getAugmentPropertiesFromElement(elem: Element): Properties {
-    const shouldCaptureEl = shouldCaptureElement(elem)
-    if (!shouldCaptureEl) {
+    if (isExplicitNoCapture(elem)) {
         return {}
     }
 
@@ -169,19 +167,13 @@ export function autocapturePropertiesForElement(
     let explicitNoCapture = false
 
     each(targetElementList, (el) => {
-        const shouldCaptureEl = shouldCaptureElement(el)
-
+        explicitNoCapture = explicitNoCapture || isExplicitNoCapture(el)
         // if the element or a parent element is an anchor tag
         // include the href as a property
         if (el.tagName.toLowerCase() === 'a') {
             href = el.getAttribute('href')
-            href = shouldCaptureEl && href && shouldCaptureValue(href) && href
-        }
-
-        // allow users to programmatically prevent capturing of elements by adding class 'ph-no-capture'
-        const classes = getClassNames(el)
-        if (includes(classes, 'ph-no-capture')) {
-            explicitNoCapture = true
+            // only capture href if element is not marked as no-capture and value is safe
+            href = !explicitNoCapture && href && shouldCaptureValue(href) && href
         }
 
         elementsJson.push(
@@ -367,7 +359,7 @@ export class Autocapture {
         const isCopyAutocapture = eventName === COPY_AUTOCAPTURE_EVENT
         if (
             target &&
-            shouldCaptureDomEvent(
+            shouldAutocaptureEvent(
                 target,
                 e,
                 this._config,
