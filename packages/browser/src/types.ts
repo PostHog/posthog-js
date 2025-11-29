@@ -385,7 +385,8 @@ export interface PostHogConfig {
 
     /**
      * Determines how PostHog stores information about the user. See [persistence](https://posthog.com/docs/libraries/js#persistence) for details.
-     *
+     * Surveys functionality requires localStorage to work properly, so if you are using it, please set this to 'localStorage+cookie' (default value) or 'localStorage'.
+     * If surveys are used with persistence disabled, localStorage will be used directly.
      * @default 'localStorage+cookie'
      */
     persistence: 'localStorage' | 'cookie' | 'memory' | 'localStorage+cookie' | 'sessionStorage'

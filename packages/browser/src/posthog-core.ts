@@ -1149,7 +1149,7 @@ export class PostHog {
         if (event_name === SurveyEventName.DISMISSED || event_name === SurveyEventName.SENT) {
             const surveyId = properties?.[SurveyEventProperties.SURVEY_ID]
             const surveyIteration = properties?.[SurveyEventProperties.SURVEY_ITERATION]
-            setSurveySeenOnLocalStorage({ id: surveyId, current_iteration: surveyIteration })
+            setSurveySeenOnLocalStorage({ id: surveyId, current_iteration: surveyIteration }, this)
             data.$set = {
                 ...data.$set,
                 [getSurveyInteractionProperty(
