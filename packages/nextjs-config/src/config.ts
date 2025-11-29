@@ -58,6 +58,9 @@ function withWebpackConfig(userWebpackConfig: NextConfig['webpack'], posthogConf
     const webpackConfig = defaultWebpackConfig(config, options)
     if (sourceMapEnabled) {
       if (!turbopackEnabled) {
+        if (options.isServer) {
+          webpackConfig.devtool = 'source-map'
+        }
         webpackConfig.plugins = webpackConfig.plugins || []
         webpackConfig.plugins.push(new PosthogWebpackPlugin(posthogConfig))
       }
