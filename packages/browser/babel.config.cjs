@@ -1,5 +1,8 @@
 module.exports = {
-    presets: ['@babel/env', ['@babel/typescript', { jsxPragma: 'h' }]],
+    presets: [
+        ['@babel/env', { targets: { node: 'current' } }],
+        ['@babel/typescript', { jsxPragma: 'h' }],
+    ],
     plugins: [
         '@babel/plugin-transform-nullish-coalescing-operator',
         [
