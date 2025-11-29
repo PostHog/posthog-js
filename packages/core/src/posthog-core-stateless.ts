@@ -544,6 +544,7 @@ export abstract class PostHogCoreStateless {
     | {
         response: FeatureFlagDetail | undefined
         requestId: string | undefined
+        evaluatedAt: number | undefined
       }
     | undefined
   > {
@@ -569,6 +570,7 @@ export abstract class PostHogCoreStateless {
     return {
       response: flagDetail,
       requestId: flagsResponse.requestId,
+      evaluatedAt: flagsResponse.evaluatedAt,
     }
   }
 

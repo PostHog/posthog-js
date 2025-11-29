@@ -109,6 +109,7 @@ describe('PostHog Feature Flags v4', () => {
               Promise.resolve({
                 flags: createMockFeatureFlags(),
                 requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+                evaluatedAt: 1640995200000,
               }),
           })
         }
@@ -589,6 +590,7 @@ describe('PostHog Feature Flags v4', () => {
                   '$feature/feature-1': true,
                   $used_bootstrap_value: false,
                   $feature_flag_request_id: '0152a345-295f-4fba-adac-2e6ea9c91082',
+                  $feature_flag_evaluated_at: expect.any(Number),
                 },
                 type: 'capture',
               },
@@ -617,6 +619,7 @@ describe('PostHog Feature Flags v4', () => {
                 '$feature/feature-1': true,
                 $used_bootstrap_value: false,
                 $feature_flag_request_id: '0152a345-295f-4fba-adac-2e6ea9c91082',
+                $feature_flag_evaluated_at: expect.any(Number),
               },
               type: 'capture',
             },
@@ -676,6 +679,7 @@ describe('PostHog Feature Flags v4', () => {
         const expectedFeatureFlags = {
           flags: createMockFeatureFlags(),
           requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+          evaluatedAt: 1640995200000,
         }
         const normalizedFeatureFlags = normalizeFlagsResponse(expectedFeatureFlags as PostHogV2FlagsResponse)
         expect(posthog.getPersistedProperty(PostHogPersistedProperty.FeatureFlagDetails)).toEqual(

@@ -18,6 +18,7 @@ describe('flags v2', () => {
         flags: {},
         errorsWhileComputingFlags: false,
         requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+        evaluatedAt: 1640995200000,
       }
       mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
 
@@ -46,6 +47,7 @@ describe('flags v2', () => {
           $feature_flag: 'non-existent-flag',
           $feature_flag_response: undefined,
           $feature_flag_request_id: '0152a345-295f-4fba-adac-2e6ea9c91082',
+          $feature_flag_evaluated_at: expect.any(Number),
           $groups: undefined,
           $lib: posthog.getLibraryId(),
           $lib_version: posthog.getLibraryVersion(),
@@ -132,6 +134,7 @@ describe('flags v2', () => {
           },
           errorsWhileComputingFlags: false,
           requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+          evaluatedAt: 1640995200000,
         }
         mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
 
@@ -163,6 +166,7 @@ describe('flags v2', () => {
             $feature_flag_version: expectedVersion,
             $feature_flag_reason: expectedReason,
             $feature_flag_request_id: '0152a345-295f-4fba-adac-2e6ea9c91082',
+            $feature_flag_evaluated_at: expect.any(Number),
             $groups: undefined,
             $lib: posthog.getLibraryId(),
             $lib_version: posthog.getLibraryVersion(),
