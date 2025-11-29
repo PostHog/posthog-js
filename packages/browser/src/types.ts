@@ -45,6 +45,11 @@ export interface CaptureResult {
     timestamp?: Date
 }
 
+export interface UserFeedbackRecordingResult {
+    feedback_id: string
+    session_id: string
+}
+
 export type AutocaptureCompatibleElement = 'a' | 'button' | 'form' | 'input' | 'select' | 'textarea' | 'label'
 export type DomAutocaptureEvents = 'click' | 'change' | 'submit'
 
