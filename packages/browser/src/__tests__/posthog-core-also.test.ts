@@ -12,17 +12,19 @@ import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
 import { SessionRecording } from '../extensions/replay/session-recording'
 import { SessionPropsManager } from '../session-props'
-
-let mockGetProperties: jest.Mock
+import { getEventProperties } from '../utils/event-utils'
 
 jest.mock('../utils/event-utils', () => {
     const originalEventUtils = jest.requireActual('../utils/event-utils')
-    mockGetProperties = jest.fn().mockImplementation((...args) => originalEventUtils.getEventProperties(...args))
     return {
         ...originalEventUtils,
-        getEventProperties: mockGetProperties,
+        getEventProperties: jest
+            .fn()
+            .mockImplementation((...args: unknown[]) => originalEventUtils.getEventProperties(...args)),
     }
 })
+
+const mockGetPropertiesFn = jest.mocked(getEventProperties)
 
 describe('posthog core', () => {
     const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
@@ -441,7 +443,7 @@ describe('posthog core', () => {
         }
 
         beforeEach(() => {
-            mockGetProperties.mockReturnValue({ $lib: 'web' })
+            mockGetPropertiesFn.mockReturnValue({ $lib: 'web' })
 
             posthog = posthogWith(
                 {

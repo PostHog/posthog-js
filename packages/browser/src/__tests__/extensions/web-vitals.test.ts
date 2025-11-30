@@ -9,11 +9,10 @@ import { DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLI
 
 jest.useFakeTimers()
 
-let mockLocation: jest.Mock
-
 jest.mock('../../utils/globals', () => {
     const original = jest.requireActual('../../utils/globals')
-    mockLocation = jest.fn().mockReturnValue({
+
+    const mockLocationFn = jest.fn().mockReturnValue({
         protocol: 'http:',
         host: 'localhost',
         pathname: '/',
@@ -24,22 +23,25 @@ jest.mock('../../utils/globals', () => {
 
     const mockWindow = original.window || global.window
     Object.defineProperty(mockWindow, 'location', {
-        get: () => mockLocation(),
+        get: () => mockLocationFn(),
         configurable: true,
     })
 
     return {
         ...original,
+        __mockLocationFn: mockLocationFn,
         assignableWindow: {
             ...original.assignableWindow,
             __PosthogExtensions__: {},
         },
         get location() {
-            return mockLocation()
+            return mockLocationFn()
         },
         window: mockWindow,
     }
 })
+
+const { __mockLocationFn: mockLocationFn } = jest.requireMock<{ __mockLocationFn: jest.Mock }>('../../utils/globals')
 
 describe('web vitals', () => {
     let posthog: PostHog
@@ -310,7 +312,7 @@ describe('web vitals', () => {
     })
 
     it('should not run on file:// protocol', async () => {
-        mockLocation.mockReturnValue({
+        mockLocationFn.mockReturnValue({
             protocol: 'file:',
             host: ' ',
             pathname: '/Users/robbie/Desktop/test.html',
@@ -364,7 +366,7 @@ describe('web vitals', () => {
         'ftp',
         'unknown',
     ])('should not run on %s protocol', async (protocol) => {
-        mockLocation.mockReturnValue({
+        mockLocationFn.mockReturnValue({
             protocol: protocol + ':',
             host: 'localhost',
             pathname: '/',
@@ -386,7 +388,7 @@ describe('web vitals', () => {
     })
 
     it.each(['http', 'https'])('should run on %s protocol', async (protocol) => {
-        mockLocation.mockReturnValue({
+        mockLocationFn.mockReturnValue({
             protocol: protocol + ':',
             host: 'localhost',
             pathname: '/',
@@ -419,7 +421,7 @@ describe('web vitals', () => {
             maskedUrl: string
         ) => {
             beforeEach(async () => {
-                mockLocation.mockReturnValue({
+                mockLocationFn.mockReturnValue({
                     protocol: 'http:',
                     host: 'localhost',
                     pathname: '/',
