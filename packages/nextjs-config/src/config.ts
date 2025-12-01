@@ -57,14 +57,24 @@ function withWebpackConfig(userWebpackConfig: NextConfig['webpack'], posthogConf
   const defaultWebpackConfig = userWebpackConfig || ((config: any) => config)
   const sourceMapEnabled = posthogConfig.sourcemaps.enabled
   const turbopackEnabled = isTurbopackEnabled()
-
   return (config: any, options: any) => {
     const webpackConfig = defaultWebpackConfig(config, options)
+    const isServer = options.isServer
     if (sourceMapEnabled) {
       if (!turbopackEnabled) {
         webpackConfig.devtool = 'hidden-source-map'
         webpackConfig.plugins = webpackConfig.plugins || []
-        webpackConfig.plugins.push(new PosthogWebpackPlugin(posthogConfig))
+        let currentConfig = posthogConfig
+        if (isServer) {
+          currentConfig = {
+            ...posthogConfig,
+            sourcemaps: {
+              ...posthogConfig.sourcemaps,
+              deleteAfterUpload: false,
+            },
+          }
+        }
+        webpackConfig.plugins.push(new PosthogWebpackPlugin(currentConfig))
       }
     }
     return webpackConfig

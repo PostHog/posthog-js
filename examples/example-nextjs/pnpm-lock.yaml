@@ -351,7 +351,7 @@ packages:
     version: 1.6.0
 
   '@posthog/nextjs-config@file:../../target/posthog-nextjs-config.tgz':
-    resolution: {integrity: sha512-SY9lLxFhRDbDQVDkr2c+7agdvhXeMJninmcbzTWgDy9xs3SDyzqEFJfo49OliPlPTiUUlkmqg5Tdq+kVfh8EeQ==, tarball: file:../../target/posthog-nextjs-config.tgz}
+    resolution: {integrity: sha512-okMd5NAUJ8ukQbE/Ytr3601BjKdOaUYKIwk8KwE/17/79ufc3y42H0fwqxLVWq9sO8ir2+LDxUkp/xUdzVY50w==, tarball: file:../../target/posthog-nextjs-config.tgz}
     version: 1.6.1
     engines: {node: '>=20'}
     peerDependencies:
