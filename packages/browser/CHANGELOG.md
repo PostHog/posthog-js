@@ -1,5 +1,23 @@
 # posthog-js
 
+## 1.299.0
+
+### Minor Changes
+
+- [#2641](https://github.com/PostHog/posthog-js/pull/2641) [`f9c4dba`](https://github.com/PostHog/posthog-js/commit/f9c4dbac52823bafab41b948c59db1ee20c5d16c) Thanks [@adboio](https://github.com/adboio)! - add survey cancellation events
+  (2025-12-01)
+
+- [#2642](https://github.com/PostHog/posthog-js/pull/2642) [`37e4f76`](https://github.com/PostHog/posthog-js/commit/37e4f7600355137285aa98758e530bc01d699d85) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Add new `payload` entry to the `EarlyAccessFeature` type
+  (2025-12-01)
+
+- [#2661](https://github.com/PostHog/posthog-js/pull/2661) [`aaad806`](https://github.com/PostHog/posthog-js/commit/aaad8061cf90ee37728e6f9c42d41779d6f40902) Thanks [@adboio](https://github.com/adboio)! - add support for surveys triggered by actions with event property filters
+  (2025-12-01)
+
+### Patch Changes
+
+- [#2582](https://github.com/PostHog/posthog-js/pull/2582) [`21365ff`](https://github.com/PostHog/posthog-js/commit/21365ff0db5d02f4e8b14e5ae81448c2b6526bc7) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: properly cleanup in network plugin
+  (2025-12-01)
+
 ## 1.298.1
 
 ### Patch Changes
