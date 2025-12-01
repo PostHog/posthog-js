@@ -347,18 +347,18 @@ packages:
     hasBin: true
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-bFed5iAyRw0CAnZXhzdSdbco/z1d6pOlqxyC6XaXxu3vPX6oez6Fi7cFB6iHrMNPbVWjZ4JunEVdRlb6twtt0g==, tarball: file:../../target/posthog-core.tgz}
+    resolution: {integrity: sha512-KoEq+q0wuyI36rYRnR05L73SJF/uNlWUT4c4dpyb7/ruU5WZwx7jvFB/mHuhWrKx9aEDVtNpuEj8k3Ng/oe9rg==, tarball: file:../../target/posthog-core.tgz}
     version: 1.6.0
 
   '@posthog/nextjs-config@file:../../target/posthog-nextjs-config.tgz':
-    resolution: {integrity: sha512-CYuJo5g0CUjVM2LCWAQLYDKRetSIuPx3GmyHwDYiY4dTyyDJluDDhAB3cIhMyuT9dddzWu1CG8Z7EVBEQMzZvg==, tarball: file:../../target/posthog-nextjs-config.tgz}
+    resolution: {integrity: sha512-SY9lLxFhRDbDQVDkr2c+7agdvhXeMJninmcbzTWgDy9xs3SDyzqEFJfo49OliPlPTiUUlkmqg5Tdq+kVfh8EeQ==, tarball: file:../../target/posthog-nextjs-config.tgz}
     version: 1.6.1
     engines: {node: '>=20'}
     peerDependencies:
       next: '>12.1.0'
 
   '@posthog/react@file:../../target/posthog-react.tgz':
-    resolution: {integrity: sha512-bkuiPxgfHyCZitRU3WaFVcQ2VSjVmQWXMXeAQUmtwUEKqHXx0kXmjaA/Z0YnL6Y8q+5C4ncVz1abJs1yVxwVwg==, tarball: file:../../target/posthog-react.tgz}
+    resolution: {integrity: sha512-Ys8jqWVKxgM2mlyRxSbBGbF8NXkxtVdIqaJrKpg8BrEKBTqShbY8bTnBo7Zhft2XB1GXOFuLTTA0KXlH61sH/w==, tarball: file:../../target/posthog-react.tgz}
     version: 1.5.0
     peerDependencies:
       '@types/react': '>=16.8.0'
@@ -369,7 +369,7 @@ packages:
         optional: true
 
   '@posthog/webpack-plugin@file:../../target/posthog-webpack-plugin.tgz':
-    resolution: {integrity: sha512-2GBBZe754049ENNDaUH+y4iq98n8oqd7xB4a3D3tUl0r06Qx00nki0OqcIvat1bes8+7arWUmbTnjiY2kLQu0g==, tarball: file:../../target/posthog-webpack-plugin.tgz}
+    resolution: {integrity: sha512-lxjq00hkY02Bc9O8IQzORU6a2FgefjJEIt63bsu3WqdOqOo0M85ZkIfU5jjCrUhJcm5BSj1WRqNNU8AFF67Dbw==, tarball: file:../../target/posthog-webpack-plugin.tgz}
     version: 1.1.1
 
   '@rtsao/scc@1.1.0':
@@ -1466,11 +1466,11 @@ packages:
     engines: {node: ^10 || ^12 || >=14}
 
   posthog-js@file:../../target/posthog-js.tgz:
-    resolution: {integrity: sha512-RL+7G3Gl5hTooxnB2VJZnyvIIQh4ZbsvlyNNhMR38EmEx09JR2pXU3z7jNRkqekCLLNdxwXkfEwj+4HkLbwB4g==, tarball: file:../../target/posthog-js.tgz}
+    resolution: {integrity: sha512-d5zuyOFhtHTvJL89Hy0bAszKSS+CsP2iDQfmF8dc17sQ9zQBIuyj+AMoCl/ReyCoe3/aqCx40Y4FXp0sNPHNSg==, tarball: file:../../target/posthog-js.tgz}
     version: 1.298.1
 
   posthog-node@file:../../target/posthog-node.tgz:
-    resolution: {integrity: sha512-8b+1aCB3En9TNNxkKiZtOnS04iJ5DlfnFRrogEmDG0BuSOiGxxr+/ILaWRoM2TqySTnB/ffpm8OmqV8OjL0mJw==, tarball: file:../../target/posthog-node.tgz}
+    resolution: {integrity: sha512-e2lGAp1KEYnu4mFGsIr28XssPCyYx7G9GZsi6gAnl5rCIfwmLy2TWrwiDBvTCEko4WuSunwF3We8HqLzYSXJeA==, tarball: file:../../target/posthog-node.tgz}
     version: 5.14.1
     engines: {node: '>=20'}
 
