@@ -234,6 +234,31 @@ export class WrappedModels {
     }
   }
 
+  private formatPartsAsContentBlocks(parts: unknown[]): FormattedContent {
+    const blocks: FormattedContent = []
+
+    for (const part of parts) {
+      // Handle dict/object with text field
+      if (part && typeof part === 'object' && 'text' in part && part.text) {
+        blocks.push({ type: 'text', text: String(part.text) })
+      }
+      // Handle string parts
+      else if (typeof part === 'string') {
+        blocks.push({ type: 'text', text: part })
+      }
+      // Handle inlineData (images, audio, PDFs)
+      else if (part && typeof part === 'object' && 'inlineData' in part) {
+        const inlineData = (part as any).inlineData
+        blocks.push({
+          type: 'image',
+          inlineData: inlineData,
+        } as FormattedContentItem)
+      }
+    }
+
+    return blocks
+  }
+
   private formatInput(contents: unknown): FormattedMessage[] {
     if (typeof contents === 'string') {
       return [{ role: 'user', content: contents }]
@@ -252,18 +277,19 @@ export class WrappedModels {
           }
 
           if ('content' in obj && obj.content) {
+            // If content is a list, format it as content blocks
+            if (Array.isArray(obj.content)) {
+              const contentBlocks = this.formatPartsAsContentBlocks(obj.content)
+              return { role: isString(obj.role) ? obj.role : 'user', content: contentBlocks }
+            }
             return { role: isString(obj.role) ? obj.role : 'user', content: obj.content }
           }
 
           if ('parts' in obj && Array.isArray(obj.parts)) {
+            const contentBlocks = this.formatPartsAsContentBlocks(obj.parts)
             return {
               role: isString(obj.role) ? obj.role : 'user',
-              content: obj.parts.map((part: unknown) => {
-                if (part && typeof part === 'object' && 'text' in part) {
-                  return (part as { text: unknown }).text
-                }
-                return part
-              }),
+              content: contentBlocks,
             }
           }
         }
