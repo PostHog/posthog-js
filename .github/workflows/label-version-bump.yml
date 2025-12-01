@@ -36,14 +36,6 @@ jobs:
       - name: Update lockfile
         run: pnpm install
 
-      # We need a deployer token to commit the changes because we need to override the CodeQL requirement
-      - name: Get deployer token
-        id: deployer
-        uses: getsentry/action-github-app-token@97c9e23528286821f97fba885c1b1123284b29cc # v2
-        with:
-          app_id: ${{ secrets.DEPLOYER_APP_ID }}
-          private_key: ${{ secrets.DEPLOYER_APP_PRIVATE_KEY }}
-
       - name: Create pull request
         id: cpr
         uses: peter-evans/create-pull-request@18f7dc018cc2cd597073088f7c7591b9d1c02672 # v3.14.0
