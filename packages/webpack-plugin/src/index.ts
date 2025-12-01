@@ -47,13 +47,14 @@ export class PosthogWebpackPlugin {
 
         // chunks are output outside of the output directory for server chunks
         const args = ['sourcemap', 'process']
+        const chunkArray = Array.from(compilation.chunks)
 
-        if (compilation.chunks.size == 0) {
+        if (chunkArray.length == 0) {
             // No chunks generated, skipping sourcemap processing.
             return
         }
 
-        const filePaths = Array.from(compilation.chunks).flatMap((chunk) =>
+        const filePaths = chunkArray.flatMap((chunk) =>
             Array.from(chunk.files).map((file) => path.resolve(outputDirectory, file))
         )
         const [commonDirectory, relativeFilePaths] = splitFilePaths(filePaths)
