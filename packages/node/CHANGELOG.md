@@ -1,5 +1,15 @@
 # posthog-node
 
+## 5.15.0
+
+### Minor Changes
+
+- [#2614](https://github.com/PostHog/posthog-js/pull/2614) [`2be0eb3`](https://github.com/PostHog/posthog-js/commit/2be0eb34da5c910230c08e2d88c1219ecb0d2556) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: Improve cache initialization performance
+  (2025-12-01)
+
+- [#2588](https://github.com/PostHog/posthog-js/pull/2588) [`ef589b6`](https://github.com/PostHog/posthog-js/commit/ef589b660d596a4a254b0f7f51e5125b50a7ac78) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - add context support
+  (2025-12-01)
+
 ## 5.14.1
 
 ### Patch Changes
