@@ -233,8 +233,18 @@ function isSessionIdleEvent(e: eventWithTime): e is eventWithTime & customEvent 
     return isCustomEvent(e, 'sessionIdle')
 }
 
+type SessionEndingPayload = {
+    lastActivityTimestamp?: number
+    currentSessionId?: string
+    currentWindowId?: string
+}
+
 function isSessionEndingEvent(e: eventWithTime): e is eventWithTime & customEvent {
     return isCustomEvent(e, '$session_ending')
+}
+
+function getSessionEndingPayload(e: eventWithTime): SessionEndingPayload | null {
+    return isSessionEndingEvent(e) ? (e.data.payload as SessionEndingPayload) : null
 }
 
 function isSessionStartingEvent(e: eventWithTime): e is eventWithTime & customEvent {
@@ -794,16 +804,23 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _onSessionIdCallback: SessionIdChangedCallback = (sessionId, windowId, changeReason) => {
         if (!changeReason) return
 
+        // Skip if session hasn't actually changed (callback might fire multiple times)
+        if (sessionId === this._sessionId && windowId === this._windowId) {
+            return
+        }
+
         const wasLikelyReset = changeReason.noSessionId
         const shouldLinkSessions =
             !wasLikelyReset && (changeReason.activityTimeout || changeReason.sessionPastMaximumLength)
 
-        let oldSessionId, oldWindowId
+        // Capture old IDs before start() updates them
+        const oldSessionId = this._sessionId
+        const oldWindowId = this._windowId
 
         if (shouldLinkSessions) {
-            oldSessionId = this._sessionId
-            oldWindowId = this._windowId
             this._tryAddCustomEvent('$session_ending', {
+                currentSessionId: oldSessionId,
+                currentWindowId: oldWindowId,
                 nextSessionId: sessionId,
                 nextWindowId: windowId,
                 changeReason,
@@ -823,9 +840,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._clearConditionalRecordingPersistence()
 
-        if (!this._stopRrweb) {
-            this.start('session_id_changed')
-        }
+        // Note: We don't call stop()/start() here because _updateWindowAndSessionIds
+        // already handles the restart. This callback fires synchronously during
+        // checkAndGetSessionAndWindowId(), so _updateWindowAndSessionIds will detect
+        // the session change and handle the restart after this callback returns.
 
         if (shouldLinkSessions) {
             this._tryAddCustomEvent('$session_starting', {
@@ -938,7 +956,28 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // TODO: Re-add ensureMaxMessageSize once we are confident in it
         const event = truncateLargeConsoleLogs(throttledEvent)
 
-        this._updateWindowAndSessionIds(event)
+        // Session lifecycle events ($session_ending, $session_starting) carry their target session ID
+        // in the payload. We must extract this BEFORE _updateWindowAndSessionIds runs, because that
+        // method triggers checkAndGetSessionAndWindowId() which would update this._sessionId.
+        // This is critical for $session_ending which must go to the OLD session, not the new one.
+        const sessionEndingPayload = getSessionEndingPayload(event)
+        const sessionStarting = isSessionStartingEvent(event)
+
+        if (sessionEndingPayload || sessionStarting) {
+            // Adjust timestamp from payload to avoid artificially extending session duration
+            const payload = (sessionEndingPayload ?? (event as customEvent).data.payload) as {
+                lastActivityTimestamp?: number
+            }
+            if (payload?.lastActivityTimestamp) {
+                event.timestamp = payload.lastActivityTimestamp
+            }
+        } else {
+            this._updateWindowAndSessionIds(event)
+        }
+
+        // $session_ending uses session ID from payload (the old session), others use current session
+        const targetSessionId = sessionEndingPayload?.currentSessionId ?? this._sessionId
+        const targetWindowId = sessionEndingPayload?.currentWindowId ?? this._windowId
 
         // When in an idle state we keep recording but don't capture the events,
         // we don't want to return early if idle is 'unknown'
@@ -958,16 +997,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
         }
 
-        if (isSessionEndingEvent(event) || isSessionStartingEvent(event)) {
-            // session ending/starting events have a timestamp when rrweb sees them
-            // which can artificially lengthen a session
-            // we know when the last activity was based on the payload and can correct the timestamp
-            const payload = event.data.payload as { lastActivityTimestamp?: number }
-            if (payload?.lastActivityTimestamp) {
-                event.timestamp = payload.lastActivityTimestamp
-            }
-        }
-
         const eventToSend =
             (this._instance.config.session_recording.compress_events ?? true) ? compressEvent(event) : event
         const size = estimateSize(eventToSend)
@@ -975,8 +1004,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         const properties = {
             $snapshot_bytes: size,
             $snapshot_data: eventToSend,
-            $session_id: this._sessionId,
-            $window_id: this._windowId,
+            $session_id: targetSessionId,
+            $window_id: targetWindowId,
         }
 
         if (this.status === DISABLED) {
