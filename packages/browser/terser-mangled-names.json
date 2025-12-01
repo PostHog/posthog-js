@@ -50,6 +50,7 @@
         "_checkStep",
         "_checkStepElement",
         "_checkStepEvent",
+        "_checkStepProperties",
         "_checkStepUrl",
         "_checkSurveyEligibility",
         "_clearAutoSubmitTimeout",

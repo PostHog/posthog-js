@@ -5,8 +5,8 @@ import { ActionMatcher } from '../extensions/surveys/action-matcher'
 import { PostHog } from '../posthog-core'
 import { CaptureResult } from '../types'
 import { SURVEY_LOGGER as logger } from './survey-utils'
-import { propertyComparisons } from './property-utils'
-import { isNull, isUndefined } from '@posthog/core'
+import { matchPropertyFilters } from './property-utils'
+import { isUndefined } from '@posthog/core'
 
 export class SurveyEventReceiver {
     // eventToSurveys is a mapping of event name to all the surveys that are activated by it
@@ -34,28 +34,7 @@ export class SurveyEventReceiver {
             return false
         }
 
-        // if there are no property filters, it means we're only matching on event name
-        if (!eventConfig.propertyFilters) {
-            return true
-        }
-
-        return Object.entries(eventConfig.propertyFilters).every(([propertyName, filter]) => {
-            const eventPropertyValue = eventPayload?.properties?.[propertyName]
-            if (isUndefined(eventPropertyValue) || isNull(eventPropertyValue)) {
-                return false
-            }
-
-            // convert event property to string for comparison
-            const eventValues = [String(eventPropertyValue)]
-
-            const comparisonFunction = propertyComparisons[filter.operator]
-            if (!comparisonFunction) {
-                logger.warn(`Unknown property comparison operator: ${filter.operator}`)
-                return false
-            }
-
-            return comparisonFunction(filter.values, eventValues)
-        })
+        return matchPropertyFilters(eventConfig.propertyFilters, eventPayload?.properties)
     }
 
     private _buildEventToSurveyMap(surveys: Survey[], conditionField: SurveyEventType): Map<string, string[]> {
