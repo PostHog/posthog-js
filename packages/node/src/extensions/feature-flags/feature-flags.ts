@@ -78,6 +78,7 @@ class FeatureFlagsPoller {
   onLoad?: (count: number) => void
   private cacheProvider?: FlagDefinitionCacheProvider
   private loadingPromise?: Promise<void>
+  private flagsEtag?: string
 
   constructor({
     pollingInterval,
@@ -683,6 +684,14 @@ class FeatureFlagsPoller {
       // both the background poller and any subsequent manual calls can keep trying to load flags
       // once the issue (quota, permission, rate limit, etc.) is resolved.
       switch (res.status) {
+        case 304:
+          // Not Modified - flags haven't changed, keep using cached data
+          this.logMsgIfDebug(() => console.debug('[FEATURE FLAGS] Flags not modified (304), using cached data'))
+          this.loadedSuccessfullyOnce = true
+          this.shouldBeginExponentialBackoff = false
+          this.backOffCount = 0
+          return
+
         case 401:
           // Invalid API key
           this.shouldBeginExponentialBackoff = true
@@ -726,6 +735,10 @@ class FeatureFlagsPoller {
             return
           }
 
+          // Store ETag from response for subsequent conditional requests
+          // Clear it if server stops sending one
+          this.flagsEtag = res.headers?.get('ETag') ?? undefined
+
           const flagData: FlagDefinitionCacheData = {
             flags: (responseJson.flags as PostHogFeatureFlag[]) ?? [],
             groupTypeMapping: (responseJson.group_type_mapping as Record<string, string>) || {},
@@ -764,21 +777,30 @@ class FeatureFlagsPoller {
     }
   }
 
-  private getPersonalApiKeyRequestOptions(method: 'GET' | 'POST' | 'PUT' | 'PATCH' = 'GET'): PostHogFetchOptions {
+  private getPersonalApiKeyRequestOptions(
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' = 'GET',
+    etag?: string
+  ): PostHogFetchOptions {
+    const headers: { [key: string]: string } = {
+      ...this.customHeaders,
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${this.personalApiKey}`,
+    }
+
+    if (etag) {
+      headers['If-None-Match'] = etag
+    }
+
     return {
       method,
-      headers: {
-        ...this.customHeaders,
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.personalApiKey}`,
-      },
+      headers,
     }
   }
 
   _requestFeatureFlagDefinitions(): Promise<PostHogFetchResponse> {
     const url = `${this.host}/api/feature_flag/local_evaluation?token=${this.projectApiKey}&send_cohorts`
 
-    const options = this.getPersonalApiKeyRequestOptions()
+    const options = this.getPersonalApiKeyRequestOptions('GET', this.flagsEtag)
 
     let abortTimeout = null
 

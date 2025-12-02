@@ -118,6 +118,9 @@ export type PostHogFetchResponse = {
   status: number
   text: () => Promise<string>
   json: () => Promise<any>
+  headers?: {
+    get(name: string): string | null
+  }
 }
 
 export type PostHogQueueItem = {
