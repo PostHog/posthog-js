@@ -191,6 +191,7 @@ export type PostHogFlagsResponse = Omit<PostHogRemoteConfig, 'hasFeatureFlags'> 
       }
   quotaLimited?: string[]
   requestId?: string
+  evaluatedAt?: number // Unix timestamp in milliseconds
 }
 
 export type PostHogFeatureFlagsResponse = PartialWithRequired<

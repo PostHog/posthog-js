@@ -1668,6 +1668,7 @@ export interface FlagsResponse extends RemoteConfig {
     errorsWhileComputingFlags: boolean
     requestId?: string
     flags: Record<string, FeatureFlagDetail>
+    evaluatedAt?: number
 }
 
 export type SiteAppGlobals = {

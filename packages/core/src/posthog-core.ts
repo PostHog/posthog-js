@@ -726,6 +726,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         // If we haven't yet received a response from the /flags endpoint, we must have used the bootstrapped value
         $used_bootstrap_value: !this.getPersistedProperty(PostHogPersistedProperty.FlagsEndpointWasHit),
         ...maybeAdd('$feature_flag_request_id', details.requestId),
+        ...maybeAdd('$feature_flag_evaluated_at', details.evaluatedAt),
       })
     }
 

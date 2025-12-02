@@ -683,6 +683,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     const flagWasLocallyEvaluated = response !== undefined
     let requestId = undefined
+    let evaluatedAt = undefined
     let flagDetail: FeatureFlagDetail | undefined = undefined
     if (!flagWasLocallyEvaluated && !onlyEvaluateLocally) {
       const remoteResponse = await super.getFeatureFlagDetailStateless(
@@ -701,6 +702,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       flagDetail = remoteResponse.response
       response = getFeatureFlagValue(flagDetail)
       requestId = remoteResponse?.requestId
+      evaluatedAt = remoteResponse?.evaluatedAt
     }
 
     const featureFlagReportedKey = `${key}_${response}`
@@ -730,6 +732,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           locally_evaluated: flagWasLocallyEvaluated,
           [`$feature/${key}`]: response,
           $feature_flag_request_id: requestId,
+          $feature_flag_evaluated_at: evaluatedAt,
         },
         groups,
         disableGeoip,
