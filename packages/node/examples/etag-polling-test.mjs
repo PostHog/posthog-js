@@ -7,6 +7,10 @@
  * Tests ETag support for local evaluation polling by polling every 5 seconds
  * and logging the stored flags and ETag behavior.
  *
+ * NOTE: This script accesses internal/private fields (featureFlags, flagsEtag)
+ * for debugging purposes. These are not part of the public API and may change
+ * or break in future versions.
+ *
  * Usage:
  *   node examples/etag-polling-test.mjs
  *
