@@ -277,6 +277,16 @@ export type DeadClicksAutoCaptureConfig = {
     mutation_threshold_ms?: number
 
     /**
+     * By default, clicks with modifier keys (ctrl, shift, alt, meta/cmd) held down are not considered dead clicks,
+     * since these typically indicate intentional actions like "open in new tab".
+     *
+     * Set this to true to capture dead clicks even when modifier keys are held.
+     *
+     * @default false
+     */
+    capture_clicks_with_modifier_keys?: boolean
+
+    /**
      * Allows setting behavior for when a dead click is captured.
      * For e.g. to support capture to heatmaps
      *

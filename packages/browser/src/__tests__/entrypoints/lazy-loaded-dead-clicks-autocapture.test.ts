@@ -7,11 +7,19 @@ import { autocaptureCompatibleElements } from '../../autocapture-utils'
 jest.useFakeTimers()
 jest.setSystemTime(1000)
 
-const triggerMouseEvent = function (node: Node, eventType: string) {
+const triggerMouseEvent = function (
+    node: Node,
+    eventType: string,
+    options?: { ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean; shiftKey?: boolean }
+) {
     node.dispatchEvent(
         new MouseEvent(eventType, {
             bubbles: true,
             cancelable: true,
+            ctrlKey: options?.ctrlKey,
+            metaKey: options?.metaKey,
+            altKey: options?.altKey,
+            shiftKey: options?.shiftKey,
         })
     )
 }
@@ -405,5 +413,47 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
         expect(fakeInstance.capture).not.toHaveBeenCalled()
         expect(replacementCapture).toHaveBeenCalled()
+    })
+
+    describe('modifier key handling', () => {
+        it.each([
+            { key: 'ctrlKey', options: { ctrlKey: true } },
+            { key: 'metaKey', options: { metaKey: true } },
+            { key: 'altKey', options: { altKey: true } },
+            { key: 'shiftKey', options: { shiftKey: true } },
+        ])('ignores clicks with $key held down by default', ({ options }) => {
+            triggerMouseEvent(document.body, 'click', options)
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(0)
+        })
+
+        it('captures regular clicks without modifier keys', () => {
+            triggerMouseEvent(document.body, 'click')
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(1)
+        })
+
+        it.each([
+            { key: 'ctrlKey', options: { ctrlKey: true } },
+            { key: 'metaKey', options: { metaKey: true } },
+            { key: 'altKey', options: { altKey: true } },
+            { key: 'shiftKey', options: { shiftKey: true } },
+        ])('captures clicks with $key when capture_clicks_with_modifier_keys is true', ({ options }) => {
+            lazyLoadedDeadClicksAutocapture.stop()
+            lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance, {
+                capture_clicks_with_modifier_keys: true,
+            })
+            lazyLoadedDeadClicksAutocapture.start(document)
+
+            triggerMouseEvent(document.body, 'click', options)
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(1)
+        })
+
+        it('ignores clicks with multiple modifier keys held down', () => {
+            triggerMouseEvent(document.body, 'click', { ctrlKey: true, shiftKey: true })
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(0)
+        })
     })
 })
