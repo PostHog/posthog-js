@@ -117,14 +117,14 @@ describe('PostHog Context', () => {
     })
   })
 
-  it('should isolate contexts when fresh: true', async () => {
+  it('should isolate contexts when inherit: false', async () => {
     posthog.withContext({ properties: { outer: 'value1' } }, () => {
       posthog.withContext(
         { properties: { inner: 'value2' } },
         () => {
           posthog.capture({ distinctId: 'user-5', event: 'test_event' })
         },
-        { fresh: true }
+        { inherit: false }
       )
     })
 

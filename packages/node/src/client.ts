@@ -1168,7 +1168,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * Run a function with specific context that will be applied to all events captured within that context.
    * It propagates the context to all subsequent calls down the call stack.
    * Context properties like tags and sessionId will be automatically attached to all events.
-   * By default, nested contexts inherit from parent contexts. Use `{ fresh: true }` to start with a clean context.
+   * By default, nested contexts inherit from parent contexts. Use `{ inherit: false }` to start with a clean context.
    *
    * @example
    * ```ts
@@ -1181,7 +1181,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param data - Context data to apply (sessionId, distinctId, properties, enableExceptionAutocapture)
    * @param fn - Function to run with the context
-   * @param options - Context options (fresh: true to start with clean context instead of inheriting)
+   * @param options - Context options (inherit: false to start with clean context instead of inheriting)
    * @returns The return value of the function
    */
   withContext<T>(data: Partial<ContextData>, fn: () => T, options?: ContextOptions): T {
