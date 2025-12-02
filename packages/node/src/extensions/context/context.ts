@@ -13,7 +13,7 @@ export class PostHogContext implements IPostHogContext {
   }
 
   run<T>(context: ContextData, fn: () => T, options?: ContextOptions): T {
-    const fresh = options?.fresh !== false
+    const fresh = options?.fresh === true
 
     if (fresh) {
       return this.storage.run(context, fn)

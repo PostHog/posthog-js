@@ -8,7 +8,7 @@ export interface ContextOptions {
   /**
    * If true, replaces the current context entirely.
    * If false, merges with the existing context (new values override existing ones).
-   * @default true
+   * @default false
    */
   fresh?: boolean
 }
