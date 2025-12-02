@@ -109,16 +109,6 @@ jobs:
           -F prerelease=false \
           -F generate_release_notes=false
 
-      - name: Dispatch generate-references for ${{ matrix.package.name }}
-        if: steps.check-package-version.outputs.is-new-version == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh workflow run generate-references.yml \
-            --ref main \
-            --field package_name="${{ matrix.package.name }}" \
-            --field package_path="${{ steps.get-package-path.outputs.path }}"
-
       ########################################################
       ############## posthog-js auto-update ##################
       - name: Dispatch posthog upgrade for ${{ matrix.package.name }}
