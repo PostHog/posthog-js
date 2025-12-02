@@ -23,10 +23,7 @@ jobs:
 
       - uses: ./.github/actions/setup
         with:
-          build: false
-
-      - name: Build @posthog-tooling/changelog
-        run: pnpm turbo --filter=@posthog-tooling/changelog build
+          build: true
 
       - name: Update versions and changelogs
         run: pnpm bump
