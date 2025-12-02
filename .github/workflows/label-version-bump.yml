@@ -29,7 +29,7 @@ jobs:
         run: pnpm turbo --filter=@posthog-tooling/changelog build
 
       - name: Update versions and changelogs
-        run: pnpm changeset version
+        run: pnpm bump
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

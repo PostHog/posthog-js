@@ -47,20 +47,8 @@
             "cache": false,
             "persistent": true
         },
-        "posthog-js#generate-references": {
-            "dependsOn": ["build"],
-            "inputs": ["dist/**", "package.json", "scripts/**", "docs/**"],
-            "outputs": ["references/**"],
-            "cache": false
-        },
-        "posthog-node#generate-references": {
-            "dependsOn": ["build"],
-            "inputs": ["dist/**", "package.json", "scripts/**", "docs/**"],
-            "outputs": ["references/**"],
-            "cache": false
-        },
-        "posthog-react-native#generate-references": {
-            "dependsOn": ["build"],
+        "generate-references": {
+            "dependsOn": ["^build", "^generate-references"],
             "inputs": ["dist/**", "package.json", "scripts/**", "docs/**"],
             "outputs": ["references/**"],
             "cache": false
