@@ -13,9 +13,11 @@ export class PostHogContext implements IPostHogContext {
   }
 
   run<T>(context: ContextData, fn: () => T, options?: ContextOptions): T {
-    const inherit = options?.inherit !== false
+    const fresh = options?.fresh === true
 
-    if (inherit) {
+    if (fresh) {
+      return this.storage.run(context, fn)
+    } else {
       const currentContext = this.get() || {}
       const mergedContext: ContextData = {
         distinctId: context.distinctId ?? currentContext.distinctId,
@@ -26,8 +28,6 @@ export class PostHogContext implements IPostHogContext {
         },
       }
       return this.storage.run(mergedContext, fn)
-    } else {
-      return this.storage.run(context, fn)
     }
   }
 }

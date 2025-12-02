@@ -341,7 +341,7 @@ export interface IPostHog {
    * @description Run a function with specific context that will be applied to all events captured within that context.
    * @param data Context data to apply (sessionId, distinctId, properties, enableExceptionAutocapture)
    * @param fn Function to run with the context
-   * @param options Context options (inherit: false to start with clean context instead of inheriting)
+   * @param options Context options (fresh)
    * @returns The return value of the function
    */
   withContext<T>(data: Partial<ContextData>, fn: () => T, options?: ContextOptions): T

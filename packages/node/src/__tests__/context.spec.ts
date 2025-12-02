@@ -100,7 +100,7 @@ describe('PostHog Context', () => {
     expect(events?.[0].distinct_id).toBe('context-user')
   })
 
-  it('should merge contexts by default (inherit: true)', async () => {
+  it('should merge contexts by default (fresh: false)', async () => {
     posthog.withContext({ properties: { outer: 'value1', shared: 'parent' } }, () => {
       posthog.withContext({ properties: { inner: 'value2', shared: 'child' } }, () => {
         posthog.capture({ distinctId: 'user-4', event: 'test_event' })
@@ -117,14 +117,14 @@ describe('PostHog Context', () => {
     })
   })
 
-  it('should isolate contexts when inherit: false', async () => {
+  it('should isolate contexts when fresh: true', async () => {
     posthog.withContext({ properties: { outer: 'value1' } }, () => {
       posthog.withContext(
         { properties: { inner: 'value2' } },
         () => {
           posthog.capture({ distinctId: 'user-5', event: 'test_event' })
         },
-        { inherit: false }
+        { fresh: true }
       )
     })
 

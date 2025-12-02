@@ -6,11 +6,11 @@ export interface ContextData {
 
 export interface ContextOptions {
   /**
-   * If true (default), merges with the existing context (new values override existing ones).
-   * If false, replaces the current context entirely.
-   * @default true
+   * If true, replaces the current context entirely.
+   * If false, merges with the existing context (new values override existing ones).
+   * @default false
    */
-  inherit?: boolean
+  fresh?: boolean
 }
 
 export interface IPostHogContext {
