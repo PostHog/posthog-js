@@ -5180,4 +5180,71 @@ describe('ETag support for local evaluation polling', () => {
     const flag = await posthog.getFeatureFlag('test-flag', 'user-1')
     expect(flag).toBe(true)
   })
+
+  it('updates ETag when server sends new ETag with 304 response', async () => {
+    let callCount = 0
+    const fetchCalls: { url: string; options: any }[] = []
+    const mockFetch = jest.fn((url: string, options: any) => {
+      fetchCalls.push({ url, options })
+      callCount++
+      if (callCount === 1) {
+        // First call: return full response with initial ETag
+        return Promise.resolve({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () =>
+            Promise.resolve({
+              flags: [{ id: 1, key: 'test-flag', active: true }],
+              group_type_mapping: {},
+              cohorts: {},
+            }),
+          headers: {
+            get: (name: string) => (name === 'ETag' ? '"etag-v1"' : null),
+          },
+        })
+      } else if (callCount === 2) {
+        // Second call: return 304 with updated ETag
+        return Promise.resolve({
+          status: 304,
+          text: () => Promise.resolve(''),
+          json: () => Promise.reject(new Error('No body on 304')),
+          headers: {
+            get: (name: string) => (name === 'ETag' ? '"etag-v2"' : null),
+          },
+        })
+      } else {
+        // Third call: return 304
+        return Promise.resolve({
+          status: 304,
+          text: () => Promise.resolve(''),
+          json: () => Promise.reject(new Error('No body on 304')),
+          headers: {
+            get: () => null,
+          },
+        })
+      }
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await waitForPromises()
+
+    // First call has no ETag
+    expect(fetchCalls[0].options.headers['If-None-Match']).toBeUndefined()
+
+    // Second call uses initial ETag
+    await posthog.reloadFeatureFlags()
+    await waitForPromises()
+    expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"etag-v1"')
+
+    // Third call should use the updated ETag from the 304 response
+    await posthog.reloadFeatureFlags()
+    await waitForPromises()
+    expect(fetchCalls[2].options.headers['If-None-Match']).toBe('"etag-v2"')
+  })
 })

@@ -687,6 +687,8 @@ class FeatureFlagsPoller {
         case 304:
           // Not Modified - flags haven't changed, keep using cached data
           this.logMsgIfDebug(() => console.debug('[FEATURE FLAGS] Flags not modified (304), using cached data'))
+          // Update ETag if server sent one (304 can include updated ETag per HTTP spec)
+          this.flagsEtag = res.headers?.get('ETag') ?? this.flagsEtag
           this.loadedSuccessfullyOnce = true
           this.shouldBeginExponentialBackoff = false
           this.backOffCount = 0
