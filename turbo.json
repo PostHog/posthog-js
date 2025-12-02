@@ -48,9 +48,7 @@
             "persistent": true
         },
         "generate-references": {
-            "dependsOn": ["^build", "^generate-references"],
-            "inputs": ["dist/**", "package.json", "scripts/**", "docs/**"],
-            "outputs": ["references/**"],
+            "dependsOn": ["build"],
             "cache": false
         }
     }
