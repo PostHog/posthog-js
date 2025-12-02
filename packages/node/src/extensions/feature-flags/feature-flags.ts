@@ -77,7 +77,6 @@ class FeatureFlagsPoller {
   backOffCount: number = 0
   onLoad?: (count: number) => void
   private cacheProvider?: FlagDefinitionCacheProvider
-  private hasAttemptedCacheLoad: boolean = false
   private loadingPromise?: Promise<void>
 
   constructor({
@@ -582,21 +581,19 @@ class FeatureFlagsPoller {
   }
 
   async loadFeatureFlags(forceReload = false): Promise<void> {
-    // On first load, try to initialize from cache (if a cache provider is configured)
-    if (this.cacheProvider && !this.hasAttemptedCacheLoad) {
-      this.hasAttemptedCacheLoad = true
-      await this.loadFromCache('Loaded flags from cache')
+    if (this.loadedSuccessfullyOnce && !forceReload) {
+      return
     }
 
-    // If a fetch is already in progress, wait for it
-    if (this.loadingPromise) {
-      return this.loadingPromise
-    }
-
-    if (!this.loadedSuccessfullyOnce || forceReload) {
+    if (!this.loadingPromise) {
       this.loadingPromise = this._loadFeatureFlags()
-      await this.loadingPromise
+        .catch((err) => this.logMsgIfDebug(() => console.debug(`[FEATURE FLAGS] Failed to load feature flags: ${err}`)))
+        .finally(() => {
+          this.loadingPromise = undefined
+        })
     }
+
+    return this.loadingPromise
   }
 
   /**
@@ -627,7 +624,7 @@ class FeatureFlagsPoller {
       this.poller = undefined
     }
 
-    this.poller = setTimeout(() => this._loadFeatureFlags(), this.getPollingInterval())
+    this.poller = setTimeout(() => this.loadFeatureFlags(true), this.getPollingInterval())
 
     try {
       let shouldFetch = true
@@ -764,8 +761,6 @@ class FeatureFlagsPoller {
       if (err instanceof ClientError) {
         this.onError?.(err)
       }
-    } finally {
-      this.loadingPromise = undefined
     }
   }
 

@@ -17,7 +17,7 @@ export default defineNuxtConfig({
       enabled: true,
       version: '3',
       logLevel: 'debug',
-      envId: process.env.POSTHOG_API_PROJECT!,
+      envId: process.env.POSTHOG_PROJECT_ID!,
       project: 'my-project',
       personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY!,
     },

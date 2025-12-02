@@ -1,16 +1,18 @@
 import { SURVEYS_ACTIVATED } from '../constants'
-import { Survey, SurveyEventName } from '../posthog-surveys-types'
+import { Survey, SurveyEventName, SurveyEventType, SurveyEventWithFilters } from '../posthog-surveys-types'
 
 import { ActionMatcher } from '../extensions/surveys/action-matcher'
 import { PostHog } from '../posthog-core'
 import { CaptureResult } from '../types'
 import { SURVEY_LOGGER as logger } from './survey-utils'
-import { propertyComparisons } from './property-utils'
-import { isNull, isUndefined } from '@posthog/core'
+import { matchPropertyFilters } from './property-utils'
+import { isUndefined } from '@posthog/core'
 
 export class SurveyEventReceiver {
     // eventToSurveys is a mapping of event name to all the surveys that are activated by it
-    private readonly _eventToSurveys: Map<string, string[]>
+    private _eventToSurveys: Map<string, string[]>
+    // cancelEventToSurveys is a mapping of event name to all the surveys that should be cancelled by it
+    private _cancelEventToSurveys: Map<string, string[]>
     // actionToSurveys is a mapping of action name to all the surveys that are activated by it
     private readonly _actionToSurveys: Map<string, string[]>
     // actionMatcher can look at CaptureResult payloads and match an event to its corresponding action.
@@ -20,7 +22,57 @@ export class SurveyEventReceiver {
     constructor(instance: PostHog) {
         this._instance = instance
         this._eventToSurveys = new Map<string, string[]>()
+        this._cancelEventToSurveys = new Map<string, string[]>()
         this._actionToSurveys = new Map<string, string[]>()
+    }
+
+    private _doesEventMatchFilter(
+        eventConfig: SurveyEventWithFilters | undefined,
+        eventPayload?: CaptureResult
+    ): boolean {
+        if (!eventConfig) {
+            return false
+        }
+
+        return matchPropertyFilters(eventConfig.propertyFilters, eventPayload?.properties)
+    }
+
+    private _buildEventToSurveyMap(surveys: Survey[], conditionField: SurveyEventType): Map<string, string[]> {
+        const map = new Map<string, string[]>()
+        surveys.forEach((survey) => {
+            survey.conditions?.[conditionField]?.values?.forEach((event) => {
+                if (event?.name) {
+                    const existing = map.get(event.name) || []
+                    existing.push(survey.id)
+                    map.set(event.name, existing)
+                }
+            })
+        })
+        return map
+    }
+
+    /**
+     * build a map of (Event1) => [Survey1, Survey2, Survey3]
+     * used for surveys that should be [activated|cancelled] by Event1
+     */
+    private _getMatchingSurveys(
+        eventName: string,
+        eventPayload: CaptureResult | undefined,
+        conditionField: SurveyEventType
+    ): Survey[] {
+        const surveyIdMap =
+            conditionField === SurveyEventType.Activation ? this._eventToSurveys : this._cancelEventToSurveys
+        const surveyIds = surveyIdMap.get(eventName)
+
+        let surveys: Survey[] = []
+        this._instance?.getSurveys((allSurveys) => {
+            surveys = allSurveys.filter((survey) => surveyIds?.includes(survey.id))
+        })
+
+        return surveys.filter((survey) => {
+            const eventConfig = survey.conditions?.[conditionField]?.values?.find((e) => e.name === eventName)
+            return this._doesEventMatchFilter(eventConfig, eventPayload)
+        })
     }
 
     register(surveys: Survey[]): void {
@@ -84,7 +136,11 @@ export class SurveyEventReceiver {
             (survey: Survey) => survey.conditions?.events && survey.conditions?.events?.values?.length > 0
         )
 
-        if (eventBasedSurveys.length === 0) {
+        const surveysWithCancelEvents = surveys.filter(
+            (survey: Survey) => survey.conditions?.cancelEvents && survey.conditions?.cancelEvents?.values?.length > 0
+        )
+
+        if (eventBasedSurveys.length === 0 && surveysWithCancelEvents.length === 0) {
             return
         }
 
@@ -94,19 +150,8 @@ export class SurveyEventReceiver {
         }
         this._instance?._addCaptureHook(matchEventToSurvey)
 
-        surveys.forEach((survey) => {
-            // maintain a mapping of (Event1) => [Survey1, Survey2, Survey3]
-            // where Surveys 1-3 are all activated by Event1
-            survey.conditions?.events?.values?.forEach((event) => {
-                if (event && event.name) {
-                    const knownSurveys: string[] | undefined = this._eventToSurveys.get(event.name)
-                    if (knownSurveys) {
-                        knownSurveys.push(survey.id)
-                    }
-                    this._eventToSurveys.set(event.name, knownSurveys || [survey.id])
-                }
-            })
-        })
+        this._eventToSurveys = this._buildEventToSurveyMap(surveys, SurveyEventType.Activation)
+        this._cancelEventToSurveys = this._buildEventToSurveyMap(surveys, SurveyEventType.Cancellation)
     }
 
     onEvent(event: string, eventPayload?: CaptureResult): void {
@@ -130,6 +175,30 @@ export class SurveyEventReceiver {
             return
         }
 
+        // check if this event should cancel any pending surveys
+        if (this._cancelEventToSurveys.has(event)) {
+            const surveysToCancel = this._getMatchingSurveys(event, eventPayload, SurveyEventType.Cancellation)
+
+            if (surveysToCancel.length > 0) {
+                logger.info('cancel event matched, cancelling surveys', {
+                    event,
+                    surveysToCancel: surveysToCancel.map((s) => s.id),
+                })
+
+                surveysToCancel.forEach((survey) => {
+                    // remove from activated surveys
+                    const index = existingActivatedSurveys.indexOf(survey.id)
+                    if (index >= 0) {
+                        existingActivatedSurveys.splice(index, 1)
+                    }
+                    // cancel any pending timeout for this survey
+                    this._instance?.cancelPendingSurvey(survey.id)
+                })
+
+                this._updateActivatedSurveys(existingActivatedSurveys)
+            }
+        }
+
         // if the event is not in the eventToSurveys map, nothing else to do
         if (!this._eventToSurveys.has(event)) {
             return
@@ -141,42 +210,7 @@ export class SurveyEventReceiver {
             surveys: this._eventToSurveys.get(event),
         })
 
-        let surveysToCheck: Survey[] = []
-
-        this._instance?.getSurveys((surveys) => {
-            surveysToCheck = surveys.filter((survey) => this._eventToSurveys.get(event)?.includes(survey.id))
-        })
-
-        const matchedSurveys = surveysToCheck.filter((survey) => {
-            // first, we get the correct event to check
-            const eventToCheck = survey.conditions?.events?.values?.find((e) => e.name === event)
-            if (!eventToCheck) {
-                return false
-            }
-
-            // if there are no property filters, it means we're only matching on event name
-            if (!eventToCheck.propertyFilters) {
-                return true
-            }
-
-            return Object.entries(eventToCheck.propertyFilters).every(([propertyName, filter]) => {
-                const eventPropertyValue = eventPayload?.properties?.[propertyName]
-                if (isUndefined(eventPropertyValue) || isNull(eventPropertyValue)) {
-                    return false
-                }
-
-                // convert event property to string for comparison
-                const eventValues = [String(eventPropertyValue)]
-
-                const comparisonFunction = propertyComparisons[filter.operator]
-                if (!comparisonFunction) {
-                    logger.warn(`Unknown property comparison operator: ${filter.operator}`)
-                    return false
-                }
-
-                return comparisonFunction(filter.values, eventValues)
-            })
-        })
+        const matchedSurveys = this._getMatchingSurveys(event, eventPayload, SurveyEventType.Activation)
 
         this._updateActivatedSurveys(existingActivatedSurveys.concat(matchedSurveys.map((survey) => survey.id) || []))
     }

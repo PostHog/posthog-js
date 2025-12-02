@@ -6,6 +6,23 @@
 
 import type { PropertyMatchType } from './types'
 
+export enum SurveyEventType {
+    Activation = 'events',
+    Cancellation = 'cancelEvents',
+}
+
+export type PropertyFilters = {
+    [propertyName: string]: {
+        values: string[]
+        operator: PropertyMatchType
+    }
+}
+
+export interface SurveyEventWithFilters {
+    name: string
+    propertyFilters?: PropertyFilters
+}
+
 export enum SurveyWidgetType {
     Button = 'button',
     Tab = 'tab',
@@ -203,18 +220,14 @@ export interface Survey {
         selector?: string
         seenSurveyWaitPeriodInDays?: number
         urlMatchType?: PropertyMatchType
+        /** events that trigger surveys */
         events: {
             repeatedActivation?: boolean
-            values: {
-                name: string
-                /** Property filters for event matching */
-                propertyFilters?: {
-                    [propertyName: string]: {
-                        values: string[]
-                        operator: PropertyMatchType
-                    }
-                }
-            }[]
+            values: SurveyEventWithFilters[]
+        } | null
+        /** events that cancel "pending" (time-delayed) surveys */
+        cancelEvents: {
+            values: SurveyEventWithFilters[]
         } | null
         actions: {
             values: SurveyActionType[]
@@ -256,6 +269,13 @@ export interface ActionStepType {
     url?: string | null
     /** @default StringMatching.Contains */
     url_matching?: ActionStepStringMatching | null
+    /** Property filters for action step matching */
+    properties?: {
+        key: string
+        value?: string | number | boolean | (string | number | boolean)[] | null
+        operator?: PropertyMatchType
+        type?: string
+    }[]
 }
 
 export enum SurveyEventName {

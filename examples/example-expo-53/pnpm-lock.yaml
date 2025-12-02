@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  node-forge: 1.3.2
+
 pnpmfileChecksum: sha256-51V53DYAleXHgPrntlBZSmeS8lOCPoT1zhKZkbvcJZs=
 
 importers:
@@ -876,8 +879,8 @@ packages:
     engines: {node: '>=14'}
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-oqOVLKgsutoIhwb+7wFBwS3HusnluwYWvoAWQwlEGRXaP+S9Gf5iSP3F5XaGZ9w5Uvj8PdyxZ7ZrZRJXEVWEkg==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.5.5
+    resolution: {integrity: sha512-2vLzAcFT1l9nhpOFBz7pBuhE4sc1jA2fTSxcZ2aR1o/Qc+pUJTc0nlsPdqwf7lC6PoaJenjZEDrsolHzAlA9IQ==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.5.2
 
   '@radix-ui/react-compose-refs@1.1.2':
     resolution: {integrity: sha512-z4eqJvfiNnFMHIIvXP3CY57y2WJs5g2v3X0zm9mEJkrkNv4rDxu+sg9Jh8EkXyeqBkB7SOcboo9dMVqhyrACIg==}
@@ -2934,8 +2937,8 @@ packages:
       encoding:
         optional: true
 
-  node-forge@1.3.1:
-    resolution: {integrity: sha512-dPEtOeMvF9VMcYV/1Wb8CPoVAXtp6MKMlcbAt4ddqmGqUJ6fQZFXkNZNkNlfevtNkGtaSoXf/vNNNSvgrdXwtA==}
+  node-forge@1.3.2:
+    resolution: {integrity: sha512-6xKiQ+cph9KImrRh0VsjH2d8/GXA4FIMlgU4B757iI1ApvcyA9VlouP0yZJha01V+huImO+kKMU7ih+2+E14fw==}
     engines: {node: '>= 6.13.0'}
 
   node-int64@0.4.0:
@@ -3136,8 +3139,8 @@ packages:
       react-native: '*'
 
   posthog-react-native@file:../../target/posthog-react-native.tgz:
-    resolution: {integrity: sha512-coAH6D1YEKUsaav/8OnIIlMw83Bby21pWxFUrKnYv1Fp071heIS+5XLR1M58Z5HSe9bgx1iosZLsOgddx6sEaw==, tarball: file:../../target/posthog-react-native.tgz}
-    version: 4.12.4
+    resolution: {integrity: sha512-CjTf5bmHPFbVHkyPfInBRiDdgZ9kX1Wd3Q/YxrAlX+61aBm1DcJOWyHHj4oYrZcSQvwjsP4HUoCUavZEvDm5PA==, tarball: file:../../target/posthog-react-native.tgz}
+    version: 4.10.8
     peerDependencies:
       '@react-native-async-storage/async-storage': '>=1.0.0'
       '@react-navigation/native': '>= 5.0.0'
@@ -4744,7 +4747,7 @@ snapshots:
       glob: 10.4.5
       lan-network: 0.1.7
       minimatch: 9.0.5
-      node-forge: 1.3.1
+      node-forge: 1.3.2
       npm-package-arg: 11.0.3
       ora: 3.4.0
       picomatch: 3.0.1
@@ -4777,7 +4780,7 @@ snapshots:
 
   '@expo/code-signing-certificates@0.0.5':
     dependencies:
-      node-forge: 1.3.1
+      node-forge: 1.3.2
       nullthrows: 1.1.1
 
   '@expo/config-plugins@10.1.2':
@@ -7590,7 +7593,7 @@ snapshots:
     dependencies:
       whatwg-url: 5.0.0
 
-  node-forge@1.3.1: {}
+  node-forge@1.3.2: {}
 
   node-int64@0.4.0: {}
 

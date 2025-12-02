@@ -1,5 +1,21 @@
 # @posthog/nextjs-config
 
+## 1.6.2
+
+### Patch Changes
+
+- [#2660](https://github.com/PostHog/posthog-js/pull/2660) [`5f0bc7c`](https://github.com/PostHog/posthog-js/commit/5f0bc7ca755457d4bb6e2ac4f0cf7ef944034983) Thanks [@hpouillot](https://github.com/hpouillot)! - fix chunk resolution
+  (2025-12-01)
+- Updated dependencies [[`5f0bc7c`](https://github.com/PostHog/posthog-js/commit/5f0bc7ca755457d4bb6e2ac4f0cf7ef944034983)]:
+  - @posthog/webpack-plugin@1.1.2
+
+## 1.6.1
+
+### Patch Changes
+
+- Updated dependencies [[`07457bf`](https://github.com/PostHog/posthog-js/commit/07457bfece0f3e4798a2c5c68e178250139ce505)]:
+  - @posthog/webpack-plugin@1.1.1
+
 ## 1.6.0
 
 ### Minor Changes

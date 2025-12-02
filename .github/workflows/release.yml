@@ -52,14 +52,62 @@ jobs:
         with:
           path: ${{ steps.get-package-path.outputs.path }}
 
-      - name: Release package ${{ matrix.package.name }}
-        uses: ./.github/actions/release
+      - name: Set up Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      ########## new package publish steps ##############
+
+      - name: Install and build dependencies
         if: steps.check-package-version.outputs.is-new-version == 'true'
-        with:
-          package_path: ${{ steps.get-package-path.outputs.path }}
-          package_name: ${{ matrix.package.name }}
-          package_version: ${{ steps.check-package-version.outputs.committed-version }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm install --frozen-lockfile && pnpm build
+
+      - name: Tag repository with package_name and package_version
+        if: steps.check-package-version.outputs.is-new-version == 'true'
+        run: |
+          git tag -a "${{ matrix.package.name }}@${{ steps.check-package-version.outputs.committed-version }}" -m "${{ matrix.package.name }}@${{ steps.check-package-version.outputs.committed-version }}"
+
+      - name: Publish ${{ matrix.package.name }} to NPM
+        if: steps.check-package-version.outputs.is-new-version == 'true'
+        run: |
+          pnpm publish --filter=${{ matrix.package.name }} --access public
+        env:
+          NPM_CONFIG_PROVENANCE: true
+
+      - name: Push tag to GitHub
+        if: steps.check-package-version.outputs.is-new-version == 'true'
+        shell: bash
+        run: |
+          git push origin "${{ matrix.package.name }}@${{ steps.check-package-version.outputs.committed-version }}"
+
+      - name: Create GitHub release
+        if: steps.check-package-version.outputs.is-new-version == 'true'
+        working-directory: ${{ steps.get-package-path.outputs.path }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # read from the first until the second header in the changelog file
+          # this assumes the formatting of the file
+          # and that this workflow is always running for the most recent entry in the file
+          LAST_CHANGELOG_ENTRY=$(awk -v defText="see CHANGELOG.md" '/^## /{if (flag) exit; flag=1} flag && /^##$/{exit} flag; END{if (!flag) print defText}' CHANGELOG.md)
+          # the action we used to use was archived, and made it really difficult to create a release with a body
+          # because the LAST_CHANGELOG_ENTRY contains bash special characters so passing it between steps
+          # was a pain.
+          # we can use the github cli to create a release with a body
+          # all as part of one step
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/posthog/posthog-js/releases \
+            -f tag_name="${{ matrix.package.name }}@${{ steps.check-package-version.outputs.committed-version }}" \
+          -f target_commitish='main' \
+          -f name="${{ matrix.package.name }}@${{ steps.check-package-version.outputs.committed-version }}" \
+          -f body="$LAST_CHANGELOG_ENTRY" \
+          -F draft=false \
+          -F prerelease=false \
+          -F generate_release_notes=false
 
       - name: Dispatch generate-references for ${{ matrix.package.name }}
         if: steps.check-package-version.outputs.is-new-version == 'true'
@@ -71,6 +119,8 @@ jobs:
             --field package_name="${{ matrix.package.name }}" \
             --field package_path="${{ steps.get-package-path.outputs.path }}"
 
+      ########################################################
+      ############## posthog-js auto-update ##################
       - name: Dispatch posthog upgrade for ${{ matrix.package.name }}
         if: matrix.package.name == 'posthog-js' && steps.check-package-version.outputs.is-new-version == 'true'
         run: |
@@ -100,13 +150,13 @@ jobs:
                    "package_version": "${{ steps.check-package-version.outputs.committed-version }}"
                  }
                }'
-
+      ####################################################
       # a CDP destination is set-up to alert when we get this event
       - name: Send failure event to PostHog
         if: ${{ failure() }}
         uses: PostHog/posthog-github-action@v0.1
         with:
-          posthog-token: "${{ secrets.POSTHOG_API_TOKEN }}"
+          posthog-token: "${{ secrets.POSTHOG_PROJECT_API_KEY }}"
           event: "posthog-js-github-release-workflow-failure"
           properties: >-
             {

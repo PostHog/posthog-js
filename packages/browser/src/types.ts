@@ -1772,13 +1772,14 @@ export type SnippetArrayItem = [method: string, ...args: any[]]
 export type JsonRecord = { [key: string]: JsonType }
 export type JsonType = string | number | boolean | null | undefined | JsonRecord | Array<JsonType>
 
+// Sync this with the backend's EarlyAccessFeatureSerializer!
 /** A feature that isn't publicly available yet.*/
 export interface EarlyAccessFeature {
-    // Sync this with the backend's EarlyAccessFeatureSerializer!
     name: string
     description: string
     stage: 'concept' | 'alpha' | 'beta'
     documentationUrl: string | null
+    payload: JsonType
     flagKey: string | null
 }
 

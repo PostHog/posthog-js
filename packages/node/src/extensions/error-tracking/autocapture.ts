@@ -50,13 +50,13 @@ export function addUncaughtExceptionListener(
   captureFn: (exception: Error, hint: CoreErrorTracking.EventHint) => void,
   onFatalFn: (exception: Error) => void
 ): void {
-  global.process.on('uncaughtException', makeUncaughtExceptionHandler(captureFn, onFatalFn))
+  globalThis.process?.on('uncaughtException', makeUncaughtExceptionHandler(captureFn, onFatalFn))
 }
 
 export function addUnhandledRejectionListener(
   captureFn: (exception: unknown, hint: CoreErrorTracking.EventHint) => void
 ): void {
-  global.process.on('unhandledRejection', (reason: unknown) => {
+  globalThis.process?.on('unhandledRejection', (reason: unknown) => {
     return captureFn(reason, {
       mechanism: {
         type: 'onunhandledrejection',
