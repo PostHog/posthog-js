@@ -182,4 +182,53 @@ describe('action-matcher', () => {
         actionMatcher.on('$pageview', createCaptureResult('$pageview', undefined, { plan: 'pro' }))
         expect(matched).toBeTruthy()
     })
+
+    it('can match action using server-provided selector_regex', () => {
+        const buttonClickedAction = createAction(2, '$autocapture')
+        if (buttonClickedAction.steps) {
+            buttonClickedAction.steps[0].selector = 'button.primary'
+            buttonClickedAction.steps[0].selector_regex =
+                '(^|;)button.*?\\.primary([-_a-zA-Z0-9\\.:"= \\[\\]\\(\\),]*?)?($|;|:([^;^\\s]*(;|$|\\s)))'
+        }
+
+        const actionMatcher = new ActionMatcher(instance)
+        actionMatcher.register([buttonClickedAction])
+        let matched = false
+
+        actionMatcher._addActionHook(() => {
+            matched = true
+        })
+
+        const noMatchResult = createCaptureResult('$autocapture', 'https://example.com')
+        noMatchResult.properties.$elements_chain = 'button.secondary:text="Click"'
+        actionMatcher.on('$autocapture', noMatchResult)
+        expect(matched).toBeFalsy()
+
+        const matchResult = createCaptureResult('$autocapture', 'https://example.com')
+        matchResult.properties.$elements_chain = 'button.primary:text="Click"'
+        actionMatcher.on('$autocapture', matchResult)
+        expect(matched).toBeTruthy()
+    })
+
+    it('does not match selector when selector_regex not provided', () => {
+        const buttonClickedAction = createAction(2, '$autocapture')
+        if (buttonClickedAction.steps) {
+            buttonClickedAction.steps[0].selector = 'button.primary'
+            // No selector_regex - matching should fail (requires server-provided regex)
+        }
+
+        const actionMatcher = new ActionMatcher(instance)
+        actionMatcher.register([buttonClickedAction])
+        let matched = false
+
+        actionMatcher._addActionHook(() => {
+            matched = true
+        })
+
+        // Should NOT match - no selector_regex provided by server
+        const matchResult = createCaptureResult('$autocapture', 'https://example.com')
+        matchResult.properties.$elements_chain = 'button.primary:text="Click"'
+        actionMatcher.on('$autocapture', matchResult)
+        expect(matched).toBeFalsy()
+    })
 })
