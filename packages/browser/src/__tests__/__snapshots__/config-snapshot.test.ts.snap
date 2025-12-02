@@ -544,7 +544,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true",
     [
-      "{ scroll_threshold_ms?: number | undefined; selection_change_threshold_ms?: number | undefined; mutation_threshold_ms?: number | undefined; __onCapture?: ((click: DeadClickCandidate, properties: Properties) => void) | undefined; }",
+      "{ scroll_threshold_ms?: number | undefined; selection_change_threshold_ms?: number | undefined; mutation_threshold_ms?: number | undefined; capture_clicks_with_modifier_keys?: boolean | undefined; __onCapture?: ((click: DeadClickCandidate, properties: Properties) => void) | undefined; }",
       "Pick<AutocaptureConfig, \\"element_attribute_ignorelist\\">"
     ]
   ],
