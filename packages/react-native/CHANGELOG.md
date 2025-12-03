@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.14.1
+
+### Patch Changes
+
+- Updated dependencies [[`e1617d9`](https://github.com/PostHog/posthog-js/commit/e1617d91255b23dc39b1dcb15b05ae64c735d9d0)]:
+  - @posthog/core@1.7.0
+
 ## 4.14.0
 
 ### Minor Changes
