@@ -1,5 +1,17 @@
 # posthog-node
 
+## 5.16.0
+
+### Minor Changes
+
+- [#2603](https://github.com/PostHog/posthog-js/pull/2603) [`e1617d9`](https://github.com/PostHog/posthog-js/commit/e1617d91255b23dc39b1dcb15b05ae64c735d9d0) Thanks [@dmarticus](https://github.com/dmarticus)! - add $feature_flag_evaluated_at properties to $feature_flag_called events
+  (2025-12-03)
+
+### Patch Changes
+
+- Updated dependencies [[`e1617d9`](https://github.com/PostHog/posthog-js/commit/e1617d91255b23dc39b1dcb15b05ae64c735d9d0)]:
+  - @posthog/core@1.7.0
+
 ## 5.15.0
 
 ### Minor Changes

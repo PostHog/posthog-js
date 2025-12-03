@@ -1,5 +1,14 @@
 # @posthog/react
 
+## 1.5.1
+
+### Patch Changes
+
+- [#2655](https://github.com/PostHog/posthog-js/pull/2655) [`d10783f`](https://github.com/PostHog/posthog-js/commit/d10783fb472bdc3a74994a7b74504b525ef725a3) Thanks [@ordehi](https://github.com/ordehi)! - Updated feature flag hooks to properly check if client is initialized and prevent client is undefined errors
+  (2025-12-03)
+- Updated dependencies [[`4487d6b`](https://github.com/PostHog/posthog-js/commit/4487d6b28e4f76696f13cea5d08dfceda3aa2cd9), [`0e67750`](https://github.com/PostHog/posthog-js/commit/0e6775030aa43d24588f2e6dbe624e8d8a1f6d7c), [`e1617d9`](https://github.com/PostHog/posthog-js/commit/e1617d91255b23dc39b1dcb15b05ae64c735d9d0)]:
+    - posthog-js@1.300.0
+
 ## 1.5.0
 
 ### Minor Changes

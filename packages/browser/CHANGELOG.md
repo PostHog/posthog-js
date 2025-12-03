@@ -1,5 +1,22 @@
 # posthog-js
 
+## 1.300.0
+
+### Minor Changes
+
+- [#2603](https://github.com/PostHog/posthog-js/pull/2603) [`e1617d9`](https://github.com/PostHog/posthog-js/commit/e1617d91255b23dc39b1dcb15b05ae64c735d9d0) Thanks [@dmarticus](https://github.com/dmarticus)! - add $feature_flag_evaluated_at properties to $feature_flag_called events
+  (2025-12-03)
+
+### Patch Changes
+
+- [#2670](https://github.com/PostHog/posthog-js/pull/2670) [`4487d6b`](https://github.com/PostHog/posthog-js/commit/4487d6b28e4f76696f13cea5d08dfceda3aa2cd9) Thanks [@pauldambra](https://github.com/pauldambra)! - A click while holding a modifier key (CTRL, ALT, CMD, Windows) shouldn't ever count as a dead click - so that we don't pick up e.g. open in a new tab as a dead click
+  (2025-12-03)
+
+- [#2677](https://github.com/PostHog/posthog-js/pull/2677) [`0e67750`](https://github.com/PostHog/posthog-js/commit/0e6775030aa43d24588f2e6dbe624e8d8a1f6d7c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - chore: allow customizing text input and background for surveys
+  (2025-12-03)
+- Updated dependencies [[`e1617d9`](https://github.com/PostHog/posthog-js/commit/e1617d91255b23dc39b1dcb15b05ae64c735d9d0)]:
+    - @posthog/core@1.7.0
+
 ## 1.299.0
 
 ### Minor Changes
