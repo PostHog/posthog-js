@@ -856,7 +856,6 @@ describe('PostHogGemini - Jest test suite', () => {
           totalTokenCount: 10,
         },
       } as any
-
       ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
 
       await client.models.generateContent({
