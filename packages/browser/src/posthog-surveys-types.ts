@@ -86,6 +86,8 @@ export interface SurveyAppearance {
     zIndex?: string
     disabledButtonOpacity?: string
     boxPadding?: string
+    inputTextColor?: string
+    inputBackgroundColor?: string
 }
 
 export enum SurveyType {
