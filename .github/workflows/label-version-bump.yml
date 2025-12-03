@@ -23,10 +23,13 @@ jobs:
 
       - uses: ./.github/actions/setup
         with:
-          build: true
+          build: false
+
+      - name: Build @posthog-tooling/changelog
+        run: pnpm turbo --filter=@posthog-tooling/changelog build
 
       - name: Update versions and changelogs
-        run: pnpm bump
+        run: pnpm bump && pnpm generate-references
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
