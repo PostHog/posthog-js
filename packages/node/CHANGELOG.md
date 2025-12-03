@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.17.0
+
+### Minor Changes
+
+- [#2671](https://github.com/PostHog/posthog-js/pull/2671) [`a1dde5c`](https://github.com/PostHog/posthog-js/commit/a1dde5c443292f0c290ecad9042912e56101f82d) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - make contexts inherit by default
+  (2025-12-03)
+
 ## 5.16.0
 
 ### Minor Changes
