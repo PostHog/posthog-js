@@ -1,6 +1,6 @@
 {
     "name": "@posthog-tooling/rollup-utils",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "description": "Rollup utilities for Posthog",
     "type": "module",
     "main": "dist/index.js",
