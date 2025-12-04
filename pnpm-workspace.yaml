@@ -23,3 +23,12 @@ catalog:
   ts-jest: 29.4.0
   "@rslib/core": 0.10.6
   "@posthog/cli": ~0.5.16
+
+supportedArchitectures:
+  cpu:
+    - x64
+    - arm64v8
+    - arm64
+  os:
+    - linux
+    - darwin
