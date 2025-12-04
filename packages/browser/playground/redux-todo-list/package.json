@@ -25,7 +25,7 @@
         "@reduxjs/toolkit": "^2.0.0",
         "kea": "^3.1.7",
         "kea-typegen": "^3.5.0",
-        "next": "^15.5.2",
+        "next": "^15.5.7",
         "posthog-js": "file:../../dist",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",

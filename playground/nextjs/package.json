@@ -18,7 +18,7 @@
         "cookie": "^0.7.2",
         "eslint": "^8.57.1",
         "hls.js": "^1.5.15",
-        "next": "14.2.33",
+        "next": "14.3.0-canary.88",
         "posthog-js": "*",
         "react": "18.3.1",
         "react-dom": "18.3.1",
