@@ -128,8 +128,6 @@ jobs:
           https://api.github.com/repos/posthog/posthog/pulls/${pull_number}/reviews \
           -d '{"body":"${{ github.event.inputs.package_name }} auto approved.","event":"APPROVE","comments":[]}'
 
-            ####################################################
-
       # a CDP destination is set-up to alert when we get this event
       - name: Send failure event to PostHog
         if: ${{ failure() }}
