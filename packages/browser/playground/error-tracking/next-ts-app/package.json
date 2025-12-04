@@ -13,10 +13,10 @@
         "preinstall": "pnpm run build-posthog"
     },
     "dependencies": {
-        "next": "15.2.1",
+        "next": "^15.5.7",
         "posthog-js": "file:../../..",
-        "react": "^19.0.0",
-        "react-dom": "^19.0.0"
+        "react": "^19.2.1",
+        "react-dom": "^19.2.1"
     },
     "devDependencies": {
         "@types/node": "^20",
