@@ -63,8 +63,25 @@ export const getAppProperties = (): PostHogCustomAppProperties => {
   }
 
   if (OptionalExpoLocalization) {
-    properties.$locale = OptionalExpoLocalization.locale
-    properties.$timezone = OptionalExpoLocalization.timezone
+    let locale: string | undefined | null
+    if ('getLocales' in OptionalExpoLocalization) {
+      locale = OptionalExpoLocalization.getLocales()[0].languageTag
+    } else if ('locale' in OptionalExpoLocalization) {
+      locale = (OptionalExpoLocalization as any).locale
+    }
+    if (locale) {
+      properties.$locale = locale
+    }
+
+    let timezone: string | undefined | null
+    if ('getCalendars' in OptionalExpoLocalization) {
+      timezone = OptionalExpoLocalization.getCalendars()[0].timeZone
+    } else if ('locale' in OptionalExpoLocalization) {
+      timezone = (OptionalExpoLocalization as any).timezone
+    }
+    if (timezone) {
+      properties.$timezone = timezone
+    }
   } else if (OptionalReactNativeLocalize) {
     const localesFn = OptionalReactNativeLocalize.getLocales
     if (localesFn) {

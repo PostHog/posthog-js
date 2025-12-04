@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { type JSX, useMemo, useState } from 'react'
 import { ScrollView, StyleProp, ViewStyle } from 'react-native'
 
 import { getDisplayOrderQuestions, getNextSurveyStep, SurveyAppearanceTheme } from '../surveys-utils'

@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { type JSX } from 'react'
 import { Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
 import { SurveyAppearanceTheme } from '../surveys-utils'

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { type JSX, useCallback, useEffect, useState } from 'react'
 import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native'
 
 import { Cancel } from './Cancel'
