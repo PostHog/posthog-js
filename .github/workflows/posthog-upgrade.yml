@@ -128,7 +128,7 @@ jobs:
           https://api.github.com/repos/posthog/posthog/pulls/${pull_number}/reviews \
           -d '{"body":"${{ github.event.inputs.package_name }} auto approved.","event":"APPROVE","comments":[]}'
 
-      # a CDP destination is set-up to alert when we get this event
+      # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
       - name: Send failure event to PostHog
         if: ${{ failure() }}
         uses: PostHog/posthog-github-action@v0.1
