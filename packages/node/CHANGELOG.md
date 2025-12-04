@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.17.2
+
+### Patch Changes
+
+- [#2678](https://github.com/PostHog/posthog-js/pull/2678) [`ca4436e`](https://github.com/PostHog/posthog-js/commit/ca4436ecdca2412b1d068bcd3d5fcaf60bd2b114) Thanks [@haacked](https://github.com/haacked)! - Local evaluation polling sends If-None-Match header with latest etag to reduce bandwidth when no flags have changed.
+  (2025-12-04)
+
 ## 5.17.1
 
 ### Patch Changes
