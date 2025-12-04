@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.301.0
+
+### Minor Changes
+
+- [#2676](https://github.com/PostHog/posthog-js/pull/2676) [`973bf70`](https://github.com/PostHog/posthog-js/commit/973bf70e4e9e9ea9dd4761c89c0ba8e1f212e941) Thanks [@adboio](https://github.com/adboio)! - support actions with all filter options
+  (2025-12-04)
+
 ## 1.300.0
 
 ### Minor Changes
