@@ -34,6 +34,13 @@ export const apiImplementationV4 = (flagsResponse: PostHogV2FlagsResponse | Erro
   }
 }
 
+/**
+ * Creates a mock headers object for testing
+ */
+export const createMockHeaders = (headers: Record<string, string> = {}) => ({
+  get: (name: string) => headers[name] ?? null,
+})
+
 export const apiImplementation = ({
   localFlags,
   decideFlags: flags,
@@ -41,6 +48,7 @@ export const apiImplementation = ({
   flagsStatus = 200,
   localFlagsStatus = 200,
   errorsWhileComputingFlags = false,
+  localFlagsEtag,
 }: {
   localFlags?: any
   decideFlags?: any
@@ -48,6 +56,7 @@ export const apiImplementation = ({
   flagsStatus?: number
   localFlagsStatus?: number
   errorsWhileComputingFlags?: boolean
+  localFlagsEtag?: string
 }) => {
   return (url: any): Promise<any> => {
     if ((url as any).includes('/flags/')) {
@@ -71,10 +80,12 @@ export const apiImplementation = ({
     }
 
     if ((url as any).includes('api/feature_flag/local_evaluation?token=TEST_API_KEY&send_cohorts')) {
+      const headers = localFlagsEtag ? createMockHeaders({ ETag: localFlagsEtag }) : createMockHeaders()
       return Promise.resolve({
         status: localFlagsStatus,
         text: () => Promise.resolve('ok'),
         json: () => Promise.resolve(localFlags),
+        headers,
       }) as any
     }
 
