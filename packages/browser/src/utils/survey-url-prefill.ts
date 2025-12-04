@@ -137,30 +137,32 @@ export function convertPrefillToResponses(survey: Survey, prefillParams: Prefill
 }
 
 /**
- * Check if all REQUIRED questions that support prefill are filled
+ * Calculate which question index to start at based on prefilled questions.
+ * Only advances past consecutive prefilled questions (starting from index 0)
+ * that have skipSubmitButton enabled.
+ *
+ * @param questions - The survey questions array
+ * @param prefilledIndices - Array of question indices that have been prefilled
+ * @returns The question index to start at
  */
-export function allRequiredQuestionsFilled(survey: Survey, responses: Record<string, any>): boolean {
-    return survey.questions.every((question: SurveyQuestion) => {
-        // Optional questions don't block auto-submit
-        if (question.optional) {
-            return true
+export function calculatePrefillStartIndex(questions: SurveyQuestion[], prefilledIndices: number[]): number {
+    let startQuestionIndex = 0
+
+    for (let i = 0; i < questions.length; i++) {
+        // stop at the first question that is not prefilled
+        if (!prefilledIndices.includes(i)) {
+            break
         }
 
-        // Link and open questions don't support prefill currently, so they don't block auto-submit
-        // If support is added in the future, they will be checked like other question types below
-        if (question.type === SurveyQuestionType.Link || question.type === SurveyQuestionType.Open) {
-            return true
+        const question = questions[i]
+        // only advance if the prefilled question has skipSubmitButton
+        if (question && 'skipSubmitButton' in question && question.skipSubmitButton) {
+            startQuestionIndex = i + 1
+        } else {
+            // show question if skipSubmitButton is false, even if prefilled
+            break
         }
+    }
 
-        // Required question must have a valid ID and response
-        if (!question.id) {
-            return false
-        }
-
-        const responseKey = getSurveyResponseKey(question.id)
-        const hasResponse = responses.hasOwnProperty(responseKey)
-
-        // For question types that support prefill, require a response
-        return hasResponse
-    })
+    return startQuestionIndex
 }

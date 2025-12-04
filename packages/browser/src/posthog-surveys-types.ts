@@ -324,6 +324,17 @@ export type DisplaySurveyOptions = DisplaySurveyPopoverOptions | DisplaySurveyIn
 
 export interface SurveyConfig {
     prefillFromUrl?: boolean
+    /**
+     * @deprecated No longer used. Surveys will automatically advance past
+     * prefilled questions with skipSubmitButton enabled. If partial response
+     * collection is enabled, partial responses for pre-filled questions will
+     * be submitted automatically on page load.
+     */
     autoSubmitIfComplete?: boolean
+    /**
+     * @deprecated No longer used. Pre-filled responses are now sent
+     * immediately when partial responses are enabled, or all required
+     * quesions have been pre-filled.
+     */
     autoSubmitDelay?: number
 }

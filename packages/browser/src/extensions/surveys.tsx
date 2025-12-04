@@ -60,7 +60,7 @@ import {
 import {
     extractPrefillParamsFromUrl,
     convertPrefillToResponses,
-    allRequiredQuestionsFilled,
+    calculatePrefillStartIndex,
 } from '../utils/survey-url-prefill'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
@@ -226,7 +226,6 @@ export class SurveyManager {
     private _posthog: PostHog
     private _surveyInFocus: string | null
     private _surveyTimeouts: Map<string, NodeJS.Timeout> = new Map()
-    private _autoSubmitTimeout?: NodeJS.Timeout
     private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener; survey: Survey }> =
         new Map()
     private _prefillHandledSurveys: Set<string> = new Set()
@@ -436,7 +435,7 @@ export class SurveyManager {
         }
 
         try {
-            const { params, autoSubmit } = extractPrefillParamsFromUrl(window.location.search)
+            const { params } = extractPrefillParamsFromUrl(window.location.search)
 
             if (Object.keys(params).length === 0) {
                 return
@@ -453,21 +452,29 @@ export class SurveyManager {
 
             const submissionId = uuidv7()
 
+            // calculate which question to start at based on prefilled questions
+            const prefilledIndices = Object.keys(params).map((k) => parseInt(k, 10))
+            const startQuestionIndex = calculatePrefillStartIndex(survey.questions, prefilledIndices)
+            const isSurveyCompleted = startQuestionIndex >= survey.questions.length
+
             setInProgressSurveyState(survey, {
                 surveySubmissionId: submissionId,
                 responses: responses,
-                lastQuestionIndex: 0,
+                lastQuestionIndex: isSurveyCompleted ? survey.questions.length - 1 : startQuestionIndex,
             })
 
             logger.info('[Survey Prefill] Stored prefilled responses in localStorage')
 
-            const shouldAutoSubmit =
-                autoSubmit &&
-                this._posthog.config.surveys?.autoSubmitIfComplete &&
-                allRequiredQuestionsFilled(survey, responses)
-
-            if (shouldAutoSubmit) {
-                this._scheduleAutoSubmit(survey, responses, submissionId)
+            // send prefilled responses if partial responses enabled or survey is complete
+            if (survey.enable_partial_responses || isSurveyCompleted) {
+                logger.info(`[Survey Prefill] Auto-submitting survey (completed: ${isSurveyCompleted})`)
+                sendSurveyEvent({
+                    responses,
+                    survey,
+                    surveySubmissionId: submissionId,
+                    posthog: this._posthog,
+                    isSurveyCompleted,
+                })
             }
 
             // Mark this survey as having been prefilled
@@ -475,24 +482,6 @@ export class SurveyManager {
         } catch (error) {
             logger.error('[Survey Prefill] Error handling URL prefill:', error)
         }
-    }
-
-    private _scheduleAutoSubmit(survey: Survey, responses: Record<string, any>, submissionId: string): void {
-        const delay = this._posthog.config.surveys?.autoSubmitDelay ?? 800
-
-        logger.info('[Survey Prefill] Auto-submit scheduled')
-
-        this._autoSubmitTimeout = setTimeout(() => {
-            logger.info('[Survey Prefill] Auto-submitting survey')
-
-            sendSurveyEvent({
-                responses,
-                survey,
-                surveySubmissionId: submissionId,
-                posthog: this._posthog,
-                isSurveyCompleted: true,
-            })
-        }, delay)
     }
 
     private _isSurveyFeatureFlagEnabled(flagKey: string | null, flagVariant: string | undefined = undefined) {
@@ -693,16 +682,8 @@ export class SurveyManager {
             logger.error(`Survey ${survey.id} is not in focus. Cannot remove survey ${survey.id}.`)
         }
         this._clearSurveyTimeout(survey.id)
-        this._clearAutoSubmitTimeout()
         this._surveyInFocus = null
         this._removeSurveyFromDom(survey)
-    }
-
-    private _clearAutoSubmitTimeout(): void {
-        if (this._autoSubmitTimeout) {
-            clearTimeout(this._autoSubmitTimeout)
-            this._autoSubmitTimeout = undefined
-        }
     }
 
     // Expose internal state and methods for testing
