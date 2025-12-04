@@ -1,4 +1,5 @@
 import * as Preact from 'preact'
+import type { JSX } from 'preact'
 import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { PostHog } from '../posthog-core'
 import {
@@ -185,7 +186,7 @@ const SURVEY_NEXT_TO_TRIGGER_PARAMS = {
     TRIGGER_SPACING: 12,
 } as const
 
-function getNextToTriggerPosition(target: HTMLElement, surveyWidth: number): React.CSSProperties | null {
+function getNextToTriggerPosition(target: HTMLElement, surveyWidth: number): JSX.CSSProperties | null {
     try {
         const buttonRect = target.getBoundingClientRect()
         const viewportHeight = window.innerHeight
@@ -212,7 +213,7 @@ function getNextToTriggerPosition(target: HTMLElement, surveyWidth: number): Rea
             right: 'auto',
             bottom: showAbove ? `${viewportHeight - buttonRect.top + spacing}px` : 'auto',
             zIndex: defaultSurveyAppearance.zIndex,
-        } satisfies React.CSSProperties
+        } satisfies JSX.CSSProperties
     } catch (error) {
         logger.warn('Failed to calculate trigger position:', error)
         return null
@@ -722,7 +723,7 @@ export class SurveyManager {
     }
 }
 
-const DEFAULT_PREVIEW_POSITION_STYLES: React.CSSProperties = {
+const DEFAULT_PREVIEW_POSITION_STYLES: JSX.CSSProperties = {
     position: 'relative',
     left: 'unset',
     right: 'unset',
@@ -745,7 +746,7 @@ export const renderSurveysPreview = ({
     forceDisableHtml?: boolean
     onPreviewSubmit?: (res: string | string[] | number | null) => void
     posthog?: PostHog
-    positionStyles?: React.CSSProperties
+    positionStyles?: JSX.CSSProperties
 }) => {
     const currentStyle = parentElement.querySelector('style[data-ph-survey-style]')
     if (currentStyle) {
@@ -1038,7 +1039,7 @@ interface SurveyPopupProps {
     survey: Survey
     forceDisableHtml?: boolean
     posthog?: PostHog
-    style?: React.CSSProperties
+    style?: JSX.CSSProperties
     previewPageIndex?: number | undefined
     removeSurveyFromFocus?: (survey: SurveyWithTypeAndAppearance) => void
     isPopup?: boolean
@@ -1082,7 +1083,7 @@ function getPopoverPosition(
     }
 }
 
-function getTabPositionStyles(position: SurveyTabPosition = SurveyTabPosition.Right): React.CSSProperties {
+function getTabPositionStyles(position: SurveyTabPosition = SurveyTabPosition.Right): JSX.CSSProperties {
     switch (position) {
         case SurveyTabPosition.Top:
             return { top: '0', left: '50%', transform: 'translateX(-50%)' }
@@ -1312,7 +1313,7 @@ export function FeedbackWidget({
 }): JSX.Element | null {
     const [isFeedbackButtonVisible, setIsFeedbackButtonVisible] = useState(true)
     const [showSurvey, setShowSurvey] = useState(false)
-    const [styleOverrides, setStyleOverrides] = useState<React.CSSProperties>({})
+    const [styleOverrides, setStyleOverrides] = useState<JSX.CSSProperties>({})
 
     const toggleSurvey = () => {
         setShowSurvey(!showSurvey)
