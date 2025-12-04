@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.302.0
+
+### Minor Changes
+
+- [#2693](https://github.com/PostHog/posthog-js/pull/2693) [`4458da7`](https://github.com/PostHog/posthog-js/commit/4458da7cafa64749059eea6e6a1ef056f64fea98) Thanks [@adboio](https://github.com/adboio)! - fix(surveys): prefilled questions for hosted surveys
+  (2025-12-04)
+
 ## 1.301.2
 
 ### Patch Changes
