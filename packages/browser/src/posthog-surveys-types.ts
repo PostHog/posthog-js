@@ -260,6 +260,8 @@ export type ActionStepStringMatching = 'contains' | 'exact' | 'regex'
 export interface ActionStepType {
     event?: string | null
     selector?: string | null
+    /** pre-compiled regex pattern for matching selector against $elements_chain */
+    selector_regex?: string | null
     /** @deprecated Only `selector` should be used now. */
     tag_name?: string
     text?: string | null
