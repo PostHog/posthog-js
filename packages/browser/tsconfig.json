@@ -20,9 +20,8 @@
         "resolveJsonModule": true,
         "downlevelIteration": true,
         "declaration": true,
-        "jsx": "preserve",
-        "jsxFactory": "h",
-        "jsxFragmentFactory": "Fragment"
+        "jsx": "react-jsx",
+        "jsxImportSource": "preact"
     },
     "include": ["./src/**/*.ts*"],
     "exclude": ["./src/__tests__/**/*.ts*"]

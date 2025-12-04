@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { type JSX } from 'react'
 import { StyleSheet, TouchableOpacity } from 'react-native'
 import { CancelSVG } from '../icons'
 

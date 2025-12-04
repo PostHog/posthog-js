@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { type JSX } from 'react'
 import { StyleSheet, Text, View, ViewStyle } from 'react-native'
 
 import { getContrastingTextColor, shouldRenderDescription, SurveyAppearanceTheme } from '../surveys-utils'

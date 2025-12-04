@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { type JSX, useEffect, useMemo, useState } from 'react'
 
 import { dismissedSurveyEvent, sendSurveyShownEvent } from './components/Surveys'
 
