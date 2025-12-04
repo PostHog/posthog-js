@@ -54,6 +54,10 @@ export default function SurveyForm() {
                 </button>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+                <p>read <a href="https://github.com/PostHog/posthog/blob/master/frontend/src/scenes/surveys/CONTRIBUTING.md">CONTRIBUTING.md</a> for a guide on how to test surveys locally!</p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
                 <div id="survey-container">
                     <h1>hello world</h1>
                 </div>
