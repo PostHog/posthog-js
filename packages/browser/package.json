@@ -49,11 +49,11 @@
         "react/package.json"
     ],
     "dependencies": {
+        "@posthog/core": "workspace:*",
         "core-js": "^3.38.1",
         "fflate": "^0.4.8",
         "preact": "^10.19.3",
-        "web-vitals": "^4.2.4",
-        "@posthog/core": "workspace:*"
+        "web-vitals": "^4.2.4"
     },
     "devDependencies": {
         "@babel/core": "7.27.1",
@@ -65,10 +65,10 @@
         "@babel/preset-typescript": "^7.27.1",
         "@jest/globals": "^29.7.0",
         "@playwright/test": "^1.52.0",
+        "@posthog-tooling/rollup-utils": "workspace:*",
         "@posthog/rrweb-plugin-console-record": "^0.0.30",
         "@posthog/rrweb-record": "^0.0.30",
         "@posthog/rrweb-types": "^0.0.30",
-        "@posthog-tooling/rollup-utils": "workspace:*",
         "@rollup/plugin-babel": "^6.0.4",
         "@rollup/plugin-commonjs": "^28.0.6",
         "@rollup/plugin-json": "^6.1.0",
@@ -116,8 +116,8 @@
         "rollup-plugin-postcss": "^4.0.2",
         "rollup-plugin-visualizer": "^6.0.3",
         "sinon": "9.0.2",
-        "testcafe": "1.20.1",
-        "testcafe-browser-provider-browserstack": "1.15.2",
+        "testcafe": "^1.20.1",
+        "testcafe-browser-provider-browserstack": "^1.15.2",
         "ts-node": "^10.9.2",
         "tslib": "catalog:",
         "typescript": "catalog:",
