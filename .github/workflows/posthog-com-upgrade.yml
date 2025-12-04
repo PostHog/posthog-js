@@ -82,3 +82,20 @@ jobs:
         shell: bash
         run: |
           echo "PostHog.com pull request for ${{ github.event.inputs.package_name }} version ${{ github.event.inputs.package_version }} ready: ${{ steps.com-repo-pr.outputs.pull-request-url }}"
+
+      # a CDP destination is set-up to alert when we get this event
+      - name: Send failure event to PostHog
+        if: ${{ failure() }}
+        uses: PostHog/posthog-github-action@v0.1
+        with:
+          posthog-token: "${{ secrets.POSTHOG_PROJECT_API_KEY }}"
+          event: "posthog-js-github-update-workflow-failure"
+          properties: >-
+            {
+              "commitSha": "${{ github.sha }}",
+              "jobStatus": "${{ job.status }}",
+              "ref": "${{ github.ref }}",
+              "repository": "Posthog/posthog.com",
+              "packageName": "${{ github.event.inputs.package.name }}",
+              "packageVersion": "${{ github.event.inputs.package_version }}"
+            }
