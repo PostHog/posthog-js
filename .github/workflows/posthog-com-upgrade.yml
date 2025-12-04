@@ -89,7 +89,7 @@ jobs:
         uses: PostHog/posthog-github-action@v0.1
         with:
           posthog-token: "${{ secrets.POSTHOG_PROJECT_API_KEY }}"
-          event: "posthog-js-github-update-workflow-failure"
+          event: "posthog-js-github-release-workflow-failure"
           properties: >-
             {
               "commitSha": "${{ github.sha }}",
