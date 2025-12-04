@@ -52,7 +52,6 @@
     "@react-navigation/native": "^5.0.10",
     "@types/jest": "catalog:",
     "@types/react": "^19.0.14",
-    "@types/react-native": "^0.69.1",
     "expo": "^53.0.24",
     "expo-application": "^6.1.5",
     "expo-device": "^7.1.4",

@@ -1,5 +1,5 @@
 import * as Preact from 'preact'
-import type { JSX } from 'preact'
+import type { JSX, RefObject } from 'preact'
 import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { PostHog } from '../posthog-core'
 import {
@@ -924,7 +924,7 @@ export function usePopupVisibility(
     isPreviewMode: boolean,
     removeSurveyFromFocus: (survey: SurveyWithTypeAndAppearance) => void,
     isPopup: boolean,
-    surveyContainerRef?: React.RefObject<HTMLDivElement>
+    surveyContainerRef?: RefObject<HTMLDivElement>
 ) {
     const [isPopupVisible, setIsPopupVisible] = useState(
         isPreviewMode || millisecondDelay === 0 || survey.type === SurveyType.ExternalSurvey
