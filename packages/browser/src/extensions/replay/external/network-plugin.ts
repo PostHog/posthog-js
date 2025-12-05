@@ -18,6 +18,7 @@ import { formDataToQuery } from '../../../utils/request-utils'
 import { patch } from '../rrweb-plugins/patch'
 import { isHostOnDenyList } from '../../../extensions/replay/external/denylist'
 import { defaultNetworkOptions } from './config'
+import { scheduler } from '../../../utils/scheduler'
 
 const logger = createLogger('[Recorder]')
 
@@ -61,12 +62,20 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Req
                     isNavigationTiming(entry) ||
                     (isResourceTiming(entry) && options.initiatorTypes.includes(entry.initiatorType as InitiatorType))
             )
-        cb({
-            requests: initialPerformanceEntries.flatMap((entry) =>
-                prepareRequest({ entry, method: undefined, status: undefined, networkRequest: {}, isInitial: true })
-            ),
-            isInitial: true,
-        })
+
+        scheduler.processEach(
+            initialPerformanceEntries,
+            (entry) =>
+                prepareRequest({ entry, method: undefined, status: undefined, networkRequest: {}, isInitial: true }),
+            {
+                onComplete: (requests) => {
+                    cb({
+                        requests: requests.flat(),
+                        isInitial: true,
+                    })
+                },
+            }
+        )
     }
     const observer = new win.PerformanceObserver((entries) => {
         // if recordBody or recordHeaders is true then we don't want to record fetch or xhr here

@@ -9,7 +9,7 @@ export function PHProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         posthog.init('phc_test_key_for_playground', {
-            api_host: '/ph-relay-xyz123',
+            api_host: 'https://us.i.posthog.com',
             ui_host: 'https://us.posthog.com',
             defaults: '2025-11-30',
             before_send: (cr) => {
