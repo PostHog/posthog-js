@@ -233,7 +233,7 @@ export class PostHogConversations {
             }
 
             this._instance._send_request({
-                url: this._instance.requestRouter.endpointFor('api', '/api/conversations/widget/message'),
+                url: this._instance.requestRouter.endpointFor('api', '/api/conversations/v1/widget/message'),
                 method: 'POST',
                 data: payload,
                 headers: {
@@ -284,7 +284,7 @@ export class PostHogConversations {
             this._instance._send_request({
                 url: this._instance.requestRouter.endpointFor(
                     'api',
-                    `/api/conversations/widget/messages/${ticketId}?${formDataToQuery(queryParams)}`
+                    `/api/conversations/v1/widget/messages/${ticketId}?${formDataToQuery(queryParams)}`
                 ),
                 method: 'GET',
                 headers: {
