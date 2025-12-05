@@ -1,5 +1,12 @@
 # @posthog/nuxt
 
+## 1.3.12
+
+### Patch Changes
+
+- Updated dependencies [[`daeacdb`](https://github.com/PostHog/posthog-js/commit/daeacdb4ca39d4274e3dd51908562b9d83c74f96)]:
+  - posthog-js@1.302.2
+
 ## 1.3.11
 
 ### Patch Changes
