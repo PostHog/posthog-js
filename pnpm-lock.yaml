@@ -288,9 +288,6 @@ importers:
       '@types/node':
         specifier: ^22.5.0
         version: 22.5.0
-      '@types/react-dom':
-        specifier: ^18.0.10
-        version: 18.0.10
       '@types/sinon':
         specifier: ^17.0.1
         version: 17.0.1
@@ -4071,9 +4068,6 @@ packages:
 
   '@types/range-parser@1.2.7':
     resolution: {integrity: sha512-hKormJbkJqzQGhziax5PItDUTMAM9uE2XXQmM37dyd4hVM+5aVl7oVxMVUiVQn2oCQFN/LKCZdvSM0pFRqbSmQ==}
-
-  '@types/react-dom@18.0.10':
-    resolution: {integrity: sha512-E42GW/JA4Qv15wQdqJq8DL4JhNpB3prJgjgapN3qJT9K2zO5IIAQh4VXvCEDupoqAwnz0cY4RlXeC/ajX5SFHg==}
 
   '@types/react-native@0.69.26':
     resolution: {integrity: sha512-K11OWz8SU3Eill/EUhma54qOeczUjIhTlV1Luv2BODawPsM8nCVJkWaAUCqJaMFrcIKUTH0KIYUzUjqWlRUNfw==}
@@ -18597,10 +18591,6 @@ snapshots:
   '@types/qs@6.14.0': {}
 
   '@types/range-parser@1.2.7': {}
-
-  '@types/react-dom@18.0.10':
-    dependencies:
-      '@types/react': 17.0.87
 
   '@types/react-native@0.69.26':
     dependencies:

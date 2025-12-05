@@ -1,4 +1,4 @@
-import * as Preact from 'preact'
+import { type JSX, type RefObject, render, Fragment } from 'preact'
 import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { PostHog } from '../posthog-core'
 import {
@@ -185,7 +185,7 @@ const SURVEY_NEXT_TO_TRIGGER_PARAMS = {
     TRIGGER_SPACING: 12,
 } as const
 
-function getNextToTriggerPosition(target: HTMLElement, surveyWidth: number): React.CSSProperties | null {
+function getNextToTriggerPosition(target: HTMLElement, surveyWidth: number): JSX.CSSProperties | null {
     try {
         const buttonRect = target.getBoundingClientRect()
         const viewportHeight = window.innerHeight
@@ -212,7 +212,7 @@ function getNextToTriggerPosition(target: HTMLElement, surveyWidth: number): Rea
             right: 'auto',
             bottom: showAbove ? `${viewportHeight - buttonRect.top + spacing}px` : 'auto',
             zIndex: defaultSurveyAppearance.zIndex,
-        } satisfies React.CSSProperties
+        } satisfies JSX.CSSProperties
     } catch (error) {
         logger.warn('Failed to calculate trigger position:', error)
         return null
@@ -270,7 +270,7 @@ export class SurveyManager {
         const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
         const { shadow } = retrieveSurveyShadow(survey, this._posthog)
         if (delaySeconds <= 0) {
-            return Preact.render(
+            return render(
                 <SurveyPopup
                     posthog={this._posthog}
                     survey={survey}
@@ -287,7 +287,7 @@ export class SurveyManager {
                 return this._removeSurveyFromFocus(survey)
             }
             // rendering with surveyPopupDelaySeconds = 0 because we're already handling the timeout here
-            Preact.render(
+            render(
                 <SurveyPopup
                     posthog={this._posthog}
                     survey={{ ...survey, appearance: { ...survey.appearance, surveyPopupDelaySeconds: 0 } }}
@@ -308,7 +308,7 @@ export class SurveyManager {
             return
         }
 
-        Preact.render(<FeedbackWidget posthog={this._posthog} survey={survey} key={survey.id} />, shadow)
+        render(<FeedbackWidget posthog={this._posthog} survey={survey} key={survey.id} />, shadow)
     }
 
     private _removeWidgetSelectorListener = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): void => {
@@ -406,7 +406,7 @@ export class SurveyManager {
 
     public renderPopover = (survey: Survey): void => {
         const { shadow } = retrieveSurveyShadow(survey, this._posthog)
-        Preact.render(
+        render(
             <SurveyPopup posthog={this._posthog} survey={survey} removeSurveyFromFocus={this._removeSurveyFromFocus} />,
             shadow
         )
@@ -417,7 +417,7 @@ export class SurveyManager {
             this._handleUrlPrefill(survey)
         }
 
-        Preact.render(
+        render(
             <SurveyPopup
                 posthog={this._posthog}
                 survey={survey}
@@ -669,7 +669,7 @@ export class SurveyManager {
         try {
             const shadowContainer = document.querySelector(getSurveyContainerClass(survey, true))
             if (shadowContainer?.shadowRoot) {
-                Preact.render(null, shadowContainer.shadowRoot)
+                render(null, shadowContainer.shadowRoot)
             }
             shadowContainer?.remove()
         } catch (error) {
@@ -703,7 +703,7 @@ export class SurveyManager {
     }
 }
 
-const DEFAULT_PREVIEW_POSITION_STYLES: React.CSSProperties = {
+const DEFAULT_PREVIEW_POSITION_STYLES: JSX.CSSProperties = {
     position: 'relative',
     left: 'unset',
     right: 'unset',
@@ -726,7 +726,7 @@ export const renderSurveysPreview = ({
     forceDisableHtml?: boolean
     onPreviewSubmit?: (res: string | string[] | number | null) => void
     posthog?: PostHog
-    positionStyles?: React.CSSProperties
+    positionStyles?: JSX.CSSProperties
 }) => {
     const currentStyle = parentElement.querySelector('style[data-ph-survey-style]')
     if (currentStyle) {
@@ -737,7 +737,7 @@ export const renderSurveysPreview = ({
         parentElement.appendChild(stylesheet)
         addSurveyCSSVariablesToElement(parentElement, survey.type, survey.appearance)
     }
-    Preact.render(
+    render(
         <SurveyPopup
             survey={survey}
             forceDisableHtml={forceDisableHtml}
@@ -765,7 +765,7 @@ export const renderFeedbackWidgetPreview = ({
         addSurveyCSSVariablesToElement(root, survey.type, survey.appearance)
     }
 
-    Preact.render(<FeedbackWidget forceDisableHtml={forceDisableHtml} survey={survey} readOnly={true} />, root)
+    render(<FeedbackWidget forceDisableHtml={forceDisableHtml} survey={survey} readOnly={true} />, root)
 }
 
 // This is the main exported function
@@ -904,7 +904,7 @@ export function usePopupVisibility(
     isPreviewMode: boolean,
     removeSurveyFromFocus: (survey: SurveyWithTypeAndAppearance) => void,
     isPopup: boolean,
-    surveyContainerRef?: React.RefObject<HTMLDivElement>
+    surveyContainerRef?: RefObject<HTMLDivElement>
 ) {
     const [isPopupVisible, setIsPopupVisible] = useState(
         isPreviewMode || millisecondDelay === 0 || survey.type === SurveyType.ExternalSurvey
@@ -1019,7 +1019,7 @@ interface SurveyPopupProps {
     survey: Survey
     forceDisableHtml?: boolean
     posthog?: PostHog
-    style?: React.CSSProperties
+    style?: JSX.CSSProperties
     previewPageIndex?: number | undefined
     removeSurveyFromFocus?: (survey: SurveyWithTypeAndAppearance) => void
     isPopup?: boolean
@@ -1063,7 +1063,7 @@ function getPopoverPosition(
     }
 }
 
-function getTabPositionStyles(position: SurveyTabPosition = SurveyTabPosition.Right): React.CSSProperties {
+function getTabPositionStyles(position: SurveyTabPosition = SurveyTabPosition.Right): JSX.CSSProperties {
     switch (position) {
         case SurveyTabPosition.Top:
             return { top: '0', left: '50%', transform: 'translateX(-50%)' }
@@ -1293,7 +1293,7 @@ export function FeedbackWidget({
 }): JSX.Element | null {
     const [isFeedbackButtonVisible, setIsFeedbackButtonVisible] = useState(true)
     const [showSurvey, setShowSurvey] = useState(false)
-    const [styleOverrides, setStyleOverrides] = useState<React.CSSProperties>({})
+    const [styleOverrides, setStyleOverrides] = useState<JSX.CSSProperties>({})
 
     const toggleSurvey = () => {
         setShowSurvey(!showSurvey)
@@ -1360,7 +1360,7 @@ export function FeedbackWidget({
     }
 
     return (
-        <Preact.Fragment>
+        <Fragment>
             {survey.appearance?.widgetType === 'tab' && (
                 <button
                     className={`ph-survey-widget-tab ${survey.appearance?.tabPosition === SurveyTabPosition.Top ? 'widget-tab-top' : ''}`}
@@ -1381,7 +1381,7 @@ export function FeedbackWidget({
                     onCloseConfirmationMessage={resetShowSurvey}
                 />
             )}
-        </Preact.Fragment>
+        </Fragment>
     )
 }
 

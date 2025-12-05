@@ -1,4 +1,4 @@
-import { Fragment } from 'preact'
+import { Fragment, type JSX } from 'preact'
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import {
     BasicSurveyQuestion,
@@ -368,7 +368,7 @@ export function MultipleChoiceQuestion({
         }
     }
 
-    const handleOpenEndedInputChange = (e: React.FormEvent<HTMLInputElement>) => {
+    const handleOpenEndedInputChange = (e: JSX.TargetedEvent<HTMLInputElement>) => {
         e.stopPropagation()
         const newValue = e.currentTarget.value
 
@@ -382,7 +382,7 @@ export function MultipleChoiceQuestion({
         }
     }
 
-    const handleOpenEndedKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const handleOpenEndedKeyDown = (e: JSX.TargetedKeyboardEvent<HTMLInputElement>) => {
         e.stopPropagation()
 
         // Handle Enter key to submit form if valid
