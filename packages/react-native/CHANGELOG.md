@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.14.3
+
+### Patch Changes
+
+- [#2697](https://github.com/PostHog/posthog-js/pull/2697) [`0c3bd5e`](https://github.com/PostHog/posthog-js/commit/0c3bd5eb1fe7fa94bb78ed1282922d613cc37e95) Thanks [@robbie-c](https://github.com/robbie-c)! - Support getting locale and timezone from expo-localization >= 14
+  (2025-12-05)
+
 ## 4.14.2
 
 ### Patch Changes
