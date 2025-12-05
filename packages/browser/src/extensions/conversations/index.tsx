@@ -50,7 +50,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
      */
     private _initialize(): void {
         if (!document || !window) {
-            logger.error('Document or window not available')
+            logger.info('Conversations not available: Document or window not available')
             return
         }
 
@@ -117,7 +117,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
      */
     private _renderWidget(initialState: ConversationsWidgetState, initialUserTraits: UserProvidedTraits | null): void {
         if (!document) {
-            logger.error('Document not available')
+            logger.info('Conversations widget not rendered: Document not available')
             return
         }
 
@@ -125,7 +125,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         let container = document.getElementById(WIDGET_CONTAINER_ID) as HTMLDivElement
         if (!container) {
             if (!document.body) {
-                logger.error('Document body not available yet')
+                logger.info('Conversations widget not rendered: Document body not available yet')
                 return
             }
             container = document.createElement('div')
