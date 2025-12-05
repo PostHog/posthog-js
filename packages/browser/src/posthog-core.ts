@@ -3074,6 +3074,10 @@ export class PostHog {
         // Start queue after opting in
         this._start_queue_if_opted_in()
 
+        // Restart session recording if it should now be enabled
+        // (this handles the case where opt_out_capturing_by_default or cookieless_mode prevented it from starting)
+        this.sessionRecording?.startIfEnabledOrStop()
+
         // Reinitialize surveys if we're in cookieless mode and just opted in
         if (this.config.cookieless_mode == 'on_reject') {
             this.surveys.loadIfEnabled()
