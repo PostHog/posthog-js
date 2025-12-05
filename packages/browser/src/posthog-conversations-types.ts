@@ -1,0 +1,252 @@
+/**
+ * Configuration options for the conversations widget
+ */
+export interface ConversationsConfig {
+    /**
+     * Custom positioning for the widget button
+     * @default { bottom: '20px', right: '20px' }
+     */
+    position?: {
+        bottom?: string
+        right?: string
+        left?: string
+        top?: string
+    }
+}
+
+/**
+ * Remote configuration for conversations from the PostHog server
+ */
+export interface ConversationsRemoteConfig {
+    /**
+     * Whether conversations are enabled for this team
+     */
+    enabled: boolean
+
+    /**
+     * Public token for authenticating conversations API requests
+     * This token is team-scoped and meant to be embedded in client code
+     */
+    token: string
+
+    /**
+     * Greeting text to show when widget is first opened
+     */
+    greetingText?: string
+
+    /**
+     * Primary color for the widget UI
+     */
+    color?: string
+
+    /**
+     * Placeholder text for the message input
+     */
+    placeholderText?: string
+
+    /**
+     * Whether to require email before starting a conversation
+     * @default false
+     */
+    requireEmail?: boolean
+
+    /**
+     * Whether to show the name field in the identification form
+     * @default true (when requireEmail is true)
+     */
+    collectName?: boolean
+
+    /**
+     * Title for the identification form
+     * @default "Before we start..."
+     */
+    identificationFormTitle?: string
+
+    /**
+     * Description for the identification form
+     * @default "Please provide your details so we can help you better."
+     */
+    identificationFormDescription?: string
+}
+
+/**
+ * Author types for messages in a conversation
+ */
+export type MessageAuthorType = 'customer' | 'AI' | 'human'
+
+/**
+ * A message in a conversation
+ */
+export interface Message {
+    /**
+     * Unique identifier for the message
+     */
+    id: string
+
+    /**
+     * The message content/text
+     */
+    content: string
+
+    /**
+     * Type of the message author
+     */
+    author_type: MessageAuthorType
+
+    /**
+     * Display name of the message author
+     */
+    author_name?: string
+
+    /**
+     * ISO timestamp when the message was created
+     */
+    created_at: string
+
+    /**
+     * Whether this is an internal note (not shown to customer)
+     */
+    is_private: boolean
+}
+
+/**
+ * Status of a support ticket
+ */
+export type TicketStatus = 'new' | 'open' | 'pending' | 'on_hold' | 'resolved'
+
+/**
+ * A support ticket in the conversations system
+ */
+export interface Ticket {
+    /**
+     * Unique identifier for the ticket
+     */
+    id: string
+
+    /**
+     * Current status of the ticket
+     */
+    status: TicketStatus
+
+    /**
+     * Preview of the last message
+     */
+    last_message?: string
+
+    /**
+     * ISO timestamp of the last message
+     */
+    last_message_at?: string
+
+    /**
+     * Total number of messages in this ticket
+     */
+    message_count: number
+
+    /**
+     * ISO timestamp when the ticket was created
+     */
+    created_at: string
+
+    /**
+     * Array of messages (only present in detailed ticket view)
+     */
+    messages?: Message[]
+}
+
+/**
+ * Visual state of the conversations widget
+ */
+export enum ConversationsWidgetState {
+    /**
+     * Widget is completely hidden (only button visible)
+     */
+    CLOSED = 'closed',
+
+    /**
+     * Widget is fully open (full chat interface)
+     */
+    OPEN = 'open',
+}
+
+/**
+ * Response from sending a message
+ */
+export interface SendMessageResponse {
+    /**
+     * ID of the ticket this message belongs to
+     */
+    ticket_id: string
+
+    /**
+     * ID of the newly created message
+     */
+    message_id: string
+
+    /**
+     * Current status of the ticket
+     */
+    ticket_status: TicketStatus
+
+    /**
+     * ISO timestamp when the message was created
+     */
+    created_at: string
+}
+
+/**
+ * Response from fetching messages
+ */
+export interface GetMessagesResponse {
+    /**
+     * ID of the ticket
+     */
+    ticket_id: string
+
+    /**
+     * Current status of the ticket
+     */
+    ticket_status: TicketStatus
+
+    /**
+     * Array of messages
+     */
+    messages: Message[]
+
+    /**
+     * Whether there are more messages to fetch
+     */
+    has_more: boolean
+}
+
+/**
+ * Response from fetching tickets list
+ */
+export interface GetTicketsResponse {
+    /**
+     * Total count of tickets
+     */
+    count: number
+
+    /**
+     * Array of tickets
+     */
+    results: Ticket[]
+}
+
+/**
+ * User traits to send with messages
+ */
+export interface ConversationsTraits {
+    name?: string | null
+    email?: string | null
+    [key: string]: string | number | boolean | null | undefined
+}
+
+/**
+ * User-provided identification data (collected via the widget form)
+ */
+export interface UserProvidedTraits {
+    name?: string
+    email?: string
+}

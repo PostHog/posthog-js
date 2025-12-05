@@ -159,6 +159,7 @@ export type PostHogExtensionKind =
     | 'lazy-recorder'
     | 'tracing-headers'
     | 'surveys'
+    | 'conversations'
     | 'dead-clicks-autocapture'
     | 'remote-config'
     | ExternalExtensionKind
@@ -218,6 +219,7 @@ interface PostHogExtensions {
         [K in ExternalIntegrationKind]?: { start: (posthog: PostHog) => void; stop: () => void }
     }
     initSessionRecording?: (ph: PostHog) => LazyLoadedSessionRecordingInterface
+    initConversations?: (ph: PostHog, config: any, api: any) => any
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win

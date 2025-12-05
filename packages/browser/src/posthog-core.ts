@@ -25,6 +25,7 @@ import { PostHogExceptions } from './posthog-exceptions'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import { PostHogSurveys } from './posthog-surveys'
+import { PostHogConversations } from './posthog-conversations'
 import {
     DisplaySurveyOptions,
     SurveyCallback,
@@ -181,6 +182,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_web_experiments: true, // disabled in beta.
     disable_surveys: false,
     disable_surveys_automatic_display: false,
+    disable_conversations: false,
     disable_external_dependency_loading: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
@@ -312,6 +314,7 @@ export class PostHog {
     pageViewManager: PageViewManager
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
+    conversations: PostHogConversations
     experiments: WebExperiments
     toolbar: Toolbar
     exceptions: PostHogExceptions
@@ -387,6 +390,7 @@ export class PostHog {
         this.scrollManager = new ScrollManager(this)
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
+        this.conversations = new PostHogConversations(this)
         this.experiments = new WebExperiments(this)
         this.exceptions = new PostHogExceptions(this)
         this.rateLimiter = new RateLimiter(this)
@@ -705,6 +709,10 @@ export class PostHog {
         })
 
         initTasks.push(() => {
+            this.conversations.loadIfEnabled()
+        })
+
+        initTasks.push(() => {
             this.heatmaps = new Heatmaps(this)
             this.heatmaps.startIfEnabled()
         })
@@ -818,6 +826,7 @@ export class PostHog {
         this.autocapture?.onRemoteConfig(config)
         this.heatmaps?.onRemoteConfig(config)
         this.surveys.onRemoteConfig(config)
+        this.conversations.onRemoteConfig(config)
         this.webVitalsAutocapture?.onRemoteConfig(config)
         this.exceptionObserver?.onRemoteConfig(config)
         this.exceptions.onRemoteConfig(config)
@@ -902,6 +911,7 @@ export class PostHog {
         })
         options.headers = {
             ...this.config.request_headers,
+            ...options.headers,
         }
         options.compression = options.compression === 'best-available' ? this.compression : options.compression
         options.disableXHRCredentials = this.config.__preview_disable_xhr_credentials
@@ -3395,6 +3405,56 @@ export class PostHog {
      */
     public getPageViewId(): string | undefined {
         return this.pageViewManager._currentPageview?.pageViewId
+    }
+
+    /**
+     * Opens the conversations widget.
+     *
+     * {@label Conversations}
+     *
+     * @public
+     *
+     * @example
+     * ```js
+     * posthog.conversationsOpen()
+     * ```
+     */
+    conversationsOpen(): void {
+        this.conversations.open()
+    }
+
+    /**
+     * Closes/minimizes the conversations widget.
+     *
+     * {@label Conversations}
+     *
+     * @public
+     *
+     * @example
+     * ```js
+     * posthog.conversationsClose()
+     * ```
+     */
+    conversationsClose(): void {
+        this.conversations.close()
+    }
+
+    /**
+     * Sends a message in the conversations widget.
+     *
+     * {@label Conversations}
+     *
+     * @public
+     *
+     * @param message - The message text to send
+     *
+     * @example
+     * ```js
+     * posthog.conversationsSendMessage('Hello, I need help!')
+     * ```
+     */
+    conversationsSendMessage(message: string): void {
+        this.conversations.sendMessage(message)
     }
 
     /**
