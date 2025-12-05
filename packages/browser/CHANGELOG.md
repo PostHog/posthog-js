@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.302.2
+
+### Patch Changes
+
+- [#2696](https://github.com/PostHog/posthog-js/pull/2696) [`daeacdb`](https://github.com/PostHog/posthog-js/commit/daeacdb4ca39d4274e3dd51908562b9d83c74f96) Thanks [@ksvat](https://github.com/ksvat)! - Update @posthog/rrweb dependencies to 0.0.33
+  (2025-12-05)
+
 ## 1.302.1
 
 ### Patch Changes
