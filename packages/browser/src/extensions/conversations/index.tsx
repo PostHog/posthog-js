@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { render, h } from 'preact'
 import { PostHog } from '../../posthog-core'
 import {

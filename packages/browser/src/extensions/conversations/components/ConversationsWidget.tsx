@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { h, Component, Fragment } from 'preact'
 import {
     ConversationsRemoteConfig,
