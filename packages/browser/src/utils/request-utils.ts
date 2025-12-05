@@ -41,37 +41,173 @@ export const formDataToQuery = function (formdata: Record<string, any> | FormDat
     return tph_arr.join(arg_separator)
 }
 
-// NOTE: Once we get rid of IE11/op_mini we can start using URLSearchParams
+/**
+ * Recursively decodes a URL-encoded string up to 5 levels deep.
+ * Also replaces '+' characters with spaces (common in query strings).
+ * 
+ * @param str - The encoded string to decode
+ * @returns The fully decoded string
+ */
+function deepDecode(str: string): string {
+  if (!str || typeof str !== "string") return "";
+
+  let prev = "";
+  let current = str;
+
+  // Decode up to 5 times in case of multiple levels of encoding
+  for (let i = 0; i < 5; i++) {
+    try {
+      prev = current;
+      const decoded = decodeURIComponent(current);
+      // If decoding didn't change the string, we're done
+      if (decoded === current) break;
+      current = decoded;
+    } catch (e) {
+      // If decoding fails (malformed string), stop trying
+      break;
+    }
+  }
+
+  // Replace '+' with space (URL query string convention)
+  return current.replace(/\+/g, " ");
+}
+
+/**
+ * Checks if a string contains nested query parameters and parses them.
+ * Returns null if the string is not a valid query string format.
+ * 
+ * @param str - The string to check for query parameters
+ * @returns Object with key-value pairs or null if not a query string
+ */
+function parsePossibleQueryString(str: string): Record<string, string> | null {
+  if (!str || typeof str !== "string") return null;
+  if (!str.includes("=")) return null;
+
+  const parts = str.split("&");
+  
+  // Check if at least one part contains "=" (valid query param format)
+  const hasQueryParam = parts.some((p) => p.includes("="));
+  if (!hasQueryParam) return null;
+
+  try {
+    const obj: Record<string, string> = {};
+    // Manually parse each key=value pair
+    for (let i = 0; i < parts.length; i++) {
+      const pair = parts[i];
+      const eqIndex = pair.indexOf("=");
+      if (eqIndex > -1) {
+        const key = pair.substring(0, eqIndex);
+        const value = pair.substring(eqIndex + 1);
+        obj[key] = value;
+      }
+    }
+    return Object.keys(obj).length > 0 ? obj : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Recursively extracts all query parameters, including nested ones.
+ * When a parameter value contains encoded query params, it extracts both
+ * the initial value and the nested parameters.
+ * 
+ * Example: utm_source=google%26utm_medium%3Dcpc
+ * Results in: { utm_source: "google", utm_medium: "cpc" }
+ * 
+ * @param obj - Object containing raw parameter key-value pairs
+ * @param finalParams - Accumulator object for all extracted parameters
+ */
+function extractParams(
+  obj: Record<string, string>,
+  finalParams: Record<string, string>
+): void {
+  for (const key in obj) {
+    if (!obj.hasOwnProperty(key)) continue;
+
+    const rawValue = obj[key] || "";
+    
+    // Decode one level to check for nested parameters
+    let decoded = "";
+    try {
+      decoded = decodeURIComponent(rawValue);
+    } catch (e) {
+      decoded = rawValue;
+    }
+    
+    // Check if this decoded value contains nested query parameters
+    const nested = parsePossibleQueryString(decoded);
+
+    if (nested) {
+      // Extract the part before the nested params as the value for current key
+      const firstPart = decoded.split("&")[0];
+      
+      // Only assign if there's a meaningful value (not another key=value pair)
+      if (firstPart && !firstPart.includes("=")) {
+        finalParams[key] = deepDecode(firstPart);
+      }
+
+      // Recursively extract the nested parameters
+      extractParams(nested, finalParams);
+      continue;
+    }
+
+    // No nested params - just decode and assign the value
+    finalParams[key] = deepDecode(rawValue);
+  }
+}
+
+/**
+ * Extracts all query parameters from a URL, including deeply nested ones.
+ * Handles cases where parameter values contain encoded query strings.
+ * 
+ * Example:
+ * Input: "http://example.com/?utm_source=google%26utm_medium%3Dcpc"
+ * Output: { utm_source: "google", utm_medium: "cpc" }
+ * 
+ * @param rawUrl - The full URL to parse
+ * @returns Object containing all extracted query parameters
+ */
+export function getAllParams(rawUrl: string): Record<string, string> {
+  try {
+    // Remove hash fragment from URL
+    const cleanedUrl = (rawUrl || "").split("#")[0];
+    const parsed = new URL(cleanedUrl);
+
+    // Get the raw query string (without '?')
+    const queryString = parsed.search.substring(1);
+    
+    // Manually parse query string to keep values encoded
+    // (URLSearchParams would auto-decode, breaking nested param detection)
+    const top: Record<string, string> = {};
+    if (queryString) {
+      const pairs = queryString.split("&");
+      for (let i = 0; i < pairs.length; i++) {
+        const pair = pairs[i];
+        const eqIndex = pair.indexOf("=");
+        if (eqIndex > -1) {
+          const key = pair.substring(0, eqIndex);
+          const value = pair.substring(eqIndex + 1);
+          top[key] = value; // Keep value encoded for nested param detection
+        }
+      }
+    }
+
+    // Extract all parameters including nested ones
+    const finalParams: Record<string, string> = {};
+    extractParams(top, finalParams);
+
+    return finalParams;
+  } catch (e) {
+    // Return empty object if URL parsing fails
+    return {};
+  }
+}
+
 export const getQueryParam = function (url: string, param: string): string {
-    const withoutHash: string = url.split('#')[0] || ''
-
-    // Split only on the first ? to sort problem out for those with multiple ?s
-    // and then remove them
-    const queryParams: string = withoutHash.split(/\?(.*)/)[1] || ''
-    const cleanedQueryParams = queryParams.replace(/^\?+/g, '')
-
-    const queryParts = cleanedQueryParams.split('&')
-    let keyValuePair
-
-    for (let i = 0; i < queryParts.length; i++) {
-        const parts = queryParts[i].split('=')
-        if (parts[0] === param) {
-            keyValuePair = parts
-            break
-        }
-    }
-
-    if (!isArray(keyValuePair) || keyValuePair.length < 2) {
-        return ''
-    } else {
-        let result = keyValuePair[1]
-        try {
-            result = decodeURIComponent(result)
-        } catch {
-            logger.error('Skipping decoding for malformed query param: ' + result)
-        }
-        return result.replace(/\+/g, ' ')
-    }
+    // now this can handle nested encoded urls like "http://example.com/?utm_source=google%26utm_medium%3Dcpc%26utm_term%3Dexample%20store"
+    // get all params and return the needed one
+    return getAllParams(url)?.[param];
 }
 
 // replace any query params in the url with the provided mask value. Tries to keep the URL as instant as possible,
