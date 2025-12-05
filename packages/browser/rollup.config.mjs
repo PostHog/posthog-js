@@ -151,6 +151,10 @@ const plugins = (es5, noExternal) => [
                               // we don't mangle _surveyManager as it's used by external surveys to paint them on the dom directly
                               '_surveyManager',
 
+                              // used in conversations
+                              '_conversationsManager',
+                              '_conversations',
+
                               // part of setup/teardown code, preserve these out of caution
                               '_init',
                               '_dom_loaded',
