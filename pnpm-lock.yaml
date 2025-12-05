@@ -232,14 +232,14 @@ importers:
         specifier: workspace:*
         version: link:../../tooling/rollup-utils
       '@posthog/rrweb-plugin-console-record':
-        specifier: ^0.0.30
-        version: 0.0.30(@posthog/rrweb-utils@0.0.9)(@posthog/rrweb@0.0.9)
+        specifier: ^0.0.33
+        version: 0.0.33(@posthog/rrweb-utils@0.0.9)(@posthog/rrweb@0.0.9)
       '@posthog/rrweb-record':
-        specifier: ^0.0.30
-        version: 0.0.30
+        specifier: ^0.0.33
+        version: 0.0.33
       '@posthog/rrweb-types':
-        specifier: ^0.0.30
-        version: 0.0.30
+        specifier: ^0.0.33
+        version: 0.0.33
       '@rollup/plugin-babel':
         specifier: ^6.0.4
         version: 6.0.4(@babel/core@7.27.1)(@types/babel__core@7.1.18)(rollup@4.50.0)
@@ -3168,20 +3168,20 @@ packages:
   '@posthog/rrdom@0.0.9':
     resolution: {integrity: sha512-o0Ey7pnphpUZXggIhVr5vFsazRSfuxVtILjH4Y2NBec0u5Qfhe7oz24TQqyxzuiARWocXntNT0cLlWBl1ZEaoQ==}
 
-  '@posthog/rrweb-plugin-console-record@0.0.30':
-    resolution: {integrity: sha512-gfNRk3N0bWecdfqw7dEx5rxic5utO1lCAlx1LkP5e5NA20kLzSZH3W8Syw+jo3QOoYrVU0Tk+BO2cwZAVbiqrA==}
+  '@posthog/rrweb-plugin-console-record@0.0.33':
+    resolution: {integrity: sha512-YAExY/ldkLXUVjN6bYX+FG3JJzMcna6UDD9JrvaS/HDDw9U0y+LgVZT8d56scMVCQGDRAjKtT+O8Xfw7a7pg5A==}
     peerDependencies:
       '@posthog/rrweb': '*'
       '@posthog/rrweb-utils': '*'
 
-  '@posthog/rrweb-record@0.0.30':
-    resolution: {integrity: sha512-QrLzSI7Gt+TXydn2lCdRhKYMkl1ZOBiMOpHAkuWk67g10WbZAqvFemoKYYnVG6x7rp+A+Bij9nJ7HgaMWFRNyw==}
+  '@posthog/rrweb-record@0.0.33':
+    resolution: {integrity: sha512-dDNA+Y272ZyG4o/HopU7H56Ddh1WrNm9C5IZYsxtdvlnwQzg0ehGZrPnSSljLG7XuhK2+jexfQcufzaYRpELpw==}
 
   '@posthog/rrweb-snapshot@0.0.9':
     resolution: {integrity: sha512-Zza2DZ2PQTd1fQI3aHMvH8cyvVrupgz8f4L68fmVmXXDZEd1945cSGWiV6jxVvo0KadQfvxNxkyAnatX7N76LQ==}
 
-  '@posthog/rrweb-types@0.0.30':
-    resolution: {integrity: sha512-4Mnt3YqWc5f17iMvNIZfINWXLnBPiwSQSdXGGx3WztbMQ5SH/ufvLRyTdeYAvlwvDPlduN74czDDbwGqAI5QzQ==}
+  '@posthog/rrweb-types@0.0.33':
+    resolution: {integrity: sha512-qkrA5u8bRpP3VLCmKXP+CqPDMHQ/RkBVKQksEtdY9Eu25EhORx9MNIeVN2NrRe64e4MfaFMbTyLeDtjKYpc3jg==}
 
   '@posthog/rrweb-utils@0.0.9':
     resolution: {integrity: sha512-IbK9ZSwCQMYKyy3RFAFhPTUFj6tJAOxCgJsA7km3e7YyIcT2a1uTz/ebj3Hy+Uu2euhApTYY73gFrriAi90RQw==}
@@ -9313,9 +9313,6 @@ packages:
   minizlib@3.1.0:
     resolution: {integrity: sha512-KZxYo1BUkWD2TVFLr0MQoM8vUUigWD3LlD83a/75BqC+4qE0Hb1Vo5v1FgcfaNXvfXzr+5EhQ6ing/CaBijTlw==}
     engines: {node: '>= 18'}
-
-  mitt@3.0.0:
-    resolution: {integrity: sha512-7dX2/10ITVyqh4aOSVI9gdape+t9l2/8QxHrFmUXu4EEUpdlxl6RudZUPZoc+zuY2hk1j7XxVroIVIan/pD/SQ==}
 
   mitt@3.0.1:
     resolution: {integrity: sha512-vKivATfr97l2/QBCYAkXYDbrIWPM2IIKEl7YPhjCvKlG3kE2gm+uBo6nEXK3M5/Ffh/FLpKExzOQ3JJoJGFKBw==}
@@ -17402,15 +17399,15 @@ snapshots:
     dependencies:
       '@posthog/rrweb-snapshot': 0.0.9
 
-  '@posthog/rrweb-plugin-console-record@0.0.30(@posthog/rrweb-utils@0.0.9)(@posthog/rrweb@0.0.9)':
+  '@posthog/rrweb-plugin-console-record@0.0.33(@posthog/rrweb-utils@0.0.9)(@posthog/rrweb@0.0.9)':
     dependencies:
       '@posthog/rrweb': 0.0.9
       '@posthog/rrweb-utils': 0.0.9
 
-  '@posthog/rrweb-record@0.0.30':
+  '@posthog/rrweb-record@0.0.33':
     dependencies:
       '@posthog/rrweb': 0.0.9
-      '@posthog/rrweb-types': 0.0.30
+      '@posthog/rrweb-types': 0.0.33
       '@posthog/rrweb-utils': 0.0.9
 
   '@posthog/rrweb-snapshot@0.0.9':
@@ -17419,7 +17416,7 @@ snapshots:
       postcss: 8.5.6
       postcss-safe-parser: 7.0.1(postcss@8.5.6)
 
-  '@posthog/rrweb-types@0.0.30': {}
+  '@posthog/rrweb-types@0.0.33': {}
 
   '@posthog/rrweb-utils@0.0.9': {}
 
@@ -17427,7 +17424,7 @@ snapshots:
     dependencies:
       '@posthog/rrdom': 0.0.9
       '@posthog/rrweb-snapshot': 0.0.9
-      '@posthog/rrweb-types': 0.0.30
+      '@posthog/rrweb-types': 0.0.33
       '@posthog/rrweb-utils': 0.0.9
       '@types/css-font-loading-module': 0.0.7
       '@xstate/fsm': 1.5.2
@@ -25930,8 +25927,6 @@ snapshots:
     dependencies:
       minipass: 7.1.2
 
-  mitt@3.0.0: {}
-
   mitt@3.0.1: {}
 
   mixin-deep@1.3.2:
@@ -28253,7 +28248,7 @@ snapshots:
 
   rrweb-snapshot@2.0.0-alpha.17:
     dependencies:
-      postcss: 8.5.3
+      postcss: 8.5.6
 
   rrweb@2.0.0-alpha.17:
     dependencies:
@@ -28262,7 +28257,7 @@ snapshots:
       '@types/css-font-loading-module': 0.0.7
       '@xstate/fsm': 1.5.2
       base64-arraybuffer: 1.0.2
-      mitt: 3.0.0
+      mitt: 3.0.1
       rrdom: 2.0.0-alpha.17
       rrweb-snapshot: 2.0.0-alpha.17
 
