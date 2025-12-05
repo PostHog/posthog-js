@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.302.1
+
+### Patch Changes
+
+- [#2694](https://github.com/PostHog/posthog-js/pull/2694) [`0d2e26b`](https://github.com/PostHog/posthog-js/commit/0d2e26bcbb8c4ae67470fdfeb3bb53382aa30bd7) Thanks [@ksvat](https://github.com/ksvat)! - Restart session recording after opt_in_capture() called
+  (2025-12-05)
+
 ## 1.302.0
 
 ### Minor Changes
