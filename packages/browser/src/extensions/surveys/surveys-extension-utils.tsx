@@ -1,4 +1,4 @@
-import { VNode, cloneElement, createContext } from 'preact'
+import { VNode, cloneElement, createContext, type JSX } from 'preact'
 import { PostHog } from '../../posthog-core'
 import {
     MultipleSurveyQuestion,
@@ -585,7 +585,7 @@ interface RenderProps {
     component: VNode<{ className: string }>
     children: string
     renderAsHtml?: boolean
-    style?: React.CSSProperties
+    style?: JSX.CSSProperties
 }
 
 export const renderChildrenAsTextOrHtml = ({ component, children, renderAsHtml, style }: RenderProps) => {
