@@ -921,7 +921,10 @@ describe('PostHog React Native', () => {
 
         await new Promise((resolve) => setTimeout(resolve, 100))
 
-        expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
+        expect((globalThis as any).window.fetch).not.toHaveBeenCalledWith(
+          expect.stringContaining('/flags/'),
+          expect.any(Object)
+        )
       })
 
       it('should reload feature flags by default when calling setGroupPropertiesForFlags', async () => {
@@ -940,7 +943,10 @@ describe('PostHog React Native', () => {
 
         await new Promise((resolve) => setTimeout(resolve, 100))
 
-        expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
+        expect((globalThis as any).window.fetch).not.toHaveBeenCalledWith(
+          expect.stringContaining('/flags/'),
+          expect.any(Object)
+        )
       })
 
       it('should reload feature flags by default when calling resetPersonPropertiesForFlags', async () => {

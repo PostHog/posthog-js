@@ -6,7 +6,7 @@ module.exports = {
     ['@babel/plugin-transform-class-properties', { loose: true }],
   ],
   presets: [
-    'module:metro-react-native-babel-preset',
+    'babel-preset-expo',
     '@babel/env',
     '@babel/preset-typescript',
     ['@babel/preset-react', { runtime: 'automatic' }],

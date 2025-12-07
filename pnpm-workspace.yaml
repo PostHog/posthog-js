@@ -21,7 +21,7 @@ catalog:
   jest: 29.7.0
   jest-environment-jsdom: ^29.7.0
   jest-environment-node: ^29.7.0
-  jest-expo: ^47.0.1
+  jest-expo: ^48.0.2
   "@types/jest": ^29.5.14
   ts-jest: 29.4.0
   "@rslib/core": 0.10.6
