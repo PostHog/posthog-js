@@ -22,30 +22,50 @@ describe('PostHog React Native', () => {
 
   describe('storage', () => {
     let storage: PostHogRNStorage
-    beforeEach(() => {
-      mockedOptionalFileSystem!.readAsStringAsync.mockImplementation(() => {
-        const res = Promise.resolve(
-          JSON.stringify({
-            version: 'v1',
-            content: {
-              foo: 'bar',
-            },
-          })
-        )
-        return res
-      })
 
-      storage = new PostHogRNStorage(buildOptimisiticAsyncStorage())
+    beforeEach(() => {
+      jest.clearAllMocks()
     })
 
     it('should load storage from the file system', async () => {
+      // Use a deferred promise so we can control when it resolves
+      let resolveReadPromise: (value: string) => void
+      const readPromise = new Promise<string>((resolve) => {
+        resolveReadPromise = resolve
+      })
+
+      mockedOptionalFileSystem!.readAsStringAsync.mockReturnValue(readPromise)
+      storage = new PostHogRNStorage(buildOptimisiticAsyncStorage())
+
+      // Before promise resolves, value should be undefined
       expect(storage.getItem('foo')).toEqual(undefined)
+
+      // Now resolve the promise
+      resolveReadPromise!(
+        JSON.stringify({
+          version: 'v1',
+          content: {
+            foo: 'bar',
+          },
+        })
+      )
+
       await storage.preloadPromise
       expect(mockedOptionalFileSystem!.readAsStringAsync).toHaveBeenCalledTimes(1)
       expect(storage.getItem('foo')).toEqual('bar')
     })
 
     it('should save storage to the file system', async () => {
+      mockedOptionalFileSystem!.readAsStringAsync.mockResolvedValue(
+        JSON.stringify({
+          version: 'v1',
+          content: {},
+        })
+      )
+
+      storage = new PostHogRNStorage(buildOptimisiticAsyncStorage())
+      await storage.preloadPromise
+
       storage.setItem('foo', 'bar2')
       expect(storage.getItem('foo')).toEqual('bar2')
       expect(mockedOptionalFileSystem!.writeAsStringAsync).toHaveBeenCalledWith(

@@ -1,34 +1,77 @@
-// Vendored / modified from @facebook/metro
+// Type declarations for metro 0.73.x (used by Expo 48 / React Native 0.71.x)
 
-// https://github.com/facebook/metro/commit/9b85f83c9cc837d8cd897aa7723be7da5b296067
+declare module 'metro' {
+  export interface MixedOutput {
+    type: string
+    data: {
+      code: string
+      lineCount?: number
+      map?: unknown[]
+      functionMap?: unknown
+    }
+  }
 
-// MIT License
+  export interface Module<T = MixedOutput> {
+    dependencies: Map<string, { absolutePath: string }>
+    getSource: () => Buffer
+    inverseDependencies: Set<string>
+    output: readonly T[]
+    path: string
+  }
 
-// Copyright (c) Meta Platforms, Inc. and affiliates.
+  export interface ReadOnlyGraph<T = MixedOutput> {
+    dependencies: ReadonlyMap<string, Module<T>>
+    entryPoints: readonly string[]
+    importBundleNames: ReadonlySet<string>
+    transformOptions: {
+      hot: boolean
+      dev: boolean
+      minify: boolean
+      platform?: string | null
+      type: string
+      [key: string]: unknown
+    }
+  }
 
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
+  export interface SerializerOptions {
+    asyncRequireModulePath: string
+    createModuleId: (path: string) => number
+    dev: boolean
+    getRunModuleStatement: (moduleId: string | number) => string
+    includeAsyncPaths: boolean
+    inlineSourceMap?: boolean
+    modulesOnly: boolean
+    processModuleFilter: (module: Module<MixedOutput>) => boolean
+    projectRoot: string
+    runBeforeMainModule: readonly string[]
+    runModule: boolean
+    serverRoot: string
+    shouldAddToIgnoreList: (module: Module<MixedOutput>) => boolean
+    sourceMapUrl?: string
+    sourceUrl?: string
+  }
 
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
+  export interface BundleMetadata {
+    pre: number
+    post: number
+    modules: [number, number][]
+  }
 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+  export interface MetroConfig {
+    serializer?: {
+      customSerializer?: (
+        entryPoint: string,
+        preModules: readonly Module<MixedOutput>[],
+        graph: ReadOnlyGraph<MixedOutput>,
+        options: SerializerOptions
+      ) => Promise<string | { code: string; map: string }>
+    }
+    [key: string]: unknown
+  }
+}
 
-// All exports were moved from src to private in Metro 0.83.0.
-// https://github.com/facebook/metro/commit/ae6f42372ed361611b5672705f22081c2022cf28
-
-declare module 'metro/private/DeltaBundler/Serializers/baseJSBundle' {
-  // https://github.com/facebook/metro/blob/9b85f83c9cc837d8cd897aa7723be7da5b296067/packages/metro/src/DeltaBundler/Serializers/baseJSBundle.js#L25
+declare module 'metro/src/DeltaBundler/Serializers/baseJSBundle' {
+  import type { Module, ReadOnlyGraph, SerializerOptions } from 'metro'
   const baseJSBundle: (
     entryPoint: string,
     premodules: ReadonlyArray<Module>,
@@ -42,26 +85,29 @@ declare module 'metro/private/DeltaBundler/Serializers/baseJSBundle' {
   export = baseJSBundle
 }
 
-declare module 'metro/private/lib/bundleToString' {
-  // https://github.com/facebook/metro/blob/9b85f83c9cc837d8cd897aa7723be7da5b296067/packages/metro/src/lib/bundleToString.js#L22
-  const baseJSBundle: (bundle: { modules: [number, string][]; post: string; pre: string }) => {
+declare module 'metro/src/lib/bundleToString' {
+  import type { BundleMetadata } from 'metro'
+  const bundleToString: (bundle: { modules: [number, string][]; post: string; pre: string }) => {
     code: string
     metadata: BundleMetadata
   }
-
-  export = baseJSBundle
+  export = bundleToString
 }
 
-declare module 'metro/private/lib/countLines' {
-  // https://github.com/facebook/metro/blob/9b85f83c9cc837d8cd897aa7723be7da5b296067/packages/metro/src/lib/countLines.js#L16
+declare module 'metro/src/lib/countLines' {
   const countLines: (code: string) => number
   export = countLines
 }
 
-declare module 'metro/private/DeltaBundler/Serializers/sourceMapString' {
-  import type { MixedOutput, Module } from 'metro'
+declare module 'metro/src/lib/CountingSet' {
+  class CountingSet<T> extends Set<T> {
+    constructor(items?: Iterable<T>)
+  }
+  export = CountingSet
+}
 
-  // https://github.com/facebook/metro/blob/9b85f83c9cc837d8cd897aa7723be7da5b296067/packages/metro/src/DeltaBundler/Serializers/sourceMapString.js#L19
+declare module 'metro/src/DeltaBundler/Serializers/sourceMapString' {
+  import type { MixedOutput, Module } from 'metro'
   const sourceMapString: (
     bundle: Module<MixedOutput>[],
     options: {
