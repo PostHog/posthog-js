@@ -24,7 +24,7 @@ import {
     FLAG_CALL_REPORTED,
 } from './constants'
 
-import { isUndefined, isArray } from '@posthog/core'
+import { isUndefined, isArray, isNull } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { getTimezone } from './utils/event-utils'
 
@@ -413,7 +413,7 @@ export class PostHogFeatureFlags {
         }
 
         // Add device_id if available (handle cookieless mode where it's null)
-        if (deviceId !== null && deviceId !== undefined) {
+        if (!isNull(deviceId) && !isUndefined(deviceId)) {
             data.$device_id = deviceId
         }
 
