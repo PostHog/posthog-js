@@ -14,14 +14,14 @@ packages:
   - "!**/examples/**"
 
 catalog:
-  "@babel/core": ^7.28.5
+  "@babel/core": ^7.27.1
   "@babel/plugin-syntax-decorators": ^7.27.1
-  "@babel/plugin-transform-exponentiation-operator": ^7.28.5
+  "@babel/plugin-transform-exponentiation-operator": ^7.27.1
   "@babel/plugin-transform-nullish-coalescing-operator": ^7.27.1
   "@babel/plugin-transform-react-jsx": ^7.27.1
-  "@babel/preset-env": ^7.28.5
-  "@babel/preset-react": ^7.28.5
-  "@babel/preset-typescript": ^7.28.5
+  "@babel/preset-env": ^7.27.1
+  "@babel/preset-react": ^7.27.1
+  "@babel/preset-typescript": ^7.27.1
   "@posthog/cli": ~0.5.16
   "@rslib/core": 0.10.6
   "@testing-library/dom": ^10.4.1
