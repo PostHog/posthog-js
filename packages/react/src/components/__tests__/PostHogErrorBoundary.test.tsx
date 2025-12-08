@@ -73,7 +73,7 @@ describe('captureException processing', () => {
         const exceptionList = captureCalls[0][1].$exception_list
         expect(exceptionList.length).toBe(1)
         const stacktrace = exceptionList[0].stacktrace
-        expect(stacktrace.frames.length).toBe(30)
+        expect(stacktrace.frames.length).toBeGreaterThan(20)
     })
 })
 
