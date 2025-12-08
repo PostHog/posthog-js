@@ -15,9 +15,9 @@ jobs:
         node-version: [20, 22, 24]
         typescript-version:
           - version: "4.7.4"
-            extra-flags: ""
+            extra-flags: "--moduleResolution node"
           - version: "5.9.2"
-            extra-flags: ""
+            extra-flags: "--moduleResolution node"
           - version: "6.0.0-dev.20251204"
             extra-flags: "--ignoreConfig"
     steps:
@@ -39,6 +39,6 @@ jobs:
         run: |
           rm ci-ts-file.js || true
           pnpm exec tsc --version
-          pnpm exec tsc ci-ts-file.ts --strict --target es2017 --module commonjs --moduleResolution node --skipLibCheck ${{ matrix.typescript-version.extra-flags }}
+          pnpm exec tsc ci-ts-file.ts --strict --target es2017 --module commonjs --skipLibCheck ${{ matrix.typescript-version.extra-flags }}
           node ci-ts-file.js
         working-directory: packages/browser
