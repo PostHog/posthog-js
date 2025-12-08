@@ -591,7 +591,8 @@ export class PostHog {
                 .filter((flag) => !!config.bootstrap?.featureFlags?.[flag])
                 .reduce(
                     (res: Record<string, string | boolean>, key) => (
-                        (res[key] = config.bootstrap?.featureFlags?.[key] || false), res
+                        (res[key] = config.bootstrap?.featureFlags?.[key] || false),
+                        res
                     ),
                     {}
                 )
