@@ -5,7 +5,7 @@ module.exports = {
     setupFilesAfterEnv: ['./src/__tests__/setup.js'],
     modulePathIgnorePatterns: ['src/__tests__/setup.js', 'src/__tests__/helpers/'],
     clearMocks: true,
-    testEnvironment: 'jest-fixed-jsdom',
+    testEnvironment: 'jsdom',
     prettierPath: null,
     moduleNameMapper: {
         '\\.css$': 'identity-obj-proxy',
