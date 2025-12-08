@@ -36,7 +36,7 @@ runs:
     # Ensure latest npm with OIDC support (npm 11.5.1+)
     - name: Ensure modern npm (OIDC support)
       shell: bash
-      run: npm install -g npm@11.6.4
+      run: sudo npm install -g npm@11.6.4
 
     - uses: actions/cache@v4
       id: pnpm-cache
