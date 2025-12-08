@@ -5,6 +5,6 @@ module.exports = {
   silent: true,
   verbose: false,
   transformIgnorePatterns: [
-    'node_modules/(.pnpm/[^/]+/node_modules/(?!(p-queue|p-timeout|eventemitter3)/)|(?!(.pnpm|p-queue|p-timeout|eventemitter3)/))',
+    'node_modules/(?:(?=\\.pnpm/).pnpm/[^/]+/node_modules/|(?!\\.pnpm/))(?!(p-queue|p-timeout|eventemitter3)/)',
   ],
 }

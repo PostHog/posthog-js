@@ -1,3 +1,5 @@
+import { TextDecoder, TextEncoder } from 'util'
+
 beforeEach(() => {
     // eslint-disable-next-line no-console
     console.error = (...args) => {
@@ -7,4 +9,7 @@ beforeEach(() => {
     console.warn = (...args) => {
         throw new Error(`Unexpected console.warn: ${args}`)
     }
+
+    global.TextEncoder = TextEncoder
+    global.TextDecoder = TextDecoder
 })
