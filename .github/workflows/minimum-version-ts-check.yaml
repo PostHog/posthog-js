@@ -14,6 +14,10 @@ jobs:
       matrix:
         node-version: [20, 22, 24]
         typescript-version: ["4.7.4", "5.9.2", "6.0.0-dev.20251204"]
+        extra-tsc-flags: [""]
+        include:
+          - typescript-version: "6.0.0-dev.20251204"
+            extra-tsc-flags: "--ignoreConfig"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -33,6 +37,6 @@ jobs:
         run: |
           rm ci-ts-file.js || true
           pnpm exec tsc --version
-          pnpm exec tsc ci-ts-file.ts --strict --target es2017 --module commonjs --moduleResolution node --skipLibCheck
+          pnpm exec tsc ci-ts-file.ts --strict --target es2017 --module commonjs --moduleResolution node --skipLibCheck ${{ matrix.extra-tsc-flags }}
           node ci-ts-file.js
         working-directory: packages/browser
