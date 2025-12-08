@@ -27,7 +27,7 @@ jobs:
       - name: Override TypeScript version
         env:
           TS_VERSION: ${{ matrix.typescript-version }}
-        run: yq -i '.catalog.typescript = strenv(TS_VERSION)' pnpm-workspace.yaml && pnpm install
+        run: yq -i '.catalog.typescript = strenv(TS_VERSION)' pnpm-workspace.yaml && pnpm install --no-frozen-lockfile
 
       - name: Test TypeScript Import
         run: |
