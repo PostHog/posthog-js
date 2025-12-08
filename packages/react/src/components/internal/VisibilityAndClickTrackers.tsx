@@ -1,4 +1,4 @@
-import React, { Children, ReactNode, useCallback, useRef } from 'react'
+import React, { Children, ReactNode, useCallback, useRef, JSX } from 'react'
 import { VisibilityAndClickTracker } from './VisibilityAndClickTracker'
 
 /**
