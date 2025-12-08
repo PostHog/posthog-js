@@ -43,14 +43,14 @@
   },
   "dependencies": {
     "@ai-sdk/provider": "^2.0.0",
-    "@anthropic-ai/sdk": "^0.67.0",
-    "@google/genai": "^1.29.0",
-    "@langchain/core": "^1.0.0",
-    "ai": "^5.0.87",
-    "langchain": "^1.0.0",
-    "openai": "^6.8.1",
-    "uuid": "^11.0.5",
-    "zod": "^4.1.8"
+    "@anthropic-ai/sdk": "^0.67.1",
+    "@google/genai": "^1.31.0",
+    "@langchain/core": "^1.1.3",
+    "ai": "^5.0.107",
+    "langchain": "^1.1.4",
+    "openai": "^6.10.0",
+    "uuid": "^11.1.0",
+    "zod": "^4.1.13"
   },
   "peerDependencies": {
     "posthog-node": "^5.0.0"

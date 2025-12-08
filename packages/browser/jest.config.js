@@ -20,5 +20,5 @@ module.exports = {
     transform: {
         '^.+\\.(js|jsx|ts|tsx|mjs)$': 'babel-jest',
     },
-    transformIgnorePatterns: ['node_modules/(?!(@testing-library/preact|preact))'],
+    transformIgnorePatterns: ['node_modules/(?!(\\.pnpm/|@testing-library/preact|preact|sinon))'],
 }
