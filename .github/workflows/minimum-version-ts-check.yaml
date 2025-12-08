@@ -31,7 +31,8 @@ jobs:
 
       - name: Test TypeScript Import
         run: |
-          rm test.ts || true
-          echo "import { posthog } from './dist/module'; import ts from "typescript"; console.log(posthog); console.log(ts.version);" > test.ts
-          pnpm exec tsc test.ts --strict --target es2017 --module commonjs --moduleResolution node --noEmit --skipLibCheck
+          rm ci-ts-file.js || true
+          pnpm exec tsc --version
+          pnpm exec tsc ci-ts-file.ts --strict --target es2017 --module commonjs --moduleResolution node --noEmit --skipLibCheck
+          node ci-ts-file.js
         working-directory: packages/browser
