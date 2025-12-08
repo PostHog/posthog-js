@@ -1,10 +1,10 @@
 import { wrapLanguageModel } from 'ai'
 import type {
-  LanguageModelV2,
-  LanguageModelV2Content,
-  LanguageModelV2Middleware,
-  LanguageModelV2Prompt,
-  LanguageModelV2StreamPart,
+  LanguageModelV3,
+  LanguageModelV3Content,
+  LanguageModelV3Middleware,
+  LanguageModelV3Prompt,
+  LanguageModelV3StreamPart,
 } from '@ai-sdk/provider'
 import { v4 as uuidv4 } from 'uuid'
 import { PostHog } from 'posthog-node'
@@ -75,7 +75,7 @@ const mapVercelParams = (params: any): Record<string, any> => {
   }
 }
 
-const mapVercelPrompt = (messages: LanguageModelV2Prompt): PostHogInput[] => {
+const mapVercelPrompt = (messages: LanguageModelV3Prompt): PostHogInput[] => {
   // Map and truncate individual content
   const inputs: PostHogInput[] = messages.map((message) => {
     let content: any
@@ -185,7 +185,7 @@ const mapVercelPrompt = (messages: LanguageModelV2Prompt): PostHogInput[] => {
   return inputs
 }
 
-const mapVercelOutput = (result: LanguageModelV2Content[]): PostHogInput[] => {
+const mapVercelOutput = (result: LanguageModelV3Content[]): PostHogInput[] => {
   const content: OutputContentItem[] = result.map((item) => {
     if (item.type === 'text') {
       return { type: 'text', text: truncate(item.text) }
@@ -257,7 +257,7 @@ const mapVercelOutput = (result: LanguageModelV2Content[]): PostHogInput[] => {
   }
 }
 
-const extractProvider = (model: LanguageModelV2): string => {
+const extractProvider = (model: LanguageModelV3): string => {
   const provider = model.provider.toLowerCase()
   const providerName = provider.split('.')[0]
   return providerName
@@ -265,10 +265,11 @@ const extractProvider = (model: LanguageModelV2): string => {
 
 export const createInstrumentationMiddleware = (
   phClient: PostHog,
-  model: LanguageModelV2,
+  model: LanguageModelV3,
   options: CreateInstrumentationMiddlewareOptions
-): LanguageModelV2Middleware => {
-  const middleware: LanguageModelV2Middleware = {
+): LanguageModelV3Middleware => {
+  const middleware: LanguageModelV3Middleware = {
+    specificationVersion: 'v3',
     wrapGenerate: async ({ doGenerate, params }) => {
       const startTime = Date.now()
       const mergedParams = {
@@ -418,14 +419,14 @@ export const createInstrumentationMiddleware = (
 
       try {
         const { stream, ...rest } = await doStream()
-        const transformStream = new TransformStream<LanguageModelV2StreamPart, LanguageModelV2StreamPart>({
+        const transformStream = new TransformStream<LanguageModelV3StreamPart, LanguageModelV3StreamPart>({
           transform(chunk, controller) {
-            // Handle new v5 streaming patterns
+            // Handle streaming patterns
             if (chunk.type === 'text-delta') {
               generatedText += chunk.delta
             }
             if (chunk.type === 'reasoning-delta') {
-              reasoningText += chunk.delta // New in v5
+              reasoningText += chunk.delta
             }
 
             // Handle tool call chunks
@@ -609,10 +610,10 @@ export const createInstrumentationMiddleware = (
 }
 
 export const wrapVercelLanguageModel = (
-  model: LanguageModelV2,
+  model: LanguageModelV3,
   phClient: PostHog,
   options: ClientOptions
-): LanguageModelV2 => {
+): LanguageModelV3 => {
   const traceId = options.posthogTraceId ?? uuidv4()
   const middleware = createInstrumentationMiddleware(phClient, model, {
     ...options,

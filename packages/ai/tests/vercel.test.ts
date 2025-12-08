@@ -1,7 +1,7 @@
 import { PostHog } from 'posthog-node'
 import { withTracing } from '../src/index'
 import { generateText, wrapLanguageModel } from 'ai'
-import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider'
+import type { LanguageModelV3, LanguageModelV3CallOptions, LanguageModelV3StreamPart } from '@ai-sdk/provider'
 import { flushPromises } from './test-utils'
 import { version } from '../package.json'
 
@@ -54,7 +54,7 @@ jest.mock('ai', () => ({
 }))
 
 // Create a mock openai function that returns a properly structured model
-const createMockModel = (modelId: string): LanguageModelV2 => {
+const createMockModel = (modelId: string): LanguageModelV3 => {
   const mockResponses = {
     'What is 9 + 10?': { text: '19', usage: { inputTokens: 10, outputTokens: 2 } },
     'What is 10 + 11?': { text: '21', usage: { inputTokens: 10, outputTokens: 2 } },
@@ -62,11 +62,11 @@ const createMockModel = (modelId: string): LanguageModelV2 => {
   }
 
   return {
-    specificationVersion: 'v2' as const,
+    specificationVersion: 'v3' as const,
     provider: 'openai',
     modelId: modelId,
     supportedUrls: {},
-    doGenerate: jest.fn().mockImplementation(async (params: LanguageModelV2CallOptions) => {
+    doGenerate: jest.fn().mockImplementation(async (params: LanguageModelV3CallOptions) => {
       // Extract the prompt text from the params
       const userMessage = params.prompt.find((m: any) => m.role === 'user')
       const promptText = userMessage?.content as string
@@ -82,15 +82,14 @@ const createMockModel = (modelId: string): LanguageModelV2 => {
         response: { modelId: modelId },
         providerMetadata: {},
         finishReason: 'stop',
-        logprobs: undefined,
         warnings: [],
       }
     }),
     doStream: jest.fn(),
-  } as LanguageModelV2
+  } as LanguageModelV3
 }
 
-describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
+describe('Vercel AI SDK v6 Middleware - End User Usage', () => {
   let mockPostHogClient: PostHog
 
   beforeEach(async () => {
@@ -311,7 +310,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
       })
 
       // Mock doGenerate to handle tools
-      baseModel.doGenerate = jest.fn().mockImplementation(async (_params: LanguageModelV2CallOptions) => {
+      baseModel.doGenerate = jest.fn().mockImplementation(async (_params: LanguageModelV3CallOptions) => {
         return {
           text: 'I will use the weather tool',
           usage: { inputTokens: 15, outputTokens: 5 },
@@ -398,16 +397,16 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
 
   describe('streamText with tool calls', () => {
     // Helper function to create a mock streaming model
-    const createMockStreamingModel = (streamParts: LanguageModelV2StreamPart[]): LanguageModelV2 => {
+    const createMockStreamingModel = (streamParts: LanguageModelV3StreamPart[]): LanguageModelV3 => {
       return {
-        specificationVersion: 'v2' as const,
+        specificationVersion: 'v3' as const,
         provider: 'test-provider',
         modelId: 'test-streaming-model',
         supportedUrls: {},
         doGenerate: jest.fn(),
         doStream: jest.fn().mockImplementation(async () => {
           // Create a readable stream from the parts
-          const stream = new ReadableStream<LanguageModelV2StreamPart>({
+          const stream = new ReadableStream<LanguageModelV3StreamPart>({
             async start(controller) {
               for (const part of streamParts) {
                 controller.enqueue(part)
@@ -421,11 +420,11 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
             response: { modelId: 'test-streaming-model' },
           }
         }),
-      } as LanguageModelV2
+      } as LanguageModelV3
     }
 
     it('should capture single tool call in streaming', async () => {
-      const streamParts: LanguageModelV2StreamPart[] = [
+      const streamParts: LanguageModelV3StreamPart[] = [
         { type: 'text-delta', id: 'text-1', delta: 'Let me check the weather ' },
         { type: 'tool-input-start', id: 'tc-1', toolName: 'get_weather' },
         { type: 'tool-input-delta', id: 'tc-1', delta: '{"location":"' },
@@ -491,7 +490,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
     })
 
     it('should capture multiple tool calls in streaming', async () => {
-      const streamParts: LanguageModelV2StreamPart[] = [
+      const streamParts: LanguageModelV3StreamPart[] = [
         { type: 'text-delta', id: 'text-1', delta: 'I will help you with multiple tasks. ' },
         // First tool call
         { type: 'tool-input-start', id: 'tc-1', toolName: 'get_weather' },
@@ -566,7 +565,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
     })
 
     it('should handle direct tool-call chunks in streaming', async () => {
-      const streamParts: LanguageModelV2StreamPart[] = [
+      const streamParts: LanguageModelV3StreamPart[] = [
         { type: 'text-delta', id: 'text-1', delta: 'Processing your request. ' },
         // Direct tool-call chunk (complete tool call in one chunk)
         {
@@ -631,7 +630,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
     })
 
     it('should handle mixed content with text, reasoning, and tool calls', async () => {
-      const streamParts: LanguageModelV2StreamPart[] = [
+      const streamParts: LanguageModelV3StreamPart[] = [
         { type: 'reasoning-delta', id: 'reasoning-1', delta: 'User wants weather info. ' },
         { type: 'reasoning-delta', id: 'reasoning-1', delta: 'I should use the weather tool.' },
         { type: 'text-delta', id: 'text-1', delta: 'Let me check that for you. ' },
@@ -705,7 +704,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
     })
 
     it('should handle empty or incomplete tool calls gracefully', async () => {
-      const streamParts: LanguageModelV2StreamPart[] = [
+      const streamParts: LanguageModelV3StreamPart[] = [
         { type: 'text-delta', id: 'text-1', delta: 'Here is the response. ' },
         // Tool call without arguments
         { type: 'tool-input-start', id: 'tc-1', toolName: 'empty_tool' },
@@ -774,7 +773,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
     })
 
     it('should handle streaming with only tool calls and no text', async () => {
-      const streamParts: LanguageModelV2StreamPart[] = [
+      const streamParts: LanguageModelV3StreamPart[] = [
         { type: 'tool-input-start', id: 'tc-1', toolName: 'function_a' },
         { type: 'tool-input-delta', id: 'tc-1', delta: '{"param":"value"}' },
         { type: 'tool-input-end', id: 'tc-1' },
