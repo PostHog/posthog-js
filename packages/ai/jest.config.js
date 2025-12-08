@@ -4,4 +4,7 @@ module.exports = {
   coverageDirectory: 'coverage',
   silent: true,
   verbose: false,
+  transformIgnorePatterns: [
+    'node_modules/(?:(?=\\.pnpm/).pnpm/[^/]+/node_modules/|(?!\\.pnpm/))(?!(p-queue|p-timeout|eventemitter3)/)',
+  ],
 }
