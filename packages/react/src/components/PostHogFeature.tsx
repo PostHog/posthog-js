@@ -1,5 +1,5 @@
 import { useFeatureFlagPayload, useFeatureFlagVariantKey, usePostHog } from '../hooks'
-import React from 'react'
+import React, { JSX } from 'react'
 import { PostHog } from '../context'
 import { isFunction, isUndefined } from '../utils/type-utils'
 import { VisibilityAndClickTrackers } from './internal/VisibilityAndClickTrackers'

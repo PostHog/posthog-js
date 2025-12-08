@@ -35,6 +35,7 @@ export const __POSTHOG_ERROR_MESSAGES = {
 
 export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryProps, PostHogErrorBoundaryState> {
     static contextType = PostHogContext
+    declare context: React.ContextType<typeof PostHogContext>
 
     constructor(props: PostHogErrorBoundaryProps) {
         super(props)
@@ -56,7 +57,7 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
         const { componentStack } = errorInfo
         this.setState({
             error,
-            componentStack,
+            componentStack: componentStack ?? null,
             exceptionEvent,
         })
     }
