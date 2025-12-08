@@ -25,8 +25,9 @@ jobs:
 
       # once its built we can see if we can use it on the forced version
       - name: Override TypeScript version
-        run: pnpm add typescript@${{ matrix.typescript-version }} --save-dev
-        working-directory: packages/browser
+        env:
+          TS_VERSION: ${{ matrix.typescript-version }}
+        run: yq -i '.catalog.typescript = strenv(TS_VERSION)' pnpm-workspace.yaml && pnpm install
 
       - name: Test TypeScript Import
         run: |
