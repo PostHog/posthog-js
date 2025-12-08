@@ -17,7 +17,8 @@ describe('PostHogErrorBoundary component', () => {
         const { container } = renderWithError({ message: 'Test error', fallback: <div></div> })
         expect(posthog.captureException).toHaveBeenCalledWith(new Error('Test error'), undefined)
         expect(container.innerHTML).toBe('<div></div>')
-        expect(console.error).toHaveBeenCalledTimes(2)
+        expect(console.error).toHaveBeenCalledTimes(1)
+        expect((console.error as any).mock.calls[0][1].message).toEqual('Test error')
     })
 
     it('should warn user when fallback is null', () => {
@@ -72,7 +73,7 @@ describe('captureException processing', () => {
         const exceptionList = captureCalls[0][1].$exception_list
         expect(exceptionList.length).toBe(1)
         const stacktrace = exceptionList[0].stacktrace
-        expect(stacktrace.frames.length).toBe(44)
+        expect(stacktrace.frames.length).toBe(30)
     })
 })
 
