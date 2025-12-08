@@ -29,17 +29,23 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private _lastMessageTimestamp: string | null = null
     private _isPolling: boolean = false
     private _unsubscribeIdentifyListener: (() => void) | null = null
+    // SECURITY: widget_session_id is the key for access control
+    // This is a random UUID that only this browser knows
+    private _widgetSessionId: string
 
     constructor(posthog: PostHog, config: ConversationsRemoteConfig, api: ConversationsApi) {
         this._posthog = posthog
         this._config = config
         this._api = api
         this._persistence = new ConversationsPersistence(posthog)
+        // Get or create widget_session_id - this stays the same even when user identifies
+        this._widgetSessionId = this._persistence.getOrCreateWidgetSessionId()
 
         logger.info('ConversationsManager initialized', {
             config,
             hasApi: !!api,
             apiMethods: api ? Object.keys(api) : 'undefined',
+            widgetSessionId: this._widgetSessionId,
         })
 
         this._initialize()
@@ -80,6 +86,11 @@ export class ConversationsManager implements ConversationsManagerInterface {
         // If we have a ticket, load its messages
         if (this._currentTicketId) {
             this._loadMessages()
+        }
+
+        // Start polling if widget is initially open
+        if (initialState === ConversationsWidgetState.OPEN) {
+            this._startPolling()
         }
 
         // Listen for identify events to handle distinct_id changes
@@ -189,7 +200,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
         const isNewTicket = !this._currentTicketId
 
         try {
-            const response = await this._api.sendMessage(message, this._currentTicketId || undefined, userTraits)
+            // Pass widget_session_id for access control
+            const response = await this._api.sendMessage(
+                message,
+                this._currentTicketId || undefined,
+                userTraits,
+                this._widgetSessionId
+            )
 
             // Update current ticket ID
             if (!this._currentTicketId) {
@@ -248,7 +265,12 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
 
         try {
-            const response = await this._api.getMessages(this._currentTicketId, this._lastMessageTimestamp || undefined)
+            // Pass widget_session_id for access control
+            const response = await this._api.getMessages(
+                this._currentTicketId,
+                this._lastMessageTimestamp || undefined,
+                this._widgetSessionId
+            )
 
             if (response.messages.length > 0) {
                 this._widgetRef?.addMessages(response.messages)
@@ -326,25 +348,24 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /**
-     * Handle distinct_id changes when user identifies
-     * The user should continue their conversation seamlessly - just now identified
+     * Handle distinct_id changes when user identifies.
+     * The user continues their conversation seamlessly - widget_session_id stays the same.
+     * No migration needed since tickets are keyed by widget_session_id, not distinct_id.
+     * Backend will update ticket.distinct_id for Person linking on the next message.
      */
     private _handleDistinctIdChange(oldDistinctId: string, newDistinctId: string): void {
-        const hadExistingTicket = !!this._currentTicketId
-
-        // Migrate the ticket from the old distinct_id to the new one
-        // This allows the user to continue their conversation after identifying
-        this._persistence.migrateTicketToNewDistinctId(oldDistinctId, newDistinctId)
-
-        logger.info('User identified, conversation continues', {
+        // No migration needed - widget_session_id stays the same
+        // The user keeps access to their ticket because the widget_session_id hasn't changed
+        logger.info('User identified, conversation continues with same widget_session_id', {
             ticketId: this._currentTicketId,
+            widgetSessionId: this._widgetSessionId,
             oldDistinctId,
             newDistinctId,
         })
 
         // Track the identity change
         this._posthog.capture('$conversations_identity_changed', {
-            hadExistingTicket,
+            hadExistingTicket: !!this._currentTicketId,
         })
     }
 

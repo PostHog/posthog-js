@@ -363,7 +363,7 @@ describe('PostHogConversations', () => {
         })
 
         describe('sendMessage', () => {
-            it('should send message with correct payload', async () => {
+            it('should send message with correct payload including widget_session_id', async () => {
                 ;(mockPostHog._send_request as jest.Mock).mockImplementation(({ callback }) => {
                     callback({
                         statusCode: 200,
@@ -376,13 +376,14 @@ describe('PostHogConversations', () => {
                     })
                 })
 
-                const result = await capturedApi.sendMessage('Hello!')
+                const result = await capturedApi.sendMessage('Hello!', undefined, undefined, 'test-widget-session-id')
 
                 expect(mockPostHog._send_request).toHaveBeenCalledWith(
                     expect.objectContaining({
                         method: 'POST',
                         url: expect.stringContaining('/api/conversations/v1/widget/message'),
                         data: expect.objectContaining({
+                            widget_session_id: 'test-widget-session-id',
                             distinct_id: 'test-distinct-id',
                             message: 'Hello!',
                             traits: expect.objectContaining({
@@ -495,7 +496,7 @@ describe('PostHogConversations', () => {
         })
 
         describe('getMessages', () => {
-            it('should fetch messages with correct parameters', async () => {
+            it('should fetch messages with widget_session_id in query params', async () => {
                 ;(mockPostHog._send_request as jest.Mock).mockImplementation(({ callback }) => {
                     callback({
                         statusCode: 200,
@@ -516,7 +517,7 @@ describe('PostHogConversations', () => {
                     })
                 })
 
-                const result = await capturedApi.getMessages('ticket-123')
+                const result = await capturedApi.getMessages('ticket-123', undefined, 'test-widget-session-id')
 
                 expect(mockPostHog._send_request).toHaveBeenCalledWith(
                     expect.objectContaining({
@@ -527,6 +528,12 @@ describe('PostHogConversations', () => {
                         },
                     })
                 )
+
+                // Verify widget_session_id is in URL
+                const callArgs = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                expect(callArgs.url).toContain('widget_session_id=test-widget-session-id')
+                // Verify distinct_id is NOT in URL (access control is via widget_session_id only)
+                expect(callArgs.url).not.toContain('distinct_id=')
 
                 expect(result).toEqual({
                     ticket_id: 'ticket-123',
@@ -554,7 +561,7 @@ describe('PostHogConversations', () => {
                     })
                 })
 
-                await capturedApi.getMessages('ticket-123', 'cursor-456')
+                await capturedApi.getMessages('ticket-123', 'cursor-456', 'test-widget-session-id')
 
                 expect(mockPostHog._send_request).toHaveBeenCalledWith(
                     expect.objectContaining({

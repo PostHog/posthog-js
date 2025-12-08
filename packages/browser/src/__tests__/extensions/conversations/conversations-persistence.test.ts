@@ -9,6 +9,8 @@ describe('ConversationsPersistence', () => {
     let mockPostHog: PostHog
 
     beforeEach(() => {
+        // Restore all mocks first to clean up any leftover mocks from previous tests
+        jest.restoreAllMocks()
         localStorage.clear()
         jest.clearAllMocks()
 
@@ -17,6 +19,66 @@ describe('ConversationsPersistence', () => {
         })
 
         persistence = new ConversationsPersistence(mockPostHog)
+    })
+
+    afterEach(() => {
+        jest.restoreAllMocks()
+    })
+
+    describe('widget_session_id persistence', () => {
+        it('should generate and persist widget_session_id', () => {
+            const sessionId = persistence.getOrCreateWidgetSessionId()
+
+            // Should be a valid UUID format
+            expect(sessionId).toMatch(/^[0-9a-f-]{36}$/i)
+
+            // Should be stored in localStorage
+            expect(localStorage.getItem('ph_conversations_widget_session_id')).toBe(sessionId)
+        })
+
+        it('should return same widget_session_id on subsequent calls', () => {
+            const sessionId1 = persistence.getOrCreateWidgetSessionId()
+            const sessionId2 = persistence.getOrCreateWidgetSessionId()
+
+            expect(sessionId1).toBe(sessionId2)
+        })
+
+        it('should return same widget_session_id even after distinct_id changes', () => {
+            const sessionIdBefore = persistence.getOrCreateWidgetSessionId()
+
+            // Simulate identify - distinct_id changes
+            ;(mockPostHog.get_distinct_id as jest.Mock).mockReturnValue('new-user@example.com')
+
+            const sessionIdAfter = persistence.getOrCreateWidgetSessionId()
+            expect(sessionIdBefore).toBe(sessionIdAfter)
+        })
+
+        it('should clear widget_session_id', () => {
+            const sessionId = persistence.getOrCreateWidgetSessionId()
+            expect(localStorage.getItem('ph_conversations_widget_session_id')).toBe(sessionId)
+
+            persistence.clearWidgetSessionId()
+
+            expect(localStorage.getItem('ph_conversations_widget_session_id')).toBeNull()
+        })
+
+        it('should generate new widget_session_id after clearing', () => {
+            const sessionId1 = persistence.getOrCreateWidgetSessionId()
+            persistence.clearWidgetSessionId()
+            const sessionId2 = persistence.getOrCreateWidgetSessionId()
+
+            expect(sessionId1).not.toBe(sessionId2)
+        })
+
+        it('should handle localStorage errors gracefully', () => {
+            jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+                throw new Error('Storage error')
+            })
+
+            // Should still return a UUID (fallback)
+            const sessionId = persistence.getOrCreateWidgetSessionId()
+            expect(sessionId).toMatch(/^[0-9a-f-]{36}$/i)
+        })
     })
 
     describe('ticket ID persistence', () => {
@@ -35,36 +97,30 @@ describe('ConversationsPersistence', () => {
             expect(loaded).toBeNull()
         })
 
-        it('should use distinct_id in storage key', () => {
+        it('should use widget_session_id in storage key (not distinct_id)', () => {
             const ticketId = 'ticket-123'
+
+            // Get the widget_session_id that will be used for the key
+            const widgetSessionId = persistence.getOrCreateWidgetSessionId()
 
             persistence.saveTicketId(ticketId)
 
-            const key = 'ph_conversations_ticket_test-distinct-id'
+            // Key should be based on widget_session_id, not distinct_id
+            const key = `ph_conversations_ticket_${widgetSessionId}`
             expect(localStorage.getItem(key)).toBe(ticketId)
         })
 
-        it('should load ticket for different distinct_id', () => {
-            const ticketId1 = 'ticket-123'
-            const ticketId2 = 'ticket-456'
+        it('should keep same ticket after distinct_id changes (identify)', () => {
+            const ticketId = 'ticket-123'
 
-            // Save for first distinct_id
-            persistence.saveTicketId(ticketId1)
+            // Save ticket
+            persistence.saveTicketId(ticketId)
 
-            // Change distinct_id
-            ;(mockPostHog.get_distinct_id as jest.Mock).mockReturnValue('different-distinct-id')
+            // Simulate identify - distinct_id changes
+            ;(mockPostHog.get_distinct_id as jest.Mock).mockReturnValue('new-user@example.com')
 
-            // Save for second distinct_id
-            persistence.saveTicketId(ticketId2)
-
-            // Load should get the second ticket
-            expect(persistence.loadTicketId()).toBe(ticketId2)
-
-            // Switch back to first distinct_id
-            ;(mockPostHog.get_distinct_id as jest.Mock).mockReturnValue('test-distinct-id')
-
-            // Should get the first ticket
-            expect(persistence.loadTicketId()).toBe(ticketId1)
+            // Should still load the same ticket because widget_session_id is unchanged
+            expect(persistence.loadTicketId()).toBe(ticketId)
         })
 
         it('should clear ticket ID', () => {
@@ -198,8 +254,9 @@ describe('ConversationsPersistence', () => {
     })
 
     describe('clearAll', () => {
-        it('should clear all conversation-related data', () => {
+        it('should clear all conversation-related data including widget_session_id', () => {
             // Set up data
+            persistence.getOrCreateWidgetSessionId() // Create widget_session_id
             persistence.saveTicketId('ticket-123')
             persistence.saveWidgetState('open')
             persistence.saveUserTraits({ name: 'Test User', email: 'test@example.com' })
@@ -209,23 +266,34 @@ describe('ConversationsPersistence', () => {
 
             persistence.clearAll()
 
+            // widget_session_id should be cleared
+            expect(localStorage.getItem('ph_conversations_widget_session_id')).toBeNull()
             expect(persistence.loadTicketId()).toBeNull()
             expect(persistence.loadWidgetState()).toBeNull()
             expect(persistence.loadUserTraits()).toBeNull()
             expect(localStorage.getItem('other_key')).toBe('should-remain')
         })
 
-        it('should clear orphaned ticket keys from previous distinct_ids', () => {
-            // Create keys for multiple distinct_ids
-            localStorage.setItem('ph_conversations_ticket_user1', 'ticket-1')
-            localStorage.setItem('ph_conversations_ticket_user2', 'ticket-2')
-            localStorage.setItem('ph_conversations_ticket_user3', 'ticket-3')
+        it('should clear orphaned ticket keys from previous sessions', () => {
+            // Create keys for multiple widget_session_ids (simulating different browser sessions)
+            localStorage.setItem('ph_conversations_ticket_session1', 'ticket-1')
+            localStorage.setItem('ph_conversations_ticket_session2', 'ticket-2')
+            localStorage.setItem('ph_conversations_ticket_session3', 'ticket-3')
 
             persistence.clearAll()
 
-            expect(localStorage.getItem('ph_conversations_ticket_user1')).toBeNull()
-            expect(localStorage.getItem('ph_conversations_ticket_user2')).toBeNull()
-            expect(localStorage.getItem('ph_conversations_ticket_user3')).toBeNull()
+            expect(localStorage.getItem('ph_conversations_ticket_session1')).toBeNull()
+            expect(localStorage.getItem('ph_conversations_ticket_session2')).toBeNull()
+            expect(localStorage.getItem('ph_conversations_ticket_session3')).toBeNull()
+        })
+
+        it('should generate new widget_session_id after clearAll', () => {
+            const sessionIdBefore = persistence.getOrCreateWidgetSessionId()
+
+            persistence.clearAll()
+
+            const sessionIdAfter = persistence.getOrCreateWidgetSessionId()
+            expect(sessionIdBefore).not.toBe(sessionIdAfter)
         })
 
         it('should handle localStorage errors gracefully', () => {
@@ -237,76 +305,24 @@ describe('ConversationsPersistence', () => {
         })
     })
 
-    describe('migrateTicketToNewDistinctId', () => {
-        it('should migrate ticket to new distinct_id', () => {
-            const oldDistinctId = 'old-distinct-id'
-            const newDistinctId = 'new-distinct-id'
-            const ticketId = 'ticket-123'
-
-            // Set up ticket for old distinct_id
-            localStorage.setItem(`ph_conversations_ticket_${oldDistinctId}`, ticketId)
-
-            persistence.migrateTicketToNewDistinctId(oldDistinctId, newDistinctId)
-
-            // Old key should be removed
-            expect(localStorage.getItem(`ph_conversations_ticket_${oldDistinctId}`)).toBeNull()
-
-            // New key should have the ticket
-            expect(localStorage.getItem(`ph_conversations_ticket_${newDistinctId}`)).toBe(ticketId)
-        })
-
-        it('should not migrate if distinct_ids are the same', () => {
-            const distinctId = 'same-id'
-            const ticketId = 'ticket-123'
-
-            localStorage.setItem(`ph_conversations_ticket_${distinctId}`, ticketId)
-
-            persistence.migrateTicketToNewDistinctId(distinctId, distinctId)
-
-            // Ticket should still be there
-            expect(localStorage.getItem(`ph_conversations_ticket_${distinctId}`)).toBe(ticketId)
-        })
-
-        it('should not migrate if old distinct_id is empty', () => {
-            const newDistinctId = 'new-distinct-id'
-
-            persistence.migrateTicketToNewDistinctId('', newDistinctId)
-
-            expect(localStorage.getItem(`ph_conversations_ticket_${newDistinctId}`)).toBeNull()
-        })
-
-        it('should do nothing if no ticket exists for old distinct_id', () => {
-            const oldDistinctId = 'old-distinct-id'
-            const newDistinctId = 'new-distinct-id'
-
-            persistence.migrateTicketToNewDistinctId(oldDistinctId, newDistinctId)
-
-            expect(localStorage.getItem(`ph_conversations_ticket_${newDistinctId}`)).toBeNull()
-        })
-
-        it('should handle localStorage errors gracefully', () => {
-            const oldDistinctId = 'old-distinct-id'
-            const newDistinctId = 'new-distinct-id'
-
-            jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-                throw new Error('Storage error')
-            })
-
-            expect(() => persistence.migrateTicketToNewDistinctId(oldDistinctId, newDistinctId)).not.toThrow()
-        })
-    })
-
     describe('localStorage unavailable', () => {
         let originalLocalStorage: Storage
 
         beforeEach(() => {
             originalLocalStorage = global.localStorage
-            // @ts-expect-error - intentionally deleting localStorage for testing
-            delete global.localStorage
+            // Intentionally deleting localStorage for testing
+            delete (global as any).localStorage
         })
 
         afterEach(() => {
             global.localStorage = originalLocalStorage
+        })
+
+        it('should handle missing localStorage for widget_session_id', () => {
+            // Should still generate a UUID (fallback behavior)
+            const sessionId = persistence.getOrCreateWidgetSessionId()
+            expect(sessionId).toMatch(/^[0-9a-f-]{36}$/i)
+            expect(() => persistence.clearWidgetSessionId()).not.toThrow()
         })
 
         it('should handle missing localStorage for ticket ID', () => {
@@ -328,10 +344,6 @@ describe('ConversationsPersistence', () => {
 
         it('should handle missing localStorage for clearAll', () => {
             expect(() => persistence.clearAll()).not.toThrow()
-        })
-
-        it('should handle missing localStorage for migration', () => {
-            expect(() => persistence.migrateTicketToNewDistinctId('old', 'new')).not.toThrow()
         })
     })
 })

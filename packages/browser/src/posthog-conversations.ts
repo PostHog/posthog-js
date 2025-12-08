@@ -15,8 +15,13 @@ const logger = createLogger('[Conversations]')
 
 // API interface that the lazy-loaded manager will use
 export interface ConversationsApi {
-    sendMessage(message: string, ticketId?: string, userTraits?: UserProvidedTraits): Promise<SendMessageResponse>
-    getMessages(ticketId: string, after?: string): Promise<GetMessagesResponse>
+    sendMessage(
+        message: string,
+        ticketId?: string,
+        userTraits?: UserProvidedTraits,
+        widgetSessionId?: string
+    ): Promise<SendMessageResponse>
+    getMessages(ticketId: string, after?: string, widgetSessionId?: string): Promise<GetMessagesResponse>
 }
 
 // Will be defined when lazy-loaded
@@ -192,12 +197,13 @@ export class PostHogConversations {
             sendMessage: (
                 message: string,
                 ticketId?: string,
-                userTraits?: UserProvidedTraits
+                userTraits?: UserProvidedTraits,
+                widgetSessionId?: string
             ): Promise<SendMessageResponse> => {
-                return this._apiSendMessage(message, ticketId, token, userTraits)
+                return this._apiSendMessage(message, ticketId, token, userTraits, widgetSessionId)
             },
-            getMessages: (ticketId: string, after?: string): Promise<GetMessagesResponse> => {
-                return this._apiGetMessages(ticketId, after, token)
+            getMessages: (ticketId: string, after?: string, widgetSessionId?: string): Promise<GetMessagesResponse> => {
+                return this._apiGetMessages(ticketId, after, token, widgetSessionId)
             },
         }
 
@@ -209,7 +215,8 @@ export class PostHogConversations {
         message: string,
         ticketId: string | undefined,
         token: string,
-        userTraits?: UserProvidedTraits
+        userTraits?: UserProvidedTraits,
+        widgetSessionId?: string
     ): Promise<SendMessageResponse> {
         // eslint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
@@ -223,6 +230,10 @@ export class PostHogConversations {
             const email = userTraits?.email || personProperties.$email || personProperties.email || null
 
             const payload = {
+                // SECURITY: widget_session_id is required for access control
+                // This is a random UUID that only this browser knows
+                widget_session_id: widgetSessionId,
+                // distinct_id is only used for Person linking, not access control
                 distinct_id: distinctId,
                 message: message.trim(),
                 traits: {
@@ -266,12 +277,18 @@ export class PostHogConversations {
     }
 
     /** Fetch messages via the API (runs in main bundle) */
-    private _apiGetMessages(ticketId: string, after: string | undefined, token: string): Promise<GetMessagesResponse> {
+    private _apiGetMessages(
+        ticketId: string,
+        after: string | undefined,
+        token: string,
+        widgetSessionId?: string
+    ): Promise<GetMessagesResponse> {
         // eslint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
-            const distinctId = this._instance.get_distinct_id()
+            // SECURITY: widget_session_id is required for access control
+            // distinct_id is NOT sent for getMessages - access is controlled by widget_session_id only
             const queryParams: Record<string, string> = {
-                distinct_id: distinctId,
+                widget_session_id: widgetSessionId || '',
                 limit: '50',
             }
 
