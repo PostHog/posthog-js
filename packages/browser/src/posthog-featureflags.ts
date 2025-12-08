@@ -24,12 +24,14 @@ import {
     FLAG_CALL_REPORTED,
 } from './constants'
 
-import { isUndefined, isArray } from '@posthog/core'
+import { isUndefined, isArray, isString, isObject, objectKeys } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { getTimezone } from './utils/event-utils'
 
 const logger = createLogger('[FeatureFlags]')
 const forceDebugLogger = createLogger('[FeatureFlags]', { debugEnabled: true })
+
+const WARN_FLAGS_NOT_LOADED = "failed. Feature flags didn't load in time."
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
@@ -97,7 +99,7 @@ export const parseFlagsResponse = (
 
     persistence &&
         persistence.register({
-            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFeatureFlags)),
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: objectKeys(filterActiveFeatureFlags(newFeatureFlags)),
             [ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
             [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
             [PERSISTENCE_FEATURE_FLAG_DETAILS]: newFeatureFlagDetails || {},
@@ -114,11 +116,11 @@ const normalizeFlagsResponse = (response: Partial<FlagsResponse>): Partial<Flags
 
         // Map of flag keys to flag values: Record<string, string | boolean>
         response.featureFlags = Object.fromEntries(
-            Object.keys(flagDetails).map((flag) => [flag, flagDetails[flag].variant ?? flagDetails[flag].enabled])
+            objectKeys(flagDetails).map((flag) => [flag, flagDetails[flag].variant ?? flagDetails[flag].enabled])
         )
         // Map of flag keys to flag payloads: Record<string, JsonType>
         response.featureFlagPayloads = Object.fromEntries(
-            Object.keys(flagDetails)
+            objectKeys(flagDetails)
                 .filter((flag) => flagDetails[flag].enabled)
                 .filter((flag) => flagDetails[flag].metadata?.payload)
                 .map((flag) => [flag, flagDetails[flag].metadata?.payload])
@@ -179,7 +181,7 @@ export class PostHogFeatureFlags {
         }
 
         return envs.filter((env) => {
-            const isValid = env && typeof env === 'string' && env.trim().length > 0
+            const isValid = env && isString(env) && env.trim().length > 0
             if (!isValid) {
                 logger.error('Invalid evaluation environment found:', env, 'Expected non-empty string')
             }
@@ -214,7 +216,7 @@ export class PostHogFeatureFlags {
     }
 
     getFlags(): string[] {
-        return Object.keys(this.getFlagVariants())
+        return objectKeys(this.getFlagVariants())
     }
 
     getFlagsWithDetails(): Record<string, FeatureFlagDetail> {
@@ -229,7 +231,7 @@ export class PostHogFeatureFlags {
 
         const finalDetails = extend({}, flagDetails || {})
         const overriddenKeys = [
-            ...new Set([...Object.keys(overriddenPayloads || {}), ...Object.keys(overridenFlags || {})]),
+            ...new Set([...objectKeys(overriddenPayloads || {}), ...objectKeys(overridenFlags || {})]),
         ]
         for (const key of overriddenKeys) {
             const originalDetail = finalDetails[key]
@@ -241,7 +243,7 @@ export class PostHogFeatureFlags {
 
             const overrideVariant = isUndefined(overrideFlagValue)
                 ? originalDetail.variant
-                : typeof overrideFlagValue === 'string'
+                : isString(overrideFlagValue)
                   ? overrideFlagValue
                   : undefined
 
@@ -294,7 +296,7 @@ export class PostHogFeatureFlags {
         }
 
         const finalFlags = extend({}, enabledFlags)
-        const overriddenKeys = Object.keys(overriddenFlags)
+        const overriddenKeys = objectKeys(overriddenFlags)
         for (let i = 0; i < overriddenKeys.length; i++) {
             finalFlags[overriddenKeys[i]] = overriddenFlags[overriddenKeys[i]]
         }
@@ -318,7 +320,7 @@ export class PostHogFeatureFlags {
         }
 
         const finalPayloads = extend({}, flagPayloads || {})
-        const overriddenKeys = Object.keys(overriddenPayloads)
+        const overriddenKeys = objectKeys(overriddenPayloads)
         for (let i = 0; i < overriddenKeys.length; i++) {
             finalPayloads[overriddenKeys[i]] = overriddenPayloads[overriddenKeys[i]]
         }
@@ -503,7 +505,7 @@ export class PostHogFeatureFlags {
      */
     getFeatureFlag(key: string, options: { send_event?: boolean } = {}): boolean | string | undefined {
         if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
-            logger.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
+            logger.warn(`getFeatureFlag for key "${key}" ${WARN_FLAGS_NOT_LOADED}`)
             return undefined
         }
         const flagValue = this.getFlagVariants()[key]
@@ -642,7 +644,7 @@ export class PostHogFeatureFlags {
      */
     isFeatureEnabled(key: string, options: { send_event?: boolean } = {}): boolean | undefined {
         if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
-            logger.warn('isFeatureEnabled for key "' + key + '" failed. Feature flags didn\'t load in time.')
+            logger.warn(`isFeatureEnabled for key "${key}" ${WARN_FLAGS_NOT_LOADED}`)
             return undefined
         }
         const flagValue = this.getFeatureFlag(key, options)
@@ -714,7 +716,7 @@ export class PostHogFeatureFlags {
 
         if (
             overrideOptions &&
-            typeof overrideOptions === 'object' &&
+            isObject(overrideOptions) &&
             ('flags' in overrideOptions || 'payloads' in overrideOptions)
         ) {
             const options = overrideOptions
@@ -810,7 +812,7 @@ export class PostHogFeatureFlags {
 
         const newFlags = { ...this.getFlagVariants(), [key]: isEnrolled }
         this._instance.persistence?.register({
-            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFlags)),
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: objectKeys(filterActiveFeatureFlags(newFlags)),
             [ENABLED_FEATURE_FLAGS]: newFlags,
         })
         this._fireFeatureFlagsCallbacks()
@@ -855,7 +857,7 @@ export class PostHogFeatureFlags {
 
         // Return truthy
         const truthyFlags = flags.filter((flag) => flagVariants[flag])
-        const truthyFlagVariants = Object.keys(flagVariants)
+        const truthyFlagVariants = objectKeys(flagVariants)
             .filter((variantKey) => flagVariants[variantKey])
             .reduce((res: Record<string, string | boolean>, key) => {
                 res[key] = flagVariants[key]
@@ -910,8 +912,8 @@ export class PostHogFeatureFlags {
         // Get persisted group properties
         const existingProperties = this._instance.get_property(STORED_GROUP_PROPERTIES_KEY) || {}
 
-        if (Object.keys(existingProperties).length !== 0) {
-            Object.keys(existingProperties).forEach((groupType) => {
+        if (objectKeys(existingProperties).length !== 0) {
+            objectKeys(existingProperties).forEach((groupType) => {
                 existingProperties[groupType] = {
                     ...existingProperties[groupType],
                     ...properties[groupType],

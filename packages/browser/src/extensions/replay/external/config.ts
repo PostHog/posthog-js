@@ -1,5 +1,5 @@
 import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig } from '../../../types'
-import { isFunction, isNullish, isString, isUndefined } from '@posthog/core'
+import { isFunction, isNullish, isString, isUndefined, objectKeys } from '@posthog/core'
 import { convertToURL } from '../../../utils/request-utils'
 import { logger } from '../../../utils/logger'
 import { shouldCaptureValue } from '../../../autocapture-utils'
@@ -92,7 +92,7 @@ const PAYLOAD_CONTENT_DENY_LIST = [
 const removeAuthorizationHeader = (data: CapturedNetworkRequest): CapturedNetworkRequest => {
     const headers = data.requestHeaders
     if (!isNullish(headers)) {
-        each(Object.keys(headers ?? {}), (header) => {
+        each(objectKeys(headers ?? {}), (header) => {
             if (HEADER_DENY_LIST.includes(header.toLowerCase())) {
                 headers[header] = REDACTED
             }

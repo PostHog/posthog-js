@@ -10,6 +10,10 @@ export * from './logger'
 
 export const STRING_FORMAT = 'utf8'
 
+// Alias for Object.keys - saves bytes when minified since
+// `Object.keys` cannot be shortened but `objectKeys` can become a single char
+export const objectKeys: (obj: object) => string[] = Object.keys
+
 export function assert(truthyValue: any, message: string): void {
   if (!truthyValue || typeof truthyValue !== 'string' || isEmpty(truthyValue)) {
     throw new Error(message)

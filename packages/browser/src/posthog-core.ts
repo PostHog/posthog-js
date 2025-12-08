@@ -99,6 +99,7 @@ import {
     isEmptyObject,
     isObject,
     isBoolean,
+    objectKeys,
 } from '@posthog/core'
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
@@ -133,6 +134,10 @@ const instances: Record<string, PostHog> = {}
 const __NOOP = () => {}
 
 const PRIMARY_INSTANCE_NAME = 'posthog'
+
+// Shared warning messages - extracted for bundle size optimization
+const WARN_SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
+const WARN_COOKIELESS_CONSENT = 'Consent opt in/out is not valid with cookieless_mode="always" and will be ignored'
 
 /*
  * Dynamic... constants? Is that an oxymoron?
@@ -587,16 +592,15 @@ export class PostHog {
         }
 
         if (this._hasBootstrappedFeatureFlags()) {
-            const activeFlags = Object.keys(config.bootstrap?.featureFlags || {})
+            const activeFlags = objectKeys(config.bootstrap?.featureFlags || {})
                 .filter((flag) => !!config.bootstrap?.featureFlags?.[flag])
                 .reduce(
                     (res: Record<string, string | boolean>, key) => (
-                        (res[key] = config.bootstrap?.featureFlags?.[key] || false),
-                        res
+                        (res[key] = config.bootstrap?.featureFlags?.[key] || false), res
                     ),
                     {}
                 )
-            const featureFlagPayloads = Object.keys(config.bootstrap?.featureFlagPayloads || {})
+            const featureFlagPayloads = objectKeys(config.bootstrap?.featureFlagPayloads || {})
                 .filter((key) => activeFlags[key])
                 .reduce((res: Record<string, JsonType>, key) => {
                     if (config.bootstrap?.featureFlagPayloads?.[key]) {
@@ -996,10 +1000,7 @@ export class PostHog {
     }
 
     _hasBootstrappedFeatureFlags(): boolean {
-        return (
-            (this.config.bootstrap?.featureFlags && Object.keys(this.config.bootstrap?.featureFlags).length > 0) ||
-            false
-        )
+        return (this.config.bootstrap?.featureFlags && !isEmptyObject(this.config.bootstrap?.featureFlags)) || false
     }
 
     /**
@@ -1337,7 +1338,7 @@ export class PostHog {
 
         const sanitize_properties = this.config.sanitize_properties
         if (sanitize_properties) {
-            logger.error('sanitize_properties is deprecated. Use before_send instead')
+            logger.error(WARN_SANITIZE_DEPRECATED)
             properties = sanitize_properties(properties, eventName)
         }
 
@@ -1377,7 +1378,7 @@ export class PostHog {
         let setOnceProperties = extend({}, initialProps, sessionProps || {}, dataSetOnce || {})
         const sanitize_properties = this.config.sanitize_properties
         if (sanitize_properties) {
-            logger.error('sanitize_properties is deprecated. Use before_send instead')
+            logger.error(WARN_SANITIZE_DEPRECATED)
             setOnceProperties = sanitize_properties(setOnceProperties, '$set_once')
         }
         this._personProcessingSetOncePropertiesSent = true
@@ -3053,7 +3054,7 @@ export class PostHog {
         captureProperties?: Properties /** set of properties to be captured along with the opt-in action */
     }): void {
         if (this.config.cookieless_mode === 'always') {
-            logger.warn('Consent opt in/out is not valid with cookieless_mode="always" and will be ignored')
+            logger.warn(WARN_COOKIELESS_CONSENT)
             return
         }
         if (this.config.cookieless_mode === 'on_reject' && this.consent.isExplicitlyOptedOut()) {
@@ -3113,7 +3114,7 @@ export class PostHog {
      */
     opt_out_capturing(): void {
         if (this.config.cookieless_mode === 'always') {
-            logger.warn('Consent opt in/out is not valid with cookieless_mode="always" and will be ignored')
+            logger.warn(WARN_COOKIELESS_CONSENT)
             return
         }
 

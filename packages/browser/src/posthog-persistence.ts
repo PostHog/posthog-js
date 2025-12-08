@@ -12,7 +12,7 @@ import {
     PERSISTENCE_RESERVED_PROPERTIES,
 } from './constants'
 
-import { isUndefined } from '@posthog/core'
+import { isUndefined, objectKeys } from '@posthog/core'
 import {
     getCampaignParams,
     getInitialPersonPropsFromInfo,
@@ -126,9 +126,9 @@ export class PostHogPersistence {
         // Filter out reserved properties
         each(this.props, function (v, k) {
             if (k === ENABLED_FEATURE_FLAGS && isObject(v)) {
-                const keys = Object.keys(v)
-                for (let i = 0; i < keys.length; i++) {
-                    p[`$feature/${keys[i]}`] = v[keys[i]]
+                const flagKeys = objectKeys(v)
+                for (let i = 0; i < flagKeys.length; i++) {
+                    p[`$feature/${flagKeys[i]}`] = v[flagKeys[i]]
                 }
             } else if (!include(PERSISTENCE_RESERVED_PROPERTIES, k)) {
                 p[k] = v

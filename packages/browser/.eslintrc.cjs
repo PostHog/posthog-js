@@ -21,6 +21,7 @@ module.exports = {
                 'no-console': 'off',
                 'no-restricted-globals': 'off',
                 'compat/compat': 'off',
+                'posthog-js/no-direct-object-keys': 'off',
             },
         },
         {
@@ -46,6 +47,7 @@ module.exports = {
                 'posthog-js/no-direct-array-check': 'off',
                 'posthog-js/no-direct-undefined-check': 'off',
                 'posthog-js/no-direct-null-check': 'off',
+                'posthog-js/no-direct-object-keys': 'off',
                 '@typescript-eslint/naming-convention': 'off',
                 'compat/compat': 'off',
                 '@typescript-eslint/no-unsafe-function-type': 'off',

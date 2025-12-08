@@ -11,7 +11,17 @@
 
 import type { IWindow, listenerHandler, RecordPlugin } from '../types/rrweb-types'
 import { CapturedNetworkRequest, Headers, InitiatorType, NetworkRecordOptions } from '../../../types'
-import { isArray, isBoolean, isFormData, isNull, isNullish, isString, isUndefined, isObject } from '@posthog/core'
+import {
+    isArray,
+    isBoolean,
+    isFormData,
+    isNull,
+    isNullish,
+    isString,
+    isUndefined,
+    isObject,
+    objectKeys,
+} from '@posthog/core'
 import { isDocument } from '../../../utils/type-utils'
 import { createLogger } from '../../../utils/logger'
 import { formDataToQuery } from '../../../utils/request-utils'
@@ -120,7 +130,7 @@ export function shouldRecordBody({
     recordBody: NetworkRecordOptions['recordBody']
 }) {
     function matchesContentType(contentTypes: string[]) {
-        const contentTypeHeader = Object.keys(headers).find((key) => key.toLowerCase() === 'content-type')
+        const contentTypeHeader = objectKeys(headers).find((key) => key.toLowerCase() === 'content-type')
         const contentType = contentTypeHeader && headers[contentTypeHeader]
         return contentTypes.some((ct) => contentType?.includes(ct))
     }

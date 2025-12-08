@@ -22,6 +22,10 @@ import {
 } from './utils/survey-utils'
 import { isNullish, isUndefined, isArray } from '@posthog/core'
 
+// Shared error messages - extracted for bundle size optimization
+const WARN_INIT_NOT_CALLED = 'init was not called'
+const WARN_SURVEY_NOT_FOUND = 'Survey not found'
+
 export class PostHogSurveys {
     // this is set to undefined until the remote config is loaded
     // then it's set to true if there are surveys to load
@@ -271,7 +275,7 @@ export class PostHogSurveys {
 
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false) {
         if (isNullish(this._surveyManager)) {
-            logger.warn('init was not called')
+            logger.warn(WARN_INIT_NOT_CALLED)
             return
         }
         return this._surveyManager.getActiveMatchingSurveys(callback, forceReload)
@@ -291,14 +295,14 @@ export class PostHogSurveys {
         }
         const survey = typeof surveyId === 'string' ? this._getSurveyById(surveyId) : surveyId
         if (!survey) {
-            return { eligible: false, reason: 'Survey not found' }
+            return { eligible: false, reason: WARN_SURVEY_NOT_FOUND }
         }
         return this._surveyManager.checkSurveyEligibility(survey)
     }
 
     canRenderSurvey(surveyId: string | Survey): SurveyRenderReason {
         if (isNullish(this._surveyManager)) {
-            logger.warn('init was not called')
+            logger.warn(WARN_INIT_NOT_CALLED)
             return { visible: false, disabledReason: 'SDK is not enabled or survey functionality is not yet loaded' }
         }
         const eligibility = this._checkSurveyEligibility(surveyId)
@@ -310,7 +314,7 @@ export class PostHogSurveys {
         // Ensure surveys are loaded before checking
         // Using Promise to wrap the callback-based getSurveys method
         if (isNullish(this._surveyManager)) {
-            logger.warn('init was not called')
+            logger.warn(WARN_INIT_NOT_CALLED)
             return Promise.resolve({
                 visible: false,
                 disabledReason: 'SDK is not enabled or survey functionality is not yet loaded',
@@ -322,7 +326,7 @@ export class PostHogSurveys {
             this.getSurveys((surveys) => {
                 const survey = surveys.find((x) => x.id === surveyId) ?? null
                 if (!survey) {
-                    resolve({ visible: false, disabledReason: 'Survey not found' })
+                    resolve({ visible: false, disabledReason: WARN_SURVEY_NOT_FOUND })
                 } else {
                     const eligibility = this._checkSurveyEligibility(survey)
                     resolve({ visible: eligibility.eligible, disabledReason: eligibility.reason })
@@ -333,12 +337,12 @@ export class PostHogSurveys {
 
     renderSurvey(surveyId: string | Survey, selector: string) {
         if (isNullish(this._surveyManager)) {
-            logger.warn('init was not called')
+            logger.warn(WARN_INIT_NOT_CALLED)
             return
         }
         const survey = typeof surveyId === 'string' ? this._getSurveyById(surveyId) : surveyId
         if (!survey?.id) {
-            logger.warn('Survey not found')
+            logger.warn(WARN_SURVEY_NOT_FOUND)
             return
         }
         if (!IN_APP_SURVEY_TYPES.includes(survey.type)) {
@@ -368,12 +372,12 @@ export class PostHogSurveys {
 
     displaySurvey(surveyId: string, options: DisplaySurveyOptions) {
         if (isNullish(this._surveyManager)) {
-            logger.warn('init was not called')
+            logger.warn(WARN_INIT_NOT_CALLED)
             return
         }
         const survey = this._getSurveyById(surveyId)
         if (!survey) {
-            logger.warn('Survey not found')
+            logger.warn(WARN_SURVEY_NOT_FOUND)
             return
         }
         let surveyToDisplay = survey
@@ -402,7 +406,7 @@ export class PostHogSurveys {
 
     cancelPendingSurvey(surveyId: string): void {
         if (isNullish(this._surveyManager)) {
-            logger.warn('init was not called')
+            logger.warn(WARN_INIT_NOT_CALLED)
             return
         }
         this._surveyManager.cancelSurvey(surveyId)

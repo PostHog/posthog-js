@@ -1,4 +1,4 @@
-import { BucketedRateLimiter, isEmptyObject, isNullish, isObject, isUndefined, Logger } from '@posthog/core'
+import { BucketedRateLimiter, isEmptyObject, isNullish, isObject, isUndefined, objectKeys, Logger } from '@posthog/core'
 import { createLogger } from '../utils/logger'
 import type { PostHog } from '../posthog-core'
 
@@ -150,7 +150,7 @@ export function getChangedState<S>(prevState: S, nextState: S, maxDepth: number 
     if (!nextState || !prevState) return {}
 
     const changed: any = {}
-    const allKeys = new Set([...Object.keys(prevState), ...Object.keys(nextState)])
+    const allKeys = new Set([...objectKeys(prevState), ...objectKeys(nextState)])
 
     for (const key of allKeys) {
         const prevValue = (prevState as any)[key]

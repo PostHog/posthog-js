@@ -1,7 +1,17 @@
 import { Breaker, Properties } from '../types'
 import { nativeForEach, nativeIndexOf } from './globals'
 import { logger } from './logger'
-import { isFormData, isNull, isNullish, isNumber, isString, isUndefined, hasOwnProperty, isArray } from '@posthog/core'
+import {
+    isFormData,
+    isNull,
+    isNullish,
+    isNumber,
+    isString,
+    isUndefined,
+    hasOwnProperty,
+    isArray,
+    objectKeys,
+} from '@posthog/core'
 
 const breaker: Breaker = {}
 
@@ -97,7 +107,7 @@ export const include = function (
  * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/entries
  */
 export function entries<T = any>(obj: Record<string, T>): [string, T][] {
-    const ownProps = Object.keys(obj)
+    const ownProps = objectKeys(obj)
     let i = ownProps.length
     const resArray = new Array(i) // preallocate the Array
 

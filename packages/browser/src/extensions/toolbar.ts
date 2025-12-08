@@ -5,7 +5,7 @@ import { _getHashParam } from '../utils/request-utils'
 import { createLogger } from '../utils/logger'
 import { window, document, assignableWindow } from '../utils/globals'
 import { TOOLBAR_ID } from '../constants'
-import { isFunction, isNullish } from '@posthog/core'
+import { isFunction, isNullish, isEmptyObject } from '@posthog/core'
 
 // TRICKY: Many web frameworks will modify the route on load, potentially before posthog is initialized.
 // To get ahead of this we grab it as soon as the posthog-js is parsed
@@ -93,7 +93,7 @@ export class Toolbar {
                 toolbarParams = state
                 toolbarParams.source = 'url'
 
-                if (toolbarParams && Object.keys(toolbarParams).length > 0) {
+                if (toolbarParams && !isEmptyObject(toolbarParams)) {
                     if (state['desiredHash']) {
                         // hash that was in the url before the redirect
                         location.hash = state['desiredHash']

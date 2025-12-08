@@ -8,10 +8,13 @@ import {
     SESSION_RECORDING_IS_SAMPLED,
 } from './constants'
 
-import { isNull, isUndefined } from '@posthog/core'
+import { isNull, isUndefined, objectKeys } from '@posthog/core'
 import { logger } from './utils/logger'
 import { window, document } from './utils/globals'
 import { uuidv7 } from './uuidv7'
+
+// Helper for storage error messages - saves bytes when minified
+const storageError = (type: string, msg: unknown) => logger.error(`${type} error: ` + msg)
 
 // we store the discovered subdomain in memory because it might be read multiple times
 let firstNonPublicSubDomain = ''
@@ -94,7 +97,7 @@ export const cookieStore: PersistentStore = {
     _is_supported: () => !!document,
 
     _error: function (msg) {
-        logger.error('cookieStore error: ' + msg)
+        storageError('cookieStore', msg)
     },
 
     _get: function (name) {
@@ -217,7 +220,7 @@ export const localStore: PersistentStore = {
     },
 
     _error: function (msg) {
-        logger.error('localStorage error: ' + msg)
+        storageError('localStorage', msg)
     },
 
     _get: function (name) {
@@ -294,7 +297,7 @@ export const localPlusCookieStore: PersistentStore = {
                 }
             })
 
-            if (Object.keys(cookiePersistedProperties).length) {
+            if (objectKeys(cookiePersistedProperties).length) {
                 cookieStore._set(name, cookiePersistedProperties, days, cross_subdomain, is_secure, debug)
             }
         } catch (err) {
@@ -321,7 +324,7 @@ export const memoryStore: PersistentStore = {
     },
 
     _error: function (msg) {
-        logger.error('memoryStorage error: ' + msg)
+        storageError('memoryStorage', msg)
     },
 
     _get: function (name) {
@@ -371,7 +374,7 @@ export const sessionStore: PersistentStore = {
     },
 
     _error: function (msg) {
-        logger.error('sessionStorage error: ', msg)
+        storageError('sessionStorage', msg)
     },
 
     _get: function (name) {

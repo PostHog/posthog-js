@@ -2,6 +2,7 @@ import { PostHog } from './posthog-core'
 import { CaptureResult, Properties, RemoteConfig, SiteApp, SiteAppGlobals, SiteAppLoader } from './types'
 import { assignableWindow } from './utils/globals'
 import { createLogger } from './utils/logger'
+import { isEmptyObject } from '@posthog/core'
 
 const logger = createLogger('[SiteApps]')
 
@@ -153,7 +154,7 @@ export class SiteApps {
     }
 
     private _onCapturedEvent(event: CaptureResult) {
-        if (Object.keys(this.apps).length === 0) {
+        if (isEmptyObject(this.apps)) {
             return
         }
 

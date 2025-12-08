@@ -25,7 +25,7 @@ import {
     isSurveyRunning,
     SURVEY_LOGGER as logger,
 } from '../utils/survey-utils'
-import { isNull, isUndefined } from '@posthog/core'
+import { isNull, isUndefined, isEmptyObject, objectKeys } from '@posthog/core'
 import { uuidv7 } from '../uuidv7'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import { Cancel } from './surveys/components/QuestionHeader'
@@ -437,7 +437,7 @@ export class SurveyManager {
         try {
             const { params } = extractPrefillParamsFromUrl(window.location.search)
 
-            if (Object.keys(params).length === 0) {
+            if (isEmptyObject(params)) {
                 return
             }
 
@@ -445,7 +445,7 @@ export class SurveyManager {
 
             const responses = convertPrefillToResponses(survey, params)
 
-            if (Object.keys(responses).length === 0) {
+            if (isEmptyObject(responses)) {
                 logger.warn('[Survey Prefill] No valid responses after conversion')
                 return
             }
@@ -453,7 +453,7 @@ export class SurveyManager {
             const submissionId = uuidv7()
 
             // calculate which question to start at based on prefilled questions
-            const prefilledIndices = Object.keys(params).map((k) => parseInt(k, 10))
+            const prefilledIndices = objectKeys(params).map((k) => parseInt(k, 10))
             const startQuestionIndex = calculatePrefillStartIndex(survey.questions, prefilledIndices)
             const isSurveyCompleted = startQuestionIndex >= survey.questions.length
 
