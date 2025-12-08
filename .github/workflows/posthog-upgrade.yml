@@ -108,8 +108,8 @@ jobs:
         id: deployer
         uses: getsentry/action-github-app-token@97c9e23528286821f97fba885c1b1123284b29cc # v2
         with:
-          app_id: ${{ secrets.DEPLOYER_APP_ID }}
-          private_key: ${{ secrets.DEPLOYER_APP_PRIVATE_KEY }}
+          app_id: ${{ secrets.GH_APP_POSTHOG_DEPLOYER_APP_ID }}
+          private_key: ${{ secrets.GH_APP_POSTHOG_DEPLOYER_PRIVATE_KEY }}
 
       - name: Stamp PR
         shell: bash
