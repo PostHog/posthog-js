@@ -1,10 +1,10 @@
 import { useFeatureFlagPayload, useFeatureFlagVariantKey, usePostHog } from '../hooks'
-import React from 'react'
+import React, { JSX } from 'react'
 import { PostHog } from '../context'
 import { isFunction, isUndefined } from '../utils/type-utils'
 import { VisibilityAndClickTrackers } from './internal/VisibilityAndClickTrackers'
 
-export type PostHogFeatureProps = React.HTMLProps<HTMLDivElement> & {
+export type PostHogFeatureProps = Omit<React.HTMLProps<HTMLDivElement>, 'children'> & {
     flag: string
     children: React.ReactNode | ((payload: any) => React.ReactNode)
     fallback?: React.ReactNode
