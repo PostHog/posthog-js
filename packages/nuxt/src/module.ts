@@ -1,5 +1,4 @@
 import { defineNuxtModule, addPlugin, createResolver, addServerPlugin } from '@nuxt/kit'
-import * as ns from '@nuxt/schema'
 import type { PostHogConfig } from 'posthog-js'
 import type { PostHogOptions } from 'posthog-node'
 import { resolveBinaryPath, spawnLocal } from '@posthog/core/process'
