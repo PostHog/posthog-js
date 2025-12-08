@@ -33,6 +33,6 @@ jobs:
         run: |
           rm ci-ts-file.js || true
           pnpm exec tsc --version
-          pnpm exec tsc ci-ts-file.ts --strict --target es2017 --module commonjs --moduleResolution node --noEmit --skipLibCheck
+          pnpm exec tsc ci-ts-file.ts --strict --target es2017 --module commonjs --moduleResolution node --skipLibCheck
           node ci-ts-file.js
         working-directory: packages/browser
