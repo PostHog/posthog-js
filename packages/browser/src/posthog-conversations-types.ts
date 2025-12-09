@@ -152,6 +152,11 @@ export interface Ticket {
      * Array of messages (only present in detailed ticket view)
      */
     messages?: Message[]
+
+    /**
+     * Number of unread messages from the team
+     */
+    unread_count?: number
 }
 
 /**
@@ -192,6 +197,12 @@ export interface SendMessageResponse {
      * ISO timestamp when the message was created
      */
     created_at: string
+
+    /**
+     * Number of unread messages from the team
+     * After customer sends a message, this is always 0
+     */
+    unread_count: number
 }
 
 /**
@@ -217,6 +228,26 @@ export interface GetMessagesResponse {
      * Whether there are more messages to fetch
      */
     has_more: boolean
+
+    /**
+     * Number of unread messages from the team
+     */
+    unread_count: number
+}
+
+/**
+ * Response from marking messages as read
+ */
+export interface MarkAsReadResponse {
+    /**
+     * Whether the operation was successful
+     */
+    success: boolean
+
+    /**
+     * Number of unread messages (should be 0 after marking as read)
+     */
+    unread_count: number
 }
 
 /**

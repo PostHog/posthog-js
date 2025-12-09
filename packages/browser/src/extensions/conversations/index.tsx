@@ -1,6 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { render, h } from 'preact'
 import { PostHog } from '../../posthog-core'
+import { isNumber } from '@posthog/core'
 import {
     ConversationsRemoteConfig,
     ConversationsWidgetState,
@@ -29,6 +30,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private _lastMessageTimestamp: string | null = null
     private _isPolling: boolean = false
     private _unsubscribeIdentifyListener: (() => void) | null = null
+    private _unreadCount: number = 0
     // SECURITY: widget_session_id is the key for access control
     // This is a random UUID that only this browser knows
     private _widgetSessionId: string
@@ -88,10 +90,8 @@ export class ConversationsManager implements ConversationsManagerInterface {
             this._loadMessages()
         }
 
-        // Start polling if widget is initially open
-        if (initialState === ConversationsWidgetState.OPEN) {
-            this._startPolling()
-        }
+        // Start polling for messages (always, to show unread badge)
+        this._startPolling()
 
         // Listen for identify events to handle distinct_id changes
         this._setupIdentifyListener()
@@ -248,11 +248,30 @@ export class ConversationsManager implements ConversationsManagerInterface {
         // Save state to localStorage
         this._persistence.saveWidgetState(state)
 
-        // Start/stop polling based on state
+        // Mark messages as read when widget opens
         if (state === ConversationsWidgetState.OPEN) {
-            this._startPolling()
-        } else {
-            this._stopPolling()
+            if (this._unreadCount > 0 && this._currentTicketId) {
+                this._markMessagesAsRead()
+            }
+        }
+    }
+
+    /**
+     * Mark messages as read
+     */
+    private async _markMessagesAsRead(): Promise<void> {
+        if (!this._currentTicketId) {
+            return
+        }
+
+        try {
+            const response = await this._api.markAsRead(this._currentTicketId, this._widgetSessionId)
+            this._unreadCount = response.unread_count
+            // Update the widget to reflect the new unread count
+            this._widgetRef?.setUnreadCount(0)
+            logger.info('Messages marked as read', { unreadCount: response.unread_count })
+        } catch (error) {
+            logger.error('Failed to mark messages as read', error)
         }
     }
 
@@ -272,6 +291,17 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 this._widgetSessionId
             )
 
+            // Update unread count from response
+            if (isNumber(response.unread_count)) {
+                this._unreadCount = response.unread_count
+                this._widgetRef?.setUnreadCount(response.unread_count)
+
+                // If widget is open and there are unread messages, mark them as read
+                if (response.unread_count > 0 && this._isWidgetOpen()) {
+                    this._markMessagesAsRead()
+                }
+            }
+
             if (response.messages.length > 0) {
                 this._widgetRef?.addMessages(response.messages)
                 // Update last message timestamp
@@ -281,6 +311,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
         } catch (error) {
             logger.error('Failed to load messages', error)
         }
+    }
+
+    /**
+     * Check if the widget is currently open
+     */
+    private _isWidgetOpen(): boolean {
+        return this._persistence.loadWidgetState() === 'open'
     }
 
     /**

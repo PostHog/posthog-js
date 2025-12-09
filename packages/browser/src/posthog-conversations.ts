@@ -3,6 +3,7 @@ import {
     ConversationsRemoteConfig,
     SendMessageResponse,
     GetMessagesResponse,
+    MarkAsReadResponse,
     UserProvidedTraits,
 } from './posthog-conversations-types'
 import { RemoteConfig } from './types'
@@ -22,6 +23,7 @@ export interface ConversationsApi {
         widgetSessionId?: string
     ): Promise<SendMessageResponse>
     getMessages(ticketId: string, after?: string, widgetSessionId?: string): Promise<GetMessagesResponse>
+    markAsRead(ticketId: string, widgetSessionId: string): Promise<MarkAsReadResponse>
 }
 
 // Will be defined when lazy-loaded
@@ -205,6 +207,9 @@ export class PostHogConversations {
             getMessages: (ticketId: string, after?: string, widgetSessionId?: string): Promise<GetMessagesResponse> => {
                 return this._apiGetMessages(ticketId, after, token, widgetSessionId)
             },
+            markAsRead: (ticketId: string, widgetSessionId: string): Promise<MarkAsReadResponse> => {
+                return this._apiMarkAsRead(ticketId, token, widgetSessionId)
+            },
         }
 
         return api
@@ -327,6 +332,51 @@ export class PostHogConversations {
 
                     const data = response.json as GetMessagesResponse
                     logger.info('Messages fetched', { count: data.messages.length, hasMore: data.has_more })
+                    resolve(data)
+                },
+            })
+        })
+    }
+
+    /** Mark messages as read via the API (runs in main bundle) */
+    private _apiMarkAsRead(ticketId: string, token: string, widgetSessionId: string): Promise<MarkAsReadResponse> {
+        // eslint-disable-next-line compat/compat
+        return new Promise((resolve, reject) => {
+            logger.info('Marking messages as read', { ticketId })
+
+            this._instance._send_request({
+                url: this._instance.requestRouter.endpointFor(
+                    'api',
+                    `/api/conversations/v1/widget/messages/${ticketId}/read`
+                ),
+                method: 'POST',
+                data: {
+                    widget_session_id: widgetSessionId,
+                },
+                headers: {
+                    'X-Conversations-Token': token,
+                },
+                callback: (response) => {
+                    if (response.statusCode === 429) {
+                        reject(new Error('Too many requests. Please wait before trying again.'))
+                        return
+                    }
+
+                    if (response.statusCode !== 200) {
+                        const errorMsg =
+                            response.json?.detail || response.json?.message || 'Failed to mark messages as read'
+                        logger.error('Failed to mark messages as read', { status: response.statusCode })
+                        reject(new Error(errorMsg))
+                        return
+                    }
+
+                    if (!response.json) {
+                        reject(new Error('Invalid response from server'))
+                        return
+                    }
+
+                    const data = response.json as MarkAsReadResponse
+                    logger.info('Messages marked as read', { unreadCount: data.unread_count })
                     resolve(data)
                 },
             })

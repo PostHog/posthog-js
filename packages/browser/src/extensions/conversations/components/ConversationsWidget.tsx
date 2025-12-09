@@ -34,6 +34,7 @@ interface WidgetState {
     formEmail: string
     formEmailError: string | null
     userTraits: UserProvidedTraits | null
+    unreadCount: number
 }
 
 export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
@@ -58,6 +59,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
             formEmail: userTraits?.email || '',
             formEmailError: null,
             userTraits,
+            unreadCount: 0,
         }
     }
 
@@ -317,6 +319,13 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         return this.state.userTraits
     }
 
+    /**
+     * Set the unread message count (called by manager)
+     */
+    setUnreadCount(count: number): void {
+        this.setState({ unreadCount: count })
+    }
+
     private _renderIdentificationForm(styles: ReturnType<typeof getStyles>) {
         const { config } = this.props
         const { formName, formEmail, formEmailError } = this.state
@@ -412,7 +421,13 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
 
         // Button only (closed state)
         if (state === ConversationsWidgetState.CLOSED) {
-            return <OpenChatButton primaryColor={primaryColor} handleToggleOpen={this._handleToggleOpen} />
+            return (
+                <OpenChatButton
+                    primaryColor={primaryColor}
+                    handleToggleOpen={this._handleToggleOpen}
+                    unreadCount={this.state.unreadCount}
+                />
+            )
         }
 
         // Open state
