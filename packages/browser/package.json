@@ -64,7 +64,7 @@
         "@babel/preset-env": "catalog:",
         "@babel/preset-typescript": "catalog:",
         "@jest/globals": "^29.7.0",
-        "@playwright/test": "^1.52.0",
+        "@playwright/test": "^1.57.0",
         "@posthog-tooling/rollup-utils": "workspace:*",
         "@posthog/rrweb-plugin-console-record": "^0.0.33",
         "@posthog/rrweb-record": "^0.0.33",
