@@ -593,12 +593,10 @@ export class PostHog {
         if (this._hasBootstrappedFeatureFlags()) {
             const activeFlags = Object.keys(config.bootstrap?.featureFlags || {})
                 .filter((flag) => !!config.bootstrap?.featureFlags?.[flag])
-                .reduce(
-                    (res: Record<string, string | boolean>, key) => (
-                        (res[key] = config.bootstrap?.featureFlags?.[key] || false), res
-                    ),
-                    {}
-                )
+                .reduce((res: Record<string, string | boolean>, key) => {
+                    res[key] = config.bootstrap?.featureFlags?.[key] || false
+                    return res
+                }, {})
             const featureFlagPayloads = Object.keys(config.bootstrap?.featureFlagPayloads || {})
                 .filter((key) => activeFlags[key])
                 .reduce((res: Record<string, JsonType>, key) => {
