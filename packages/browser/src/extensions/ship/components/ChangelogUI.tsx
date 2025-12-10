@@ -62,19 +62,17 @@ function DateRangeDropdown({ value, onChange }: DateRangeDropdownProps) {
     const currentLabel = DATE_RANGE_OPTIONS.find((o) => o.value === value)?.label || 'All time'
 
     return (
-        <div className="date-range-select" ref={dropdownRef}>
-            <button className="date-range-select__trigger" onClick={() => setIsOpen(!isOpen)} type="button">
-                <span className="date-range-select__label">{currentLabel}</span>
-                <span className={`date-range-select__chevron ${isOpen ? 'date-range-select__chevron--open' : ''}`}>
-                    ▼
-                </span>
+        <div className="dropdown" ref={dropdownRef}>
+            <button className="dropdown__trigger" onClick={() => setIsOpen(!isOpen)} type="button">
+                <span className="dropdown__label">{currentLabel}</span>
+                <span className={`dropdown__chevron ${isOpen ? 'dropdown__chevron--open' : ''}`}>▼</span>
             </button>
             {isOpen && (
-                <div className="date-range-select__dropdown">
+                <div className="dropdown__menu">
                     {DATE_RANGE_OPTIONS.map((option) => (
                         <button
                             key={option.value}
-                            className={`date-range-select__option ${value === option.value ? 'date-range-select__option--selected' : ''}`}
+                            className={`dropdown__option ${value === option.value ? 'dropdown__option--selected' : ''}`}
                             onClick={() => {
                                 onChange(option.value)
                                 setIsOpen(false)
@@ -137,35 +135,30 @@ function MultiSelectDropdown({
               : `${selectedCount} selected`
 
     return (
-        <div className="multi-select" ref={dropdownRef}>
-            <button className="multi-select__trigger" onClick={() => setIsOpen(!isOpen)} type="button">
-                <span className="multi-select__label">{buttonLabel}</span>
+        <div className="dropdown dropdown--multi" ref={dropdownRef}>
+            <button className="dropdown__trigger" onClick={() => setIsOpen(!isOpen)} type="button">
+                <span className="dropdown__label">{buttonLabel}</span>
                 {selectedCount > 0 && (
-                    <button
-                        className="multi-select__clear"
-                        onClick={handleClearAll}
-                        type="button"
-                        aria-label="Clear all"
-                    >
+                    <button className="dropdown__clear" onClick={handleClearAll} type="button" aria-label="Clear all">
                         ×
                     </button>
                 )}
-                <span className={`multi-select__chevron ${isOpen ? 'multi-select__chevron--open' : ''}`}>▼</span>
+                <span className={`dropdown__chevron ${isOpen ? 'dropdown__chevron--open' : ''}`}>▼</span>
             </button>
             {isOpen && (
-                <div className="multi-select__dropdown">
+                <div className="dropdown__menu">
                     {options.map((option) => (
-                        <label key={option.id} className="multi-select__option">
+                        <label key={option.id} className="dropdown__option dropdown__option--checkbox">
                             <input
                                 type="checkbox"
                                 checked={selectedIds.has(option.id)}
                                 onChange={() => handleToggleOption(option.id)}
-                                className="multi-select__checkbox"
+                                className="dropdown__checkbox"
                             />
-                            <span className="multi-select__option-label">{option.name}</span>
+                            <span>{option.name}</span>
                         </label>
                     ))}
-                    {options.length === 0 && <div className="multi-select__empty">{emptyMessage}</div>}
+                    {options.length === 0 && <div className="dropdown__empty">{emptyMessage}</div>}
                 </div>
             )}
         </div>
