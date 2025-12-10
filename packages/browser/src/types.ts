@@ -535,6 +535,13 @@ export interface PostHogConfig {
     disable_surveys_automatic_display: boolean
 
     /**
+     * Determines whether PostHog should disable all product tours functionality.
+     *
+     * @default true (disabled until feature is ready for GA)
+     */
+    disable_product_tours: boolean
+
+    /**
      * Survey-specific configuration options.
      *
      * @default undefined
@@ -1611,6 +1618,11 @@ export interface RemoteConfig {
      * Whether surveys are enabled
      */
     surveys?: boolean | Survey[]
+
+    /**
+     * Whether product tours are enabled
+     */
+    productTours?: boolean
 
     /**
      * Parameters for the toolbar
