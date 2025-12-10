@@ -12,6 +12,8 @@ export interface KanbanBoardProps<T> {
     renderItem: (item: T) => Preact.JSX.Element
     getItemKey: (item: T) => string
     emptyMessage?: string
+    /** When true, right-aligns content so user scrolls left to see older items */
+    rightAlign?: boolean
 }
 
 export function KanbanBoard<T>({
@@ -19,9 +21,10 @@ export function KanbanBoard<T>({
     renderItem,
     getItemKey,
     emptyMessage = 'No items',
+    rightAlign = false,
 }: KanbanBoardProps<T>): Preact.JSX.Element {
     return (
-        <div className="kanban">
+        <div className={`kanban ${rightAlign ? 'kanban--right-align' : ''}`}>
             {columns.map((column) => (
                 <div key={column.id} className="kanban__column">
                     <div className="kanban__column-header">

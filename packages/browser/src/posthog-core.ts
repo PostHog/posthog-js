@@ -45,6 +45,7 @@ import { localStore } from './storage'
 import {
     CaptureOptions,
     CaptureResult,
+    ChangelogCallback,
     Compression,
     ConfigDefaults,
     EarlyAccessFeatureCallback,
@@ -1775,6 +1776,14 @@ export class PostHog {
         stages: EarlyAccessFeatureStage[] = ['beta', 'alpha', 'concept', 'general-availability']
     ): () => void {
         return this.ship.renderFeatureEnrollments(container, stages)
+    }
+
+    renderChangelog(container: HTMLElement): () => void {
+        return this.ship.renderChangelog(container)
+    }
+
+    getChangelogEntries(callback: ChangelogCallback): void {
+        this.ship.getChangelogEntries(callback)
     }
 
     /**

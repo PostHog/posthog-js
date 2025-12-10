@@ -8,6 +8,7 @@ import { document as _document } from '../../../utils/globals'
 import featureEnrollmentStyles from './FeatureEnrollmentUI.css'
 import { isNull } from '@posthog/core'
 import { KanbanBoard, KanbanColumn } from './KanbanBoard'
+import { FEATURE_STAGE_CONFIGS, ALL_STAGES } from '../ship-extension-utils'
 
 const document = _document as Document
 const logger = createLogger('[PostHog FeatureEnrollmentUI]')
@@ -21,18 +22,11 @@ interface EarlyAccessFeatureWithOptInState extends EarlyAccessFeature {
     enabled: boolean
 }
 
-interface FeatureStageConfig {
+export interface FeatureStageConfig {
     stage: EarlyAccessFeatureStage
     title: string
     description: string
 }
-
-const FEATURE_STAGE_CONFIGS: FeatureStageConfig[] = [
-    { stage: 'concept', title: 'Ideas', description: 'Features we are considering' },
-    { stage: 'alpha', title: 'In progress', description: 'Currently being built' },
-    { stage: 'beta', title: 'Early access', description: 'Available to try now' },
-    { stage: 'general-availability', title: 'Released', description: 'Generally available' },
-]
 
 function FeatureEnrollmentUI({ posthogInstance, stages }: FeatureEnrollmentUIProps) {
     const [features, setFeatures] = useState<EarlyAccessFeatureWithOptInState[]>([])
@@ -229,8 +223,6 @@ export interface RenderFeatureEnrollmentUIOptions {
     container: HTMLElement
     stages?: EarlyAccessFeatureStage[]
 }
-
-const ALL_STAGES: EarlyAccessFeatureStage[] = ['concept', 'alpha', 'beta', 'general-availability']
 
 /**
  * Renders the Feature Enrollment UI into a container element using Shadow DOM for style isolation.

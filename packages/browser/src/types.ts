@@ -1801,6 +1801,39 @@ export interface EarlyAccessFeatureResponse {
     earlyAccessFeatures: EarlyAccessFeature[]
 }
 
+// Sync this with the backend's ChangelogSerializer!
+/** A changelog entry for product updates.*/
+export interface ChangelogEntry {
+    id: string
+    name: string
+    description: string | null
+    date: string // ISO date string
+    action: string | null
+    product_item: {
+        id: string
+        name: string
+        description: string | null
+        product_area: {
+            id: string
+            name: string
+        } | null
+        team: {
+            id: string
+            name: string
+        } | null
+        role: {
+            id: string
+            name: string
+        } | null
+    } | null
+}
+
+export type ChangelogCallback = (entries: ChangelogEntry[]) => void
+
+export interface ChangelogResponse {
+    changelog_entries: ChangelogEntry[]
+}
+
 export type Headers = Record<string, string>
 
 /* for rrweb/network@1
