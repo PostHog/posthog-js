@@ -60,5 +60,5 @@ export function PostHogFeatureEnrollment({ stages, ...props }: PostHogFeatureEnr
         }
     }, [posthog, stages])
 
-    return <div ref={containerRef} {...props} />
+    return <div ref={containerRef} style={{ width: '100%', height: '100%' }} {...props} />
 }
