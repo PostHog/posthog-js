@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.303.1
+
+### Patch Changes
+
+- [#2719](https://github.com/PostHog/posthog-js/pull/2719) [`3f9e3d2`](https://github.com/PostHog/posthog-js/commit/3f9e3d2730acbfc00f8d53efa4e2d72558527549) Thanks [@ksvat](https://github.com/ksvat)! - Update rrweb version used
+  (2025-12-10)
+
 ## 1.303.0
 
 ### Minor Changes
