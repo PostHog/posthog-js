@@ -7,6 +7,7 @@ import { prepareStylesheet } from '../../utils/stylesheet-loader'
 import { document as _document } from '../../../utils/globals'
 import featureEnrollmentStyles from './FeatureEnrollmentUI.css'
 import { isNull } from '@posthog/core'
+import { KanbanBoard, KanbanColumn } from './KanbanBoard'
 
 const document = _document as Document
 const logger = createLogger('[PostHog FeatureEnrollmentUI]')
@@ -20,13 +21,13 @@ interface EarlyAccessFeatureWithOptInState extends EarlyAccessFeature {
     enabled: boolean
 }
 
-type KanbanColumn = {
+interface FeatureStageConfig {
     stage: EarlyAccessFeatureStage
     title: string
     description: string
 }
 
-const KANBAN_COLUMNS: KanbanColumn[] = [
+const FEATURE_STAGE_CONFIGS: FeatureStageConfig[] = [
     { stage: 'concept', title: 'Ideas', description: 'Features we are considering' },
     { stage: 'alpha', title: 'In progress', description: 'Currently being built' },
     { stage: 'beta', title: 'Early access', description: 'Available to try now' },
@@ -83,8 +84,14 @@ function FeatureEnrollmentUI({ posthogInstance, stages }: FeatureEnrollmentUIPro
 
     const getFeaturesByStage = (stage: EarlyAccessFeatureStage) => features.filter((f) => f.stage === stage)
 
-    // Filter columns to only show stages that are requested
-    const visibleColumns = KANBAN_COLUMNS.filter((col) => stages.includes(col.stage))
+    const columns: KanbanColumn<EarlyAccessFeatureWithOptInState>[] = FEATURE_STAGE_CONFIGS.filter((config) =>
+        stages.includes(config.stage)
+    ).map((config) => ({
+        id: config.stage,
+        title: config.title,
+        description: config.description,
+        items: getFeaturesByStage(config.stage),
+    }))
 
     if (loading) {
         return (
@@ -104,33 +111,12 @@ function FeatureEnrollmentUI({ posthogInstance, stages }: FeatureEnrollmentUIPro
 
     return (
         <div className="feature-enrollment-ui">
-            <div className="kanban">
-                {visibleColumns.map((column) => {
-                    const columnFeatures = getFeaturesByStage(column.stage)
-                    return (
-                        <div key={column.stage} className="kanban__column">
-                            <div className="kanban__column-header">
-                                <h3 className="kanban__column-title">
-                                    {column.title}
-                                    {columnFeatures.length > 0 && (
-                                        <span className="kanban__column-count">{columnFeatures.length}</span>
-                                    )}
-                                </h3>
-                                <p className="kanban__column-description">{column.description}</p>
-                            </div>
-                            <div className="kanban__column-content">
-                                {columnFeatures.length === 0 ? (
-                                    <div className="kanban__empty">No features</div>
-                                ) : (
-                                    columnFeatures.map((feature) => (
-                                        <FeatureCard key={feature.flagKey} feature={feature} onToggle={handleToggle} />
-                                    ))
-                                )}
-                            </div>
-                        </div>
-                    )
-                })}
-            </div>
+            <KanbanBoard
+                columns={columns}
+                renderItem={(feature) => <FeatureCard feature={feature} onToggle={handleToggle} />}
+                getItemKey={(feature) => feature.flagKey ?? feature.name}
+                emptyMessage="No features"
+            />
         </div>
     )
 }
