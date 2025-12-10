@@ -28,16 +28,16 @@ export class Ship {
         this._instance._send_request({
             url: this._instance.requestRouter.endpointFor(
                 'api',
-                `/api/changelog_entries/?token=${this._instance.config.token}`
+                `/api/changelog_entries/?token=${this._instance.config.token}&include_filter_options=true`
             ),
             method: 'GET',
             callback: (response) => {
                 if (!response.json) {
-                    callback([])
+                    callback({} as ChangelogResponse)
                     return
                 }
-                const entries = (response.json as ChangelogResponse).changelog_entries
-                callback(entries)
+                const changelog = response.json as ChangelogResponse
+                callback(changelog)
             },
         })
     }

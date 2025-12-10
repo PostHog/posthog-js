@@ -1828,10 +1828,22 @@ export interface ChangelogEntry {
     } | null
 }
 
-export type ChangelogCallback = (entries: ChangelogEntry[]) => void
+export interface ProductArea {
+    id: string
+    name: string
+}
+
+export interface Team {
+    id: string
+    name: string
+}
+
+export type ChangelogCallback = (changelog: ChangelogResponse) => void
 
 export interface ChangelogResponse {
     changelog_entries: ChangelogEntry[]
+    product_areas: ProductArea[]
+    teams: Team[]
 }
 
 export type Headers = Record<string, string>

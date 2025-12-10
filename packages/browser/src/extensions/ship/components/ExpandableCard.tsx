@@ -34,27 +34,31 @@ export function ExpandableCard({
         }
     }, [description])
 
+    const descriptionContent = (
+        <div className="expandable-card__description-wrapper">
+            <p
+                ref={descriptionRef}
+                className={`expandable-card__description ${isExpanded ? 'expandable-card__description--expanded' : ''}`}
+            >
+                {description || <span className="expandable-card__no-description">No description</span>}
+            </p>
+            {isTruncated && (
+                <button
+                    type="button"
+                    className="expandable-card__expand-btn"
+                    onClick={() => setIsExpanded(!isExpanded)}
+                    aria-expanded={isExpanded}
+                >
+                    {isExpanded ? '−' : '+'}
+                </button>
+            )}
+        </div>
+    )
+
     return (
         <div className={`expandable-card ${className ?? ''}`} id={id}>
             <div className="expandable-card__header">{title}</div>
-            <div className="expandable-card__description-wrapper">
-                <p
-                    ref={descriptionRef}
-                    className={`expandable-card__description ${isExpanded ? 'expandable-card__description--expanded' : ''}`}
-                >
-                    {description || <span className="expandable-card__no-description">No description</span>}
-                </p>
-                {isTruncated && (
-                    <button
-                        type="button"
-                        className="expandable-card__expand-btn"
-                        onClick={() => setIsExpanded(!isExpanded)}
-                        aria-expanded={isExpanded}
-                    >
-                        {isExpanded ? '−' : '+'}
-                    </button>
-                )}
-            </div>
+            {descriptionContent}
             {meta && <div className="expandable-card__meta">{meta}</div>}
             {footer && <div className="expandable-card__footer">{footer}</div>}
         </div>

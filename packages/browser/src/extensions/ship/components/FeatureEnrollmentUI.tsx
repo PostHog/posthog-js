@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'preact/hooks'
+import { useState, useEffect } from 'preact/hooks'
 import * as Preact from 'preact'
 import { PostHog } from '../../../posthog-core'
 import { createLogger } from '../../../utils/logger'
@@ -6,9 +6,9 @@ import { EarlyAccessFeature, EarlyAccessFeatureStage } from '../../../types'
 import { prepareStylesheet } from '../../utils/stylesheet-loader'
 import { document as _document } from '../../../utils/globals'
 import featureEnrollmentStyles from './FeatureEnrollmentUI.css'
-import { isNull } from '@posthog/core'
 import { KanbanBoard, KanbanColumn } from './KanbanBoard'
 import { FEATURE_STAGE_CONFIGS, ALL_STAGES } from '../ship-extension-utils'
+import { ExpandableCard } from './ExpandableCard'
 
 const document = _document as Document
 const logger = createLogger('[PostHog FeatureEnrollmentUI]')
@@ -73,7 +73,19 @@ function FeatureEnrollmentUI({ posthogInstance, stages }: FeatureEnrollmentUIPro
             return
         }
         posthogInstance.updateEarlyAccessFeatureEnrollment(feature.flagKey, newValue, feature.stage)
-        setFeatures((prev) => prev.map((f) => (f.flagKey === feature.flagKey ? { ...f, enabled: newValue } : f)))
+        setFeatures((prev) =>
+            prev.map((f) => {
+                if (f.flagKey === feature.flagKey) {
+                    // For upvote (concept/alpha), increment count when enabling
+                    const newCount =
+                        newValue && (f.stage === 'concept' || f.stage === 'alpha')
+                            ? (f.optedInCount ?? 0) + 1
+                            : f.optedInCount
+                    return { ...f, enabled: newValue, optedInCount: newCount }
+                }
+                return f
+            })
+        )
     }
 
     const getFeaturesByStage = (stage: EarlyAccessFeatureStage) => features.filter((f) => f.stage === stage)
@@ -125,86 +137,59 @@ function FeatureCard({ feature, onToggle }: FeatureCardProps): Preact.JSX.Elemen
     const isAlpha = feature.stage === 'alpha'
     const isBeta = feature.stage === 'beta'
 
-    // Only beta features get a toggle, concept and alpha get "notify me" button
-    const showToggle = isBeta
-    const showNotifyButton = isConcept || isAlpha
+    const showUpvote = isConcept || isAlpha
+    const showEnrolledToggle = isBeta
 
-    const [isExpanded, setIsExpanded] = useState(false)
-    const [isTruncated, setIsTruncated] = useState(false)
-    const descriptionRef = useRef<HTMLParagraphElement>(null)
+    const optedInCount = feature.optedInCount ?? 0
 
-    useEffect(() => {
-        const el = descriptionRef.current
-        if (el) {
-            // Check if content is truncated by comparing scrollHeight to clientHeight
-            setIsTruncated(el.scrollHeight > el.clientHeight)
-        }
-    }, [feature.description])
+    // Upvote button for concept/alpha - one-way action (can't un-upvote)
+    const upvoteElement = showUpvote ? (
+        <button
+            type="button"
+            className={`feature-card__upvote ${feature.enabled ? 'feature-card__upvote--active' : ''}`}
+            onClick={() => !feature.enabled && onToggle(feature, true)}
+            disabled={feature.enabled}
+            aria-label={feature.enabled ? 'Upvoted' : 'Upvote this feature'}
+            title={feature.enabled ? 'Upvoted' : 'Upvote'}
+        >
+            <span className="feature-card__upvote-arrow">▲</span>
+            <span className="feature-card__upvote-count">{optedInCount}</span>
+        </button>
+    ) : null
+
+    // Toggle for beta features
+    const toggleElement = showEnrolledToggle ? (
+        <label className="feature-card__toggle-label">
+            <input
+                type="checkbox"
+                className="feature-card__toggle"
+                checked={feature.enabled}
+                onChange={(e) => onToggle(feature, (e.target as HTMLInputElement).checked)}
+            />
+            <span className="feature-card__toggle-switch" />
+        </label>
+    ) : null
 
     return (
-        <div className={`feature-card feature-card--${feature.stage}`} id={feature.flagKey ?? undefined}>
-            <div className="feature-card__header">
-                {showToggle ? (
-                    <label className="feature-card__toggle-label">
-                        <input
-                            type="checkbox"
-                            className="feature-card__toggle"
-                            checked={feature.enabled}
-                            onChange={(e) => onToggle(feature, (e.target as HTMLInputElement).checked)}
-                        />
-                        <span className="feature-card__toggle-switch" />
-                        <h4 className="feature-card__name">{feature.name}</h4>
-                    </label>
-                ) : (
-                    <h4 className="feature-card__name">{feature.name}</h4>
-                )}
-            </div>
-            <div className="feature-card__description-wrapper">
-                <p
-                    ref={descriptionRef}
-                    className={`feature-card__description ${isExpanded ? 'feature-card__description--expanded' : ''}`}
-                >
-                    {feature.description || <span className="feature-card__no-description">No description</span>}
-                </p>
-                {isTruncated && (
-                    <button
-                        type="button"
-                        className="feature-card__expand-btn"
-                        onClick={() => setIsExpanded(!isExpanded)}
-                        aria-expanded={isExpanded}
-                    >
-                        {isExpanded ? '−' : '+'}
-                    </button>
-                )}
-            </div>
-            {!isNull(feature.optedInCount) && feature.optedInCount > 0 && (
-                <div className="feature-card__interested-count">
-                    {feature.optedInCount} {feature.optedInCount === 1 ? 'user' : 'users'} opted in
-                </div>
-            )}
-            <div className="feature-card__footer">
-                {showNotifyButton && (
-                    <button
-                        type="button"
-                        className={`feature-card__button ${feature.enabled ? 'feature-card__button--registered' : ''}`}
-                        disabled={feature.enabled}
-                        onClick={() => onToggle(feature, true)}
-                    >
-                        {feature.enabled ? '✓ Subscribed' : 'Subscribe'}
-                    </button>
-                )}
-                {feature.documentationUrl && (
-                    <a
-                        href={feature.documentationUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="feature-card__link"
-                    >
-                        Learn more
+        <ExpandableCard
+            id={feature.flagKey ?? undefined}
+            className={`feature-card feature-card--${feature.stage}`}
+            title={
+                <>
+                    {upvoteElement}
+                    {toggleElement}
+                    <h4 className="expandable-card__title">{feature.name}</h4>
+                </>
+            }
+            description={feature.description}
+            footer={
+                feature.documentationUrl ? (
+                    <a href={feature.documentationUrl} target="_blank" rel="noopener noreferrer" className="link">
+                        Learn more{' >'}
                     </a>
-                )}
-            </div>
-        </div>
+                ) : undefined
+            }
+        />
     )
 }
 

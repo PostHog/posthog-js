@@ -1,36 +1,10 @@
-:host {
-    --ph-feature-font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', Helvetica, Arial,
-        sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
-    --ph-feature-bg-primary: #ffffff;
-    --ph-feature-bg-secondary: #f3f4f6;
-    --ph-feature-text-primary: #1f2937;
-    --ph-feature-text-secondary: #6b7280;
-    --ph-feature-text-tertiary: #9ca3af;
-    --ph-feature-border-color: #e5e7eb;
-    --ph-feature-accent-color: #1d4ed8;
-    --ph-feature-accent-hover: #1e40af;
-    --ph-feature-switch-bg: #d1d5db;
-    --ph-feature-switch-bg-checked: #1d4ed8;
-    --ph-feature-switch-handle: #ffffff;
-    --ph-feature-link-color: #2563eb;
-    --ph-feature-link-hover: #1d4ed8;
-    --ph-feature-button-primary-bg: #1d4ed8;
-    --ph-feature-button-primary-text: #ffffff;
-    --ph-feature-button-disabled-bg: #e5e7eb;
-    --ph-feature-button-disabled-text: #9ca3af;
-    --ph-feature-radius: 8px;
-    --ph-feature-radius-sm: 6px;
-}
+/* Feature Enrollment UI - imports shared styles and adds feature-specific overrides */
+@import './shared.css';
 
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-}
-
+/* Feature Enrollment container */
 .feature-enrollment-ui {
-    font-family: var(--ph-feature-font-family);
-    color: var(--ph-feature-text-primary);
+    font-family: var(--ph-font-family);
+    color: var(--ph-text-primary);
     line-height: 1.5;
     font-size: 14px;
 }
@@ -39,194 +13,64 @@
 .feature-enrollment-ui__empty {
     padding: 24px;
     text-align: center;
-    color: var(--ph-feature-text-secondary);
+    color: var(--ph-text-secondary);
 }
 
-/* Kanban Layout */
-.kanban {
-    display: flex;
-    gap: 16px;
-    overflow-x: auto;
-}
-
-.kanban__column {
+/* Upvote button for concept/alpha features */
+.feature-card__upvote {
     display: flex;
     flex-direction: column;
-    min-width: 240px;
-    flex: 1 0 240px;
-}
-
-.kanban__column-header {
-    margin-bottom: 12px;
-    padding-left: 10px;
-}
-
-.kanban__column-title {
-    font-size: 14px;
-    font-weight: 600;
-    margin: 0 0 4px 0;
-    color: var(--ph-feature-text-primary);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.kanban__column-count {
-    display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 20px;
-    height: 20px;
-    padding: 0 6px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--ph-feature-text-secondary);
-    background-color: var(--ph-feature-bg-secondary);
-    border-radius: 10px;
-}
-
-.kanban__column-description {
-    font-size: 12px;
-    color: var(--ph-feature-text-tertiary);
-    margin: 0;
-}
-
-.kanban__column-content {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    flex: 1;
-}
-
-.kanban__empty {
-    padding: 16px;
-    text-align: center;
-    font-size: 13px;
-    color: var(--ph-feature-text-tertiary);
-    background-color: var(--ph-feature-bg-secondary);
-    border-radius: var(--ph-feature-radius);
-    border: 1px dashed var(--ph-feature-border-color);
-}
-
-/* Feature Card */
-.feature-card {
-    background: var(--ph-feature-bg-primary);
-    border: 1px solid var(--ph-feature-border-color);
-    border-radius: var(--ph-feature-radius);
-    padding: 12px 16px;
-}
-
-.feature-card__header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
-}
-
-.feature-card__name {
-    font-size: 14px;
-    font-weight: 600;
-    margin: 0;
-    color: var(--ph-feature-text-primary);
-}
-
-.feature-card__description-wrapper {
-    position: relative;
-    margin-bottom: 8px;
-}
-
-.feature-card__description {
-    font-size: 13px;
-    color: var(--ph-feature-text-secondary);
-    margin: 0;
-    line-height: 1.4;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-
-.feature-card__description--expanded {
-    display: block;
-    -webkit-line-clamp: unset;
-    line-clamp: unset;
-}
-
-.feature-card__expand-btn {
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    width: 20px;
-    height: 20px;
-    padding: 0;
-    border: none;
-    background-color: var(--ph-feature-bg-secondary);
-    color: var(--ph-feature-text-secondary);
-    border-radius: 50%;
-    font-size: 14px;
-    font-weight: 600;
-    line-height: 1;
+    min-width: 36px;
+    padding: 4px 8px;
+    background-color: var(--ph-bg-secondary);
+    border: 1px solid var(--ph-border-color);
+    border-radius: var(--ph-radius-sm);
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background-color 150ms ease, color 150ms ease;
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+    color: var(--ph-text-secondary);
+    flex-shrink: 0;
+    font-family: inherit;
 }
 
-.feature-card__expand-btn:hover {
-    background-color: var(--ph-feature-border-color);
-    color: var(--ph-feature-text-primary);
+.feature-card__upvote:hover:not(:disabled) {
+    background-color: var(--ph-border-color);
+    color: var(--ph-text-primary);
 }
 
-.feature-card__expand-btn:focus-visible {
-    outline: 2px solid var(--ph-feature-accent-color);
+.feature-card__upvote:focus-visible {
+    outline: 2px solid var(--ph-accent-color);
     outline-offset: 2px;
 }
 
-.feature-card__no-description {
-    color: var(--ph-feature-text-tertiary);
-    font-style: italic;
+.feature-card__upvote--active {
+    background-color: var(--ph-accent-color);
+    border-color: var(--ph-accent-color);
+    color: var(--ph-button-primary-text);
+    cursor: default;
 }
 
-.feature-card__actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+.feature-card__upvote-arrow {
+    font-size: 14px;
+    line-height: 1;
 }
 
-.feature-card__footer {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+.feature-card__upvote-count {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.0;
 }
 
-.feature-card__interested-count {
-    font-size: 12px;
-    color: var(--ph-feature-text-tertiary);
-    margin-bottom: 8px;
-}
-
-.feature-card__link {
-    font-size: 13px;
-    color: var(--ph-feature-link-color);
-    text-decoration: none;
-}
-
-.feature-card__link:hover {
-    color: var(--ph-feature-link-hover);
-    text-decoration: underline;
-}
-
-/* Toggle Switch */
+/* Toggle label for beta features */
 .feature-card__toggle-label {
     display: flex;
     align-items: center;
-    gap: 10px;
     cursor: pointer;
-    user-select: none;
+    flex-shrink: 0;
 }
 
+/* Toggle Switch for feature enrollment */
 .feature-card__toggle {
     position: absolute;
     opacity: 0;
@@ -239,7 +83,7 @@
     display: inline-block;
     width: 32px;
     height: 18px;
-    background-color: var(--ph-feature-switch-bg);
+    background-color: var(--ph-switch-bg);
     border-radius: 18px;
     transition: background-color 150ms ease;
     flex-shrink: 0;
@@ -252,14 +96,14 @@
     left: 2px;
     width: 14px;
     height: 14px;
-    background-color: var(--ph-feature-switch-handle);
+    background-color: var(--ph-switch-handle);
     border-radius: 50%;
     transition: transform 150ms ease;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .feature-card__toggle:checked + .feature-card__toggle-switch {
-    background-color: var(--ph-feature-switch-bg-checked);
+    background-color: var(--ph-switch-bg-checked);
 }
 
 .feature-card__toggle:checked + .feature-card__toggle-switch::after {
@@ -267,44 +111,6 @@
 }
 
 .feature-card__toggle:focus-visible + .feature-card__toggle-switch {
-    outline: 2px solid var(--ph-feature-accent-color);
+    outline: 2px solid var(--ph-accent-color);
     outline-offset: 2px;
-}
-
-/* Concept Card Button */
-.feature-card__button {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    font-size: 13px;
-    font-weight: 500;
-    font-family: inherit;
-    color: var(--ph-feature-button-primary-text);
-    background-color: var(--ph-feature-button-primary-bg);
-    border: none;
-    border-radius: var(--ph-feature-radius-sm);
-    cursor: pointer;
-    transition: background-color 150ms ease;
-}
-
-.feature-card__button:hover:not(:disabled) {
-    background-color: var(--ph-feature-accent-hover);
-}
-
-.feature-card__button:focus-visible {
-    outline: 2px solid var(--ph-feature-accent-color);
-    outline-offset: 2px;
-}
-
-.feature-card__button:disabled,
-.feature-card__button--registered {
-    background-color: var(--ph-feature-button-disabled-bg);
-    color: var(--ph-feature-text-secondary);
-    cursor: default;
-}
-
-.feature-card__button--registered {
-    background-color: var(--ph-feature-bg-secondary);
-    color: var(--ph-feature-text-secondary);
 }

@@ -61,3 +61,42 @@ export const FEATURE_STAGE_CONFIGS: FeatureStageConfig[] = [
 ]
 
 export const ALL_STAGES: EarlyAccessFeatureStage[] = ['concept', 'alpha', 'beta', 'general-availability']
+
+export type DateRangeOption = 'last_7_days' | 'this_month' | 'last_3_months' | 'this_year' | 'all_time'
+
+export const DATE_RANGE_OPTIONS: { value: DateRangeOption; label: string }[] = [
+    { value: 'all_time', label: 'All time' },
+    { value: 'last_7_days', label: 'Last 7 days' },
+    { value: 'this_month', label: 'This month' },
+    { value: 'last_3_months', label: 'Last 3 months' },
+    { value: 'this_year', label: 'This year' },
+]
+
+export function getDateRangeFilter(option: DateRangeOption): { from: Date | null; to: Date | null } {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+
+    switch (option) {
+        case 'last_7_days': {
+            const from = new Date(today)
+            from.setDate(from.getDate() - 7)
+            return { from, to: now }
+        }
+        case 'this_month': {
+            const from = new Date(today.getFullYear(), today.getMonth(), 1)
+            return { from, to: now }
+        }
+        case 'last_3_months': {
+            const from = new Date(today)
+            from.setMonth(from.getMonth() - 3)
+            return { from, to: now }
+        }
+        case 'this_year': {
+            const from = new Date(today.getFullYear(), 0, 1)
+            return { from, to: now }
+        }
+        case 'all_time':
+        default:
+            return { from: null, to: null }
+    }
+}
