@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.304.0
+
+### Minor Changes
+
+- [#2723](https://github.com/PostHog/posthog-js/pull/2723) [`ecd68fb`](https://github.com/PostHog/posthog-js/commit/ecd68fbfa37bb0b6c692665818e630b9c604eb17) Thanks [@adboio](https://github.com/adboio)! - product tours: support auto-show config, add modal steps
+  (2025-12-10)
+
 ## 1.303.1
 
 ### Patch Changes
