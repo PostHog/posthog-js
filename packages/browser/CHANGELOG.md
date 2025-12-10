@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.303.0
+
+### Minor Changes
+
+- [#2720](https://github.com/PostHog/posthog-js/pull/2720) [`915da62`](https://github.com/PostHog/posthog-js/commit/915da624eca3368f2f0d8143d4973bff4f2c67ef) Thanks [@adboio](https://github.com/adboio)! - product tours super-alpha
+  (2025-12-10)
+
 ## 1.302.2
 
 ### Patch Changes
@@ -268,19 +275,16 @@
     ```
 
     **URL format:** `?q0=1&q1=8&auto_submit=true`
-
     - `q{N}` = question index (0-based)
     - Value = choice index or rating value
     - `auto_submit=true` enables auto-submission
 
     **Supported question types:**
-
     - Single choice (choice index)
     - Multiple choice (multiple q{N} params)
     - Rating (numeric value, validated against scale)
 
     **Use cases:**
-
     - Pre-filled NPS surveys from email campaigns
     - One-click survey responses from notifications
     - SMS surveys with embedded feedback
