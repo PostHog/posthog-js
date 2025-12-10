@@ -21,7 +21,7 @@ export interface ProductTourTooltipProps {
     step: ProductTourStep
     stepIndex: number
     totalSteps: number
-    targetElement: HTMLElement
+    targetElement: HTMLElement | null
     onNext: () => void
     onPrevious: () => void
     onDismiss: (reason: ProductTourDismissReason) => void
@@ -112,11 +112,16 @@ export function ProductTourTooltip({
     const isTransitioningRef = useRef(false)
     const isFirstRender = useRef(true)
 
+    const isModalStep = !targetElement
+
     const updatePosition = useCallback(() => {
+        if (isModalStep) {
+            return
+        }
         const rect = targetElement.getBoundingClientRect()
         setPosition(calculateTooltipPosition(rect))
         setSpotlightStyle(getSpotlightStyle(rect))
-    }, [targetElement])
+    }, [targetElement, isModalStep])
 
     useEffect(() => {
         const isStepChange = previousStepRef.current !== stepIndex
@@ -127,6 +132,13 @@ export function ProductTourTooltip({
             isFirstRender.current = false
             previousStepRef.current = stepIndex
             isTransitioningRef.current = true
+
+            if (isModalStep) {
+                // Modal steps are just centered on screen - no positioning needed
+                setTransitionState('visible')
+                isTransitioningRef.current = false
+                return
+            }
 
             scrollToElement(targetElement, () => {
                 if (previousStepRef.current !== currentStepIndex) {
@@ -157,6 +169,18 @@ export function ProductTourTooltip({
                 setDisplayedStepIndex(stepIndex)
                 setTransitionState('entering')
 
+                if (isModalStep) {
+                    // Modal steps don't need scrolling or position calculation
+                    setTimeout(() => {
+                        if (previousStepRef.current !== currentStepIndex) {
+                            return
+                        }
+                        setTransitionState('visible')
+                        isTransitioningRef.current = false
+                    }, 50)
+                    return
+                }
+
                 scrollToElement(targetElement, () => {
                     if (previousStepRef.current !== currentStepIndex) {
                         return
@@ -173,10 +197,10 @@ export function ProductTourTooltip({
                 })
             }, 150)
         }
-    }, [targetElement, stepIndex, step, updatePosition])
+    }, [targetElement, stepIndex, step, updatePosition, isModalStep])
 
     useEffect(() => {
-        if (transitionState !== 'visible') {
+        if (transitionState !== 'visible' || isModalStep) {
             return
         }
 
@@ -193,7 +217,7 @@ export function ProductTourTooltip({
             window?.removeEventListener('scroll', handleUpdate, true)
             window?.removeEventListener('resize', handleUpdate)
         }
-    }, [updatePosition, transitionState])
+    }, [updatePosition, transitionState, isModalStep])
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -228,7 +252,7 @@ export function ProductTourTooltip({
         '--ph-tour-border-color': appearance.borderColor,
     } as h.JSX.CSSProperties
 
-    const isReady = transitionState !== 'initializing' && position && spotlightStyle
+    const isReady = isModalStep || (transitionState !== 'initializing' && position && spotlightStyle)
     const isVisible = transitionState === 'visible'
 
     if (!isReady) {
@@ -240,6 +264,58 @@ export function ProductTourTooltip({
         )
     }
 
+    // Modal step: centered on screen with overlay dimming, no spotlight/arrow
+    if (isModalStep) {
+        return (
+            <div class="ph-tour-container" style={containerStyle}>
+                <div class="ph-tour-click-overlay" onClick={handleOverlayClick} />
+                <div class="ph-tour-modal-overlay" />
+                <div class="ph-tour-tooltip ph-tour-tooltip--modal" onClick={handleTooltipClick}>
+                    <button
+                        class="ph-tour-dismiss"
+                        onClick={() => onDismiss('user_clicked_skip')}
+                        aria-label="Close tour"
+                    >
+                        {cancelSVG}
+                    </button>
+
+                    <div
+                        class="ph-tour-content"
+                        dangerouslySetInnerHTML={{ __html: renderTipTapContent(displayedStep.content) }}
+                    />
+
+                    <div class="ph-tour-footer">
+                        <span class="ph-tour-progress">
+                            {displayedStepIndex + 1} of {totalSteps}
+                        </span>
+
+                        <div class="ph-tour-buttons">
+                            {!isFirstStep && (
+                                <button class="ph-tour-button ph-tour-button--secondary" onClick={onPrevious}>
+                                    Back
+                                </button>
+                            )}
+                            <button class="ph-tour-button ph-tour-button--primary" onClick={onNext}>
+                                {isLastStep ? 'Done' : 'Next'}
+                            </button>
+                        </div>
+                    </div>
+
+                    {!appearance.whiteLabel && (
+                        <a
+                            href="https://posthog.com/product-tours"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="ph-tour-branding"
+                        >
+                            Tour by {IconPosthogLogo}
+                        </a>
+                    )}
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div class="ph-tour-container" style={containerStyle}>
             <div class="ph-tour-click-overlay" onClick={handleOverlayClick} />
@@ -247,7 +323,7 @@ export function ProductTourTooltip({
             <div
                 class="ph-tour-spotlight"
                 style={
-                    isVisible
+                    isVisible && spotlightStyle
                         ? spotlightStyle
                         : {
                               top: '50%',
@@ -261,15 +337,15 @@ export function ProductTourTooltip({
             <div
                 class={`ph-tour-tooltip ${isVisible ? 'ph-tour-tooltip--visible' : 'ph-tour-tooltip--hidden'}`}
                 style={{
-                    top: `${position.top}px`,
-                    left: `${position.left}px`,
+                    top: `${position!.top}px`,
+                    left: `${position!.left}px`,
                     opacity: isVisible ? 1 : 0,
                     transform: isVisible ? 'translateY(0)' : 'translateY(10px)',
                     transition: 'opacity 0.15s ease-out, transform 0.15s ease-out',
                 }}
                 onClick={handleTooltipClick}
             >
-                <div class={`ph-tour-arrow ph-tour-arrow--${getOppositePosition(position.position)}`} />
+                <div class={`ph-tour-arrow ph-tour-arrow--${getOppositePosition(position!.position)}`} />
 
                 <button class="ph-tour-dismiss" onClick={() => onDismiss('user_clicked_skip')} aria-label="Close tour">
                     {cancelSVG}

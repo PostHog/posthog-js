@@ -1,17 +1,88 @@
 import { render } from 'preact'
 import { PostHog } from '../../posthog-core'
-import { ProductTour, ProductTourDismissReason, ProductTourRenderReason } from '../../posthog-product-tours-types'
-import { checkTourConditions } from '../../utils/product-tour-utils'
+import {
+    ProductTour,
+    ProductTourCallback,
+    ProductTourDismissReason,
+    ProductTourRenderReason,
+} from '../../posthog-product-tours-types'
 import { findElementBySelector, getElementMetadata, getProductTourStylesheet } from './product-tours-utils'
 import { ProductTourTooltip } from './components/ProductTourTooltip'
 import { createLogger } from '../../utils/logger'
-import { document as _document } from '../../utils/globals'
+import { document as _document, window as _window } from '../../utils/globals'
 import { localStore } from '../../storage'
 import { addEventListener } from '../../utils'
+import { isNull } from '@posthog/core'
 
 const logger = createLogger('[Product Tours]')
 
 const document = _document as Document
+const window = _window as Window & typeof globalThis
+
+// Tour condition checking utilities (moved from utils/product-tour-utils.ts)
+function doesTourUrlMatch(tour: ProductTour): boolean {
+    const conditions = tour.conditions
+    if (!conditions?.url) {
+        return true
+    }
+
+    const currentUrl = window.location.href
+    const targetUrl = conditions.url
+    const matchType = conditions.urlMatchType || 'contains'
+
+    switch (matchType) {
+        case 'exact':
+            return currentUrl === targetUrl
+        case 'contains':
+            return currentUrl.includes(targetUrl)
+        case 'regex':
+            try {
+                const regex = new RegExp(targetUrl)
+                return regex.test(currentUrl)
+            } catch {
+                return false
+            }
+        default:
+            return false
+    }
+}
+
+function doesTourSelectorMatch(tour: ProductTour): boolean {
+    const conditions = tour.conditions
+    if (!conditions?.selector) {
+        return true
+    }
+
+    try {
+        return !isNull(document.querySelector(conditions.selector))
+    } catch {
+        return false
+    }
+}
+
+function isTourInDateRange(tour: ProductTour): boolean {
+    const now = new Date()
+
+    if (tour.start_date) {
+        const startDate = new Date(tour.start_date)
+        if (now < startDate) {
+            return false
+        }
+    }
+
+    if (tour.end_date) {
+        const endDate = new Date(tour.end_date)
+        if (now > endDate) {
+            return false
+        }
+    }
+
+    return true
+}
+
+function checkTourConditions(tour: ProductTour): boolean {
+    return isTourInDateRange(tour) && doesTourUrlMatch(tour) && doesTourSelectorMatch(tour)
+}
 
 const CONTAINER_CLASS = 'ph-product-tour-container'
 const TRIGGER_LISTENER_ATTRIBUTE = 'data-ph-tour-trigger'
@@ -119,16 +190,19 @@ export class ProductTourManager {
             const activeTriggerTourIds = new Set<string>()
 
             for (const tour of tours) {
-                // Tours with trigger_selector: always attach listener, skip eligibility
+                // Determine the trigger selector - explicit trigger_selector takes precedence,
+                // otherwise use conditions.selector for click-only tours (auto_launch=false)
+                const triggerSelector = tour.trigger_selector || (!tour.auto_launch ? tour.conditions?.selector : null)
+
+                // Tours with a trigger selector: always attach listener
                 // These are "on-demand" tours that show when clicked
-                if (tour.trigger_selector) {
+                if (triggerSelector) {
                     activeTriggerTourIds.add(tour.id)
-                    this._manageTriggerSelectorListener(tour)
-                    continue
+                    this._manageTriggerSelectorListener({ ...tour, trigger_selector: triggerSelector })
                 }
 
-                // Tours without trigger_selector: check eligibility for auto-show
-                if (!this._activeTour && this._isTourEligible(tour)) {
+                // Only auto-show if auto_launch is enabled
+                if (tour.auto_launch && !this._activeTour && this._isTourEligible(tour)) {
                     this.showTour(tour)
                 }
             }
@@ -168,6 +242,7 @@ export class ProductTourManager {
 
     showTour(tour: ProductTour, reason: ProductTourRenderReason = 'auto'): void {
         // Validate all step selectors before showing the tour
+        // Steps without selectors are modal steps and don't need validation
         const selectorFailures: Array<{
             stepIndex: number
             stepId: string
@@ -178,6 +253,12 @@ export class ProductTourManager {
 
         for (let i = 0; i < tour.steps.length; i++) {
             const step = tour.steps[i]
+
+            // Skip validation for modal steps (no selector)
+            if (!step.selector) {
+                continue
+            }
+
             const result = findElementBySelector(step.selector)
 
             if (result.error === 'not_found' || result.error === 'not_visible') {
@@ -315,6 +396,20 @@ export class ProductTourManager {
         }
 
         const step = this._activeTour.steps[this._currentStepIndex]
+
+        // Modal step (no selector) - render without a target element
+        if (!step.selector) {
+            this._captureEvent('product tour step shown', {
+                $product_tour_id: this._activeTour.id,
+                $product_tour_step_id: step.id,
+                $product_tour_step_order: this._currentStepIndex,
+                $product_tour_step_type: 'modal',
+            })
+
+            this._renderTooltipWithPreact(null)
+            return
+        }
+
         const result = findElementBySelector(step.selector)
 
         if (result.error === 'not_found' || result.error === 'not_visible') {
@@ -370,7 +465,7 @@ export class ProductTourManager {
         this._renderTooltipWithPreact(element)
     }
 
-    private _renderTooltipWithPreact(element: HTMLElement): void {
+    private _renderTooltipWithPreact(element: HTMLElement | null): void {
         if (!this._activeTour) {
             return
         }
@@ -465,5 +560,38 @@ export class ProductTourManager {
 
     private _captureEvent(eventName: string, properties: Record<string, any>): void {
         this._instance.capture(eventName, properties)
+    }
+
+    // Public API methods delegated from PostHogProductTours
+    getActiveProductTours(callback: ProductTourCallback): void {
+        this._instance.productTours?.getProductTours((tours, context) => {
+            if (!context?.isLoaded) {
+                callback([], context)
+                return
+            }
+
+            const activeTours = tours.filter((tour) => this._isTourEligible(tour))
+            callback(activeTours, context)
+        })
+    }
+
+    resetTour(tourId: string): void {
+        localStore._remove(`ph_product_tour_completed_${tourId}`)
+        localStore._remove(`ph_product_tour_dismissed_${tourId}`)
+    }
+
+    resetAllTours(): void {
+        const storage = window?.localStorage
+        if (!storage) {
+            return
+        }
+        const keysToRemove: string[] = []
+        for (let i = 0; i < storage.length; i++) {
+            const key = storage.key(i)
+            if (key?.startsWith('ph_product_tour_completed_') || key?.startsWith('ph_product_tour_dismissed_')) {
+                keysToRemove.push(key)
+            }
+        }
+        keysToRemove.forEach((key) => localStore._remove(key))
     }
 }
