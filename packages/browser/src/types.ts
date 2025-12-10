@@ -1787,10 +1787,11 @@ export type JsonType = string | number | boolean | null | undefined | JsonRecord
 export interface EarlyAccessFeature {
     name: string
     description: string
-    stage: 'concept' | 'alpha' | 'beta'
+    stage: 'concept' | 'alpha' | 'beta' | 'general-availability'
     documentationUrl: string | null
     payload: JsonType
     flagKey: string | null
+    optedInCount: number | null
 }
 
 export type EarlyAccessFeatureStage = 'concept' | 'alpha' | 'beta' | 'general-availability'

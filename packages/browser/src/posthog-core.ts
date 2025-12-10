@@ -104,6 +104,7 @@ import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
 import { SessionRecording } from './extensions/replay/session-recording'
+import { Ship } from './extensions/ship'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -316,6 +317,7 @@ export class PostHog {
     toolbar: Toolbar
     exceptions: PostHogExceptions
     consent: ConsentManager
+    ship: Ship
 
     // These are instance-specific state created after initialisation
     persistence?: PostHogPersistence
@@ -393,6 +395,7 @@ export class PostHog {
         this.requestRouter = new RequestRouter(this)
         this.consent = new ConsentManager(this)
         this.externalIntegrations = new ExternalIntegrations(this)
+        this.ship = new Ship(this)
         // NOTE: See the property definition for deprecation notice
         this.people = {
             set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
@@ -1765,6 +1768,13 @@ export class PostHog {
         stages?: EarlyAccessFeatureStage[]
     ): void {
         return this.featureFlags.getEarlyAccessFeatures(callback, force_reload, stages)
+    }
+
+    renderFeatureEnrollments(
+        container: HTMLElement,
+        stages: EarlyAccessFeatureStage[] = ['beta', 'alpha', 'concept', 'general-availability']
+    ): () => void {
+        return this.ship.renderFeatureEnrollments(container, stages)
     }
 
     /**

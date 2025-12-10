@@ -7,6 +7,7 @@ import {
     RemoteConfig,
     SiteAppLoader,
     SessionStartReason,
+    EarlyAccessFeatureStage,
 } from '../types'
 // only importing types here, so won't affect the bundle
 // eslint-disable-next-line posthog-js/no-external-replay-imports
@@ -161,6 +162,7 @@ export type PostHogExtensionKind =
     | 'surveys'
     | 'dead-clicks-autocapture'
     | 'remote-config'
+    | 'ship'
     | ExternalExtensionKind
 
 export interface LazyLoadedSessionRecordingInterface {
@@ -200,6 +202,7 @@ interface PostHogExtensions {
     rrweb?: { record: any; version: string }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
     generateSurveys?: (posthog: PostHog, isSurveysEnabled: boolean) => any | undefined
+    generateShip?: (posthog: PostHog, stages: EarlyAccessFeatureStage[]) => any | undefined
     postHogWebVitalsCallbacks?: {
         onLCP: (metric: any) => void
         onCLS: (metric: any) => void
