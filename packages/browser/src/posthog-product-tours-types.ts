@@ -8,7 +8,7 @@ export interface JSONContent {
 
 export interface ProductTourStep {
     id: string
-    selector: string
+    selector?: string
     content: JSONContent | null
 }
 

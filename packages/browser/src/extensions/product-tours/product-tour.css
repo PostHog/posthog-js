@@ -63,6 +63,13 @@
     pointer-events: auto;
 }
 
+.ph-tour-tooltip--modal {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
 .ph-tour-arrow {
     position: absolute;
     width: 0;

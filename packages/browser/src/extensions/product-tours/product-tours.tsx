@@ -168,6 +168,7 @@ export class ProductTourManager {
 
     showTour(tour: ProductTour, reason: ProductTourRenderReason = 'auto'): void {
         // Validate all step selectors before showing the tour
+        // Steps without selectors are modal steps and don't need validation
         const selectorFailures: Array<{
             stepIndex: number
             stepId: string
@@ -178,6 +179,12 @@ export class ProductTourManager {
 
         for (let i = 0; i < tour.steps.length; i++) {
             const step = tour.steps[i]
+
+            // Skip validation for modal steps (no selector)
+            if (!step.selector) {
+                continue
+            }
+
             const result = findElementBySelector(step.selector)
 
             if (result.error === 'not_found' || result.error === 'not_visible') {
@@ -315,6 +322,20 @@ export class ProductTourManager {
         }
 
         const step = this._activeTour.steps[this._currentStepIndex]
+
+        // Modal step (no selector) - render without a target element
+        if (!step.selector) {
+            this._captureEvent('product tour step shown', {
+                $product_tour_id: this._activeTour.id,
+                $product_tour_step_id: step.id,
+                $product_tour_step_order: this._currentStepIndex,
+                $product_tour_step_type: 'modal',
+            })
+
+            this._renderTooltipWithPreact(null)
+            return
+        }
+
         const result = findElementBySelector(step.selector)
 
         if (result.error === 'not_found' || result.error === 'not_visible') {
