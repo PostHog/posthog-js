@@ -140,7 +140,7 @@ export function ProductTourTooltip({
                 return
             }
 
-            scrollToElement(targetElement).then(() => {
+            scrollToElement(targetElement, () => {
                 if (previousStepRef.current !== currentStepIndex) {
                     return
                 }
@@ -181,7 +181,7 @@ export function ProductTourTooltip({
                     return
                 }
 
-                scrollToElement(targetElement).then(() => {
+                scrollToElement(targetElement, () => {
                     if (previousStepRef.current !== currentStepIndex) {
                         return
                     }

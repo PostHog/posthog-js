@@ -2,10 +2,8 @@ import { PostHog } from './posthog-core'
 import { ProductTour, ProductTourCallback } from './posthog-product-tours-types'
 import { RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
-import { checkTourConditions } from './utils/product-tour-utils'
 import { isNullish, isUndefined, isArray } from '@posthog/core'
-import { assignableWindow, window } from './utils/globals'
-import { localStore } from './storage'
+import { assignableWindow } from './utils/globals'
 
 const logger = createLogger('[Product Tours]')
 
@@ -19,6 +17,9 @@ interface ProductTourManagerInterface {
     dismissTour: (reason: string) => void
     nextStep: () => void
     previousStep: () => void
+    getActiveProductTours: (callback: ProductTourCallback) => void
+    resetTour: (tourId: string) => void
+    resetAllTours: () => void
 }
 
 export class PostHogProductTours {
@@ -164,36 +165,12 @@ export class PostHogProductTours {
     }
 
     getActiveProductTours(callback: ProductTourCallback): void {
-        this.getProductTours((tours, context) => {
-            if (!context?.isLoaded) {
-                callback([], context)
-                return
-            }
-
-            const activeTours = tours.filter((tour) => {
-                if (!checkTourConditions(tour)) {
-                    return false
-                }
-
-                const completedKey = `ph_product_tour_completed_${tour.id}`
-                const dismissedKey = `ph_product_tour_dismissed_${tour.id}`
-
-                if (localStore._get(completedKey) || localStore._get(dismissedKey)) {
-                    return false
-                }
-
-                if (tour.internal_targeting_flag_key) {
-                    const flagValue = this._instance.featureFlags?.getFeatureFlag(tour.internal_targeting_flag_key)
-                    if (!flagValue) {
-                        return false
-                    }
-                }
-
-                return true
-            })
-
-            callback(activeTours, context)
-        })
+        if (isNullish(this._productTourManager)) {
+            logger.warn('Product tours not loaded yet')
+            callback([], { isLoaded: false, error: 'Product tours not loaded' })
+            return
+        }
+        this._productTourManager.getActiveProductTours(callback)
     }
 
     showProductTour(tourId: string): void {
@@ -223,22 +200,10 @@ export class PostHogProductTours {
     }
 
     resetTour(tourId: string): void {
-        localStore._remove(`ph_product_tour_completed_${tourId}`)
-        localStore._remove(`ph_product_tour_dismissed_${tourId}`)
+        this._productTourManager?.resetTour(tourId)
     }
 
     resetAllTours(): void {
-        const storage = window?.localStorage
-        if (!storage) {
-            return
-        }
-        const keysToRemove: string[] = []
-        for (let i = 0; i < storage.length; i++) {
-            const key = storage.key(i)
-            if (key?.startsWith('ph_product_tour_completed_') || key?.startsWith('ph_product_tour_dismissed_')) {
-                keysToRemove.push(key)
-            }
-        }
-        keysToRemove.forEach((key) => localStore._remove(key))
+        this._productTourManager?.resetAllTours()
     }
 }

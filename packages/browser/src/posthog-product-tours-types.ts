@@ -33,6 +33,7 @@ export interface ProductTour {
     name: string
     description?: string
     type: 'product_tour'
+    auto_launch?: boolean
     start_date: string | null
     end_date: string | null
     current_iteration?: number
