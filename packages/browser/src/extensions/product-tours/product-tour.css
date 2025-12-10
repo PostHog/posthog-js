@@ -49,6 +49,17 @@
     pointer-events: none;
 }
 
+.ph-tour-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: var(--ph-tour-z-index);
+    background: var(--ph-tour-overlay-color);
+    pointer-events: none;
+}
+
 .ph-tour-tooltip {
     position: fixed;
     z-index: calc(var(--ph-tour-z-index) + 1);
@@ -259,6 +270,19 @@
     }
 }
 
+@keyframes ph-tour-modal-fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
 .ph-tour-tooltip {
     animation: ph-tour-fade-in 0.2s ease-out;
+}
+
+.ph-tour-tooltip--modal {
+    animation: ph-tour-modal-fade-in 0.2s ease-out;
 }

@@ -134,13 +134,13 @@ export function ProductTourTooltip({
             isTransitioningRef.current = true
 
             if (isModalStep) {
-                // Modal steps don't need scrolling or position calculation
+                // Modal steps are just centered on screen - no positioning needed
                 setTransitionState('visible')
                 isTransitioningRef.current = false
                 return
             }
 
-            scrollToElement(targetElement).then(() => {
+            scrollToElement(targetElement, () => {
                 if (previousStepRef.current !== currentStepIndex) {
                     return
                 }
@@ -181,7 +181,7 @@ export function ProductTourTooltip({
                     return
                 }
 
-                scrollToElement(targetElement).then(() => {
+                scrollToElement(targetElement, () => {
                     if (previousStepRef.current !== currentStepIndex) {
                         return
                     }
@@ -264,19 +264,13 @@ export function ProductTourTooltip({
         )
     }
 
-    // Modal step: centered on screen, no overlay/spotlight, no arrow
+    // Modal step: centered on screen with overlay dimming, no spotlight/arrow
     if (isModalStep) {
         return (
             <div class="ph-tour-container" style={containerStyle}>
-                <div
-                    class={`ph-tour-tooltip ph-tour-tooltip--modal ${isVisible ? 'ph-tour-tooltip--visible' : 'ph-tour-tooltip--hidden'}`}
-                    style={{
-                        opacity: isVisible ? 1 : 0,
-                        transform: isVisible ? 'translate(-50%, -50%)' : 'translate(-50%, calc(-50% + 10px))',
-                        transition: 'opacity 0.15s ease-out, transform 0.15s ease-out',
-                    }}
-                    onClick={handleTooltipClick}
-                >
+                <div class="ph-tour-click-overlay" onClick={handleOverlayClick} />
+                <div class="ph-tour-modal-overlay" />
+                <div class="ph-tour-tooltip ph-tour-tooltip--modal" onClick={handleTooltipClick}>
                     <button
                         class="ph-tour-dismiss"
                         onClick={() => onDismiss('user_clicked_skip')}
