@@ -1,6 +1,9 @@
 /* Shared CSS variables and base styles for Ship components */
 
 :host {
+    display: block;
+    width: 100%;
+    overflow: hidden;
     --ph-font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', Helvetica, Arial,
         sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
     --ph-bg-primary: #ffffff;
@@ -36,6 +39,8 @@
     color: var(--ph-text-primary);
     line-height: 1.5;
     font-size: 14px;
+    width: 100%;
+    overflow: hidden;
 }
 
 .ship-ui__loading,
@@ -50,11 +55,15 @@
     display: flex;
     gap: 16px;
     overflow-x: auto;
+    max-width: 100%;
 }
 
 .kanban--right-align {
-    flex-direction: row-reverse;
-    justify-content: flex-start;
+    direction: rtl;
+}
+
+.kanban--right-align > * {
+    direction: ltr;
 }
 
 .kanban__column {

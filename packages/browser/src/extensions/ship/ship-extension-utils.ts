@@ -50,7 +50,8 @@ export function generateMonthRange(entries: ChangelogEntry[]): string[] {
         }
     }
 
-    return allMonths
+    // Reverse for RTL scroll container (so newest appears on right visually)
+    return allMonths.reverse()
 }
 export const FEATURE_STAGE_CONFIGS: FeatureStageConfig[] = [
     { stage: 'concept', title: 'Ideas', description: 'Features we are considering' },
