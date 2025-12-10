@@ -595,8 +595,7 @@ export class PostHog {
                 .filter((flag) => !!config.bootstrap?.featureFlags?.[flag])
                 .reduce(
                     (res: Record<string, string | boolean>, key) => (
-                        (res[key] = config.bootstrap?.featureFlags?.[key] || false),
-                        res
+                        (res[key] = config.bootstrap?.featureFlags?.[key] || false), res
                     ),
                     {}
                 )
@@ -1144,7 +1143,11 @@ export class PostHog {
         if (setProperties) {
             data.$set = options?.$set
         }
-        const setOnceProperties = this._calculate_set_once_properties(options?.$set_once)
+        // $groupidentify events don't process person $set_once on the server, so skip calculating
+        // set_once properties to avoid setting _personProcessingSetOncePropertiesSent prematurely.
+        // This ensures initial person props (UTMs, referrer) are included with subsequent $identify.
+        const setOnceProperties =
+            event_name === '$groupidentify' ? undefined : this._calculate_set_once_properties(options?.$set_once)
         if (setOnceProperties) {
             data.$set_once = setOnceProperties
         }
