@@ -7,6 +7,7 @@ import { ProductTourTooltip } from './components/ProductTourTooltip'
 import { createLogger } from '../../utils/logger'
 import { document as _document } from '../../utils/globals'
 import { localStore } from '../../storage'
+import { addEventListener } from '../../utils'
 
 const logger = createLogger('[Product Tours]')
 
@@ -77,11 +78,11 @@ export class ProductTourManager {
         }
 
         this._checkInterval = setInterval(() => {
-            this.evaluateAndDisplayTours()
+            this._evaluateAndDisplayTours()
         }, CHECK_INTERVAL_MS)
 
-        this.evaluateAndDisplayTours()
-        document.addEventListener('visibilitychange', this.handleVisibilityChange)
+        this._evaluateAndDisplayTours()
+        addEventListener(document, 'visibilitychange', this._handleVisibilityChange)
     }
 
     stop(): void {
@@ -89,24 +90,24 @@ export class ProductTourManager {
             clearInterval(this._checkInterval)
             this._checkInterval = null
         }
-        document.removeEventListener('visibilitychange', this.handleVisibilityChange)
+        document.removeEventListener('visibilitychange', this._handleVisibilityChange)
         this._removeAllTriggerListeners()
-        this.cleanup()
+        this._cleanup()
     }
 
-    private handleVisibilityChange = (): void => {
+    private _handleVisibilityChange = (): void => {
         if (document.hidden && this._checkInterval) {
             clearInterval(this._checkInterval)
             this._checkInterval = null
         } else if (!document.hidden && !this._checkInterval) {
             this._checkInterval = setInterval(() => {
-                this.evaluateAndDisplayTours()
+                this._evaluateAndDisplayTours()
             }, CHECK_INTERVAL_MS)
-            this.evaluateAndDisplayTours()
+            this._evaluateAndDisplayTours()
         }
     }
 
-    private evaluateAndDisplayTours(): void {
+    private _evaluateAndDisplayTours(): void {
         // Use getProductTours (not getActiveProductTours) because trigger_selector tours
         // should work even if completed/dismissed
         this._instance.productTours?.getProductTours((tours) => {
@@ -127,7 +128,7 @@ export class ProductTourManager {
                 }
 
                 // Tours without trigger_selector: check eligibility for auto-show
-                if (!this._activeTour && this.isTourEligible(tour)) {
+                if (!this._activeTour && this._isTourEligible(tour)) {
                     this.showTour(tour)
                 }
             }
@@ -140,7 +141,7 @@ export class ProductTourManager {
         })
     }
 
-    private isTourEligible(tour: ProductTour): boolean {
+    private _isTourEligible(tour: ProductTour): boolean {
         if (!checkTourConditions(tour)) {
             logger.info(`Tour ${tour.id} failed conditions check`)
             return false
@@ -193,7 +194,7 @@ export class ProductTourManager {
         if (selectorFailures.length > 0) {
             // Emit events for each failed selector for debugging/data purposes
             for (const failure of selectorFailures) {
-                this.captureEvent('product tour step selector failed', {
+                this._captureEvent('product tour step selector failed', {
                     $product_tour_id: tour.id,
                     $product_tour_step_id: failure.stepId,
                     $product_tour_step_order: failure.stepIndex,
@@ -215,14 +216,14 @@ export class ProductTourManager {
         this._currentStepIndex = 0
         this._renderReason = reason
 
-        this.captureEvent('product tour shown', {
+        this._captureEvent('product tour shown', {
             $product_tour_id: tour.id,
             $product_tour_name: tour.name,
             $product_tour_iteration: tour.current_iteration || 1,
             $product_tour_render_reason: reason,
         })
 
-        this.renderCurrentStep()
+        this._renderCurrentStep()
     }
 
     showTourById(tourId: string): void {
@@ -245,7 +246,7 @@ export class ProductTourManager {
 
         const currentStep = this._activeTour.steps[this._currentStepIndex]
 
-        this.captureEvent('product tour step completed', {
+        this._captureEvent('product tour step completed', {
             $product_tour_id: this._activeTour.id,
             $product_tour_step_id: currentStep.id,
             $product_tour_step_order: this._currentStepIndex,
@@ -253,9 +254,9 @@ export class ProductTourManager {
 
         if (this._currentStepIndex < this._activeTour.steps.length - 1) {
             this._currentStepIndex++
-            this.renderCurrentStep()
+            this._renderCurrentStep()
         } else {
-            this.completeTour()
+            this._completeTour()
         }
     }
 
@@ -265,7 +266,7 @@ export class ProductTourManager {
         }
 
         this._currentStepIndex--
-        this.renderCurrentStep()
+        this._renderCurrentStep()
     }
 
     dismissTour = (reason: ProductTourDismissReason = 'user_clicked_skip'): void => {
@@ -275,7 +276,7 @@ export class ProductTourManager {
 
         const currentStep = this._activeTour.steps[this._currentStepIndex]
 
-        this.captureEvent('product tour dismissed', {
+        this._captureEvent('product tour dismissed', {
             $product_tour_id: this._activeTour.id,
             $product_tour_step_id: currentStep.id,
             $product_tour_step_order: this._currentStepIndex,
@@ -284,15 +285,15 @@ export class ProductTourManager {
 
         localStore._set(`ph_product_tour_dismissed_${this._activeTour.id}`, true)
 
-        this.cleanup()
+        this._cleanup()
     }
 
-    private completeTour(): void {
+    private _completeTour(): void {
         if (!this._activeTour) {
             return
         }
 
-        this.captureEvent('product tour completed', {
+        this._captureEvent('product tour completed', {
             $product_tour_id: this._activeTour.id,
             $product_tour_steps_count: this._activeTour.steps.length,
         })
@@ -305,10 +306,10 @@ export class ProductTourManager {
             },
         })
 
-        this.cleanup()
+        this._cleanup()
     }
 
-    private renderCurrentStep(): void {
+    private _renderCurrentStep(): void {
         if (!this._activeTour) {
             return
         }
@@ -317,7 +318,7 @@ export class ProductTourManager {
         const result = findElementBySelector(step.selector)
 
         if (result.error === 'not_found' || result.error === 'not_visible') {
-            this.captureEvent('product tour step selector failed', {
+            this._captureEvent('product tour step selector failed', {
                 $product_tour_id: this._activeTour.id,
                 $product_tour_step_id: step.id,
                 $product_tour_step_order: this._currentStepIndex,
@@ -335,7 +336,7 @@ export class ProductTourManager {
         }
 
         if (result.error === 'multiple_matches') {
-            this.captureEvent('product tour step selector failed', {
+            this._captureEvent('product tour step selector failed', {
                 $product_tour_id: this._activeTour.id,
                 $product_tour_step_id: step.id,
                 $product_tour_step_order: this._currentStepIndex,
@@ -354,7 +355,7 @@ export class ProductTourManager {
         const element = result.element
         const metadata = getElementMetadata(element)
 
-        this.captureEvent('product tour step shown', {
+        this._captureEvent('product tour step shown', {
             $product_tour_id: this._activeTour.id,
             $product_tour_step_id: step.id,
             $product_tour_step_order: this._currentStepIndex,
@@ -366,10 +367,10 @@ export class ProductTourManager {
             $product_tour_step_element_text: metadata.text,
         })
 
-        this.renderTooltipWithPreact(element)
+        this._renderTooltipWithPreact(element)
     }
 
-    private renderTooltipWithPreact(element: HTMLElement): void {
+    private _renderTooltipWithPreact(element: HTMLElement): void {
         if (!this._activeTour) {
             return
         }
@@ -392,7 +393,7 @@ export class ProductTourManager {
         )
     }
 
-    private cleanup(): void {
+    private _cleanup(): void {
         if (this._activeTour) {
             removeTourFromDom(this._activeTour.id)
         }
@@ -439,7 +440,7 @@ export class ProductTourManager {
                 this.showTour(tour, 'trigger')
             }
 
-            currentElement.addEventListener('click', listener)
+            addEventListener(currentElement, 'click', listener)
             currentElement.setAttribute(TRIGGER_LISTENER_ATTRIBUTE, tour.id)
             this._triggerSelectorListeners.set(tour.id, { element: currentElement, listener, tour })
             logger.info(`Attached trigger listener for tour ${tour.id} on ${tour.trigger_selector}`)
@@ -462,7 +463,7 @@ export class ProductTourManager {
         })
     }
 
-    private captureEvent(eventName: string, properties: Record<string, any>): void {
+    private _captureEvent(eventName: string, properties: Record<string, any>): void {
         this._instance.capture(eventName, properties)
     }
 }

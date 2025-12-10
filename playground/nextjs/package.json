@@ -20,7 +20,7 @@
         "eslint": "^8.57.1",
         "hls.js": "^1.5.15",
         "next": "^15.5.7",
-        "posthog-js": "file:/Users/adambowker/posthog-js/target/posthog-js.tgz",
+        "posthog-js": "*",
         "react": "19.2.1",
         "react-dom": "19.2.1",
         "socket.io": "^4.8.1",

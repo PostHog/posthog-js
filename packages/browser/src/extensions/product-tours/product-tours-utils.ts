@@ -12,10 +12,7 @@ const document = _document as Document
 const window = _window as Window & typeof globalThis
 
 export function getProductTourStylesheet(): HTMLStyleElement | null {
-    const stylesheet = prepareStylesheet(
-        document,
-        typeof productTourStyles === 'string' ? productTourStyles : ''
-    )
+    const stylesheet = prepareStylesheet(document, typeof productTourStyles === 'string' ? productTourStyles : '')
     stylesheet?.setAttribute('data-ph-product-tour-style', 'true')
     return stylesheet
 }

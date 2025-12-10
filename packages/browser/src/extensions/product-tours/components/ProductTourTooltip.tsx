@@ -37,59 +37,57 @@ function getOppositePosition(position: TooltipPosition): TooltipPosition {
     return opposites[position]
 }
 
-function scrollToElement(element: HTMLElement): Promise<void> {
-    return new Promise((resolve) => {
-        const initialRect = element.getBoundingClientRect()
-        const viewportHeight = window.innerHeight
-        const viewportWidth = window.innerWidth
+function scrollToElement(element: HTMLElement, resolve: () => void): void {
+    const initialRect = element.getBoundingClientRect()
+    const viewportHeight = window.innerHeight
+    const viewportWidth = window.innerWidth
 
-        const safeMarginY = viewportHeight / 6
-        const safeMarginX = viewportWidth / 6
+    const safeMarginY = viewportHeight / 6
+    const safeMarginX = viewportWidth / 6
 
-        const isInSafeZone =
-            initialRect.top >= safeMarginY &&
-            initialRect.bottom <= viewportHeight - safeMarginY &&
-            initialRect.left >= safeMarginX &&
-            initialRect.right <= viewportWidth - safeMarginX
+    const isInSafeZone =
+        initialRect.top >= safeMarginY &&
+        initialRect.bottom <= viewportHeight - safeMarginY &&
+        initialRect.left >= safeMarginX &&
+        initialRect.right <= viewportWidth - safeMarginX
 
-        if (isInSafeZone) {
-            resolve()
-            return
-        }
+    if (isInSafeZone) {
+        resolve()
+        return
+    }
 
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
 
-        let lastTop = initialRect.top
-        let stableCount = 0
-        let resolved = false
+    let lastTop = initialRect.top
+    let stableCount = 0
+    let resolved = false
 
-        const checkStability = () => {
-            if (resolved) return
+    const checkStability = () => {
+        if (resolved) return
 
-            const currentRect = element.getBoundingClientRect()
-            if (Math.abs(currentRect.top - lastTop) < 1) {
-                stableCount++
-                if (stableCount >= 3) {
-                    resolved = true
-                    resolve()
-                    return
-                }
-            } else {
-                stableCount = 0
-            }
-            lastTop = currentRect.top
-            setTimeout(checkStability, 50)
-        }
-
-        setTimeout(checkStability, 30)
-
-        setTimeout(() => {
-            if (!resolved) {
+        const currentRect = element.getBoundingClientRect()
+        if (Math.abs(currentRect.top - lastTop) < 1) {
+            stableCount++
+            if (stableCount >= 3) {
                 resolved = true
                 resolve()
+                return
             }
-        }, 500)
-    })
+        } else {
+            stableCount = 0
+        }
+        lastTop = currentRect.top
+        setTimeout(checkStability, 50)
+    }
+
+    setTimeout(checkStability, 30)
+
+    setTimeout(() => {
+        if (!resolved) {
+            resolved = true
+            resolve()
+        }
+    }, 500)
 }
 
 export function ProductTourTooltip({
@@ -130,7 +128,7 @@ export function ProductTourTooltip({
             previousStepRef.current = stepIndex
             isTransitioningRef.current = true
 
-            scrollToElement(targetElement).then(() => {
+            scrollToElement(targetElement, () => {
                 if (previousStepRef.current !== currentStepIndex) {
                     return
                 }
@@ -159,7 +157,7 @@ export function ProductTourTooltip({
                 setDisplayedStepIndex(stepIndex)
                 setTransitionState('entering')
 
-                scrollToElement(targetElement).then(() => {
+                scrollToElement(targetElement, () => {
                     if (previousStepRef.current !== currentStepIndex) {
                         return
                     }
@@ -248,12 +246,16 @@ export function ProductTourTooltip({
 
             <div
                 class="ph-tour-spotlight"
-                style={isVisible ? spotlightStyle : {
-                    top: '50%',
-                    left: '50%',
-                    width: '0px',
-                    height: '0px',
-                }}
+                style={
+                    isVisible
+                        ? spotlightStyle
+                        : {
+                              top: '50%',
+                              left: '50%',
+                              width: '0px',
+                              height: '0px',
+                          }
+                }
             />
 
             <div
@@ -269,11 +271,7 @@ export function ProductTourTooltip({
             >
                 <div class={`ph-tour-arrow ph-tour-arrow--${getOppositePosition(position.position)}`} />
 
-                <button
-                    class="ph-tour-dismiss"
-                    onClick={() => onDismiss('user_clicked_skip')}
-                    aria-label="Close tour"
-                >
+                <button class="ph-tour-dismiss" onClick={() => onDismiss('user_clicked_skip')} aria-label="Close tour">
                     {cancelSVG}
                 </button>
 

@@ -3,7 +3,7 @@ import { ProductTour, ProductTourCallback } from './posthog-product-tours-types'
 import { RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
 import { checkTourConditions } from './utils/product-tour-utils'
-import { isNullish, isUndefined } from '@posthog/core'
+import { isNullish, isUndefined, isArray } from '@posthog/core'
 import { assignableWindow, window } from './utils/globals'
 import { localStore } from './storage'
 
@@ -120,7 +120,7 @@ export class PostHogProductTours {
     }
 
     getProductTours(callback: ProductTourCallback, forceReload: boolean = false): void {
-        if (Array.isArray(this._cachedTours) && !forceReload) {
+        if (isArray(this._cachedTours) && !forceReload) {
             callback(this._cachedTours, { isLoaded: true })
             return
         }
@@ -128,38 +128,29 @@ export class PostHogProductTours {
         const persistence = this._instance.persistence
         if (persistence) {
             const storedTours = persistence.props[PRODUCT_TOURS_STORAGE_KEY]
-            if (Array.isArray(storedTours) && !forceReload) {
+            if (isArray(storedTours) && !forceReload) {
                 this._cachedTours = storedTours
                 callback(storedTours, { isLoaded: true })
                 return
             }
         }
 
-        const apiHost = this._instance.config.api_host
-        const token = this._instance.config.token
-
-        if (!apiHost || !token) {
-            logger.error('Cannot fetch product tours: missing api_host or token')
-            callback([], { isLoaded: false, error: 'Missing configuration' })
-            return
-        }
-
-        const url = `${apiHost}/api/product_tours/?token=${token}`
-
-        fetch(url, {
+        this._instance._send_request({
+            url: this._instance.requestRouter.endpointFor(
+                'api',
+                `/api/product_tours/?token=${this._instance.config.token}`
+            ),
             method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        })
-            .then((response) => {
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`)
+            callback: (response) => {
+                const statusCode = response.statusCode
+                if (statusCode !== 200 || !response.json) {
+                    const error = `Product Tours API could not be loaded, status: ${statusCode}`
+                    logger.error(error)
+                    callback([], { isLoaded: false, error })
+                    return
                 }
-                return response.json()
-            })
-            .then((data) => {
-                const tours: ProductTour[] = Array.isArray(data.product_tours) ? data.product_tours : []
+
+                const tours: ProductTour[] = isArray(response.json.product_tours) ? response.json.product_tours : []
 
                 this._cachedTours = tours
 
@@ -168,11 +159,8 @@ export class PostHogProductTours {
                 }
 
                 callback(tours, { isLoaded: true })
-            })
-            .catch((error) => {
-                logger.error('Failed to fetch product tours:', error)
-                callback([], { isLoaded: false, error: error.message })
-            })
+            },
+        })
     }
 
     getActiveProductTours(callback: ProductTourCallback): void {
