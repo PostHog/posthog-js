@@ -352,6 +352,7 @@
         "_surveyCallbacks",
         "_surveyEventUnsubscribe",
         "_surveyInFocus",
+        "_surveyLoadTriggered",
         "_surveyTimeouts",
         "_sync_opt_out_with_persistence",
         "_timestamp",
