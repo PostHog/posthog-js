@@ -7,14 +7,14 @@ import {
     getEventTarget,
     getSafeText,
     isAngularStyleAttr,
-    isSensitiveElement,
     makeSafeText,
-    shouldCaptureDomEvent,
+    shouldAutocaptureEvent,
     shouldCaptureElement,
     shouldCaptureRageclick,
     shouldCaptureValue,
     splitClassString,
 } from './autocapture-utils'
+import { isSensitiveElement } from './utils/sensitive-data-detection'
 
 import RageClick from './extensions/rageclick'
 import { AutocaptureConfig, COPY_AUTOCAPTURE_EVENT, EventName, Properties, RemoteConfig } from './types'
@@ -367,7 +367,7 @@ export class Autocapture {
         const isCopyAutocapture = eventName === COPY_AUTOCAPTURE_EVENT
         if (
             target &&
-            shouldCaptureDomEvent(
+            shouldAutocaptureEvent(
                 target,
                 e,
                 this._config,

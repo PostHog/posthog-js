@@ -4,16 +4,15 @@ import sinon from 'sinon'
 
 import {
     getSafeText,
-    shouldCaptureDomEvent,
+    shouldAutocaptureEvent,
     shouldCaptureElement,
-    isSensitiveElement,
-    shouldCaptureValue,
     isAngularStyleAttr,
     getNestedSpanText,
     getDirectAndNestedSpanText,
     getElementsChainString,
     getClassNames,
     makeSafeText,
+    shouldCaptureValue,
 } from '../autocapture-utils'
 import { document } from '../utils/globals'
 import { makeMouseEvent } from './autocapture.test'
@@ -175,7 +174,7 @@ describe(`Autocapture utility functions`, () => {
     describe(`shouldCaptureDomEvent`, () => {
         it(`should capture "submit" events on <form> elements`, () => {
             expect(
-                shouldCaptureDomEvent(document!.createElement(`form`), {
+                shouldAutocaptureEvent(document!.createElement(`form`), {
                     type: `submit`,
                 } as unknown as Event)
             ).toBe(true)
@@ -183,14 +182,14 @@ describe(`Autocapture utility functions`, () => {
 
         it.each([`input`, `SELECT`, `textarea`])(`should capture "change" events on <%s> elements`, (tagName) => {
             expect(
-                shouldCaptureDomEvent(document!.createElement(tagName), {
+                shouldAutocaptureEvent(document!.createElement(tagName), {
                     type: `change`,
                 } as unknown as Event)
             ).toBe(true)
         })
 
         it.each([`A`, `a`])(`should capture "click" events on <%s> elements`, (tagName) => {
-            expect(shouldCaptureDomEvent(document!.createElement(tagName), makeMouseEvent({}))).toBe(true)
+            expect(shouldAutocaptureEvent(document!.createElement(tagName), makeMouseEvent({}))).toBe(true)
         })
 
         it(`should capture "click" events on <button> elements`, () => {
@@ -200,22 +199,22 @@ describe(`Autocapture utility functions`, () => {
             const button3 = document!.createElement(`input`)
             button3.setAttribute(`type`, `submit`)
             ;[button1, button2, button3].forEach((button) => {
-                expect(shouldCaptureDomEvent(button, makeMouseEvent({}))).toBe(true)
+                expect(shouldAutocaptureEvent(button, makeMouseEvent({}))).toBe(true)
             })
         })
 
         it(`should protect against bad inputs`, () => {
-            expect(shouldCaptureDomEvent(null as unknown as Element, makeMouseEvent({}))).toBe(false)
-            expect(shouldCaptureDomEvent(undefined as unknown as Element, makeMouseEvent({}))).toBe(false)
-            expect(shouldCaptureDomEvent(`div` as unknown as Element, makeMouseEvent({}))).toBe(false)
+            expect(shouldAutocaptureEvent(null as unknown as Element, makeMouseEvent({}))).toBe(false)
+            expect(shouldAutocaptureEvent(undefined as unknown as Element, makeMouseEvent({}))).toBe(false)
+            expect(shouldAutocaptureEvent(`div` as unknown as Element, makeMouseEvent({}))).toBe(false)
         })
 
         it(`should NOT capture "click" events on <form> elements`, () => {
-            expect(shouldCaptureDomEvent(document!.createElement(`form`), makeMouseEvent({}))).toBe(false)
+            expect(shouldAutocaptureEvent(document!.createElement(`form`), makeMouseEvent({}))).toBe(false)
         })
 
         it.each([`html`, 'body'])(`should NOT capture "click" events on <%s> elements`, (tagName) => {
-            expect(shouldCaptureDomEvent(document!.createElement(tagName), makeMouseEvent({}))).toBe(false)
+            expect(shouldAutocaptureEvent(document!.createElement(tagName), makeMouseEvent({}))).toBe(false)
         })
 
         describe('css selector allowlist', () => {
@@ -317,34 +316,9 @@ describe(`Autocapture utility functions`, () => {
                 ],
             ])('correctly respects the allow list: %s', (_, clickTarget, autoCaptureConfig, shouldCapture) => {
                 expect(
-                    shouldCaptureDomEvent(clickTarget, makeMouseEvent({}), autoCaptureConfig as AutocaptureConfig)
+                    shouldAutocaptureEvent(clickTarget, makeMouseEvent({}), autoCaptureConfig as AutocaptureConfig)
                 ).toBe(shouldCapture)
             })
-        })
-    })
-
-    describe(`isSensitiveElement`, () => {
-        it(`should not include input elements`, () => {
-            expect(isSensitiveElement(document!.createElement(`input`))).toBe(true)
-        })
-
-        it(`should not include select elements`, () => {
-            expect(isSensitiveElement(document!.createElement(`select`))).toBe(true)
-        })
-
-        it(`should not include textarea elements`, () => {
-            expect(isSensitiveElement(document!.createElement(`textarea`))).toBe(true)
-        })
-
-        it(`should not include elements where contenteditable="true"`, () => {
-            const editable = document!.createElement(`div`)
-            const noneditable = document!.createElement(`div`)
-
-            editable.setAttribute(`contenteditable`, `true`)
-            noneditable.setAttribute(`contenteditable`, `false`)
-
-            expect(isSensitiveElement(editable)).toBe(true)
-            expect(isSensitiveElement(noneditable)).toBe(false)
         })
     })
 
@@ -388,45 +362,6 @@ describe(`Autocapture utility functions`, () => {
             expect(shouldCaptureElement(el)).toBe(false)
         })
 
-        it(`should not include hidden fields`, () => {
-            input.type = `hidden`
-            expect(shouldCaptureElement(input)).toBe(false)
-        })
-
-        it(`should not include password fields`, () => {
-            input.type = `password`
-            expect(shouldCaptureElement(input)).toBe(false)
-        })
-
-        it(`should not include fields with sensitive names`, () => {
-            const sensitiveNames = [
-                `cc_name`,
-                `card-num`,
-                `ccnum`,
-                `credit-card_number`,
-                `credit_card[number]`,
-                `csc num`,
-                `CVC`,
-                `Expiration`,
-                `password`,
-                `pwd`,
-                `routing`,
-                `routing-number`,
-                `security code`,
-                `seccode`,
-                `security number`,
-                `social sec`,
-                `SsN`,
-            ]
-            sensitiveNames.forEach((name) => {
-                input.name = ''
-                expect(shouldCaptureElement(input)).toBe(true)
-
-                input.name = name
-                expect(shouldCaptureElement(input)).toBe(false)
-            })
-        })
-
         // See https://github.com/posthog/posthog-js/issues/165
         // Under specific circumstances a bug caused .replace to be called on a DOM element
         // instead of a string, removing the element from the page. Ensure this issue is mitigated.
@@ -460,24 +395,16 @@ describe(`Autocapture utility functions`, () => {
             expect(shouldCaptureValue(null as unknown as string)).toBe(false)
         })
 
-        it(`should not include numbers that look like valid credit cards`, () => {
-            // one for each type on http://www.getcreditcardnumbers.com/
-            const validCCNumbers = [
-                `3419-881002-84912`,
-                `30148420855976`,
-                `5183792099737678`,
-                `6011-5100-8788-7057`,
-                `180035601937848`,
-                `180072512946394`,
-                `4556617778508`,
-            ]
-            validCCNumbers.forEach((num) => {
-                expect(shouldCaptureValue(num)).toBe(false)
-            })
+        it(`should return false when the value is undefined`, () => {
+            expect(shouldCaptureValue(undefined as unknown as string)).toBe(false)
         })
 
-        it(`should not include values that look like social security numbers`, () => {
+        it(`should return false for sensitive values`, () => {
             expect(shouldCaptureValue(`123-45-6789`)).toBe(false)
+        })
+
+        it(`should return true for non-sensitive values`, () => {
+            expect(shouldCaptureValue(`hello world`)).toBe(true)
         })
     })
 

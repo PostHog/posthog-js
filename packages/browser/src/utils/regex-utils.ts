@@ -16,3 +16,12 @@ export const isMatchingRegex = function (value: string, pattern: string): boolea
         return false
     }
 }
+
+/**
+ * Wraps a regex pattern with ^ and $ anchors so it only matches the entire string.
+ * @param {RegExp} pattern - The regex pattern to anchor
+ * @returns {RegExp} A new regex that matches only if the entire string matches the pattern
+ */
+export const toExactMatch = function (pattern: RegExp): RegExp {
+    return new RegExp(`^(?:${pattern.source})$`, pattern.flags)
+}

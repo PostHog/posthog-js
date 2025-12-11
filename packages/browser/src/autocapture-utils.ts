@@ -6,6 +6,11 @@ import { logger } from './utils/logger'
 import { window } from './utils/globals'
 import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
 import { includes, trim } from '@posthog/core'
+import {
+    doesCaptureElementHaveSensitiveData,
+    isSensitiveElement,
+    isSensitiveValue,
+} from './utils/sensitive-data-detection'
 
 export function splitClassString(s: string): string[] {
     return s ? trim(s).split(/\s+/) : []
@@ -262,8 +267,7 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
 }
 
 /*
- * Check whether a DOM event should be "captured" or if it may contain sensitive data
- * using a variety of heuristics.
+ * Check whether a DOM event should be "captured" using a variety of heuristics.
  * @param {Element} el - element to check
  * @param {Event} event - event to check
  * @param {Object} autocaptureConfig - autocapture config
@@ -271,7 +275,7 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
  * @param {string[]} allowedEventTypes - event types to capture, normally just 'click', but some autocapture types react to different events, some elements have fixed events (e.g., form has "submit")
  * @returns {boolean} whether the event should be captured
  */
-export function shouldCaptureDomEvent(
+export function shouldAutocaptureEvent(
     el: Element,
     event: Event,
     autocaptureConfig: AutocaptureConfig | undefined = undefined,
@@ -338,116 +342,62 @@ export function shouldCaptureDomEvent(
 }
 
 /*
+ * Check whether an element or its parents have been explicitly marked to not capture.
+ * Looks for 'ph-sensitive' or 'ph-no-capture' classes.
+ * @param {Element} el - element to check
+ * @returns {boolean} whether the element is marked as no-capture
+ */
+function isExplicitNoCapture(el: Element): boolean {
+    for (let curEl = el; curEl.parentNode && !isTag(curEl, 'body'); curEl = curEl.parentNode as Element) {
+        const classes = getClassNames(curEl)
+        if (includes(classes, 'ph-sensitive') || includes(classes, 'ph-no-capture')) {
+            return true
+        }
+    }
+
+    return false
+}
+
+/*
+ * Check whether an element has been explicitly marked to capture via 'ph-include' class.
+ * @param {Element} el - element to check
+ * @returns {boolean} whether the element is opted-in for capture
+ */
+function isExplicitCapture(el: Element): boolean {
+    return includes(getClassNames(el), 'ph-include')
+}
+
+/*
  * Check whether a DOM element should be "captured" or if it may contain sensitive data
  * using a variety of heuristics.
  * @param {Element} el - element to check
  * @returns {boolean} whether the element should be captured
  */
 export function shouldCaptureElement(el: Element): boolean {
-    for (let curEl = el; curEl.parentNode && !isTag(curEl, 'body'); curEl = curEl.parentNode as Element) {
-        const classes = getClassNames(curEl)
-        if (includes(classes, 'ph-sensitive') || includes(classes, 'ph-no-capture')) {
-            return false
-        }
+    if (isExplicitNoCapture(el)) {
+        return false
     }
 
-    if (includes(getClassNames(el), 'ph-include')) {
+    if (isExplicitCapture(el)) {
         return true
     }
 
-    // don't include hidden or password fields
-    const type = (el as HTMLInputElement).type || ''
-    if (isString(type)) {
-        // it's possible for el.type to be a DOM element if el is a form with a child input[name="type"]
-        switch (type.toLowerCase()) {
-            case 'hidden':
-                return false
-            case 'password':
-                return false
-        }
-    }
-
-    // filter out data from fields that look like sensitive fields
-    const name = (el as HTMLInputElement).name || el.id || ''
-    // See https://github.com/posthog/posthog-js/issues/165
-    // Under specific circumstances a bug caused .replace to be called on a DOM element
-    // instead of a string, removing the element from the page. Ensure this issue is mitigated.
-    if (isString(name)) {
-        // it's possible for el.name or el.id to be a DOM element if el is a form with a child input[name="name"]
-        const sensitiveNameRegex =
-            /^cc|cardnum|ccnum|creditcard|csc|cvc|cvv|exp|pass|pwd|routing|seccode|securitycode|securitynum|socialsec|socsec|ssn/i
-        if (sensitiveNameRegex.test(name.replace(/[^a-zA-Z0-9]/g, ''))) {
-            return false
-        }
-    }
-
-    return true
+    return !doesCaptureElementHaveSensitiveData(el)
 }
-
-/*
- * Check whether a DOM element is 'sensitive' and we should only capture limited data
- * @param {Element} el - element to check
- * @returns {boolean} whether the element should be captured
- */
-export function isSensitiveElement(el: Element): boolean {
-    // don't send data from inputs or similar elements since there will always be
-    // a risk of clientside javascript placing sensitive data in attributes
-    const allowedInputTypes = ['button', 'checkbox', 'submit', 'reset']
-    if (
-        (isTag(el, 'input') && !allowedInputTypes.includes((el as HTMLInputElement).type)) ||
-        isTag(el, 'select') ||
-        isTag(el, 'textarea') ||
-        el.getAttribute('contenteditable') === 'true'
-    ) {
-        return true
-    }
-    return false
-}
-
-// Define the core pattern for matching credit card numbers
-const coreCCPattern = `(4[0-9]{12}(?:[0-9]{3})?)|(5[1-5][0-9]{14})|(6(?:011|5[0-9]{2})[0-9]{12})|(3[47][0-9]{13})|(3(?:0[0-5]|[68][0-9])[0-9]{11})|((?:2131|1800|35[0-9]{3})[0-9]{11})`
-// Create the Anchored version of the regex by adding '^' at the start and '$' at the end
-const anchoredCCRegex = new RegExp(`^(?:${coreCCPattern})$`)
-// The Unanchored version is essentially the core pattern, usable as is for partial matches
-const unanchoredCCRegex = new RegExp(coreCCPattern)
-
-// Define the core pattern for matching SSNs with optional dashes
-const coreSSNPattern = `\\d{3}-?\\d{2}-?\\d{4}`
-// Create the Anchored version of the regex by adding '^' at the start and '$' at the end
-const anchoredSSNRegex = new RegExp(`^(${coreSSNPattern})$`)
-// The Unanchored version is essentially the core pattern itself, usable for partial matches
-const unanchoredSSNRegex = new RegExp(`(${coreSSNPattern})`)
 
 /*
  * Check whether a string value should be "captured" or if it may contain sensitive data
  * using a variety of heuristics.
  * @param {string} value - string value to check
  * @param {boolean} anchorRegexes - whether to anchor the regexes to the start and end of the string
- * @returns {boolean} whether the element should be captured
+ * @returns {boolean} whether the value should be captured
  */
 export function shouldCaptureValue(value: string, anchorRegexes = true): boolean {
     if (isNullish(value)) {
         return false
     }
 
-    if (isString(value)) {
-        value = trim(value)
-
-        // check to see if input value looks like a credit card number
-        // see: https://www.safaribooksonline.com/library/view/regular-expressions-cookbook/9781449327453/ch04s20.html
-        const ccRegex = anchorRegexes ? anchoredCCRegex : unanchoredCCRegex
-        if (ccRegex.test((value || '').replace(/[- ]/g, ''))) {
-            return false
-        }
-
-        // check to see if input value looks like a social security number
-        const ssnRegex = anchorRegexes ? anchoredSSNRegex : unanchoredSSNRegex
-        if (ssnRegex.test(value)) {
-            return false
-        }
-    }
-
-    return true
+    return !isSensitiveValue(value, anchorRegexes)
 }
 
 /*
