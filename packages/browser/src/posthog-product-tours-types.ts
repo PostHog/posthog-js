@@ -1,3 +1,5 @@
+import { PropertyMatchType } from './types'
+
 export interface JSONContent {
     type?: string
     attrs?: Record<string, any>
@@ -33,7 +35,7 @@ export interface ProductTourStep {
 
 export interface ProductTourConditions {
     url?: string
-    urlMatchType?: 'exact' | 'contains' | 'regex'
+    urlMatchType?: PropertyMatchType
     selector?: string
 }
 
