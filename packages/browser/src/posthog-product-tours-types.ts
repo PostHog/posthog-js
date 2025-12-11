@@ -31,6 +31,8 @@ export interface ProductTourStep {
     survey?: ProductTourSurveyQuestion
     /** ID of the auto-created survey for this step (set by backend) */
     linkedSurveyId?: string
+    /** ID of the survey question (set by backend, used for event tracking) */
+    linkedSurveyQuestionId?: string
 }
 
 export interface ProductTourConditions {
