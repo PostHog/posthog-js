@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.305.0
+
+### Minor Changes
+
+- [#2732](https://github.com/PostHog/posthog-js/pull/2732) [`8496933`](https://github.com/PostHog/posthog-js/commit/849693303ef3527dd348c7c6e55c1f1780af13fe) Thanks [@adboio](https://github.com/adboio)! - support survey steps in product tours
+  (2025-12-11)
+
 ## 1.304.0
 
 ### Minor Changes
