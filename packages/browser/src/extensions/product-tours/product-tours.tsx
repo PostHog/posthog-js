@@ -130,6 +130,7 @@ export class ProductTourManager {
     private _checkInterval: ReturnType<typeof setInterval> | null = null
     private _triggerSelectorListeners: Map<string, TriggerListenerData> = new Map()
     private _surveyEventUnsubscribe: (() => void) | null = null
+    private _surveyLoadTriggered: boolean = false
 
     constructor(instance: PostHog) {
         this._instance = instance
@@ -177,6 +178,18 @@ export class ProductTourManager {
             if (tours.length === 0) {
                 this._removeAllTriggerListeners()
                 return
+            }
+
+            // Pre-emptively load surveys if any tours that could show on this page have survey steps
+            // This ensures the surveys module is ready before a survey step is reached
+            if (!this._surveyLoadTriggered) {
+                const needsSurveys = tours.some(
+                    (tour) => checkTourConditions(tour) && tour.steps.some((step) => step.linkedSurveyId)
+                )
+                if (needsSurveys) {
+                    this._surveyLoadTriggered = true
+                    this._instance.surveys?.loadIfEnabled()
+                }
             }
 
             const activeTriggerTourIds = new Set<string>()
@@ -490,6 +503,10 @@ export class ProductTourManager {
         if (!this._activeTour) {
             return
         }
+
+        // Hide the tour tooltip while showing the survey (but keep container for later steps)
+        const { shadow } = retrieveTourShadow(this._activeTour.id)
+        render(null, shadow)
 
         const step = this._activeTour.steps[this._currentStepIndex]
 
