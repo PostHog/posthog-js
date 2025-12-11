@@ -6,10 +6,29 @@ export interface JSONContent {
     text?: string
 }
 
+export type ProductTourSurveyQuestionType = 'open' | 'rating'
+
+export interface ProductTourSurveyQuestion {
+    type: ProductTourSurveyQuestionType
+    questionText: string
+    /** Rating display type - emoji or number */
+    display?: 'emoji' | 'number'
+    /** Rating scale - 3 or 5 for emoji, 5 or 10 for number */
+    scale?: 3 | 5 | 10
+    /** Label for low end of rating scale (e.g., "Not likely") */
+    lowerBoundLabel?: string
+    /** Label for high end of rating scale (e.g., "Very likely") */
+    upperBoundLabel?: string
+}
+
 export interface ProductTourStep {
     id: string
     selector?: string
     content: JSONContent | null
+    /** Inline survey question config - if present, this is a survey step */
+    survey?: ProductTourSurveyQuestion
+    /** ID of the auto-created survey for this step (set by backend) */
+    linkedSurveyId?: string
 }
 
 export interface ProductTourConditions {
