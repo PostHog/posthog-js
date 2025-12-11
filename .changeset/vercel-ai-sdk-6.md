@@ -1,13 +1,11 @@
 ---
-"@posthog/ai": major
+"@posthog/ai": minor
 ---
 
-Add support for Vercel AI SDK 6 (LanguageModelV3)
-
-BREAKING CHANGE: This release requires Vercel AI SDK v6 (currently in beta). If you're using AI SDK v5, please continue using the previous version of @posthog/ai.
+Add support for both Vercel AI SDK 5 and 6
 
 Changes:
-- Updated `ai` dependency to `6.0.0-beta.138`
-- Updated `@ai-sdk/provider` to `3.0.0-beta.25`
-- Migrated from `LanguageModelV2` to `LanguageModelV3` types
-- Added `specificationVersion: 'v3'` to middleware
+- Runtime version detection via `model.specificationVersion`
+- Support both `LanguageModelV2` (SDK 5) and `LanguageModelV3` (SDK 6)
+- Moved `@ai-sdk/provider` and `ai` to peer dependencies with dual version ranges
+- No breaking changes - existing SDK 5 users can continue without modification
