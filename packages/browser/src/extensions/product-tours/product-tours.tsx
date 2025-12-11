@@ -6,9 +6,10 @@ import {
     ProductTourDismissReason,
     ProductTourRenderReason,
 } from '../../posthog-product-tours-types'
-import { DisplaySurveyType, SurveyEventName, SurveyEventProperties } from '../../posthog-surveys-types'
+import { SurveyEventName, SurveyEventProperties } from '../../posthog-surveys-types'
 import { findElementBySelector, getElementMetadata, getProductTourStylesheet } from './product-tours-utils'
 import { ProductTourTooltip } from './components/ProductTourTooltip'
+import { ProductTourSurveyStep } from './components/ProductTourSurveyStep'
 import { createLogger } from '../../utils/logger'
 import { document as _document, window as _window } from '../../utils/globals'
 import { localStore } from '../../storage'
@@ -129,8 +130,6 @@ export class ProductTourManager {
     private _renderReason: ProductTourRenderReason = 'auto'
     private _checkInterval: ReturnType<typeof setInterval> | null = null
     private _triggerSelectorListeners: Map<string, TriggerListenerData> = new Map()
-    private _surveyEventUnsubscribe: (() => void) | null = null
-    private _surveyLoadTriggered: boolean = false
 
     constructor(instance: PostHog) {
         this._instance = instance
@@ -178,18 +177,6 @@ export class ProductTourManager {
             if (tours.length === 0) {
                 this._removeAllTriggerListeners()
                 return
-            }
-
-            // Pre-emptively load surveys if any tours that could show on this page have survey steps
-            // This ensures the surveys module is ready before a survey step is reached
-            if (!this._surveyLoadTriggered) {
-                const needsSurveys = tours.some(
-                    (tour) => checkTourConditions(tour) && tour.steps.some((step) => step.linkedSurveyId)
-                )
-                if (needsSurveys) {
-                    this._surveyLoadTriggered = true
-                    this._instance.surveys?.loadIfEnabled()
-                }
             }
 
             const activeTriggerTourIds = new Set<string>()
@@ -402,9 +389,9 @@ export class ProductTourManager {
 
         const step = this._activeTour.steps[this._currentStepIndex]
 
-        // Survey step - display the linked survey and listen for completion
-        if (step.linkedSurveyId) {
-            this._renderSurveyStep(step.linkedSurveyId)
+        // Survey step - render native survey step component
+        if (step.survey) {
+            this._renderSurveyStep()
             return
         }
 
@@ -499,18 +486,17 @@ export class ProductTourManager {
         )
     }
 
-    private _renderSurveyStep(surveyId: string): void {
+    private _renderSurveyStep(): void {
         if (!this._activeTour) {
             return
         }
 
-        // Hide the tour tooltip while showing the survey (but keep container for later steps)
-        const { shadow } = retrieveTourShadow(this._activeTour.id)
-        render(null, shadow)
-
+        const tourId = this._activeTour.id
         const step = this._activeTour.steps[this._currentStepIndex]
+        const surveyId = step.linkedSurveyId
+        const questionId = step.linkedSurveyQuestionId
+        const questionText = step.survey?.questionText || ''
 
-        // Emit tour step shown event
         this._captureEvent('product tour step shown', {
             $product_tour_id: this._activeTour.id,
             $product_tour_step_id: step.id,
@@ -519,43 +505,68 @@ export class ProductTourManager {
             $product_tour_linked_survey_id: surveyId,
         })
 
-        // Clean up any existing survey event listener
-        this._cleanupSurveyListener()
-
-        // Set up listener for survey events
-        this._surveyEventUnsubscribe = this._instance.on(
-            'eventCaptured',
-            (data: { event: string; properties?: Record<string, any> }) => {
-                const eventSurveyId = data.properties?.[SurveyEventProperties.SURVEY_ID]
-                if (eventSurveyId !== surveyId) {
-                    return
-                }
-
-                if (data.event === SurveyEventName.SENT) {
-                    logger.info(`Survey ${surveyId} completed, advancing tour`)
-                    this._cleanupSurveyListener()
-                    this.nextStep()
-                } else if (data.event === SurveyEventName.DISMISSED) {
-                    logger.info(`Survey ${surveyId} dismissed, dismissing tour`)
-                    this._cleanupSurveyListener()
-                    this.dismissTour('user_clicked_skip')
-                }
-            }
-        )
-
-        // Display the survey
-        this._instance.surveys?.displaySurvey(surveyId, {
-            ignoreConditions: true,
-            ignoreDelay: true,
-            displayType: DisplaySurveyType.Popover,
+        this._captureEvent(SurveyEventName.SHOWN, {
+            [SurveyEventProperties.SURVEY_ID]: surveyId,
+            [SurveyEventProperties.PRODUCT_TOUR_ID]: tourId,
+            sessionRecordingUrl: this._instance.get_session_replay_url?.(),
         })
 
-        logger.info(`Displayed survey ${surveyId} for tour step ${this._currentStepIndex}`)
-    }
+        const { shadow } = retrieveTourShadow(this._activeTour.id)
 
-    private _cleanupSurveyListener(): void {
-        this._surveyEventUnsubscribe?.()
-        this._surveyEventUnsubscribe = null
+        const handleSubmit = (response: string | number | null) => {
+            const responseKey = questionId ? `$survey_response_${questionId}` : '$survey_response'
+            this._captureEvent(SurveyEventName.SENT, {
+                [SurveyEventProperties.SURVEY_ID]: surveyId,
+                [SurveyEventProperties.PRODUCT_TOUR_ID]: tourId,
+                [SurveyEventProperties.SURVEY_QUESTIONS]: [
+                    {
+                        id: questionId,
+                        question: questionText,
+                        response: response,
+                    },
+                ],
+                [SurveyEventProperties.SURVEY_COMPLETED]: true,
+                sessionRecordingUrl: this._instance.get_session_replay_url?.(),
+                ...(!isNull(response) && { [responseKey]: response }),
+            })
+
+            logger.info(`Survey ${surveyId} completed`, !isNull(response) ? `with response: ${response}` : '(skipped)')
+            this.nextStep()
+        }
+
+        const handleDismiss = (reason: ProductTourDismissReason) => {
+            this._captureEvent(SurveyEventName.DISMISSED, {
+                [SurveyEventProperties.SURVEY_ID]: surveyId,
+                [SurveyEventProperties.PRODUCT_TOUR_ID]: tourId,
+                [SurveyEventProperties.SURVEY_QUESTIONS]: [
+                    {
+                        id: questionId,
+                        question: questionText,
+                        response: null,
+                    },
+                ],
+                [SurveyEventProperties.SURVEY_PARTIALLY_COMPLETED]: false,
+                sessionRecordingUrl: this._instance.get_session_replay_url?.(),
+            })
+
+            logger.info(`Survey ${surveyId} dismissed`)
+            this.dismissTour(reason)
+        }
+
+        render(
+            <ProductTourSurveyStep
+                tour={this._activeTour}
+                step={step}
+                stepIndex={this._currentStepIndex}
+                totalSteps={this._activeTour.steps.length}
+                onSubmit={handleSubmit}
+                onPrevious={this.previousStep}
+                onDismiss={handleDismiss}
+            />,
+            shadow
+        )
+
+        logger.info(`Rendered survey step for tour step ${this._currentStepIndex}`)
     }
 
     private _cleanup(): void {
@@ -563,7 +574,6 @@ export class ProductTourManager {
             removeTourFromDom(this._activeTour.id)
         }
 
-        this._cleanupSurveyListener()
         this._activeTour = null
         this._currentStepIndex = 0
         this._renderReason = 'auto'
