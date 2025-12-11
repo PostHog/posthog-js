@@ -1,6 +1,6 @@
 {
     "name": "@posthog-tooling/tsconfig-base",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "description": "Base TypeScript configuration for PostHog packages",
     "main": "tsconfig.json",
     "author": "PostHog",

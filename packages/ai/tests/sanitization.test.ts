@@ -560,4 +560,251 @@ describe('Base64 image redaction', () => {
       expect(result.content[0].image_url.url).toBe('https://example.com/image.jpg')
     })
   })
+
+  describe('Multimodal environment variable control', () => {
+    beforeEach(() => {
+      delete process.env._INTERNAL_LLMA_MULTIMODAL
+    })
+
+    afterEach(() => {
+      delete process.env._INTERNAL_LLMA_MULTIMODAL
+    })
+
+    describe('Flag value handling', () => {
+      it('should redact images when _INTERNAL_LLMA_MULTIMODAL is not set', () => {
+        const base64Image = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
+        const result = redactBase64DataUrl(base64Image)
+        expect(result).toBe('[base64 image redacted]')
+      })
+
+      it('should preserve images when _INTERNAL_LLMA_MULTIMODAL is "true"', () => {
+        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
+        const base64Image = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
+        const result = redactBase64DataUrl(base64Image)
+        expect(result).toBe(base64Image)
+      })
+
+      it('should preserve images when _INTERNAL_LLMA_MULTIMODAL is "1"', () => {
+        process.env._INTERNAL_LLMA_MULTIMODAL = '1'
+        const base64Image = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
+        const result = redactBase64DataUrl(base64Image)
+        expect(result).toBe(base64Image)
+      })
+
+      it('should preserve images when _INTERNAL_LLMA_MULTIMODAL is "yes"', () => {
+        process.env._INTERNAL_LLMA_MULTIMODAL = 'yes'
+        const base64Image = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
+        const result = redactBase64DataUrl(base64Image)
+        expect(result).toBe(base64Image)
+      })
+
+      it('should redact images when _INTERNAL_LLMA_MULTIMODAL is "false"', () => {
+        process.env._INTERNAL_LLMA_MULTIMODAL = 'false'
+        const base64Image = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
+        const result = redactBase64DataUrl(base64Image)
+        expect(result).toBe('[base64 image redacted]')
+      })
+    })
+
+    describe('OpenAI provider', () => {
+      it('should preserve images when flag is enabled', () => {
+        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
+        const input = [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image_url',
+                image_url: { url: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...' },
+              },
+            ],
+          },
+        ]
+
+        const result = sanitize(input, 'openai-chat-completions') as any
+        expect(result[0].content[0].image_url.url).toBe('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...')
+      })
+
+      it('should redact audio when flag is disabled', () => {
+        delete process.env._INTERNAL_LLMA_MULTIMODAL
+        const input = [
+          {
+            role: 'assistant',
+            content: [{ type: 'audio', data: 'base64audiodata', id: 'audio_123' }],
+          },
+        ]
+
+        const result = sanitize(input, 'openai-chat-completions') as any
+        expect(result[0].content[0].data).toBe('[base64 image redacted]')
+        expect(result[0].content[0].id).toBe('audio_123')
+      })
+
+      it('should preserve audio when flag is enabled', () => {
+        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
+        const input = [
+          {
+            role: 'assistant',
+            content: [{ type: 'audio', data: 'base64audiodata', id: 'audio_123' }],
+          },
+        ]
+
+        const result = sanitize(input, 'openai-chat-completions') as any
+        expect(result[0].content[0].data).toBe('base64audiodata')
+      })
+    })
+
+    describe('Anthropic provider', () => {
+      it('should preserve images when flag is enabled', () => {
+        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
+        const input = [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: 'image/jpeg',
+                  data: 'base64data',
+                },
+              },
+            ],
+          },
+        ]
+
+        const result = sanitize(input, 'anthropic') as any
+        expect(result[0].content[0].source.data).toBe('base64data')
+      })
+
+      it('should preserve PDFs/documents when flag is enabled', () => {
+        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
+        const input = [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'document',
+                source: {
+                  type: 'base64',
+                  media_type: 'application/pdf',
+                  data: 'base64pdfdata',
+                },
+              },
+            ],
+          },
+        ]
+
+        const result = sanitize(input, 'anthropic') as any
+        expect(result[0].content[0].source.data).toBe('base64pdfdata')
+      })
+
+      it('should redact documents when flag is disabled', () => {
+        delete process.env._INTERNAL_LLMA_MULTIMODAL
+        const input = [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'document',
+                source: {
+                  type: 'base64',
+                  media_type: 'application/pdf',
+                  data: 'base64pdfdata',
+                },
+              },
+            ],
+          },
+        ]
+
+        const result = sanitize(input, 'anthropic') as any
+        expect(result[0].content[0].source.data).toBe('[base64 image redacted]')
+      })
+    })
+
+    describe('Gemini provider', () => {
+      it('should preserve images when flag is enabled', () => {
+        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
+        const input = [{ parts: [{ inlineData: { mimeType: 'image/jpeg', data: 'base64data' } }] }]
+
+        const result = sanitize(input, 'gemini') as any
+        expect(result[0].parts[0].inlineData.data).toBe('base64data')
+      })
+
+      it('should redact audio when flag is disabled', () => {
+        delete process.env._INTERNAL_LLMA_MULTIMODAL
+        const input = [
+          {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: 'audio/L16;codec=pcm;rate=24000',
+                  data: 'base64audiodata',
+                },
+              },
+            ],
+          },
+        ]
+
+        const result = sanitize(input, 'gemini') as any
+        expect(result[0].parts[0].inlineData.data).toBe('[base64 image redacted]')
+      })
+
+      it('should preserve audio when flag is enabled', () => {
+        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
+        const input = [
+          {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: 'audio/L16;codec=pcm;rate=24000',
+                  data: 'base64audiodata',
+                },
+              },
+            ],
+          },
+        ]
+
+        const result = sanitize(input, 'gemini') as any
+        expect(result[0].parts[0].inlineData.data).toBe('base64audiodata')
+      })
+    })
+
+    describe('LangChain provider', () => {
+      it('should preserve Anthropic-style images when flag is enabled', () => {
+        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
+        const input = [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: { data: 'base64data' },
+              },
+            ],
+          },
+        ]
+
+        const result = sanitize(input, 'langchain') as any
+        expect(result[0].content[0].source.data).toBe('base64data')
+      })
+
+      it('should redact Anthropic-style images when flag is disabled', () => {
+        delete process.env._INTERNAL_LLMA_MULTIMODAL
+        const input = [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: { data: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...' },
+              },
+            ],
+          },
+        ]
+
+        const result = sanitize(input, 'langchain') as any
+        expect(result[0].content[0].source.data).toBe('[base64 image redacted]')
+      })
+    })
+  })
 })

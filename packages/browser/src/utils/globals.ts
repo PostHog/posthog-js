@@ -160,6 +160,7 @@ export type PostHogExtensionKind =
     | 'tracing-headers'
     | 'surveys'
     | 'conversations'
+    | 'product-tours'
     | 'dead-clicks-autocapture'
     | 'remote-config'
     | ExternalExtensionKind
@@ -201,6 +202,7 @@ interface PostHogExtensions {
     rrweb?: { record: any; version: string }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
     generateSurveys?: (posthog: PostHog, isSurveysEnabled: boolean) => any | undefined
+    generateProductTours?: (posthog: PostHog, isEnabled: boolean) => any | undefined
     postHogWebVitalsCallbacks?: {
         onLCP: (metric: any) => void
         onCLS: (metric: any) => void

@@ -1,5 +1,95 @@
 # posthog-js
 
+## 1.304.0
+
+### Minor Changes
+
+- [#2723](https://github.com/PostHog/posthog-js/pull/2723) [`ecd68fb`](https://github.com/PostHog/posthog-js/commit/ecd68fbfa37bb0b6c692665818e630b9c604eb17) Thanks [@adboio](https://github.com/adboio)! - product tours: support auto-show config, add modal steps
+  (2025-12-10)
+
+## 1.303.1
+
+### Patch Changes
+
+- [#2719](https://github.com/PostHog/posthog-js/pull/2719) [`3f9e3d2`](https://github.com/PostHog/posthog-js/commit/3f9e3d2730acbfc00f8d53efa4e2d72558527549) Thanks [@ksvat](https://github.com/ksvat)! - Update rrweb version used
+  (2025-12-10)
+
+## 1.303.0
+
+### Minor Changes
+
+- [#2720](https://github.com/PostHog/posthog-js/pull/2720) [`915da62`](https://github.com/PostHog/posthog-js/commit/915da624eca3368f2f0d8143d4973bff4f2c67ef) Thanks [@adboio](https://github.com/adboio)! - product tours super-alpha
+  (2025-12-10)
+
+## 1.302.2
+
+### Patch Changes
+
+- [#2696](https://github.com/PostHog/posthog-js/pull/2696) [`daeacdb`](https://github.com/PostHog/posthog-js/commit/daeacdb4ca39d4274e3dd51908562b9d83c74f96) Thanks [@ksvat](https://github.com/ksvat)! - Update @posthog/rrweb dependencies to 0.0.33
+  (2025-12-05)
+
+## 1.302.1
+
+### Patch Changes
+
+- [#2694](https://github.com/PostHog/posthog-js/pull/2694) [`0d2e26b`](https://github.com/PostHog/posthog-js/commit/0d2e26bcbb8c4ae67470fdfeb3bb53382aa30bd7) Thanks [@ksvat](https://github.com/ksvat)! - Restart session recording after opt_in_capture() called
+  (2025-12-05)
+
+## 1.302.0
+
+### Minor Changes
+
+- [#2693](https://github.com/PostHog/posthog-js/pull/2693) [`4458da7`](https://github.com/PostHog/posthog-js/commit/4458da7cafa64749059eea6e6a1ef056f64fea98) Thanks [@adboio](https://github.com/adboio)! - fix(surveys): prefilled questions for hosted surveys
+  (2025-12-04)
+
+## 1.301.2
+
+### Patch Changes
+
+- [#2690](https://github.com/PostHog/posthog-js/pull/2690) [`e9c00fd`](https://github.com/PostHog/posthog-js/commit/e9c00fd451f6ee648ff40dcad538d38bfd5f3ff4) Thanks [@robbie-c](https://github.com/robbie-c)! - Related to https://www.wiz.io/blog/critical-vulnerability-in-react-cve-2025-55182
+
+    We didn't include any of the vulnerable deps in any of our packages, however we did have them as dev / test / example project dependencies.
+
+    There was no way that any of these vulnerable packages were included in any of our published packages.
+
+    We've now patched out those dependencies.
+
+    Out of an abundance of caution, let's create a new release of all of our packages. (2025-12-04)
+
+- Updated dependencies [[`e9c00fd`](https://github.com/PostHog/posthog-js/commit/e9c00fd451f6ee648ff40dcad538d38bfd5f3ff4)]:
+    - @posthog/core@1.7.1
+
+## 1.301.1
+
+### Patch Changes
+
+- [#2666](https://github.com/PostHog/posthog-js/pull/2666) [`2004d36`](https://github.com/PostHog/posthog-js/commit/2004d369854d1467ae01120340cfa475ea8c42d5) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: session id rotation relied on in-memory cache which would be stale after log idle periods - particularly with multiple windows in play
+  (2025-12-04)
+
+## 1.301.0
+
+### Minor Changes
+
+- [#2676](https://github.com/PostHog/posthog-js/pull/2676) [`973bf70`](https://github.com/PostHog/posthog-js/commit/973bf70e4e9e9ea9dd4761c89c0ba8e1f212e941) Thanks [@adboio](https://github.com/adboio)! - support actions with all filter options
+  (2025-12-04)
+
+## 1.300.0
+
+### Minor Changes
+
+- [#2603](https://github.com/PostHog/posthog-js/pull/2603) [`e1617d9`](https://github.com/PostHog/posthog-js/commit/e1617d91255b23dc39b1dcb15b05ae64c735d9d0) Thanks [@dmarticus](https://github.com/dmarticus)! - add $feature_flag_evaluated_at properties to $feature_flag_called events
+  (2025-12-03)
+
+### Patch Changes
+
+- [#2670](https://github.com/PostHog/posthog-js/pull/2670) [`4487d6b`](https://github.com/PostHog/posthog-js/commit/4487d6b28e4f76696f13cea5d08dfceda3aa2cd9) Thanks [@pauldambra](https://github.com/pauldambra)! - A click while holding a modifier key (CTRL, ALT, CMD, Windows) shouldn't ever count as a dead click - so that we don't pick up e.g. open in a new tab as a dead click
+  (2025-12-03)
+
+- [#2677](https://github.com/PostHog/posthog-js/pull/2677) [`0e67750`](https://github.com/PostHog/posthog-js/commit/0e6775030aa43d24588f2e6dbe624e8d8a1f6d7c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - chore: allow customizing text input and background for surveys
+  (2025-12-03)
+- Updated dependencies [[`e1617d9`](https://github.com/PostHog/posthog-js/commit/e1617d91255b23dc39b1dcb15b05ae64c735d9d0)]:
+    - @posthog/core@1.7.0
+
 ## 1.299.0
 
 ### Minor Changes

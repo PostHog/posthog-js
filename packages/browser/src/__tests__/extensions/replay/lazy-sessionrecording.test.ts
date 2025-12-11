@@ -3036,6 +3036,8 @@ describe('Lazy SessionRecording', () => {
             })
 
             expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_ending', {
+                currentSessionId: sessionId,
+                currentWindowId: 'windowId',
                 nextSessionId: newSessionId,
                 nextWindowId: newWindowId,
                 changeReason: {
@@ -3087,6 +3089,8 @@ describe('Lazy SessionRecording', () => {
             })
 
             expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_ending', {
+                currentSessionId: sessionId,
+                currentWindowId: 'windowId',
                 nextSessionId: newSessionId,
                 nextWindowId: newWindowId,
                 changeReason: {
@@ -3143,6 +3147,8 @@ describe('Lazy SessionRecording', () => {
 
             // should capture the flushed size from the ending session
             expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_ending', {
+                currentSessionId: sessionId,
+                currentWindowId: 'windowId',
                 nextSessionId: newSessionId,
                 nextWindowId: newWindowId,
                 changeReason: {

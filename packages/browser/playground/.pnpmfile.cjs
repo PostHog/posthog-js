@@ -1,3 +1,4 @@
+const repoRoot = __dirname + '/../../..'
 /** @type {import('pnpm').Hooks} */
 module.exports = {
     hooks: {
@@ -7,7 +8,7 @@ module.exports = {
                     for (const dep in deps) {
                         if (dep.startsWith('posthog') || dep.startsWith('@posthog')) {
                             const tarballName = dep.replace('@', '').replace('/', '-')
-                            deps[dep] = `file:../../../../target/${tarballName}.tgz`
+                            deps[dep] = `file:${repoRoot}/target/${tarballName}.tgz`
                         }
                     }
                 }

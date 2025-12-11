@@ -1,5 +1,48 @@
 # posthog-node
 
+## 5.17.2
+
+### Patch Changes
+
+- [#2678](https://github.com/PostHog/posthog-js/pull/2678) [`ca4436e`](https://github.com/PostHog/posthog-js/commit/ca4436ecdca2412b1d068bcd3d5fcaf60bd2b114) Thanks [@haacked](https://github.com/haacked)! - Local evaluation polling sends If-None-Match header with latest etag to reduce bandwidth when no flags have changed.
+  (2025-12-04)
+
+## 5.17.1
+
+### Patch Changes
+
+- [#2690](https://github.com/PostHog/posthog-js/pull/2690) [`e9c00fd`](https://github.com/PostHog/posthog-js/commit/e9c00fd451f6ee648ff40dcad538d38bfd5f3ff4) Thanks [@robbie-c](https://github.com/robbie-c)! - Related to https://www.wiz.io/blog/critical-vulnerability-in-react-cve-2025-55182
+
+  We didn't include any of the vulnerable deps in any of our packages, however we did have them as dev / test / example project dependencies.
+
+  There was no way that any of these vulnerable packages were included in any of our published packages.
+
+  We've now patched out those dependencies.
+
+  Out of an abundance of caution, let's create a new release of all of our packages. (2025-12-04)
+
+- Updated dependencies [[`e9c00fd`](https://github.com/PostHog/posthog-js/commit/e9c00fd451f6ee648ff40dcad538d38bfd5f3ff4)]:
+  - @posthog/core@1.7.1
+
+## 5.17.0
+
+### Minor Changes
+
+- [#2671](https://github.com/PostHog/posthog-js/pull/2671) [`a1dde5c`](https://github.com/PostHog/posthog-js/commit/a1dde5c443292f0c290ecad9042912e56101f82d) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - make contexts inherit by default
+  (2025-12-03)
+
+## 5.16.0
+
+### Minor Changes
+
+- [#2603](https://github.com/PostHog/posthog-js/pull/2603) [`e1617d9`](https://github.com/PostHog/posthog-js/commit/e1617d91255b23dc39b1dcb15b05ae64c735d9d0) Thanks [@dmarticus](https://github.com/dmarticus)! - add $feature_flag_evaluated_at properties to $feature_flag_called events
+  (2025-12-03)
+
+### Patch Changes
+
+- Updated dependencies [[`e1617d9`](https://github.com/PostHog/posthog-js/commit/e1617d91255b23dc39b1dcb15b05ae64c735d9d0)]:
+  - @posthog/core@1.7.0
+
 ## 5.15.0
 
 ### Minor Changes

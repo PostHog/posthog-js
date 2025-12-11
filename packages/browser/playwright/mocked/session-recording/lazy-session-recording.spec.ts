@@ -56,6 +56,26 @@ function getSnapshotTimestamp(snapshot: any, position: 'first' | 'last'): number
     return snapshotData[index]?.timestamp || snapshotData[index]?.data?.timestamp
 }
 
+async function simulateSessionExpiry(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        const ph = (window as WindowWithPostHog).posthog
+        const activityTs = ph?.sessionManager?.['_sessionActivityTimestamp']
+        const startTs = ph?.sessionManager?.['_sessionStartTimestamp']
+        const sessionId = ph?.sessionManager?.['_sessionId']
+        const timeout = ph?.sessionManager?.['_sessionTimeoutMs']
+
+        const expiredActivityTs = activityTs! - timeout! - 1000
+        const expiredStartTs = startTs! - timeout! - 1000
+
+        // @ts-expect-error - accessing private properties for test
+        ph.sessionManager['_sessionActivityTimestamp'] = expiredActivityTs
+        // @ts-expect-error - accessing private properties for test
+        ph.sessionManager['_sessionStartTimestamp'] = expiredStartTs
+        // @ts-expect-error - accessing private properties for test
+        ph.persistence.register({ $sesid: [expiredActivityTs, sessionId, expiredStartTs] })
+    })
+}
+
 const startOptions = {
     options: {
         session_recording: {},
@@ -254,22 +274,8 @@ test.describe('Session recording - array.js', () => {
         expect(capturedEvents[1]['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
 
         await page.resetCapturedEvents()
-        const timestampBeforeRotation = await page.evaluate(() => {
-            const ph = (window as WindowWithPostHog).posthog
-            const activityTs = ph?.sessionManager?.['_sessionActivityTimestamp']
-            const startTs = ph?.sessionManager?.['_sessionStartTimestamp']
-            const timeout = ph?.sessionManager?.['_sessionTimeoutMs']
-
-            // move the session values back,
-            // so that the next event appears to be greater than timeout since those values
-            // @ts-expect-error can ignore that TS thinks these things might be null
-            ph.sessionManager['_sessionActivityTimestamp'] = activityTs - timeout - 1000
-            // @ts-expect-error can ignore that TS thinks these things might be null
-            ph.sessionManager['_sessionStartTimestamp'] = startTs - timeout - 1000
-
-            return Date.now()
-        })
-
+        const timestampBeforeRotation = Date.now()
+        await simulateSessionExpiry(page)
         await page.waitForTimeout(100)
 
         await page.waitingForNetworkCausedBy({

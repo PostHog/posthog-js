@@ -1,4 +1,4 @@
-import React, { Children, useCallback, useRef } from 'react'
+import React, { Children, useCallback, useRef, JSX } from 'react'
 import { usePostHog } from '../hooks'
 import { VisibilityAndClickTracker } from './internal/VisibilityAndClickTracker'
 

@@ -37,3 +37,5 @@ cypress/downloads/downloads.html
 
 react/sync.js
 react/dist
+
+ci-ts-file.js

@@ -24,6 +24,7 @@ import { PageViewManager } from './page-view'
 import { PostHogExceptions } from './posthog-exceptions'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
+import { PostHogProductTours } from './posthog-product-tours'
 import { PostHogSurveys } from './posthog-surveys'
 import { PostHogConversations } from './posthog-conversations'
 import {
@@ -183,6 +184,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_surveys: false,
     disable_surveys_automatic_display: false,
     disable_conversations: false,
+    disable_product_tours: true,
     disable_external_dependency_loading: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
@@ -315,6 +317,7 @@ export class PostHog {
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
     conversations: PostHogConversations
+    productTours: PostHogProductTours
     experiments: WebExperiments
     toolbar: Toolbar
     exceptions: PostHogExceptions
@@ -391,6 +394,7 @@ export class PostHog {
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
         this.conversations = new PostHogConversations(this)
+        this.productTours = new PostHogProductTours(this)
         this.experiments = new WebExperiments(this)
         this.exceptions = new PostHogExceptions(this)
         this.rateLimiter = new RateLimiter(this)
@@ -713,6 +717,10 @@ export class PostHog {
         })
 
         initTasks.push(() => {
+            this.productTours.loadIfEnabled()
+        })
+
+        initTasks.push(() => {
             this.heatmaps = new Heatmaps(this)
             this.heatmaps.startIfEnabled()
         })
@@ -827,6 +835,7 @@ export class PostHog {
         this.heatmaps?.onRemoteConfig(config)
         this.surveys.onRemoteConfig(config)
         this.conversations.onRemoteConfig(config)
+        this.productTours.onRemoteConfig(config)
         this.webVitalsAutocapture?.onRemoteConfig(config)
         this.exceptionObserver?.onRemoteConfig(config)
         this.exceptions.onRemoteConfig(config)
@@ -3083,6 +3092,10 @@ export class PostHog {
 
         // Start queue after opting in
         this._start_queue_if_opted_in()
+
+        // Restart session recording if it should now be enabled
+        // (this handles the case where opt_out_capturing_by_default or cookieless_mode prevented it from starting)
+        this.sessionRecording?.startIfEnabledOrStop()
 
         // Reinitialize surveys if we're in cookieless mode and just opted in
         if (this.config.cookieless_mode == 'on_reject') {

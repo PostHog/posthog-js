@@ -81,3 +81,7 @@ The subdomains are:
 
 - [https://www.posthog.dev:3000](https://www.posthog.dev:3000)
 - [https://app.posthog.dev:3000](https://app.posthog.dev:3000)
+
+#### Surveys testing guide
+
+See [surveys/CONTRIBUTING.md](https://github.com/PostHog/posthog/blob/master/frontend/src/scenes/surveys/CONTRIBUTING.md) in the main `posthog` repo for more details
