@@ -269,6 +269,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                     elementAttributeIgnoreList: this._config.element_attribute_ignorelist,
                     // TRICKY: it appears that we were moving to elementsChainAsString, but the UI still depends on elements, so :shrug:
                     elementsChainAsString: false,
+                    sensitiveDataDetectionConfig: this.instance.config.sensitive_data_detection,
                 }).props,
                 $dead_click_scroll_delay_ms: click.scrollDelayMs,
                 $dead_click_mutation_delay_ms: click.mutationDelayMs,

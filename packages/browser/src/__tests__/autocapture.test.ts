@@ -288,7 +288,7 @@ describe('Autocapture system', () => {
         })
 
         it('should collect multiple augments from elements', () => {
-            const props = getAugmentPropertiesFromElement(div)
+            const props = getAugmentPropertiesFromElement(div, {})
 
             expect(props['one-on-the-div']).toBe('one')
             expect(props['two-on-the-div']).toBe('two')
@@ -297,7 +297,7 @@ describe('Autocapture system', () => {
         })
 
         it('should collect augment from input value', () => {
-            const props = getAugmentPropertiesFromElement(input)
+            const props = getAugmentPropertiesFromElement(input, {})
 
             expect(props['on-the-input']).toBe('is on the input')
         })
@@ -315,13 +315,13 @@ describe('Autocapture system', () => {
         })
 
         it('should not collect augment from the hidden element value', () => {
-            const props = getAugmentPropertiesFromElement(hidden)
+            const props = getAugmentPropertiesFromElement(hidden, {})
 
             expect(props).toStrictEqual({})
         })
 
         it('should collect augment from the password element value', () => {
-            const props = getAugmentPropertiesFromElement(password)
+            const props = getAugmentPropertiesFromElement(password, {})
 
             expect(props).toStrictEqual({})
         })
@@ -330,7 +330,7 @@ describe('Autocapture system', () => {
         describe('inconsistencies in the original implementation', () => {
             it('fails to collect attribute if sensitive data is detected in the element', () => {
                 password.setAttribute('data-ph-capture-attribute-on-the-div', 'my data to collect')
-                const props = getAugmentPropertiesFromElement(password)
+                const props = getAugmentPropertiesFromElement(password, {})
 
                 // we'd expect to capture the attribute, because the user has explicitly asked for it
                 // yet we don't in the original implementation

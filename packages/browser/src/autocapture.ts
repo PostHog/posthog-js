@@ -17,7 +17,7 @@ import {
 import { isSensitiveElement } from './utils/sensitive-data-detection'
 
 import RageClick from './extensions/rageclick'
-import { AutocaptureConfig, EventName, Properties, RemoteConfig } from './types'
+import { AutocaptureConfig, EventName, PostHogConfig, Properties, RemoteConfig } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
@@ -39,8 +39,11 @@ function limitText(length: number, text: string): string {
     return text
 }
 
-export function getAugmentPropertiesFromElement(elem: Element): Properties {
-    const shouldCaptureEl = shouldCaptureElement(elem)
+export function getAugmentPropertiesFromElement(
+    elem: Element,
+    config: PostHogConfig['sensitive_data_detection']
+): Properties {
+    const shouldCaptureEl = shouldCaptureElement(elem, config)
     if (!shouldCaptureEl) {
         return {}
     }
@@ -82,7 +85,8 @@ export function getPropertiesFromElement(
     elem: Element,
     maskAllAttributes: boolean,
     maskText: boolean,
-    elementAttributeIgnorelist: string[] | undefined
+    elementAttributeIgnorelist: string[] | undefined,
+    sensitiveDataDetectionConfig?: PostHogConfig['sensitive_data_detection']
 ): Properties {
     const tag_name = elem.tagName.toLowerCase()
     const props: Properties = {
@@ -90,9 +94,9 @@ export function getPropertiesFromElement(
     }
     if (autocaptureCompatibleElements.indexOf(tag_name) > -1 && !maskText) {
         if (tag_name.toLowerCase() === 'a' || tag_name.toLowerCase() === 'button') {
-            props['$el_text'] = limitText(1024, getDirectAndNestedSpanText(elem))
+            props['$el_text'] = limitText(1024, getDirectAndNestedSpanText(elem, sensitiveDataDetectionConfig))
         } else {
-            props['$el_text'] = limitText(1024, getSafeText(elem))
+            props['$el_text'] = limitText(1024, getSafeText(elem, sensitiveDataDetectionConfig))
         }
     }
 
@@ -105,7 +109,11 @@ export function getPropertiesFromElement(
     // capture the deny list here because this not-a-class class makes it tricky to use this.config in the function below
     each(elem.attributes, function (attr: Attr) {
         // Only capture attributes we know are safe
-        if (isSensitiveElement(elem) && ['name', 'id', 'class', 'aria-label'].indexOf(attr.name) === -1) return
+        if (
+            isSensitiveElement(elem, sensitiveDataDetectionConfig) &&
+            ['name', 'id', 'class', 'aria-label'].indexOf(attr.name) === -1
+        )
+            return
 
         if (elementAttributeIgnorelist?.includes(attr.name)) return
 
@@ -145,12 +153,14 @@ export function autocapturePropertiesForElement(
         maskAllText,
         elementAttributeIgnoreList,
         elementsChainAsString,
+        sensitiveDataDetectionConfig,
     }: {
         e: Event
         maskAllElementAttributes: boolean
         maskAllText: boolean
         elementAttributeIgnoreList?: string[] | undefined
         elementsChainAsString: boolean
+        sensitiveDataDetectionConfig: PostHogConfig['sensitive_data_detection']
     }
 ): { props: Properties; explicitNoCapture?: boolean } {
     const targetElementList = [target]
@@ -171,7 +181,7 @@ export function autocapturePropertiesForElement(
     let explicitNoCapture = false
 
     each(targetElementList, (el) => {
-        const shouldCaptureEl = shouldCaptureElement(el)
+        const shouldCaptureEl = shouldCaptureElement(el, sensitiveDataDetectionConfig)
 
         // if the element or a parent element is an anchor tag
         // include the href as a property
@@ -182,6 +192,7 @@ export function autocapturePropertiesForElement(
 
         // allow users to programmatically prevent capturing of elements by adding class 'ph-no-capture'
         const classes = getClassNames(el)
+
         if (includes(classes, 'ph-no-capture')) {
             explicitNoCapture = true
         }
@@ -190,7 +201,7 @@ export function autocapturePropertiesForElement(
             getPropertiesFromElement(el, maskAllElementAttributes, maskAllText, elementAttributeIgnoreList)
         )
 
-        const augmentProperties = getAugmentPropertiesFromElement(el)
+        const augmentProperties = getAugmentPropertiesFromElement(el, sensitiveDataDetectionConfig)
         extend(autocaptureAugmentProperties, augmentProperties)
     })
 
@@ -202,9 +213,9 @@ export function autocapturePropertiesForElement(
         // if the element is a button or anchor tag get the span text from any
         // children and include it as/with the text property on the parent element
         if (target.tagName.toLowerCase() === 'a' || target.tagName.toLowerCase() === 'button') {
-            elementsJson[0]['$el_text'] = getDirectAndNestedSpanText(target)
+            elementsJson[0]['$el_text'] = getDirectAndNestedSpanText(target, sensitiveDataDetectionConfig)
         } else {
-            elementsJson[0]['$el_text'] = getSafeText(target)
+            elementsJson[0]['$el_text'] = getSafeText(target, sensitiveDataDetectionConfig)
         }
     }
 
@@ -360,7 +371,7 @@ export class Autocapture {
                 !!this.instance.config.rageclick &&
                 this.rageclicks?.isRageClick(e.clientX, e.clientY, e.timeStamp || new Date().getTime())
             ) {
-                if (shouldCaptureRageclick(target, this.instance.config.rageclick)) {
+                if (shouldCaptureRageclick(target, this.instance.config)) {
                     this._captureEvent(e, '$rageclick')
                 }
             }
@@ -387,6 +398,7 @@ export class Autocapture {
                 maskAllText: this.instance.config.mask_all_text,
                 elementAttributeIgnoreList: this._config.element_attribute_ignorelist,
                 elementsChainAsString: this._elementsChainAsString,
+                sensitiveDataDetectionConfig: this.instance.config.sensitive_data_detection,
             })
 
             if (explicitNoCapture) {
