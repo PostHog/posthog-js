@@ -88,6 +88,8 @@ export interface SurveyAppearance {
     boxPadding?: string
     inputTextColor?: string
     inputBackgroundColor?: string
+    // Hide the X (cancel) button - defaults to false (show the button)
+    hideCancelButton?: boolean
 }
 
 export enum SurveyType {
