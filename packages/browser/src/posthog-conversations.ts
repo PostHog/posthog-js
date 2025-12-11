@@ -7,39 +7,22 @@ import {
     UserProvidedTraits,
 } from './posthog-conversations-types'
 import { RemoteConfig } from './types'
-import { assignableWindow } from './utils/globals'
+import { assignableWindow, LazyLoadedConversationsInterface, ConversationsApiInterface } from './utils/globals'
 import { createLogger } from './utils/logger'
 import { isNullish, isUndefined, isBoolean, isNull } from '@posthog/core'
 import { formDataToQuery } from './utils/request-utils'
 
 const logger = createLogger('[Conversations]')
 
-// API interface that the lazy-loaded manager will use
-export interface ConversationsApi {
-    sendMessage(
-        message: string,
-        ticketId?: string,
-        userTraits?: UserProvidedTraits,
-        widgetSessionId?: string
-    ): Promise<SendMessageResponse>
-    getMessages(ticketId: string, after?: string, widgetSessionId?: string): Promise<GetMessagesResponse>
-    markAsRead(ticketId: string, widgetSessionId: string): Promise<MarkAsReadResponse>
-}
-
-// Will be defined when lazy-loaded
-export interface ConversationsManager {
-    show(): void
-    hide(): void
-    sendMessage(message: string): void
-    destroy(): void
-}
+export type ConversationsApi = ConversationsApiInterface
+export type ConversationsManager = LazyLoadedConversationsInterface
 
 export class PostHogConversations {
     // This is set to undefined until the remote config is loaded
     // then it's set to true if conversations are enabled
     // or false if conversations are disabled in the project settings
     private _isConversationsEnabled?: boolean = undefined
-    private _conversationsManager: ConversationsManager | null = null
+    private _conversationsManager: LazyLoadedConversationsInterface | null = null
     private _isInitializing: boolean = false
     private _remoteConfig: ConversationsRemoteConfig | null = null
 
@@ -141,6 +124,7 @@ export class PostHogConversations {
             if (initConversations) {
                 // Conversations code is already loaded
                 this._completeInitialization(initConversations)
+                this._isInitializing = false
                 return
             }
 
@@ -156,13 +140,12 @@ export class PostHogConversations {
                 if (err || !phExtensions.initConversations) {
                     this._handleLoadError('Could not load conversations script', err)
                 } else {
-                    // Need to get the function reference again inside the callback
                     this._completeInitialization(phExtensions.initConversations)
                 }
+                this._isInitializing = false
             })
         } catch (e) {
             this._handleLoadError('Error initializing conversations', e)
-        } finally {
             this._isInitializing = false
         }
     }
@@ -172,8 +155,8 @@ export class PostHogConversations {
         initConversationsFn: (
             instance: PostHog,
             config: ConversationsRemoteConfig,
-            api: ConversationsApi
-        ) => ConversationsManager
+            api: ConversationsApiInterface
+        ) => LazyLoadedConversationsInterface
     ): void {
         if (!this._remoteConfig) {
             logger.error('Cannot complete initialization: remote config is null')
@@ -192,7 +175,7 @@ export class PostHogConversations {
     }
 
     /** Create the API object for the lazy-loaded manager to use */
-    private _createApi(): ConversationsApi {
+    private _createApi(): ConversationsApiInterface {
         const token = this._remoteConfig?.token || ''
 
         const api = {

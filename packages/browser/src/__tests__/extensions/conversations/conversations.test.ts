@@ -45,10 +45,13 @@ describe('PostHogConversations', () => {
         })
 
         // Setup PostHog extensions
+        // initConversations is initially undefined (script not loaded)
+        // loadExternalDependency callback will set it (simulating script load)
         assignableWindow.__PosthogExtensions__ = {
-            initConversations: jest.fn().mockReturnValue(mockManager),
+            initConversations: undefined,
             loadExternalDependency: jest.fn((_instance, _path, callback) => {
-                // Simulate successful load
+                // Simulate script loading by setting initConversations
+                assignableWindow.__PosthogExtensions__!.initConversations = jest.fn().mockReturnValue(mockManager)
                 callback(null)
             }),
         }

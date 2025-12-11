@@ -8,6 +8,12 @@ import {
     SiteAppLoader,
     SessionStartReason,
 } from '../types'
+import type {
+    ConversationsRemoteConfig,
+    SendMessageResponse,
+    GetMessagesResponse,
+    MarkAsReadResponse,
+} from '../posthog-conversations-types'
 // only importing types here, so won't affect the bundle
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SessionRecordingStatus, TriggerType } from '../extensions/replay/external/triggerMatching'
@@ -185,6 +191,28 @@ export interface LazyLoadedDeadClicksAutocaptureInterface {
     stop: () => void
 }
 
+export interface LazyLoadedConversationsInterface {
+    show: () => void
+    hide: () => void
+    sendMessage: (message: string) => void
+    destroy: () => void
+}
+
+/**
+ * API interface passed to the lazy-loaded conversations manager
+ * This is created in the main bundle and passed to the lazy-loaded extension
+ */
+export interface ConversationsApiInterface {
+    sendMessage: (
+        message: string,
+        ticketId?: string,
+        userTraits?: { name?: string; email?: string },
+        widgetSessionId?: string
+    ) => Promise<SendMessageResponse>
+    getMessages: (ticketId: string, after?: string, widgetSessionId?: string) => Promise<GetMessagesResponse>
+    markAsRead: (ticketId: string, widgetSessionId: string) => Promise<MarkAsReadResponse>
+}
+
 interface PostHogExtensions {
     loadExternalDependency?: (
         posthog: PostHog,
@@ -221,7 +249,11 @@ interface PostHogExtensions {
         [K in ExternalIntegrationKind]?: { start: (posthog: PostHog) => void; stop: () => void }
     }
     initSessionRecording?: (ph: PostHog) => LazyLoadedSessionRecordingInterface
-    initConversations?: (ph: PostHog, config: any, api: any) => any
+    initConversations?: (
+        ph: PostHog,
+        config: ConversationsRemoteConfig,
+        api: ConversationsApiInterface
+    ) => LazyLoadedConversationsInterface
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win
