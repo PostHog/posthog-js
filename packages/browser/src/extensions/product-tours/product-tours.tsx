@@ -13,39 +13,29 @@ import { createLogger } from '../../utils/logger'
 import { document as _document, window as _window } from '../../utils/globals'
 import { localStore } from '../../storage'
 import { addEventListener } from '../../utils'
-import { isNull } from '@posthog/core'
+import { isNull, SurveyMatchType } from '@posthog/core'
+import { propertyComparisons } from '../../utils/property-utils'
 
 const logger = createLogger('[Product Tours]')
 
 const document = _document as Document
 const window = _window as Window & typeof globalThis
 
-// Tour condition checking utilities (moved from utils/product-tour-utils.ts)
+// Tour condition checking - reuses the same URL matching logic as surveys
 function doesTourUrlMatch(tour: ProductTour): boolean {
     const conditions = tour.conditions
     if (!conditions?.url) {
         return true
     }
 
-    const currentUrl = window.location.href
-    const targetUrl = conditions.url
-    const matchType = conditions.urlMatchType || 'contains'
-
-    switch (matchType) {
-        case 'exact':
-            return currentUrl === targetUrl
-        case 'contains':
-            return currentUrl.includes(targetUrl)
-        case 'regex':
-            try {
-                const regex = new RegExp(targetUrl)
-                return regex.test(currentUrl)
-            } catch {
-                return false
-            }
-        default:
-            return false
+    const href = window?.location?.href
+    if (!href) {
+        return false
     }
+
+    const targets = [conditions.url]
+    const matchType = conditions.urlMatchType || SurveyMatchType.Icontains
+    return propertyComparisons[matchType](targets, [href])
 }
 
 function doesTourSelectorMatch(tour: ProductTour): boolean {
