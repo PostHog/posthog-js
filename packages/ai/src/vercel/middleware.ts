@@ -1,8 +1,12 @@
-import { wrapLanguageModel } from 'ai'
 import type {
+  LanguageModelV2,
+  LanguageModelV2CallOptions,
+  LanguageModelV2Content,
+  LanguageModelV2Prompt,
+  LanguageModelV2StreamPart,
   LanguageModelV3,
+  LanguageModelV3CallOptions,
   LanguageModelV3Content,
-  LanguageModelV3Middleware,
   LanguageModelV3Prompt,
   LanguageModelV3StreamPart,
 } from '@ai-sdk/provider'
@@ -21,19 +25,23 @@ import { Buffer } from 'buffer'
 import { redactBase64DataUrl } from '../sanitization'
 import { isString } from '../typeGuards'
 
-interface ClientOptions {
-  posthogDistinctId?: string
-  posthogTraceId?: string
-  posthogProperties?: Record<string, any>
-  posthogPrivacyMode?: boolean
-  posthogGroups?: Record<string, any>
-  posthogModelOverride?: string
-  posthogProviderOverride?: string
-  posthogCostOverride?: CostOverride
-  posthogCaptureImmediate?: boolean
+// Union types for dual version support
+type LanguageModel = LanguageModelV2 | LanguageModelV3
+type LanguageModelCallOptions = LanguageModelV2CallOptions | LanguageModelV3CallOptions
+type LanguageModelPrompt = LanguageModelV2Prompt | LanguageModelV3Prompt
+type LanguageModelContent = LanguageModelV2Content | LanguageModelV3Content
+type LanguageModelStreamPart = LanguageModelV2StreamPart | LanguageModelV3StreamPart
+
+// Type guards
+function isV3Model(model: LanguageModel): model is LanguageModelV3 {
+  return model.specificationVersion === 'v3'
 }
 
-interface CreateInstrumentationMiddlewareOptions {
+function isV2Model(model: LanguageModel): model is LanguageModelV2 {
+  return model.specificationVersion === 'v2'
+}
+
+interface ClientOptions {
   posthogDistinctId?: string
   posthogTraceId?: string
   posthogProperties?: Record<string, any>
@@ -75,7 +83,7 @@ const mapVercelParams = (params: any): Record<string, any> => {
   }
 }
 
-const mapVercelPrompt = (messages: LanguageModelV3Prompt): PostHogInput[] => {
+const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
   // Map and truncate individual content
   const inputs: PostHogInput[] = messages.map((message) => {
     let content: any
@@ -185,7 +193,7 @@ const mapVercelPrompt = (messages: LanguageModelV3Prompt): PostHogInput[] => {
   return inputs
 }
 
-const mapVercelOutput = (result: LanguageModelV3Content[]): PostHogInput[] => {
+const mapVercelOutput = (result: LanguageModelContent[]): PostHogInput[] => {
   const content: OutputContentItem[] = result.map((item) => {
     if (item.type === 'text') {
       return { type: 'text', text: truncate(item.text) }
@@ -257,76 +265,101 @@ const mapVercelOutput = (result: LanguageModelV3Content[]): PostHogInput[] => {
   }
 }
 
-const extractProvider = (model: LanguageModelV3): string => {
+const extractProvider = (model: LanguageModel): string => {
   const provider = model.provider.toLowerCase()
   const providerName = provider.split('.')[0]
   return providerName
 }
 
-export const createInstrumentationMiddleware = (
+// Extract web search count from provider metadata (works for both V2 and V3)
+const extractWebSearchCount = (providerMetadata: unknown, usage: any): number => {
+  // Try Anthropic-specific extraction
+  if (
+    providerMetadata &&
+    typeof providerMetadata === 'object' &&
+    'anthropic' in providerMetadata &&
+    providerMetadata.anthropic &&
+    typeof providerMetadata.anthropic === 'object' &&
+    'server_tool_use' in providerMetadata.anthropic
+  ) {
+    const serverToolUse = providerMetadata.anthropic.server_tool_use
+    if (
+      serverToolUse &&
+      typeof serverToolUse === 'object' &&
+      'web_search_requests' in serverToolUse &&
+      typeof serverToolUse.web_search_requests === 'number'
+    ) {
+      return serverToolUse.web_search_requests
+    }
+  }
+
+  // Fall back to generic calculation
+  return calculateWebSearchCount({
+    usage,
+    providerMetadata,
+  })
+}
+
+// Extract additional token values from provider metadata
+const extractAdditionalTokenValues = (providerMetadata: unknown): Record<string, any> => {
+  if (
+    providerMetadata &&
+    typeof providerMetadata === 'object' &&
+    'anthropic' in providerMetadata &&
+    providerMetadata.anthropic &&
+    typeof providerMetadata.anthropic === 'object' &&
+    'cacheCreationInputTokens' in providerMetadata.anthropic
+  ) {
+    return {
+      cacheCreationInputTokens: providerMetadata.anthropic.cacheCreationInputTokens,
+    }
+  }
+  return {}
+}
+
+/**
+ * Wraps a Vercel AI SDK language model (V2 or V3) with PostHog tracing.
+ * Automatically detects the model version and applies appropriate instrumentation.
+ */
+export const wrapVercelLanguageModel = <T extends LanguageModel>(
+  model: T,
   phClient: PostHog,
-  model: LanguageModelV3,
-  options: CreateInstrumentationMiddlewareOptions
-): LanguageModelV3Middleware => {
-  const middleware: LanguageModelV3Middleware = {
-    specificationVersion: 'v3',
-    wrapGenerate: async ({ doGenerate, params }) => {
+  options: ClientOptions
+): T => {
+  const traceId = options.posthogTraceId ?? uuidv4()
+  const mergedOptions = {
+    ...options,
+    posthogTraceId: traceId,
+    posthogDistinctId: options.posthogDistinctId,
+    posthogProperties: {
+      ...options.posthogProperties,
+      $ai_framework: 'vercel',
+    },
+  }
+
+  // Create wrapped model that preserves the original type
+  const wrappedModel = {
+    ...model,
+    doGenerate: async (params: LanguageModelCallOptions) => {
       const startTime = Date.now()
       const mergedParams = {
-        ...options,
+        ...mergedOptions,
         ...mapVercelParams(params),
-        posthogProperties: {
-          ...options.posthogProperties,
-          $ai_framework: 'vercel',
-        },
       }
       const availableTools = extractAvailableToolCalls('vercel', params)
 
       try {
-        const result = await doGenerate()
+        const result = await model.doGenerate(params as any)
         const modelId =
-          options.posthogModelOverride ?? (result.response?.modelId ? result.response.modelId : model.modelId)
-        const provider = options.posthogProviderOverride ?? extractProvider(model)
+          mergedOptions.posthogModelOverride ?? (result.response?.modelId ? result.response.modelId : model.modelId)
+        const provider = mergedOptions.posthogProviderOverride ?? extractProvider(model)
         const baseURL = '' // cannot currently get baseURL from vercel
-        const content = mapVercelOutput(result.content)
+        const content = mapVercelOutput(result.content as LanguageModelContent[])
         const latency = (Date.now() - startTime) / 1000
         const providerMetadata = result.providerMetadata
-        const additionalTokenValues = {
-          ...(providerMetadata?.anthropic
-            ? {
-                cacheCreationInputTokens: providerMetadata.anthropic.cacheCreationInputTokens,
-              }
-            : {}),
-        }
+        const additionalTokenValues = extractAdditionalTokenValues(providerMetadata)
 
-        // Calculate web search count based on provider
-        let webSearchCount = 0
-
-        if (
-          providerMetadata?.anthropic &&
-          typeof providerMetadata.anthropic === 'object' &&
-          'server_tool_use' in providerMetadata.anthropic
-        ) {
-          // Anthropic-specific extraction
-          const serverToolUse = providerMetadata.anthropic.server_tool_use
-
-          if (
-            serverToolUse &&
-            typeof serverToolUse === 'object' &&
-            'web_search_requests' in serverToolUse &&
-            typeof serverToolUse.web_search_requests === 'number'
-          ) {
-            webSearchCount = serverToolUse.web_search_requests
-          }
-        } else {
-          // For other providers through Vercel, pass available metadata to helper
-          // Note: Vercel abstracts provider responses, so we may not have access to
-          // raw citations/annotations unless Vercel exposes them in usage/metadata
-          webSearchCount = calculateWebSearchCount({
-            usage: result.usage,
-            providerMetadata: providerMetadata,
-          })
-        }
+        const webSearchCount = extractWebSearchCount(providerMetadata, result.usage)
 
         const usage = {
           inputTokens: result.usage.inputTokens,
@@ -336,13 +369,14 @@ export const createInstrumentationMiddleware = (
           webSearchCount,
           ...additionalTokenValues,
         }
+
         await sendEventToPosthog({
           client: phClient,
-          distinctId: options.posthogDistinctId,
-          traceId: options.posthogTraceId ?? uuidv4(),
+          distinctId: mergedOptions.posthogDistinctId,
+          traceId: mergedOptions.posthogTraceId ?? uuidv4(),
           model: modelId,
           provider: provider,
-          input: options.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt),
+          input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
           output: content,
           latency,
           baseURL,
@@ -350,7 +384,7 @@ export const createInstrumentationMiddleware = (
           httpStatus: 200,
           usage,
           tools: availableTools,
-          captureImmediate: options.posthogCaptureImmediate,
+          captureImmediate: mergedOptions.posthogCaptureImmediate,
         })
 
         return result
@@ -358,11 +392,11 @@ export const createInstrumentationMiddleware = (
         const modelId = model.modelId
         await sendEventToPosthog({
           client: phClient,
-          distinctId: options.posthogDistinctId,
-          traceId: options.posthogTraceId ?? uuidv4(),
+          distinctId: mergedOptions.posthogDistinctId,
+          traceId: mergedOptions.posthogTraceId ?? uuidv4(),
           model: modelId,
           provider: model.provider,
-          input: options.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt),
+          input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
           output: [],
           latency: 0,
           baseURL: '',
@@ -375,13 +409,13 @@ export const createInstrumentationMiddleware = (
           isError: true,
           error: truncate(JSON.stringify(error)),
           tools: availableTools,
-          captureImmediate: options.posthogCaptureImmediate,
+          captureImmediate: mergedOptions.posthogCaptureImmediate,
         })
         throw error
       }
     },
 
-    wrapStream: async ({ doStream, params }) => {
+    doStream: async (params: LanguageModelCallOptions) => {
       const startTime = Date.now()
       let generatedText = ''
       let reasoningText = ''
@@ -394,16 +428,12 @@ export const createInstrumentationMiddleware = (
       } = {}
       let providerMetadata: unknown = undefined
       const mergedParams = {
-        ...options,
+        ...mergedOptions,
         ...mapVercelParams(params),
-        posthogProperties: {
-          ...options.posthogProperties,
-          $ai_framework: 'vercel',
-        },
       }
 
-      const modelId = options.posthogModelOverride ?? model.modelId
-      const provider = options.posthogProviderOverride ?? extractProvider(model)
+      const modelId = mergedOptions.posthogModelOverride ?? model.modelId
+      const provider = mergedOptions.posthogProviderOverride ?? extractProvider(model)
       const availableTools = extractAvailableToolCalls('vercel', params)
       const baseURL = '' // cannot currently get baseURL from vercel
 
@@ -418,10 +448,10 @@ export const createInstrumentationMiddleware = (
       >()
 
       try {
-        const { stream, ...rest } = await doStream()
-        const transformStream = new TransformStream<LanguageModelV3StreamPart, LanguageModelV3StreamPart>({
+        const { stream, ...rest } = await model.doStream(params as any)
+        const transformStream = new TransformStream<LanguageModelStreamPart, LanguageModelStreamPart>({
           transform(chunk, controller) {
-            // Handle streaming patterns
+            // Handle streaming patterns - compatible with both V2 and V3
             if (chunk.type === 'text-delta') {
               generatedText += chunk.delta
             }
@@ -447,7 +477,6 @@ export const createInstrumentationMiddleware = (
             }
             if (chunk.type === 'tool-input-end') {
               // Tool call is complete, keep it in the map for final processing
-              // Nothing specific to do here, the tool call is already complete
             }
             if (chunk.type === 'tool-call') {
               // Direct tool call chunk (complete tool call)
@@ -460,17 +489,7 @@ export const createInstrumentationMiddleware = (
 
             if (chunk.type === 'finish') {
               providerMetadata = chunk.providerMetadata
-              const additionalTokenValues =
-                providerMetadata &&
-                typeof providerMetadata === 'object' &&
-                'anthropic' in providerMetadata &&
-                providerMetadata.anthropic &&
-                typeof providerMetadata.anthropic === 'object' &&
-                'cacheCreationInputTokens' in providerMetadata.anthropic
-                  ? {
-                      cacheCreationInputTokens: providerMetadata.anthropic.cacheCreationInputTokens,
-                    }
-                  : {}
+              const additionalTokenValues = extractAdditionalTokenValues(providerMetadata)
               usage = {
                 inputTokens: chunk.usage?.inputTokens,
                 outputTokens: chunk.usage?.outputTokens,
@@ -518,37 +537,7 @@ export const createInstrumentationMiddleware = (
                   ]
                 : []
 
-            // Calculate web search count based on provider
-            let webSearchCount = 0
-
-            if (
-              providerMetadata &&
-              typeof providerMetadata === 'object' &&
-              'anthropic' in providerMetadata &&
-              providerMetadata.anthropic &&
-              typeof providerMetadata.anthropic === 'object' &&
-              'server_tool_use' in providerMetadata.anthropic
-            ) {
-              // Anthropic-specific extraction
-              const serverToolUse = providerMetadata.anthropic.server_tool_use
-
-              if (
-                serverToolUse &&
-                typeof serverToolUse === 'object' &&
-                'web_search_requests' in serverToolUse &&
-                typeof serverToolUse.web_search_requests === 'number'
-              ) {
-                webSearchCount = serverToolUse.web_search_requests
-              }
-            } else {
-              // For other providers through Vercel, pass available metadata to helper
-              // Note: Vercel abstracts provider responses, so we may not have access to
-              // raw citations/annotations unless Vercel exposes them in usage/metadata
-              webSearchCount = calculateWebSearchCount({
-                usage: usage,
-                providerMetadata: providerMetadata,
-              })
-            }
+            const webSearchCount = extractWebSearchCount(providerMetadata, usage)
 
             // Update usage with web search count
             const finalUsage = {
@@ -558,11 +547,11 @@ export const createInstrumentationMiddleware = (
 
             await sendEventToPosthog({
               client: phClient,
-              distinctId: options.posthogDistinctId,
-              traceId: options.posthogTraceId ?? uuidv4(),
+              distinctId: mergedOptions.posthogDistinctId,
+              traceId: mergedOptions.posthogTraceId ?? uuidv4(),
               model: modelId,
               provider: provider,
-              input: options.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt),
+              input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
               output: output,
               latency,
               baseURL,
@@ -570,7 +559,7 @@ export const createInstrumentationMiddleware = (
               httpStatus: 200,
               usage: finalUsage,
               tools: availableTools,
-              captureImmediate: options.posthogCaptureImmediate,
+              captureImmediate: mergedOptions.posthogCaptureImmediate,
             })
           },
         })
@@ -582,11 +571,11 @@ export const createInstrumentationMiddleware = (
       } catch (error: any) {
         await sendEventToPosthog({
           client: phClient,
-          distinctId: options.posthogDistinctId,
-          traceId: options.posthogTraceId ?? uuidv4(),
+          distinctId: mergedOptions.posthogDistinctId,
+          traceId: mergedOptions.posthogTraceId ?? uuidv4(),
           model: modelId,
           provider: provider,
-          input: options.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt),
+          input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
           output: [],
           latency: 0,
           baseURL: '',
@@ -599,32 +588,16 @@ export const createInstrumentationMiddleware = (
           isError: true,
           error: truncate(JSON.stringify(error)),
           tools: availableTools,
-          captureImmediate: options.posthogCaptureImmediate,
+          captureImmediate: mergedOptions.posthogCaptureImmediate,
         })
         throw error
       }
     },
-  }
-
-  return middleware
-}
-
-export const wrapVercelLanguageModel = (
-  model: LanguageModelV3,
-  phClient: PostHog,
-  options: ClientOptions
-): LanguageModelV3 => {
-  const traceId = options.posthogTraceId ?? uuidv4()
-  const middleware = createInstrumentationMiddleware(phClient, model, {
-    ...options,
-    posthogTraceId: traceId,
-    posthogDistinctId: options.posthogDistinctId,
-  })
-
-  const wrappedModel = wrapLanguageModel({
-    model,
-    middleware,
-  })
+  } as T
 
   return wrappedModel
 }
+
+// Export type guards for external use
+export { isV2Model, isV3Model }
+export type { LanguageModel, ClientOptions }
