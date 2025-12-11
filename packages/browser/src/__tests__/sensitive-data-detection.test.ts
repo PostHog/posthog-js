@@ -7,15 +7,15 @@ import {
 describe('sensitive data detection', () => {
     describe(`isSensitiveElement`, () => {
         it(`should not include input elements`, () => {
-            expect(isSensitiveElement(document!.createElement(`input`), {})).toBe(true)
+            expect(isSensitiveElement(document!.createElement(`input`))).toBe(true)
         })
 
         it(`should not include select elements`, () => {
-            expect(isSensitiveElement(document!.createElement(`select`), {})).toBe(true)
+            expect(isSensitiveElement(document!.createElement(`select`))).toBe(true)
         })
 
         it(`should not include textarea elements`, () => {
-            expect(isSensitiveElement(document!.createElement(`textarea`), {})).toBe(true)
+            expect(isSensitiveElement(document!.createElement(`textarea`))).toBe(true)
         })
 
         it(`should not include elements where contenteditable="true"`, () => {
@@ -25,8 +25,8 @@ describe('sensitive data detection', () => {
             editable.setAttribute(`contenteditable`, `true`)
             noneditable.setAttribute(`contenteditable`, `false`)
 
-            expect(isSensitiveElement(editable, {})).toBe(true)
-            expect(isSensitiveElement(noneditable, {})).toBe(false)
+            expect(isSensitiveElement(editable)).toBe(true)
+            expect(isSensitiveElement(noneditable)).toBe(false)
         })
     })
 
@@ -76,12 +76,12 @@ describe('sensitive data detection', () => {
 
         it(`should not include hidden fields`, () => {
             input.type = `hidden`
-            expect(doesCaptureElementHaveSensitiveData(input, {})).toBe(true)
+            expect(doesCaptureElementHaveSensitiveData(input)).toBe(true)
         })
 
         it(`should not include password fields`, () => {
             input.type = `password`
-            expect(doesCaptureElementHaveSensitiveData(input, {})).toBe(true)
+            expect(doesCaptureElementHaveSensitiveData(input)).toBe(true)
         })
 
         it(`should not include fields with sensitive names`, () => {
@@ -106,10 +106,10 @@ describe('sensitive data detection', () => {
             ]
             sensitiveNames.forEach((name) => {
                 input.name = ''
-                expect(doesCaptureElementHaveSensitiveData(input, {})).toBe(false)
+                expect(doesCaptureElementHaveSensitiveData(input)).toBe(false)
 
                 input.name = name
-                expect(doesCaptureElementHaveSensitiveData(input, {})).toBe(true)
+                expect(doesCaptureElementHaveSensitiveData(input)).toBe(true)
             })
         })
 
@@ -117,19 +117,19 @@ describe('sensitive data detection', () => {
         describe('a bug with substring matching', () => {
             it(`matches 'cc' only at the start of the string`, () => {
                 input.name = `my_cc`
-                expect(doesCaptureElementHaveSensitiveData(input, {})).toBe(false)
+                expect(doesCaptureElementHaveSensitiveData(input)).toBe(false)
 
                 input.name = `cc_number`
-                expect(doesCaptureElementHaveSensitiveData(input, {})).toBe(true)
+                expect(doesCaptureElementHaveSensitiveData(input)).toBe(true)
             })
 
             it(`matches other sensitive substrings wherever they appear`, () => {
                 input.name = `expiration_date_cc`
-                expect(doesCaptureElementHaveSensitiveData(input, {})).toBe(true)
+                expect(doesCaptureElementHaveSensitiveData(input)).toBe(true)
 
                 // this is the bug!
                 input.name = `my_expert_view`
-                expect(doesCaptureElementHaveSensitiveData(input, {})).toBe(true)
+                expect(doesCaptureElementHaveSensitiveData(input)).toBe(true)
             })
         })
     })

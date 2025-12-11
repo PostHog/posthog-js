@@ -225,6 +225,7 @@ describe(`Autocapture utility functions`, () => {
             button3.setAttribute(`type`, `submit`)
             ;[button1, button2, button3].forEach((button) => {
                 expect(shouldAutocaptureEvent(button, makeMouseEvent({}))).toBe(true)
+                expect(shouldAutocaptureEvent(button, makeMouseEvent({}))).toBe(true)
             })
         })
 
@@ -422,7 +423,6 @@ describe(`Autocapture utility functions`, () => {
 
         it(`should return false when the value is undefined`, () => {
             expect(shouldCaptureValue(undefined as unknown as string)).toBe(false)
-        })
 
         it(`should return false for sensitive values`, () => {
             expect(shouldCaptureValue(`123-45-6789`)).toBe(false)
