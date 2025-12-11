@@ -11,6 +11,7 @@ import Head from 'next/head'
 import { PostHogProvider } from 'posthog-js/react'
 
 const CDP_DOMAINS = ['https://*.redditstatic.com', 'https://*.reddit.com'].join(' ')
+const TMDB_DOMAINS = ['https://api.themoviedb.org', 'https://image.tmdb.org'].join(' ')
 const CHAT_DOMAINS = [
     'https://*.intercom.io',
     'https://*.intercomcdn.com',
@@ -51,10 +52,10 @@ export default function App({ Component, pageProps }: AppProps) {
                     httpEquiv="Content-Security-Policy"
                     content={`
                     default-src 'self';
-                    connect-src 'self' ${localhostDomain} https://*.posthog.com https://lottie.host ${CDP_DOMAINS} ${CHAT_DOMAINS};
+                    connect-src 'self' ${localhostDomain} https://*.posthog.com https://lottie.host ${CDP_DOMAINS} ${CHAT_DOMAINS} ${TMDB_DOMAINS};
                     script-src 'self' 'unsafe-eval' 'unsafe-inline' ${localhostDomain} https://*.posthog.com ${CDP_DOMAINS} ${CHAT_DOMAINS};
                     style-src 'self' 'unsafe-inline' ${localhostDomain} https://*.posthog.com ${CHAT_DOMAINS};
-                    img-src 'self' data: blob: ${localhostDomain} https://*.posthog.com https://lottie.host https://cataas.com ${CDP_DOMAINS} ${CHAT_DOMAINS};
+                    img-src 'self' data: blob: ${localhostDomain} https://*.posthog.com https://lottie.host https://cataas.com ${CDP_DOMAINS} ${CHAT_DOMAINS} ${TMDB_DOMAINS} https://upload.wikimedia.org;
                     worker-src 'self' blob: ${CHAT_DOMAINS};
                     font-src 'self' ${localhostDomain} https://*.posthog.com ${CHAT_DOMAINS};
                     media-src 'self' ${localhostDomain} https://*.posthog.com ${CHAT_DOMAINS};
