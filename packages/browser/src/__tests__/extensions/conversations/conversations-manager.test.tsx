@@ -5,6 +5,7 @@ import { ConversationsRemoteConfig, ConversationsWidgetState, Message } from '..
 import { PostHog } from '../../../posthog-core'
 import { createMockPostHog, createMockPersistence } from '../../helpers/posthog-instance'
 import '@testing-library/jest-dom'
+import { act } from '@testing-library/preact'
 
 // Mock the persistence layer
 jest.mock('../../../extensions/conversations/persistence')
@@ -41,10 +42,14 @@ describe('ConversationsManager', () => {
         jest.clearAllMocks()
         jest.useFakeTimers()
 
+        // Mock scrollIntoView which is not implemented in JSDOM
+        Element.prototype.scrollIntoView = jest.fn()
+
         // Setup mock PostHog instance
         mockPostHog = createMockPostHog({
             capture: jest.fn(),
             get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
+            on: jest.fn().mockReturnValue(jest.fn()), // Returns unsubscribe function
             persistence: createMockPersistence({
                 props: {
                     $name: 'Test User',
@@ -75,6 +80,9 @@ describe('ConversationsManager', () => {
                 ticket_status: 'open',
                 messages: mockMessages,
                 has_more: false,
+            }),
+            markAsRead: jest.fn().mockResolvedValue({
+                unread_count: 0,
             }),
         }
     })
@@ -119,7 +127,9 @@ describe('ConversationsManager', () => {
         })
 
         it('should show the widget', () => {
-            manager.show()
+            act(() => {
+                manager.show()
+            })
 
             expect(mockPostHog.capture).toHaveBeenCalledWith(
                 '$conversations_widget_state_changed',
@@ -130,10 +140,14 @@ describe('ConversationsManager', () => {
         })
 
         it('should hide the widget', () => {
-            manager.show()
+            act(() => {
+                manager.show()
+            })
             jest.clearAllMocks()
 
-            manager.hide()
+            act(() => {
+                manager.hide()
+            })
 
             expect(mockPostHog.capture).toHaveBeenCalledWith(
                 '$conversations_widget_state_changed',
@@ -152,7 +166,9 @@ describe('ConversationsManager', () => {
                 created_at: '2023-01-01T00:00:00Z',
             })
 
-            manager.show()
+            act(() => {
+                manager.show()
+            })
 
             // Advance timers to trigger polling
             jest.advanceTimersByTime(5000)
@@ -161,10 +177,14 @@ describe('ConversationsManager', () => {
         })
 
         it('should stop polling when closed', () => {
-            manager.show()
+            act(() => {
+                manager.show()
+            })
             jest.clearAllMocks()
 
-            manager.hide()
+            act(() => {
+                manager.hide()
+            })
 
             // Advance timers to verify polling stopped
             jest.advanceTimersByTime(10000)
@@ -224,6 +244,11 @@ describe('ConversationsManager', () => {
 
     describe('message polling', () => {
         beforeEach(async () => {
+            // Reset the sendMessage mock completely and set it to resolve properly
+            ;(mockApi.sendMessage as jest.Mock).mockReset().mockResolvedValue({
+                ticket_id: 'ticket-123',
+                message_id: 'msg-1',
+            })
             manager = new ConversationsManager(mockPostHog, mockConfig, mockApi)
             // Send a message to create a ticket
             await manager.sendMessage('Hello!')
@@ -231,7 +256,9 @@ describe('ConversationsManager', () => {
         })
 
         it('should poll for messages at regular intervals when open', () => {
-            manager.show()
+            act(() => {
+                manager.show()
+            })
 
             // Advance time by poll interval
             jest.advanceTimersByTime(5000)
@@ -242,7 +269,9 @@ describe('ConversationsManager', () => {
         })
 
         it('should not poll when widget is closed', () => {
-            manager.hide()
+            act(() => {
+                manager.hide()
+            })
 
             jest.advanceTimersByTime(10000)
 
@@ -250,7 +279,9 @@ describe('ConversationsManager', () => {
         })
 
         it('should use last message timestamp for pagination', async () => {
-            manager.show()
+            act(() => {
+                manager.show()
+            })
 
             // Wait for first poll
             jest.advanceTimersByTime(5000)
@@ -265,7 +296,9 @@ describe('ConversationsManager', () => {
                 () => new Promise((resolve) => setTimeout(() => resolve({ messages: [], has_more: false }), 10000))
             )
 
-            manager.show()
+            act(() => {
+                manager.show()
+            })
 
             // Try to poll multiple times quickly
             jest.advanceTimersByTime(1000)
@@ -278,7 +311,9 @@ describe('ConversationsManager', () => {
         it('should handle polling errors gracefully', async () => {
             ;(mockApi.getMessages as jest.Mock).mockRejectedValue(new Error('Network error'))
 
-            manager.show()
+            act(() => {
+                manager.show()
+            })
             jest.advanceTimersByTime(5000)
 
             // Should not throw, just log error
@@ -326,7 +361,9 @@ describe('ConversationsManager', () => {
         })
 
         it('should stop polling on destroy', () => {
-            manager.show()
+            act(() => {
+                manager.show()
+            })
             jest.clearAllMocks()
 
             manager.destroy()
@@ -355,9 +392,11 @@ describe('ConversationsManager', () => {
     })
 
     describe('persistence integration', () => {
-        it('should save ticket ID to persistence', async () => {
+        beforeEach(() => {
             manager = new ConversationsManager(mockPostHog, mockConfig, mockApi)
+        })
 
+        it('should save ticket ID to persistence', async () => {
             await manager.sendMessage('Hello!')
 
             // The persistence mock should have been called to save the ticket ID
@@ -365,9 +404,9 @@ describe('ConversationsManager', () => {
         })
 
         it('should save widget state to persistence', () => {
-            manager = new ConversationsManager(mockPostHog, mockConfig, mockApi)
-
-            manager.show()
+            act(() => {
+                manager.show()
+            })
 
             // The persistence mock should have been called to save the state
             expect(mockPostHog.capture).toHaveBeenCalledWith(
