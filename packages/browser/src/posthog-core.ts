@@ -1141,11 +1141,11 @@ export class PostHog {
         if (setProperties) {
             data.$set = options?.$set
         }
-        // $groupidentify events don't process person $set_once on the server, so skip calculating
-        // set_once properties to avoid setting _personProcessingSetOncePropertiesSent prematurely.
-        // This ensures initial person props (UTMs, referrer) are included with subsequent $identify.
-        const setOnceProperties =
-            event_name === '$groupidentify' ? undefined : this._calculate_set_once_properties(options?.$set_once)
+        // $groupidentify doesn't process person $set_once on the server, so don't mark
+        // initial person props as sent. This ensures they're included with subsequent
+        // $identify calls.
+        const markSetOnceAsSent = event_name !== '$groupidentify'
+        const setOnceProperties = this._calculate_set_once_properties(options?.$set_once, markSetOnceAsSent)
         if (setOnceProperties) {
             data.$set_once = setOnceProperties
         }
@@ -1370,8 +1370,10 @@ export class PostHog {
      * profile with mostly-accurate properties, despite earlier events not setting them. We do this by storing them in
      * persistence.
      * @param dataSetOnce
+     * @param markAsSent - if true, marks the properties as sent so they won't be included in future events.
+     *                     Set to false for events like $groupidentify where the server doesn't process person props.
      */
-    _calculate_set_once_properties(dataSetOnce?: Properties): Properties | undefined {
+    _calculate_set_once_properties(dataSetOnce?: Properties, markAsSent: boolean = true): Properties | undefined {
         if (!this.persistence || !this._hasPersonProcessing()) {
             return dataSetOnce
         }
@@ -1390,7 +1392,9 @@ export class PostHog {
             logger.error('sanitize_properties is deprecated. Use before_send instead')
             setOnceProperties = sanitize_properties(setOnceProperties, '$set_once')
         }
-        this._personProcessingSetOncePropertiesSent = true
+        if (markAsSent) {
+            this._personProcessingSetOncePropertiesSent = true
+        }
         if (isEmptyObject(setOnceProperties)) {
             return undefined
         }
@@ -2268,10 +2272,6 @@ export class PostHog {
     group(groupType: string, groupKey: string, groupPropertiesToSet?: Properties): void {
         if (!groupType || !groupKey) {
             logger.error('posthog.group requires a group type and group key')
-            return
-        }
-
-        if (!this._requirePersonProcessing('posthog.group')) {
             return
         }
 
