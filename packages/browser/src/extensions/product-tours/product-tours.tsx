@@ -1,14 +1,22 @@
 import { render } from 'preact'
 import { PostHog } from '../../posthog-core'
 import {
+    DEFAULT_PRODUCT_TOUR_APPEARANCE,
     ProductTour,
     ProductTourCallback,
     ProductTourDismissReason,
     ProductTourRenderReason,
 } from '../../posthog-product-tours-types'
-import { DisplaySurveyType, SurveyEventName, SurveyEventProperties } from '../../posthog-surveys-types'
+import {
+    DisplaySurveyType,
+    SurveyAppearance,
+    SurveyEventName,
+    SurveyEventProperties,
+    SurveyPosition,
+} from '../../posthog-surveys-types'
 import { findElementBySelector, getElementMetadata, getProductTourStylesheet } from './product-tours-utils'
 import { ProductTourTooltip } from './components/ProductTourTooltip'
+import { ProductTourOverlay } from './components/ProductTourOverlay'
 import { createLogger } from '../../utils/logger'
 import { document as _document, window as _window } from '../../utils/globals'
 import { localStore } from '../../storage'
@@ -504,9 +512,11 @@ export class ProductTourManager {
             return
         }
 
-        // Hide the tour tooltip while showing the survey (but keep container for later steps)
+        const tourAppearance = { ...DEFAULT_PRODUCT_TOUR_APPEARANCE, ...this._activeTour.appearance }
+
+        // Render just the overlay to maintain the dimmed background during survey step
         const { shadow } = retrieveTourShadow(this._activeTour.id)
-        render(null, shadow)
+        render(<ProductTourOverlay appearance={tourAppearance} />, shadow)
 
         const step = this._activeTour.steps[this._currentStepIndex]
 
@@ -543,11 +553,39 @@ export class ProductTourManager {
             }
         )
 
-        // Display the survey
+        // Build survey appearance override to match tour styling
+        const surveyAppearanceOverride: Partial<SurveyAppearance> = {
+            // Direct mappings from tour appearance
+            backgroundColor: tourAppearance.backgroundColor,
+            submitButtonColor: tourAppearance.buttonColor,
+            submitButtonTextColor: tourAppearance.buttonTextColor,
+            borderColor: tourAppearance.borderColor,
+            borderRadius: `${tourAppearance.borderRadius}px`,
+            whiteLabel: tourAppearance.whiteLabel,
+
+            // Rating buttons should use tour button colors for consistency
+            ratingButtonColor: tourAppearance.backgroundColor,
+            ratingButtonActiveColor: tourAppearance.buttonColor,
+            ratingButtonHoverColor: tourAppearance.buttonColor,
+
+            // Input fields should match tour styling
+            inputBackgroundColor: '#ffffff',
+            inputTextColor: tourAppearance.textColor,
+
+            // Match tour visual style
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+            boxPadding: '16px',
+            maxWidth: '320px',
+
+            // Center the survey to match modal tour positioning
+            position: SurveyPosition.MiddleCenter,
+        }
+
         this._instance.surveys?.displaySurvey(surveyId, {
             ignoreConditions: true,
             ignoreDelay: true,
             displayType: DisplaySurveyType.Popover,
+            appearance: surveyAppearanceOverride,
         })
 
         logger.info(`Displayed survey ${surveyId} for tour step ${this._currentStepIndex}`)

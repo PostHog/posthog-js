@@ -386,6 +386,15 @@ export class PostHogSurveys {
                 },
             }
         }
+        if (options.appearance) {
+            surveyToDisplay = {
+                ...survey,
+                appearance: {
+                    ...survey.appearance,
+                    ...options.appearance,
+                },
+            }
+        }
         if (options.ignoreConditions === false) {
             const canRender = this.canRenderSurvey(survey)
             if (!canRender.visible) {

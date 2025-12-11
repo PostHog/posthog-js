@@ -86,6 +86,8 @@ export interface SurveyAppearance {
     zIndex?: string
     disabledButtonOpacity?: string
     boxPadding?: string
+    boxShadow?: string
+    borderRadius?: string
     inputTextColor?: string
     inputBackgroundColor?: string
     // Hide the X (cancel) button - defaults to false (show the button)
@@ -311,6 +313,7 @@ interface DisplaySurveyOptionsBase {
     ignoreConditions: boolean
     ignoreDelay: boolean
     displayType: DisplaySurveyType
+    appearance?: Partial<SurveyAppearance>
 }
 
 interface DisplaySurveyPopoverOptions extends DisplaySurveyOptionsBase {
