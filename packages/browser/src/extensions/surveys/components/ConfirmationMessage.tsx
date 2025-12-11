@@ -42,9 +42,11 @@ export function ConfirmationMessage({
         }
     }, [onClose])
 
+    const renderCancelButton = isPopup && appearance.hideCancelButton !== true
+
     return (
         <div className="thank-you-message" role="status" tabIndex={0} aria-atomic="true">
-            {isPopup && <Cancel onClick={() => onClose()} />}
+            {renderCancelButton && <Cancel onClick={() => onClose()} />}
             <h3 className="thank-you-message-header">{header}</h3>
             {description &&
                 renderChildrenAsTextOrHtml({
