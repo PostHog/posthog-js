@@ -75,10 +75,10 @@ export function makeSafeText(s: string | null | undefined): string | null {
  * @param {Element} el - element to get the text of
  * @returns {string} the element's direct text content
  */
-export function getSafeText(el: Element): string {
+export function getSafeText(el: Element, config: PostHogConfig['sensitive_data_detection']): string {
     let elText = ''
 
-    if (shouldCaptureElement(el) && !isSensitiveElement(el) && el.childNodes && el.childNodes.length) {
+    if (shouldCaptureElement(el, config) && !isSensitiveElement(el, config) && el.childNodes && el.childNodes.length) {
         each(el.childNodes, function (child) {
             if (isTextNode(child) && child.textContent) {
                 elText += makeSafeText(child.textContent) ?? ''
@@ -195,20 +195,21 @@ function shouldIgnoreByContent(
 // autocapture check will already filter for ph-no-capture,
 // but we include it here to protect against future changes accidentally removing that check
 const DEFAULT_RAGE_CLICK_IGNORE_LIST = ['.ph-no-rageclick', '.ph-no-capture']
-export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfig['rageclick']) {
+export function shouldCaptureRageclick(el: Element | null, config: PostHogConfig) {
     if (!window || cannotCheckForAutocapture(el)) {
         return false
     }
 
+    const rageClickConfig = config['rageclick']
     let selectorIgnoreList: string[] | boolean
     let contentIgnorelist: boolean | string[] | undefined
-    if (isBoolean(_config)) {
-        selectorIgnoreList = _config ? DEFAULT_RAGE_CLICK_IGNORE_LIST : false
+    if (isBoolean(rageClickConfig)) {
+        selectorIgnoreList = rageClickConfig ? DEFAULT_RAGE_CLICK_IGNORE_LIST : false
         // For backward compatibility, don't enable content filtering for rageclick: true
         contentIgnorelist = undefined
     } else {
-        selectorIgnoreList = _config?.css_selector_ignorelist ?? DEFAULT_RAGE_CLICK_IGNORE_LIST
-        contentIgnorelist = _config?.content_ignorelist
+        selectorIgnoreList = rageClickConfig.css_selector_ignorelist ?? DEFAULT_RAGE_CLICK_IGNORE_LIST
+        contentIgnorelist = rageClickConfig.content_ignorelist
     }
 
     if (selectorIgnoreList === false) {
@@ -218,7 +219,7 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
     // Traverse DOM once and cache element data to avoid redundant calls to getSafeText
     const { targetElementList } = getElementAndParentsForElement(el, false)
     const elementsWithText: ElementWithText[] = targetElementList.map((element) => ({
-        safeText: getSafeText(element).toLowerCase(),
+        safeText: getSafeText(element, config['sensitive_data_detection']).toLowerCase(),
         ariaLabel: element.getAttribute('aria-label')?.toLowerCase().trim() || '',
     }))
 
@@ -373,7 +374,7 @@ function isExplicitCapture(el: Element): boolean {
  * @param {Element} el - element to check
  * @returns {boolean} whether the element should be captured
  */
-export function shouldCaptureElement(el: Element): boolean {
+export function shouldCaptureElement(el: Element, config: PostHogConfig['sensitive_data_detection']): boolean {
     if (isExplicitNoCapture(el)) {
         return false
     }
@@ -382,7 +383,7 @@ export function shouldCaptureElement(el: Element): boolean {
         return true
     }
 
-    return !doesCaptureElementHaveSensitiveData(el)
+    return !doesCaptureElementHaveSensitiveData(el, config)
 }
 
 /*
@@ -421,9 +422,9 @@ export function isAngularStyleAttr(attributeName: string): boolean {
  * @param {Element} target - element to check
  * @returns {string} text content of the target element and its child span tags
  */
-export function getDirectAndNestedSpanText(target: Element): string {
-    let text = getSafeText(target)
-    text = `${text} ${getNestedSpanText(target)}`.trim()
+export function getDirectAndNestedSpanText(target: Element, config: PostHogConfig['sensitive_data_detection']): string {
+    let text = getSafeText(target, config)
+    text = `${text} ${getNestedSpanText(target, config)}`.trim()
     return shouldCaptureValue(text) ? text : ''
 }
 
@@ -433,17 +434,17 @@ export function getDirectAndNestedSpanText(target: Element): string {
  * @param {Element} target - element to check
  * @returns {string} text content of span tags
  */
-export function getNestedSpanText(target: Element): string {
+export function getNestedSpanText(target: Element, config: PostHogConfig['sensitive_data_detection']): string {
     let text = ''
     if (target && target.childNodes && target.childNodes.length) {
         each(target.childNodes, function (child) {
             if (child && child.tagName?.toLowerCase() === 'span') {
                 try {
-                    const spanText = getSafeText(child)
+                    const spanText = getSafeText(child, config)
                     text = `${text} ${spanText}`.trim()
 
                     if (child.childNodes && child.childNodes.length) {
-                        text = `${text} ${getNestedSpanText(child)}`.trim()
+                        text = `${text} ${getNestedSpanText(child, config)}`.trim()
                     }
                 } catch (e) {
                     logger.error('[AutoCapture]', e)

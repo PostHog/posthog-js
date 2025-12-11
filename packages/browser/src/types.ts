@@ -309,7 +309,7 @@ export interface HeatmapConfig {
 
 export type BeforeSendFn = (cr: CaptureResult | null) => CaptureResult | null
 
-export type ConfigDefaults = '2025-11-30' | '2025-05-24' | 'unset'
+export type ConfigDefaults = '2025-12-11' | '2025-11-30' | '2025-05-24' | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
@@ -713,6 +713,7 @@ export interface PostHogConfig {
      * - `'unset'`: Use legacy default behaviors
      * - `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')
      * - `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)
+     * - `'2025-12-11'`: Defaults from '2025-11-30' plus additional changes (improvements + configurability of sensitive data detection)
      *
      * @default 'unset'
      */
@@ -732,6 +733,13 @@ export interface PostHogConfig {
      * @experimental
      */
     __preview_deferred_init_extensions: boolean
+
+    /**
+     * Determines the sensitive data detection options.
+     * @see `SensitiveDataDetectionOptions`
+     * @default {}
+     */
+    sensitive_data_detection?: SensitiveDataDetectionOptions
 
     /**
      * Determines the session recording options.
@@ -1182,6 +1190,24 @@ export interface ErrorTrackingOptions {
      * @default 10
      */
     __exceptionRateLimiterBucketSize?: number
+}
+
+/**
+ * Configuration options for automatic sensitive data detection.
+
+ */
+export interface SensitiveDataDetectionOptions {
+    /**
+     * List of input types which will not be scanned for sensitive data.
+     *
+     * @default ['button', 'checkbox', 'submit', 'reset']
+     */
+    allowedInputTypes?: string[]
+
+    /**
+     * Regular expression to match sensitive field names (e.g., cc, ssn, password, etc.)
+     */
+    sensitiveNameRegex?: RegExp
 }
 
 export interface SessionRecordingOptions {
