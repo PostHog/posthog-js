@@ -120,6 +120,31 @@ describe(`Autocapture utility functions`, () => {
             el.innerHTML = `Mixed "double" and 'single' quotes`
             expect(getSafeText(el)).toBe(`Mixed "double" and 'single' quotes`)
         })
+
+        // TODO:@luke-belton make this test pass in future
+        it(`should collect text from sensitive elements with ph-include class`, () => {
+            const input = document!.createElement(`input`)
+            input.className = `ph-include`
+            input.appendChild(document.createTextNode(`Hello world`))
+            document!.body.appendChild(input)
+            // expect(getSafeText(input)).toBe(`Hello world`)
+        })
+
+        it(`shouldn't collect text from elements with ph-no-capture class`, () => {
+            const el = document!.createElement(`div`)
+            el.className = `ph-no-capture`
+            el.innerHTML = `Hello world`
+            document!.body.appendChild(el)
+            expect(getSafeText(el)).toBe(``)
+        })
+
+        it(`shouldn't collect text from elements with ph-sensitive class`, () => {
+            const el = document!.createElement(`div`)
+            el.className = `ph-sensitive`
+            el.innerHTML = `Hello world`
+            document!.body.appendChild(el)
+            expect(getSafeText(el)).toBe(``)
+        })
     })
 
     describe(`makeSafeText`, () => {
