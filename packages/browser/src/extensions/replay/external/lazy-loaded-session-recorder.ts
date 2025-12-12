@@ -62,7 +62,6 @@ import { PostHog } from '../../../posthog-core'
 import {
     CaptureResult,
     NetworkRecordOptions,
-    NetworkRequest,
     Properties,
     SessionIdChangedCallback,
     SessionRecordingOptions,
