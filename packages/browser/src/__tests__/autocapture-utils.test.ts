@@ -14,7 +14,7 @@ import {
     getElementsChainString,
     getClassNames,
     makeSafeText,
-} from '../autocapture-utils'
+} from '../extensions/autocapture/autocapture-utils'
 import { document } from '../utils/globals'
 import { makeMouseEvent } from './autocapture.test'
 import { AutocaptureConfig } from '../types'

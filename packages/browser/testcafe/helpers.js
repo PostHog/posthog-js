@@ -36,6 +36,18 @@ export const staticFilesMock = RequestMock()
         const arrayjs = fs.readFileSync(path.resolve(__dirname, fileToRead))
         res.setBody(arrayjs)
     })
+    .onRequestTo(/\/static\/autocapture\.js/)
+    .respond((req, res) => {
+        const autocapturejs = fs.readFileSync(path.resolve(__dirname, '../dist/autocapture.js'))
+        res.setBody(autocapturejs)
+        res.headers['content-type'] = 'application/javascript'
+    })
+    .onRequestTo(/\/static\/heatmaps\.js/)
+    .respond((req, res) => {
+        const heatmapsjs = fs.readFileSync(path.resolve(__dirname, '../dist/heatmaps.js'))
+        res.setBody(heatmapsjs)
+        res.headers['content-type'] = 'application/javascript'
+    })
     .onRequestTo(/playground/)
     .respond((req, res) => {
         const html = fs.readFileSync(path.resolve(__dirname, '../playground/cypress-full/index.html'))
