@@ -3250,6 +3250,7 @@ describe('Lazy SessionRecording', () => {
                     data: { href: 'https://example.com/?token=secret123&other=value' },
                 })
             )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
             // Verify the masking function was called with 'name' property
             expect(maskFn).toHaveBeenCalledWith(
@@ -3262,12 +3263,15 @@ describe('Lazy SessionRecording', () => {
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 expect.objectContaining({
-                    $snapshot_data: expect.objectContaining({
-                        data: expect.objectContaining({
-                            href: 'https://example.com/?token=[REDACTED]&other=value',
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'https://example.com/?token=[REDACTED]&other=value',
+                            },
                         }),
-                    }),
-                })
+                    ],
+                }),
+                expect.anything()
             )
         })
 
@@ -3295,6 +3299,7 @@ describe('Lazy SessionRecording', () => {
                     data: { href: 'https://example.com/?token=secret123' },
                 })
             )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
             // Verify the deprecated masking function was called
             expect(deprecatedMaskFn).toHaveBeenCalledWith(
@@ -3307,12 +3312,15 @@ describe('Lazy SessionRecording', () => {
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 expect.objectContaining({
-                    $snapshot_data: expect.objectContaining({
-                        data: expect.objectContaining({
-                            href: 'https://example.com/?token=[REDACTED]',
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'https://example.com/?token=[REDACTED]',
+                            },
                         }),
-                    }),
-                })
+                    ],
+                }),
+                expect.anything()
             )
         })
 
@@ -3336,6 +3344,7 @@ describe('Lazy SessionRecording', () => {
                     data: { href: 'https://example.com/?token=secret' },
                 })
             )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
             // Should only call the new function, not the deprecated one
             expect(newMaskFn).toHaveBeenCalled()
@@ -3345,20 +3354,23 @@ describe('Lazy SessionRecording', () => {
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 expect.objectContaining({
-                    $snapshot_data: expect.objectContaining({
-                        data: expect.objectContaining({
-                            href: 'masked-by-new',
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'masked-by-new',
+                            },
                         }),
-                    }),
-                })
+                    ],
+                }),
+                expect.anything()
             )
         })
 
         it('supports backward compatibility when maskCapturedNetworkRequestFn returns url instead of name', () => {
-            // Some users might check 'url' property instead of 'name'
+            // Some users might mistakenly return 'url' property instead of 'name'
             const maskFn = jest.fn((data) => {
-                if (data.url) {
-                    return { ...data, url: data.url.replace(/token=[^&]+/, 'token=[REDACTED]') }
+                if (data.name) {
+                    return { url: data.name.replace(/token=[^&]+/, 'token=[REDACTED]') }
                 }
                 return data
             })
@@ -3378,17 +3390,28 @@ describe('Lazy SessionRecording', () => {
                     data: { href: 'https://example.com/?token=secret123' },
                 })
             )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
-            // Should still work by checking the 'url' property as fallback
+            // Verify the masking function was called with 'name' property
+            expect(maskFn).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    name: 'https://example.com/?token=secret123',
+                })
+            )
+
+            // Should still work even though user returned 'url' instead of 'name'
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 expect.objectContaining({
-                    $snapshot_data: expect.objectContaining({
-                        data: expect.objectContaining({
-                            href: 'https://example.com/?token=[REDACTED]',
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'https://example.com/?token=[REDACTED]',
+                            },
                         }),
-                    }),
-                })
+                    ],
+                }),
+                expect.anything()
             )
         })
     })
