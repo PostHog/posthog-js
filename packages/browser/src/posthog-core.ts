@@ -317,7 +317,6 @@ export class PostHog {
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
     conversations: PostHogConversations
-    productTours: PostHogProductTours
     experiments: WebExperiments
     toolbar: Toolbar
     exceptions: PostHogExceptions
@@ -336,6 +335,7 @@ export class PostHog {
     exceptionObserver?: ExceptionObserver
     deadClicksAutocapture?: DeadClicksAutocapture
     historyAutocapture?: HistoryAutocapture
+    productTours?: PostHogProductTours
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -394,7 +394,6 @@ export class PostHog {
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
         this.conversations = new PostHogConversations(this)
-        this.productTours = new PostHogProductTours(this)
         this.experiments = new WebExperiments(this)
         this.exceptions = new PostHogExceptions(this)
         this.rateLimiter = new RateLimiter(this)
@@ -715,6 +714,7 @@ export class PostHog {
         })
 
         initTasks.push(() => {
+            this.productTours = new PostHogProductTours(this)
             this.productTours.loadIfEnabled()
         })
 
@@ -833,7 +833,7 @@ export class PostHog {
         this.heatmaps?.onRemoteConfig(config)
         this.surveys.onRemoteConfig(config)
         this.conversations.onRemoteConfig(config)
-        this.productTours.onRemoteConfig(config)
+        this.productTours?.onRemoteConfig(config)
         this.webVitalsAutocapture?.onRemoteConfig(config)
         this.exceptionObserver?.onRemoteConfig(config)
         this.exceptions.onRemoteConfig(config)

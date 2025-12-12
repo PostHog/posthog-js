@@ -321,11 +321,6 @@ export default function Hogflix() {
                     </div>
                 </>
             )}
-
-            {/* Floating Product Tour Button */}
-            <button className="product-tour-btn" data-attr="hogflix-product-tour">
-                Launch Product Tour
-            </button>
         </div>
     )
 }
@@ -344,11 +339,6 @@ const hogflixStyles = `
 
     /* Hide the default page header */
     main > .sticky.top-0.bg-white {
-        display: none !important;
-    }
-
-    /* Hide cookie consent banner on Hogflix page */
-    .fixed.right-2.bottom-2.border.rounded.p-2.bg-gray-100 {
         display: none !important;
     }
 
@@ -853,30 +843,6 @@ const hogflixStyles = `
 
     .setup-message a:hover {
         text-decoration: underline;
-    }
-
-    /* Product Tour Button */
-    .product-tour-btn {
-        position: fixed;
-        bottom: 24px;
-        right: 24px;
-        z-index: 200;
-        background: #F54E00;
-        color: #fff;
-        border: none;
-        border-radius: 8px;
-        padding: 12px 20px;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-        transition: all 0.2s ease;
-    }
-
-    .product-tour-btn:hover {
-        background: #ff6a2b;
-        transform: translateY(-2px);
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
     }
 
     /* Responsive */
