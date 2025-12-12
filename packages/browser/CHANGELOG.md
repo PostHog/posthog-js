@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.306.0
+
+### Minor Changes
+
+- [#2733](https://github.com/PostHog/posthog-js/pull/2733) [`e97857c`](https://github.com/PostHog/posthog-js/commit/e97857cb62ce3d11e39de3fea734ba4d56a40298) Thanks [@adboio](https://github.com/adboio)! - support hideCancelButton in survey appearance
+  (2025-12-12)
+
+### Patch Changes
+
+- [#2725](https://github.com/PostHog/posthog-js/pull/2725) [`90a0f14`](https://github.com/PostHog/posthog-js/commit/90a0f143e639b898fc698f247ec8e08ea3db9ddf) Thanks [@ordehi](https://github.com/ordehi)! - fix: include initial person props in $identify when group() called first
+  (2025-12-12)
+
 ## 1.305.0
 
 ### Minor Changes
