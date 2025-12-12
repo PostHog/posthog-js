@@ -12,10 +12,6 @@ const USER_TRAITS_KEY = 'ph_conversations_user_traits'
 export class ConversationsPersistence {
     private _cachedWidgetSessionId: string | null = null
 
-    constructor() {
-        // No dependencies needed - persistence uses localStorage directly
-    }
-
     /**
      * Get or create the widget session ID (random UUID for access control).
      * This ID is generated once per browser and persists across sessions.
@@ -264,8 +260,6 @@ export class ConversationsPersistence {
             // Clear widget session ID last (this will lose access to previous tickets)
             // Must be done last because _getStorageKey() would recreate it if called after clear
             this.clearWidgetSessionId()
-
-            logger.info('Cleared all conversation data', { removedKeys: keysToRemove.length })
         } catch (error) {
             logger.error('Failed to clear conversation data', error)
         }
