@@ -54,7 +54,13 @@ export default function SurveyForm() {
                 </button>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-                <p>read <a href="https://github.com/PostHog/posthog/blob/master/frontend/src/scenes/surveys/CONTRIBUTING.md">CONTRIBUTING.md</a> for a guide on how to test surveys locally!</p>
+                <p>
+                    read{' '}
+                    <a href="https://github.com/PostHog/posthog/blob/master/frontend/src/scenes/surveys/CONTRIBUTING.md">
+                        CONTRIBUTING.md
+                    </a>{' '}
+                    for a guide on how to test surveys locally!
+                </p>
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
@@ -63,18 +69,22 @@ export default function SurveyForm() {
                 </div>
             </div>
 
-            <div className='flex flex-col items-center gap-3'>
-                <div className='flex gap-2'>
+            <div className="flex flex-col items-center gap-3">
+                <div className="flex gap-2">
                     <input
                         type="text"
                         placeholder="event name"
                         value={eventInput}
-                        className='border border-1 p-2'
+                        className="border border-1 p-2"
                         onChange={(e) => setEventInput(e.target.value)}
                     />
                     <button onClick={() => posthog.capture(eventInput)}>send event</button>
                 </div>
-                <span className='flex'><em>calls <pre className='inline'>posthog.capture('{eventInput}')</pre></em></span>
+                <span className="flex">
+                    <em>
+                        calls <pre className="inline">posthog.capture('{eventInput}')</pre>
+                    </em>
+                </span>
             </div>
 
             {/* Add spacer to push the bottom button down */}
