@@ -80,8 +80,6 @@ export class PosthogWebpackPlugin {
             args.push('--delete-after')
         }
 
-        this.logger.info(args)
-
         await spawnLocal(config.cliBinaryPath, args, {
             cwd: process.cwd(),
             env: {
