@@ -1,17 +1,20 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { render, h } from 'preact'
-import { PostHog } from '../../posthog-core'
 import { isNumber } from '@posthog/core'
 import {
     ConversationsRemoteConfig,
     ConversationsWidgetState,
     UserProvidedTraits,
+    SendMessageResponse,
+    GetMessagesResponse,
+    MarkAsReadResponse,
 } from '../../posthog-conversations-types'
-import { ConversationsManager as ConversationsManagerInterface, ConversationsApi } from '../../posthog-conversations'
+import { ConversationsManager as ConversationsManagerInterface } from '../../posthog-conversations'
 import { ConversationsPersistence } from './persistence'
 import { ConversationsWidget } from './components/ConversationsWidget'
 import { createLogger } from '../../utils/logger'
-import { document, window } from '../../utils/globals'
+import { document, window, ConversationsApiHelpers } from '../../utils/globals'
+import { formDataToQuery } from '../../utils/request-utils'
 
 const logger = createLogger('[ConversationsManager]')
 
@@ -19,9 +22,8 @@ const WIDGET_CONTAINER_ID = 'ph-conversations-widget-container'
 const POLL_INTERVAL_MS = 5000 // 5 seconds
 
 export class ConversationsManager implements ConversationsManagerInterface {
-    private _posthog: PostHog
     private _config: ConversationsRemoteConfig
-    private _api: ConversationsApi
+    private _api: ConversationsApiHelpers
     private _persistence: ConversationsPersistence
     private _widgetRef: ConversationsWidget | null = null
     private _containerElement: HTMLDivElement | null = null
@@ -35,23 +37,188 @@ export class ConversationsManager implements ConversationsManagerInterface {
     // This is a random UUID that only this browser knows
     private _widgetSessionId: string
 
-    constructor(posthog: PostHog, config: ConversationsRemoteConfig, api: ConversationsApi) {
-        this._posthog = posthog
+    constructor(config: ConversationsRemoteConfig, apiHelpers: ConversationsApiHelpers) {
         this._config = config
-        this._api = api
-        this._persistence = new ConversationsPersistence(posthog)
+        this._api = apiHelpers
+        this._persistence = new ConversationsPersistence()
         // Get or create widget_session_id - this stays the same even when user identifies
         this._widgetSessionId = this._persistence.getOrCreateWidgetSessionId()
 
         logger.info('ConversationsManager initialized', {
             config,
-            hasApi: !!api,
-            apiMethods: api ? Object.keys(api) : 'undefined',
             widgetSessionId: this._widgetSessionId,
         })
 
         this._initialize()
     }
+
+    // ==================== API Methods ====================
+
+    /** Send a message via the API */
+    private _apiSendMessage(
+        message: string,
+        ticketId: string | undefined,
+        userTraits?: UserProvidedTraits
+    ): Promise<SendMessageResponse> {
+        const token = this._config.token
+
+        // eslint-disable-next-line compat/compat
+        return new Promise((resolve, reject) => {
+            const distinctId = this._api.getDistinctId()
+            const personProperties = this._api.getPersonProperties()
+
+            // Priority for traits:
+            // 1. User-provided traits from the widget form
+            // 2. PostHog person properties
+            const name = userTraits?.name || personProperties.$name || personProperties.name || null
+            const email = userTraits?.email || personProperties.$email || personProperties.email || null
+
+            const payload = {
+                // SECURITY: widget_session_id is required for access control
+                // This is a random UUID that only this browser knows
+                widget_session_id: this._widgetSessionId,
+                // distinct_id is only used for Person linking, not access control
+                distinct_id: distinctId,
+                message: message.trim(),
+                traits: {
+                    name,
+                    email,
+                },
+                ticket_id: ticketId || null,
+            }
+
+            this._api.sendRequest({
+                url: this._api.endpointFor('api', '/api/conversations/v1/widget/message'),
+                method: 'POST',
+                data: payload,
+                headers: {
+                    'X-Conversations-Token': token,
+                },
+                callback: (response) => {
+                    if (response.statusCode === 429) {
+                        reject(new Error('Too many requests. Please wait before trying again.'))
+                        return
+                    }
+
+                    if (response.statusCode !== 200 && response.statusCode !== 201) {
+                        const errorMsg = response.json?.detail || response.json?.message || 'Failed to send message'
+                        logger.error('Failed to send message', { status: response.statusCode })
+                        reject(new Error(errorMsg))
+                        return
+                    }
+
+                    if (!response.json) {
+                        reject(new Error('Invalid response from server'))
+                        return
+                    }
+
+                    const data = response.json as SendMessageResponse
+                    logger.info('Message sent successfully', { ticketId: data.ticket_id, messageId: data.message_id })
+                    resolve(data)
+                },
+            })
+        })
+    }
+
+    /** Fetch messages via the API */
+    private _apiGetMessages(ticketId: string, after?: string): Promise<GetMessagesResponse> {
+        const token = this._config.token
+
+        // eslint-disable-next-line compat/compat
+        return new Promise((resolve, reject) => {
+            // SECURITY: widget_session_id is required for access control
+            // distinct_id is NOT sent for getMessages - access is controlled by widget_session_id only
+            const queryParams: Record<string, string> = {
+                widget_session_id: this._widgetSessionId,
+                limit: '50',
+            }
+
+            if (after) {
+                queryParams.after = after
+            }
+
+            logger.info('Fetching messages', { ticketId, after })
+
+            this._api.sendRequest({
+                url: this._api.endpointFor(
+                    'api',
+                    `/api/conversations/v1/widget/messages/${ticketId}?${formDataToQuery(queryParams)}`
+                ),
+                method: 'GET',
+                headers: {
+                    'X-Conversations-Token': token,
+                },
+                callback: (response) => {
+                    if (response.statusCode === 429) {
+                        reject(new Error('Too many requests. Please wait before trying again.'))
+                        return
+                    }
+
+                    if (response.statusCode !== 200) {
+                        const errorMsg = response.json?.detail || response.json?.message || 'Failed to fetch messages'
+                        logger.error('Failed to fetch messages', { status: response.statusCode })
+                        reject(new Error(errorMsg))
+                        return
+                    }
+
+                    if (!response.json) {
+                        reject(new Error('Invalid response from server'))
+                        return
+                    }
+
+                    const data = response.json as GetMessagesResponse
+                    logger.info('Messages fetched', { count: data.messages.length, hasMore: data.has_more })
+                    resolve(data)
+                },
+            })
+        })
+    }
+
+    /** Mark messages as read via the API */
+    private _apiMarkAsRead(ticketId: string): Promise<MarkAsReadResponse> {
+        const token = this._config.token
+
+        // eslint-disable-next-line compat/compat
+        return new Promise((resolve, reject) => {
+            logger.info('Marking messages as read', { ticketId })
+
+            this._api.sendRequest({
+                url: this._api.endpointFor('api', `/api/conversations/v1/widget/messages/${ticketId}/read`),
+                method: 'POST',
+                data: {
+                    widget_session_id: this._widgetSessionId,
+                },
+                headers: {
+                    'X-Conversations-Token': token,
+                },
+                callback: (response) => {
+                    if (response.statusCode === 429) {
+                        reject(new Error('Too many requests. Please wait before trying again.'))
+                        return
+                    }
+
+                    if (response.statusCode !== 200) {
+                        const errorMsg =
+                            response.json?.detail || response.json?.message || 'Failed to mark messages as read'
+                        logger.error('Failed to mark messages as read', { status: response.statusCode })
+                        reject(new Error(errorMsg))
+                        return
+                    }
+
+                    if (!response.json) {
+                        reject(new Error('Invalid response from server'))
+                        return
+                    }
+
+                    const data = response.json as MarkAsReadResponse
+                    logger.info('Messages marked as read', { unreadCount: data.unread_count })
+                    resolve(data)
+                },
+            })
+        })
+    }
+
+    // ==================== Widget Initialization ====================
 
     /**
      * Initialize the widget
@@ -79,7 +246,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._renderWidget(initialState, initialUserTraits)
 
         // Track widget initialization
-        this._posthog.capture('$conversations_widget_loaded', {
+        this._api.capture('$conversations_widget_loaded', {
             hasExistingTicket: !!this._currentTicketId,
             initialState: initialState,
             hasUserTraits: !!initialUserTraits,
@@ -102,7 +269,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
      */
     private _getInitialUserTraits(): UserProvidedTraits | null {
         // First, check PostHog's person properties
-        const personProperties = this._posthog.persistence?.props || {}
+        const personProperties = this._api.getPersonProperties()
         const posthogName = personProperties.$name || personProperties.name
         const posthogEmail = personProperties.$email || personProperties.email
 
@@ -174,7 +341,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._persistence.saveUserTraits(traits)
 
         // Track identification
-        this._posthog.capture('$conversations_user_identified', {
+        this._api.capture('$conversations_user_identified', {
             hasName: !!traits.name,
             hasEmail: !!traits.email,
         })
@@ -187,26 +354,11 @@ export class ConversationsManager implements ConversationsManagerInterface {
         // Get user traits from the widget
         const userTraits = this._widgetRef?.getUserTraits() || undefined
 
-        if (!this._api) {
-            logger.error('API is undefined!')
-            throw new Error('API not initialized')
-        }
-
-        if (!this._api.sendMessage) {
-            logger.error('sendMessage is undefined on API!', { api: this._api })
-            throw new Error('API.sendMessage not initialized')
-        }
-
         const isNewTicket = !this._currentTicketId
 
         try {
-            // Pass widget_session_id for access control
-            const response = await this._api.sendMessage(
-                message,
-                this._currentTicketId || undefined,
-                userTraits,
-                this._widgetSessionId
-            )
+            // Call API directly
+            const response = await this._apiSendMessage(message, this._currentTicketId || undefined, userTraits)
 
             // Update current ticket ID
             if (!this._currentTicketId) {
@@ -216,7 +368,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             }
 
             // Track message sent
-            this._posthog.capture('$conversations_message_sent', {
+            this._api.capture('$conversations_message_sent', {
                 ticketId: response.ticket_id,
                 isNewTicket: isNewTicket,
                 messageLength: message.length,
@@ -240,7 +392,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         logger.info('Widget state changed', { state })
 
         // Track state changes
-        this._posthog.capture('$conversations_widget_state_changed', {
+        this._api.capture('$conversations_widget_state_changed', {
             state: state,
             ticketId: this._currentTicketId,
         })
@@ -265,7 +417,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
 
         try {
-            const response = await this._api.markAsRead(this._currentTicketId, this._widgetSessionId)
+            const response = await this._apiMarkAsRead(this._currentTicketId)
             this._unreadCount = response.unread_count
             // Update the widget to reflect the new unread count
             this._widgetRef?.setUnreadCount(0)
@@ -284,12 +436,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
 
         try {
-            // Pass widget_session_id for access control
-            const response = await this._api.getMessages(
-                this._currentTicketId,
-                this._lastMessageTimestamp || undefined,
-                this._widgetSessionId
-            )
+            const response = await this._apiGetMessages(this._currentTicketId, this._lastMessageTimestamp || undefined)
 
             // Update unread count from response
             if (isNumber(response.unread_count)) {
@@ -371,7 +518,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
      */
     private _setupIdentifyListener(): void {
         // Listen for captured events and detect $identify events
-        this._unsubscribeIdentifyListener = this._posthog.on('eventCaptured', (event) => {
+        this._unsubscribeIdentifyListener = this._api.on('eventCaptured', (event: any) => {
             if (event.event === '$identify') {
                 const newDistinctId = event.properties?.distinct_id
                 const oldDistinctId = event.properties?.$anon_distinct_id
@@ -401,7 +548,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         })
 
         // Track the identity change
-        this._posthog.capture('$conversations_identity_changed', {
+        this._api.capture('$conversations_identity_changed', {
             hadExistingTicket: !!this._currentTicketId,
         })
     }
@@ -457,17 +604,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
  * This is the entry point called from the lazy-loaded bundle
  */
 export function initConversations(
-    posthog: PostHog,
     config: ConversationsRemoteConfig,
-    api: ConversationsApi
+    apiHelpers: ConversationsApiHelpers
 ): ConversationsManager {
-    logger.info('initConversations called', {
-        hasPosthog: !!posthog,
-        hasConfig: !!config,
-        hasApi: !!api,
-        apiType: typeof api,
-        apiKeys: api ? Object.keys(api) : 'undefined',
-        argumentsLength: arguments.length,
-    })
-    return new ConversationsManager(posthog, config, api)
+    logger.info('initConversations called', { hasConfig: !!config, hasApiHelpers: !!apiHelpers })
+    return new ConversationsManager(config, apiHelpers)
 }

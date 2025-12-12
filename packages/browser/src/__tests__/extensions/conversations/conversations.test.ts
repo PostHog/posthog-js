@@ -1,11 +1,10 @@
 /* eslint-disable compat/compat */
-import { PostHogConversations, ConversationsApi, ConversationsManager } from '../../../posthog-conversations'
+import { PostHogConversations, ConversationsManager } from '../../../posthog-conversations'
 import { ConversationsRemoteConfig } from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'
 import { RemoteConfig } from '../../../types'
-import { assignableWindow } from '../../../utils/globals'
+import { assignableWindow, ConversationsApiHelpers } from '../../../utils/globals'
 import { createMockPostHog, createMockConfig, createMockPersistence } from '../../helpers/posthog-instance'
-import { RequestRouter } from '../../../utils/request-router'
 
 describe('PostHogConversations', () => {
     let conversations: PostHogConversations
@@ -38,10 +37,14 @@ describe('PostHogConversations', () => {
                     $email: 'test@example.com',
                 },
             }),
-            requestRouter: new RequestRouter(mockPostHog as any),
+            requestRouter: {
+                endpointFor: jest.fn().mockReturnValue('https://test.posthog.com/api/test'),
+            } as any,
             consent: {
                 isOptedOut: jest.fn().mockReturnValue(false),
             } as any,
+            get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
+            on: jest.fn().mockReturnValue(jest.fn()), // Returns unsubscribe function
         })
 
         // Setup PostHog extensions
@@ -217,9 +220,15 @@ describe('PostHogConversations', () => {
             conversations.onRemoteConfig(validRemoteConfig as RemoteConfig)
 
             expect(assignableWindow.__PosthogExtensions__.initConversations).toHaveBeenCalledWith(
-                mockPostHog,
                 expect.objectContaining({ enabled: true, token: 'test-token' }),
-                expect.any(Object)
+                expect.objectContaining({
+                    sendRequest: expect.any(Function),
+                    endpointFor: expect.any(Function),
+                    getDistinctId: expect.any(Function),
+                    getPersonProperties: expect.any(Function),
+                    capture: expect.any(Function),
+                    on: expect.any(Function),
+                })
             )
         })
 
@@ -344,13 +353,13 @@ describe('PostHogConversations', () => {
         })
     })
 
-    describe('API integration', () => {
-        let capturedApi: ConversationsApi
+    describe('API helpers creation', () => {
+        let capturedApiHelpers: ConversationsApiHelpers
 
         beforeEach(() => {
             assignableWindow.__PosthogExtensions__ = {
-                initConversations: jest.fn((_instance, _config, api) => {
-                    capturedApi = api
+                initConversations: jest.fn((config, apiHelpers) => {
+                    capturedApiHelpers = apiHelpers
                     return mockManager
                 }),
             }
@@ -365,248 +374,66 @@ describe('PostHogConversations', () => {
             conversations.onRemoteConfig(remoteConfig as RemoteConfig)
         })
 
-        describe('sendMessage', () => {
-            it('should send message with correct payload including widget_session_id', async () => {
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(({ callback }) => {
-                    callback({
-                        statusCode: 200,
-                        json: {
-                            ticket_id: 'ticket-123',
-                            message_id: 'msg-456',
-                            ticket_status: 'open',
-                            created_at: '2023-01-01T00:00:00Z',
-                        },
-                    })
-                })
+        it('should create apiHelpers with all required methods', () => {
+            expect(capturedApiHelpers).toBeDefined()
+            expect(typeof capturedApiHelpers.sendRequest).toBe('function')
+            expect(typeof capturedApiHelpers.endpointFor).toBe('function')
+            expect(typeof capturedApiHelpers.getDistinctId).toBe('function')
+            expect(typeof capturedApiHelpers.getPersonProperties).toBe('function')
+            expect(typeof capturedApiHelpers.capture).toBe('function')
+            expect(typeof capturedApiHelpers.on).toBe('function')
+        })
 
-                const result = await capturedApi.sendMessage('Hello!', undefined, undefined, 'test-widget-session-id')
-
-                expect(mockPostHog._send_request).toHaveBeenCalledWith(
-                    expect.objectContaining({
-                        method: 'POST',
-                        url: expect.stringContaining('/api/conversations/v1/widget/message'),
-                        data: expect.objectContaining({
-                            widget_session_id: 'test-widget-session-id',
-                            distinct_id: 'test-distinct-id',
-                            message: 'Hello!',
-                            traits: expect.objectContaining({
-                                name: 'Test User',
-                                email: 'test@example.com',
-                            }),
-                        }),
-                        headers: {
-                            'X-Conversations-Token': 'test-conversations-token',
-                        },
-                    })
-                )
-
-                expect(result).toEqual({
-                    ticket_id: 'ticket-123',
-                    message_id: 'msg-456',
-                    ticket_status: 'open',
-                    created_at: '2023-01-01T00:00:00Z',
-                })
+        it('sendRequest should call PostHog._send_request', () => {
+            capturedApiHelpers.sendRequest({
+                url: 'https://test.com/api',
+                method: 'POST',
+                data: { test: 'data' },
+                headers: { 'X-Test': 'header' },
+                callback: jest.fn(),
             })
 
-            it('should include ticket_id if provided', async () => {
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(({ callback }) => {
-                    callback({
-                        statusCode: 200,
-                        json: {
-                            ticket_id: 'existing-ticket',
-                            message_id: 'msg-456',
-                            ticket_status: 'open',
-                            created_at: '2023-01-01T00:00:00Z',
-                        },
-                    })
-                })
-
-                await capturedApi.sendMessage('Hello!', 'existing-ticket')
-
-                expect(mockPostHog._send_request).toHaveBeenCalledWith(
-                    expect.objectContaining({
-                        data: expect.objectContaining({
-                            ticket_id: 'existing-ticket',
-                        }),
-                    })
-                )
-            })
-
-            it('should use user-provided traits over PostHog properties', async () => {
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(({ callback }) => {
-                    callback({
-                        statusCode: 200,
-                        json: {
-                            ticket_id: 'ticket-123',
-                            message_id: 'msg-456',
-                            ticket_status: 'open',
-                            created_at: '2023-01-01T00:00:00Z',
-                        },
-                    })
-                })
-
-                await capturedApi.sendMessage('Hello!', undefined, {
-                    name: 'Override Name',
-                    email: 'override@example.com',
-                })
-
-                expect(mockPostHog._send_request).toHaveBeenCalledWith(
-                    expect.objectContaining({
-                        data: expect.objectContaining({
-                            traits: {
-                                name: 'Override Name',
-                                email: 'override@example.com',
-                            },
-                        }),
-                    })
-                )
-            })
-
-            it('should handle 429 rate limit error', async () => {
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(({ callback }) => {
-                    callback({
-                        statusCode: 429,
-                        json: {},
-                    })
-                })
-
-                await expect(capturedApi.sendMessage('Hello!')).rejects.toThrow(
-                    'Too many requests. Please wait before trying again.'
-                )
-            })
-
-            it('should handle 4xx error', async () => {
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(({ callback }) => {
-                    callback({
-                        statusCode: 400,
-                        json: { detail: 'Invalid message' },
-                    })
-                })
-
-                await expect(capturedApi.sendMessage('Hello!')).rejects.toThrow('Invalid message')
-            })
-
-            it('should handle invalid response', async () => {
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(({ callback }) => {
-                    callback({
-                        statusCode: 200,
-                        json: null,
-                    })
-                })
-
-                await expect(capturedApi.sendMessage('Hello!')).rejects.toThrow('Invalid response from server')
+            expect(mockPostHog._send_request).toHaveBeenCalledWith({
+                url: 'https://test.com/api',
+                method: 'POST',
+                data: { test: 'data' },
+                headers: { 'X-Test': 'header' },
+                callback: expect.any(Function),
             })
         })
 
-        describe('getMessages', () => {
-            it('should fetch messages with widget_session_id in query params', async () => {
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(({ callback }) => {
-                    callback({
-                        statusCode: 200,
-                        json: {
-                            ticket_id: 'ticket-123',
-                            ticket_status: 'open',
-                            messages: [
-                                {
-                                    id: 'msg-1',
-                                    content: 'Hello',
-                                    author_type: 'customer',
-                                    created_at: '2023-01-01T00:00:00Z',
-                                    is_private: false,
-                                },
-                            ],
-                            has_more: false,
-                        },
-                    })
-                })
+        it('endpointFor should call PostHog.requestRouter.endpointFor', () => {
+            capturedApiHelpers.endpointFor('api', '/test/path')
 
-                const result = await capturedApi.getMessages('ticket-123', undefined, 'test-widget-session-id')
+            expect(mockPostHog.requestRouter.endpointFor).toHaveBeenCalledWith('api', '/test/path')
+        })
 
-                expect(mockPostHog._send_request).toHaveBeenCalledWith(
-                    expect.objectContaining({
-                        method: 'GET',
-                        url: expect.stringContaining('/api/conversations/v1/widget/messages/ticket-123'),
-                        headers: {
-                            'X-Conversations-Token': 'test-conversations-token',
-                        },
-                    })
-                )
+        it('getDistinctId should call PostHog.get_distinct_id', () => {
+            capturedApiHelpers.getDistinctId()
 
-                // Verify widget_session_id is in URL
-                const callArgs = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
-                expect(callArgs.url).toContain('widget_session_id=test-widget-session-id')
-                // Verify distinct_id is NOT in URL (access control is via widget_session_id only)
-                expect(callArgs.url).not.toContain('distinct_id=')
+            expect(mockPostHog.get_distinct_id).toHaveBeenCalled()
+        })
 
-                expect(result).toEqual({
-                    ticket_id: 'ticket-123',
-                    ticket_status: 'open',
-                    messages: expect.arrayContaining([
-                        expect.objectContaining({
-                            id: 'msg-1',
-                            content: 'Hello',
-                        }),
-                    ]),
-                    has_more: false,
-                })
+        it('getPersonProperties should return persistence props', () => {
+            const result = capturedApiHelpers.getPersonProperties()
+
+            expect(result).toEqual({
+                $name: 'Test User',
+                $email: 'test@example.com',
             })
+        })
 
-            it('should include after parameter for pagination', async () => {
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(({ callback }) => {
-                    callback({
-                        statusCode: 200,
-                        json: {
-                            ticket_id: 'ticket-123',
-                            ticket_status: 'open',
-                            messages: [],
-                            has_more: false,
-                        },
-                    })
-                })
+        it('capture should call PostHog.capture', () => {
+            capturedApiHelpers.capture('test_event', { prop: 'value' })
 
-                await capturedApi.getMessages('ticket-123', 'cursor-456', 'test-widget-session-id')
+            expect(mockPostHog.capture).toHaveBeenCalledWith('test_event', { prop: 'value' })
+        })
 
-                expect(mockPostHog._send_request).toHaveBeenCalledWith(
-                    expect.objectContaining({
-                        url: expect.stringContaining('after=cursor-456'),
-                    })
-                )
-            })
+        it('on should call PostHog.on', () => {
+            const handler = jest.fn()
+            capturedApiHelpers.on('eventCaptured', handler)
 
-            it('should handle 429 rate limit error', async () => {
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(({ callback }) => {
-                    callback({
-                        statusCode: 429,
-                        json: {},
-                    })
-                })
-
-                await expect(capturedApi.getMessages('ticket-123')).rejects.toThrow(
-                    'Too many requests. Please wait before trying again.'
-                )
-            })
-
-            it('should handle 4xx error', async () => {
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(({ callback }) => {
-                    callback({
-                        statusCode: 404,
-                        json: { detail: 'Ticket not found' },
-                    })
-                })
-
-                await expect(capturedApi.getMessages('ticket-123')).rejects.toThrow('Ticket not found')
-            })
-
-            it('should handle invalid response', async () => {
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(({ callback }) => {
-                    callback({
-                        statusCode: 200,
-                        json: null,
-                    })
-                })
-
-                await expect(capturedApi.getMessages('ticket-123')).rejects.toThrow('Invalid response from server')
-            })
+            expect(mockPostHog.on).toHaveBeenCalledWith('eventCaptured', handler)
         })
     })
 

@@ -1,4 +1,3 @@
-import { PostHog } from '../../posthog-core'
 import { UserProvidedTraits } from '../../posthog-conversations-types'
 import { createLogger } from '../../utils/logger'
 import { uuidv7 } from '../../uuidv7'
@@ -11,11 +10,10 @@ const WIDGET_STATE_KEY = 'ph_conversations_widget_state'
 const USER_TRAITS_KEY = 'ph_conversations_user_traits'
 
 export class ConversationsPersistence {
-    private _posthog: PostHog
     private _cachedWidgetSessionId: string | null = null
 
-    constructor(posthog: PostHog) {
-        this._posthog = posthog
+    constructor() {
+        // No dependencies needed - persistence uses localStorage directly
     }
 
     /**

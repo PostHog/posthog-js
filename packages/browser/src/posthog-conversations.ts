@@ -1,20 +1,12 @@
 import { PostHog } from './posthog-core'
-import {
-    ConversationsRemoteConfig,
-    SendMessageResponse,
-    GetMessagesResponse,
-    MarkAsReadResponse,
-    UserProvidedTraits,
-} from './posthog-conversations-types'
+import { ConversationsRemoteConfig } from './posthog-conversations-types'
 import { RemoteConfig } from './types'
-import { assignableWindow, LazyLoadedConversationsInterface, ConversationsApiInterface } from './utils/globals'
+import { assignableWindow, LazyLoadedConversationsInterface, ConversationsApiHelpers } from './utils/globals'
 import { createLogger } from './utils/logger'
 import { isNullish, isUndefined, isBoolean, isNull } from '@posthog/core'
-import { formDataToQuery } from './utils/request-utils'
 
 const logger = createLogger('[Conversations]')
 
-export type ConversationsApi = ConversationsApiInterface
 export type ConversationsManager = LazyLoadedConversationsInterface
 
 export class PostHogConversations {
@@ -150,12 +142,46 @@ export class PostHogConversations {
         }
     }
 
+    /**
+     * Create API helpers that wrap PostHog internal methods.
+     * These bound functions ensure the methods work correctly even after minification.
+     */
+    private _createApiHelpers(): ConversationsApiHelpers {
+        const instance = this._instance
+
+        return {
+            sendRequest: (options) => {
+                instance._send_request({
+                    url: options.url,
+                    method: options.method,
+                    data: options.data,
+                    headers: options.headers,
+                    callback: options.callback,
+                })
+            },
+            endpointFor: (type, path) => {
+                return instance.requestRouter.endpointFor(type, path)
+            },
+            getDistinctId: () => {
+                return instance.get_distinct_id()
+            },
+            getPersonProperties: () => {
+                return instance.persistence?.props || {}
+            },
+            capture: (eventName, properties) => {
+                instance.capture(eventName, properties)
+            },
+            on: (event, handler) => {
+                return instance.on(event as any, handler)
+            },
+        }
+    }
+
     /** Helper to finalize conversations initialization */
     private _completeInitialization(
         initConversationsFn: (
-            instance: PostHog,
             config: ConversationsRemoteConfig,
-            api: ConversationsApiInterface
+            apiHelpers: ConversationsApiHelpers
         ) => LazyLoadedConversationsInterface
     ): void {
         if (!this._remoteConfig) {
@@ -164,206 +190,15 @@ export class PostHogConversations {
         }
 
         try {
-            // Create the API object that uses the main bundle's _send_request
-            const api = this._createApi()
+            // Create API helpers that wrap PostHog internal methods
+            const apiHelpers = this._createApiHelpers()
 
-            this._conversationsManager = initConversationsFn(this._instance, this._remoteConfig, api)
+            // Pass config and API helpers to the extension
+            this._conversationsManager = initConversationsFn(this._remoteConfig, apiHelpers)
             logger.info('Conversations loaded successfully')
         } catch (e) {
             this._handleLoadError('Error completing conversations initialization', e)
         }
-    }
-
-    /** Create the API object for the lazy-loaded manager to use */
-    private _createApi(): ConversationsApiInterface {
-        const token = this._remoteConfig?.token || ''
-
-        const api = {
-            sendMessage: (
-                message: string,
-                ticketId?: string,
-                userTraits?: UserProvidedTraits,
-                widgetSessionId?: string
-            ): Promise<SendMessageResponse> => {
-                return this._apiSendMessage(message, ticketId, token, userTraits, widgetSessionId)
-            },
-            getMessages: (ticketId: string, after?: string, widgetSessionId?: string): Promise<GetMessagesResponse> => {
-                return this._apiGetMessages(ticketId, after, token, widgetSessionId)
-            },
-            markAsRead: (ticketId: string, widgetSessionId: string): Promise<MarkAsReadResponse> => {
-                return this._apiMarkAsRead(ticketId, token, widgetSessionId)
-            },
-        }
-
-        return api
-    }
-
-    /** Send a message via the API (runs in main bundle) */
-    private _apiSendMessage(
-        message: string,
-        ticketId: string | undefined,
-        token: string,
-        userTraits?: UserProvidedTraits,
-        widgetSessionId?: string
-    ): Promise<SendMessageResponse> {
-        // eslint-disable-next-line compat/compat
-        return new Promise((resolve, reject) => {
-            const distinctId = this._instance.get_distinct_id()
-            const personProperties = this._instance.persistence?.props || {}
-
-            // Priority for traits:
-            // 1. User-provided traits from the widget form
-            // 2. PostHog person properties
-            const name = userTraits?.name || personProperties.$name || personProperties.name || null
-            const email = userTraits?.email || personProperties.$email || personProperties.email || null
-
-            const payload = {
-                // SECURITY: widget_session_id is required for access control
-                // This is a random UUID that only this browser knows
-                widget_session_id: widgetSessionId,
-                // distinct_id is only used for Person linking, not access control
-                distinct_id: distinctId,
-                message: message.trim(),
-                traits: {
-                    name,
-                    email,
-                },
-                ticket_id: ticketId || null,
-            }
-
-            this._instance._send_request({
-                url: this._instance.requestRouter.endpointFor('api', '/api/conversations/v1/widget/message'),
-                method: 'POST',
-                data: payload,
-                headers: {
-                    'X-Conversations-Token': token,
-                },
-                callback: (response) => {
-                    if (response.statusCode === 429) {
-                        reject(new Error('Too many requests. Please wait before trying again.'))
-                        return
-                    }
-
-                    if (response.statusCode !== 200 && response.statusCode !== 201) {
-                        const errorMsg = response.json?.detail || response.json?.message || 'Failed to send message'
-                        logger.error('Failed to send message', { status: response.statusCode })
-                        reject(new Error(errorMsg))
-                        return
-                    }
-
-                    if (!response.json) {
-                        reject(new Error('Invalid response from server'))
-                        return
-                    }
-
-                    const data = response.json as SendMessageResponse
-                    logger.info('Message sent successfully', { ticketId: data.ticket_id, messageId: data.message_id })
-                    resolve(data)
-                },
-            })
-        })
-    }
-
-    /** Fetch messages via the API (runs in main bundle) */
-    private _apiGetMessages(
-        ticketId: string,
-        after: string | undefined,
-        token: string,
-        widgetSessionId?: string
-    ): Promise<GetMessagesResponse> {
-        // eslint-disable-next-line compat/compat
-        return new Promise((resolve, reject) => {
-            // SECURITY: widget_session_id is required for access control
-            // distinct_id is NOT sent for getMessages - access is controlled by widget_session_id only
-            const queryParams: Record<string, string> = {
-                widget_session_id: widgetSessionId || '',
-                limit: '50',
-            }
-
-            if (after) {
-                queryParams.after = after
-            }
-
-            logger.info('Fetching messages', { ticketId, after })
-
-            this._instance._send_request({
-                url: this._instance.requestRouter.endpointFor(
-                    'api',
-                    `/api/conversations/v1/widget/messages/${ticketId}?${formDataToQuery(queryParams)}`
-                ),
-                method: 'GET',
-                headers: {
-                    'X-Conversations-Token': token,
-                },
-                callback: (response) => {
-                    if (response.statusCode === 429) {
-                        reject(new Error('Too many requests. Please wait before trying again.'))
-                        return
-                    }
-
-                    if (response.statusCode !== 200) {
-                        const errorMsg = response.json?.detail || response.json?.message || 'Failed to fetch messages'
-                        logger.error('Failed to fetch messages', { status: response.statusCode })
-                        reject(new Error(errorMsg))
-                        return
-                    }
-
-                    if (!response.json) {
-                        reject(new Error('Invalid response from server'))
-                        return
-                    }
-
-                    const data = response.json as GetMessagesResponse
-                    logger.info('Messages fetched', { count: data.messages.length, hasMore: data.has_more })
-                    resolve(data)
-                },
-            })
-        })
-    }
-
-    /** Mark messages as read via the API (runs in main bundle) */
-    private _apiMarkAsRead(ticketId: string, token: string, widgetSessionId: string): Promise<MarkAsReadResponse> {
-        // eslint-disable-next-line compat/compat
-        return new Promise((resolve, reject) => {
-            logger.info('Marking messages as read', { ticketId })
-
-            this._instance._send_request({
-                url: this._instance.requestRouter.endpointFor(
-                    'api',
-                    `/api/conversations/v1/widget/messages/${ticketId}/read`
-                ),
-                method: 'POST',
-                data: {
-                    widget_session_id: widgetSessionId,
-                },
-                headers: {
-                    'X-Conversations-Token': token,
-                },
-                callback: (response) => {
-                    if (response.statusCode === 429) {
-                        reject(new Error('Too many requests. Please wait before trying again.'))
-                        return
-                    }
-
-                    if (response.statusCode !== 200) {
-                        const errorMsg =
-                            response.json?.detail || response.json?.message || 'Failed to mark messages as read'
-                        logger.error('Failed to mark messages as read', { status: response.statusCode })
-                        reject(new Error(errorMsg))
-                        return
-                    }
-
-                    if (!response.json) {
-                        reject(new Error('Invalid response from server'))
-                        return
-                    }
-
-                    const data = response.json as MarkAsReadResponse
-                    logger.info('Messages marked as read', { unreadCount: data.unread_count })
-                    resolve(data)
-                },
-            })
-        })
     }
 
     /** Helper to handle initialization errors */

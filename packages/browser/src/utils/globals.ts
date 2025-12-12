@@ -8,12 +8,7 @@ import {
     SiteAppLoader,
     SessionStartReason,
 } from '../types'
-import type {
-    ConversationsRemoteConfig,
-    SendMessageResponse,
-    GetMessagesResponse,
-    MarkAsReadResponse,
-} from '../posthog-conversations-types'
+import type { ConversationsRemoteConfig } from '../posthog-conversations-types'
 // only importing types here, so won't affect the bundle
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SessionRecordingStatus, TriggerType } from '../extensions/replay/external/triggerMatching'
@@ -199,18 +194,29 @@ export interface LazyLoadedConversationsInterface {
 }
 
 /**
- * API interface passed to the lazy-loaded conversations manager
- * This is created in the main bundle and passed to the lazy-loaded extension
+ * API helpers passed from the main bundle to the lazy-loaded conversations extension.
+ * These are bound wrapper functions that ensure internal PostHog methods work correctly
+ * even after minification.
  */
-export interface ConversationsApiInterface {
-    sendMessage: (
-        message: string,
-        ticketId?: string,
-        userTraits?: { name?: string; email?: string },
-        widgetSessionId?: string
-    ) => Promise<SendMessageResponse>
-    getMessages: (ticketId: string, after?: string, widgetSessionId?: string) => Promise<GetMessagesResponse>
-    markAsRead: (ticketId: string, widgetSessionId: string) => Promise<MarkAsReadResponse>
+export interface ConversationsApiHelpers {
+    /** Send an HTTP request using PostHog's request infrastructure */
+    sendRequest: (options: {
+        url: string
+        method: 'GET' | 'POST'
+        data?: Record<string, any>
+        headers?: Record<string, string>
+        callback: (response: { statusCode: number; json?: any }) => void
+    }) => void
+    /** Build a full API URL from a path */
+    endpointFor: (type: 'api', path: string) => string
+    /** Get the current distinct ID */
+    getDistinctId: () => string
+    /** Get person properties from persistence */
+    getPersonProperties: () => Record<string, any>
+    /** Capture an event */
+    capture: (eventName: string, properties?: Record<string, any>) => void
+    /** Subscribe to events */
+    on: (event: string, handler: (data: any) => void) => () => void
 }
 
 interface PostHogExtensions {
@@ -250,9 +256,8 @@ interface PostHogExtensions {
     }
     initSessionRecording?: (ph: PostHog) => LazyLoadedSessionRecordingInterface
     initConversations?: (
-        ph: PostHog,
         config: ConversationsRemoteConfig,
-        api: ConversationsApiInterface
+        apiHelpers: ConversationsApiHelpers
     ) => LazyLoadedConversationsInterface
 }
 
