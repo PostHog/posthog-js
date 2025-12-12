@@ -81,7 +81,7 @@
         "_containerElement",
         "_context",
         "_counter",
-        "_createApi",
+        "_createApiHelpers",
         "_cross_subdomain",
         "_currentPageview",
         "_currentStepIndex",
