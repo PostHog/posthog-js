@@ -48,19 +48,16 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
             const args = ['sourcemap', 'process']
             const cliPath = posthogOptions.cliBinaryPath
             if (options.dir) {
-                const directory = path.resolve(options.dir)
-                args.push('--directory', directory)
                 for (const fileName in bundle) {
                     const chunk = bundle[fileName]
                     if (chunk.type === 'chunk') {
-                        args.push('--include', `**/${fileName}`)
+                        const chunkPath = path.resolve(options.dir, fileName)
+                        args.push('--file', chunkPath)
                     }
                 }
             } else if (options.file) {
                 const filePath = path.resolve(options.file)
-                const parentDirectory = path.dirname(filePath)
-                args.push('--directory', parentDirectory)
-                args.push('--include', filePath)
+                args.push('--file', filePath)
             }
             if (posthogOptions.sourcemaps.project) {
                 args.push('--project', posthogOptions.sourcemaps.project)

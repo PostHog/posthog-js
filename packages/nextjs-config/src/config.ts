@@ -62,7 +62,6 @@ function withWebpackConfig(userWebpackConfig: NextConfig['webpack'], posthogConf
     const isServer = options.isServer
     if (sourceMapEnabled) {
       if (!turbopackEnabled) {
-        webpackConfig.devtool = 'hidden-source-map'
         webpackConfig.plugins = webpackConfig.plugins || []
         let currentConfig = posthogConfig
         if (isServer) {

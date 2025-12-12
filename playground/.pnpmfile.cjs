@@ -29,9 +29,10 @@ module.exports = {
                 packages: ['.'],
                 preferFrozenLockfile: false,
                 verifyDepsBeforeRun: true,
-                nodeLinker: 'pnp',
+                nodeLinker: 'isolated',
                 minimumReleaseAge: 4320,
                 minimumReleaseAgeExclude: ['node-forge@1.3.2'],
+                onlyBuiltDependencies: ['@posthog/cli'],
             })
         },
     },
