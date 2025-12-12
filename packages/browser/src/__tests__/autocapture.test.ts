@@ -232,6 +232,7 @@ describe('Autocapture system', () => {
         let div2: HTMLDivElement
         let input: HTMLInputElement
         let sensitiveInput: HTMLInputElement
+        let noCaptureInput: HTMLInputElement
         let hidden: HTMLInputElement
         let password: HTMLInputElement
 
@@ -253,6 +254,14 @@ describe('Autocapture system', () => {
             sensitiveInput.setAttribute('data-ph-capture-attribute-on-the-sensitive-input', 'is on the sensitive-input')
             sensitiveInput.className = 'ph-sensitive'
 
+            noCaptureInput = document.createElement('input')
+            noCaptureInput.value = 'test val'
+            noCaptureInput.setAttribute(
+                'data-ph-capture-attribute-on-the-no-capture-input',
+                'is on the no-capture-input'
+            )
+            noCaptureInput.className = 'ph-no-capture'
+
             hidden = document.createElement('input')
             hidden.setAttribute('type', 'hidden')
             hidden.setAttribute('data-ph-capture-attribute-on-the-hidden', 'is on the hidden')
@@ -273,6 +282,7 @@ describe('Autocapture system', () => {
             div2.appendChild(div)
             div2.appendChild(input)
             div2.appendChild(sensitiveInput)
+            div2.appendChild(noCaptureInput)
             div2.appendChild(hidden)
             div2.appendChild(password)
         })
@@ -292,10 +302,16 @@ describe('Autocapture system', () => {
             expect(props['on-the-input']).toBe('is on the input')
         })
 
-        it('should collect augment from input with class "ph-sensitive"', () => {
+        it('should not collect augment from input with class "ph-sensitive"', () => {
             const props = getAugmentPropertiesFromElement(sensitiveInput)
 
-            expect(props['on-the-sensitive-input']).toBeUndefined()
+            expect(props).toStrictEqual({})
+        })
+
+        it('should not collect augment from input with class "ph-no-capture"', () => {
+            const props = getAugmentPropertiesFromElement(noCaptureInput)
+
+            expect(props).toStrictEqual({})
         })
 
         it('should not collect augment from the hidden element value', () => {
