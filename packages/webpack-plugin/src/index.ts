@@ -1,6 +1,6 @@
 import { Logger, createLogger } from '@posthog/core'
 import { PluginConfig, resolveConfig, ResolvedPluginConfig } from './config'
-import { Compilation, Stats } from 'webpack'
+import { Compilation, Stats, SourceMapDevToolPlugin, Compiler } from 'webpack'
 import { spawnLocal } from '@posthog/core/process'
 import path from 'path'
 
@@ -24,19 +24,26 @@ export class PosthogWebpackPlugin {
     }
 
     apply(compiler: any): void {
+        new SourceMapDevToolPlugin({
+            filename: '[file].map',
+            noSources: false,
+            moduleFilenameTemplate: '[resource-path]',
+            append: this.resolvedConfig.sourcemaps.deleteAfterUpload ? false : undefined,
+        }).apply(compiler)
+
         const onDone = async (stats: Stats, callback: any): Promise<void> => {
             callback = callback || (() => {})
             try {
                 await this.processSourceMaps(stats.compilation, this.resolvedConfig)
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : error
-                this.logger.error('Error running PostHog sourcemap plugin:', errorMessage)
+                this.logger.error('Error running PostHog webpack plugin:', errorMessage)
             }
             return callback()
         }
 
         if (compiler.hooks) {
-            compiler.hooks.done.tapAsync('SourcemapWebpackPlugin', onDone)
+            compiler.hooks.done.tapAsync('PosthogWebpackPlugin', onDone)
         } else {
             compiler.plugin('done', onDone)
         }
@@ -54,16 +61,12 @@ export class PosthogWebpackPlugin {
             return
         }
 
-        const filePaths = chunkArray.flatMap((chunk) =>
-            Array.from(chunk.files).map((file) => path.resolve(outputDirectory, file))
+        chunkArray.forEach((chunk) =>
+            chunk.files.forEach((file) => {
+                const chunkPath = path.resolve(outputDirectory, file)
+                args.push('--file', chunkPath)
+            })
         )
-        const [commonDirectory, relativeFilePaths] = splitFilePaths(filePaths)
-
-        args.push('--directory', commonDirectory)
-
-        for (const chunkPath of relativeFilePaths) {
-            args.push('--include', `**/${chunkPath}`)
-        }
 
         if (config.sourcemaps.project) {
             args.push('--project', config.sourcemaps.project)
@@ -95,37 +98,4 @@ function assertValue(value: any, message: string): void {
     if (!value) {
         throw new Error(message)
     }
-}
-
-// Convert a list of absolute file path to a common absolute directory ancestor path and relative path
-function splitFilePaths(absolutePaths: string[]): [string, string[]] {
-    if (!absolutePaths || absolutePaths.length === 0) {
-        return [process.cwd(), []]
-    }
-
-    // Start with the directory of the first path and walk up until we find a common ancestor
-    let commonDir = path.dirname(absolutePaths[0])
-
-    const isCommonAncestor = (candidate: string): boolean => {
-        return absolutePaths.every((p) => {
-            const rel = path.relative(candidate, p)
-            // If rel starts with '..' or is absolute, p is not inside candidate
-            return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
-        })
-    }
-
-    // If the first candidate isn't a common ancestor, walk up the directory tree
-    while (!isCommonAncestor(commonDir)) {
-        const parent = path.dirname(commonDir)
-        if (parent === commonDir) {
-            // reached filesystem root
-            break
-        }
-        commonDir = parent
-    }
-
-    // Compute relative paths from the common directory, normalize to forward slashes for globs
-    const relativePaths = absolutePaths.map((p) => path.relative(commonDir, p).replace(/\\/g, '/'))
-
-    return [commonDir, relativePaths]
 }
