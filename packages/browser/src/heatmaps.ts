@@ -3,7 +3,7 @@ import { DeadClickCandidate, Properties, RemoteConfig } from './types'
 import { PostHog } from './posthog-core'
 
 import { document, window } from './utils/globals'
-import { getEventTarget, getParentElement } from './autocapture-utils'
+import { getEventTarget, getParentElement } from './utils/dom-event-utils'
 import { HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
 import { isNumber, isUndefined, isEmptyObject, isObject } from '@posthog/core'
 import { createLogger } from './utils/logger'

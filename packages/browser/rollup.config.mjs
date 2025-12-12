@@ -177,6 +177,9 @@ const plugins = (es5, noExternal) => [
                               // set as part of lazy-loading (doesn't start with _ BUT be abundantly cautious)
                               'loadExternalDependency',
 
+                              // called across main bundle / lazy bundle boundary for autocapture
+                              '_captureEvent',
+
                               // part of the public API (none start with _ so are not mangled anyway BUT be abundantly cautious)
                               'capture',
                               'identify',

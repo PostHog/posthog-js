@@ -1,4 +1,4 @@
-import { Autocapture } from './autocapture'
+import { Autocapture } from './extensions/autocapture'
 import Config from './config'
 import { ConsentManager, ConsentStatus } from './consent'
 import {

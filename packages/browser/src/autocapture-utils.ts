@@ -6,6 +6,10 @@ import { logger } from './utils/logger'
 import { window } from './utils/globals'
 import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
 import { includes, trim } from '@posthog/core'
+import { getEventTarget, getParentElement, autocaptureCompatibleElements } from './utils/dom-event-utils'
+
+// Re-export shared utilities for backwards compatibility
+export { getEventTarget, getParentElement, autocaptureCompatibleElements }
 
 export function splitClassString(s: string): string[] {
     return s ? trim(s).split(/\s+/) : []
@@ -84,20 +88,6 @@ export function getSafeText(el: Element): string {
     return trim(elText)
 }
 
-export function getEventTarget(e: Event): Element | null {
-    // https://developer.mozilla.org/en-US/docs/Web/API/Event/target#Compatibility_notes
-    if (isUndefined(e.target)) {
-        return (e.srcElement as Element) || null
-    } else {
-        if ((e.target as HTMLElement)?.shadowRoot) {
-            return (e.composedPath()[0] as Element) || null
-        }
-        return (e.target as Element) || null
-    }
-}
-
-export const autocaptureCompatibleElements = ['a', 'button', 'form', 'input', 'select', 'textarea', 'label']
-
 /*
  if there is no config, then all elements are allowed
  if there is a config, and there is an allow list, then only elements in the allow list are allowed
@@ -143,12 +133,6 @@ function checkIfElementsMatchCSSSelector(elements: Element[], selectorList: stri
     }
 
     return false
-}
-
-export function getParentElement(curEl: Element): Element | false {
-    const parentNode = curEl.parentNode
-    if (!parentNode || !isElementNode(parentNode)) return false
-    return parentNode
 }
 
 const DEFAULT_CONTENT_IGNORELIST = ['next', 'previous', 'prev', '>', '<']

@@ -160,6 +160,7 @@ export type PostHogExtensionKind =
     | 'tracing-headers'
     | 'surveys'
     | 'dead-clicks-autocapture'
+    | 'autocapture'
     | 'remote-config'
     | ExternalExtensionKind
 
@@ -181,6 +182,12 @@ export interface LazyLoadedSessionRecordingInterface {
 export interface LazyLoadedDeadClicksAutocaptureInterface {
     start: (observerTarget: Node) => void
     stop: () => void
+}
+
+export interface LazyLoadedAutocaptureInterface {
+    _captureEvent: (e: Event, eventName?: string, timestamp?: Date) => boolean | void
+    setElementSelectors: (selectors: Set<string>) => void
+    getElementSelectors: (element: Element | null) => string[] | null
 }
 
 interface PostHogExtensions {
@@ -214,6 +221,7 @@ interface PostHogExtensions {
         ph: PostHog,
         config: DeadClicksAutoCaptureConfig
     ) => LazyLoadedDeadClicksAutocaptureInterface
+    initAutocapture?: (ph: PostHog) => LazyLoadedAutocaptureInterface
     integrations?: {
         [K in ExternalIntegrationKind]?: { start: (posthog: PostHog) => void; stop: () => void }
     }
