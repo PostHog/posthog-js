@@ -38,7 +38,6 @@ export class PostHogConversations {
             // It's a ConversationsRemoteConfig object
             this._isConversationsEnabled = conversations.enabled
             this._remoteConfig = conversations
-            logger.info(`Conversations enabled, token: ${conversations.token ? 'present' : 'missing'}`)
         }
 
         this.loadIfEnabled()
