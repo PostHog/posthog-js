@@ -206,11 +206,6 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         if (onIdentify) {
             onIdentify(traits)
         }
-
-        logger.info('=== FORM SUBMITTED ===')
-        logger.info(`  Name: ${traits.name || '(not provided)'}`)
-        logger.info(`  Email: ${traits.email || '(not provided)'}`)
-        logger.info('  → User can now chat')
     }
 
     private _handleSendMessage = async () => {
