@@ -168,7 +168,7 @@ describe('ConversationsManager', () => {
 
         it('should show the widget', () => {
             act(() => {
-                manager.show()
+                manager.enable()
             })
 
             expect(mockApiHelpers.capture).toHaveBeenCalledWith(
@@ -181,12 +181,12 @@ describe('ConversationsManager', () => {
 
         it('should hide the widget', () => {
             act(() => {
-                manager.show()
+                manager.enable()
             })
             jest.clearAllMocks()
 
             act(() => {
-                manager.hide()
+                manager.disable()
             })
 
             expect(mockApiHelpers.capture).toHaveBeenCalledWith(
@@ -461,7 +461,7 @@ describe('ConversationsManager', () => {
 
         it('should save widget state when changed', () => {
             act(() => {
-                manager.show()
+                manager.enable()
             })
 
             expect(mockApiHelpers.capture).toHaveBeenCalledWith(

@@ -68,9 +68,8 @@ export class PostHogConversations {
     }
 
     loadIfEnabled() {
-        // Guard clauses
         if (this._conversationsManager) {
-            return // Already loaded
+            return
         }
         if (this._isInitializing) {
             logger.info('Already initializing conversations, skipping...')
@@ -207,44 +206,25 @@ export class PostHogConversations {
         this._isInitializing = false
     }
 
-    // Public API methods
-
     /**
-     * Opens the conversations widget
+     * Show the conversations widget (button and chat panel)
      */
-    open(): void {
-        if (!this._conversationsManager) {
-            logger.warn('Conversations not loaded yet. Call loadIfEnabled() first.')
-            return
-        }
-        this._conversationsManager.show()
-    }
-
-    /**
-     * Closes/minimizes the conversations widget
-     */
-    close(): void {
+    enable(): void {
         if (!this._conversationsManager) {
             logger.warn('Conversations not loaded yet.')
             return
         }
-        this._conversationsManager.hide()
+        this._conversationsManager.enable()
     }
 
     /**
-     * Sends a message in the current conversation
-     * @param message - The message text to send
+     * Hide the conversations widget completely (button and chat panel)
      */
-    sendMessage(message: string): void {
+    disable(): void {
         if (!this._conversationsManager) {
-            logger.warn('Conversations not loaded yet. Cannot send message.')
             return
         }
-        if (!message || message.trim().length === 0) {
-            logger.warn('Cannot send empty message.')
-            return
-        }
-        this._conversationsManager.sendMessage(message)
+        this._conversationsManager.disable()
     }
 
     /**

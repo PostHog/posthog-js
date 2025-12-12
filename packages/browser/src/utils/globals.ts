@@ -187,9 +187,8 @@ export interface LazyLoadedDeadClicksAutocaptureInterface {
 }
 
 export interface LazyLoadedConversationsInterface {
-    show: () => void
-    hide: () => void
-    sendMessage: (message: string) => void
+    enable: () => void
+    disable: () => void
     destroy: () => void
 }
 

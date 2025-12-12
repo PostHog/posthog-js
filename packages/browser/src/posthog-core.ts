@@ -3423,56 +3423,6 @@ export class PostHog {
     }
 
     /**
-     * Opens the conversations widget.
-     *
-     * {@label Conversations}
-     *
-     * @public
-     *
-     * @example
-     * ```js
-     * posthog.conversationsOpen()
-     * ```
-     */
-    conversationsOpen(): void {
-        this.conversations.open()
-    }
-
-    /**
-     * Closes/minimizes the conversations widget.
-     *
-     * {@label Conversations}
-     *
-     * @public
-     *
-     * @example
-     * ```js
-     * posthog.conversationsClose()
-     * ```
-     */
-    conversationsClose(): void {
-        this.conversations.close()
-    }
-
-    /**
-     * Sends a message in the conversations widget.
-     *
-     * {@label Conversations}
-     *
-     * @public
-     *
-     * @param message - The message text to send
-     *
-     * @example
-     * ```js
-     * posthog.conversationsSendMessage('Hello, I need help!')
-     * ```
-     */
-    conversationsSendMessage(message: string): void {
-        this.conversations.sendMessage(message)
-    }
-
-    /**
      * Capture written user feedback for a LLM trace. Numeric values are converted to strings.
      *
      * {@label LLM analytics}

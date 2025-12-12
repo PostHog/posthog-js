@@ -52,8 +52,6 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._initialize()
     }
 
-    // ==================== API Methods ====================
-
     /** Send a message via the API */
     private _apiSendMessage(
         message: string,
@@ -74,8 +72,6 @@ export class ConversationsManager implements ConversationsManagerInterface {
             const email = userTraits?.email || personProperties.$email || personProperties.email || null
 
             const payload = {
-                // SECURITY: widget_session_id is required for access control
-                // This is a random UUID that only this browser knows
                 widget_session_id: this._widgetSessionId,
                 // distinct_id is only used for Person linking, not access control
                 distinct_id: distinctId,
@@ -113,7 +109,6 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     }
 
                     const data = response.json as SendMessageResponse
-                    logger.info('Message sent successfully', { ticketId: data.ticket_id, messageId: data.message_id })
                     resolve(data)
                 },
             })
@@ -136,8 +131,6 @@ export class ConversationsManager implements ConversationsManagerInterface {
             if (after) {
                 queryParams.after = after
             }
-
-            logger.info('Fetching messages', { ticketId, after })
 
             this._api.sendRequest({
                 url: this._api.endpointFor(
@@ -167,7 +160,6 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     }
 
                     const data = response.json as GetMessagesResponse
-                    logger.info('Messages fetched', { count: data.messages.length, hasMore: data.has_more })
                     resolve(data)
                 },
             })
@@ -211,14 +203,11 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     }
 
                     const data = response.json as MarkAsReadResponse
-                    logger.info('Messages marked as read', { unreadCount: data.unread_count })
                     resolve(data)
                 },
             })
         })
     }
-
-    // ==================== Widget Initialization ====================
 
     /**
      * Initialize the widget
@@ -291,52 +280,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /**
-     * Render the widget to the DOM
-     */
-    private _renderWidget(initialState: ConversationsWidgetState, initialUserTraits: UserProvidedTraits | null): void {
-        if (!document) {
-            logger.info('Conversations widget not rendered: Document not available')
-            return
-        }
-
-        // Create container if it doesn't exist
-        let container = document.getElementById(WIDGET_CONTAINER_ID) as HTMLDivElement
-        if (!container) {
-            if (!document.body) {
-                logger.info('Conversations widget not rendered: Document body not available yet')
-                return
-            }
-            container = document.createElement('div')
-            container.id = WIDGET_CONTAINER_ID
-            document.body.appendChild(container)
-        }
-        this._containerElement = container
-
-        // Render widget with ref
-        render(
-            <ConversationsWidget
-                ref={(ref: ConversationsWidget | null) => {
-                    this._widgetRef = ref
-                }}
-                config={this._config}
-                initialState={initialState}
-                initialUserTraits={initialUserTraits}
-                onSendMessage={this._handleSendMessage}
-                onStateChange={this._handleStateChange}
-                onIdentify={this._handleIdentify}
-            />,
-            container
-        )
-
-        logger.info('Widget rendered', { initialState })
-    }
-
-    /**
      * Handle user identification from the widget form
      */
     private _handleIdentify = (traits: UserProvidedTraits): void => {
-        logger.info('User identified via widget form', { hasName: !!traits.name, hasEmail: !!traits.email })
-
         // Save traits to localStorage
         this._persistence.saveUserTraits(traits)
 
@@ -553,24 +499,22 @@ export class ConversationsManager implements ConversationsManagerInterface {
         })
     }
 
-    // Public interface methods
-
     /**
-     * Show the widget
+     * Enable/show the widget (button and chat panel)
      */
-    show(): void {
+    enable(): void {
         this._widgetRef?.show()
     }
 
     /**
-     * Hide/minimize the widget
+     * Disable/hide the widget completely (button and chat panel)
      */
-    hide(): void {
+    disable(): void {
         this._widgetRef?.hide()
     }
 
     /**
-     * Send a message programmatically
+     * Send a message programmatically (internal use)
      */
     sendMessage(message: string): void {
         this._handleSendMessage(message)
@@ -596,6 +540,45 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         this._widgetRef = null
         logger.info('Widget destroyed')
+    }
+
+    /**
+     * Render the widget to the DOM
+     */
+    private _renderWidget(initialState: ConversationsWidgetState, initialUserTraits: UserProvidedTraits | null): void {
+        if (!document) {
+            logger.info('Conversations widget not rendered: Document not available')
+            return
+        }
+
+        // Create container if it doesn't exist
+        let container = document.getElementById(WIDGET_CONTAINER_ID) as HTMLDivElement
+        if (!container) {
+            if (!document.body) {
+                logger.info('Conversations widget not rendered: Document body not available yet')
+                return
+            }
+            container = document.createElement('div')
+            container.id = WIDGET_CONTAINER_ID
+            document.body.appendChild(container)
+        }
+        this._containerElement = container
+
+        // Render widget with ref
+        render(
+            <ConversationsWidget
+                ref={(ref: ConversationsWidget | null) => {
+                    this._widgetRef = ref
+                }}
+                config={this._config}
+                initialState={initialState}
+                initialUserTraits={initialUserTraits}
+                onSendMessage={this._handleSendMessage}
+                onStateChange={this._handleStateChange}
+                onIdentify={this._handleIdentify}
+            />,
+            container
+        )
     }
 }
 

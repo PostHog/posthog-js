@@ -18,9 +18,8 @@ describe('PostHogConversations', () => {
 
         // Setup mock manager
         mockManager = {
-            show: jest.fn(),
-            hide: jest.fn(),
-            sendMessage: jest.fn(),
+            enable: jest.fn(),
+            disable: jest.fn(),
             destroy: jest.fn(),
         } as ConversationsManager
 
@@ -303,52 +302,31 @@ describe('PostHogConversations', () => {
             conversations.onRemoteConfig(remoteConfig as RemoteConfig)
         })
 
-        describe('open', () => {
-            it('should call show on the manager', () => {
-                conversations.open()
+        describe('enable', () => {
+            it('should call enable on the manager', () => {
+                conversations.enable()
 
-                expect(mockManager.show).toHaveBeenCalled()
+                expect(mockManager.enable).toHaveBeenCalled()
             })
 
             it('should not throw if manager is not loaded', () => {
                 const newConversations = new PostHogConversations(mockPostHog)
 
-                expect(() => newConversations.open()).not.toThrow()
+                expect(() => newConversations.enable()).not.toThrow()
             })
         })
 
-        describe('close', () => {
-            it('should call hide on the manager', () => {
-                conversations.close()
+        describe('disable', () => {
+            it('should call disable on the manager', () => {
+                conversations.disable()
 
-                expect(mockManager.hide).toHaveBeenCalled()
+                expect(mockManager.disable).toHaveBeenCalled()
             })
 
             it('should not throw if manager is not loaded', () => {
                 const newConversations = new PostHogConversations(mockPostHog)
 
-                expect(() => newConversations.close()).not.toThrow()
-            })
-        })
-
-        describe('sendMessage', () => {
-            it('should call sendMessage on the manager', () => {
-                conversations.sendMessage('Hello!')
-
-                expect(mockManager.sendMessage).toHaveBeenCalledWith('Hello!')
-            })
-
-            it('should not send empty messages', () => {
-                conversations.sendMessage('')
-                conversations.sendMessage('   ')
-
-                expect(mockManager.sendMessage).not.toHaveBeenCalled()
-            })
-
-            it('should not throw if manager is not loaded', () => {
-                const newConversations = new PostHogConversations(mockPostHog)
-
-                expect(() => newConversations.sendMessage('test')).not.toThrow()
+                expect(() => newConversations.disable()).not.toThrow()
             })
         })
     })
