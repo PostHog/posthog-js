@@ -163,6 +163,8 @@ export type PostHogExtensionKind =
     | 'conversations'
     | 'product-tours'
     | 'dead-clicks-autocapture'
+    | 'autocapture'
+    | 'heatmaps'
     | 'remote-config'
     | ExternalExtensionKind
 
@@ -191,6 +193,19 @@ export interface LazyLoadedConversationsInterface {
     disable: () => void
     destroy: () => void
     reset: () => void
+}
+
+export interface LazyLoadedAutocaptureInterface {
+    _captureEvent: (e: Event, eventName?: string, timestamp?: Date) => boolean | void
+    setElementSelectors: (selectors: Set<string>) => void
+    getElementSelectors: (element: Element | null) => string[] | null
+}
+
+export interface LazyLoadedHeatmapsInterface {
+    start: () => void
+    stop: () => void
+    getAndClearBuffer: () => { [key: string]: Properties[] } | undefined
+    _onClick: (e: MouseEvent, type?: string) => void
 }
 
 interface PostHogExtensions {
@@ -225,6 +240,8 @@ interface PostHogExtensions {
         ph: PostHog,
         config: DeadClicksAutoCaptureConfig
     ) => LazyLoadedDeadClicksAutocaptureInterface
+    initAutocapture?: (ph: PostHog) => LazyLoadedAutocaptureInterface
+    initHeatmaps?: (ph: PostHog) => LazyLoadedHeatmapsInterface
     integrations?: {
         [K in ExternalIntegrationKind]?: { start: (posthog: PostHog) => void; stop: () => void }
     }

@@ -2,7 +2,7 @@ import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig } from '../
 import { isFunction, isNullish, isString, isUndefined } from '@posthog/core'
 import { convertToURL } from '../../../utils/request-utils'
 import { logger } from '../../../utils/logger'
-import { shouldCaptureValue } from '../../../autocapture-utils'
+import { shouldCaptureValue } from '../../autocapture/autocapture-utils'
 import { each } from '../../../utils'
 
 const LOGGER_PREFIX = '[SessionRecording]'
