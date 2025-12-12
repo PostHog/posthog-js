@@ -187,7 +187,9 @@
     border-radius: 6px;
     border: none;
     cursor: pointer;
-    transition: opacity 0.15s ease, transform 0.1s ease;
+    transition:
+        opacity 0.15s ease,
+        transform 0.1s ease;
 }
 
 .ph-tour-button:hover {
@@ -225,7 +227,9 @@
     color: var(--ph-tour-text-secondary-color);
     font-size: 18px;
     line-height: 1;
-    transition: background 0.15s ease, color 0.15s ease;
+    transition:
+        background 0.15s ease,
+        color 0.15s ease;
 }
 
 .ph-tour-dismiss:hover {

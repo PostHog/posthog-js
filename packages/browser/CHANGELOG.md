@@ -1,5 +1,24 @@
 # posthog-js
 
+## 1.306.0
+
+### Minor Changes
+
+- [#2733](https://github.com/PostHog/posthog-js/pull/2733) [`e97857c`](https://github.com/PostHog/posthog-js/commit/e97857cb62ce3d11e39de3fea734ba4d56a40298) Thanks [@adboio](https://github.com/adboio)! - support hideCancelButton in survey appearance
+  (2025-12-12)
+
+### Patch Changes
+
+- [#2725](https://github.com/PostHog/posthog-js/pull/2725) [`90a0f14`](https://github.com/PostHog/posthog-js/commit/90a0f143e639b898fc698f247ec8e08ea3db9ddf) Thanks [@ordehi](https://github.com/ordehi)! - fix: include initial person props in $identify when group() called first
+  (2025-12-12)
+
+## 1.305.0
+
+### Minor Changes
+
+- [#2732](https://github.com/PostHog/posthog-js/pull/2732) [`8496933`](https://github.com/PostHog/posthog-js/commit/849693303ef3527dd348c7c6e55c1f1780af13fe) Thanks [@adboio](https://github.com/adboio)! - support survey steps in product tours
+  (2025-12-11)
+
 ## 1.304.0
 
 ### Minor Changes
@@ -289,19 +308,16 @@
     ```
 
     **URL format:** `?q0=1&q1=8&auto_submit=true`
-
     - `q{N}` = question index (0-based)
     - Value = choice index or rating value
     - `auto_submit=true` enables auto-submission
 
     **Supported question types:**
-
     - Single choice (choice index)
     - Multiple choice (multiple q{N} params)
     - Rating (numeric value, validated against scale)
 
     **Use cases:**
-
     - Pre-filled NPS surveys from email campaigns
     - One-click survey responses from notifications
     - SMS surveys with embedded feedback

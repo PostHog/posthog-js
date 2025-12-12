@@ -2,7 +2,7 @@
     "id": "posthog-js",
     "hogRef": "0.3",
     "info": {
-        "version": "1.306.0",
+        "version": "1.305.0",
         "id": "posthog-js",
         "title": "PostHog JavaScript Web SDK",
         "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -3361,7 +3361,7 @@
                     "name": "url"
                 },
                 {
-                    "type": "PropertyMatchType",
+                    "type": "'exact' | 'contains' | 'regex'",
                     "name": "urlMatchType"
                 }
             ],
@@ -4127,10 +4127,6 @@
                 {
                     "type": "string",
                     "name": "fontFamily"
-                },
-                {
-                    "type": "boolean",
-                    "name": "hideCancelButton"
                 },
                 {
                     "type": "string",

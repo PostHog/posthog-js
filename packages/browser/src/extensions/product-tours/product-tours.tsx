@@ -6,45 +6,36 @@ import {
     ProductTourDismissReason,
     ProductTourRenderReason,
 } from '../../posthog-product-tours-types'
+import { DisplaySurveyType, SurveyEventName, SurveyEventProperties } from '../../posthog-surveys-types'
 import { findElementBySelector, getElementMetadata, getProductTourStylesheet } from './product-tours-utils'
 import { ProductTourTooltip } from './components/ProductTourTooltip'
 import { createLogger } from '../../utils/logger'
 import { document as _document, window as _window } from '../../utils/globals'
 import { localStore } from '../../storage'
 import { addEventListener } from '../../utils'
-import { isNull } from '@posthog/core'
+import { isNull, SurveyMatchType } from '@posthog/core'
+import { propertyComparisons } from '../../utils/property-utils'
 
 const logger = createLogger('[Product Tours]')
 
 const document = _document as Document
 const window = _window as Window & typeof globalThis
 
-// Tour condition checking utilities (moved from utils/product-tour-utils.ts)
+// Tour condition checking - reuses the same URL matching logic as surveys
 function doesTourUrlMatch(tour: ProductTour): boolean {
     const conditions = tour.conditions
     if (!conditions?.url) {
         return true
     }
 
-    const currentUrl = window.location.href
-    const targetUrl = conditions.url
-    const matchType = conditions.urlMatchType || 'contains'
-
-    switch (matchType) {
-        case 'exact':
-            return currentUrl === targetUrl
-        case 'contains':
-            return currentUrl.includes(targetUrl)
-        case 'regex':
-            try {
-                const regex = new RegExp(targetUrl)
-                return regex.test(currentUrl)
-            } catch {
-                return false
-            }
-        default:
-            return false
+    const href = window?.location?.href
+    if (!href) {
+        return false
     }
+
+    const targets = [conditions.url]
+    const matchType = conditions.urlMatchType || SurveyMatchType.Icontains
+    return propertyComparisons[matchType](targets, [href])
 }
 
 function doesTourSelectorMatch(tour: ProductTour): boolean {
@@ -138,6 +129,7 @@ export class ProductTourManager {
     private _renderReason: ProductTourRenderReason = 'auto'
     private _checkInterval: ReturnType<typeof setInterval> | null = null
     private _triggerSelectorListeners: Map<string, TriggerListenerData> = new Map()
+    private _surveyEventUnsubscribe: (() => void) | null = null
 
     constructor(instance: PostHog) {
         this._instance = instance
@@ -397,6 +389,12 @@ export class ProductTourManager {
 
         const step = this._activeTour.steps[this._currentStepIndex]
 
+        // Survey step - display the linked survey and listen for completion
+        if (step.linkedSurveyId) {
+            this._renderSurveyStep(step.linkedSurveyId)
+            return
+        }
+
         // Modal step (no selector) - render without a target element
         if (!step.selector) {
             this._captureEvent('product tour step shown', {
@@ -488,11 +486,67 @@ export class ProductTourManager {
         )
     }
 
+    private _renderSurveyStep(surveyId: string): void {
+        if (!this._activeTour) {
+            return
+        }
+
+        const step = this._activeTour.steps[this._currentStepIndex]
+
+        // Emit tour step shown event
+        this._captureEvent('product tour step shown', {
+            $product_tour_id: this._activeTour.id,
+            $product_tour_step_id: step.id,
+            $product_tour_step_order: this._currentStepIndex,
+            $product_tour_step_type: 'survey',
+            $product_tour_linked_survey_id: surveyId,
+        })
+
+        // Clean up any existing survey event listener
+        this._cleanupSurveyListener()
+
+        // Set up listener for survey events
+        this._surveyEventUnsubscribe = this._instance.on(
+            'eventCaptured',
+            (data: { event: string; properties?: Record<string, any> }) => {
+                const eventSurveyId = data.properties?.[SurveyEventProperties.SURVEY_ID]
+                if (eventSurveyId !== surveyId) {
+                    return
+                }
+
+                if (data.event === SurveyEventName.SENT) {
+                    logger.info(`Survey ${surveyId} completed, advancing tour`)
+                    this._cleanupSurveyListener()
+                    this.nextStep()
+                } else if (data.event === SurveyEventName.DISMISSED) {
+                    logger.info(`Survey ${surveyId} dismissed, dismissing tour`)
+                    this._cleanupSurveyListener()
+                    this.dismissTour('user_clicked_skip')
+                }
+            }
+        )
+
+        // Display the survey
+        this._instance.surveys?.displaySurvey(surveyId, {
+            ignoreConditions: true,
+            ignoreDelay: true,
+            displayType: DisplaySurveyType.Popover,
+        })
+
+        logger.info(`Displayed survey ${surveyId} for tour step ${this._currentStepIndex}`)
+    }
+
+    private _cleanupSurveyListener(): void {
+        this._surveyEventUnsubscribe?.()
+        this._surveyEventUnsubscribe = null
+    }
+
     private _cleanup(): void {
         if (this._activeTour) {
             removeTourFromDom(this._activeTour.id)
         }
 
+        this._cleanupSurveyListener()
         this._activeTour = null
         this._currentStepIndex = 0
         this._renderReason = 'auto'

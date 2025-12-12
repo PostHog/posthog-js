@@ -1249,9 +1249,11 @@ export function Questions({
         return null
     }
 
+    const renderCancelButton = isPopup && survey.appearance?.hideCancelButton !== true
+
     return (
         <form className="survey-form" name="surveyForm">
-            {isPopup && (
+            {renderCancelButton && (
                 <Cancel
                     onClick={() => {
                         onPopupSurveyDismissed()
