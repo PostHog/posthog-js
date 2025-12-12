@@ -503,18 +503,19 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         const userSessionRecordingOptions = this._instance.config.session_recording
 
         // userSessionRecordingOptions.maskNetworkRequestFn is deprecated, fallback to it
-        const maskFn =
-            userSessionRecordingOptions.maskCapturedNetworkRequestFn ||
-            userSessionRecordingOptions.maskNetworkRequestFn
+        if (userSessionRecordingOptions.maskCapturedNetworkRequestFn) {
+            const result = userSessionRecordingOptions.maskCapturedNetworkRequestFn({
+                name: url,
+            } as any)
+            // CapturedNetworkRequest uses 'name' for URL, but also check 'url' for compatibility
+            return result?.name ?? (result as any)?.url
+        }
 
-        if (maskFn) {
-            let networkRequest: NetworkRequest | null | undefined = {
+        if (userSessionRecordingOptions.maskNetworkRequestFn) {
+            const result = userSessionRecordingOptions.maskNetworkRequestFn({
                 url,
-            }
-
-            networkRequest = maskFn(networkRequest as any)
-
-            return networkRequest?.url
+            })
+            return result?.url
         }
 
         return url
