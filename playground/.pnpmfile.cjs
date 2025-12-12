@@ -29,7 +29,9 @@ module.exports = {
                 packages: ['.'],
                 preferFrozenLockfile: false,
                 verifyDepsBeforeRun: true,
-                nodeLinker: 'hoisted',
+                nodeLinker: 'pnp',
+                minimumReleaseAge: 4320,
+                minimumReleaseAgeExclude: ['node-forge@1.3.2'],
             })
         },
     },

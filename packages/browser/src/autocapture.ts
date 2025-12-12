@@ -235,11 +235,12 @@ export class Autocapture {
     _initialized: boolean = false
     _isDisabledServerSide: boolean | null = null
     _elementSelectors: Set<string> | null
-    rageclicks = new RageClick()
+    rageclicks: RageClick
     _elementsChainAsString = false
 
     constructor(instance: PostHog) {
         this.instance = instance
+        this.rageclicks = new RageClick(instance.config.rageclick)
         this._elementSelectors = null
     }
 
@@ -355,7 +356,7 @@ export class Autocapture {
         if (eventName === '$autocapture' && e.type === 'click' && e instanceof MouseEvent) {
             if (
                 !!this.instance.config.rageclick &&
-                this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime())
+                this.rageclicks?.isRageClick(e.clientX, e.clientY, e.timeStamp || new Date().getTime())
             ) {
                 if (shouldCaptureRageclick(target, this.instance.config.rageclick)) {
                     this._captureEvent(e, '$rageclick')

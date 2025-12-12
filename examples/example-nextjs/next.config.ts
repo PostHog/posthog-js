@@ -7,11 +7,13 @@ const nextConfig = {
 
 export default withPostHogConfig(nextConfig, {
     personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY!,
-    envId: process.env.POSTHOG_API_PROJECT!,
+    envId: process.env.POSTHOG_PROJECT_ID!,
     host: process.env.NEXT_PUBLIC_POSTHOG_API_HOST!,
-    verbose: true,
+    cliBinaryPath: process.env.POSTHOG_CLI_PATH, // Optional
+    logLevel: 'debug',
     sourcemaps: {
         project: 'example-nextjs',
         version: packageJson.version,
+        deleteAfterUpload: true,
     },
 })

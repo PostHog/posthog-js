@@ -1,40 +1,14 @@
 import type { NextConfig } from 'next'
-import { SourcemapWebpackPlugin } from './webpack-plugin'
+import { PosthogWebpackPlugin, PluginConfig, resolveConfig, ResolvedPluginConfig } from '@posthog/webpack-plugin'
 import { hasCompilerHook, isTurbopackEnabled, processSourceMaps } from './utils'
 
 type NextFuncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => NextConfig
 type NextAsyncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => Promise<NextConfig>
 type UserProvidedConfig = NextConfig | NextFuncConfig | NextAsyncConfig
 
-export type PostHogNextConfig = {
-  personalApiKey: string
-  envId: string
-  host?: string
-  verbose?: boolean
-  sourcemaps?: {
-    enabled?: boolean
-    project?: string
-    version?: string
-    deleteAfterUpload?: boolean
-  }
-}
-
-export type PostHogNextConfigComplete = {
-  personalApiKey: string
-  envId: string
-  host: string
-  verbose: boolean
-  sourcemaps: {
-    enabled: boolean
-    project?: string
-    version?: string
-    deleteAfterUpload: boolean
-  }
-}
-
-export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogConfig: PostHogNextConfig): NextConfig {
-  const posthogNextConfigComplete = resolvePostHogConfig(posthogConfig)
-  const sourceMapEnabled = posthogNextConfigComplete.sourcemaps.enabled
+export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogConfig: PluginConfig): NextConfig {
+  const resolvedConfig = resolveConfig(posthogConfig)
+  const sourceMapEnabled = resolvedConfig.sourcemaps.enabled
   const isCompilerHookSupported = hasCompilerHook()
   const turbopackEnabled = isTurbopackEnabled()
   if (turbopackEnabled && !isCompilerHookSupported) {
@@ -47,13 +21,16 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
       distDir,
       ...userConfig
     } = await resolveUserConfig(userNextConfig, phase, defaultConfig)
-    return {
+    const nextConfig = {
       ...userConfig,
       distDir,
-      productionBrowserSourceMaps: sourceMapEnabled,
-      webpack: withWebpackConfig(userWebPackConfig, posthogNextConfigComplete, distDir),
-      compiler: withCompilerConfig(userCompilerConfig, posthogNextConfigComplete),
+      webpack: withWebpackConfig(userWebPackConfig, resolvedConfig),
+      compiler: withCompilerConfig(userCompilerConfig, resolvedConfig),
     }
+    if (turbopackEnabled && sourceMapEnabled) {
+      nextConfig.productionBrowserSourceMaps = true
+    }
+    return nextConfig
   }
 }
 
@@ -76,41 +53,28 @@ function resolveUserConfig(
   }
 }
 
-function resolvePostHogConfig(posthogProvidedConfig: PostHogNextConfig): PostHogNextConfigComplete {
-  const { personalApiKey, envId, host, verbose, sourcemaps = {} } = posthogProvidedConfig
-  return {
-    personalApiKey,
-    envId,
-    host: host ?? 'https://us.posthog.com',
-    verbose: verbose ?? true,
-    sourcemaps: {
-      enabled: sourcemaps.enabled ?? process.env.NODE_ENV == 'production',
-      project: sourcemaps.project,
-      version: sourcemaps.version,
-      deleteAfterUpload: sourcemaps.deleteAfterUpload ?? true,
-    },
-  }
-}
-
-function withWebpackConfig(
-  userWebpackConfig: NextConfig['webpack'],
-  posthogConfig: PostHogNextConfigComplete,
-  distDir: string | undefined
-) {
+function withWebpackConfig(userWebpackConfig: NextConfig['webpack'], posthogConfig: ResolvedPluginConfig) {
   const defaultWebpackConfig = userWebpackConfig || ((config: any) => config)
   const sourceMapEnabled = posthogConfig.sourcemaps.enabled
+  const turbopackEnabled = isTurbopackEnabled()
   return (config: any, options: any) => {
-    const turbopackEnabled = isTurbopackEnabled()
     const webpackConfig = defaultWebpackConfig(config, options)
+    const isServer = options.isServer
     if (sourceMapEnabled) {
-      if (options.isServer) {
-        webpackConfig.devtool = 'source-map'
-      }
       if (!turbopackEnabled) {
+        webpackConfig.devtool = 'hidden-source-map'
         webpackConfig.plugins = webpackConfig.plugins || []
-        webpackConfig.plugins.push(
-          new SourcemapWebpackPlugin(posthogConfig, options.isServer, options.nextRuntime, distDir)
-        )
+        let currentConfig = posthogConfig
+        if (isServer) {
+          currentConfig = {
+            ...posthogConfig,
+            sourcemaps: {
+              ...posthogConfig.sourcemaps,
+              deleteAfterUpload: false,
+            },
+          }
+        }
+        webpackConfig.plugins.push(new PosthogWebpackPlugin(currentConfig))
       }
     }
     return webpackConfig
@@ -119,7 +83,7 @@ function withWebpackConfig(
 
 function withCompilerConfig(
   userCompilerConfig: NextConfig['compiler'],
-  posthogConfig: PostHogNextConfigComplete
+  posthogConfig: ResolvedPluginConfig
 ): NextConfig['compiler'] {
   const sourceMapEnabled = posthogConfig.sourcemaps.enabled
   const turbopackEnabled = isTurbopackEnabled()
@@ -128,7 +92,7 @@ function withCompilerConfig(
     const userCompilerHook = userCompilerConfig?.runAfterProductionCompile
     newConfig.runAfterProductionCompile = async (config: { distDir: string; projectDir: string }) => {
       await userCompilerHook?.(config)
-      posthogConfig.verbose && console.debug('Processing source maps from compilation hook...')
+      console.debug('Processing source maps from compilation hook...')
       await processSourceMaps(posthogConfig, config.distDir)
     }
     return newConfig

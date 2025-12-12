@@ -159,6 +159,7 @@ export type PostHogExtensionKind =
     | 'lazy-recorder'
     | 'tracing-headers'
     | 'surveys'
+    | 'product-tours'
     | 'dead-clicks-autocapture'
     | 'remote-config'
     | ExternalExtensionKind
@@ -200,6 +201,7 @@ interface PostHogExtensions {
     rrweb?: { record: any; version: string }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
     generateSurveys?: (posthog: PostHog, isSurveysEnabled: boolean) => any | undefined
+    generateProductTours?: (posthog: PostHog, isEnabled: boolean) => any | undefined
     postHogWebVitalsCallbacks?: {
         onLCP: (metric: any) => void
         onCLS: (metric: any) => void
@@ -221,6 +223,14 @@ interface PostHogExtensions {
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win
+
+// React Native polyfills for posthog-js compatibility
+if (typeof self === 'undefined') {
+    ;(global as any).self = global
+}
+if (typeof File === 'undefined') {
+    ;(global as any).File = function () {}
+}
 
 export const ArrayProto = Array.prototype
 export const nativeForEach = ArrayProto.forEach

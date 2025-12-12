@@ -67,11 +67,26 @@ jest.mock('openai', () => {
     }
   }
 
+  // Mock Transcriptions class
+  class MockTranscriptions {
+    constructor() {}
+    create() {
+      return Promise.resolve({})
+    }
+  }
+
+  // Mock Audio class
+  class MockAudio {
+    constructor() {}
+    static Transcriptions = MockTranscriptions
+  }
+
   // Mock OpenAI class
   class MockOpenAI {
     chat: any
     embeddings: any
     responses: any
+    audio: any
     constructor() {
       this.chat = {
         completions: {
@@ -84,10 +99,16 @@ jest.mock('openai', () => {
       this.responses = {
         create: jest.fn(),
       }
+      this.audio = {
+        transcriptions: {
+          create: jest.fn(),
+        },
+      }
     }
     static Chat = MockChat
     static Responses = MockResponses
     static Embeddings = MockEmbeddings
+    static Audio = MockAudio
   }
 
   return {
@@ -97,6 +118,7 @@ jest.mock('openai', () => {
     Chat: MockChat,
     Responses: MockResponses,
     Embeddings: MockEmbeddings,
+    Audio: MockAudio,
   }
 })
 
@@ -1101,7 +1123,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(properties['$ai_input']).toBe('Hello world')
       expect(properties['$ai_output_choices']).toBeNull() // Embeddings don't have output
       expect(properties['$ai_input_tokens']).toBe(5)
-      expect(properties['$ai_output_tokens']).toBeUndefined() // Embeddings don't send output tokens (matches Python)
+      expect(properties['$ai_output_tokens']).toBeUndefined() // Embeddings don't send output tokens
       expect(properties['$ai_http_status']).toBe(200)
       expect(properties['test']).toBe('embeddings')
       expect(typeof properties['$ai_latency']).toBe('number')
@@ -1153,7 +1175,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(properties['$ai_input']).toEqual(arrayInput)
       expect(properties['$ai_output_choices']).toBeNull() // Embeddings don't have output
       expect(properties['$ai_input_tokens']).toBe(8)
-      expect(properties['$ai_output_tokens']).toBeUndefined() // Embeddings don't send output tokens (matches Python)
+      expect(properties['$ai_output_tokens']).toBeUndefined() // Embeddings don't send output tokens
     })
 
     conditionalTest('embeddings privacy mode', async () => {
@@ -1207,6 +1229,607 @@ describe('PostHogOpenAI - Jest test suite', () => {
       // captureImmediate should be called once, and capture should not be called
       expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(0)
+    })
+  })
+
+  describe('Transcriptions', () => {
+    let mockTranscriptionResponse: any
+
+    beforeEach(() => {
+      // Default transcription response
+      mockTranscriptionResponse = {
+        text: 'Hello, this is a test transcription.',
+      }
+
+      // Mock the Audio.Transcriptions.prototype.create method
+      const AudioMock: any = openaiModule.Audio
+      const TranscriptionsMock = AudioMock.Transcriptions
+      TranscriptionsMock.prototype.create = jest.fn().mockResolvedValue(mockTranscriptionResponse)
+    })
+
+    conditionalTest('basic transcription', async () => {
+      const mockFile = new Blob(['mock audio data'], { type: 'audio/mpeg' }) as any
+      mockFile.name = 'test.mp3'
+
+      const response = await client.audio.transcriptions.create({
+        file: mockFile,
+        model: 'whisper-1',
+        posthogDistinctId: 'test-transcription-user',
+        posthogProperties: { test: 'transcription' },
+      })
+
+      expect(response).toEqual(mockTranscriptionResponse)
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { distinctId, event, properties } = captureArgs[0]
+
+      expect(distinctId).toBe('test-transcription-user')
+      expect(event).toBe('$ai_generation')
+      expect(properties['$ai_lib']).toBe('posthog-ai')
+      expect(properties['$ai_lib_version']).toBe(version)
+      expect(properties['$ai_provider']).toBe('openai')
+      expect(properties['$ai_model']).toBe('whisper-1')
+      expect(properties['$ai_output_choices']).toBe('Hello, this is a test transcription.')
+      expect(properties['$ai_http_status']).toBe(200)
+      expect(properties['test']).toBe('transcription')
+      expect(typeof properties['$ai_latency']).toBe('number')
+      expect(properties['$ai_input_tokens']).toBe(0)
+      expect(properties['$ai_output_tokens']).toBe(0)
+    })
+
+    conditionalTest('transcription with prompt', async () => {
+      const mockFile = new Blob(['mock audio data'], { type: 'audio/mpeg' }) as any
+      mockFile.name = 'test.mp3'
+
+      await client.audio.transcriptions.create({
+        file: mockFile,
+        model: 'whisper-1',
+        prompt: 'This is a test prompt to guide transcription.',
+        posthogDistinctId: 'test-user',
+      })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      expect(properties['$ai_input']).toBe('This is a test prompt to guide transcription.')
+    })
+
+    conditionalTest('transcription with language parameter', async () => {
+      const mockFile = new Blob(['mock audio data'], { type: 'audio/mpeg' }) as any
+      mockFile.name = 'test.mp3'
+
+      await client.audio.transcriptions.create({
+        file: mockFile,
+        model: 'whisper-1',
+        language: 'en',
+        posthogDistinctId: 'test-user',
+      })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      expect(properties['$ai_model_parameters']).toMatchObject({
+        language: 'en',
+      })
+    })
+
+    conditionalTest('transcription verbose json format', async () => {
+      const mockVerboseResponse = {
+        language: 'english',
+        duration: 2.5,
+        text: 'Hello, this is a test transcription.',
+        words: [
+          { word: 'Hello', start: 0.0, end: 0.5 },
+          { word: 'this', start: 0.5, end: 0.8 },
+        ],
+      }
+
+      const AudioMock: any = openaiModule.Audio
+      const TranscriptionsMock = AudioMock.Transcriptions
+      TranscriptionsMock.prototype.create = jest.fn().mockResolvedValue(mockVerboseResponse)
+
+      const mockFile = new Blob(['mock audio data'], { type: 'audio/mpeg' }) as any
+      mockFile.name = 'test.mp3'
+
+      const response = await client.audio.transcriptions.create({
+        file: mockFile,
+        model: 'whisper-1',
+        response_format: 'verbose_json',
+        posthogDistinctId: 'test-verbose-user',
+      })
+
+      expect(response).toEqual(mockVerboseResponse)
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      expect(properties['$ai_output_choices']).toBe('Hello, this is a test transcription.')
+      expect(properties['$ai_model_parameters']).toMatchObject({
+        response_format: 'verbose_json',
+      })
+    })
+
+    conditionalTest('transcription privacy mode', async () => {
+      const mockFile = new Blob(['mock audio data'], { type: 'audio/mpeg' }) as any
+      mockFile.name = 'test.mp3'
+
+      await client.audio.transcriptions.create({
+        file: mockFile,
+        model: 'whisper-1',
+        prompt: 'Sensitive prompt',
+        posthogDistinctId: 'test-user',
+        posthogPrivacyMode: true,
+      })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      expect(properties['$ai_input']).toBeNull()
+      expect(properties['$ai_output_choices']).toBeNull()
+    })
+
+    conditionalTest('transcription with usage tokens', async () => {
+      const responseWithUsage = {
+        text: 'Hello, this is a test transcription.',
+        usage: {
+          type: 'tokens' as const,
+          input_tokens: 150,
+          output_tokens: 50,
+        },
+      }
+
+      const AudioMock: any = openaiModule.Audio
+      const TranscriptionsMock = AudioMock.Transcriptions
+      TranscriptionsMock.prototype.create = jest.fn().mockResolvedValue(responseWithUsage)
+
+      const mockFile = new Blob(['mock audio data'], { type: 'audio/mpeg' }) as any
+      mockFile.name = 'test.mp3'
+
+      await client.audio.transcriptions.create({
+        file: mockFile,
+        model: 'whisper-1',
+        posthogDistinctId: 'test-user',
+      })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      expect(properties['$ai_input_tokens']).toBe(150)
+      expect(properties['$ai_output_tokens']).toBe(50)
+    })
+
+    conditionalTest('transcription error handling', async () => {
+      const AudioMock: any = openaiModule.Audio
+      const TranscriptionsMock = AudioMock.Transcriptions
+      const testError = new Error('API Error') as Error & { status: number }
+      testError.status = 400
+      TranscriptionsMock.prototype.create = jest.fn().mockRejectedValue(testError)
+
+      const mockFile = new Blob(['mock audio data'], { type: 'audio/mpeg' }) as any
+      mockFile.name = 'test.mp3'
+
+      await expect(
+        client.audio.transcriptions.create({
+          file: mockFile,
+          model: 'whisper-1',
+          posthogDistinctId: 'error-user',
+        })
+      ).rejects.toThrow('API Error')
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      expect(properties['$ai_http_status']).toBe(400)
+      expect(properties['$ai_is_error']).toBe(true)
+      expect(properties['$ai_error']).toContain('400')
+    })
+
+    conditionalTest('transcription captureImmediate flag', async () => {
+      const mockFile = new Blob(['mock audio data'], { type: 'audio/mpeg' }) as any
+      mockFile.name = 'test.mp3'
+
+      await client.audio.transcriptions.create({
+        file: mockFile,
+        model: 'whisper-1',
+        posthogDistinctId: 'test-user',
+        posthogCaptureImmediate: true,
+      })
+
+      expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(0)
+    })
+
+    conditionalTest('transcription groups', async () => {
+      const mockFile = new Blob(['mock audio data'], { type: 'audio/mpeg' }) as any
+      mockFile.name = 'test.mp3'
+
+      await client.audio.transcriptions.create({
+        file: mockFile,
+        model: 'whisper-1',
+        posthogDistinctId: 'test-user',
+        posthogGroups: { company: 'test_company' },
+      })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { groups } = captureArgs[0]
+      expect(groups).toEqual({ company: 'test_company' })
+    })
+
+    conditionalTest('posthogProperties are not sent to OpenAI', async () => {
+      const AudioMock: any = openaiModule.Audio
+      const TranscriptionsMock = AudioMock.Transcriptions
+      const mockCreate = jest.fn().mockResolvedValue(mockTranscriptionResponse)
+      const originalCreate = TranscriptionsMock.prototype.create
+      TranscriptionsMock.prototype.create = mockCreate
+
+      const mockFile = new Blob(['mock audio data'], { type: 'audio/mpeg' }) as any
+      mockFile.name = 'test.mp3'
+
+      await client.audio.transcriptions.create({
+        file: mockFile,
+        model: 'whisper-1',
+        posthogDistinctId: 'test-user',
+        posthogProperties: { key: 'value' },
+        posthogGroups: { team: 'test' },
+        posthogPrivacyMode: true,
+        posthogCaptureImmediate: true,
+        posthogTraceId: 'trace-123',
+      })
+
+      const [actualParams] = mockCreate.mock.calls[0]
+      const posthogParams = Object.keys(actualParams).filter((key) => key.startsWith('posthog'))
+      expect(posthogParams).toEqual([])
+      TranscriptionsMock.prototype.create = originalCreate
+    })
+  })
+
+  describe('Web Search Tracking', () => {
+    conditionalTest('should track web search with Perplexity-style citations (binary detection)', async () => {
+      mockOpenAiChatResponse = {
+        id: 'chatcmpl-test',
+        object: 'chat.completion',
+        created: Date.now() / 1000,
+        model: 'sonar-pro',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Based on my search, PostHog is a product analytics platform.',
+              annotations: [
+                {
+                  type: 'url_citation',
+                  text: 'PostHog docs',
+                  url: 'https://posthog.com',
+                },
+              ] as any,
+            },
+            finish_reason: 'stop',
+            logprobs: null,
+          },
+        ],
+        usage: {
+          prompt_tokens: 50,
+          completion_tokens: 30,
+          total_tokens: 80,
+        },
+      } as ChatCompletion
+
+      await client.chat.completions.create({
+        model: 'sonar-pro',
+        messages: [{ role: 'user', content: 'What is PostHog?' }],
+        posthogDistinctId: 'test-user',
+      })
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      expect(properties['$ai_web_search_count']).toBe(1)
+    })
+
+    conditionalTest('should track exact count from Responses API web_search_call', async () => {
+      // Mock Responses API response with web_search_call items
+      const mockResponsesResult = {
+        id: 'resp_test',
+        output: [
+          {
+            type: 'web_search_call',
+            id: 'search_1',
+            query: 'PostHog features',
+          },
+          {
+            type: 'web_search_call',
+            id: 'search_2',
+            query: 'PostHog pricing',
+          },
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'text',
+                text: 'Based on the search results, here is what I found...',
+              },
+            ],
+          },
+        ],
+        usage: {
+          input_tokens: 60,
+          output_tokens: 40,
+          total_tokens: 100,
+        },
+      } as any
+
+      const ResponsesMock: any = openaiModule.Responses || class MockResponses {}
+      ResponsesMock.prototype.create = jest.fn().mockResolvedValue(mockResponsesResult)
+
+      await client.responses.create({
+        model: 'gpt-4',
+        input: 'Tell me about PostHog',
+        posthogDistinctId: 'test-user',
+      } as any)
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      // Should detect 2 web_search_call items (exact count)
+      expect(properties['$ai_web_search_count']).toBe(2)
+    })
+
+    conditionalTest('should track web search in streaming with citations on final chunk', async () => {
+      // Create stream chunks with citations
+      mockStreamChunks = [
+        {
+          id: 'chatcmpl-test',
+          object: 'chat.completion.chunk',
+          created: Date.now() / 1000,
+          model: 'sonar-pro',
+          choices: [
+            {
+              index: 0,
+              delta: { content: 'Search result text' },
+              finish_reason: null,
+              logprobs: null,
+            },
+          ],
+        } as ChatCompletionChunk,
+        {
+          id: 'chatcmpl-test',
+          object: 'chat.completion.chunk',
+          created: Date.now() / 1000,
+          model: 'sonar-pro',
+          choices: [
+            {
+              index: 0,
+              delta: {},
+              finish_reason: 'stop',
+              logprobs: null,
+            },
+          ],
+          usage: {
+            prompt_tokens: 40,
+            completion_tokens: 25,
+            total_tokens: 65,
+          },
+          citations: [
+            {
+              url: 'https://example.com',
+              text: 'Example citation',
+            },
+          ] as any,
+        } as any,
+      ]
+
+      const stream = await client.chat.completions.create({
+        model: 'sonar-pro',
+        messages: [{ role: 'user', content: 'Search query' }],
+        stream: true,
+        posthogDistinctId: 'test-user',
+      })
+
+      // Consume stream
+      for await (const _chunk of stream) {
+        // Just consume
+      }
+
+      await flushPromises()
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      expect(properties['$ai_web_search_count']).toBe(1)
+    })
+
+    conditionalTest('should detect web search on early chunk without usage data (CRITICAL)', async () => {
+      mockStreamChunks = [
+        {
+          id: 'chatcmpl-test',
+          object: 'chat.completion.chunk',
+          created: Date.now() / 1000,
+          model: 'gpt-4',
+          choices: [
+            {
+              index: 0,
+              delta: {
+                content: 'Search result',
+                annotations: [
+                  {
+                    type: 'url_citation',
+                    text: 'Citation',
+                    url: 'https://example.com',
+                  },
+                ] as any,
+              },
+              finish_reason: null,
+              logprobs: null,
+            },
+          ],
+          // NO usage data on this chunk!
+        } as any,
+        {
+          id: 'chatcmpl-test',
+          object: 'chat.completion.chunk',
+          created: Date.now() / 1000,
+          model: 'gpt-4',
+          choices: [
+            {
+              index: 0,
+              delta: {},
+              finish_reason: 'stop',
+              logprobs: null,
+            },
+          ],
+          usage: {
+            prompt_tokens: 30,
+            completion_tokens: 20,
+            total_tokens: 50,
+          },
+        } as ChatCompletionChunk,
+      ]
+
+      const stream = await client.chat.completions.create({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: 'Query' }],
+        stream: true,
+        posthogDistinctId: 'test-user',
+      })
+
+      // Consume stream
+      for await (const _chunk of stream) {
+        // Just consume
+      }
+
+      await flushPromises()
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      // Should detect web search from early chunk even without usage data
+      expect(properties['$ai_web_search_count']).toBe(1)
+    })
+
+    conditionalTest('should detect web search from search_results (Perplexity via OpenRouter)', async () => {
+      mockOpenAiChatResponse = {
+        id: 'chatcmpl-test',
+        object: 'chat.completion',
+        created: Date.now() / 1000,
+        model: 'sonar-pro',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Search result content',
+            },
+            finish_reason: 'stop',
+            logprobs: null,
+          },
+        ],
+        usage: {
+          prompt_tokens: 35,
+          completion_tokens: 28,
+          total_tokens: 63,
+        },
+        search_results: [
+          {
+            url: 'https://example.com',
+            title: 'Example',
+          },
+        ] as any,
+      } as any
+
+      await client.chat.completions.create({
+        model: 'sonar-pro',
+        messages: [{ role: 'user', content: 'Search' }],
+        posthogDistinctId: 'test-user',
+      })
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      expect(properties['$ai_web_search_count']).toBe(1)
+    })
+
+    conditionalTest('should detect web search from search_context_size (Perplexity via OpenRouter)', async () => {
+      mockOpenAiChatResponse = {
+        id: 'chatcmpl-test',
+        object: 'chat.completion',
+        created: Date.now() / 1000,
+        model: 'sonar-pro',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Search result',
+            },
+            finish_reason: 'stop',
+            logprobs: null,
+          },
+        ],
+        usage: {
+          prompt_tokens: 45,
+          completion_tokens: 32,
+          total_tokens: 77,
+          search_context_size: '1234',
+        } as any,
+      } as any
+
+      await client.chat.completions.create({
+        model: 'sonar-pro',
+        messages: [{ role: 'user', content: 'Query' }],
+        posthogDistinctId: 'test-user',
+      })
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      expect(properties['$ai_web_search_count']).toBe(1)
+    })
+
+    conditionalTest('should not include web search count when not present', async () => {
+      mockOpenAiChatResponse = {
+        id: 'chatcmpl-test',
+        object: 'chat.completion',
+        created: Date.now() / 1000,
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Regular response without web search',
+            },
+            finish_reason: 'stop',
+            logprobs: null,
+          },
+        ],
+        usage: {
+          prompt_tokens: 20,
+          completion_tokens: 15,
+          total_tokens: 35,
+        },
+      } as ChatCompletion
+
+      await client.chat.completions.create({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: 'Hello' }],
+        posthogDistinctId: 'test-user',
+      })
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      // Should not have web search count when not present
+      expect(properties['$ai_web_search_count']).toBeUndefined()
     })
   })
 

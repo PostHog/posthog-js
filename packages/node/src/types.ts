@@ -5,21 +5,25 @@ import type {
   PostHogFetchOptions,
   PostHogFetchResponse,
 } from '@posthog/core'
+import { ContextData, ContextOptions } from './extensions/context/types'
 
-export interface IdentifyMessage {
+import type { FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
+
+export type IdentifyMessage = {
   distinctId: string
   properties?: Record<string | number, any>
   disableGeoip?: boolean
 }
 
-export interface SendFeatureFlagsOptions {
+export type SendFeatureFlagsOptions = {
   onlyEvaluateLocally?: boolean
   personProperties?: Record<string, any>
   groupProperties?: Record<string, Record<string, any>>
   flagKeys?: string[]
 }
 
-export interface EventMessage extends IdentifyMessage {
+export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
+  distinctId?: string // Optional - can be provided via context
   event: string
   groups?: Record<string, string | number> // Mapping of group type to group id
   sendFeatureFlags?: boolean | SendFeatureFlagsOptions
@@ -27,7 +31,7 @@ export interface EventMessage extends IdentifyMessage {
   uuid?: string
 }
 
-export interface GroupIdentifyMessage {
+export type GroupIdentifyMessage = {
   groupType: string
   groupKey: string // Unique identifier for the group
   properties?: Record<string | number, any>
@@ -73,6 +77,32 @@ export type PostHogOptions = PostHogCoreOptions & {
   // We recommend setting this to false if you are only using the personalApiKey for evaluating remote config payloads via `getRemoteConfigPayload` and not using local evaluation.
   enableLocalEvaluation?: boolean
   /**
+   * @experimental This API is experimental and may change in minor versions.
+   *
+   * Optional cache provider for feature flag definitions.
+   *
+   * Allows custom caching strategies (Redis, database, etc.) for flag definitions
+   * in multi-worker environments. If not provided, defaults to in-memory cache.
+   *
+   * This enables distributed coordination where only one worker fetches flags while
+   * others use cached data, reducing API calls and improving performance.
+   *
+   * @example
+   * ```typescript
+   * import { FlagDefinitionCacheProvider } from 'posthog-node/experimental'
+   *
+   * class RedisCacheProvider implements FlagDefinitionCacheProvider {
+   *   // ... implementation
+   * }
+   *
+   * const client = new PostHog('api-key', {
+   *   personalApiKey: 'personal-key',
+   *   flagDefinitionCacheProvider: new RedisCacheProvider(redis)
+   * })
+   * ```
+   */
+  flagDefinitionCacheProvider?: FlagDefinitionCacheProvider
+  /**
    * Allows modification or dropping of events before they're sent to PostHog.
    * If an array is provided, the functions are run in order.
    * If a function returns null, the event will be dropped.
@@ -99,6 +129,31 @@ export type PostHogOptions = PostHogCoreOptions & {
    * @default false
    */
   realtimeFlags?: boolean
+  /**
+   * Additional user agent strings to block from being tracked.
+   * These are combined with the default list of blocked user agents.
+   *
+   * @default []
+   */
+  custom_blocked_useragents?: string[]
+  /**
+   * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+   * Enables collection of bot traffic as $bot_pageview events instead of dropping them.
+   * When enabled, events with a $raw_user_agent property that matches the bot detection list
+   * will have their $pageview event renamed to $bot_pageview.
+   *
+   * To use this feature, pass the user agent in event properties:
+   * ```ts
+   * client.capture({
+   *   distinctId: 'user_123',
+   *   event: '$pageview',
+   *   properties: {
+   *     $raw_user_agent: req.headers['user-agent']
+   *   }
+   * })
+   * ```
+   */
+  __preview_capture_bot_pageviews?: boolean
 }
 
 export type PostHogFeatureFlag = {
@@ -291,6 +346,21 @@ export interface IPostHog {
    * already polled automatically at a regular interval.
    */
   reloadFeatureFlags(): Promise<void>
+
+  /**
+   * @description Run a function with specific context that will be applied to all events captured within that context.
+   * @param data Context data to apply (sessionId, distinctId, properties, enableExceptionAutocapture)
+   * @param fn Function to run with the context
+   * @param options Context options (fresh)
+   * @returns The return value of the function
+   */
+  withContext<T>(data: Partial<ContextData>, fn: () => T, options?: ContextOptions): T
+
+  /**
+   * @description Get the current context data.
+   * @returns The current context data, or undefined if no context is set
+   */
+  getContext(): ContextData | undefined
 
   /**
    * @description Flushes the events still in the queue and clears the feature flags poller to allow for

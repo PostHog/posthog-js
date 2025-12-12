@@ -75,6 +75,26 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * Error Tracking Configuration
    */
   errorTracking?: ErrorTrackingOptions
+
+  /**
+   * Automatically include common device and app properties in feature flag evaluation.
+   *
+   * When enabled, the following properties are sent with every /flags request:
+   * - $app_version: App version
+   * - $app_build: App build number
+   * - $app_namespace: App bundle identifier / namespace
+   * - $os_name: Operating system name
+   * - $os_version: Operating system version
+   * - $device_type: Device type (Mobile, Desktop, Web)
+   * - $lib: Name of the SDK library
+   * - $lib_version: Version of the SDK library
+   *
+   * This ensures feature flags that rely on these properties work correctly
+   * without waiting for server-side processing of identify() calls.
+   *
+   * @default true
+   */
+  setDefaultPersonProperties?: boolean
 }
 
 export class PostHog extends PostHogCore {
@@ -88,6 +108,7 @@ export class PostHog extends PostHogCore {
   private _errorTracking: ErrorTracking
   private _surveysReadyPromise: Promise<void> | null = null
   private _surveysReady: boolean = false
+  private _setDefaultPersonProperties: boolean
 
   /**
    * Creates a new PostHog instance for React Native. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
@@ -130,6 +151,7 @@ export class PostHog extends PostHogCore {
     this._disableSurveys = options?.disableSurveys ?? false
     this._disableRemoteConfig = options?.disableRemoteConfig ?? false
     this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger)
+    this._setDefaultPersonProperties = options?.setDefaultPersonProperties ?? true
 
     // Either build the app properties from the existing ones
     this._appProperties =
@@ -178,6 +200,11 @@ export class PostHog extends PostHogCore {
       }
 
       this.setupBootstrap(options)
+
+      // Set default person properties for flags if enabled
+      if (this._setDefaultPersonProperties) {
+        this._setDefaultPersonPropertiesForFlags(false)
+      }
 
       this._isInitialized = true
 
@@ -349,6 +376,51 @@ export class PostHog extends PostHogCore {
    */
   reset(): void {
     super.reset()
+
+    if (this._setDefaultPersonProperties) {
+      // Reset reloads flags asyncrhonously, but doesn't wait for it.
+      // As a result, we can synchronously set the default person properties without
+      // reloading, and allow the super.reset() call to reload the flags.
+      this._setDefaultPersonPropertiesForFlags(false)
+    }
+  }
+
+  /**
+   * Helper to extract and set default person properties from app properties
+   *
+   * @private
+   *
+   * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
+   */
+  private _setDefaultPersonPropertiesForFlags(reloadFeatureFlags = true): void {
+    const defaultProps: Record<string, string> = {}
+    const relevantKeys = [
+      '$app_version',
+      '$app_build',
+      '$app_namespace',
+      '$os_name',
+      '$os_version',
+      '$device_type',
+    ] as const
+
+    relevantKeys.forEach((key) => {
+      const value = this._appProperties[key]
+      if (value !== null && value !== undefined) {
+        defaultProps[key] = String(value)
+      }
+    })
+
+    const commonProps = this.getCommonEventProperties()
+    if (commonProps.$lib) {
+      defaultProps.$lib = String(commonProps.$lib)
+    }
+    if (commonProps.$lib_version) {
+      defaultProps.$lib_version = String(commonProps.$lib_version)
+    }
+
+    if (Object.keys(defaultProps).length > 0) {
+      this.setPersonPropertiesForFlags(defaultProps, reloadFeatureFlags)
+    }
   }
 
   /**
@@ -553,6 +625,22 @@ export class PostHog extends PostHogCore {
    */
   group(groupType: string, groupKey: string, properties?: PostHogEventProperties): void {
     super.group(groupType, groupKey, properties)
+
+    // Automatically cache group properties for feature flag evaluation
+    if (properties && Object.keys(properties).length > 0) {
+      const propsToCache: Record<string, string> = {}
+      Object.keys(properties).forEach((key) => {
+        const value = properties[key]
+        if (value !== null && value !== undefined) {
+          propsToCache[key] = String(value)
+        }
+      })
+      if (Object.keys(propsToCache).length > 0) {
+        this.setGroupPropertiesForFlags({
+          [groupType]: propsToCache,
+        })
+      }
+    }
   }
 
   /**
@@ -617,9 +705,14 @@ export class PostHog extends PostHogCore {
    * @public
    *
    * @param properties The person properties to set for flag evaluation
+   * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
-  setPersonPropertiesForFlags(properties: Record<string, string>): void {
+  setPersonPropertiesForFlags(properties: Record<string, string>, reloadFeatureFlags = true): void {
     super.setPersonPropertiesForFlags(properties)
+
+    if (reloadFeatureFlags) {
+      this.reloadFeatureFlags()
+    }
   }
 
   /**
@@ -635,9 +728,15 @@ export class PostHog extends PostHogCore {
    * ```
    *
    * @public
+   *
+   * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
-  resetPersonPropertiesForFlags(): void {
+  resetPersonPropertiesForFlags(reloadFeatureFlags = true): void {
     super.resetPersonPropertiesForFlags()
+
+    if (reloadFeatureFlags) {
+      this.reloadFeatureFlags()
+    }
   }
 
   /**
@@ -657,9 +756,14 @@ export class PostHog extends PostHogCore {
    * @public
    *
    * @param properties The group properties to set for flag evaluation
+   * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
-  setGroupPropertiesForFlags(properties: Record<string, Record<string, string>>): void {
+  setGroupPropertiesForFlags(properties: Record<string, Record<string, string>>, reloadFeatureFlags = true): void {
     super.setGroupPropertiesForFlags(properties)
+
+    if (reloadFeatureFlags) {
+      this.reloadFeatureFlags()
+    }
   }
 
   /**
@@ -674,9 +778,15 @@ export class PostHog extends PostHogCore {
    * ```
    *
    * @public
+   *
+   * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
-  resetGroupPropertiesForFlags(): void {
+  resetGroupPropertiesForFlags(reloadFeatureFlags = true): void {
     super.resetGroupPropertiesForFlags()
+
+    if (reloadFeatureFlags) {
+      this.reloadFeatureFlags()
+    }
   }
 
   /**
@@ -815,6 +925,26 @@ export class PostHog extends PostHogCore {
   identify(distinctId?: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
     const previousDistinctId = this.getDistinctId()
     super.identify(distinctId, properties, options)
+
+    // Automatically cache person properties for feature flag evaluation
+    // Use $set if provided, otherwise use top-level properties
+    const userProps = properties?.$set || properties
+    if (userProps && Object.keys(userProps).length > 0) {
+      const propsToCache: Record<string, string> = {}
+      Object.entries(userProps).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          propsToCache[key] = String(value)
+        }
+      })
+      if (Object.keys(propsToCache).length > 0) {
+        // `identify` will already reload flags if the distinctId changed,
+        // so we only need to reload if the distinctId is the same. The
+        // reload is async but not awaited, so by synchronously setting the
+        // properties here, we ensure they are set before the reload happens.
+        const shouldReloadFlags = distinctId === previousDistinctId
+        this.setPersonPropertiesForFlags(propsToCache, shouldReloadFlags)
+      }
+    }
 
     if (this._isEnableSessionReplay() && OptionalReactNativeSessionReplay) {
       try {

@@ -4,7 +4,7 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-pnpmfileChecksum: sha256-cEvMMkfkheI3EBa4G37GQNElnmWChFh76TB33kbeS1E=
+pnpmfileChecksum: sha256-OcVGlYgAXhwIsFX1WLS9u6NOlScsFrdTUbTxlr/ypOs=
 
 importers:
 
@@ -12,19 +12,19 @@ importers:
     dependencies:
       '@react-native-async-storage/async-storage':
         specifier: ^1.21.0
-        version: 1.24.0(react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.2.0))
+        version: 1.24.0(react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.3.1))
       posthog-react-native:
         specifier: file:../../target/posthog-react-native.tgz
-        version: file:../../target/posthog-react-native.tgz(@react-native-async-storage/async-storage@1.24.0(react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.2.0)))(react-native-svg@15.12.0(react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.2.0))(react@18.2.0))
+        version: file:../../target/posthog-react-native.tgz(@react-native-async-storage/async-storage@1.24.0(react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.3.1)))(react-native-svg@15.12.0(react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.3.1))(react@18.3.1))
       react:
-        specifier: 18.2.0
-        version: 18.2.0
+        specifier: 18.3.1
+        version: 18.3.1
       react-native:
         specifier: 0.71.15
-        version: 0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.2.0)
+        version: 0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.3.1)
       react-native-macos:
         specifier: ^0.71.0-0
-        version: 0.71.36(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.2.0)
+        version: 0.71.36(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.3.1)
     devDependencies:
       '@babel/core':
         specifier: ^7.20.0
@@ -67,7 +67,7 @@ importers:
         version: 2.8.8
       react-test-renderer:
         specifier: 18.2.0
-        version: 18.2.0(react@18.2.0)
+        version: 18.2.0(react@18.3.1)
       typescript:
         specifier: 4.8.4
         version: 4.8.4
@@ -952,8 +952,8 @@ packages:
     engines: {node: '>= 8'}
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-SEmf7ATAKNuDEtREr97sJMlHjzcmUM6g/CtD3XoByO0RsJI9gJ8AzmWBM6VXJ2tUB2gvS4m6ohfw5QoP+InXcw==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.0.0
+    resolution: {integrity: sha512-9Qowpawtz7QcjMy8DX4WPrz073+f7qoNJ5piKst/hXYc64+5PVt6ObXe/uVMFip7lKsDN+ilxFAPDtoHQSMfZg==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.7.0
 
   '@react-native-async-storage/async-storage@1.24.0':
     resolution: {integrity: sha512-W4/vbwUOYOjco0x3toB8QCr7EjIP6nE9G7o8PMguvvjYT5Awg09lyV4enACRx4s++PPulBiBSjL0KTFx2u0Z/g==}
@@ -2689,6 +2689,7 @@ packages:
 
   metro-react-native-babel-preset@0.73.10:
     resolution: {integrity: sha512-1/dnH4EHwFb2RKEKx34vVDpUS3urt2WEeR8FYim+ogqALg4sTpG7yeQPxWpbgKATezt4rNfqAANpIyH19MS4BQ==}
+    deprecated: Use @react-native/babel-preset instead
     peerDependencies:
       '@babel/core': '*'
 
@@ -3001,8 +3002,8 @@ packages:
     engines: {node: '>= 0.4'}
 
   posthog-react-native@file:../../target/posthog-react-native.tgz:
-    resolution: {integrity: sha512-BbMDIU3ynMYi0/JHm8lFaw5w5/DmXiLycW+QTBP8jRp2TIytSnWi9hRsdjtBAR7nlCbfNnqSuJ5/CcAvTyPkpg==, tarball: file:../../target/posthog-react-native.tgz}
-    version: 4.4.0
+    resolution: {integrity: sha512-njMKGPiElA/eq3vOJ/zV/6SVWU69qb+tXBJJRr4X4l0RN5bRF4fRGyNZzg73htoPKVA6RCDUgMYba8WefMQRnA==, tarball: file:../../target/posthog-react-native.tgz}
+    version: 4.14.1
     peerDependencies:
       '@react-native-async-storage/async-storage': '>=1.0.0'
       '@react-navigation/native': '>= 5.0.0'
@@ -3010,7 +3011,7 @@ packages:
       expo-device: '>= 4.0.0'
       expo-file-system: '>= 13.0.0'
       expo-localization: '>= 11.0.0'
-      posthog-react-native-session-replay: '>= 1.1.1'
+      posthog-react-native-session-replay: '>= 1.2.0'
       react-native-device-info: '>= 10.0.0'
       react-native-localize: '>= 3.0.0'
       react-native-navigation: '>= 6.0.0'
@@ -3143,8 +3144,8 @@ packages:
     peerDependencies:
       react: ^18.2.0
 
-  react@18.2.0:
-    resolution: {integrity: sha512-/3IjMdb2L9QbBdWiW5e3P2/npwMBaU9mHCSCUzNln0ZCYbcfTsGbTJrU/kGemdH2IWmB2ioZ+zkxtmq6g09fGQ==}
+  react@18.3.1:
+    resolution: {integrity: sha512-wS+hAgJShR0KhEvPJArfuPVN1+Hz1t0Y6n5jLrGQbkb4urgPE/0Rve+1kMB1v/oWgHgm4WIcV+i7F2pTVj+2iQ==}
     engines: {node: '>=0.10.0'}
 
   readable-stream@2.3.8:
@@ -4953,12 +4954,14 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.19.1
 
-  '@posthog/core@file:../../target/posthog-core.tgz': {}
+  '@posthog/core@file:../../target/posthog-core.tgz':
+    dependencies:
+      cross-spawn: 7.0.6
 
-  '@react-native-async-storage/async-storage@1.24.0(react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.2.0))':
+  '@react-native-async-storage/async-storage@1.24.0(react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.3.1))':
     dependencies:
       merge-options: 3.0.4
-      react-native: 0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.2.0)
+      react-native: 0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.3.1)
 
   '@react-native-community/cli-clean@10.1.1':
     dependencies:
@@ -7744,12 +7747,12 @@ snapshots:
 
   possible-typed-array-names@1.1.0: {}
 
-  posthog-react-native@file:../../target/posthog-react-native.tgz(@react-native-async-storage/async-storage@1.24.0(react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.2.0)))(react-native-svg@15.12.0(react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.2.0))(react@18.2.0)):
+  posthog-react-native@file:../../target/posthog-react-native.tgz(@react-native-async-storage/async-storage@1.24.0(react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.3.1)))(react-native-svg@15.12.0(react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.3.1))(react@18.3.1)):
     dependencies:
       '@posthog/core': file:../../target/posthog-core.tgz
-      react-native-svg: 15.12.0(react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.2.0))(react@18.2.0)
+      react-native-svg: 15.12.0(react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.3.1))(react@18.3.1)
     optionalDependencies:
-      '@react-native-async-storage/async-storage': 1.24.0(react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.2.0))
+      '@react-native-async-storage/async-storage': 1.24.0(react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.3.1))
 
   prelude-ls@1.2.1: {}
 
@@ -7828,7 +7831,7 @@ snapshots:
 
   react-native-gradle-plugin@0.71.19: {}
 
-  react-native-macos@0.71.36(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.2.0):
+  react-native-macos@0.71.36(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.3.1):
     dependencies:
       '@jest/create-cache-key-function': 29.7.0
       '@react-native-community/cli': 10.2.4(@babel/core@7.28.0)
@@ -7854,16 +7857,16 @@ snapshots:
       nullthrows: 1.1.1
       pretty-format: 26.6.2
       promise: 8.3.0
-      react: 18.2.0
+      react: 18.3.1
       react-devtools-core: 4.28.5
       react-native-codegen: 0.71.6(@babel/preset-env@7.28.0(@babel/core@7.28.0))
       react-native-gradle-plugin: 0.71.19
       react-refresh: 0.4.3
-      react-shallow-renderer: 16.15.0(react@18.2.0)
+      react-shallow-renderer: 16.15.0(react@18.3.1)
       regenerator-runtime: 0.13.11
       scheduler: 0.23.2
       stacktrace-parser: 0.1.11
-      use-sync-external-store: 1.5.0(react@18.2.0)
+      use-sync-external-store: 1.5.0(react@18.3.1)
       whatwg-fetch: 3.6.20
       ws: 6.2.3
     transitivePeerDependencies:
@@ -7874,15 +7877,15 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  react-native-svg@15.12.0(react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.2.0))(react@18.2.0):
+  react-native-svg@15.12.0(react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.3.1))(react@18.3.1):
     dependencies:
       css-select: 5.2.2
       css-tree: 1.1.3
-      react: 18.2.0
-      react-native: 0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.2.0)
+      react: 18.3.1
+      react-native: 0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.3.1)
       warn-once: 0.1.1
 
-  react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.2.0):
+  react-native@0.71.15(@babel/core@7.28.0)(@babel/preset-env@7.28.0(@babel/core@7.28.0))(react@18.3.1):
     dependencies:
       '@jest/create-cache-key-function': 29.7.0
       '@react-native-community/cli': 10.2.6(@babel/core@7.28.0)
@@ -7908,16 +7911,16 @@ snapshots:
       nullthrows: 1.1.1
       pretty-format: 26.6.2
       promise: 8.3.0
-      react: 18.2.0
+      react: 18.3.1
       react-devtools-core: 4.28.5
       react-native-codegen: 0.71.6(@babel/preset-env@7.28.0(@babel/core@7.28.0))
       react-native-gradle-plugin: 0.71.19
       react-refresh: 0.4.3
-      react-shallow-renderer: 16.15.0(react@18.2.0)
+      react-shallow-renderer: 16.15.0(react@18.3.1)
       regenerator-runtime: 0.13.11
       scheduler: 0.23.2
       stacktrace-parser: 0.1.11
-      use-sync-external-store: 1.5.0(react@18.2.0)
+      use-sync-external-store: 1.5.0(react@18.3.1)
       whatwg-fetch: 3.6.20
       ws: 6.2.3
     transitivePeerDependencies:
@@ -7930,20 +7933,20 @@ snapshots:
 
   react-refresh@0.4.3: {}
 
-  react-shallow-renderer@16.15.0(react@18.2.0):
+  react-shallow-renderer@16.15.0(react@18.3.1):
     dependencies:
       object-assign: 4.1.1
-      react: 18.2.0
+      react: 18.3.1
       react-is: 18.3.1
 
-  react-test-renderer@18.2.0(react@18.2.0):
+  react-test-renderer@18.2.0(react@18.3.1):
     dependencies:
-      react: 18.2.0
+      react: 18.3.1
       react-is: 18.3.1
-      react-shallow-renderer: 16.15.0(react@18.2.0)
+      react-shallow-renderer: 16.15.0(react@18.3.1)
       scheduler: 0.23.2
 
-  react@18.2.0:
+  react@18.3.1:
     dependencies:
       loose-envify: 1.4.0
 
@@ -8478,9 +8481,9 @@ snapshots:
     dependencies:
       punycode: 2.3.1
 
-  use-sync-external-store@1.5.0(react@18.2.0):
+  use-sync-external-store@1.5.0(react@18.3.1):
     dependencies:
-      react: 18.2.0
+      react: 18.3.1
 
   util-deprecate@1.0.2: {}
 

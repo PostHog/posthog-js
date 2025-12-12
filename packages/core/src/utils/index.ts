@@ -1,10 +1,12 @@
 import { FetchLike } from '../types'
 
+export * from './bot-detection'
 export * from './bucketed-rate-limiter'
 export * from './number-utils'
 export * from './string-utils'
 export * from './type-utils'
 export * from './promise-queue'
+export * from './logger'
 
 export const STRING_FORMAT = 'utf8'
 

@@ -180,9 +180,9 @@ export class SessionIdManager {
     }
 
     private _getSessionId(): [number, string, number] {
-        if (this._sessionId && this._sessionActivityTimestamp && this._sessionStartTimestamp) {
-            return [this._sessionActivityTimestamp, this._sessionId, this._sessionStartTimestamp]
-        }
+        // Always read from persistence - it's the source of truth
+        // The in-memory cache could become stale (e.g., in a frozen tab scenario where
+        // time passes but the cache isn't updated)
         const sessionIdInfo = this._persistence.props[SESSION_ID]
 
         if (isArray(sessionIdInfo) && sessionIdInfo.length === 2) {
@@ -270,7 +270,8 @@ export class SessionIdManager {
 
         let valuesChanged = false
         const noSessionId = !sessionId
-        const activityTimeout = !readOnly && this._sessionHasBeenIdleTooLong(timestamp, lastActivityTimestamp)
+        const activityTimeout =
+            !noSessionId && !readOnly && this._sessionHasBeenIdleTooLong(timestamp, lastActivityTimestamp)
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
             sessionId = this._sessionIdGenerator()
             windowId = this._windowIdGenerator()

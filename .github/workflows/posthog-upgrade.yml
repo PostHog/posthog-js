@@ -30,7 +30,7 @@ jobs:
           repository: "PostHog/posthog"
           token: ${{ secrets.POSTHOG_BOT_PAT }}
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin v4.2.0
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
@@ -56,6 +56,25 @@ jobs:
           RETRY_TIMES: 20
           RETRY_WAIT_SECONDS: 5
 
+      - name: Install new package version in hedgebox-dummy
+        shell: bash
+        run: |
+          if [ -d "hedgebox-dummy" ]; then
+              cd hedgebox-dummy
+              for i in $(seq 1 $RETRY_TIMES); do
+                  if pnpm upgrade ${{ github.event.inputs.package_name }}@${{ github.event.inputs.package_version }}; then
+                      break
+                  else
+                      [ $i -ne $RETRY_TIMES ] && sleep $RETRY_WAIT_SECONDS || false
+                  fi
+              done
+          else
+              echo "hedgebox-dummy folder not found, skipping"
+          fi
+        env:
+          RETRY_TIMES: 20
+          RETRY_WAIT_SECONDS: 5
+
       - name: Generate branch name
         id: generate-branch-name
         shell: bash
@@ -65,7 +84,7 @@ jobs:
 
       - name: Create main repo pull request
         id: main-repo-pr
-        uses: peter-evans/create-pull-request@v3
+        uses: peter-evans/create-pull-request@18f7dc018cc2cd597073088f7c7591b9d1c02672 #v3.14.0
         with:
           token: ${{ secrets.POSTHOG_BOT_PAT }}
           commit-message: "chore(deps): Update ${{ github.event.inputs.package_name }} to ${{ github.event.inputs.package_version }}"
@@ -87,10 +106,10 @@ jobs:
 
       - name: Get deployer token
         id: deployer
-        uses: getsentry/action-github-app-token@v2
+        uses: getsentry/action-github-app-token@97c9e23528286821f97fba885c1b1123284b29cc # v2
         with:
-          app_id: ${{ secrets.DEPLOYER_APP_ID }}
-          private_key: ${{ secrets.DEPLOYER_APP_PRIVATE_KEY }}
+          app_id: ${{ secrets.GH_APP_POSTHOG_DEPLOYER_APP_ID }}
+          private_key: ${{ secrets.GH_APP_POSTHOG_DEPLOYER_PRIVATE_KEY }}
 
       - name: Stamp PR
         shell: bash
@@ -108,3 +127,20 @@ jobs:
           -H "X-GitHub-Api-Version: 2022-11-28" \
           https://api.github.com/repos/posthog/posthog/pulls/${pull_number}/reviews \
           -d '{"body":"${{ github.event.inputs.package_name }} auto approved.","event":"APPROVE","comments":[]}'
+
+      # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
+      - name: Send failure event to PostHog
+        if: ${{ failure() }}
+        uses: PostHog/posthog-github-action@v0.1
+        with:
+          posthog-token: "${{ secrets.POSTHOG_PROJECT_API_KEY }}"
+          event: "posthog-js-github-release-workflow-failure"
+          properties: >-
+            {
+              "commitSha": "${{ github.sha }}",
+              "jobStatus": "${{ job.status }}",
+              "ref": "${{ github.ref }}",
+              "repository": "Posthog/posthog",
+              "packageName": "${{ github.event.inputs.package_name }}",
+              "packageVersion": "${{ github.event.inputs.package_version }}"
+            }

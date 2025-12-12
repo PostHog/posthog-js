@@ -14,6 +14,10 @@ on:
         required: true
         type: string
 
+permissions:
+  actions: write
+  contents: read
+
 jobs:
   posthog-com-upgrade:
     name: Upgrade PostHog.com Package
@@ -27,7 +31,7 @@ jobs:
           token: ${{ secrets.POSTHOG_BOT_PAT }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin v4.2.0
         with:
           node-version: 22
           cache: yarn
@@ -59,7 +63,7 @@ jobs:
 
       - name: Create PostHog.com repo pull request
         id: com-repo-pr
-        uses: peter-evans/create-pull-request@v3
+        uses: peter-evans/create-pull-request@18f7dc018cc2cd597073088f7c7591b9d1c02672 #v3.14.0
         with:
           token: ${{ secrets.POSTHOG_BOT_PAT }}
           commit-message: "chore(deps): Update ${{ github.event.inputs.package_name }} to ${{ github.event.inputs.package_version }}"
@@ -78,3 +82,20 @@ jobs:
         shell: bash
         run: |
           echo "PostHog.com pull request for ${{ github.event.inputs.package_name }} version ${{ github.event.inputs.package_version }} ready: ${{ steps.com-repo-pr.outputs.pull-request-url }}"
+
+      # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
+      - name: Send failure event to PostHog
+        if: ${{ failure() }}
+        uses: PostHog/posthog-github-action@v0.1
+        with:
+          posthog-token: "${{ secrets.POSTHOG_PROJECT_API_KEY }}"
+          event: "posthog-js-github-release-workflow-failure"
+          properties: >-
+            {
+              "commitSha": "${{ github.sha }}",
+              "jobStatus": "${{ job.status }}",
+              "ref": "${{ github.ref }}",
+              "repository": "Posthog/posthog.com",
+              "packageName": "${{ github.event.inputs.package_name }}",
+              "packageVersion": "${{ github.event.inputs.package_version }}"
+            }

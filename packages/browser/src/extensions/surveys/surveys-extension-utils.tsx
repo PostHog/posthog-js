@@ -1,4 +1,4 @@
-import { VNode, cloneElement, createContext } from 'preact'
+import { VNode, cloneElement, createContext, type JSX } from 'preact'
 import { PostHog } from '../../posthog-core'
 import {
     MultipleSurveyQuestion,
@@ -137,13 +137,16 @@ export const addSurveyCSSVariablesToElement = (
     hostStyle.setProperty('--ph-widget-text-color', getContrastingTextColor(effectiveAppearance.widgetColor))
     hostStyle.setProperty('--ph-widget-z-index', effectiveAppearance.zIndex)
 
-    // Adjust input/choice background slightly if main background is white
-    if (effectiveAppearance.backgroundColor === 'white') {
-        hostStyle.setProperty('--ph-survey-input-background', '#f8f8f8')
+    // Use user-provided inputBackgroundColor, or fallback to internal default (with slight adjustment for white backgrounds)
+    let inputBgColor = appearance?.inputBackgroundColor || effectiveAppearance.inputBackground
+    if (!appearance?.inputBackgroundColor && effectiveAppearance.backgroundColor === 'white') {
+        inputBgColor = '#f8f8f8'
     }
-
-    hostStyle.setProperty('--ph-survey-input-background', effectiveAppearance.inputBackground)
-    hostStyle.setProperty('--ph-survey-input-text-color', getContrastingTextColor(effectiveAppearance.inputBackground))
+    hostStyle.setProperty('--ph-survey-input-background', inputBgColor)
+    hostStyle.setProperty(
+        '--ph-survey-input-text-color',
+        appearance?.inputTextColor || getContrastingTextColor(inputBgColor)
+    )
     hostStyle.setProperty('--ph-survey-scrollbar-thumb-color', effectiveAppearance.scrollbarThumbColor)
     hostStyle.setProperty('--ph-survey-scrollbar-track-color', effectiveAppearance.scrollbarTrackColor)
     hostStyle.setProperty('--ph-survey-outline-color', effectiveAppearance.outlineColor)
@@ -582,7 +585,7 @@ interface RenderProps {
     component: VNode<{ className: string }>
     children: string
     renderAsHtml?: boolean
-    style?: React.CSSProperties
+    style?: JSX.CSSProperties
 }
 
 export const renderChildrenAsTextOrHtml = ({ component, children, renderAsHtml, style }: RenderProps) => {

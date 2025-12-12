@@ -3,6 +3,15 @@ import { isString, isObject } from './typeGuards'
 const REDACTED_IMAGE_PLACEHOLDER = '[base64 image redacted]'
 
 // ============================================
+// Multimodal Feature Toggle
+// ============================================
+
+const isMultimodalEnabled = (): boolean => {
+  const val = process.env._INTERNAL_LLMA_MULTIMODAL || ''
+  return val.toLowerCase() === 'true' || val === '1' || val.toLowerCase() === 'yes'
+}
+
+// ============================================
 // Base64 Detection Helpers
 // ============================================
 
@@ -34,6 +43,7 @@ const isRawBase64 = (str: string): boolean => {
 export function redactBase64DataUrl(str: string): string
 export function redactBase64DataUrl(str: unknown): unknown
 export function redactBase64DataUrl(str: unknown): unknown {
+  if (isMultimodalEnabled()) return str
   if (!isString(str)) return str
 
   // Check for data URL format
@@ -102,6 +112,12 @@ const sanitizeOpenAIImage = (item: unknown): unknown => {
     }
   }
 
+  // Handle audio format
+  if (item.type === 'audio' && 'data' in item) {
+    if (isMultimodalEnabled()) return item
+    return { ...item, data: REDACTED_IMAGE_PLACEHOLDER }
+  }
+
   return item
 }
 
@@ -120,11 +136,12 @@ const sanitizeOpenAIResponseImage = (item: unknown): unknown => {
 }
 
 const sanitizeAnthropicImage = (item: unknown): unknown => {
+  if (isMultimodalEnabled()) return item
   if (!isObject(item)) return item
 
-  // Handle Anthropic's image format
+  // Handle Anthropic's image and document formats (same structure, different type field)
   if (
-    item.type === 'image' &&
+    (item.type === 'image' || item.type === 'document') &&
     'source' in item &&
     isObject(item.source) &&
     item.source.type === 'base64' &&
@@ -143,9 +160,10 @@ const sanitizeAnthropicImage = (item: unknown): unknown => {
 }
 
 const sanitizeGeminiPart = (part: unknown): unknown => {
+  if (isMultimodalEnabled()) return part
   if (!isObject(part)) return part
 
-  // Handle Gemini's inline data format
+  // Handle Gemini's inline data format (images, audio, PDFs all use inlineData)
   if ('inlineData' in part && isObject(part.inlineData) && 'data' in part.inlineData) {
     return {
       ...part,
@@ -193,6 +211,7 @@ const sanitizeLangChainImage = (item: unknown): unknown => {
 
   // Anthropic style
   if (item.type === 'image' && 'source' in item && isObject(item.source) && 'data' in item.source) {
+    if (isMultimodalEnabled()) return item
     return {
       ...item,
       source: {

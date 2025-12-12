@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
-import { usePostHog } from './usePostHog'
+import { useContext, useEffect, useState } from 'react'
+import { PostHogContext } from '../context'
 
 export function useActiveFeatureFlags(): string[] {
-    const client = usePostHog()
+    const { client, bootstrap } = useContext(PostHogContext)
 
     const [featureFlags, setFeatureFlags] = useState<string[]>(() => client.featureFlags.getFlags())
 
@@ -11,6 +11,11 @@ export function useActiveFeatureFlags(): string[] {
             setFeatureFlags(flags)
         })
     }, [client])
+
+    // if the client is not loaded yet and we have a bootstrapped value, use it
+    if (!client?.featureFlags?.hasLoadedFlags && bootstrap?.featureFlags) {
+        return Object.keys(bootstrap.featureFlags)
+    }
 
     return featureFlags
 }

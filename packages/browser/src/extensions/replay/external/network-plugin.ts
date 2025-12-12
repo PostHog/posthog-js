@@ -292,13 +292,21 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                     return originalSend(body)
                 }
 
+                // Cleanup function to remove all event listeners and prevent memory leaks
+                const cleanup = () => {
+                    xhr.removeEventListener('readystatechange', readyStateListener)
+                    xhr.removeEventListener('error', cleanup)
+                    xhr.removeEventListener('abort', cleanup)
+                    xhr.removeEventListener('timeout', cleanup)
+                }
+
                 const readyStateListener = () => {
                     if (xhr.readyState !== xhr.DONE) {
                         return
                     }
 
-                    // Clean up the listener immediately when done to prevent memory leaks
-                    xhr.removeEventListener('readystatechange', readyStateListener)
+                    // Clean up all listeners immediately when done to prevent memory leaks
+                    cleanup()
 
                     end = win.performance.now()
                     const responseHeaders: Headers = {}
@@ -348,8 +356,15 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                 // so let's ignore the rule here.
                 // eslint-disable-next-line posthog-js/no-add-event-listener
                 xhr.addEventListener('readystatechange', readyStateListener)
+                // Also clean up on error, abort, and timeout to prevent memory leaks
+                // eslint-disable-next-line posthog-js/no-add-event-listener
+                xhr.addEventListener('error', cleanup)
+                // eslint-disable-next-line posthog-js/no-add-event-listener
+                xhr.addEventListener('abort', cleanup)
+                // eslint-disable-next-line posthog-js/no-add-event-listener
+                xhr.addEventListener('timeout', cleanup)
 
-                originalOpen.call(xhr, method, url, async, username, password)
+                originalOpen.call(xhr, method, url.toString(), async, username, password)
             }
         }
     )
@@ -555,7 +570,7 @@ function initFetchObserver(
 
             try {
                 const requestHeaders: Headers = {}
-                req.headers.forEach((value, header) => {
+                req.headers.forEach((value: string, header: string | number) => {
                     requestHeaders[header] = value
                 })
                 if (recordRequestHeaders) {
@@ -577,7 +592,7 @@ function initFetchObserver(
                 end = win.performance.now()
 
                 const responseHeaders: Headers = {}
-                res.headers.forEach((value, header) => {
+                res.headers.forEach((value: string, header: string | number) => {
                     responseHeaders[header] = value
                 })
                 if (recordResponseHeaders) {
@@ -672,6 +687,7 @@ function initNetworkObserver(
         performanceObserver()
         xhrObserver()
         fetchObserver()
+        initialisedHandler = null
     }
     return initialisedHandler
 }

@@ -1,4 +1,4 @@
-# PostHog.js React Components
+# PostHog.js React Components.
 
 ## Testing
 

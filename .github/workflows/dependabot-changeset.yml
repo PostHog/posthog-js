@@ -4,12 +4,14 @@ jobs:
   changeset:
     runs-on: ubuntu-latest
     if: github.actor == 'dependabot[bot]'
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Generate changeset
-        uses: the-guild-org/changesets-dependencies-action@v1.1.0
+        uses: the-guild-org/changesets-dependencies-action@f11b16181c79e07d62b112c2f32c9db534a9df09 # pin v1.2.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

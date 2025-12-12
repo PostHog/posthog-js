@@ -3,37 +3,43 @@
 import { SurveyActionType, ActionStepStringMatching } from '../../../posthog-surveys-types'
 import { PostHogPersistence } from '../../../posthog-persistence'
 import { PostHog } from '../../../posthog-core'
-import { CaptureResult, PostHogConfig } from '../../../types'
+import { CaptureResult, PostHogConfig, Properties, PropertyMatchType } from '../../../types'
 import { ActionMatcher } from '../../../extensions/surveys/action-matcher'
+import { createMockPostHog, createMockConfig } from '../../helpers/posthog-instance'
 
 describe('action-matcher', () => {
     let config: PostHogConfig
     let instance: PostHog
 
     beforeEach(() => {
-        config = {
+        config = createMockConfig({
             token: 'testtoken',
             api_host: 'https://app.posthog.com',
             persistence: 'memory',
-        } as unknown as PostHogConfig
+        })
 
-        instance = {
+        instance = createMockPostHog({
             config: config,
             persistence: new PostHogPersistence(config),
             _addCaptureHook: jest.fn(),
-        } as unknown as PostHog
+        })
     })
 
     afterEach(() => {
         instance.persistence?.clear()
     })
 
-    const createCaptureResult = (eventName: string, currentUrl?: string): CaptureResult => {
+    const createCaptureResult = (
+        eventName: string,
+        currentUrl?: string,
+        additionalProperties?: Properties
+    ): CaptureResult => {
         return {
             $set: undefined,
             $set_once: undefined,
             properties: {
                 $current_url: currentUrl,
+                ...additionalProperties,
             },
             timestamp: undefined,
             uuid: '0C984DA5-761F-4F75-9582-D2F95B43B04A',
@@ -44,7 +50,12 @@ describe('action-matcher', () => {
         id: number,
         eventName: string,
         currentUrl?: string,
-        urlMatch?: ActionStepStringMatching
+        urlMatch?: ActionStepStringMatching,
+        properties?: {
+            key: string
+            value: string | number | boolean | (string | number | boolean)[]
+            operator?: PropertyMatchType
+        }[]
     ): SurveyActionType => {
         return {
             id: id,
@@ -58,12 +69,9 @@ describe('action-matcher', () => {
                     href_matching: null,
                     url: currentUrl,
                     url_matching: urlMatch || 'exact',
+                    properties: properties,
                 },
             ],
-            created_at: '2024-06-20T14:39:23.616676Z',
-            deleted: false,
-            is_action: true,
-            tags: [],
         }
     }
 
@@ -154,5 +162,73 @@ describe('action-matcher', () => {
 
         actionMatcher.on('$autocapture', result)
         expect(buttonClickedActionMatched).toBeTruthy()
+    })
+
+    it('can match action with property filters', () => {
+        const action = createAction(1, '$pageview', undefined, undefined, [
+            { key: 'plan', value: 'pro', operator: 'exact' },
+        ])
+        const actionMatcher = new ActionMatcher(instance)
+        actionMatcher.register([action])
+
+        let matched = false
+        actionMatcher._addActionHook(() => {
+            matched = true
+        })
+
+        actionMatcher.on('$pageview', createCaptureResult('$pageview', undefined, { plan: 'free' }))
+        expect(matched).toBeFalsy()
+
+        actionMatcher.on('$pageview', createCaptureResult('$pageview', undefined, { plan: 'pro' }))
+        expect(matched).toBeTruthy()
+    })
+
+    it('can match action using server-provided selector_regex', () => {
+        const buttonClickedAction = createAction(2, '$autocapture')
+        if (buttonClickedAction.steps) {
+            buttonClickedAction.steps[0].selector = 'button.primary'
+            buttonClickedAction.steps[0].selector_regex =
+                '(^|;)button.*?\\.primary([-_a-zA-Z0-9\\.:"= \\[\\]\\(\\),]*?)?($|;|:([^;^\\s]*(;|$|\\s)))'
+        }
+
+        const actionMatcher = new ActionMatcher(instance)
+        actionMatcher.register([buttonClickedAction])
+        let matched = false
+
+        actionMatcher._addActionHook(() => {
+            matched = true
+        })
+
+        const noMatchResult = createCaptureResult('$autocapture', 'https://example.com')
+        noMatchResult.properties.$elements_chain = 'button.secondary:text="Click"'
+        actionMatcher.on('$autocapture', noMatchResult)
+        expect(matched).toBeFalsy()
+
+        const matchResult = createCaptureResult('$autocapture', 'https://example.com')
+        matchResult.properties.$elements_chain = 'button.primary:text="Click"'
+        actionMatcher.on('$autocapture', matchResult)
+        expect(matched).toBeTruthy()
+    })
+
+    it('does not match selector when selector_regex not provided', () => {
+        const buttonClickedAction = createAction(2, '$autocapture')
+        if (buttonClickedAction.steps) {
+            buttonClickedAction.steps[0].selector = 'button.primary'
+            // No selector_regex - matching should fail (requires server-provided regex)
+        }
+
+        const actionMatcher = new ActionMatcher(instance)
+        actionMatcher.register([buttonClickedAction])
+        let matched = false
+
+        actionMatcher._addActionHook(() => {
+            matched = true
+        })
+
+        // Should NOT match - no selector_regex provided by server
+        const matchResult = createCaptureResult('$autocapture', 'https://example.com')
+        matchResult.properties.$elements_chain = 'button.primary:text="Click"'
+        actionMatcher.on('$autocapture', matchResult)
+        expect(matched).toBeFalsy()
     })
 })

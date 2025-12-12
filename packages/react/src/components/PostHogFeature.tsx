@@ -1,9 +1,10 @@
 import { useFeatureFlagPayload, useFeatureFlagVariantKey, usePostHog } from '../hooks'
-import React, { Children, ReactNode, useCallback, useEffect, useRef } from 'react'
+import React, { JSX } from 'react'
 import { PostHog } from '../context'
-import { isFunction, isNull, isUndefined } from '../utils/type-utils'
+import { isFunction, isUndefined } from '../utils/type-utils'
+import { VisibilityAndClickTrackers } from './internal/VisibilityAndClickTrackers'
 
-export type PostHogFeatureProps = React.HTMLProps<HTMLDivElement> & {
+export type PostHogFeatureProps = Omit<React.HTMLProps<HTMLDivElement>, 'children'> & {
     flag: string
     children: React.ReactNode | ((payload: any) => React.ReactNode)
     fallback?: React.ReactNode
@@ -25,6 +26,7 @@ export function PostHogFeature({
 }: PostHogFeatureProps): JSX.Element | null {
     const payload = useFeatureFlagPayload(flag)
     const variant = useFeatureFlagVariantKey(flag)
+    const posthog = usePostHog()
 
     const shouldTrackInteraction = trackInteraction ?? true
     const shouldTrackView = trackView ?? true
@@ -37,6 +39,8 @@ export function PostHogFeature({
                 options={visibilityObserverOptions}
                 trackInteraction={shouldTrackInteraction}
                 trackView={shouldTrackView}
+                onInteract={() => captureFeatureInteraction({ flag, posthog, flagVariant: variant })}
+                onView={() => captureFeatureView({ flag, posthog, flagVariant: variant })}
                 {...props}
             >
                 {childNode}
@@ -46,7 +50,7 @@ export function PostHogFeature({
     return <>{fallback}</>
 }
 
-function captureFeatureInteraction({
+export function captureFeatureInteraction({
     flag,
     posthog,
     flagVariant,
@@ -65,7 +69,7 @@ function captureFeatureInteraction({
     posthog.capture('$feature_interaction', properties)
 }
 
-function captureFeatureView({
+export function captureFeatureView({
     flag,
     posthog,
     flagVariant,
@@ -82,93 +86,4 @@ function captureFeatureView({
         properties.feature_flag_variant = flagVariant
     }
     posthog.capture('$feature_view', properties)
-}
-
-function VisibilityAndClickTracker({
-    flag,
-    children,
-    onIntersect,
-    onClick,
-    trackView,
-    options,
-    ...props
-}: {
-    flag: string
-    children: React.ReactNode
-    onIntersect: (entry: IntersectionObserverEntry) => void
-    onClick: () => void
-    trackView: boolean
-    options?: IntersectionObserverInit
-}): JSX.Element {
-    const ref = useRef<HTMLDivElement>(null)
-    const posthog = usePostHog()
-
-    useEffect(() => {
-        if (isNull(ref.current) || !trackView) return
-
-        // eslint-disable-next-line compat/compat
-        const observer = new IntersectionObserver(([entry]) => onIntersect(entry), {
-            threshold: 0.1,
-            ...options,
-        })
-        observer.observe(ref.current)
-        return () => observer.disconnect()
-    }, [flag, options, posthog, ref, trackView, onIntersect])
-
-    return (
-        <div ref={ref} {...props} onClick={onClick}>
-            {children}
-        </div>
-    )
-}
-
-function VisibilityAndClickTrackers({
-    flag,
-    children,
-    trackInteraction,
-    trackView,
-    options,
-    ...props
-}: {
-    flag: string
-    children: React.ReactNode
-    trackInteraction: boolean
-    trackView: boolean
-    options?: IntersectionObserverInit
-}): JSX.Element {
-    const clickTrackedRef = useRef(false)
-    const visibilityTrackedRef = useRef(false)
-    const posthog = usePostHog()
-    const variant = useFeatureFlagVariantKey(flag)
-
-    const cachedOnClick = useCallback(() => {
-        if (!clickTrackedRef.current && trackInteraction) {
-            captureFeatureInteraction({ flag, posthog, flagVariant: variant })
-            clickTrackedRef.current = true
-        }
-    }, [flag, posthog, trackInteraction, variant])
-
-    const onIntersect = (entry: IntersectionObserverEntry) => {
-        if (!visibilityTrackedRef.current && entry.isIntersecting) {
-            captureFeatureView({ flag, posthog, flagVariant: variant })
-            visibilityTrackedRef.current = true
-        }
-    }
-
-    const trackedChildren = Children.map(children, (child: ReactNode) => {
-        return (
-            <VisibilityAndClickTracker
-                flag={flag}
-                onClick={cachedOnClick}
-                onIntersect={onIntersect}
-                trackView={trackView}
-                options={options}
-                {...props}
-            >
-                {child}
-            </VisibilityAndClickTracker>
-        )
-    })
-
-    return <>{trackedChildren}</>
 }

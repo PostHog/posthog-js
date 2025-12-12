@@ -3,18 +3,22 @@ import { isUndefined } from '@posthog/core'
 import { assignableWindow, window } from './globals'
 import type { Logger } from '@posthog/core'
 
+type CreateLoggerOptions = {
+    debugEnabled?: boolean
+}
+
 type PosthogJsLogger = Omit<Logger, 'createLogger'> & {
     _log: (level: 'log' | 'warn' | 'error', ...args: any[]) => void
     uninitializedWarning: (methodName: string) => void
-    createLogger: (prefix: string) => PosthogJsLogger
+    createLogger: (prefix: string, options?: CreateLoggerOptions) => PosthogJsLogger
 }
 
-const _createLogger = (prefix: string): PosthogJsLogger => {
+const _createLogger = (prefix: string, { debugEnabled }: CreateLoggerOptions = {}): PosthogJsLogger => {
     const logger: PosthogJsLogger = {
         _log: (level: 'log' | 'warn' | 'error', ...args: any[]) => {
             if (
                 window &&
-                (Config.DEBUG || assignableWindow.POSTHOG_DEBUG) &&
+                (Config.DEBUG || assignableWindow.POSTHOG_DEBUG || debugEnabled) &&
                 !isUndefined(window.console) &&
                 window.console
             ) {
@@ -50,7 +54,8 @@ const _createLogger = (prefix: string): PosthogJsLogger => {
             logger.error(`You must initialize PostHog before calling ${methodName}`)
         },
 
-        createLogger: (additionalPrefix: string) => _createLogger(`${prefix} ${additionalPrefix}`),
+        createLogger: (additionalPrefix: string, options?: CreateLoggerOptions) =>
+            _createLogger(`${prefix} ${additionalPrefix}`, options),
     }
     return logger
 }

@@ -29,12 +29,14 @@ import { createLogger } from './utils/logger'
 import { getTimezone } from './utils/event-utils'
 
 const logger = createLogger('[FeatureFlags]')
+const forceDebugLogger = createLogger('[FeatureFlags]', { debugEnabled: true })
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
 const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
 const PERSISTENCE_FEATURE_FLAG_REQUEST_ID = '$feature_flag_request_id'
+const PERSISTENCE_FEATURE_FLAG_EVALUATED_AT = '$feature_flag_evaluated_at'
 
 export const filterActiveFeatureFlags = (featureFlags?: Record<string, string | boolean>) => {
     const activeFeatureFlags: Record<string, string | boolean> = {}
@@ -63,6 +65,7 @@ export const parseFlagsResponse = (
     }
 
     const requestId = response['requestId']
+    const evaluatedAt = response['evaluatedAt']
 
     // using the v1 api
     if (isArray(featureFlags)) {
@@ -99,6 +102,7 @@ export const parseFlagsResponse = (
             [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
             [PERSISTENCE_FEATURE_FLAG_DETAILS]: newFeatureFlagDetails || {},
             ...(requestId ? { [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: requestId } : {}),
+            ...(evaluatedAt ? { [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: evaluatedAt } : {}),
         })
 }
 
@@ -425,7 +429,7 @@ export class PostHogFeatureFlags {
             ? '&only_evaluate_survey_feature_flags=true'
             : ''
 
-        const url = this._instance.requestRouter.endpointFor('api', flagsRoute + queryParams)
+        const url = this._instance.requestRouter.endpointFor('flags', flagsRoute + queryParams)
 
         if (useRemoteConfigWithFlags) {
             data.timezone = getTimezone()
@@ -505,6 +509,7 @@ export class PostHogFeatureFlags {
         const flagValue = this.getFlagVariants()[key]
         const flagReportValue = `${flagValue}`
         const requestId = this._instance.get_property(PERSISTENCE_FEATURE_FLAG_REQUEST_ID) || undefined
+        const evaluatedAt = this._instance.get_property(PERSISTENCE_FEATURE_FLAG_EVALUATED_AT) || undefined
         const flagCallReported: Record<string, string[]> = this._instance.get_property(FLAG_CALL_REPORTED) || {}
 
         if (options.send_event || !('send_event' in options)) {
@@ -523,6 +528,7 @@ export class PostHogFeatureFlags {
                     $feature_flag_response: flagValue,
                     $feature_flag_payload: this.getFeatureFlagPayload(key) || null,
                     $feature_flag_request_id: requestId,
+                    $feature_flag_evaluated_at: evaluatedAt,
                     $feature_flag_bootstrapped_response: this._instance.config.bootstrap?.featureFlags?.[key] || null,
                     $feature_flag_bootstrapped_payload:
                         this._instance.config.bootstrap?.featureFlagPayloads?.[key] || null,
@@ -611,7 +617,7 @@ export class PostHogFeatureFlags {
 
         this._instance._send_request({
             method: 'POST',
-            url: this._instance.requestRouter.endpointFor('api', '/flags/?v=2&config=true'),
+            url: this._instance.requestRouter.endpointFor('flags', '/flags/?v=2&config=true'),
             data,
             compression: this._instance.config.disable_compression ? undefined : Compression.Base64,
             timeout: this._instance.config.feature_flag_request_timeout_ms,
@@ -702,7 +708,8 @@ export class PostHogFeatureFlags {
             this._instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
             this._instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
             this._fireFeatureFlagsCallbacks()
-            return
+
+            return forceDebugLogger.info('All overrides cleared')
         }
 
         if (
@@ -717,6 +724,7 @@ export class PostHogFeatureFlags {
             if ('flags' in options) {
                 if (options.flags === false) {
                     this._instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
+                    forceDebugLogger.info('Flag overrides cleared')
                 } else if (options.flags) {
                     if (isArray(options.flags)) {
                         const flagsObj: Record<string, string | boolean> = {}
@@ -727,6 +735,8 @@ export class PostHogFeatureFlags {
                     } else {
                         this._instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: options.flags })
                     }
+
+                    forceDebugLogger.info('Flag overrides set', { flags: options.flags })
                 }
             }
 
@@ -734,10 +744,12 @@ export class PostHogFeatureFlags {
             if ('payloads' in options) {
                 if (options.payloads === false) {
                     this._instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
+                    forceDebugLogger.info('Payload overrides cleared')
                 } else if (options.payloads) {
                     this._instance.persistence.register({
                         [PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS]: options.payloads,
                     })
+                    forceDebugLogger.info('Payload overrides set', { payloads: options.payloads })
                 }
             }
 

@@ -4867,3 +4867,384 @@ describe('quota limiting', () => {
     consoleSpy.mockRestore()
   })
 })
+
+describe('fetch context handling', () => {
+  it('should call fetch without bound context to avoid illegal invocation errors in edge environments', async () => {
+    let fetchContext: any
+    const mockFetch = jest.fn(function (this: any, ..._args: unknown[]) {
+      fetchContext = this
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            flags: [],
+            featureFlagPayloads: {},
+          })
+        )
+      )
+    })
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await posthog.reloadFeatureFlags()
+    expect(mockFetch).toHaveBeenCalled()
+    expect(fetchContext).toBeUndefined()
+  })
+})
+
+describe('ETag support for local evaluation polling', () => {
+  let posthog: PostHog
+
+  jest.useFakeTimers()
+
+  afterEach(async () => {
+    await posthog.shutdown()
+  })
+
+  it('stores ETag from response and sends it on subsequent requests', async () => {
+    const flags = {
+      flags: [{ id: 1, key: 'test-flag', active: true }],
+      group_type_mapping: {},
+      cohorts: {},
+    }
+
+    // Track all fetch calls
+    const fetchCalls: { url: string; options: any }[] = []
+    const mockFetch = jest.fn((url: string, options: any) => {
+      fetchCalls.push({ url, options })
+      return Promise.resolve({
+        status: 200,
+        text: () => Promise.resolve('ok'),
+        json: () => Promise.resolve(flags),
+        headers: {
+          get: (name: string) => (name === 'ETag' ? '"abc123"' : null),
+        },
+      })
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      ...posthogImmediateResolveOptions,
+    })
+
+    // Wait for initial load
+    await waitForPromises()
+
+    // First call should not have If-None-Match header
+    expect(fetchCalls[0].options.headers['If-None-Match']).toBeUndefined()
+
+    // Trigger a reload
+    await posthog.reloadFeatureFlags()
+    await waitForPromises()
+
+    // Second call should have If-None-Match header with the ETag
+    expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"abc123"')
+  })
+
+  it('handles 304 Not Modified response by keeping cached flags', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          key: 'test-flag',
+          active: true,
+          filters: {
+            groups: [{ rollout_percentage: 100 }],
+          },
+        },
+      ],
+      group_type_mapping: {},
+      cohorts: {},
+    }
+
+    // Track all fetch calls to verify headers
+    const fetchCalls: { url: string; options: any }[] = []
+    let callCount = 0
+    const mockFetch = jest.fn((url: string, options: any) => {
+      fetchCalls.push({ url, options })
+      callCount++
+      if (callCount === 1) {
+        // First call: return full response with ETag
+        return Promise.resolve({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve(flags),
+          headers: {
+            get: (name: string) => (name === 'ETag' ? '"test-etag"' : null),
+          },
+        })
+      } else {
+        // Second call: return 304 Not Modified
+        return Promise.resolve({
+          status: 304,
+          text: () => Promise.resolve(''),
+          json: () => Promise.reject(new Error('No body on 304')),
+          headers: {
+            get: (name: string) => (name === 'ETag' ? '"test-etag"' : null),
+          },
+        })
+      }
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      ...posthogImmediateResolveOptions,
+    })
+
+    // Wait for initial load
+    await waitForPromises()
+
+    // First call should not have If-None-Match header
+    expect(fetchCalls[0].options.headers['If-None-Match']).toBeUndefined()
+
+    // Verify flags were loaded
+    const flag1 = await posthog.getFeatureFlag('test-flag', 'user-1')
+    expect(flag1).toBe(true)
+
+    // Trigger a reload (should get 304)
+    await posthog.reloadFeatureFlags()
+    await waitForPromises()
+
+    // Verify the request that triggered 304 included the If-None-Match header
+    expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"test-etag"')
+
+    // Verify flags are still available after 304
+    const flag2 = await posthog.getFeatureFlag('test-flag', 'user-1')
+    expect(flag2).toBe(true)
+
+    // Verify fetch was called twice
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('updates ETag when flags change', async () => {
+    let callCount = 0
+    const mockFetch = jest.fn(() => {
+      callCount++
+      return Promise.resolve({
+        status: 200,
+        text: () => Promise.resolve('ok'),
+        json: () =>
+          Promise.resolve({
+            flags: [{ id: 1, key: `flag-v${callCount}`, active: true }],
+            group_type_mapping: {},
+            cohorts: {},
+          }),
+        headers: {
+          get: (name: string) => (name === 'ETag' ? `"etag-v${callCount}"` : null),
+        },
+      })
+    })
+
+    const fetchCalls: { url: string; options: any }[] = []
+    const wrappedFetch = jest.fn((url: string, options: any) => {
+      fetchCalls.push({ url, options })
+      return mockFetch()
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: wrappedFetch,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await waitForPromises()
+
+    // First call - no ETag
+    expect(fetchCalls[0].options.headers['If-None-Match']).toBeUndefined()
+
+    // Second call
+    await posthog.reloadFeatureFlags()
+    await waitForPromises()
+    expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"etag-v1"')
+
+    // Third call
+    await posthog.reloadFeatureFlags()
+    await waitForPromises()
+    expect(fetchCalls[2].options.headers['If-None-Match']).toBe('"etag-v2"')
+  })
+
+  it('clears ETag when server stops sending it', async () => {
+    let callCount = 0
+    const mockFetch = jest.fn(() => {
+      callCount++
+      return Promise.resolve({
+        status: 200,
+        text: () => Promise.resolve('ok'),
+        json: () =>
+          Promise.resolve({
+            flags: [{ id: 1, key: 'test-flag', active: true }],
+            group_type_mapping: {},
+            cohorts: {},
+          }),
+        headers: {
+          // Only return ETag on first call
+          get: (name: string) => (name === 'ETag' && callCount === 1 ? '"initial-etag"' : null),
+        },
+      })
+    })
+
+    const fetchCalls: { url: string; options: any }[] = []
+    const wrappedFetch = jest.fn((url: string, options: any) => {
+      fetchCalls.push({ url, options })
+      return mockFetch()
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: wrappedFetch,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await waitForPromises()
+
+    // Second call should have the ETag from first response
+    await posthog.reloadFeatureFlags()
+    await waitForPromises()
+    expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"initial-etag"')
+
+    // Third call should not have ETag (server stopped sending it)
+    await posthog.reloadFeatureFlags()
+    await waitForPromises()
+    expect(fetchCalls[2].options.headers['If-None-Match']).toBeUndefined()
+  })
+
+  it('resets backoff on 304 response', async () => {
+    let callCount = 0
+    const mockFetch = jest.fn(() => {
+      callCount++
+      if (callCount === 1) {
+        // First call: return full response
+        return Promise.resolve({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () =>
+            Promise.resolve({
+              flags: [
+                {
+                  id: 1,
+                  key: 'test-flag',
+                  active: true,
+                  filters: {
+                    groups: [{ rollout_percentage: 100 }],
+                  },
+                },
+              ],
+              group_type_mapping: {},
+              cohorts: {},
+            }),
+          headers: {
+            get: (name: string) => (name === 'ETag' ? '"test-etag"' : null),
+          },
+        })
+      } else {
+        // Subsequent calls: return 304
+        return Promise.resolve({
+          status: 304,
+          text: () => Promise.resolve(''),
+          json: () => Promise.reject(new Error('No body on 304')),
+          headers: {
+            get: () => null,
+          },
+        })
+      }
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await waitForPromises()
+
+    // Multiple 304 responses should not cause any issues
+    await posthog.reloadFeatureFlags()
+    await waitForPromises()
+    await posthog.reloadFeatureFlags()
+    await waitForPromises()
+
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+
+    // Flags should still work
+    const flag = await posthog.getFeatureFlag('test-flag', 'user-1')
+    expect(flag).toBe(true)
+  })
+
+  it('updates ETag when server sends new ETag with 304 response', async () => {
+    let callCount = 0
+    const fetchCalls: { url: string; options: any }[] = []
+    const mockFetch = jest.fn((url: string, options: any) => {
+      fetchCalls.push({ url, options })
+      callCount++
+      if (callCount === 1) {
+        // First call: return full response with initial ETag
+        return Promise.resolve({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () =>
+            Promise.resolve({
+              flags: [{ id: 1, key: 'test-flag', active: true }],
+              group_type_mapping: {},
+              cohorts: {},
+            }),
+          headers: {
+            get: (name: string) => (name === 'ETag' ? '"etag-v1"' : null),
+          },
+        })
+      } else if (callCount === 2) {
+        // Second call: return 304 with updated ETag
+        return Promise.resolve({
+          status: 304,
+          text: () => Promise.resolve(''),
+          json: () => Promise.reject(new Error('No body on 304')),
+          headers: {
+            get: (name: string) => (name === 'ETag' ? '"etag-v2"' : null),
+          },
+        })
+      } else {
+        // Third call: return 304
+        return Promise.resolve({
+          status: 304,
+          text: () => Promise.resolve(''),
+          json: () => Promise.reject(new Error('No body on 304')),
+          headers: {
+            get: () => null,
+          },
+        })
+      }
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await waitForPromises()
+
+    // First call has no ETag
+    expect(fetchCalls[0].options.headers['If-None-Match']).toBeUndefined()
+
+    // Second call uses initial ETag
+    await posthog.reloadFeatureFlags()
+    await waitForPromises()
+    expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"etag-v1"')
+
+    // Third call should use the updated ETag from the 304 response
+    await posthog.reloadFeatureFlags()
+    await waitForPromises()
+    expect(fetchCalls[2].options.headers['If-None-Match']).toBe('"etag-v2"')
+  })
+})

@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import { PostHog } from '../../posthog-core'
 import { FlagsResponse } from '../../types'
 import { SURVEY_IN_PROGRESS_PREFIX } from '../../utils/survey-utils'
+import { createMockPostHog } from '../helpers/posthog-instance'
 
 declare const global: any
 
@@ -68,7 +69,7 @@ describe('survey display logic', () => {
         },
     ]
 
-    const mockPostHog = {
+    const mockPostHog = createMockPostHog({
         surveys: {
             getSurveys: jest.fn().mockImplementation((callback) => callback(mockSurveys)),
         },
@@ -77,7 +78,7 @@ describe('survey display logic', () => {
         config: {
             disable_surveys_automatic_display: false,
         },
-    } as unknown as PostHog
+    })
 
     test('callSurveysAndEvaluateDisplayLogic runs on interval irrespective of url change', () => {
         jest.useFakeTimers()
@@ -122,11 +123,11 @@ describe('usePopupVisibility', () => {
         current_iteration_start_date: null,
         feature_flag_keys: null,
     }
-    const mockPostHog = {
+    const mockPostHog = createMockPostHog({
         getActiveMatchingSurveys: jest.fn().mockImplementation((callback) => callback([mockSurvey])),
         get_session_replay_url: jest.fn(),
         capture: jest.fn().mockImplementation((eventName) => eventName),
-    } as unknown as PostHog
+    })
 
     const removeSurvey = jest.fn()
 
@@ -300,7 +301,7 @@ describe('SurveyManager', () => {
             },
         ]
 
-        mockPostHog = {
+        mockPostHog = createMockPostHog({
             getActiveMatchingSurveys: jest.fn(),
             get_session_replay_url: jest.fn(),
             capture: jest.fn(),
@@ -316,7 +317,7 @@ describe('SurveyManager', () => {
             surveys: {
                 getSurveys: jest.fn().mockImplementation((callback) => callback(mockSurveys)),
             },
-        } as unknown as PostHog
+        })
 
         surveyManager = new SurveyManager(mockPostHog)
     })
@@ -600,14 +601,14 @@ describe('SurveyManager', () => {
         beforeEach(() => {
             jest.useFakeTimers()
             // Set up mocks
-            mockPostHog = {
+            mockPostHog = createMockPostHog({
                 getActiveMatchingSurveys: jest.fn(),
                 get_session_replay_url: jest.fn(),
                 capture: jest.fn(),
                 featureFlags: {
                     isFeatureEnabled: jest.fn().mockReturnValue(true),
                 },
-            } as unknown as PostHog
+            })
 
             surveyManager = new SurveyManager(mockPostHog)
 
@@ -706,6 +707,27 @@ describe('SurveyManager', () => {
             // Verify both timeouts are tracked separately
             expect(firstTimeoutId).not.toEqual(secondTimeoutId)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(mockSurvey2.id)
+        })
+
+        test('cancelSurvey should clear timeout and release focus for pending survey', () => {
+            surveyManager.getTestAPI().handlePopoverSurvey(mockSurvey)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(true)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(mockSurvey.id)
+
+            const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
+            surveyManager.cancelSurvey(mockSurvey.id)
+
+            expect(clearTimeoutSpy).toHaveBeenCalled()
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBeNull()
+        })
+
+        test('cancelSurvey should do nothing if survey has no pending timeout', () => {
+            // Don't schedule the survey, just try to cancel it
+            const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
+            surveyManager.cancelSurvey('non-existent-survey')
+
+            expect(clearTimeoutSpy).not.toHaveBeenCalled()
         })
     })
 
@@ -809,10 +831,10 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 
     beforeEach(() => {
         // Mock PostHog instance
-        posthog = {
+        posthog = createMockPostHog({
             capture: jest.fn(),
             get_session_replay_url: jest.fn(),
-        } as unknown as PostHog
+        })
 
         mockRemoveSurveyFromFocus = jest.fn()
 

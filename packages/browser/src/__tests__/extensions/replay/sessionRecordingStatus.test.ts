@@ -15,7 +15,7 @@ import {
     TRIGGER_PENDING,
     URLTriggerMatching,
 } from '../../../extensions/replay/external/triggerMatching'
-import { PostHog } from '../../../posthog-core'
+import { createMockPostHog } from '../../helpers/posthog-instance'
 
 type TestConfig = {
     name: string
@@ -24,7 +24,7 @@ type TestConfig = {
     allMatchExpected: SessionRecordingStatus
 }
 
-const fakePostHog = { register_for_session: () => {} } as unknown as PostHog
+const fakePostHog = createMockPostHog({ register_for_session: () => {} })
 
 const defaultTriggersStatus: RecordingTriggersStatus = {
     receivedFlags: true,

@@ -399,4 +399,12 @@ export class PostHogSurveys {
         }
         this._surveyManager.handlePopoverSurvey(surveyToDisplay)
     }
+
+    cancelPendingSurvey(surveyId: string): void {
+        if (isNullish(this._surveyManager)) {
+            logger.warn('init was not called')
+            return
+        }
+        this._surveyManager.cancelSurvey(surveyId)
+    }
 }

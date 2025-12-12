@@ -48,24 +48,13 @@ describe('PostHogGemini - Jest test suite', () => {
   let mockPostHogClient: PostHog
   let client: PostHogGemini
 
-  beforeAll(() => {
-    if (!process.env.GEMINI_API_KEY) {
-      console.warn('⚠️ Skipping Gemini tests: No GEMINI_API_KEY environment variable set')
-    }
-  })
-
   beforeEach(() => {
-    // Skip all tests if no API key is present
-    if (!process.env.GEMINI_API_KEY) {
-      return
-    }
-
     jest.clearAllMocks()
 
     // Reset the default mocks
     mockPostHogClient = new (PostHog as any)()
     client = new PostHogGemini({
-      apiKey: process.env.GEMINI_API_KEY || '',
+      apiKey: 'test-api-key',
       posthog: mockPostHogClient as any,
     })
 
@@ -144,10 +133,7 @@ describe('PostHogGemini - Jest test suite', () => {
     ;(client as any).client.models.generateContentStream = mockGenerateContentStream(mockGeminiStreamResponse)
   })
 
-  // Wrap each test with conditional skip
-  const conditionalTest = process.env.GEMINI_API_KEY ? test : test.skip
-
-  conditionalTest('basic content generation', async () => {
+  test('basic content generation', async () => {
     const response = await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: 'Hello',
@@ -182,7 +168,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(typeof properties['$ai_latency']).toBe('number')
   })
 
-  conditionalTest('streaming content generation', async () => {
+  test('streaming content generation', async () => {
     const stream = client.models.generateContentStream({
       model: 'gemini-2.0-flash-001',
       contents: 'Write a short poem',
@@ -224,7 +210,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(typeof properties['$ai_latency']).toBe('number')
   })
 
-  conditionalTest('groups', async () => {
+  test('groups', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: 'Hello',
@@ -239,7 +225,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(groups).toEqual({ team: 'ai-team' })
   })
 
-  conditionalTest('privacy mode', async () => {
+  test('privacy mode', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: 'Sensitive information',
@@ -255,7 +241,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$ai_output_choices']).toBeNull()
   })
 
-  conditionalTest('error handling', async () => {
+  test('error handling', async () => {
     const error = new Error('API Error')
     ;(error as any).status = 400
     ;(client as any).client.models.generateContent = jest.fn().mockRejectedValue(error)
@@ -278,7 +264,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$ai_output_tokens']).toBe(0)
   })
 
-  conditionalTest('array contents input', async () => {
+  test('array contents input', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: ['Hello', 'How are you?'],
@@ -295,7 +281,7 @@ describe('PostHogGemini - Jest test suite', () => {
     ])
   })
 
-  conditionalTest('object contents input', async () => {
+  test('object contents input', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: { text: 'Hello world' },
@@ -309,7 +295,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$ai_input']).toEqual([{ role: 'user', content: 'Hello world' }])
   })
 
-  conditionalTest('capture immediate', async () => {
+  test('capture immediate', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: 'Hello',
@@ -321,7 +307,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(0)
   })
 
-  conditionalTest('vertex ai configuration', () => {
+  test('vertex ai configuration', () => {
     const vertexClient = new PostHogGemini({
       vertexai: true,
       project: 'test-project',
@@ -333,7 +319,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(vertexClient.models).toBeDefined()
   })
 
-  conditionalTest('streaming with function calls', async () => {
+  test('streaming with function calls', async () => {
     // Mock streaming response with function calls
     const mockStreamWithFunctions = [
       {
@@ -446,7 +432,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$ai_output_tokens']).toBe(15)
   })
 
-  conditionalTest('streaming with multiple text chunks accumulation', async () => {
+  test('streaming with multiple text chunks accumulation', async () => {
     // Mock streaming response with multiple text chunks
     const mockMultipleTextChunks = [
       {
@@ -500,7 +486,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$ai_output_tokens']).toBe(4)
   })
 
-  conditionalTest('anonymous user - $process_person_profile set to false', async () => {
+  test('anonymous user - $process_person_profile set to false', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: 'Hello',
@@ -515,7 +501,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$process_person_profile']).toBe(false)
   })
 
-  conditionalTest('identified user - $process_person_profile not set', async () => {
+  test('identified user - $process_person_profile not set', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: 'Hello',
@@ -531,7 +517,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$process_person_profile']).toBeUndefined()
   })
 
-  conditionalTest('systemInstruction parameter as string', async () => {
+  test('systemInstruction parameter as string', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: 'What is the weather?',
@@ -550,7 +536,7 @@ describe('PostHogGemini - Jest test suite', () => {
     ])
   })
 
-  conditionalTest('systemInstruction parameter as ContentUnion', async () => {
+  test('systemInstruction parameter as ContentUnion', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: 'What is the capital of France?',
@@ -569,7 +555,7 @@ describe('PostHogGemini - Jest test suite', () => {
     ])
   })
 
-  conditionalTest('streaming with systemInstruction parameter', async () => {
+  test('streaming with systemInstruction parameter', async () => {
     const stream = client.models.generateContentStream({
       model: 'gemini-2.0-flash-001',
       contents: 'Tell me about AI',
@@ -590,5 +576,315 @@ describe('PostHogGemini - Jest test suite', () => {
       { role: 'system', content: 'You are an AI expert.' },
       { role: 'user', content: 'Tell me about AI' },
     ])
+  })
+
+  describe('Web Search Tracking', () => {
+    test('should detect grounding metadata (binary detection)', async () => {
+      mockGeminiResponse = {
+        text: 'Based on search results, here is what I found.',
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'Based on search results, here is what I found.' }],
+              role: 'model',
+            },
+            finishReason: 'STOP',
+            index: 0,
+            safetyRatings: [],
+            groundingMetadata: {
+              webSearchQueries: ['PostHog features'],
+              groundingChunks: [
+                {
+                  web: {
+                    uri: 'https://posthog.com',
+                    title: 'PostHog',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        usageMetadata: {
+          promptTokenCount: 25,
+          candidatesTokenCount: 18,
+          totalTokenCount: 43,
+        },
+      } as any
+
+      // Update the mock to use the new response
+      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+
+      await client.models.generateContent({
+        model: 'gemini-2.0-flash-001',
+        contents: 'What is PostHog?',
+        posthogDistinctId: 'test-user',
+      })
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      // Gemini uses binary detection (1 or 0)
+      expect(properties['$ai_web_search_count']).toBe(1)
+    })
+
+    test('should detect grounding in streaming', async () => {
+      // Create mock stream with grounding metadata
+      mockGeminiStreamResponse = [
+        {
+          text: 'Search result',
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'Search result' }],
+                role: 'model',
+              },
+              groundingMetadata: {
+                groundingChunks: [
+                  {
+                    web: {
+                      uri: 'https://example.com',
+                      title: 'Example',
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          usageMetadata: {
+            promptTokenCount: 20,
+            candidatesTokenCount: 10,
+            totalTokenCount: 30,
+          },
+        },
+      ] as any
+
+      // Re-mock the generateContentStream method with new chunks
+      ;(client as any).client.models.generateContentStream = mockGenerateContentStream(mockGeminiStreamResponse)
+
+      const stream = client.models.generateContentStream({
+        model: 'gemini-2.0-flash-001',
+        contents: 'Search query',
+        posthogDistinctId: 'test-user',
+      })
+
+      for await (const _chunk of stream) {
+        // Just consume
+      }
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      expect(properties['$ai_web_search_count']).toBe(1)
+    })
+
+    test('should return 0 for empty grounding metadata', async () => {
+      mockGeminiResponse = {
+        text: 'Regular response',
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'Regular response' }],
+              role: 'model',
+            },
+            finishReason: 'STOP',
+            index: 0,
+            safetyRatings: [],
+            groundingMetadata: null, // Explicitly null
+          },
+        ],
+        usageMetadata: {
+          promptTokenCount: 15,
+          candidatesTokenCount: 8,
+          totalTokenCount: 23,
+        },
+      } as any
+
+      await client.models.generateContent({
+        model: 'gemini-2.0-flash-001',
+        contents: 'Hello',
+        posthogDistinctId: 'test-user',
+      })
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      // Should not include web search count when grounding not present
+      expect(properties['$ai_web_search_count']).toBeUndefined()
+    })
+
+    test('should return 0 for empty grounding arrays', async () => {
+      mockGeminiResponse = {
+        text: 'Regular response',
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'Regular response' }],
+              role: 'model',
+            },
+            finishReason: 'STOP',
+            index: 0,
+            safetyRatings: [],
+            groundingMetadata: {
+              webSearchQueries: [], // Empty array
+              groundingChunks: [], // Empty array
+            },
+          },
+        ],
+        usageMetadata: {
+          promptTokenCount: 12,
+          candidatesTokenCount: 6,
+          totalTokenCount: 18,
+        },
+      } as any
+
+      await client.models.generateContent({
+        model: 'gemini-2.0-flash-001',
+        contents: 'Test',
+        posthogDistinctId: 'test-user',
+      })
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      // Empty arrays should not trigger web search count
+      expect(properties['$ai_web_search_count']).toBeUndefined()
+    })
+
+    test('should return 0 for empty grounding metadata object', async () => {
+      mockGeminiResponse = {
+        text: 'Hello! How can I help you today?',
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'Hello! How can I help you today?' }],
+              role: 'model',
+            },
+            finishReason: 'STOP',
+            groundingMetadata: {}, // Empty object - this was the bug!
+            index: 0,
+          },
+        ],
+        usageMetadata: {
+          promptTokenCount: 2,
+          candidatesTokenCount: 9,
+          totalTokenCount: 43,
+        },
+      } as any
+
+      await client.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: 'hi',
+        posthogDistinctId: 'test-user',
+      })
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      // Empty groundingMetadata object should not trigger web search count
+      expect(properties['$ai_web_search_count']).toBeUndefined()
+    })
+
+    test('should detect google_search function call', async () => {
+      mockGeminiResponse = {
+        text: '',
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  functionCall: {
+                    name: 'google_search',
+                    args: { query: 'PostHog documentation' },
+                  },
+                },
+              ],
+              role: 'model',
+            },
+            finishReason: 'STOP',
+            index: 0,
+            safetyRatings: [],
+          },
+        ],
+        usageMetadata: {
+          promptTokenCount: 30,
+          candidatesTokenCount: 15,
+          totalTokenCount: 45,
+        },
+      } as any
+
+      // Update the mock to use the new response
+      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+
+      await client.models.generateContent({
+        model: 'gemini-2.0-flash-001',
+        contents: 'Search for PostHog',
+        posthogDistinctId: 'test-user',
+      })
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      // Function call with google_search should trigger web search count
+      expect(properties['$ai_web_search_count']).toBe(1)
+    })
+  })
+
+  describe('TTS Support', () => {
+    test('should support responseModalities and speechConfig in config', async () => {
+      mockGeminiResponse = {
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: 'audio/wav',
+                    data: Buffer.from('fake audio data').toString('base64'),
+                  },
+                },
+              ],
+              role: 'model',
+            },
+            finishReason: 'STOP',
+            index: 0,
+            safetyRatings: [],
+          },
+        ],
+        usageMetadata: {
+          promptTokenCount: 10,
+          candidatesTokenCount: 0,
+          totalTokenCount: 10,
+        },
+      } as any
+      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+
+      await client.models.generateContent({
+        model: 'gemini-2.5-flash-preview-tts',
+        contents: [{ role: 'user', parts: [{ text: 'Say hello' }] }],
+        config: {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: 'Kore',
+              },
+            },
+          },
+        },
+        posthogDistinctId: 'test-tts-user',
+      })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalled()
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { distinctId, properties } = captureArgs[0]
+
+      expect(distinctId).toBe('test-tts-user')
+      expect(properties['$ai_model']).toBe('gemini-2.5-flash-preview-tts')
+      expect(properties['$ai_input']).toEqual([{ role: 'user', content: [{ type: 'text', text: 'Say hello' }] }])
+
+      const generateContentCall = ((client as any).client.models.generateContent as jest.Mock).mock.calls[0][0]
+      expect(generateContentCall.config.responseModalities).toEqual(['AUDIO'])
+      expect(generateContentCall.config.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe('Kore')
+    })
   })
 })

@@ -1,6 +1,6 @@
 {
   "name": "@posthog/core",
-  "version": "1.4.0",
+  "version": "1.7.1",
   "license": "MIT",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -59,6 +59,11 @@
   "devDependencies": {
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
+    "@types/cross-spawn": "^6.0.6",
+    "@types/jest": "catalog:",
     "jest": "catalog:"
+  },
+  "dependencies": {
+    "cross-spawn": "^7.0.6"
   }
 }

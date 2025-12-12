@@ -5,7 +5,7 @@ import { uuid7ToTimestampMs, uuidv7 } from '../uuidv7'
 import { BootstrapConfig, PostHogConfig, Properties } from '../types'
 import { PostHogPersistence } from '../posthog-persistence'
 import { assignableWindow } from '../utils/globals'
-import { PostHog } from '../posthog-core'
+import { createMockPostHog } from './helpers/posthog-instance'
 
 jest.mock('../uuidv7')
 jest.mock('../storage')
@@ -24,11 +24,13 @@ describe('Session ID manager', () => {
 
     const sessionIdMgr = (phPersistence: Partial<PostHogPersistence>) => {
         registerMock = jest.fn()
-        return new SessionIdManager({
-            config,
-            persistence: phPersistence as PostHogPersistence,
-            register: registerMock,
-        } as unknown as PostHog)
+        return new SessionIdManager(
+            createMockPostHog({
+                config,
+                persistence: phPersistence as PostHogPersistence,
+                register: registerMock,
+            })
+        )
     }
 
     const originalDate = Date
@@ -83,11 +85,13 @@ describe('Session ID manager', () => {
             const bootstrap: BootstrapConfig = {
                 sessionID: bootstrapSessionId,
             }
-            const sessionIdManager = new SessionIdManager({
-                config: { ...config, bootstrap },
-                persistence: persistence as PostHogPersistence,
-                register: jest.fn(),
-            } as unknown as PostHog)
+            const sessionIdManager = new SessionIdManager(
+                createMockPostHog({
+                    config: { ...config, bootstrap },
+                    persistence: persistence as PostHogPersistence,
+                    register: jest.fn(),
+                })
+            )
 
             // act
             const { sessionId, sessionStartTimestamp } = sessionIdManager.checkAndGetSessionAndWindowId(false, now)
@@ -343,13 +347,15 @@ describe('Session ID manager', () => {
 
     describe('custom session_idle_timeout_seconds', () => {
         const mockSessionManager = (timeout: number | undefined) =>
-            new SessionIdManager({
-                config: {
-                    session_idle_timeout_seconds: timeout,
-                },
-                persistence: persistence as PostHogPersistence,
-                register: jest.fn(),
-            } as unknown as PostHog)
+            new SessionIdManager(
+                createMockPostHog({
+                    config: {
+                        session_idle_timeout_seconds: timeout,
+                    },
+                    persistence: persistence as PostHogPersistence,
+                    register: jest.fn(),
+                })
+            )
 
         beforeEach(() => {
             console.warn = jest.fn()
@@ -515,6 +521,52 @@ describe('Session ID manager', () => {
             expect(mockHandler3).toHaveBeenCalledTimes(1)
 
             jest.useRealTimers()
+        })
+    })
+
+    describe('persistence is source of truth over in-memory cache', () => {
+        // This test verifies that when persistence is updated (e.g., by another tab or after a frozen tab thaws),
+        // the session manager reads from persistence rather than trusting stale in-memory cache
+
+        const memoryConfig = {
+            persistence_name: 'test-session-memory',
+            persistence: 'memory',
+            token: 'test-token',
+        } as PostHogConfig
+
+        it.each([
+            { description: 'with stale timestamp from simulated frozen tab', offsetMs: 1000 },
+            { description: 'with exactly expired timestamp', offsetMs: 1 },
+        ])('should detect activity timeout $description', ({ offsetMs }) => {
+            const realPersistence = new PostHogPersistence(memoryConfig)
+            const testTimestamp = 1603107479471
+
+            const sessionIdManager = new SessionIdManager(
+                createMockPostHog({
+                    config: memoryConfig,
+                    persistence: realPersistence,
+                    register: jest.fn(),
+                }),
+                () => 'newUUID',
+                () => 'newUUID'
+            )
+
+            // First call establishes the session
+            const firstResult = sessionIdManager.checkAndGetSessionAndWindowId(false, testTimestamp)
+            expect(firstResult.sessionId).toBe('newUUID')
+
+            // Simulate persistence being updated externally to have a stale timestamp
+            // In a frozen tab scenario, another tab might have updated persistence,
+            // or time passed while the tab was frozen
+            const staleTimestamp = testTimestamp - (DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS * 1000 + offsetMs)
+            realPersistence.register({ [SESSION_ID]: [staleTimestamp, 'oldSessionID', staleTimestamp] })
+
+            // Second call should read from persistence and detect the activity timeout
+            const secondResult = sessionIdManager.checkAndGetSessionAndWindowId(false, testTimestamp)
+
+            // The session SHOULD rotate because persistence shows idle timeout exceeded
+            expect(secondResult.changeReason?.activityTimeout).toBe(true)
+            expect(secondResult.sessionId).not.toBe('oldSessionID')
         })
     })
 

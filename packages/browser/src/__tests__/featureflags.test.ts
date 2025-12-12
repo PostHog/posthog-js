@@ -4,6 +4,7 @@ import { filterActiveFeatureFlags, parseFlagsResponse, PostHogFeatureFlags } fro
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { PostHogConfig } from '../types'
+import { createMockPostHog } from './helpers/posthog-instance'
 
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
@@ -1703,8 +1704,9 @@ describe('featureflags', () => {
         })
     })
 
-    describe('Feature Flag Request ID', () => {
+    describe('Feature Flag Request ID and Evaluated At', () => {
         const TEST_REQUEST_ID = 'test-request-id-123'
+        const TEST_EVALUATED_AT = 1234567890
 
         it('saves requestId from /flags response', () => {
             featureFlags.receivedFeatureFlags({
@@ -1714,6 +1716,16 @@ describe('featureflags', () => {
             })
 
             expect(instance.get_property('$feature_flag_request_id')).toEqual(TEST_REQUEST_ID)
+        })
+
+        it('saves evaluatedAt from /flags response', () => {
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                evaluatedAt: TEST_EVALUATED_AT,
+            })
+
+            expect(instance.get_property('$feature_flag_evaluated_at')).toEqual(TEST_EVALUATED_AT)
         })
 
         it('includes requestId in feature flag called event', () => {
@@ -1739,12 +1751,36 @@ describe('featureflags', () => {
             )
         })
 
+        it('includes evaluatedAt in feature flag called event', () => {
+            // Setup flags with evaluatedAt
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                evaluatedAt: TEST_EVALUATED_AT,
+            })
+            featureFlags._hasLoadedFlags = true
+
+            // Test flag call
+            featureFlags.getFeatureFlag('test-flag')
+
+            // Verify capture call includes evaluatedAt
+            expect(instance.capture).toHaveBeenCalledWith(
+                '$feature_flag_called',
+                expect.objectContaining({
+                    $feature_flag: 'test-flag',
+                    $feature_flag_response: true,
+                    $feature_flag_evaluated_at: TEST_EVALUATED_AT,
+                })
+            )
+        })
+
         it('includes version in feature flag called event', () => {
-            // Setup flags with requestId
+            // Setup flags with requestId and evaluatedAt
             featureFlags.receivedFeatureFlags({
                 featureFlags: { 'test-flag': true },
                 featureFlagPayloads: {},
                 requestId: TEST_REQUEST_ID,
+                evaluatedAt: TEST_EVALUATED_AT,
                 flags: {
                     'test-flag': {
                         key: 'test-flag',
@@ -1768,13 +1804,14 @@ describe('featureflags', () => {
             // Test flag call
             featureFlags.getFeatureFlag('test-flag')
 
-            // Verify capture call includes requestId
+            // Verify capture call includes requestId and evaluatedAt
             expect(instance.capture).toHaveBeenCalledWith(
                 '$feature_flag_called',
                 expect.objectContaining({
                     $feature_flag: 'test-flag',
                     $feature_flag_response: 'variant-1',
                     $feature_flag_request_id: TEST_REQUEST_ID,
+                    $feature_flag_evaluated_at: TEST_EVALUATED_AT,
                     $feature_flag_version: 42,
                     $feature_flag_reason: 'Matched condition set 1',
                     $feature_flag_id: 23,
@@ -1810,6 +1847,38 @@ describe('featureflags', () => {
                 '$feature_flag_called',
                 expect.objectContaining({
                     $feature_flag_request_id: NEW_REQUEST_ID,
+                })
+            )
+        })
+
+        it('updates evaluatedAt when new /flags response is received', () => {
+            // First /flags response
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                evaluatedAt: TEST_EVALUATED_AT,
+            })
+
+            expect(instance.get_property('$feature_flag_evaluated_at')).toEqual(TEST_EVALUATED_AT)
+
+            // Second /flags response with new timestamp
+            const NEW_EVALUATED_AT = 9876543210
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                evaluatedAt: NEW_EVALUATED_AT,
+            })
+
+            expect(instance.get_property('$feature_flag_evaluated_at')).toEqual(NEW_EVALUATED_AT)
+
+            // Verify new timestamp is used in events
+            featureFlags._hasLoadedFlags = true
+            featureFlags.getFeatureFlag('test-flag')
+
+            expect(instance.capture).toHaveBeenCalledWith(
+                '$feature_flag_called',
+                expect.objectContaining({
+                    $feature_flag_evaluated_at: NEW_EVALUATED_AT,
                 })
             )
         })
@@ -2173,7 +2242,7 @@ describe('getRemoteConfigPayload', () => {
     let featureFlags: PostHogFeatureFlags
 
     beforeEach(() => {
-        instance = {
+        instance = createMockPostHog({
             config: {
                 token: 'test-token',
                 api_host: 'https://test.com',
@@ -2183,7 +2252,7 @@ describe('getRemoteConfigPayload', () => {
             requestRouter: {
                 endpointFor: jest.fn().mockImplementation((endpoint, path) => `${endpoint}${path}`),
             },
-        } as unknown as PostHog
+        })
 
         featureFlags = new PostHogFeatureFlags(instance)
     })
@@ -2197,7 +2266,7 @@ describe('getRemoteConfigPayload', () => {
         expect(instance._send_request).toHaveBeenCalledWith(
             expect.objectContaining({
                 method: 'POST',
-                url: 'api/flags/?v=2&config=true',
+                url: 'flags/flags/?v=2&config=true',
                 data: expect.objectContaining({
                     distinct_id: 'test-distinct-id',
                     token: 'test-token',
@@ -2214,7 +2283,7 @@ describe('getRemoteConfigPayload', () => {
         expect(instance._send_request).toHaveBeenCalledWith(
             expect.objectContaining({
                 method: 'POST',
-                url: 'api/flags/?v=2&config=true',
+                url: 'flags/flags/?v=2&config=true',
                 data: expect.objectContaining({
                     distinct_id: 'test-distinct-id',
                     token: 'test-token',
@@ -2235,7 +2304,7 @@ describe('getRemoteConfigPayload', () => {
         expect(instance._send_request).toHaveBeenCalledWith(
             expect.objectContaining({
                 method: 'POST',
-                url: 'api/flags/?v=2&config=true',
+                url: 'flags/flags/?v=2&config=true',
                 data: expect.objectContaining({
                     distinct_id: 'test-distinct-id',
                     token: 'test-token',
@@ -2245,5 +2314,61 @@ describe('getRemoteConfigPayload', () => {
 
         // Verify evaluation_environments is not in the data
         expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toBeUndefined()
+    })
+
+    describe('flags_api_host configuration', () => {
+        it('should use flags_api_host when configured', () => {
+            const apiConfig = {
+                api_host: 'https://app.posthog.com',
+                flags_api_host: 'https://example.com/feature-flags',
+            }
+            const customInstance = createMockPostHog({
+                config: {
+                    token: 'test-token',
+                    ...apiConfig,
+                } as PostHogConfig,
+                get_distinct_id: () => 'test-distinct-id',
+                _send_request: jest.fn(),
+                requestRouter: new RequestRouter({ config: apiConfig } as any),
+            })
+
+            const customFeatureFlags = new PostHogFeatureFlags(customInstance)
+            const callback = jest.fn()
+            customFeatureFlags.getRemoteConfigPayload('test-flag', callback)
+
+            expect(customInstance._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    method: 'POST',
+                    url: 'https://example.com/feature-flags/flags/?v=2&config=true',
+                })
+            )
+        })
+
+        it('should fall back to api_host when flags_api_host is not configured', () => {
+            const customInstance = createMockPostHog({
+                config: {
+                    token: 'test-token',
+                    api_host: 'https://app.posthog.com',
+                } as PostHogConfig,
+                get_distinct_id: () => 'test-distinct-id',
+                _send_request: jest.fn(),
+                requestRouter: new RequestRouter({
+                    config: {
+                        api_host: 'https://app.posthog.com',
+                    },
+                } as any),
+            })
+
+            const customFeatureFlags = new PostHogFeatureFlags(customInstance)
+            const callback = jest.fn()
+            customFeatureFlags.getRemoteConfigPayload('test-flag', callback)
+
+            expect(customInstance._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    method: 'POST',
+                    url: 'https://us.i.posthog.com/flags/?v=2&config=true',
+                })
+            )
+        })
     })
 })

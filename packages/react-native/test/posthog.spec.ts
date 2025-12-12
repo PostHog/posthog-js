@@ -577,4 +577,421 @@ describe('PostHog React Native', () => {
       expect(posthog.getPersistedProperty(PostHogPersistedProperty.SessionStartTimestamp)).toEqual(nowMinus23Hour)
     })
   })
+
+  describe('person and group properties for flags', () => {
+    describe('default person properties', () => {
+      afterEach(() => {
+        jest.restoreAllMocks()
+      })
+
+      it('should set default person properties on initialization when enabled', async () => {
+        jest.spyOn(PostHog.prototype, 'getCommonEventProperties').mockReturnValue({
+          $lib: 'posthog-react-native',
+          $lib_version: '1.2.3',
+        })
+
+        posthog = new PostHog('test-api-key', {
+          setDefaultPersonProperties: true,
+          customAppProperties: {
+            $app_version: '1.0.0',
+            $app_namespace: 'com.example.app',
+            $device_type: 'Mobile',
+            $os_name: 'iOS',
+          },
+        })
+
+        await posthog.ready()
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+
+        expect(cachedProps).toHaveProperty('$app_version', '1.0.0')
+        expect(cachedProps).toHaveProperty('$app_namespace', 'com.example.app')
+        expect(cachedProps).toHaveProperty('$device_type', 'Mobile')
+        expect(cachedProps).toHaveProperty('$os_name', 'iOS')
+        expect(cachedProps.$lib).toBe('posthog-react-native')
+        expect(cachedProps.$lib_version).toBe('1.2.3')
+      })
+
+      it('should not set default person properties when disabled', async () => {
+        posthog = new PostHog('test-api-key', {
+          setDefaultPersonProperties: false,
+        })
+        await posthog.ready()
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+
+        expect(cachedProps === undefined || Object.keys(cachedProps).length === 0).toBe(true)
+      })
+
+      it('should set default person properties by default (true)', async () => {
+        posthog = new PostHog('test-api-key', {
+          customAppProperties: {
+            $device_type: 'Mobile',
+          },
+        })
+        await posthog.ready()
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+
+        expect(cachedProps).toBeTruthy()
+        expect(cachedProps).toHaveProperty('$device_type', 'Mobile')
+      })
+
+      it('should only include defined properties', async () => {
+        posthog = new PostHog('test-api-key', {
+          setDefaultPersonProperties: true,
+          customAppProperties: {
+            $app_version: '1.0.0',
+            $app_namespace: 'com.example.app',
+            $device_type: 'Mobile',
+            $os_name: null,
+          },
+        })
+        await posthog.ready()
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+
+        expect(cachedProps).toHaveProperty('$app_version', '1.0.0')
+        expect(cachedProps).toHaveProperty('$app_namespace', 'com.example.app')
+        expect(cachedProps).toHaveProperty('$device_type', 'Mobile')
+        expect(cachedProps).not.toHaveProperty('$os_name')
+      })
+
+      it('should restore default properties after reset()', async () => {
+        posthog = new PostHog('test-api-key', {
+          setDefaultPersonProperties: true,
+          customAppProperties: {
+            $device_type: 'Mobile',
+          },
+        })
+        await posthog.ready()
+
+        let cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+        expect(cachedProps).toBeTruthy()
+        expect(cachedProps).toHaveProperty('$device_type', 'Mobile')
+
+        posthog.reset()
+
+        cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+        expect(cachedProps).toBeTruthy()
+        expect(cachedProps).toHaveProperty('$device_type', 'Mobile')
+      })
+
+      it('should set default properties synchronously during reset without extra reload', async () => {
+        jest.spyOn(PostHog.prototype, 'getCommonEventProperties').mockReturnValue({
+          $lib: 'posthog-react-native',
+          $lib_version: '1.2.3',
+        })
+        posthog = new PostHog('test-api-key', {
+          setDefaultPersonProperties: true,
+          customAppProperties: {
+            $device_type: 'Mobile',
+            $os_name: 'iOS',
+          },
+        })
+        await posthog.ready()
+        ;(globalThis as any).window.fetch.mockClear()
+
+        posthog.reset()
+
+        // `reset` reloads flags asynchronously but does not wait for it
+        // we wait for the next tick to allow the event loop to process it
+        await new Promise((resolve) => setImmediate(resolve))
+
+        const flagsCalls = (globalThis as any).window.fetch.mock.calls.filter((call: any) =>
+          call[0].includes('/flags/')
+        )
+        expect(flagsCalls.length).toBe(1)
+
+        const flagsCallBody = JSON.parse(flagsCalls[0][1].body)
+        expect(flagsCallBody.person_properties).toEqual({
+          $device_type: 'Mobile',
+          $os_name: 'iOS',
+          $lib: 'posthog-react-native',
+          $lib_version: '1.2.3',
+        })
+      })
+
+      it('should merge user properties with default properties', async () => {
+        posthog = new PostHog('test-api-key', {
+          setDefaultPersonProperties: true,
+          customAppProperties: {
+            $device_type: 'Mobile',
+            $app_version: '1.0.0',
+          },
+        })
+        await posthog.ready()
+
+        let cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+        expect(cachedProps.$device_type).toBe('Mobile')
+
+        posthog.identify('user-123', { $device_type: 'Tablet', email: 'test@example.com' })
+
+        cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+        expect(cachedProps.$device_type).toBe('Tablet')
+        expect(cachedProps.$app_version).toBe('1.0.0')
+        expect(cachedProps.email).toBe('test@example.com')
+      })
+    })
+
+    describe('person properties auto-caching from identify()', () => {
+      beforeEach(async () => {
+        posthog = new PostHog('test-api-key', {
+          setDefaultPersonProperties: false,
+        })
+        await posthog.ready()
+      })
+
+      it('should cache person properties from identify() call', async () => {
+        posthog.identify('user-123', { email: 'test@example.com', name: 'Test User' })
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+        expect(cachedProps).toEqual({ email: 'test@example.com', name: 'Test User' })
+      })
+
+      it('should merge person properties from multiple identify() calls', async () => {
+        posthog.identify('user-123', { email: 'test@example.com' })
+        posthog.identify('user-123', { name: 'Test User' })
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+        expect(cachedProps).toEqual({ email: 'test@example.com', name: 'Test User' })
+      })
+
+      it('should clear person properties on reset()', async () => {
+        posthog.identify('user-123', { email: 'test@example.com' })
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)).toBeTruthy()
+
+        posthog.reset()
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+        expect(cachedProps === undefined || Object.keys(cachedProps).length === 0).toBe(true)
+      })
+
+      it('should cache properties from $set when provided', async () => {
+        posthog.identify('user-123', {
+          $set: { email: 'test@example.com', plan: 'premium' },
+        })
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+        expect(cachedProps).toEqual({ email: 'test@example.com', plan: 'premium' })
+      })
+
+      it('should ignore $set_once when caching properties', async () => {
+        posthog.identify('user-123', {
+          $set: { email: 'test@example.com' },
+          $set_once: { created_at: '2024-01-01' },
+        })
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+        expect(cachedProps).toEqual({ email: 'test@example.com' })
+      })
+
+      it('should merge properties from multiple identify() calls with $set', async () => {
+        posthog.identify('user-123', { $set: { email: 'test@example.com' } })
+        posthog.identify('user-123', { $set: { plan: 'premium' } })
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+        expect(cachedProps).toEqual({ email: 'test@example.com', plan: 'premium' })
+      })
+
+      it('should reload flags once when identify() is called with same distinctId and new properties', async () => {
+        ;(globalThis as any).window.fetch = jest.fn().mockResolvedValue({ status: 200 })
+        posthog = new PostHog('test-api-key', {
+          setDefaultPersonProperties: false,
+          flushInterval: 0,
+          preloadFeatureFlags: false,
+        })
+        const distinctId = 'user-123'
+        jest.spyOn(posthog, 'getDistinctId').mockReturnValue(distinctId)
+        await posthog.ready()
+        ;(globalThis as any).window.fetch.mockClear()
+
+        posthog.identify(distinctId, { email: 'test@example.com' })
+
+        await new Promise((resolve) => setImmediate(resolve))
+
+        const flagsCalls = (globalThis as any).window.fetch.mock.calls.filter((call: any) =>
+          call[0].includes('/flags/')
+        )
+        expect(flagsCalls.length).toBe(1)
+      })
+
+      it('should reload flags once when identify() is called with different distinctId', async () => {
+        ;(globalThis as any).window.fetch = jest.fn().mockResolvedValue({ status: 200 })
+        posthog = new PostHog('test-api-key', {
+          setDefaultPersonProperties: false,
+          flushInterval: 0,
+          preloadFeatureFlags: false,
+        })
+        await posthog.ready()
+        jest.spyOn(posthog, 'getDistinctId').mockReturnValue('user-123')
+        ;(globalThis as any).window.fetch.mockClear()
+
+        posthog.identify('some-new-distinct-id', { email: 'different@example.com' })
+
+        await new Promise((resolve) => setImmediate(resolve))
+
+        const flagsCalls = (globalThis as any).window.fetch.mock.calls.filter((call: any) =>
+          call[0].includes('/flags/')
+        )
+        expect(flagsCalls.length).toBe(1)
+      })
+    })
+
+    describe('group properties auto-caching from group()', () => {
+      beforeEach(async () => {
+        posthog = new PostHog('test-api-key', {
+          setDefaultPersonProperties: false,
+        })
+        await posthog.ready()
+      })
+
+      it('should cache group properties from group() call', async () => {
+        posthog.group('company', 'acme-inc', { name: 'Acme Inc', employees: 50 })
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.GroupProperties)
+        expect(cachedProps).toEqual({ company: { name: 'Acme Inc', employees: '50' } })
+      })
+
+      it('should merge group properties from multiple group() calls', async () => {
+        posthog.group('company', 'acme-inc', { name: 'Acme Inc' })
+        posthog.group('company', 'acme-inc', { employees: 50 })
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.GroupProperties)
+        expect(cachedProps).toEqual({ company: { name: 'Acme Inc', employees: '50' } })
+      })
+
+      it('should handle multiple group types', async () => {
+        posthog.group('company', 'acme-inc', { name: 'Acme Inc' })
+        posthog.group('project', 'proj-1', { name: 'Project 1' })
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.GroupProperties)
+        expect(cachedProps).toEqual({
+          company: { name: 'Acme Inc' },
+          project: { name: 'Project 1' },
+        })
+      })
+
+      it('should clear group properties on reset()', async () => {
+        posthog.group('company', 'acme-inc', { name: 'Acme Inc' })
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.GroupProperties)).toBeTruthy()
+
+        posthog.reset()
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.GroupProperties)).toBeUndefined()
+      })
+    })
+
+    describe('reloadFeatureFlags parameter', () => {
+      beforeEach(async () => {
+        ;(globalThis as any).window.fetch = jest.fn(async (url) => {
+          let res: any = { status: 'ok' }
+          if (url.includes('flags')) {
+            res = {
+              featureFlags: { 'test-flag': true },
+            }
+          }
+
+          return {
+            status: 200,
+            json: () => Promise.resolve(res),
+          }
+        })
+
+        posthog = new PostHog('test-api-key', {
+          setDefaultPersonProperties: false,
+          flushInterval: 0,
+          preloadFeatureFlags: false,
+        })
+        await posthog.ready()
+        ;(globalThis as any).window.fetch.mockClear()
+      })
+
+      it('should reload feature flags by default when calling setPersonPropertiesForFlags', async () => {
+        posthog.setPersonPropertiesForFlags({ email: 'test@example.com' })
+
+        await waitForExpect(200, () => {
+          expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/flags/'),
+            expect.any(Object)
+          )
+        })
+      })
+
+      it('should not reload feature flags when reloadFeatureFlags is false for setPersonPropertiesForFlags', async () => {
+        posthog.setPersonPropertiesForFlags({ email: 'test@example.com' }, false)
+
+        await new Promise((resolve) => setTimeout(resolve, 100))
+
+        expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
+      })
+
+      it('should reload feature flags by default when calling setGroupPropertiesForFlags', async () => {
+        posthog.setGroupPropertiesForFlags({ company: { name: 'Acme Inc' } })
+
+        await waitForExpect(200, () => {
+          expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/flags/'),
+            expect.any(Object)
+          )
+        })
+      })
+
+      it('should not reload feature flags when reloadFeatureFlags is false for setGroupPropertiesForFlags', async () => {
+        posthog.setGroupPropertiesForFlags({ company: { name: 'Acme Inc' } }, false)
+
+        await new Promise((resolve) => setTimeout(resolve, 100))
+
+        expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
+      })
+
+      it('should reload feature flags by default when calling resetPersonPropertiesForFlags', async () => {
+        posthog.setPersonPropertiesForFlags({ email: 'test@example.com' }, false)
+        ;(globalThis as any).window.fetch.mockClear()
+
+        posthog.resetPersonPropertiesForFlags()
+
+        await waitForExpect(200, () => {
+          expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/flags/'),
+            expect.any(Object)
+          )
+        })
+      })
+
+      it('should not reload feature flags when reloadFeatureFlags is false for resetPersonPropertiesForFlags', async () => {
+        posthog.setPersonPropertiesForFlags({ email: 'test@example.com' }, false)
+        ;(globalThis as any).window.fetch.mockClear()
+
+        posthog.resetPersonPropertiesForFlags(false)
+
+        await new Promise((resolve) => setTimeout(resolve, 100))
+
+        expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
+      })
+
+      it('should reload feature flags by default when calling resetGroupPropertiesForFlags', async () => {
+        posthog.setGroupPropertiesForFlags({ company: { name: 'Acme Inc' } }, false)
+        ;(globalThis as any).window.fetch.mockClear()
+
+        posthog.resetGroupPropertiesForFlags()
+
+        await waitForExpect(200, () => {
+          expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/flags/'),
+            expect.any(Object)
+          )
+        })
+      })
+
+      it('should not reload feature flags when reloadFeatureFlags is false for resetGroupPropertiesForFlags', async () => {
+        posthog.setGroupPropertiesForFlags({ company: { name: 'Acme Inc' } }, false)
+        ;(globalThis as any).window.fetch.mockClear()
+
+        posthog.resetGroupPropertiesForFlags(false)
+
+        await new Promise((resolve) => setTimeout(resolve, 100))
+
+        expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
+      })
+    })
+  })
 })

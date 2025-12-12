@@ -14,6 +14,7 @@ type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatComplet
 type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
 type ResponseCreateParams = OpenAIOrignal.Responses.ResponseCreateParams
 type EmbeddingCreateParams = OpenAIOrignal.EmbeddingCreateParams
+type TranscriptionCreateParams = OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateParams
 type AnthropicTool = AnthropicOriginal.Tool
 
 // limit large outputs by truncating to 200kb (approx 200k bytes)
@@ -77,6 +78,7 @@ export const getModelParams = (
         | ResponseCreateParams
         | ResponseCreateParamsWithTools
         | EmbeddingCreateParams
+        | TranscriptionCreateParams
       ) &
         MonitoringParams)
     | null
@@ -96,6 +98,9 @@ export const getModelParams = (
     'stop',
     'stream',
     'streaming',
+    'language',
+    'response_format',
+    'timestamp_granularities',
   ] as const
 
   for (const key of paramKeys) {
@@ -107,7 +112,7 @@ export const getModelParams = (
 }
 
 /**
- * Helper to format responses (non-streaming) for consumption, mirroring Python's openai vs. anthropic approach.
+ * Helper to format responses (non-streaming) for consumption
  */
 export const formatResponse = (response: any, provider: string): FormattedMessage[] => {
   if (!response) {
@@ -180,6 +185,14 @@ export const formatResponseOpenAI = (response: any): FormattedMessage[] => {
               },
             })
           }
+        }
+
+        // Handle audio output (gpt-4o-audio-preview)
+        if (choice.message.audio) {
+          content.push({
+            type: 'audio',
+            ...choice.message.audio,
+          })
         }
       }
 
@@ -258,6 +271,21 @@ export const formatResponseGemini = (response: any): FormattedMessage[] => {
                 name: part.functionCall.name,
                 arguments: part.functionCall.args,
               },
+            })
+          } else if (part.inlineData) {
+            // Handle audio/media inline data
+            const mimeType = part.inlineData.mimeType || 'audio/pcm'
+            let data = part.inlineData.data
+
+            // Handle binary data (Buffer/Uint8Array -> base64)
+            if (data instanceof Uint8Array || Buffer.isBuffer(data)) {
+              data = Buffer.from(data).toString('base64')
+            }
+
+            content.push({
+              type: 'audio',
+              mime_type: mimeType,
+              data: data,
             })
           }
         }
@@ -342,6 +370,124 @@ export const truncate = (input: unknown): string => {
 }
 
 /**
+ * Calculate web search count from raw API response.
+ *
+ * Uses a two-tier detection strategy:
+ * Priority 1 (Exact Count): Count actual web search calls when available
+ * Priority 2 (Binary Detection): Return 1 if web search indicators are present, 0 otherwise
+ *
+ * @param result - Raw API response from any provider (OpenAI, Perplexity, OpenRouter, Gemini, etc.)
+ * @returns Number of web searches performed (exact count or binary 1/0)
+ */
+export function calculateWebSearchCount(result: unknown): number {
+  if (!result || typeof result !== 'object') {
+    return 0
+  }
+
+  // Priority 1: Exact Count
+  // Check for OpenAI Responses API web_search_call items
+  if ('output' in result && Array.isArray(result.output)) {
+    let count = 0
+
+    for (const item of result.output) {
+      if (typeof item === 'object' && item !== null && 'type' in item && item.type === 'web_search_call') {
+        count++
+      }
+    }
+
+    if (count > 0) {
+      return count
+    }
+  }
+
+  // Priority 2: Binary Detection (1 or 0)
+
+  // Check for citations at root level (Perplexity)
+  if ('citations' in result && Array.isArray(result.citations) && result.citations.length > 0) {
+    return 1
+  }
+
+  // Check for search_results at root level (Perplexity via OpenRouter)
+  if ('search_results' in result && Array.isArray(result.search_results) && result.search_results.length > 0) {
+    return 1
+  }
+
+  // Check for usage.search_context_size (Perplexity via OpenRouter)
+  if ('usage' in result && typeof result.usage === 'object' && result.usage !== null) {
+    if ('search_context_size' in result.usage && result.usage.search_context_size) {
+      return 1
+    }
+  }
+
+  // Check for annotations with url_citation in choices[].message or choices[].delta (OpenAI/Perplexity)
+  if ('choices' in result && Array.isArray(result.choices)) {
+    for (const choice of result.choices) {
+      if (typeof choice === 'object' && choice !== null) {
+        // Check both message (non-streaming) and delta (streaming) for annotations
+        const content = ('message' in choice ? choice.message : null) || ('delta' in choice ? choice.delta : null)
+
+        if (typeof content === 'object' && content !== null && 'annotations' in content) {
+          const annotations = content.annotations
+
+          if (Array.isArray(annotations)) {
+            const hasUrlCitation = annotations.some((ann: unknown) => {
+              return typeof ann === 'object' && ann !== null && 'type' in ann && ann.type === 'url_citation'
+            })
+
+            if (hasUrlCitation) {
+              return 1
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Check for annotations in output[].content[] (OpenAI Responses API)
+  if ('output' in result && Array.isArray(result.output)) {
+    for (const item of result.output) {
+      if (typeof item === 'object' && item !== null && 'content' in item) {
+        const content = item.content
+
+        if (Array.isArray(content)) {
+          for (const contentItem of content) {
+            if (typeof contentItem === 'object' && contentItem !== null && 'annotations' in contentItem) {
+              const annotations = contentItem.annotations
+
+              if (Array.isArray(annotations)) {
+                const hasUrlCitation = annotations.some((ann: unknown) => {
+                  return typeof ann === 'object' && ann !== null && 'type' in ann && ann.type === 'url_citation'
+                })
+
+                if (hasUrlCitation) {
+                  return 1
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Check for grounding_metadata (Gemini)
+  if ('candidates' in result && Array.isArray(result.candidates)) {
+    for (const candidate of result.candidates) {
+      if (
+        typeof candidate === 'object' &&
+        candidate !== null &&
+        'grounding_metadata' in candidate &&
+        candidate.grounding_metadata
+      ) {
+        return 1
+      }
+    }
+  }
+
+  return 0
+}
+
+/**
  * Extract available tool calls from the request parameters.
  * These are the tools provided to the LLM, not the tool calls in the response.
  */
@@ -402,6 +548,7 @@ export type SendEventToPosthogParams = {
     | ResponseCreateParams
     | ResponseCreateParamsWithTools
     | EmbeddingCreateParams
+    | TranscriptionCreateParams
   ) &
     MonitoringParams
   isError?: boolean
@@ -517,6 +664,7 @@ export const sendEventToPosthog = async ({
     ...(usage.reasoningTokens ? { $ai_reasoning_tokens: usage.reasoningTokens } : {}),
     ...(usage.cacheReadInputTokens ? { $ai_cache_read_input_tokens: usage.cacheReadInputTokens } : {}),
     ...(usage.cacheCreationInputTokens ? { $ai_cache_creation_input_tokens: usage.cacheCreationInputTokens } : {}),
+    ...(usage.webSearchCount ? { $ai_web_search_count: usage.webSearchCount } : {}),
   }
 
   const properties = {
