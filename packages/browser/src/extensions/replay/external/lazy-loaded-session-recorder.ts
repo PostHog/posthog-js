@@ -502,14 +502,17 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _maskUrl(url: string): string | undefined {
         const userSessionRecordingOptions = this._instance.config.session_recording
 
-        if (userSessionRecordingOptions.maskNetworkRequestFn) {
+        // userSessionRecordingOptions.maskNetworkRequestFn is deprecated, fallback to it
+        const maskFn =
+            userSessionRecordingOptions.maskCapturedNetworkRequestFn ||
+            userSessionRecordingOptions.maskNetworkRequestFn
+
+        if (maskFn) {
             let networkRequest: NetworkRequest | null | undefined = {
                 url,
             }
 
-            // TODO we should deprecate this and use the same function for this masking and the rrweb/network plugin
-            // TODO or deprecate this and provide a new clearer name so this would be `maskURLPerformanceFn` or similar
-            networkRequest = userSessionRecordingOptions.maskNetworkRequestFn(networkRequest)
+            networkRequest = maskFn(networkRequest as any)
 
             return networkRequest?.url
         }
