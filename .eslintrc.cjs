@@ -95,5 +95,5 @@ module.exports = {
             },
         },
     ],
-    ignorePatterns: ['node_modules', 'dist'],
+    ignorePatterns: ['node_modules', 'dist', 'next-env.d.ts', '.next'],
 }

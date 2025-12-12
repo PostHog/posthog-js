@@ -77,6 +77,8 @@ jobs:
         uses: ./.github/actions/setup
       - name: Lint all packages
         run: pnpm lint
+      - name: Lint playground files
+        run: pnpm lint:playground
 
   write-mangled-property-names:
     name: Write mangled property names

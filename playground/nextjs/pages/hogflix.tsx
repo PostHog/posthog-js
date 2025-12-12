@@ -38,9 +38,7 @@ function MovieCard({ movie, isLarge = false }: { movie: Movie; isLarge?: boolean
     const [isHovered, setIsHovered] = useState(false)
     const [isInList, setIsInList] = useState(false)
     const imagePath = isLarge ? movie.poster_path : movie.backdrop_path || movie.poster_path
-    const imageUrl = imagePath
-        ? `${TMDB_IMAGE_BASE}/${isLarge ? 'w342' : 'w500'}${imagePath}`
-        : '/placeholder.jpg'
+    const imageUrl = imagePath ? `${TMDB_IMAGE_BASE}/${isLarge ? 'w342' : 'w500'}${imagePath}` : '/placeholder.jpg'
 
     // Generate a fake "match" percentage based on movie id
     const matchPercent = 70 + (movie.id % 30)
@@ -58,45 +56,33 @@ function MovieCard({ movie, isLarge = false }: { movie: Movie; isLarge?: boolean
         >
             {showNewBadge && <span className="card-badge new">NEW</span>}
             {showTopTenBadge && !showNewBadge && <span className="card-badge top">TOP 10</span>}
-            <img
-                src={imageUrl}
-                alt={movie.title || movie.name || 'Movie'}
-                loading="lazy"
-            />
+            <img src={imageUrl} alt={movie.title || movie.name || 'Movie'} loading="lazy" />
             <div className={`card-overlay ${isHovered ? 'visible' : ''}`}>
                 <h4>{movie.title || movie.name}</h4>
                 <div className="card-meta">
                     <span className="match">{matchPercent}% Match</span>
                     <span className="maturity">TV-MA</span>
-                    <span className="year">
-                        {(movie.release_date || movie.first_air_date || '').split('-')[0]}
-                    </span>
+                    <span className="year">{(movie.release_date || movie.first_air_date || '').split('-')[0]}</span>
                 </div>
                 <p className="card-overview">{movie.overview}</p>
                 <div className="card-buttons">
-                    <button
-                        className="play-btn"
-                        data-ph-capture-attribute-action="play"
-                    >
+                    <button className="play-btn" data-ph-capture-attribute-action="play">
                         ▶
                     </button>
                     <button
                         className={`add-list-btn ${isInList ? 'added' : ''}`}
-                        onClick={(e) => { e.stopPropagation(); setIsInList(!isInList) }}
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            setIsInList(!isInList)
+                        }}
                         data-ph-capture-attribute-action={isInList ? 'remove-from-list' : 'add-to-list'}
                     >
                         {isInList ? '✓' : '+'}
                     </button>
-                    <button
-                        className="like-btn"
-                        data-ph-capture-attribute-action="like"
-                    >
+                    <button className="like-btn" data-ph-capture-attribute-action="like">
                         👍
                     </button>
-                    <button
-                        className="info-btn"
-                        data-ph-capture-attribute-action="more-info"
-                    >
+                    <button className="info-btn" data-ph-capture-attribute-action="more-info">
                         ▼
                     </button>
                 </div>
@@ -105,7 +91,15 @@ function MovieCard({ movie, isLarge = false }: { movie: Movie; isLarge?: boolean
     )
 }
 
-function CategoryRowComponent({ title, movies, isLarge = false }: { title: string; movies: Movie[]; isLarge?: boolean }) {
+function CategoryRowComponent({
+    title,
+    movies,
+    isLarge = false,
+}: {
+    title: string
+    movies: Movie[]
+    isLarge?: boolean
+}) {
     const rowRef = useRef<HTMLDivElement>(null)
     const [showLeftArrow, setShowLeftArrow] = useState(false)
     const [showRightArrow, setShowRightArrow] = useState(true)
@@ -115,7 +109,7 @@ function CategoryRowComponent({ title, movies, isLarge = false }: { title: strin
         const scrollAmount = rowRef.current.clientWidth * 0.8
         rowRef.current.scrollBy({
             left: direction === 'left' ? -scrollAmount : scrollAmount,
-            behavior: 'smooth'
+            behavior: 'smooth',
         })
     }
 
@@ -164,9 +158,7 @@ function CategoryRowComponent({ title, movies, isLarge = false }: { title: strin
 function HeroSection({ movie }: { movie: Movie | null }) {
     if (!movie) return null
 
-    const backdropUrl = movie.backdrop_path
-        ? `${TMDB_IMAGE_BASE}/original${movie.backdrop_path}`
-        : null
+    const backdropUrl = movie.backdrop_path ? `${TMDB_IMAGE_BASE}/original${movie.backdrop_path}` : null
 
     return (
         <div className="hero-section" style={{ backgroundImage: backdropUrl ? `url(${backdropUrl})` : undefined }}>
@@ -210,7 +202,9 @@ function HogflixHeader() {
                     <span className="flix">FLIX</span>
                 </h1>
                 <nav className="header-nav">
-                    <a href="#" className="active">Home</a>
+                    <a href="#" className="active">
+                        Home
+                    </a>
                     <a href="#">TV Shows</a>
                     <a href="#">Movies</a>
                     <a href="#">New & Popular</a>
@@ -276,7 +270,9 @@ export default function Hogflix() {
                 <Head>
                     <title>Hogflix - Setup Required</title>
                 </Head>
-                <style jsx global>{hogflixStyles}</style>
+                <style jsx global>
+                    {hogflixStyles}
+                </style>
                 <div className="setup-message">
                     <h1 className="hogflix-logo-large">
                         <span className="hog">HOG</span>
@@ -300,7 +296,9 @@ export default function Hogflix() {
             <Head>
                 <title>Hogflix</title>
             </Head>
-            <style jsx global>{hogflixStyles}</style>
+            <style jsx global>
+                {hogflixStyles}
+            </style>
 
             <HogflixHeader />
 
