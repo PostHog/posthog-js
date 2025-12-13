@@ -61,6 +61,7 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Req
                     isNavigationTiming(entry) ||
                     (isResourceTiming(entry) && options.initiatorTypes.includes(entry.initiatorType as InitiatorType))
             )
+
         cb({
             requests: initialPerformanceEntries.flatMap((entry) =>
                 prepareRequest({ entry, method: undefined, status: undefined, networkRequest: {}, isInitial: true })

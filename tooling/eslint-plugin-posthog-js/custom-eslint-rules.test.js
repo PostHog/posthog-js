@@ -8,6 +8,7 @@ const noDirectDateCheck = require('./no-direct-date-check')
 const noDirectNumberCheck = require('./no-direct-number-check')
 const noDirectBooleanCheck = require('./no-direct-boolean-check')
 const noAddEventListener = require('./no-add-event-listener')
+const noDirectRequestIdleCallback = require('./no-direct-request-idle-callback')
 
 const { RuleTester } = require('eslint')
 
@@ -162,6 +163,32 @@ ruleTester.run('no-add-event-listener', noAddEventListener, {
             code: "document.addEventListener('pageleave', () => {}, { capture: false })",
             errors: [{ message: 'Use addEventListener from @utils instead of calling it directly on elements' }],
             output: "import { addEventListener } from './utils'\naddEventListener(document, 'pageleave', () => {}, { capture: false })",
+        },
+    ],
+})
+
+ruleTester.run('no-direct-request-idle-callback', noDirectRequestIdleCallback, {
+    valid: [
+        { code: '_requestIdleCallback(() => {})' },
+        { code: '_cancelIdleCallback(handle)' },
+        { code: 'someOtherFunction()' },
+    ],
+    invalid: [
+        {
+            code: 'requestIdleCallback(() => {})',
+            errors: [{ messageId: 'noDirectRequestIdleCallback' }],
+        },
+        {
+            code: 'window.requestIdleCallback(() => {})',
+            errors: [{ messageId: 'noDirectRequestIdleCallback' }],
+        },
+        {
+            code: 'cancelIdleCallback(handle)',
+            errors: [{ messageId: 'noDirectCancelIdleCallback' }],
+        },
+        {
+            code: 'window.cancelIdleCallback(handle)',
+            errors: [{ messageId: 'noDirectCancelIdleCallback' }],
         },
     ],
 })
