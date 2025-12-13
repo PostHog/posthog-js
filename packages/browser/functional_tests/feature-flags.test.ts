@@ -27,6 +27,7 @@ describe('FunctionalTests / Feature Flags', () => {
             expect(getRequests(token)['/flags/']).toEqual([
                 // This is the initial call to the flags endpoint on PostHog init.
                 {
+                    $device_id: anonymousId,
                     distinct_id: anonymousId,
                     person_properties: {},
                     groups: {},
@@ -53,6 +54,7 @@ describe('FunctionalTests / Feature Flags', () => {
                 // `identify()`.
                 {
                     $anon_distinct_id: anonymousId,
+                    $device_id: anonymousId,
                     distinct_id: 'test-id',
                     person_properties: {
                         $initial__kx: null,
@@ -102,6 +104,7 @@ describe('FunctionalTests / Feature Flags', () => {
             expect(getRequests(token)['/flags/']).toEqual([
                 // This is the initial call to the flags endpoint on PostHog init.
                 {
+                    $device_id: anonymousId,
                     distinct_id: anonymousId,
                     person_properties: {},
                     groups: {},
@@ -125,6 +128,7 @@ describe('FunctionalTests / Feature Flags', () => {
                 // `identify()`.
                 {
                     $anon_distinct_id: anonymousId,
+                    $device_id: anonymousId,
                     distinct_id: 'test-id',
                     groups: {},
                     person_properties: {
@@ -172,6 +176,7 @@ describe('FunctionalTests / Feature Flags', () => {
         await waitFor(() => {
             expect(getRequests(token)['/flags/']).toEqual([
                 {
+                    $device_id: anonymousId,
                     distinct_id: 'test-id',
                     groups: {},
                     person_properties: {
@@ -221,6 +226,7 @@ describe('FunctionalTests / Feature Flags', () => {
             expect(getRequests(token)['/flags/']).toEqual([
                 // This is the initial call to the flags endpoint on PostHog init.
                 {
+                    $device_id: anonymousId,
                     distinct_id: anonymousId,
                     person_properties: {},
                     groups: {},
@@ -248,6 +254,7 @@ describe('FunctionalTests / Feature Flags', () => {
             expect(getRequests(token)['/flags/']).toEqual([
                 {
                     $anon_distinct_id: anonymousId,
+                    $device_id: anonymousId,
                     distinct_id: 'test-id',
                     groups: {},
                     person_properties: {
@@ -304,6 +311,7 @@ describe('FunctionalTests / Feature Flags', () => {
                 // This is the initial call to the flags endpoint on PostHog init, with all info added from `loaded`.
                 {
                     $anon_distinct_id: 'anon-id',
+                    $device_id: 'anon-id',
                     distinct_id: 'test-id',
                     groups: { playlist: 'id:77' },
                     person_properties: {

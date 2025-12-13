@@ -68,6 +68,7 @@ test.describe('flags', () => {
         expect(flagsPayload).toEqual({
             token: 'test token',
             distinct_id: 'new-id',
+            $device_id: flagsPayload.$device_id,
             person_properties: {
                 $initial__kx: null,
                 $initial_current_url: 'http://localhost:2345/playground/cypress/index.html',
