@@ -300,6 +300,7 @@ export enum SurveyEventProperties {
     SURVEY_SUBMISSION_ID = '$survey_submission_id',
     SURVEY_QUESTIONS = '$survey_questions',
     SURVEY_COMPLETED = '$survey_completed',
+    PRODUCT_TOUR_ID = '$product_tour_id',
 }
 
 export enum DisplaySurveyType {
