@@ -13,6 +13,8 @@ const lazyLoadedJSFiles = [
     'tracing-headers',
     'web-vitals',
     'dead-clicks-autocapture',
+    'autocapture',
+    'heatmaps',
 ]
 
 export type WindowWithPostHog = typeof globalThis & {
