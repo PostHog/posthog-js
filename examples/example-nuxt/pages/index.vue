@@ -28,6 +28,10 @@
 
       <button @click="redirectRenderingError" style="padding: 10px; cursor: pointer">8. Rendering Error</button>
     </div>
+
+    <div style="margin-top: 20px">
+      <a href="/feature-flags" style="color: blue; text-decoration: underline">→ Go to Feature Flags Testing</a>
+    </div>
   </div>
 </template>
 
