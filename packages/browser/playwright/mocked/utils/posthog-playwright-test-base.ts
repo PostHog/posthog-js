@@ -8,6 +8,7 @@ const lazyLoadedJSFiles = [
     'recorder',
     'posthog-recorder',
     'lazy-recorder',
+    'conversations',
     'surveys',
     'exception-autocapture',
     'tracing-headers',

@@ -2,3 +2,6 @@ lib
 
 packages/react-native/src/version.ts
 packages/core/src/vendor/*
+
+# Generated API reference files - should not be formatted
+**/references/*.json
