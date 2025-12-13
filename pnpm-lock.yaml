@@ -515,6 +515,9 @@ importers:
       '@posthog/core':
         specifier: workspace:*
         version: link:../core
+      eventsource:
+        specifier: ^2.0.2
+        version: 2.0.2
     devDependencies:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
@@ -522,6 +525,9 @@ importers:
       '@rslib/core':
         specifier: 'catalog:'
         version: 0.10.6(@microsoft/api-extractor@7.55.1(@types/node@20.19.9))(typescript@5.9.3)
+      '@types/eventsource':
+        specifier: ^1.1.15
+        version: 1.1.15
       '@types/express':
         specifier: ^5.0.5
         version: 5.0.5
@@ -4022,6 +4028,9 @@ packages:
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
 
+  '@types/eventsource@1.1.15':
+    resolution: {integrity: sha512-XQmGcbnxUNa06HR3VBVkc9+A2Vpi9ZyLJcdS5dwaQQ/4ZMWFO+5c90FnMUpbtMZwB/FChoYHwuVg8TvkECacTA==}
+
   '@types/express-serve-static-core@5.1.0':
     resolution: {integrity: sha512-jnHMsrd0Mwa9Cf4IdOzbz543y4XJepXrbia2T4b6+spXC2We3t1y6K44D3mR8XMFSXMCf3/l7rCgddfx7UNVBA==}
 
@@ -6638,6 +6647,10 @@ packages:
   eventsource-parser@3.0.6:
     resolution: {integrity: sha512-Vo1ab+QXPzZ4tCa8SwIHJFaSzy4R6SHf7BY79rFBDf0idraZWAkYrDjDj8uWaSm3S2TK+hJ7/t1CEmZ7jXw+pg==}
     engines: {node: '>=18.0.0'}
+
+  eventsource@2.0.2:
+    resolution: {integrity: sha512-IzUmBGPR3+oUG9dUeXynyNmf91/3zUSJg1lCktzKw47OXuhco54U3r9B7O4XX+Rb1Itm9OZ2b0RkTs10bICOxA==}
+    engines: {node: '>=12.0.0'}
 
   exec-async@2.2.0:
     resolution: {integrity: sha512-87OpwcEiMia/DeiKFzaQNBNFeN3XkkpYIh9FyOqq5mS2oKv3CBE67PXoEKcr6nodWdXNogTiQ0jE2NGuoffXPw==}
@@ -17476,6 +17489,8 @@ snapshots:
 
   '@types/estree@1.0.8': {}
 
+  '@types/eventsource@1.1.15': {}
+
   '@types/express-serve-static-core@5.1.0':
     dependencies:
       '@types/node': 22.19.1
@@ -20741,6 +20756,8 @@ snapshots:
   events@3.3.0: {}
 
   eventsource-parser@3.0.6: {}
+
+  eventsource@2.0.2: {}
 
   exec-async@2.2.0: {}
 

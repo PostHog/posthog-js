@@ -120,6 +120,16 @@ export type PostHogOptions = PostHogCoreOptions & {
    */
   evaluationEnvironments?: readonly string[]
   /**
+   * Enable real-time feature flag updates via Server-Sent Events (SSE).
+   * When enabled, the SDK will establish a persistent connection to receive
+   * flag updates in real-time instead of relying solely on polling.
+   *
+   * Requires personalApiKey to be set for authentication.
+   *
+   * @default false
+   */
+  realtimeFlags?: boolean
+  /**
    * Additional user agent strings to block from being tracked.
    * These are combined with the default list of blocked user agents.
    *

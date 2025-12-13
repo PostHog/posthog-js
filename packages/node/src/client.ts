@@ -115,6 +115,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             this._events.emit('localEvaluationFlagsLoaded', count)
           },
           customHeaders: this.getCustomHeaders(),
+          realtimeFlags: options.realtimeFlags ?? false,
           cacheProvider: options.flagDefinitionCacheProvider,
         })
       }

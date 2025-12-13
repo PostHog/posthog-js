@@ -2,6 +2,7 @@ import { FeatureFlagCondition, FlagProperty, FlagPropertyValue, PostHogFeatureFl
 import type { FeatureFlagValue, JsonType, PostHogFetchOptions, PostHogFetchResponse } from '@posthog/core'
 import { safeSetTimeout } from '@posthog/core'
 import { hashSHA1 } from './crypto'
+import EventSource from 'eventsource'
 import { FlagDefinitionCacheProvider, FlagDefinitionCacheData } from './cache'
 
 const SIXTY_SECONDS = 60 * 1000
@@ -54,6 +55,7 @@ type FeatureFlagsPollerOptions = {
   onError?: (error: Error) => void
   onLoad?: (count: number) => void
   customHeaders?: { [key: string]: string }
+  realtimeFlags?: boolean
   cacheProvider?: FlagDefinitionCacheProvider
 }
 
@@ -76,6 +78,9 @@ class FeatureFlagsPoller {
   shouldBeginExponentialBackoff: boolean = false
   backOffCount: number = 0
   onLoad?: (count: number) => void
+  eventSource?: EventSource
+  sseConnected: boolean = false
+  realtimeFlags: boolean = false
   private cacheProvider?: FlagDefinitionCacheProvider
   private loadingPromise?: Promise<void>
   private flagsEtag?: string
@@ -103,6 +108,7 @@ class FeatureFlagsPoller {
     this.fetch = options.fetch || fetch
     this.onError = options.onError
     this.customHeaders = customHeaders
+    this.realtimeFlags = options.realtimeFlags ?? false
     this.onLoad = options.onLoad
     this.cacheProvider = options.cacheProvider
     void this.loadFeatureFlags()
@@ -764,6 +770,11 @@ class FeatureFlagsPoller {
           }
 
           this.onLoad?.(this.featureFlags.length)
+
+          // Set up SSE connection after initial flags are loaded successfully
+          if (this.realtimeFlags && !this.sseConnected) {
+            this._setupSSEConnection()
+          }
           break
         }
 
@@ -824,8 +835,93 @@ class FeatureFlagsPoller {
     }
   }
 
+  private _setupSSEConnection(): void {
+    if (this.eventSource || this.sseConnected) {
+      // Already connected or connecting
+      return
+    }
+
+    if (!this.realtimeFlags) {
+      return
+    }
+
+    const token = this.projectApiKey
+    const url = `${this.host}/flags/definitions/stream?token=${encodeURIComponent(token)}`
+
+    try {
+      const eventSourceOptions: Record<string, any> = {
+        headers: {
+          ...this.customHeaders,
+          Authorization: `Bearer ${this.personalApiKey}`,
+        },
+      }
+
+      this.eventSource = new EventSource(url, eventSourceOptions)
+
+      this.eventSource.onopen = () => {
+        this.sseConnected = true
+      }
+
+      this.eventSource.onmessage = (event) => {
+        try {
+          const flagData = JSON.parse(event.data)
+          if (flagData && typeof flagData === 'object') {
+            // Update flags from SSE message
+            this._processFlagUpdate(flagData)
+          }
+        } catch (error) {
+          this.onError?.(new Error(`Error parsing SSE message: ${error}`))
+        }
+      }
+
+      this.eventSource.onerror = (error) => {
+        this.onError?.(new Error(`SSE connection error: ${error}`))
+        this._closeSSEConnection()
+
+        // Attempt to reconnect after a delay
+        setTimeout(() => {
+          if (this.realtimeFlags && !this.sseConnected) {
+            this._setupSSEConnection()
+          }
+        }, 5000)
+      }
+    } catch (error) {
+      this.onError?.(new Error(`Failed to establish SSE connection: ${error}`))
+    }
+  }
+
+  private _closeSSEConnection(): void {
+    if (this.eventSource) {
+      this.eventSource.close()
+      this.eventSource = undefined
+    }
+    this.sseConnected = false
+  }
+
+  private _processFlagUpdate(flagData: { [key: string]: any }): void {
+    const flag = flagData as PostHogFeatureFlag
+
+    if (flag.deleted) {
+      // Remove the flag
+      delete this.featureFlagsByKey[flag.key]
+      this.featureFlags = this.featureFlags.filter((f) => f.key !== flag.key)
+    } else {
+      // Update or add the flag
+      this.featureFlagsByKey[flag.key] = flag
+
+      // Update in the array
+      const existingIndex = this.featureFlags.findIndex((f) => f.key === flag.key)
+      if (existingIndex >= 0) {
+        this.featureFlags[existingIndex] = flag
+      } else {
+        this.featureFlags.push(flag)
+      }
+    }
+  }
+
   async stopPoller(timeoutMs: number = 30000): Promise<void> {
     clearTimeout(this.poller)
+    this._closeSSEConnection()
 
     if (this.cacheProvider) {
       try {
