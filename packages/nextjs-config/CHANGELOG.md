@@ -1,5 +1,17 @@
 # @posthog/nextjs-config
 
+## 1.7.0
+
+### Minor Changes
+
+- [#2741](https://github.com/PostHog/posthog-js/pull/2741) [`5c14781`](https://github.com/PostHog/posthog-js/commit/5c14781dc0b791e3fbdc3d9507dc52ccf1eb9ca4) Thanks [@hpouillot](https://github.com/hpouillot)! - upgrade webpack-plugin package
+  (2025-12-13)
+
+### Patch Changes
+
+- Updated dependencies [[`5c14781`](https://github.com/PostHog/posthog-js/commit/5c14781dc0b791e3fbdc3d9507dc52ccf1eb9ca4)]:
+  - @posthog/webpack-plugin@1.2.0
+
 ## 1.6.4
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.306.1
+
+### Patch Changes
+
+- [#2746](https://github.com/PostHog/posthog-js/pull/2746) [`515c18f`](https://github.com/PostHog/posthog-js/commit/515c18fd32505cfe7afaa88f9950f0cdda2ecd8f) Thanks [@ksvat](https://github.com/ksvat)! - Update which network masking function usage
+  (2025-12-13)
+
 ## 1.306.0
 
 ### Minor Changes
