@@ -2,7 +2,7 @@ import nextPackage from 'next/package.json' with { type: 'json' }
 import semver from 'semver'
 
 import { spawnLocal } from '@posthog/core/process'
-import { ResolvedPluginConfig } from '@posthog/webpack-plugin'
+import type { ResolvedPluginConfig } from '@posthog/webpack-plugin/config'
 
 export function getNextJsVersion(): string {
   return nextPackage.version

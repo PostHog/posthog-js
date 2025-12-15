@@ -1,5 +1,6 @@
 import type { NextConfig } from 'next'
-import { PosthogWebpackPlugin, PluginConfig, resolveConfig, ResolvedPluginConfig } from '@posthog/webpack-plugin'
+import type { PluginConfig, ResolvedPluginConfig } from '@posthog/webpack-plugin/config'
+import { resolveConfig } from '@posthog/webpack-plugin/config'
 import { hasCompilerHook, isTurbopackEnabled, processSourceMaps } from './utils'
 
 type NextFuncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => NextConfig
@@ -21,10 +22,18 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
       distDir,
       ...userConfig
     } = await resolveUserConfig(userNextConfig, phase, defaultConfig)
+
+    // Lazy-load webpack plugin only when needed (non-Turbopack builds)
+    let WebpackPlugin: typeof import('@posthog/webpack-plugin').PosthogWebpackPlugin | undefined
+    if (sourceMapEnabled && !turbopackEnabled) {
+      const webpackPluginModule = await import('@posthog/webpack-plugin')
+      WebpackPlugin = webpackPluginModule.PosthogWebpackPlugin
+    }
+
     const nextConfig = {
       ...userConfig,
       distDir,
-      webpack: withWebpackConfig(userWebPackConfig, resolvedConfig),
+      webpack: withWebpackConfig(userWebPackConfig, resolvedConfig, WebpackPlugin),
       compiler: withCompilerConfig(userCompilerConfig, resolvedConfig),
     }
     if (turbopackEnabled && sourceMapEnabled) {
@@ -53,28 +62,29 @@ function resolveUserConfig(
   }
 }
 
-function withWebpackConfig(userWebpackConfig: NextConfig['webpack'], posthogConfig: ResolvedPluginConfig) {
+function withWebpackConfig(
+  userWebpackConfig: NextConfig['webpack'],
+  posthogConfig: ResolvedPluginConfig,
+  WebpackPlugin?: typeof import('@posthog/webpack-plugin').PosthogWebpackPlugin
+) {
   const defaultWebpackConfig = userWebpackConfig || ((config: any) => config)
   const sourceMapEnabled = posthogConfig.sourcemaps.enabled
-  const turbopackEnabled = isTurbopackEnabled()
   return (config: any, options: any) => {
     const webpackConfig = defaultWebpackConfig(config, options)
     const isServer = options.isServer
-    if (sourceMapEnabled) {
-      if (!turbopackEnabled) {
-        webpackConfig.plugins = webpackConfig.plugins || []
-        let currentConfig = posthogConfig
-        if (isServer) {
-          currentConfig = {
-            ...posthogConfig,
-            sourcemaps: {
-              ...posthogConfig.sourcemaps,
-              deleteAfterUpload: false,
-            },
-          }
+    if (sourceMapEnabled && WebpackPlugin) {
+      webpackConfig.plugins = webpackConfig.plugins || []
+      let currentConfig = posthogConfig
+      if (isServer) {
+        currentConfig = {
+          ...posthogConfig,
+          sourcemaps: {
+            ...posthogConfig.sourcemaps,
+            deleteAfterUpload: false,
+          },
         }
-        webpackConfig.plugins.push(new PosthogWebpackPlugin(currentConfig))
       }
+      webpackConfig.plugins.push(new WebpackPlugin(currentConfig))
     }
     return webpackConfig
   }

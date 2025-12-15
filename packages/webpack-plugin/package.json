@@ -43,6 +43,11 @@
             "require": "./dist/index.js",
             "import": "./dist/index.mjs",
             "types": "./dist/index.d.ts"
+        },
+        "./config": {
+            "require": "./dist/config.js",
+            "import": "./dist/config.mjs",
+            "types": "./dist/config.d.ts"
         }
     }
 }

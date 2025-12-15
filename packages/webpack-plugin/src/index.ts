@@ -1,6 +1,6 @@
 import { Logger, createLogger } from '@posthog/core'
 import { PluginConfig, resolveConfig, ResolvedPluginConfig } from './config'
-import { Compilation, Stats, SourceMapDevToolPlugin, Compiler } from 'webpack'
+import { Compilation, Stats, SourceMapDevToolPlugin } from 'webpack'
 import { spawnLocal } from '@posthog/core/process'
 import path from 'path'
 
