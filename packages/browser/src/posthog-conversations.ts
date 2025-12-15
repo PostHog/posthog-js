@@ -115,6 +115,9 @@ export class PostHogConversations {
         }
 
         const phExtensions = assignableWindow?.__PosthogExtensions__
+        if (!phExtensions) {
+            return
+        }
 
         // Wait for remote config to load
         if (isUndefined(this._isConversationsEnabled)) {
