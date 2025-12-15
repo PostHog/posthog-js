@@ -24,13 +24,13 @@
         "src"
     ],
     "peerDependencies": {
-        "webpack": "^4 || ^5"
+        "webpack": "^5"
     },
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
         "jest": "catalog:",
-        "webpack": "^4 || ^5"
+        "webpack": "^5"
     },
     "scripts": {
         "clean": "rimraf dist",

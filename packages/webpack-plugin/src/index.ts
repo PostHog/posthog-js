@@ -45,7 +45,7 @@ export class PosthogWebpackPlugin {
         if (compiler.hooks) {
             compiler.hooks.done.tapAsync('PosthogWebpackPlugin', onDone)
         } else {
-            console.log('PosthogWebpackPlugin is not compatible with webpack version < 4')
+            throw new Error('PosthogWebpackPlugin is not compatible with webpack version < 5')
         }
     }
 
