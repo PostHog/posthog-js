@@ -1,11 +1,62 @@
 import { PostHog } from './posthog-core'
 import { ConversationsRemoteConfig } from './posthog-conversations-types'
 import { RemoteConfig } from './types'
-import { assignableWindow, LazyLoadedConversationsInterface, ConversationsApiHelpers } from './utils/globals'
+import {
+    assignableWindow,
+    LazyLoadedConversationsInterface,
+    ConversationsApiHelpers,
+    window as _window,
+} from './utils/globals'
 import { createLogger } from './utils/logger'
 import { isNullish, isUndefined, isBoolean, isNull } from '@posthog/core'
 
 const logger = createLogger('[Conversations]')
+
+/**
+ * Extract hostname from a domain string (handles URLs and plain hostnames)
+ */
+function extractHostname(domain: string): string | null {
+    // Remove protocol if present
+    let hostname = domain.replace(/^https?:\/\//, '')
+    // Remove path, query, port if present
+    hostname = hostname.split('/')[0].split('?')[0].split(':')[0]
+    return hostname || null
+}
+
+/**
+ * Check if the current domain matches the allowed domains list.
+ * Returns true if:
+ * - domains is empty or not present (no restriction)
+ * - current hostname matches any allowed domain
+ */
+function isCurrentDomainAllowed(domains: string[] | undefined): boolean {
+    // No domain restriction - allow all
+    if (!domains || domains.length === 0) {
+        return true
+    }
+
+    const currentHostname = _window?.location?.hostname
+    if (!currentHostname) {
+        // Can't determine hostname (SSR, etc.) - allow by default
+        return true
+    }
+
+    return domains.some((domain) => {
+        const allowedHostname = extractHostname(domain)
+        if (!allowedHostname) {
+            return false
+        }
+
+        if (allowedHostname.startsWith('*.')) {
+            // Wildcard match: *.example.com matches foo.example.com and example.com
+            const pattern = allowedHostname.slice(2) // Remove "*."
+            return currentHostname.endsWith(`.${pattern}`) || currentHostname === pattern
+        }
+
+        // Exact match
+        return currentHostname === allowedHostname
+    })
+}
 
 export type ConversationsManager = LazyLoadedConversationsInterface
 
@@ -104,6 +155,12 @@ export class PostHogConversations {
         // Check if we have the required config
         if (!this._remoteConfig || !this._remoteConfig.token) {
             logger.error('Conversations enabled but missing token in remote config.')
+            return
+        }
+
+        // Check if current domain is allowed
+        if (!isCurrentDomainAllowed(this._remoteConfig.domains)) {
+            logger.info('Current domain not in allowed domains list.')
             return
         }
 

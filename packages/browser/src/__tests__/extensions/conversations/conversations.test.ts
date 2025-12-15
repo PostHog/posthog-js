@@ -462,4 +462,171 @@ describe('PostHogConversations', () => {
             expect(conversations.isEnabled()).toBe(false)
         })
     })
+
+    describe('domain filtering', () => {
+        const originalLocation = window.location
+
+        beforeEach(() => {
+            // Reset for each test
+            Object.defineProperty(window, 'location', {
+                value: { hostname: 'app.example.com' },
+                writable: true,
+            })
+        })
+
+        afterEach(() => {
+            Object.defineProperty(window, 'location', {
+                value: originalLocation,
+                writable: true,
+            })
+        })
+
+        it('should load when domains is empty (allow all)', () => {
+            const remoteConfig: Partial<RemoteConfig> = {
+                conversations: {
+                    enabled: true,
+                    token: 'test-token',
+                    domains: [],
+                } as ConversationsRemoteConfig,
+            }
+
+            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+
+            expect(assignableWindow.__PosthogExtensions__?.initConversations).toHaveBeenCalled()
+        })
+
+        it('should load when domains is not present (allow all)', () => {
+            const remoteConfig: Partial<RemoteConfig> = {
+                conversations: {
+                    enabled: true,
+                    token: 'test-token',
+                } as ConversationsRemoteConfig,
+            }
+
+            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+
+            expect(assignableWindow.__PosthogExtensions__?.initConversations).toHaveBeenCalled()
+        })
+
+        it('should load when current domain matches exactly', () => {
+            Object.defineProperty(window, 'location', {
+                value: { hostname: 'example.com' },
+                writable: true,
+            })
+
+            const remoteConfig: Partial<RemoteConfig> = {
+                conversations: {
+                    enabled: true,
+                    token: 'test-token',
+                    domains: ['https://example.com'],
+                } as ConversationsRemoteConfig,
+            }
+
+            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+
+            expect(assignableWindow.__PosthogExtensions__?.initConversations).toHaveBeenCalled()
+        })
+
+        it('should load when current domain matches wildcard pattern', () => {
+            Object.defineProperty(window, 'location', {
+                value: { hostname: 'app.example.com' },
+                writable: true,
+            })
+
+            const remoteConfig: Partial<RemoteConfig> = {
+                conversations: {
+                    enabled: true,
+                    token: 'test-token',
+                    domains: ['https://*.example.com'],
+                } as ConversationsRemoteConfig,
+            }
+
+            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+
+            expect(assignableWindow.__PosthogExtensions__?.initConversations).toHaveBeenCalled()
+        })
+
+        it('should load when wildcard matches root domain too', () => {
+            Object.defineProperty(window, 'location', {
+                value: { hostname: 'example.com' },
+                writable: true,
+            })
+
+            const remoteConfig: Partial<RemoteConfig> = {
+                conversations: {
+                    enabled: true,
+                    token: 'test-token',
+                    domains: ['https://*.example.com'],
+                } as ConversationsRemoteConfig,
+            }
+
+            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+
+            expect(assignableWindow.__PosthogExtensions__?.initConversations).toHaveBeenCalled()
+        })
+
+        it('should NOT load when current domain does not match any allowed domain', () => {
+            Object.defineProperty(window, 'location', {
+                value: { hostname: 'other-site.com' },
+                writable: true,
+            })
+
+            // Track if initConversations was called
+            const mockInit = jest.fn().mockReturnValue(mockManager)
+            assignableWindow.__PosthogExtensions__ = {
+                initConversations: mockInit,
+            }
+
+            const remoteConfig: Partial<RemoteConfig> = {
+                conversations: {
+                    enabled: true,
+                    token: 'test-token',
+                    domains: ['https://example.com', 'https://*.posthog.com'],
+                } as ConversationsRemoteConfig,
+            }
+
+            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+
+            expect(mockInit).not.toHaveBeenCalled()
+            expect(conversations.isLoaded()).toBe(false)
+        })
+
+        it('should match any domain in the list', () => {
+            Object.defineProperty(window, 'location', {
+                value: { hostname: 'app.posthog.com' },
+                writable: true,
+            })
+
+            const remoteConfig: Partial<RemoteConfig> = {
+                conversations: {
+                    enabled: true,
+                    token: 'test-token',
+                    domains: ['https://example.com', 'https://*.posthog.com'],
+                } as ConversationsRemoteConfig,
+            }
+
+            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+
+            expect(assignableWindow.__PosthogExtensions__?.initConversations).toHaveBeenCalled()
+        })
+
+        it('should ignore invalid domain URLs gracefully', () => {
+            Object.defineProperty(window, 'location', {
+                value: { hostname: 'example.com' },
+                writable: true,
+            })
+
+            const remoteConfig: Partial<RemoteConfig> = {
+                conversations: {
+                    enabled: true,
+                    token: 'test-token',
+                    domains: ['not-a-valid-url', 'https://example.com'],
+                } as ConversationsRemoteConfig,
+            }
+
+            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+
+            expect(assignableWindow.__PosthogExtensions__?.initConversations).toHaveBeenCalled()
+        })
+    })
 })

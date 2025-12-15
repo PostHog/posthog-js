@@ -67,6 +67,13 @@ export interface ConversationsRemoteConfig {
      * @default "Please provide your details so we can help you better."
      */
     identificationFormDescription?: string
+
+    /**
+     * List of allowed domains where the widget should be shown.
+     * Supports wildcards like "https://*.example.com"
+     * Empty array or not present means show on all domains.
+     */
+    domains?: string[]
 }
 
 /**
