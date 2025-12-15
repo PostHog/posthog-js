@@ -190,6 +190,7 @@ export interface LazyLoadedConversationsInterface {
     enable: () => void
     disable: () => void
     destroy: () => void
+    reset: () => void
 }
 
 interface PostHogExtensions {

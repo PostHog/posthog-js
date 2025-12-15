@@ -90,20 +90,12 @@ export class PostHogConversations {
     }
 
     reset(): void {
-        // Clear conversation data from persistence
-        // Keys are defined in the lazy-loaded extension (extensions/conversations/persistence.ts)
-        this._instance.persistence?.unregister('$conversations_widget_session_id')
-        this._instance.persistence?.unregister('$conversations_ticket_id')
-        this._instance.persistence?.unregister('$conversations_widget_state')
-        this._instance.persistence?.unregister('$conversations_user_traits')
+        // Delegate cleanup to the lazy-loaded manager (which knows about persistence keys)
+        // If not loaded, there's nothing to reset anyway
+        this._conversationsManager?.reset()
+        this._conversationsManager = null
 
-        // Destroy the manager if it exists
-        if (this._conversationsManager) {
-            this._conversationsManager.destroy()
-            this._conversationsManager = null
-        }
-
-        // Reset state
+        // Reset local state
         this._isConversationsEnabled = undefined
         this._remoteConfig = null
     }

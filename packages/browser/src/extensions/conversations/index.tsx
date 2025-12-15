@@ -548,6 +548,25 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /**
+     * Reset all conversation data and destroy the widget.
+     * Called on posthog.reset() to start fresh.
+     */
+    reset(): void {
+        // Clear all persisted conversation data
+        this._persistence.clearAll()
+
+        // Reset local state
+        this._currentTicketId = null
+        this._lastMessageTimestamp = null
+        this._unreadCount = 0
+
+        // Destroy the widget
+        this.destroy()
+
+        logger.info('Conversations reset')
+    }
+
+    /**
      * Render the widget to the DOM
      */
     private _renderWidget(initialState: ConversationsWidgetState, initialUserTraits: UserProvidedTraits | null): void {

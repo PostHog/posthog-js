@@ -21,6 +21,7 @@ describe('PostHogConversations', () => {
             enable: jest.fn(),
             disable: jest.fn(),
             destroy: jest.fn(),
+            reset: jest.fn(),
         } as ConversationsManager
 
         // Setup mock PostHog instance
@@ -238,19 +239,7 @@ describe('PostHogConversations', () => {
     })
 
     describe('reset', () => {
-        it('should clear conversation-related data from localStorage', () => {
-            localStorage.setItem('ph_conversations_ticket_id', 'test-ticket')
-            localStorage.setItem('ph_conversations_user_traits', '{"name":"Test"}')
-            localStorage.setItem('other_key', 'should-remain')
-
-            conversations.reset()
-
-            expect(localStorage.getItem('ph_conversations_ticket_id')).toBeNull()
-            expect(localStorage.getItem('ph_conversations_user_traits')).toBeNull()
-            expect(localStorage.getItem('other_key')).toBe('should-remain')
-        })
-
-        it('should destroy the manager if it exists', () => {
+        it('should delegate to the lazy-loaded manager reset method', () => {
             const remoteConfig: Partial<RemoteConfig> = {
                 conversations: {
                     enabled: true,
@@ -263,8 +252,16 @@ describe('PostHogConversations', () => {
 
             conversations.reset()
 
-            expect(mockManager.destroy).toHaveBeenCalled()
+            expect(mockManager.reset).toHaveBeenCalled()
             expect(conversations.isLoaded()).toBe(false)
+        })
+
+        it('should be a no-op if manager is not loaded', () => {
+            // Don't load the manager
+            expect(conversations.isLoaded()).toBe(false)
+
+            // Should not throw
+            expect(() => conversations.reset()).not.toThrow()
         })
 
         it('should reset state', () => {
