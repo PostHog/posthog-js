@@ -1,5 +1,12 @@
 # @posthog/webpack-plugin
 
+## 1.2.1
+
+### Patch Changes
+
+- [#2753](https://github.com/PostHog/posthog-js/pull/2753) [`c5f3f65`](https://github.com/PostHog/posthog-js/commit/c5f3f6509fefeb4ad74c11f188fc03c4f0199236) Thanks [@hpouillot](https://github.com/hpouillot)! - add webpack as peer dependency
+  (2025-12-15)
+
 ## 1.2.0
 
 ### Minor Changes
