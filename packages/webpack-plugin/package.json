@@ -23,11 +23,14 @@
         "dist",
         "src"
     ],
+    "peerDependencies": {
+        "webpack": "^4 || ^5"
+    },
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
         "jest": "catalog:",
-        "webpack": "^5.102.1"
+        "webpack": "^4 || ^5"
     },
     "scripts": {
         "clean": "rimraf dist",

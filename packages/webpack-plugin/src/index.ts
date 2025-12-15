@@ -1,6 +1,6 @@
 import { Logger, createLogger } from '@posthog/core'
 import { PluginConfig, resolveConfig, ResolvedPluginConfig } from './config'
-import { Compilation, Stats, SourceMapDevToolPlugin, Compiler } from 'webpack'
+import webpack from 'webpack'
 import { spawnLocal } from '@posthog/core/process'
 import path from 'path'
 
@@ -23,15 +23,15 @@ export class PosthogWebpackPlugin {
         )
     }
 
-    apply(compiler: any): void {
-        new SourceMapDevToolPlugin({
+    apply(compiler: webpack.Compiler): void {
+        new compiler.webpack.SourceMapDevToolPlugin({
             filename: '[file].map',
             noSources: false,
             moduleFilenameTemplate: '[resource-path]',
             append: this.resolvedConfig.sourcemaps.deleteAfterUpload ? false : undefined,
         }).apply(compiler)
 
-        const onDone = async (stats: Stats, callback: any): Promise<void> => {
+        const onDone = async (stats: webpack.Stats, callback: any): Promise<void> => {
             callback = callback || (() => {})
             try {
                 await this.processSourceMaps(stats.compilation, this.resolvedConfig)
@@ -45,11 +45,11 @@ export class PosthogWebpackPlugin {
         if (compiler.hooks) {
             compiler.hooks.done.tapAsync('PosthogWebpackPlugin', onDone)
         } else {
-            compiler.plugin('done', onDone)
+            console.log('PosthogWebpackPlugin is not compatible with webpack version < 4')
         }
     }
 
-    async processSourceMaps(compilation: Compilation, config: ResolvedPluginConfig): Promise<void> {
+    async processSourceMaps(compilation: webpack.Compilation, config: ResolvedPluginConfig): Promise<void> {
         const outputDirectory = compilation.outputOptions.path
 
         // chunks are output outside of the output directory for server chunks
