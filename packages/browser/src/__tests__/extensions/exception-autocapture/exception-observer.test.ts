@@ -183,7 +183,7 @@ describe('Exception Observer', () => {
             }
             const observer = new ExceptionObserver(posthog)
 
-            window!.console.error(new Error('console error test'))
+            window!.console.error('console error test')
 
             const captureCall = beforeSendMock.mock.calls.find(
                 (call: any) => call[0]?.properties?.$exception_list?.[0]?.value === 'console error test'
