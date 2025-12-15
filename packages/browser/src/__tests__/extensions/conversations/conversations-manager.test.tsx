@@ -1,5 +1,5 @@
 /* eslint-disable compat/compat */
-import { ConversationsManager } from '../../../extensions/conversations'
+import { ConversationsManager } from '../../../extensions/conversations/external'
 import {
     ConversationsRemoteConfig,
     ConversationsWidgetState,
@@ -13,7 +13,7 @@ import '@testing-library/jest-dom'
 import { act } from '@testing-library/preact'
 
 // Mock the persistence layer
-jest.mock('../../../extensions/conversations/persistence', () => {
+jest.mock('../../../extensions/conversations/external/persistence', () => {
     return {
         ConversationsPersistence: jest.fn().mockImplementation(() => ({
             getOrCreateWidgetSessionId: jest.fn().mockReturnValue('test-widget-session-id'),

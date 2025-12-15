@@ -1,7 +1,7 @@
-import { PostHog } from '../../posthog-core'
-import { UserProvidedTraits } from '../../posthog-conversations-types'
-import { createLogger } from '../../utils/logger'
-import { uuidv7 } from '../../uuidv7'
+import { PostHog } from '../../../posthog-core'
+import { UserProvidedTraits } from '../../../posthog-conversations-types'
+import { createLogger } from '../../../utils/logger'
+import { uuidv7 } from '../../../uuidv7'
 
 const logger = createLogger('[ConversationsPersistence]')
 

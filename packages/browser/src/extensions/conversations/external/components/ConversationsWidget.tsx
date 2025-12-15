@@ -5,8 +5,8 @@ import {
     Message,
     ConversationsWidgetState,
     UserProvidedTraits,
-} from '../../../posthog-conversations-types'
-import { createLogger } from '../../../utils/logger'
+} from '../../../../posthog-conversations-types'
+import { createLogger } from '../../../../utils/logger'
 import { getStyles } from './styles'
 import { OpenChatButton } from './OpenChatButton'
 import { SendMessageButton } from './SendMessageButton'

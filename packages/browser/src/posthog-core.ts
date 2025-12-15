@@ -26,7 +26,7 @@ import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import { PostHogProductTours } from './posthog-product-tours'
 import { PostHogSurveys } from './posthog-surveys'
-import { PostHogConversations } from './posthog-conversations'
+import { PostHogConversations } from './extensions/conversations/posthog-conversations'
 import {
     DisplaySurveyOptions,
     SurveyCallback,

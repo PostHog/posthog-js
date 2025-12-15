@@ -8,14 +8,14 @@ import {
     SendMessageResponse,
     GetMessagesResponse,
     MarkAsReadResponse,
-} from '../../posthog-conversations-types'
-import { PostHog } from '../../posthog-core'
-import { ConversationsManager as ConversationsManagerInterface } from '../../posthog-conversations'
+} from '../../../posthog-conversations-types'
+import { PostHog } from '../../../posthog-core'
+import { ConversationsManager as ConversationsManagerInterface } from '../posthog-conversations'
 import { ConversationsPersistence } from './persistence'
 import { ConversationsWidget } from './components/ConversationsWidget'
-import { createLogger } from '../../utils/logger'
-import { document, window } from '../../utils/globals'
-import { formDataToQuery } from '../../utils/request-utils'
+import { createLogger } from '../../../utils/logger'
+import { document, window } from '../../../utils/globals'
+import { formDataToQuery } from '../../../utils/request-utils'
 
 const logger = createLogger('[ConversationsManager]')
 

@@ -1,8 +1,8 @@
-import { PostHog } from './posthog-core'
-import { ConversationsRemoteConfig } from './posthog-conversations-types'
-import { RemoteConfig } from './types'
-import { assignableWindow, LazyLoadedConversationsInterface, window as _window } from './utils/globals'
-import { createLogger } from './utils/logger'
+import { PostHog } from '../../posthog-core'
+import { ConversationsRemoteConfig } from '../../posthog-conversations-types'
+import { RemoteConfig } from '../../types'
+import { assignableWindow, LazyLoadedConversationsInterface, window as _window } from '../../utils/globals'
+import { createLogger } from '../../utils/logger'
 import { isNullish, isUndefined, isBoolean, isNull } from '@posthog/core'
 
 const logger = createLogger('[Conversations]')
