@@ -15,7 +15,7 @@
         "@posthog/nextjs-config": "*",
         "@posthog/react": "*",
         "posthog-node": "*",
-        "next": "^13",
+        "next": "^14",
         "posthog-js": "*",
         "react": "^19.2.1",
         "react-dom": "^19.2.1"
