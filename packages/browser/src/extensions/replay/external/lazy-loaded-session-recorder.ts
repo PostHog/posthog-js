@@ -62,7 +62,6 @@ import { PostHog } from '../../../posthog-core'
 import {
     CaptureResult,
     NetworkRecordOptions,
-    NetworkRequest,
     Properties,
     SessionIdChangedCallback,
     SessionRecordingOptions,
@@ -502,16 +501,20 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _maskUrl(url: string): string | undefined {
         const userSessionRecordingOptions = this._instance.config.session_recording
 
+        // userSessionRecordingOptions.maskNetworkRequestFn is deprecated, fallback to it
+        if (userSessionRecordingOptions.maskCapturedNetworkRequestFn) {
+            const result = userSessionRecordingOptions.maskCapturedNetworkRequestFn({
+                name: url,
+            } as any)
+            // CapturedNetworkRequest uses 'name' for URL, but also check 'url' for compatibility
+            return result?.name ?? (result as any)?.url
+        }
+
         if (userSessionRecordingOptions.maskNetworkRequestFn) {
-            let networkRequest: NetworkRequest | null | undefined = {
+            const result = userSessionRecordingOptions.maskNetworkRequestFn({
                 url,
-            }
-
-            // TODO we should deprecate this and use the same function for this masking and the rrweb/network plugin
-            // TODO or deprecate this and provide a new clearer name so this would be `maskURLPerformanceFn` or similar
-            networkRequest = userSessionRecordingOptions.maskNetworkRequestFn(networkRequest)
-
-            return networkRequest?.url
+            })
+            return result?.url
         }
 
         return url

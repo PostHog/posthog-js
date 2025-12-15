@@ -170,6 +170,39 @@ describe('Exception Observer', () => {
         })
     })
 
+    describe('when console error capturing is enabled', () => {
+        it('captures an event when console.error is called', () => {
+            // setup.js makes console.error throw, so we need to replace it
+            const originalConsoleError = window!.console.error
+            window!.console.error = jest.fn()
+
+            posthog.config.capture_exceptions = {
+                capture_console_errors: true,
+                capture_unhandled_errors: false,
+                capture_unhandled_rejections: false,
+            }
+            const observer = new ExceptionObserver(posthog)
+
+            window!.console.error('console error test')
+
+            const captureCall = beforeSendMock.mock.calls.find(
+                (call: any) => call[0]?.properties?.$exception_list?.[0]?.value === 'console error test'
+            )
+            expect(captureCall).toBeDefined()
+            expect(captureCall[0]).toMatchObject({
+                event: '$exception',
+                properties: {
+                    $exception_list: [
+                        { type: 'Error', value: 'console error test', stacktrace: { frames: expect.any(Array) } },
+                    ],
+                },
+            })
+
+            observer['_stopCapturing']()
+            window!.console.error = originalConsoleError
+        })
+    })
+
     describe('when there are handlers already present', () => {
         const originalOnError = jest.fn()
         const originalOnUnhandledRejection = jest.fn()

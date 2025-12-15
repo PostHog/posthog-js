@@ -1,5 +1,12 @@
 # @posthog/webpack-plugin
 
+## 1.2.0
+
+### Minor Changes
+
+- [#2741](https://github.com/PostHog/posthog-js/pull/2741) [`5c14781`](https://github.com/PostHog/posthog-js/commit/5c14781dc0b791e3fbdc3d9507dc52ccf1eb9ca4) Thanks [@hpouillot](https://github.com/hpouillot)! - fix sourcemap upload with complex file path
+  use SourceMapDevToolPlugin to customize sourcemap generation (2025-12-13)
+
 ## 1.1.4
 
 ### Patch Changes
