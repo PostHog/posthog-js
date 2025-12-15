@@ -1,1 +1,2 @@
 pnpmfile: ../.pnpmfile.cjs
+nodeLinker: hoisted
