@@ -115,10 +115,6 @@ export class PostHogConversations {
         }
 
         const phExtensions = assignableWindow?.__PosthogExtensions__
-        if (!phExtensions) {
-            logger.error('PostHog Extensions not found.')
-            return
-        }
 
         // Wait for remote config to load
         if (isUndefined(this._isConversationsEnabled)) {
