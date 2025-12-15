@@ -124,6 +124,11 @@ describe('ConversationsManager', () => {
             }),
             capture: jest.fn(),
             on: jest.fn().mockReturnValue(jest.fn()), // Returns unsubscribe function
+            // Persistence methods - these are mocked because ConversationsPersistence is mocked above
+            getProperty: jest.fn(),
+            setProperty: jest.fn(),
+            removeProperty: jest.fn(),
+            isPersistenceAvailable: jest.fn().mockReturnValue(true),
         }
     })
 

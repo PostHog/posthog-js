@@ -1,24 +1,45 @@
 /* eslint-disable compat/compat */
 import { ConversationsPersistence } from '../../../extensions/conversations/persistence'
-import { PostHog } from '../../../posthog-core'
 import { UserProvidedTraits } from '../../../posthog-conversations-types'
-import { createMockPostHog } from '../../helpers/posthog-instance'
+import { ConversationsApiHelpers } from '../../../utils/globals'
+
+// Same constants as in the extension - defined locally for testing
+const CONVERSATIONS_WIDGET_SESSION_ID = '$conversations_widget_session_id'
+const CONVERSATIONS_TICKET_ID = '$conversations_ticket_id'
+const CONVERSATIONS_WIDGET_STATE = '$conversations_widget_state'
+const CONVERSATIONS_USER_TRAITS = '$conversations_user_traits'
 
 describe('ConversationsPersistence', () => {
     let persistence: ConversationsPersistence
-    let mockPostHog: PostHog
+    let mockApiHelpers: ConversationsApiHelpers
+    let mockStorage: Record<string, any>
 
     beforeEach(() => {
-        // Restore all mocks first to clean up any leftover mocks from previous tests
         jest.restoreAllMocks()
-        localStorage.clear()
         jest.clearAllMocks()
 
-        mockPostHog = createMockPostHog({
-            get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
-        })
+        // Create a mock storage object
+        mockStorage = {}
 
-        persistence = new ConversationsPersistence(mockPostHog)
+        // Create mock API helpers that simulate PostHog's persistence
+        mockApiHelpers = {
+            sendRequest: jest.fn(),
+            endpointFor: jest.fn(),
+            getDistinctId: jest.fn().mockReturnValue('test-distinct-id'),
+            getPersonProperties: jest.fn().mockReturnValue({}),
+            capture: jest.fn(),
+            on: jest.fn().mockReturnValue(() => {}),
+            getProperty: jest.fn((key: string) => mockStorage[key]),
+            setProperty: jest.fn((key: string, value: any) => {
+                mockStorage[key] = value
+            }),
+            removeProperty: jest.fn((key: string) => {
+                delete mockStorage[key]
+            }),
+            isPersistenceAvailable: jest.fn().mockReturnValue(true),
+        }
+
+        persistence = new ConversationsPersistence(mockApiHelpers)
     })
 
     afterEach(() => {
@@ -32,8 +53,8 @@ describe('ConversationsPersistence', () => {
             // Should be a valid UUID format
             expect(sessionId).toMatch(/^[0-9a-f-]{36}$/i)
 
-            // Should be stored in localStorage
-            expect(localStorage.getItem('ph_conversations_widget_session_id')).toBe(sessionId)
+            // Should be stored via setProperty
+            expect(mockApiHelpers.setProperty).toHaveBeenCalledWith(CONVERSATIONS_WIDGET_SESSION_ID, sessionId)
         })
 
         it('should return same widget_session_id on subsequent calls', () => {
@@ -43,41 +64,65 @@ describe('ConversationsPersistence', () => {
             expect(sessionId1).toBe(sessionId2)
         })
 
+        it('should return existing widget_session_id from persistence', () => {
+            const existingSessionId = 'existing-session-id-12345'
+            mockStorage[CONVERSATIONS_WIDGET_SESSION_ID] = existingSessionId
+
+            const sessionId = persistence.getOrCreateWidgetSessionId()
+
+            expect(sessionId).toBe(existingSessionId)
+            // Should not create a new one
+            expect(mockApiHelpers.setProperty).not.toHaveBeenCalled()
+        })
+
         it('should return same widget_session_id even after distinct_id changes', () => {
             const sessionIdBefore = persistence.getOrCreateWidgetSessionId()
 
             // Simulate identify - distinct_id changes
-            ;(mockPostHog.get_distinct_id as jest.Mock).mockReturnValue('new-user@example.com')
+            ;(mockApiHelpers.getDistinctId as jest.Mock).mockReturnValue('new-user@example.com')
 
             const sessionIdAfter = persistence.getOrCreateWidgetSessionId()
             expect(sessionIdBefore).toBe(sessionIdAfter)
         })
 
         it('should clear widget_session_id', () => {
-            const sessionId = persistence.getOrCreateWidgetSessionId()
-            expect(localStorage.getItem('ph_conversations_widget_session_id')).toBe(sessionId)
-
+            persistence.getOrCreateWidgetSessionId()
             persistence.clearWidgetSessionId()
 
-            expect(localStorage.getItem('ph_conversations_widget_session_id')).toBeNull()
+            expect(mockApiHelpers.removeProperty).toHaveBeenCalledWith(CONVERSATIONS_WIDGET_SESSION_ID)
         })
 
         it('should generate new widget_session_id after clearing', () => {
             const sessionId1 = persistence.getOrCreateWidgetSessionId()
             persistence.clearWidgetSessionId()
+
+            // Clear the cache and storage
+            mockStorage = {}
+
+            // Create new persistence instance to clear internal cache
+            persistence = new ConversationsPersistence(mockApiHelpers)
             const sessionId2 = persistence.getOrCreateWidgetSessionId()
 
             expect(sessionId1).not.toBe(sessionId2)
         })
 
-        it('should handle localStorage errors gracefully', () => {
-            jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+        it('should handle persistence errors gracefully', () => {
+            ;(mockApiHelpers.getProperty as jest.Mock).mockImplementation(() => {
                 throw new Error('Storage error')
             })
 
             // Should still return a UUID (fallback)
             const sessionId = persistence.getOrCreateWidgetSessionId()
             expect(sessionId).toMatch(/^[0-9a-f-]{36}$/i)
+        })
+
+        it('should handle persistence unavailable', () => {
+            ;(mockApiHelpers.isPersistenceAvailable as jest.Mock).mockReturnValue(false)
+
+            // Should still return a UUID (fallback)
+            const sessionId = persistence.getOrCreateWidgetSessionId()
+            expect(sessionId).toMatch(/^[0-9a-f-]{36}$/i)
+            expect(mockApiHelpers.setProperty).not.toHaveBeenCalled()
         })
     })
 
@@ -86,8 +131,9 @@ describe('ConversationsPersistence', () => {
             const ticketId = 'ticket-123'
 
             persistence.saveTicketId(ticketId)
-            const loaded = persistence.loadTicketId()
+            expect(mockApiHelpers.setProperty).toHaveBeenCalledWith(CONVERSATIONS_TICKET_ID, ticketId)
 
+            const loaded = persistence.loadTicketId()
             expect(loaded).toBe(ticketId)
         })
 
@@ -97,19 +143,6 @@ describe('ConversationsPersistence', () => {
             expect(loaded).toBeNull()
         })
 
-        it('should use widget_session_id in storage key (not distinct_id)', () => {
-            const ticketId = 'ticket-123'
-
-            // Get the widget_session_id that will be used for the key
-            const widgetSessionId = persistence.getOrCreateWidgetSessionId()
-
-            persistence.saveTicketId(ticketId)
-
-            // Key should be based on widget_session_id, not distinct_id
-            const key = `ph_conversations_ticket_${widgetSessionId}`
-            expect(localStorage.getItem(key)).toBe(ticketId)
-        })
-
         it('should keep same ticket after distinct_id changes (identify)', () => {
             const ticketId = 'ticket-123'
 
@@ -117,9 +150,9 @@ describe('ConversationsPersistence', () => {
             persistence.saveTicketId(ticketId)
 
             // Simulate identify - distinct_id changes
-            ;(mockPostHog.get_distinct_id as jest.Mock).mockReturnValue('new-user@example.com')
+            ;(mockApiHelpers.getDistinctId as jest.Mock).mockReturnValue('new-user@example.com')
 
-            // Should still load the same ticket because widget_session_id is unchanged
+            // Should still load the same ticket
             expect(persistence.loadTicketId()).toBe(ticketId)
         })
 
@@ -130,34 +163,42 @@ describe('ConversationsPersistence', () => {
             expect(persistence.loadTicketId()).toBe(ticketId)
 
             persistence.clearTicketId()
-            expect(persistence.loadTicketId()).toBeNull()
+            expect(mockApiHelpers.removeProperty).toHaveBeenCalledWith(CONVERSATIONS_TICKET_ID)
         })
 
-        it('should handle localStorage errors gracefully', () => {
-            const ticketId = 'ticket-123'
-
-            // Mock localStorage.setItem to throw
-            jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        it('should handle persistence errors gracefully for save', () => {
+            ;(mockApiHelpers.setProperty as jest.Mock).mockImplementation(() => {
                 throw new Error('Storage full')
             })
 
-            expect(() => persistence.saveTicketId(ticketId)).not.toThrow()
+            expect(() => persistence.saveTicketId('ticket-123')).not.toThrow()
+        })
 
-            // Mock localStorage.getItem to throw
-            jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+        it('should handle persistence errors gracefully for load', () => {
+            ;(mockApiHelpers.getProperty as jest.Mock).mockImplementation(() => {
                 throw new Error('Storage error')
             })
 
             expect(persistence.loadTicketId()).toBeNull()
+        })
+
+        it('should handle persistence unavailable', () => {
+            ;(mockApiHelpers.isPersistenceAvailable as jest.Mock).mockReturnValue(false)
+
+            expect(() => persistence.saveTicketId('ticket-123')).not.toThrow()
+            expect(persistence.loadTicketId()).toBeNull()
+            expect(mockApiHelpers.setProperty).not.toHaveBeenCalled()
         })
     })
 
     describe('widget state persistence', () => {
         it('should save and load widget state', () => {
             persistence.saveWidgetState('open')
+            expect(mockApiHelpers.setProperty).toHaveBeenCalledWith(CONVERSATIONS_WIDGET_STATE, 'open')
             expect(persistence.loadWidgetState()).toBe('open')
 
             persistence.saveWidgetState('closed')
+            expect(mockApiHelpers.setProperty).toHaveBeenCalledWith(CONVERSATIONS_WIDGET_STATE, 'closed')
             expect(persistence.loadWidgetState()).toBe('closed')
         })
 
@@ -166,22 +207,28 @@ describe('ConversationsPersistence', () => {
         })
 
         it('should return null for invalid state values', () => {
-            localStorage.setItem('ph_conversations_widget_state', 'invalid')
+            mockStorage[CONVERSATIONS_WIDGET_STATE] = 'invalid'
 
             expect(persistence.loadWidgetState()).toBeNull()
         })
 
-        it('should handle localStorage errors gracefully', () => {
-            jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        it('should handle persistence errors gracefully', () => {
+            ;(mockApiHelpers.setProperty as jest.Mock).mockImplementation(() => {
                 throw new Error('Storage full')
             })
 
             expect(() => persistence.saveWidgetState('open')).not.toThrow()
-
-            jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+            ;(mockApiHelpers.getProperty as jest.Mock).mockImplementation(() => {
                 throw new Error('Storage error')
             })
 
+            expect(persistence.loadWidgetState()).toBeNull()
+        })
+
+        it('should handle persistence unavailable', () => {
+            ;(mockApiHelpers.isPersistenceAvailable as jest.Mock).mockReturnValue(false)
+
+            expect(() => persistence.saveWidgetState('open')).not.toThrow()
             expect(persistence.loadWidgetState()).toBeNull()
         })
     })
@@ -194,8 +241,9 @@ describe('ConversationsPersistence', () => {
             }
 
             persistence.saveUserTraits(traits)
-            const loaded = persistence.loadUserTraits()
+            expect(mockApiHelpers.setProperty).toHaveBeenCalledWith(CONVERSATIONS_USER_TRAITS, traits)
 
+            const loaded = persistence.loadUserTraits()
             expect(loaded).toEqual(traits)
         })
 
@@ -224,67 +272,54 @@ describe('ConversationsPersistence', () => {
             expect(persistence.loadUserTraits()).toEqual(traits)
 
             persistence.clearUserTraits()
-            expect(persistence.loadUserTraits()).toBeNull()
+            expect(mockApiHelpers.removeProperty).toHaveBeenCalledWith(CONVERSATIONS_USER_TRAITS)
         })
 
-        it('should handle JSON parse errors', () => {
-            localStorage.setItem('ph_conversations_user_traits', 'invalid json')
-
-            expect(persistence.loadUserTraits()).toBeNull()
-        })
-
-        it('should handle localStorage errors gracefully', () => {
+        it('should handle persistence errors gracefully', () => {
             const traits: UserProvidedTraits = {
                 name: 'Test User',
                 email: 'test@example.com',
             }
 
-            jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+            ;(mockApiHelpers.setProperty as jest.Mock).mockImplementation(() => {
                 throw new Error('Storage full')
             })
 
             expect(() => persistence.saveUserTraits(traits)).not.toThrow()
-
-            jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+            ;(mockApiHelpers.getProperty as jest.Mock).mockImplementation(() => {
                 throw new Error('Storage error')
             })
 
             expect(persistence.loadUserTraits()).toBeNull()
         })
+
+        it('should handle persistence unavailable', () => {
+            ;(mockApiHelpers.isPersistenceAvailable as jest.Mock).mockReturnValue(false)
+
+            expect(() => persistence.saveUserTraits({ name: 'Test' })).not.toThrow()
+            expect(persistence.loadUserTraits()).toBeNull()
+            expect(() => persistence.clearUserTraits()).not.toThrow()
+        })
     })
 
     describe('clearAll', () => {
-        it('should clear all conversation-related data including widget_session_id', () => {
+        it('should clear all conversation-related data', () => {
             // Set up data
-            persistence.getOrCreateWidgetSessionId() // Create widget_session_id
+            persistence.getOrCreateWidgetSessionId()
             persistence.saveTicketId('ticket-123')
             persistence.saveWidgetState('open')
             persistence.saveUserTraits({ name: 'Test User', email: 'test@example.com' })
 
-            // Add some other keys that shouldn't be cleared
-            localStorage.setItem('other_key', 'should-remain')
+            // Clear mock calls
+            jest.clearAllMocks()
 
             persistence.clearAll()
 
-            // widget_session_id should be cleared
-            expect(localStorage.getItem('ph_conversations_widget_session_id')).toBeNull()
-            expect(persistence.loadTicketId()).toBeNull()
-            expect(persistence.loadWidgetState()).toBeNull()
-            expect(persistence.loadUserTraits()).toBeNull()
-            expect(localStorage.getItem('other_key')).toBe('should-remain')
-        })
-
-        it('should clear orphaned ticket keys from previous sessions', () => {
-            // Create keys for multiple widget_session_ids (simulating different browser sessions)
-            localStorage.setItem('ph_conversations_ticket_session1', 'ticket-1')
-            localStorage.setItem('ph_conversations_ticket_session2', 'ticket-2')
-            localStorage.setItem('ph_conversations_ticket_session3', 'ticket-3')
-
-            persistence.clearAll()
-
-            expect(localStorage.getItem('ph_conversations_ticket_session1')).toBeNull()
-            expect(localStorage.getItem('ph_conversations_ticket_session2')).toBeNull()
-            expect(localStorage.getItem('ph_conversations_ticket_session3')).toBeNull()
+            // All properties should be removed
+            expect(mockApiHelpers.removeProperty).toHaveBeenCalledWith(CONVERSATIONS_WIDGET_STATE)
+            expect(mockApiHelpers.removeProperty).toHaveBeenCalledWith(CONVERSATIONS_USER_TRAITS)
+            expect(mockApiHelpers.removeProperty).toHaveBeenCalledWith(CONVERSATIONS_TICKET_ID)
+            expect(mockApiHelpers.removeProperty).toHaveBeenCalledWith(CONVERSATIONS_WIDGET_SESSION_ID)
         })
 
         it('should generate new widget_session_id after clearAll', () => {
@@ -292,57 +327,59 @@ describe('ConversationsPersistence', () => {
 
             persistence.clearAll()
 
+            // Clear storage and create new persistence instance
+            mockStorage = {}
+            persistence = new ConversationsPersistence(mockApiHelpers)
+
             const sessionIdAfter = persistence.getOrCreateWidgetSessionId()
             expect(sessionIdBefore).not.toBe(sessionIdAfter)
         })
 
-        it('should handle localStorage errors gracefully', () => {
-            jest.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+        it('should handle persistence errors gracefully', () => {
+            ;(mockApiHelpers.removeProperty as jest.Mock).mockImplementation(() => {
                 throw new Error('Storage error')
             })
 
             expect(() => persistence.clearAll()).not.toThrow()
         })
+
+        it('should handle persistence unavailable', () => {
+            ;(mockApiHelpers.isPersistenceAvailable as jest.Mock).mockReturnValue(false)
+
+            expect(() => persistence.clearAll()).not.toThrow()
+        })
     })
 
-    describe('localStorage unavailable', () => {
-        let originalLocalStorage: Storage
-
+    describe('persistence unavailable scenarios', () => {
         beforeEach(() => {
-            originalLocalStorage = global.localStorage
-            // Intentionally deleting localStorage for testing
-            delete (global as any).localStorage
+            ;(mockApiHelpers.isPersistenceAvailable as jest.Mock).mockReturnValue(false)
         })
 
-        afterEach(() => {
-            global.localStorage = originalLocalStorage
-        })
-
-        it('should handle missing localStorage for widget_session_id', () => {
+        it('should handle missing persistence for widget_session_id', () => {
             // Should still generate a UUID (fallback behavior)
             const sessionId = persistence.getOrCreateWidgetSessionId()
             expect(sessionId).toMatch(/^[0-9a-f-]{36}$/i)
             expect(() => persistence.clearWidgetSessionId()).not.toThrow()
         })
 
-        it('should handle missing localStorage for ticket ID', () => {
+        it('should handle missing persistence for ticket ID', () => {
             expect(() => persistence.saveTicketId('ticket-123')).not.toThrow()
             expect(persistence.loadTicketId()).toBeNull()
             expect(() => persistence.clearTicketId()).not.toThrow()
         })
 
-        it('should handle missing localStorage for widget state', () => {
+        it('should handle missing persistence for widget state', () => {
             expect(() => persistence.saveWidgetState('open')).not.toThrow()
             expect(persistence.loadWidgetState()).toBeNull()
         })
 
-        it('should handle missing localStorage for user traits', () => {
+        it('should handle missing persistence for user traits', () => {
             expect(() => persistence.saveUserTraits({ name: 'Test' })).not.toThrow()
             expect(persistence.loadUserTraits()).toBeNull()
             expect(() => persistence.clearUserTraits()).not.toThrow()
         })
 
-        it('should handle missing localStorage for clearAll', () => {
+        it('should handle missing persistence for clearAll', () => {
             expect(() => persistence.clearAll()).not.toThrow()
         })
     })

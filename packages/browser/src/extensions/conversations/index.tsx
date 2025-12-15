@@ -40,7 +40,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
     constructor(config: ConversationsRemoteConfig, apiHelpers: ConversationsApiHelpers) {
         this._config = config
         this._api = apiHelpers
-        this._persistence = new ConversationsPersistence()
+        this._persistence = new ConversationsPersistence(apiHelpers)
         // Get or create widget_session_id - this stays the same even when user identifies
         this._widgetSessionId = this._persistence.getOrCreateWidgetSessionId()
 

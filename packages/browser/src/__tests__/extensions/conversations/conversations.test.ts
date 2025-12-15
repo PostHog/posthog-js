@@ -360,6 +360,11 @@ describe('PostHogConversations', () => {
             expect(typeof capturedApiHelpers.getPersonProperties).toBe('function')
             expect(typeof capturedApiHelpers.capture).toBe('function')
             expect(typeof capturedApiHelpers.on).toBe('function')
+            // Persistence methods
+            expect(typeof capturedApiHelpers.getProperty).toBe('function')
+            expect(typeof capturedApiHelpers.setProperty).toBe('function')
+            expect(typeof capturedApiHelpers.removeProperty).toBe('function')
+            expect(typeof capturedApiHelpers.isPersistenceAvailable).toBe('function')
         })
 
         it('sendRequest should call PostHog._send_request', () => {

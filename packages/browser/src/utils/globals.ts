@@ -216,6 +216,16 @@ export interface ConversationsApiHelpers {
     capture: (eventName: string, properties?: Record<string, any>) => void
     /** Subscribe to events */
     on: (event: string, handler: (data: any) => void) => () => void
+
+    // Persistence methods - use PostHog's core persistence layer
+    /** Get a property from persistence */
+    getProperty: (key: string) => any
+    /** Set a property in persistence */
+    setProperty: (key: string, value: any) => void
+    /** Remove a property from persistence */
+    removeProperty: (key: string) => void
+    /** Check if persistence is available and enabled */
+    isPersistenceAvailable: () => boolean
 }
 
 interface PostHogExtensions {

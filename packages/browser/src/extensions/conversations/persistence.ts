@@ -1,16 +1,30 @@
 import { UserProvidedTraits } from '../../posthog-conversations-types'
 import { createLogger } from '../../utils/logger'
+import { ConversationsApiHelpers } from '../../utils/globals'
 import { uuidv7 } from '../../uuidv7'
 
 const logger = createLogger('[ConversationsPersistence]')
 
-const WIDGET_SESSION_ID_KEY = 'ph_conversations_widget_session_id'
-const STORAGE_KEY_PREFIX = 'ph_conversations_ticket_'
-const WIDGET_STATE_KEY = 'ph_conversations_widget_state'
-const USER_TRAITS_KEY = 'ph_conversations_user_traits'
+// Persistence keys - defined here in the lazy-loaded extension bundle
+// These keys are also listed in constants.ts PERSISTENCE_RESERVED_PROPERTIES
+// to prevent them from being included in event properties
+const CONVERSATIONS_WIDGET_SESSION_ID = '$conversations_widget_session_id'
+const CONVERSATIONS_TICKET_ID = '$conversations_ticket_id'
+const CONVERSATIONS_WIDGET_STATE = '$conversations_widget_state'
+const CONVERSATIONS_USER_TRAITS = '$conversations_user_traits'
 
+/**
+ * ConversationsPersistence manages conversation-related data using PostHog's
+ * core persistence layer. This ensures the data respects user's persistence
+ * preferences (localStorage, cookie, sessionStorage, memory) and consent settings.
+ */
 export class ConversationsPersistence {
     private _cachedWidgetSessionId: string | null = null
+    private _api: ConversationsApiHelpers
+
+    constructor(apiHelpers: ConversationsApiHelpers) {
+        this._api = apiHelpers
+    }
 
     /**
      * Get or create the widget session ID (random UUID for access control).
@@ -26,20 +40,20 @@ export class ConversationsPersistence {
             return this._cachedWidgetSessionId
         }
 
-        if (typeof localStorage === 'undefined') {
+        // Check if persistence is available
+        if (!this._api.isPersistenceAvailable()) {
             // Fallback: generate a new one each time (won't persist)
-            // This is acceptable for SSR or environments without localStorage
+            // This is acceptable for SSR or environments without persistence
             const sessionId = uuidv7()
-            logger.warn('localStorage not available, widget_session_id will not persist', { sessionId })
+            logger.warn('Persistence not available, widget_session_id will not persist', { sessionId })
             return sessionId
         }
 
         try {
-            let sessionId = localStorage.getItem(WIDGET_SESSION_ID_KEY)
+            let sessionId = this._api.getProperty(CONVERSATIONS_WIDGET_SESSION_ID)
             if (!sessionId) {
                 sessionId = uuidv7()
-                localStorage.setItem(WIDGET_SESSION_ID_KEY, sessionId)
-                logger.info('Generated new widget_session_id', { sessionId })
+                this._api.setProperty(CONVERSATIONS_WIDGET_SESSION_ID, sessionId)
             }
             this._cachedWidgetSessionId = sessionId
             return sessionId
@@ -57,12 +71,12 @@ export class ConversationsPersistence {
     clearWidgetSessionId(): void {
         this._cachedWidgetSessionId = null
 
-        if (typeof localStorage === 'undefined') {
+        if (!this._api.isPersistenceAvailable()) {
             return
         }
 
         try {
-            localStorage.removeItem(WIDGET_SESSION_ID_KEY)
+            this._api.removeProperty(CONVERSATIONS_WIDGET_SESSION_ID)
             logger.info('Cleared widget_session_id')
         } catch (error) {
             logger.error('Failed to clear widget_session_id', error)
@@ -70,49 +84,37 @@ export class ConversationsPersistence {
     }
 
     /**
-     * Get the localStorage key for the current widget_session_id.
-     * Ticket storage is now keyed by widget_session_id (not distinct_id)
-     * to ensure the same browser session always sees the same ticket.
-     */
-    private _getStorageKey(): string {
-        const sessionId = this.getOrCreateWidgetSessionId()
-        return `${STORAGE_KEY_PREFIX}${sessionId}`
-    }
-
-    /**
-     * Save the current ticket ID to localStorage
+     * Save the current ticket ID to persistence
      */
     saveTicketId(ticketId: string): void {
-        if (typeof localStorage === 'undefined') {
-            logger.warn('localStorage not available')
+        if (!this._api.isPersistenceAvailable()) {
+            logger.warn('Persistence not available')
             return
         }
 
-        const key = this._getStorageKey()
         try {
-            localStorage.setItem(key, ticketId)
-            logger.info('Saved ticket ID', { ticketId, key })
+            this._api.setProperty(CONVERSATIONS_TICKET_ID, ticketId)
+            logger.info('Saved ticket ID', { ticketId })
         } catch (error) {
             logger.error('Failed to save ticket ID', error)
         }
     }
 
     /**
-     * Load the current ticket ID from localStorage
+     * Load the current ticket ID from persistence
      */
     loadTicketId(): string | null {
-        if (typeof localStorage === 'undefined') {
-            logger.warn('localStorage not available')
+        if (!this._api.isPersistenceAvailable()) {
+            logger.warn('Persistence not available')
             return null
         }
 
-        const key = this._getStorageKey()
         try {
-            const ticketId = localStorage.getItem(key)
+            const ticketId = this._api.getProperty(CONVERSATIONS_TICKET_ID)
             if (ticketId) {
-                logger.info('Loaded ticket ID', { ticketId, key })
+                logger.info('Loaded ticket ID', { ticketId })
             }
-            return ticketId
+            return ticketId || null
         } catch (error) {
             logger.error('Failed to load ticket ID', error)
             return null
@@ -120,18 +122,17 @@ export class ConversationsPersistence {
     }
 
     /**
-     * Clear the current ticket ID from localStorage
+     * Clear the current ticket ID from persistence
      */
     clearTicketId(): void {
-        if (typeof localStorage === 'undefined') {
-            logger.warn('localStorage not available')
+        if (!this._api.isPersistenceAvailable()) {
+            logger.warn('Persistence not available')
             return
         }
 
-        const key = this._getStorageKey()
         try {
-            localStorage.removeItem(key)
-            logger.info('Cleared ticket ID', { key })
+            this._api.removeProperty(CONVERSATIONS_TICKET_ID)
+            logger.info('Cleared ticket ID')
         } catch (error) {
             logger.error('Failed to clear ticket ID', error)
         }
@@ -141,12 +142,12 @@ export class ConversationsPersistence {
      * Save widget state (open, closed)
      */
     saveWidgetState(state: 'open' | 'closed'): void {
-        if (typeof localStorage === 'undefined') {
+        if (!this._api.isPersistenceAvailable()) {
             return
         }
 
         try {
-            localStorage.setItem(WIDGET_STATE_KEY, state)
+            this._api.setProperty(CONVERSATIONS_WIDGET_STATE, state)
         } catch (error) {
             logger.error('Failed to save widget state', error)
         }
@@ -156,12 +157,12 @@ export class ConversationsPersistence {
      * Load widget state
      */
     loadWidgetState(): 'open' | 'closed' | null {
-        if (typeof localStorage === 'undefined') {
+        if (!this._api.isPersistenceAvailable()) {
             return null
         }
 
         try {
-            const state = localStorage.getItem(WIDGET_STATE_KEY)
+            const state = this._api.getProperty(CONVERSATIONS_WIDGET_STATE)
             if (state === 'open' || state === 'closed') {
                 return state
             }
@@ -173,16 +174,16 @@ export class ConversationsPersistence {
     }
 
     /**
-     * Save user-provided traits (name, email) to localStorage
+     * Save user-provided traits (name, email) to persistence
      */
     saveUserTraits(traits: UserProvidedTraits): void {
-        if (typeof localStorage === 'undefined') {
-            logger.warn('localStorage not available')
+        if (!this._api.isPersistenceAvailable()) {
+            logger.warn('Persistence not available')
             return
         }
 
         try {
-            localStorage.setItem(USER_TRAITS_KEY, JSON.stringify(traits))
+            this._api.setProperty(CONVERSATIONS_USER_TRAITS, traits)
             logger.info('Saved user traits', { hasName: !!traits.name, hasEmail: !!traits.email })
         } catch (error) {
             logger.error('Failed to save user traits', error)
@@ -190,17 +191,16 @@ export class ConversationsPersistence {
     }
 
     /**
-     * Load user-provided traits from localStorage
+     * Load user-provided traits from persistence
      */
     loadUserTraits(): UserProvidedTraits | null {
-        if (typeof localStorage === 'undefined') {
+        if (!this._api.isPersistenceAvailable()) {
             return null
         }
 
         try {
-            const data = localStorage.getItem(USER_TRAITS_KEY)
-            if (data) {
-                const traits = JSON.parse(data) as UserProvidedTraits
+            const traits = this._api.getProperty(CONVERSATIONS_USER_TRAITS) as UserProvidedTraits | undefined
+            if (traits) {
                 logger.info('Loaded user traits', { hasName: !!traits.name, hasEmail: !!traits.email })
                 return traits
             }
@@ -212,15 +212,15 @@ export class ConversationsPersistence {
     }
 
     /**
-     * Clear user-provided traits from localStorage
+     * Clear user-provided traits from persistence
      */
     clearUserTraits(): void {
-        if (typeof localStorage === 'undefined') {
+        if (!this._api.isPersistenceAvailable()) {
             return
         }
 
         try {
-            localStorage.removeItem(USER_TRAITS_KEY)
+            this._api.removeProperty(CONVERSATIONS_USER_TRAITS)
             logger.info('Cleared user traits')
         } catch (error) {
             logger.error('Failed to clear user traits', error)
@@ -228,38 +228,24 @@ export class ConversationsPersistence {
     }
 
     /**
-     * Clear all conversation-related data from localStorage.
+     * Clear all conversation-related data from persistence.
      * This is called on posthog.reset() to start fresh.
      */
     clearAll(): void {
-        if (typeof localStorage === 'undefined') {
+        if (!this._api.isPersistenceAvailable()) {
             return
         }
 
         try {
-            // Clear widget state
-            localStorage.removeItem(WIDGET_STATE_KEY)
-
-            // Clear user traits
-            localStorage.removeItem(USER_TRAITS_KEY)
-
-            // Clear ALL ticket keys (including current and orphaned from previous sessions)
-            // We do this before clearing widget_session_id to avoid recreating it
-            const keysToRemove: string[] = []
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i)
-                if (key?.startsWith(STORAGE_KEY_PREFIX)) {
-                    keysToRemove.push(key)
-                }
-            }
-
-            keysToRemove.forEach((key) => {
-                localStorage.removeItem(key)
-            })
+            // Clear all conversation properties
+            this._api.removeProperty(CONVERSATIONS_WIDGET_STATE)
+            this._api.removeProperty(CONVERSATIONS_USER_TRAITS)
+            this._api.removeProperty(CONVERSATIONS_TICKET_ID)
 
             // Clear widget session ID last (this will lose access to previous tickets)
-            // Must be done last because _getStorageKey() would recreate it if called after clear
             this.clearWidgetSessionId()
+
+            logger.info('Cleared all conversation data')
         } catch (error) {
             logger.error('Failed to clear conversation data', error)
         }

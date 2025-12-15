@@ -95,17 +95,12 @@ export class PostHogConversations {
     }
 
     reset(): void {
-        // Clear any conversation-related data from localStorage
-        if (typeof localStorage !== 'undefined') {
-            const conversationKeys = []
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i)
-                if (key?.startsWith('ph_conversations_')) {
-                    conversationKeys.push(key)
-                }
-            }
-            conversationKeys.forEach((key) => localStorage.removeItem(key))
-        }
+        // Clear conversation data from persistence
+        // Keys are defined in the lazy-loaded extension (extensions/conversations/persistence.ts)
+        this._instance.persistence?.unregister('$conversations_widget_session_id')
+        this._instance.persistence?.unregister('$conversations_ticket_id')
+        this._instance.persistence?.unregister('$conversations_widget_state')
+        this._instance.persistence?.unregister('$conversations_user_traits')
 
         // Destroy the manager if it exists
         if (this._conversationsManager) {
@@ -123,15 +118,12 @@ export class PostHogConversations {
             return
         }
         if (this._isInitializing) {
-            logger.info('Already initializing conversations, skipping...')
             return
         }
         if (this._instance.config.disable_conversations) {
-            logger.info('Conversations disabled. Not loading.')
             return
         }
         if (this._instance.config.cookieless_mode && this._instance.consent.isOptedOut()) {
-            logger.info('Not loading conversations in cookieless mode without consent.')
             return
         }
 
@@ -148,7 +140,6 @@ export class PostHogConversations {
 
         // Check if conversations are enabled
         if (!this._isConversationsEnabled) {
-            logger.info('Conversations not enabled for this team.')
             return
         }
 
@@ -160,7 +151,6 @@ export class PostHogConversations {
 
         // Check if current domain is allowed
         if (!isCurrentDomainAllowed(this._remoteConfig.domains)) {
-            logger.info('Current domain not in allowed domains list.')
             return
         }
 
@@ -228,6 +218,20 @@ export class PostHogConversations {
             },
             on: (event, handler) => {
                 return instance.on(event as any, handler)
+            },
+
+            // Persistence methods - use PostHog's core persistence layer
+            getProperty: (key) => {
+                return instance.persistence?.get_property(key)
+            },
+            setProperty: (key, value) => {
+                instance.persistence?.register({ [key]: value })
+            },
+            removeProperty: (key) => {
+                instance.persistence?.unregister(key)
+            },
+            isPersistenceAvailable: () => {
+                return !!instance.persistence && !instance.persistence.isDisabled?.()
             },
         }
     }
