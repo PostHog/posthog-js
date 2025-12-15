@@ -1,6 +1,6 @@
+import { PostHog } from '../../posthog-core'
 import { UserProvidedTraits } from '../../posthog-conversations-types'
 import { createLogger } from '../../utils/logger'
-import { ConversationsApiHelpers } from '../../utils/globals'
 import { uuidv7 } from '../../uuidv7'
 
 const logger = createLogger('[ConversationsPersistence]')
@@ -20,10 +20,12 @@ const CONVERSATIONS_USER_TRAITS = '$conversations_user_traits'
  */
 export class ConversationsPersistence {
     private _cachedWidgetSessionId: string | null = null
-    private _api: ConversationsApiHelpers
 
-    constructor(apiHelpers: ConversationsApiHelpers) {
-        this._api = apiHelpers
+    constructor(private readonly _posthog: PostHog) {}
+
+    /** Check if persistence is available and enabled */
+    private _isPersistenceAvailable(): boolean {
+        return !!this._posthog.persistence && !this._posthog.persistence.isDisabled?.()
     }
 
     /**
@@ -41,7 +43,7 @@ export class ConversationsPersistence {
         }
 
         // Check if persistence is available
-        if (!this._api.isPersistenceAvailable()) {
+        if (!this._isPersistenceAvailable()) {
             // Fallback: generate a new one each time (won't persist)
             // This is acceptable for SSR or environments without persistence
             const sessionId = uuidv7()
@@ -50,10 +52,10 @@ export class ConversationsPersistence {
         }
 
         try {
-            let sessionId = this._api.getProperty(CONVERSATIONS_WIDGET_SESSION_ID)
+            let sessionId = this._posthog.persistence?.get_property(CONVERSATIONS_WIDGET_SESSION_ID)
             if (!sessionId) {
                 sessionId = uuidv7()
-                this._api.setProperty(CONVERSATIONS_WIDGET_SESSION_ID, sessionId)
+                this._posthog.persistence?.register({ [CONVERSATIONS_WIDGET_SESSION_ID]: sessionId })
             }
             this._cachedWidgetSessionId = sessionId
             return sessionId
@@ -71,12 +73,12 @@ export class ConversationsPersistence {
     clearWidgetSessionId(): void {
         this._cachedWidgetSessionId = null
 
-        if (!this._api.isPersistenceAvailable()) {
+        if (!this._isPersistenceAvailable()) {
             return
         }
 
         try {
-            this._api.removeProperty(CONVERSATIONS_WIDGET_SESSION_ID)
+            this._posthog.persistence?.unregister(CONVERSATIONS_WIDGET_SESSION_ID)
             logger.info('Cleared widget_session_id')
         } catch (error) {
             logger.error('Failed to clear widget_session_id', error)
@@ -87,13 +89,13 @@ export class ConversationsPersistence {
      * Save the current ticket ID to persistence
      */
     saveTicketId(ticketId: string): void {
-        if (!this._api.isPersistenceAvailable()) {
+        if (!this._isPersistenceAvailable()) {
             logger.warn('Persistence not available')
             return
         }
 
         try {
-            this._api.setProperty(CONVERSATIONS_TICKET_ID, ticketId)
+            this._posthog.persistence?.register({ [CONVERSATIONS_TICKET_ID]: ticketId })
             logger.info('Saved ticket ID', { ticketId })
         } catch (error) {
             logger.error('Failed to save ticket ID', error)
@@ -104,13 +106,13 @@ export class ConversationsPersistence {
      * Load the current ticket ID from persistence
      */
     loadTicketId(): string | null {
-        if (!this._api.isPersistenceAvailable()) {
+        if (!this._isPersistenceAvailable()) {
             logger.warn('Persistence not available')
             return null
         }
 
         try {
-            const ticketId = this._api.getProperty(CONVERSATIONS_TICKET_ID)
+            const ticketId = this._posthog.persistence?.get_property(CONVERSATIONS_TICKET_ID)
             if (ticketId) {
                 logger.info('Loaded ticket ID', { ticketId })
             }
@@ -125,13 +127,13 @@ export class ConversationsPersistence {
      * Clear the current ticket ID from persistence
      */
     clearTicketId(): void {
-        if (!this._api.isPersistenceAvailable()) {
+        if (!this._isPersistenceAvailable()) {
             logger.warn('Persistence not available')
             return
         }
 
         try {
-            this._api.removeProperty(CONVERSATIONS_TICKET_ID)
+            this._posthog.persistence?.unregister(CONVERSATIONS_TICKET_ID)
             logger.info('Cleared ticket ID')
         } catch (error) {
             logger.error('Failed to clear ticket ID', error)
@@ -142,12 +144,12 @@ export class ConversationsPersistence {
      * Save widget state (open, closed)
      */
     saveWidgetState(state: 'open' | 'closed'): void {
-        if (!this._api.isPersistenceAvailable()) {
+        if (!this._isPersistenceAvailable()) {
             return
         }
 
         try {
-            this._api.setProperty(CONVERSATIONS_WIDGET_STATE, state)
+            this._posthog.persistence?.register({ [CONVERSATIONS_WIDGET_STATE]: state })
         } catch (error) {
             logger.error('Failed to save widget state', error)
         }
@@ -157,12 +159,12 @@ export class ConversationsPersistence {
      * Load widget state
      */
     loadWidgetState(): 'open' | 'closed' | null {
-        if (!this._api.isPersistenceAvailable()) {
+        if (!this._isPersistenceAvailable()) {
             return null
         }
 
         try {
-            const state = this._api.getProperty(CONVERSATIONS_WIDGET_STATE)
+            const state = this._posthog.persistence?.get_property(CONVERSATIONS_WIDGET_STATE)
             if (state === 'open' || state === 'closed') {
                 return state
             }
@@ -177,13 +179,13 @@ export class ConversationsPersistence {
      * Save user-provided traits (name, email) to persistence
      */
     saveUserTraits(traits: UserProvidedTraits): void {
-        if (!this._api.isPersistenceAvailable()) {
+        if (!this._isPersistenceAvailable()) {
             logger.warn('Persistence not available')
             return
         }
 
         try {
-            this._api.setProperty(CONVERSATIONS_USER_TRAITS, traits)
+            this._posthog.persistence?.register({ [CONVERSATIONS_USER_TRAITS]: traits })
             logger.info('Saved user traits', { hasName: !!traits.name, hasEmail: !!traits.email })
         } catch (error) {
             logger.error('Failed to save user traits', error)
@@ -194,12 +196,14 @@ export class ConversationsPersistence {
      * Load user-provided traits from persistence
      */
     loadUserTraits(): UserProvidedTraits | null {
-        if (!this._api.isPersistenceAvailable()) {
+        if (!this._isPersistenceAvailable()) {
             return null
         }
 
         try {
-            const traits = this._api.getProperty(CONVERSATIONS_USER_TRAITS) as UserProvidedTraits | undefined
+            const traits = this._posthog.persistence?.get_property(CONVERSATIONS_USER_TRAITS) as
+                | UserProvidedTraits
+                | undefined
             if (traits) {
                 logger.info('Loaded user traits', { hasName: !!traits.name, hasEmail: !!traits.email })
                 return traits
@@ -215,12 +219,12 @@ export class ConversationsPersistence {
      * Clear user-provided traits from persistence
      */
     clearUserTraits(): void {
-        if (!this._api.isPersistenceAvailable()) {
+        if (!this._isPersistenceAvailable()) {
             return
         }
 
         try {
-            this._api.removeProperty(CONVERSATIONS_USER_TRAITS)
+            this._posthog.persistence?.unregister(CONVERSATIONS_USER_TRAITS)
             logger.info('Cleared user traits')
         } catch (error) {
             logger.error('Failed to clear user traits', error)
@@ -232,15 +236,15 @@ export class ConversationsPersistence {
      * This is called on posthog.reset() to start fresh.
      */
     clearAll(): void {
-        if (!this._api.isPersistenceAvailable()) {
+        if (!this._isPersistenceAvailable()) {
             return
         }
 
         try {
             // Clear all conversation properties
-            this._api.removeProperty(CONVERSATIONS_WIDGET_STATE)
-            this._api.removeProperty(CONVERSATIONS_USER_TRAITS)
-            this._api.removeProperty(CONVERSATIONS_TICKET_ID)
+            this._posthog.persistence?.unregister(CONVERSATIONS_WIDGET_STATE)
+            this._posthog.persistence?.unregister(CONVERSATIONS_USER_TRAITS)
+            this._posthog.persistence?.unregister(CONVERSATIONS_TICKET_ID)
 
             // Clear widget session ID last (this will lose access to previous tickets)
             this.clearWidgetSessionId()

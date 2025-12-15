@@ -3,7 +3,7 @@ import { PostHogConversations, ConversationsManager } from '../../../posthog-con
 import { ConversationsRemoteConfig } from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'
 import { RemoteConfig } from '../../../types'
-import { assignableWindow, ConversationsApiHelpers } from '../../../utils/globals'
+import { assignableWindow } from '../../../utils/globals'
 import { createMockPostHog, createMockConfig, createMockPersistence } from '../../helpers/posthog-instance'
 
 describe('PostHogConversations', () => {
@@ -220,14 +220,7 @@ describe('PostHogConversations', () => {
 
             expect(assignableWindow.__PosthogExtensions__.initConversations).toHaveBeenCalledWith(
                 expect.objectContaining({ enabled: true, token: 'test-token' }),
-                expect.objectContaining({
-                    sendRequest: expect.any(Function),
-                    endpointFor: expect.any(Function),
-                    getDistinctId: expect.any(Function),
-                    getPersonProperties: expect.any(Function),
-                    capture: expect.any(Function),
-                    on: expect.any(Function),
-                })
+                mockPostHog
             )
         })
 
@@ -331,13 +324,13 @@ describe('PostHogConversations', () => {
         })
     })
 
-    describe('API helpers creation', () => {
-        let capturedApiHelpers: ConversationsApiHelpers
+    describe('PostHog instance passing', () => {
+        let capturedPosthog: PostHog
 
         beforeEach(() => {
             assignableWindow.__PosthogExtensions__ = {
-                initConversations: jest.fn((config, apiHelpers) => {
-                    capturedApiHelpers = apiHelpers
+                initConversations: jest.fn((config, posthog) => {
+                    capturedPosthog = posthog
                     return mockManager
                 }),
             }
@@ -352,71 +345,8 @@ describe('PostHogConversations', () => {
             conversations.onRemoteConfig(remoteConfig as RemoteConfig)
         })
 
-        it('should create apiHelpers with all required methods', () => {
-            expect(capturedApiHelpers).toBeDefined()
-            expect(typeof capturedApiHelpers.sendRequest).toBe('function')
-            expect(typeof capturedApiHelpers.endpointFor).toBe('function')
-            expect(typeof capturedApiHelpers.getDistinctId).toBe('function')
-            expect(typeof capturedApiHelpers.getPersonProperties).toBe('function')
-            expect(typeof capturedApiHelpers.capture).toBe('function')
-            expect(typeof capturedApiHelpers.on).toBe('function')
-            // Persistence methods
-            expect(typeof capturedApiHelpers.getProperty).toBe('function')
-            expect(typeof capturedApiHelpers.setProperty).toBe('function')
-            expect(typeof capturedApiHelpers.removeProperty).toBe('function')
-            expect(typeof capturedApiHelpers.isPersistenceAvailable).toBe('function')
-        })
-
-        it('sendRequest should call PostHog._send_request', () => {
-            capturedApiHelpers.sendRequest({
-                url: 'https://test.com/api',
-                method: 'POST',
-                data: { test: 'data' },
-                headers: { 'X-Test': 'header' },
-                callback: jest.fn(),
-            })
-
-            expect(mockPostHog._send_request).toHaveBeenCalledWith({
-                url: 'https://test.com/api',
-                method: 'POST',
-                data: { test: 'data' },
-                headers: { 'X-Test': 'header' },
-                callback: expect.any(Function),
-            })
-        })
-
-        it('endpointFor should call PostHog.requestRouter.endpointFor', () => {
-            capturedApiHelpers.endpointFor('api', '/test/path')
-
-            expect(mockPostHog.requestRouter.endpointFor).toHaveBeenCalledWith('api', '/test/path')
-        })
-
-        it('getDistinctId should call PostHog.get_distinct_id', () => {
-            capturedApiHelpers.getDistinctId()
-
-            expect(mockPostHog.get_distinct_id).toHaveBeenCalled()
-        })
-
-        it('getPersonProperties should return persistence props', () => {
-            const result = capturedApiHelpers.getPersonProperties()
-
-            expect(result).toEqual({
-                $name: 'Test User',
-                $email: 'test@example.com',
-            })
-        })
-
-        it('capture should call PostHog.capture', () => {
-            capturedApiHelpers.capture('test_event', { prop: 'value' })
-
-            expect(mockPostHog.capture).toHaveBeenCalledWith('test_event', { prop: 'value' })
-        })
-
-        it('on should call PostHog.on', () => {
-            const handler = jest.fn()
-            capturedApiHelpers.on('eventCaptured', handler)
-
-            expect(mockPostHog.on).toHaveBeenCalledWith('eventCaptured', handler)
+        it('should pass the PostHog instance directly to initConversations', () => {
+            expect(capturedPosthog).toBe(mockPostHog)
         })
     })
 

@@ -1,12 +1,7 @@
 import { PostHog } from './posthog-core'
 import { ConversationsRemoteConfig } from './posthog-conversations-types'
 import { RemoteConfig } from './types'
-import {
-    assignableWindow,
-    LazyLoadedConversationsInterface,
-    ConversationsApiHelpers,
-    window as _window,
-} from './utils/globals'
+import { assignableWindow, LazyLoadedConversationsInterface, window as _window } from './utils/globals'
 import { createLogger } from './utils/logger'
 import { isNullish, isUndefined, isBoolean, isNull } from '@posthog/core'
 
@@ -187,61 +182,9 @@ export class PostHogConversations {
         }
     }
 
-    /**
-     * Create API helpers that wrap PostHog internal methods.
-     * These bound functions ensure the methods work correctly even after minification.
-     */
-    private _createApiHelpers(): ConversationsApiHelpers {
-        const instance = this._instance
-
-        return {
-            sendRequest: (options) => {
-                instance._send_request({
-                    url: options.url,
-                    method: options.method,
-                    data: options.data,
-                    headers: options.headers,
-                    callback: options.callback,
-                })
-            },
-            endpointFor: (type, path) => {
-                return instance.requestRouter.endpointFor(type, path)
-            },
-            getDistinctId: () => {
-                return instance.get_distinct_id()
-            },
-            getPersonProperties: () => {
-                return instance.persistence?.props || {}
-            },
-            capture: (eventName, properties) => {
-                instance.capture(eventName, properties)
-            },
-            on: (event, handler) => {
-                return instance.on(event as any, handler)
-            },
-
-            // Persistence methods - use PostHog's core persistence layer
-            getProperty: (key) => {
-                return instance.persistence?.get_property(key)
-            },
-            setProperty: (key, value) => {
-                instance.persistence?.register({ [key]: value })
-            },
-            removeProperty: (key) => {
-                instance.persistence?.unregister(key)
-            },
-            isPersistenceAvailable: () => {
-                return !!instance.persistence && !instance.persistence.isDisabled?.()
-            },
-        }
-    }
-
     /** Helper to finalize conversations initialization */
     private _completeInitialization(
-        initConversationsFn: (
-            config: ConversationsRemoteConfig,
-            apiHelpers: ConversationsApiHelpers
-        ) => LazyLoadedConversationsInterface
+        initConversationsFn: (config: ConversationsRemoteConfig, posthog: PostHog) => LazyLoadedConversationsInterface
     ): void {
         if (!this._remoteConfig) {
             logger.error('Cannot complete initialization: remote config is null')
@@ -249,11 +192,8 @@ export class PostHogConversations {
         }
 
         try {
-            // Create API helpers that wrap PostHog internal methods
-            const apiHelpers = this._createApiHelpers()
-
-            // Pass config and API helpers to the extension
-            this._conversationsManager = initConversationsFn(this._remoteConfig, apiHelpers)
+            // Pass config and PostHog instance to the extension
+            this._conversationsManager = initConversationsFn(this._remoteConfig, this._instance)
             logger.info('Conversations loaded successfully')
         } catch (e) {
             this._handleLoadError('Error completing conversations initialization', e)

@@ -192,42 +192,6 @@ export interface LazyLoadedConversationsInterface {
     destroy: () => void
 }
 
-/**
- * API helpers passed from the main bundle to the lazy-loaded conversations extension.
- * These are bound wrapper functions that ensure internal PostHog methods work correctly
- * even after minification.
- */
-export interface ConversationsApiHelpers {
-    /** Send an HTTP request using PostHog's request infrastructure */
-    sendRequest: (options: {
-        url: string
-        method: 'GET' | 'POST'
-        data?: Record<string, any>
-        headers?: Record<string, string>
-        callback: (response: { statusCode: number; json?: any }) => void
-    }) => void
-    /** Build a full API URL from a path */
-    endpointFor: (type: 'api', path: string) => string
-    /** Get the current distinct ID */
-    getDistinctId: () => string
-    /** Get person properties from persistence */
-    getPersonProperties: () => Record<string, any>
-    /** Capture an event */
-    capture: (eventName: string, properties?: Record<string, any>) => void
-    /** Subscribe to events */
-    on: (event: string, handler: (data: any) => void) => () => void
-
-    // Persistence methods - use PostHog's core persistence layer
-    /** Get a property from persistence */
-    getProperty: (key: string) => any
-    /** Set a property in persistence */
-    setProperty: (key: string, value: any) => void
-    /** Remove a property from persistence */
-    removeProperty: (key: string) => void
-    /** Check if persistence is available and enabled */
-    isPersistenceAvailable: () => boolean
-}
-
 interface PostHogExtensions {
     loadExternalDependency?: (
         posthog: PostHog,
@@ -264,10 +228,7 @@ interface PostHogExtensions {
         [K in ExternalIntegrationKind]?: { start: (posthog: PostHog) => void; stop: () => void }
     }
     initSessionRecording?: (ph: PostHog) => LazyLoadedSessionRecordingInterface
-    initConversations?: (
-        config: ConversationsRemoteConfig,
-        apiHelpers: ConversationsApiHelpers
-    ) => LazyLoadedConversationsInterface
+    initConversations?: (config: ConversationsRemoteConfig, posthog: PostHog) => LazyLoadedConversationsInterface
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win

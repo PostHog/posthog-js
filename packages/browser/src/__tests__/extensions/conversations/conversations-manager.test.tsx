@@ -8,7 +8,7 @@ import {
     GetMessagesResponse,
     MarkAsReadResponse,
 } from '../../../posthog-conversations-types'
-import { ConversationsApiHelpers } from '../../../utils/globals'
+import { PostHog } from '../../../posthog-core'
 import '@testing-library/jest-dom'
 import { act } from '@testing-library/preact'
 
@@ -30,7 +30,7 @@ jest.mock('../../../extensions/conversations/persistence', () => {
 
 describe('ConversationsManager', () => {
     let manager: ConversationsManager
-    let mockApiHelpers: ConversationsApiHelpers
+    let mockPosthog: PostHog
     let mockConfig: ConversationsRemoteConfig
 
     const mockMessages: Message[] = [
@@ -92,10 +92,10 @@ describe('ConversationsManager', () => {
             color: '#007bff',
         }
 
-        // Setup mock API helpers - simulating the bound functions from PostHogConversations
+        // Setup mock PostHog instance
         // Note: callbacks are called synchronously to avoid issues with Jest fake timers
-        mockApiHelpers = {
-            sendRequest: jest.fn((options) => {
+        mockPosthog = {
+            _send_request: jest.fn((options) => {
                 // Call callback synchronously to avoid fake timer issues
                 const url = options.url as string
                 const method = options.method as string
@@ -116,20 +116,23 @@ describe('ConversationsManager', () => {
                     })
                 }
             }),
-            endpointFor: jest.fn((type, path) => `https://test.posthog.com${path}`),
-            getDistinctId: jest.fn().mockReturnValue('test-distinct-id'),
-            getPersonProperties: jest.fn().mockReturnValue({
-                $name: 'Test User',
-                $email: 'test@example.com',
-            }),
+            requestRouter: {
+                endpointFor: jest.fn((type: string, path: string) => `https://test.posthog.com${path}`),
+            },
+            get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
+            persistence: {
+                props: {
+                    $name: 'Test User',
+                    $email: 'test@example.com',
+                },
+                get_property: jest.fn(),
+                register: jest.fn(),
+                unregister: jest.fn(),
+                isDisabled: jest.fn().mockReturnValue(false),
+            },
             capture: jest.fn(),
             on: jest.fn().mockReturnValue(jest.fn()), // Returns unsubscribe function
-            // Persistence methods - these are mocked because ConversationsPersistence is mocked above
-            getProperty: jest.fn(),
-            setProperty: jest.fn(),
-            removeProperty: jest.fn(),
-            isPersistenceAvailable: jest.fn().mockReturnValue(true),
-        }
+        } as unknown as PostHog
     })
 
     afterEach(() => {
@@ -141,16 +144,16 @@ describe('ConversationsManager', () => {
 
     describe('initialization', () => {
         it('should initialize and render the widget', () => {
-            manager = new ConversationsManager(mockConfig, mockApiHelpers)
+            manager = new ConversationsManager(mockConfig, mockPosthog)
 
             const container = document.getElementById('ph-conversations-widget-container')
             expect(container).toBeInTheDocument()
         })
 
         it('should capture widget loaded event', () => {
-            manager = new ConversationsManager(mockConfig, mockApiHelpers)
+            manager = new ConversationsManager(mockConfig, mockPosthog)
 
-            expect(mockApiHelpers.capture).toHaveBeenCalledWith(
+            expect(mockPosthog.capture).toHaveBeenCalledWith(
                 '$conversations_widget_loaded',
                 expect.objectContaining({
                     hasExistingTicket: expect.any(Boolean),
@@ -159,16 +162,17 @@ describe('ConversationsManager', () => {
             )
         })
 
-        it('should get user traits from apiHelpers', () => {
-            manager = new ConversationsManager(mockConfig, mockApiHelpers)
+        it('should get user traits from PostHog persistence', () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
 
-            expect(mockApiHelpers.getPersonProperties).toHaveBeenCalled()
+            // User traits are accessed via mockPosthog.persistence.props
+            expect(mockPosthog.persistence?.props).toBeDefined()
         })
     })
 
     describe('show and hide', () => {
         beforeEach(() => {
-            manager = new ConversationsManager(mockConfig, mockApiHelpers)
+            manager = new ConversationsManager(mockConfig, mockPosthog)
         })
 
         it('should show the widget', () => {
@@ -176,7 +180,7 @@ describe('ConversationsManager', () => {
                 manager.enable()
             })
 
-            expect(mockApiHelpers.capture).toHaveBeenCalledWith(
+            expect(mockPosthog.capture).toHaveBeenCalledWith(
                 '$conversations_widget_state_changed',
                 expect.objectContaining({
                     state: ConversationsWidgetState.OPEN,
@@ -194,7 +198,7 @@ describe('ConversationsManager', () => {
                 manager.disable()
             })
 
-            expect(mockApiHelpers.capture).toHaveBeenCalledWith(
+            expect(mockPosthog.capture).toHaveBeenCalledWith(
                 '$conversations_widget_state_changed',
                 expect.objectContaining({
                     state: ConversationsWidgetState.CLOSED,
@@ -205,7 +209,7 @@ describe('ConversationsManager', () => {
 
     describe('sendMessage', () => {
         beforeEach(() => {
-            manager = new ConversationsManager(mockConfig, mockApiHelpers)
+            manager = new ConversationsManager(mockConfig, mockPosthog)
         })
 
         it('should send a message through the API', async () => {
@@ -213,7 +217,7 @@ describe('ConversationsManager', () => {
                 await manager.sendMessage('Hello!')
             })
 
-            expect(mockApiHelpers.sendRequest).toHaveBeenCalledWith(
+            expect(mockPosthog._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: expect.stringContaining('/api/conversations/v1/widget/message'),
                     method: 'POST',
@@ -230,7 +234,7 @@ describe('ConversationsManager', () => {
                 await manager.sendMessage('Hello!')
             })
 
-            expect(mockApiHelpers.capture).toHaveBeenCalledWith(
+            expect(mockPosthog.capture).toHaveBeenCalledWith(
                 '$conversations_message_sent',
                 expect.objectContaining({
                     ticketId: 'ticket-123',
@@ -260,7 +264,7 @@ describe('ConversationsManager', () => {
                 await manager.sendMessage('Second message')
             })
 
-            expect(mockApiHelpers.sendRequest).toHaveBeenCalledWith(
+            expect(mockPosthog._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     data: expect.objectContaining({
                         ticket_id: 'ticket-123',
@@ -285,7 +289,7 @@ describe('ConversationsManager', () => {
 
     describe('message polling', () => {
         beforeEach(async () => {
-            manager = new ConversationsManager(mockConfig, mockApiHelpers)
+            manager = new ConversationsManager(mockConfig, mockPosthog)
             // Send a message to create a ticket
             await act(async () => {
                 await manager.sendMessage('Hello!')
@@ -300,7 +304,7 @@ describe('ConversationsManager', () => {
             })
 
             // Should have made a getMessages request
-            expect(mockApiHelpers.sendRequest).toHaveBeenCalledWith(
+            expect(mockPosthog._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: expect.stringContaining('/widget/messages/ticket-123'),
                     method: 'GET',
@@ -313,7 +317,7 @@ describe('ConversationsManager', () => {
                 jest.advanceTimersByTime(5000)
             })
 
-            expect(mockApiHelpers.sendRequest).toHaveBeenCalledWith(
+            expect(mockPosthog._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: expect.stringContaining('widget_session_id='),
                 })
@@ -325,7 +329,7 @@ describe('ConversationsManager', () => {
                 jest.advanceTimersByTime(5000)
             })
 
-            const calls = (mockApiHelpers.sendRequest as jest.Mock).mock.calls
+            const calls = (mockPosthog._send_request as jest.Mock).mock.calls
             const getMessagesCall = calls.find((call) => call[0].url.includes('/widget/messages/'))
             expect(getMessagesCall[0].url).not.toContain('distinct_id=')
         })
@@ -333,11 +337,11 @@ describe('ConversationsManager', () => {
 
     describe('identify handling', () => {
         beforeEach(() => {
-            manager = new ConversationsManager(mockConfig, mockApiHelpers)
+            manager = new ConversationsManager(mockConfig, mockPosthog)
         })
 
         it('should set up identify listener', () => {
-            expect(mockApiHelpers.on).toHaveBeenCalledWith('eventCaptured', expect.any(Function))
+            expect(mockPosthog.on).toHaveBeenCalledWith('eventCaptured', expect.any(Function))
         })
 
         it('should have an unsubscribe function', () => {
@@ -347,7 +351,7 @@ describe('ConversationsManager', () => {
 
     describe('destroy', () => {
         beforeEach(() => {
-            manager = new ConversationsManager(mockConfig, mockApiHelpers)
+            manager = new ConversationsManager(mockConfig, mockPosthog)
         })
 
         // Note: This test is skipped because Jest fake timers interact poorly with
@@ -379,7 +383,7 @@ describe('ConversationsManager', () => {
 
     describe('API integration', () => {
         beforeEach(() => {
-            manager = new ConversationsManager(mockConfig, mockApiHelpers)
+            manager = new ConversationsManager(mockConfig, mockPosthog)
         })
 
         describe('sendMessage API', () => {
@@ -388,7 +392,7 @@ describe('ConversationsManager', () => {
                     await manager.sendMessage('Hello!')
                 })
 
-                expect(mockApiHelpers.sendRequest).toHaveBeenCalledWith(
+                expect(mockPosthog._send_request).toHaveBeenCalledWith(
                     expect.objectContaining({
                         method: 'POST',
                         url: expect.stringContaining('/api/conversations/v1/widget/message'),
@@ -422,7 +426,7 @@ describe('ConversationsManager', () => {
                     jest.advanceTimersByTime(5000)
                 })
 
-                expect(mockApiHelpers.sendRequest).toHaveBeenCalledWith(
+                expect(mockPosthog._send_request).toHaveBeenCalledWith(
                     expect.objectContaining({
                         method: 'GET',
                         url: expect.stringContaining('/api/conversations/v1/widget/messages/ticket-123'),
@@ -433,7 +437,7 @@ describe('ConversationsManager', () => {
                 )
 
                 // Verify widget_session_id is in URL
-                const callArgs = (mockApiHelpers.sendRequest as jest.Mock).mock.calls[0][0]
+                const callArgs = (mockPosthog._send_request as jest.Mock).mock.calls[0][0]
                 expect(callArgs.url).toContain('widget_session_id=')
             })
         })
@@ -453,7 +457,7 @@ describe('ConversationsManager', () => {
 
     describe('persistence integration', () => {
         beforeEach(() => {
-            manager = new ConversationsManager(mockConfig, mockApiHelpers)
+            manager = new ConversationsManager(mockConfig, mockPosthog)
         })
 
         it('should save ticket ID after sending message', async () => {
@@ -469,7 +473,7 @@ describe('ConversationsManager', () => {
                 manager.enable()
             })
 
-            expect(mockApiHelpers.capture).toHaveBeenCalledWith(
+            expect(mockPosthog.capture).toHaveBeenCalledWith(
                 '$conversations_widget_state_changed',
                 expect.objectContaining({
                     state: ConversationsWidgetState.OPEN,

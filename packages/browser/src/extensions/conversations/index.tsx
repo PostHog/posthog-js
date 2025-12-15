@@ -9,11 +9,12 @@ import {
     GetMessagesResponse,
     MarkAsReadResponse,
 } from '../../posthog-conversations-types'
+import { PostHog } from '../../posthog-core'
 import { ConversationsManager as ConversationsManagerInterface } from '../../posthog-conversations'
 import { ConversationsPersistence } from './persistence'
 import { ConversationsWidget } from './components/ConversationsWidget'
 import { createLogger } from '../../utils/logger'
-import { document, window, ConversationsApiHelpers } from '../../utils/globals'
+import { document, window } from '../../utils/globals'
 import { formDataToQuery } from '../../utils/request-utils'
 
 const logger = createLogger('[ConversationsManager]')
@@ -23,7 +24,6 @@ const POLL_INTERVAL_MS = 5000 // 5 seconds
 
 export class ConversationsManager implements ConversationsManagerInterface {
     private _config: ConversationsRemoteConfig
-    private _api: ConversationsApiHelpers
     private _persistence: ConversationsPersistence
     private _widgetRef: ConversationsWidget | null = null
     private _containerElement: HTMLDivElement | null = null
@@ -37,10 +37,12 @@ export class ConversationsManager implements ConversationsManagerInterface {
     // This is a random UUID that only this browser knows
     private _widgetSessionId: string
 
-    constructor(config: ConversationsRemoteConfig, apiHelpers: ConversationsApiHelpers) {
+    constructor(
+        config: ConversationsRemoteConfig,
+        private readonly _posthog: PostHog
+    ) {
         this._config = config
-        this._api = apiHelpers
-        this._persistence = new ConversationsPersistence(apiHelpers)
+        this._persistence = new ConversationsPersistence(_posthog)
         // Get or create widget_session_id - this stays the same even when user identifies
         this._widgetSessionId = this._persistence.getOrCreateWidgetSessionId()
 
@@ -62,8 +64,8 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         // eslint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
-            const distinctId = this._api.getDistinctId()
-            const personProperties = this._api.getPersonProperties()
+            const distinctId = this._posthog.get_distinct_id()
+            const personProperties = this._posthog.persistence?.props || {}
 
             // Priority for traits:
             // 1. User-provided traits from the widget form
@@ -83,8 +85,8 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 ticket_id: ticketId || null,
             }
 
-            this._api.sendRequest({
-                url: this._api.endpointFor('api', '/api/conversations/v1/widget/message'),
+            this._posthog._send_request({
+                url: this._posthog.requestRouter.endpointFor('api', '/api/conversations/v1/widget/message'),
                 method: 'POST',
                 data: payload,
                 headers: {
@@ -132,8 +134,8 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 queryParams.after = after
             }
 
-            this._api.sendRequest({
-                url: this._api.endpointFor(
+            this._posthog._send_request({
+                url: this._posthog.requestRouter.endpointFor(
                     'api',
                     `/api/conversations/v1/widget/messages/${ticketId}?${formDataToQuery(queryParams)}`
                 ),
@@ -174,8 +176,11 @@ export class ConversationsManager implements ConversationsManagerInterface {
         return new Promise((resolve, reject) => {
             logger.info('Marking messages as read', { ticketId })
 
-            this._api.sendRequest({
-                url: this._api.endpointFor('api', `/api/conversations/v1/widget/messages/${ticketId}/read`),
+            this._posthog._send_request({
+                url: this._posthog.requestRouter.endpointFor(
+                    'api',
+                    `/api/conversations/v1/widget/messages/${ticketId}/read`
+                ),
                 method: 'POST',
                 data: {
                     widget_session_id: this._widgetSessionId,
@@ -235,7 +240,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._renderWidget(initialState, initialUserTraits)
 
         // Track widget initialization
-        this._api.capture('$conversations_widget_loaded', {
+        this._posthog.capture('$conversations_widget_loaded', {
             hasExistingTicket: !!this._currentTicketId,
             initialState: initialState,
             hasUserTraits: !!initialUserTraits,
@@ -258,7 +263,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
      */
     private _getInitialUserTraits(): UserProvidedTraits | null {
         // First, check PostHog's person properties
-        const personProperties = this._api.getPersonProperties()
+        const personProperties = this._posthog.persistence?.props || {}
         const posthogName = personProperties.$name || personProperties.name
         const posthogEmail = personProperties.$email || personProperties.email
 
@@ -287,7 +292,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._persistence.saveUserTraits(traits)
 
         // Track identification
-        this._api.capture('$conversations_user_identified', {
+        this._posthog.capture('$conversations_user_identified', {
             hasName: !!traits.name,
             hasEmail: !!traits.email,
         })
@@ -314,7 +319,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             }
 
             // Track message sent
-            this._api.capture('$conversations_message_sent', {
+            this._posthog.capture('$conversations_message_sent', {
                 ticketId: response.ticket_id,
                 isNewTicket: isNewTicket,
                 messageLength: message.length,
@@ -338,7 +343,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         logger.info('Widget state changed', { state })
 
         // Track state changes
-        this._api.capture('$conversations_widget_state_changed', {
+        this._posthog.capture('$conversations_widget_state_changed', {
             state: state,
             ticketId: this._currentTicketId,
         })
@@ -464,7 +469,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
      */
     private _setupIdentifyListener(): void {
         // Listen for captured events and detect $identify events
-        this._unsubscribeIdentifyListener = this._api.on('eventCaptured', (event: any) => {
+        this._unsubscribeIdentifyListener = this._posthog.on('eventCaptured', (event: any) => {
             if (event.event === '$identify') {
                 const newDistinctId = event.properties?.distinct_id
                 const oldDistinctId = event.properties?.$anon_distinct_id
@@ -494,7 +499,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         })
 
         // Track the identity change
-        this._api.capture('$conversations_identity_changed', {
+        this._posthog.capture('$conversations_identity_changed', {
             hadExistingTicket: !!this._currentTicketId,
         })
     }
@@ -586,10 +591,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
  * Initialize the conversations widget
  * This is the entry point called from the lazy-loaded bundle
  */
-export function initConversations(
-    config: ConversationsRemoteConfig,
-    apiHelpers: ConversationsApiHelpers
-): ConversationsManager {
-    logger.info('initConversations called', { hasConfig: !!config, hasApiHelpers: !!apiHelpers })
-    return new ConversationsManager(config, apiHelpers)
+export function initConversations(config: ConversationsRemoteConfig, posthog: PostHog): ConversationsManager {
+    logger.info('initConversations called', { hasConfig: !!config, hasPosthog: !!posthog })
+    return new ConversationsManager(config, posthog)
 }
