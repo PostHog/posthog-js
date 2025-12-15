@@ -56,10 +56,18 @@ jobs:
         outputs:
             committed: ${{ steps.commit-version-bump.outputs.committed }}
         steps:
+            - name: Get GitHub App token
+              id: deployer
+              uses: getsentry/action-github-app-token@97c9e23528286821f97fba885c1b1123284b29cc # v2
+              with:
+                  app_id: ${{ secrets.GH_APP_POSTHOG_DEPLOYER_APP_ID }}
+                  private_key: ${{ secrets.GH_APP_POSTHOG_DEPLOYER_PRIVATE_KEY }}
+
             - name: Checkout repository
               uses: actions/checkout@v4
               with:
                   fetch-depth: 0
+                  token: ${{ steps.deployer.outputs.token }}
 
             - name: Setup environment
               uses: ./.github/actions/setup
@@ -73,7 +81,7 @@ jobs:
               run: |
                   pnpm bump && pnpm generate-references
               env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GITHUB_TOKEN: ${{ steps.deployer.outputs.token }}
 
             - name: Update lockfile
               run: pnpm install
@@ -107,6 +115,8 @@ jobs:
                     git push origin main
                     echo "committed=true" >> "$GITHUB_OUTPUT"
                   fi
+              env:
+                  GITHUB_TOKEN: ${{ steps.deployer.outputs.token }}
 
     publish:
         name: Publish packages
