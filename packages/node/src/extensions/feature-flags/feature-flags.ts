@@ -81,6 +81,8 @@ class FeatureFlagsPoller {
   eventSource?: EventSource
   sseConnected: boolean = false
   realtimeFlags: boolean = false
+  private sseReconnectAttempts: number = 0
+  private readonly MAX_SSE_RECONNECT_DELAY = 60000 // 60 seconds max
   private cacheProvider?: FlagDefinitionCacheProvider
   private loadingPromise?: Promise<void>
   private flagsEtag?: string
@@ -845,6 +847,10 @@ class FeatureFlagsPoller {
       return
     }
 
+    if (!this.personalApiKey) {
+      return
+    }
+
     const token = this.projectApiKey
     const url = `${this.host}/flags/definitions/stream?token=${encodeURIComponent(token)}`
 
@@ -860,6 +866,7 @@ class FeatureFlagsPoller {
 
       this.eventSource.onopen = () => {
         this.sseConnected = true
+        this.sseReconnectAttempts = 0 // Reset on successful connection
       }
 
       this.eventSource.onmessage = (event) => {
@@ -867,7 +874,9 @@ class FeatureFlagsPoller {
           const flagData = JSON.parse(event.data)
           if (flagData && typeof flagData === 'object') {
             // Update flags from SSE message
-            this._processFlagUpdate(flagData)
+            this._processFlagUpdate(flagData).catch((error) => {
+              this.onError?.(new Error(`Error processing SSE message: ${error}`))
+            })
           }
         } catch (error) {
           this.onError?.(new Error(`Error parsing SSE message: ${error}`))
@@ -878,12 +887,17 @@ class FeatureFlagsPoller {
         this.onError?.(new Error(`SSE connection error: ${error}`))
         this._closeSSEConnection()
 
-        // Attempt to reconnect after a delay
-        setTimeout(() => {
-          if (this.realtimeFlags && !this.sseConnected) {
-            this._setupSSEConnection()
-          }
-        }, 5000)
+        // Attempt to reconnect with exponential backoff if realtime flags are still enabled
+        if (this.realtimeFlags) {
+          const delay = Math.min(5000 * Math.pow(2, this.sseReconnectAttempts), this.MAX_SSE_RECONNECT_DELAY)
+          this.sseReconnectAttempts++
+
+          setTimeout(() => {
+            if (this.realtimeFlags && !this.sseConnected) {
+              this._setupSSEConnection()
+            }
+          }, delay)
+        }
       }
     } catch (error) {
       this.onError?.(new Error(`Failed to establish SSE connection: ${error}`))
@@ -898,7 +912,21 @@ class FeatureFlagsPoller {
     this.sseConnected = false
   }
 
-  private _processFlagUpdate(flagData: { [key: string]: any }): void {
+  private async _processFlagUpdate(flagData: { [key: string]: any }): Promise<void> {
+    // Validate flag data structure
+    if (!flagData || typeof flagData !== 'object' || !flagData.key) {
+      this.onError?.(new Error(`Invalid SSE flag update: missing required 'key' field`))
+      return
+    }
+
+    // Update group type mapping and cohorts if provided in SSE message
+    if (flagData.group_type_mapping) {
+      this.groupTypeMapping = flagData.group_type_mapping
+    }
+    if (flagData.cohorts) {
+      this.cohorts = flagData.cohorts
+    }
+
     const flag = flagData as PostHogFeatureFlag
 
     if (flag.deleted) {
@@ -915,6 +943,21 @@ class FeatureFlagsPoller {
         this.featureFlags[existingIndex] = flag
       } else {
         this.featureFlags.push(flag)
+      }
+    }
+
+    // Update cache provider if configured
+    if (this.cacheProvider) {
+      try {
+        const cacheData: FlagDefinitionCacheData = {
+          flags: this.featureFlags,
+          groupTypeMapping: this.groupTypeMapping,
+          cohorts: this.cohorts,
+        }
+        await this.cacheProvider.onFlagDefinitionsReceived(cacheData)
+      } catch (err) {
+        this.onError?.(new Error(`Failed to update cache after SSE update: ${err}`))
+        // Continue anyway, the data at least made it to memory
       }
     }
   }
