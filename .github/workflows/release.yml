@@ -8,6 +8,7 @@ permissions:
 on:
     pull_request:
         types: [closed]
+        branches: [main]
     workflow_dispatch:
 
 # Concurrency control: only one release process can run at a time
@@ -23,9 +24,9 @@ jobs:
         # Run when PR with 'release' label is merged to main, or when manually triggered
         if: |
             github.event_name == 'workflow_dispatch' ||
-            (github.event.pull_request.merged == true
-             && contains(github.event.pull_request.labels.*.name, 'release')
-             && github.event.pull_request.base.ref == 'main')
+            (github.event_name == 'pull_request'
+             && github.event.pull_request.merged == true
+             && contains(github.event.pull_request.labels.*.name, 'release'))
         outputs:
             has-changesets: ${{ steps.check.outputs.has-changesets }}
         steps:
