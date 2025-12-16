@@ -26,6 +26,7 @@ import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import { PostHogProductTours } from './posthog-product-tours'
 import { PostHogSurveys } from './posthog-surveys'
+import { PostHogConversations } from './extensions/conversations/posthog-conversations'
 import {
     DisplaySurveyOptions,
     SurveyCallback,
@@ -182,6 +183,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_web_experiments: true, // disabled in beta.
     disable_surveys: false,
     disable_surveys_automatic_display: false,
+    disable_conversations: false,
     disable_product_tours: true,
     disable_external_dependency_loading: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
@@ -314,6 +316,7 @@ export class PostHog {
     pageViewManager: PageViewManager
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
+    conversations: PostHogConversations
     productTours: PostHogProductTours
     experiments: WebExperiments
     toolbar: Toolbar
@@ -390,6 +393,7 @@ export class PostHog {
         this.scrollManager = new ScrollManager(this)
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
+        this.conversations = new PostHogConversations(this)
         this.productTours = new PostHogProductTours(this)
         this.experiments = new WebExperiments(this)
         this.exceptions = new PostHogExceptions(this)
@@ -707,6 +711,10 @@ export class PostHog {
         })
 
         initTasks.push(() => {
+            this.conversations.loadIfEnabled()
+        })
+
+        initTasks.push(() => {
             this.productTours.loadIfEnabled()
         })
 
@@ -824,6 +832,7 @@ export class PostHog {
         this.autocapture?.onRemoteConfig(config)
         this.heatmaps?.onRemoteConfig(config)
         this.surveys.onRemoteConfig(config)
+        this.conversations.onRemoteConfig(config)
         this.productTours.onRemoteConfig(config)
         this.webVitalsAutocapture?.onRemoteConfig(config)
         this.exceptionObserver?.onRemoteConfig(config)
@@ -909,6 +918,7 @@ export class PostHog {
         })
         options.headers = {
             ...this.config.request_headers,
+            ...options.headers,
         }
         options.compression = options.compression === 'best-available' ? this.compression : options.compression
         options.disableXHRCredentials = this.config.__preview_disable_xhr_credentials
