@@ -1,4 +1,6 @@
 name: 'Notify Slack - Release Approval Needed'
+permissions:
+    contents: read
 
 on:
     workflow_dispatch:
