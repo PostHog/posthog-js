@@ -27,3 +27,4 @@ jobs:
                   allowlist: |
                       actions/
                       PostHog/
+                      github/codeql-action/
