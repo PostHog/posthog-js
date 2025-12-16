@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.307.1
+
+### Patch Changes
+
+- [#2708](https://github.com/PostHog/posthog-js/pull/2708) [`3b7f30c`](https://github.com/PostHog/posthog-js/commit/3b7f30cfb5ea1ae743ca0e3471b33f7ba5ff1d0b) Thanks [@andehen](https://github.com/andehen)! - Include $device_id when fetching feature flags
+  (2025-12-16)
+
 ## 1.307.0
 
 ### Minor Changes
