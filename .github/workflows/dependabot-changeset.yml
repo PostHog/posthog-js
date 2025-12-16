@@ -5,13 +5,14 @@ jobs:
     runs-on: ubuntu-latest
     if: github.actor == 'dependabot[bot]'
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Generate changeset
         uses: the-guild-org/changesets-dependencies-action@f11b16181c79e07d62b112c2f32c9db534a9df09 # pin v1.2.2
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # we must use a PAT, otherwise the PR's tests won't run after this commit
+          GITHUB_TOKEN: ${{ secrets.POSTHOG_BOT_PAT }}
