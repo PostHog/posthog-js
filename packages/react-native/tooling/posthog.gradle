@@ -178,7 +178,16 @@ def resolvePostHogCliPackagePath(reactRoot) {
         } catch (Throwable ignored2) {} // if the resolve fails we fallback to the default path
     }
 
-    def cliPackage = resolvedCliPath != null && resolvedCliPath.exists() ? resolvedCliPath.getAbsolutePath() : "$reactRoot/node_modules/@posthog/cli"
+    def cliPackage = null
+
+    if (resolvedCliPath != null && resolvedCliPath.exists()) {
+        cliPackage = resolvedCliPath.getAbsolutePath()
+    } else if (new File("$reactRoot/node_modules/@posthog/cli").exists()) {
+        cliPackage = "$reactRoot/node_modules/@posthog/cli"
+    } else {
+        cliPackage = "posthog-cli"
+    }
+
     return cliPackage
 }
 
