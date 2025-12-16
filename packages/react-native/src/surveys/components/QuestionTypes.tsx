@@ -9,7 +9,12 @@ import {
   VeryDissatisfiedEmoji,
   VerySatisfiedEmoji,
 } from '../icons'
-import { getContrastingTextColor, getDisplayOrderChoices, SurveyAppearanceTheme } from '../surveys-utils'
+import {
+  defaultRatingLabelOpacity,
+  getContrastingTextColor,
+  getDisplayOrderChoices,
+  SurveyAppearanceTheme,
+} from '../surveys-utils'
 import {
   SurveyQuestion,
   SurveyRatingDisplay,
@@ -154,10 +159,14 @@ export function RatingQuestion({
           )}
         </View>
         <View style={styles.ratingText}>
-          <Text style={{ color: getContrastingTextColor(appearance.backgroundColor), opacity: 0.7 }}>
+          <Text
+            style={{ color: getContrastingTextColor(appearance.backgroundColor), opacity: defaultRatingLabelOpacity }}
+          >
             {question.lowerBoundLabel}
           </Text>
-          <Text style={{ color: getContrastingTextColor(appearance.backgroundColor), opacity: 0.7 }}>
+          <Text
+            style={{ color: getContrastingTextColor(appearance.backgroundColor), opacity: defaultRatingLabelOpacity }}
+          >
             {question.upperBoundLabel}
           </Text>
         </View>

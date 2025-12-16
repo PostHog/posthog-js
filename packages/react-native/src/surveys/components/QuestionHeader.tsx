@@ -2,7 +2,12 @@ import React from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { SurveyQuestionDescriptionContentType } from '@posthog/core'
-import { getContrastingTextColor, shouldRenderDescription, SurveyAppearanceTheme } from '../surveys-utils'
+import {
+  defaultDescriptionOpacity,
+  getContrastingTextColor,
+  shouldRenderDescription,
+  SurveyAppearanceTheme,
+} from '../surveys-utils'
 
 export function QuestionHeader({
   question,
@@ -21,7 +26,9 @@ export function QuestionHeader({
     <View style={styles.container}>
       <Text style={[styles.question, { color: textColor }]}>{question}</Text>
       {shouldRenderDescription(description, descriptionContentType) && (
-        <Text style={[styles.description, { color: textColor, opacity: 0.8 }]}>{description}</Text>
+        <Text style={[styles.description, { color: textColor, opacity: defaultDescriptionOpacity }]}>
+          {description}
+        </Text>
       )}
     </View>
   )

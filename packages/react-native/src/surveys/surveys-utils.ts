@@ -37,6 +37,8 @@ export function shouldRenderDescription(
 }
 
 export const defaultBackgroundColor = '#eeeded' as const
+export const defaultDescriptionOpacity = 0.8
+export const defaultRatingLabelOpacity = 0.7
 
 export type SurveyAppearanceTheme = Omit<
   Required<SurveyAppearance>,
