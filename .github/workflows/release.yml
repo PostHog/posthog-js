@@ -42,7 +42,6 @@ jobs:
                     echo "❌ No changesets found. Cannot proceed with release."
                     echo "Please ensure your PR includes a changeset file."
                     echo "has-changesets=false" >> "$GITHUB_OUTPUT"
-                    exit 1
                   else
                     echo "✓ Found changesets to process"
                     echo "has-changesets=true" >> "$GITHUB_OUTPUT"
