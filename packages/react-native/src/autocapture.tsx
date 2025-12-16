@@ -11,15 +11,36 @@ interface Element {
   return?: Element
 }
 
+const isAnimatedValue = (value: any): boolean => {
+  // Check if it's a Reanimated shared value or animated style
+  // _isReanimatedSharedValue is the official internal marker for SharedValues
+  // Also check for _value property which is present in SharedValues
+  return (
+    value?._isReanimatedSharedValue === true ||
+    (typeof value === 'object' && value !== null && '_value' in value && typeof value.value !== 'undefined')
+  )
+}
+
 const flattenStyles = (styles: any): any => {
   const flattened: any = {}
+
+  // Skip if the entire style object is an animated value
+  if (isAnimatedValue(styles)) {
+    return {}
+  }
 
   if (Array.isArray(styles)) {
     for (const style of styles) {
       Object.assign(flattened, flattenStyles(style))
     }
-  } else {
-    Object.assign(flattened, styles)
+  } else if (styles && typeof styles === 'object') {
+    // Filter out individual animated properties within a regular style object
+    // This handles cases like { opacity: animatedValue, backgroundColor: 'red' }
+    for (const key in styles) {
+      if (!isAnimatedValue(styles[key])) {
+        flattened[key] = styles[key]
+      }
+    }
   }
 
   return flattened
@@ -81,7 +102,12 @@ export const autocaptureFromTouchEvent = (e: any, posthog: PostHog, options: Pos
         }
         const value = props[key]
         if (key === 'style') {
-          el.attr__style = stringifyStyle(value)
+          // Safely handle style prop, especially for animated styles
+          try {
+            el.attr__style = stringifyStyle(value)
+          } catch (error) {
+            // Skip style capturing if it fails (e.g., animated styles)
+          }
         } else if (['string', 'number', 'boolean'].includes(typeof value)) {
           if (key === 'children') {
             el.$el_text = typeof value === 'string' ? value : JSON.stringify(value)
