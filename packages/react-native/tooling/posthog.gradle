@@ -158,37 +158,64 @@ plugins.withId('com.android.application') {
 }
 
 def resolvePostHogCliPackagePath(reactRoot) {
-    def resolvedCliPath = null
+    // First, try to find @posthog/cli folder from require.resolve
     try {
-        resolvedCliPath = new File(["node", "--print", "require.resolve('@posthog/cli/package.json')"].execute(null, rootDir).text.trim()).getParentFile();
-    } catch (Throwable ignored) { // Check if it's located in .pnpm
-        try {
-            def pnpmRefPath = reactRoot.toString() + "/node_modules/@posthog/cli/node_modules/.bin/posthog-cli"
-            def postHogCliFile = new File(pnpmRefPath)
-
-            if (postHogCliFile.exists()) {
-                def cliFileText = postHogCliFile.text
-                def matcher = cliFileText =~ /NODE_PATH="([^"]*?)@posthog\/cli\//
-
-                if (matcher.find()) {
-                    def match = matcher.group(1)
-                    resolvedCliPath = new File(match + "@posthog/cli")
-                }
+        def resolvedPath = new File(["node", "--print", "require.resolve('@posthog/cli/package.json')"].execute(null, rootDir).text.trim()).getParentFile()
+        if (resolvedPath != null && resolvedPath.exists()) {
+            def runPostHogCliFile = new File(resolvedPath, "run-posthog-cli.js")
+            if (runPostHogCliFile.exists()) {
+                project.logger.info("resolved posthog-cli dynamically: `${runPostHogCliFile.getAbsolutePath()}`")
+                return runPostHogCliFile.getAbsolutePath()
             }
-        } catch (Throwable ignored2) {} // if the resolve fails we fallback to the default path
+        }
+    } catch (Throwable ignored) {}
+
+    // Second, check if @posthog/cli exists in $reactRoot/node_modules
+    def nodeModulesPath = new File("$reactRoot/node_modules/@posthog/cli")
+    if (nodeModulesPath.exists()) {
+        def runPostHogCliFile = new File(nodeModulesPath, "run-posthog-cli.js")
+        if (runPostHogCliFile.exists()) {
+            project.logger.info("resolved posthog-cli hard-coded path (yarn or npm): `${runPostHogCliFile.getAbsolutePath()}`")
+            return runPostHogCliFile.getAbsolutePath()
+        }
     }
 
-    def cliPackage = null
-
-    if (resolvedCliPath != null && resolvedCliPath.exists()) {
-        cliPackage = resolvedCliPath.getAbsolutePath()
-    } else if (new File("$reactRoot/node_modules/@posthog/cli").exists()) {
-        cliPackage = "$reactRoot/node_modules/@posthog/cli"
-    } else {
-        cliPackage = "posthog-cli"
+    // Third, check for pnpm installation with node_modules/.bin/posthog-cli
+    def pnpmBinPath = new File("$reactRoot/node_modules/.bin/posthog-cli")
+    if (pnpmBinPath.exists()) {
+        project.logger.info("resolved posthog-cli hard-coded path (pnpm): `${pnpmBinPath.getAbsolutePath()}`")
+        return pnpmBinPath.getAbsolutePath()
     }
 
-    return cliPackage
+    // Fourth, check using npm root for local installation
+    try {
+        def npmRoot = ["npm", "root"].execute(null, rootDir).text.trim()
+        def npmPostHogCliPath = new File(npmRoot, "@posthog/cli")
+        if (npmPostHogCliPath.exists()) {
+            def runPostHogCliFile = new File(npmPostHogCliPath, "run-posthog-cli.js")
+            if (runPostHogCliFile.exists()) {
+                project.logger.info("resolved posthog-cli via npm root: `${runPostHogCliFile.getAbsolutePath()}`")
+                return runPostHogCliFile.getAbsolutePath()
+            }
+        }
+    } catch (Throwable ignored) {}
+
+    // Fifth, check for global npm installation of @posthog/cli
+    try {
+        def globalPrefix = ["npm", "prefix", "-g"].execute().text.trim()
+        def globalPostHogCliPath = new File(globalPrefix, "lib/node_modules/@posthog/cli")
+        if (globalPostHogCliPath.exists()) {
+            def runPostHogCliFile = new File(globalPostHogCliPath, "run-posthog-cli.js")
+            if (runPostHogCliFile.exists()) {
+                project.logger.info("resolved posthog-cli from global npm installation: `${runPostHogCliFile.getAbsolutePath()}`")
+                return runPostHogCliFile.getAbsolutePath()
+            }
+        }
+    } catch (Throwable ignored) {}
+
+    // Finally, fallback to global install
+    project.logger.info("falling back to global posthog-cli")
+    return "posthog-cli"
 }
 
 def resolvePostHogReactNativeSDKPath(reactRoot) {
