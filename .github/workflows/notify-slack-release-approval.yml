@@ -57,14 +57,10 @@ jobs:
               env:
                   SLACK_USER_GROUP_ID: ${{ inputs.slack_user_group_id || vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID }}
               run: |
-                  if [ -n "$SLACK_USER_GROUP_ID" ]; then
-                    echo "group_mention=<!subteam^$SLACK_USER_GROUP_ID|@group-client-libraries>" >> "$GITHUB_OUTPUT"
-                  else
-                    echo "group_mention=@group-client-libraries" >> "$GITHUB_OUTPUT"
-                  fi
+                  echo "group_mention=<!subteam^$SLACK_USER_GROUP_ID|@group-client-libraries>" >> "$GITHUB_OUTPUT"
 
             - name: Send Slack notification
-              uses: slackapi/slack-github-action@b6f4640825302dc9b85bd5ffbe34dfc7a762e404 # v2.1.1
+              uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
               with:
                   webhook: ${{ inputs.slack_webhook_url || vars.APPROVALS_CLIENT_LIBRARIES_SLACK_WEBHOOK_URL }}
                   webhook-type: incoming-webhook
