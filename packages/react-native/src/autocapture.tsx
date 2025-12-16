@@ -15,10 +15,7 @@ const isAnimatedValue = (value: any): boolean => {
   // Check if it's a Reanimated shared value or animated style
   // _isReanimatedSharedValue is the official internal marker for SharedValues
   // Also check for _value property which is present in SharedValues
-  return (
-    value?._isReanimatedSharedValue === true ||
-    (typeof value === 'object' && value !== null && '_value' in value && typeof value.value !== 'undefined')
-  )
+  return value?._isReanimatedSharedValue === true || (typeof value === 'object' && value !== null && '_value' in value)
 }
 
 const flattenStyles = (styles: any): any => {
