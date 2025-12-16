@@ -32,11 +32,7 @@ fi
 # Check for posthog-cli using installer environment variables
 # TODO: provide a config that users can force the location
 # Xcode starts with a very limited $PATH so using whereis does not work
-if [ -n "$POSTHOG_CLI_INSTALL_DIR" ]; then
-  PH_CLI_PATH="$POSTHOG_CLI_INSTALL_DIR/posthog-cli"
-elif [ -n "$CARGO_DIST_FORCE_INSTALL_DIR" ]; then
-  PH_CLI_PATH="$CARGO_DIST_FORCE_INSTALL_DIR/posthog-cli"
-elif [ -f "$HOME/.posthog/posthog-cli" ]; then
+if [ -f "$HOME/.posthog/posthog-cli" ]; then
   PH_CLI_PATH="$HOME/.posthog/posthog-cli"
 else
   # Check if installed via npm -g @posthog/cli

@@ -51,6 +51,7 @@ export const STORED_PERSON_PROPERTIES_KEY = '$stored_person_properties'
 export const STORED_GROUP_PROPERTIES_KEY = '$stored_group_properties'
 export const SURVEYS = '$surveys'
 export const SURVEYS_ACTIVATED = '$surveys_activated'
+export const CONVERSATIONS = '$conversations'
 export const FLAG_CALL_REPORTED = '$flag_call_reported'
 export const USER_STATE = '$user_state'
 export const CLIENT_SESSION_PROPS = '$client_session_props'
@@ -98,6 +99,11 @@ export const PERSISTENCE_RESERVED_PROPERTIES = [
     INITIAL_REFERRER_INFO,
     ENABLE_PERSON_PROCESSING,
     INITIAL_PERSON_INFO,
+    // Conversations keys (defined in lazy-loaded extension)
+    '$conversations_widget_session_id',
+    '$conversations_ticket_id',
+    '$conversations_widget_state',
+    '$conversations_user_traits',
 ]
 
 export const SURVEYS_REQUEST_TIMEOUT_MS = 10000

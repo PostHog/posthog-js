@@ -24,7 +24,9 @@ import { PageViewManager } from './page-view'
 import { PostHogExceptions } from './posthog-exceptions'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
+import { PostHogProductTours } from './posthog-product-tours'
 import { PostHogSurveys } from './posthog-surveys'
+import { PostHogConversations } from './extensions/conversations/posthog-conversations'
 import {
     DisplaySurveyOptions,
     SurveyCallback,
@@ -182,6 +184,8 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_web_experiments: true, // disabled in beta.
     disable_surveys: false,
     disable_surveys_automatic_display: false,
+    disable_conversations: false,
+    disable_product_tours: true,
     disable_external_dependency_loading: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
@@ -313,6 +317,8 @@ export class PostHog {
     pageViewManager: PageViewManager
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
+    conversations: PostHogConversations
+    productTours: PostHogProductTours
     experiments: WebExperiments
     toolbar: Toolbar
     exceptions: PostHogExceptions
@@ -388,6 +394,8 @@ export class PostHog {
         this.scrollManager = new ScrollManager(this)
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
+        this.conversations = new PostHogConversations(this)
+        this.productTours = new PostHogProductTours(this)
         this.experiments = new WebExperiments(this)
         this.exceptions = new PostHogExceptions(this)
         this.rateLimiter = new RateLimiter(this)
@@ -590,12 +598,10 @@ export class PostHog {
         if (this._hasBootstrappedFeatureFlags()) {
             const activeFlags = Object.keys(config.bootstrap?.featureFlags || {})
                 .filter((flag) => !!config.bootstrap?.featureFlags?.[flag])
-                .reduce(
-                    (res: Record<string, string | boolean>, key) => (
-                        (res[key] = config.bootstrap?.featureFlags?.[key] || false), res
-                    ),
-                    {}
-                )
+                .reduce((res: Record<string, string | boolean>, key) => {
+                    res[key] = config.bootstrap?.featureFlags?.[key] || false
+                    return res
+                }, {})
             const featureFlagPayloads = Object.keys(config.bootstrap?.featureFlagPayloads || {})
                 .filter((key) => activeFlags[key])
                 .reduce((res: Record<string, JsonType>, key) => {
@@ -703,6 +709,14 @@ export class PostHog {
 
         initTasks.push(() => {
             this.surveys.loadIfEnabled()
+        })
+
+        initTasks.push(() => {
+            this.conversations.loadIfEnabled()
+        })
+
+        initTasks.push(() => {
+            this.productTours.loadIfEnabled()
         })
 
         initTasks.push(() => {
@@ -819,6 +833,8 @@ export class PostHog {
         this.autocapture?.onRemoteConfig(config)
         this.heatmaps?.onRemoteConfig(config)
         this.surveys.onRemoteConfig(config)
+        this.conversations.onRemoteConfig(config)
+        this.productTours.onRemoteConfig(config)
         this.webVitalsAutocapture?.onRemoteConfig(config)
         this.exceptionObserver?.onRemoteConfig(config)
         this.exceptions.onRemoteConfig(config)
@@ -903,6 +919,7 @@ export class PostHog {
         })
         options.headers = {
             ...this.config.request_headers,
+            ...options.headers,
         }
         options.compression = options.compression === 'best-available' ? this.compression : options.compression
         options.disableXHRCredentials = this.config.__preview_disable_xhr_credentials
@@ -1135,7 +1152,11 @@ export class PostHog {
         if (setProperties) {
             data.$set = options?.$set
         }
-        const setOnceProperties = this._calculate_set_once_properties(options?.$set_once)
+        // $groupidentify doesn't process person $set_once on the server, so don't mark
+        // initial person props as sent. This ensures they're included with subsequent
+        // $identify calls.
+        const markSetOnceAsSent = event_name !== '$groupidentify'
+        const setOnceProperties = this._calculate_set_once_properties(options?.$set_once, markSetOnceAsSent)
         if (setOnceProperties) {
             data.$set_once = setOnceProperties
         }
@@ -1360,8 +1381,10 @@ export class PostHog {
      * profile with mostly-accurate properties, despite earlier events not setting them. We do this by storing them in
      * persistence.
      * @param dataSetOnce
+     * @param markAsSent - if true, marks the properties as sent so they won't be included in future events.
+     *                     Set to false for events like $groupidentify where the server doesn't process person props.
      */
-    _calculate_set_once_properties(dataSetOnce?: Properties): Properties | undefined {
+    _calculate_set_once_properties(dataSetOnce?: Properties, markAsSent: boolean = true): Properties | undefined {
         if (!this.persistence || !this._hasPersonProcessing()) {
             return dataSetOnce
         }
@@ -1380,7 +1403,9 @@ export class PostHog {
             logger.error('sanitize_properties is deprecated. Use before_send instead')
             setOnceProperties = sanitize_properties(setOnceProperties, '$set_once')
         }
-        this._personProcessingSetOncePropertiesSent = true
+        if (markAsSent) {
+            this._personProcessingSetOncePropertiesSent = true
+        }
         if (isEmptyObject(setOnceProperties)) {
             return undefined
         }
@@ -2261,10 +2286,6 @@ export class PostHog {
             return
         }
 
-        if (!this._requirePersonProcessing('posthog.group')) {
-            return
-        }
-
         const existingGroups = this.getGroups()
 
         // if group key changes, remove stored group properties
@@ -3124,6 +3145,10 @@ export class PostHog {
 
         // Start queue after opting in
         this._start_queue_if_opted_in()
+
+        // Restart session recording if it should now be enabled
+        // (this handles the case where opt_out_capturing_by_default or cookieless_mode prevented it from starting)
+        this.sessionRecording?.startIfEnabledOrStop()
 
         // Reinitialize surveys if we're in cookieless mode and just opted in
         if (this.config.cookieless_mode == 'on_reject') {

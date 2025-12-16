@@ -7,7 +7,7 @@ settings:
 overrides:
   node-forge: 1.3.2
 
-pnpmfileChecksum: sha256-51V53DYAleXHgPrntlBZSmeS8lOCPoT1zhKZkbvcJZs=
+pnpmfileChecksum: sha256-OcVGlYgAXhwIsFX1WLS9u6NOlScsFrdTUbTxlr/ypOs=
 
 importers:
 
@@ -38,10 +38,10 @@ importers:
         specifier: file:../../target/posthog-js-lite.tgz
         version: file:../../target/posthog-js-lite.tgz
       react:
-        specifier: ^18.2.0
+        specifier: ^18.3.1
         version: 18.3.1
       react-dom:
-        specifier: ^18.2.0
+        specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
       react-scripts:
         specifier: 5.0.1
@@ -1052,8 +1052,8 @@ packages:
         optional: true
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-2vLzAcFT1l9nhpOFBz7pBuhE4sc1jA2fTSxcZ2aR1o/Qc+pUJTc0nlsPdqwf7lC6PoaJenjZEDrsolHzAlA9IQ==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.5.2
+    resolution: {integrity: sha512-9Qowpawtz7QcjMy8DX4WPrz073+f7qoNJ5piKst/hXYc64+5PVt6ObXe/uVMFip7lKsDN+ilxFAPDtoHQSMfZg==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.7.0
 
   '@rollup/plugin-babel@5.3.1':
     resolution: {integrity: sha512-WFfdLWU/xVWKeRQnKmIAQULUI7Il0gZnBIH/ZFO069wYIfPu+8zrfp/KMW0atmELoRDq8FbiP3VCss9MhCut7Q==}
@@ -4412,8 +4412,8 @@ packages:
     engines: {node: ^10 || ^12 || >=14}
 
   posthog-js-lite@file:../../target/posthog-js-lite.tgz:
-    resolution: {integrity: sha512-v3odkuY0/bg0+r1qSN86vP5UZBFGf/Vgws1FxOdEyWQIup9nXBibotVSVUi8n/mkBD7MuLr7c8b7bq8b4J3F3w==, tarball: file:../../target/posthog-js-lite.tgz}
-    version: 4.1.10
+    resolution: {integrity: sha512-Cy+RgDvwYgjM7wd13idqN9IVkY4Cuf35QADAyOFBBNSW++WZlrHDTzY9frF1Sq7rDBDs+UY590XYcxoobYKY2g==, tarball: file:../../target/posthog-js-lite.tgz}
+    version: 4.2.1
 
   prelude-ls@1.1.2:
     resolution: {integrity: sha512-ESF23V4SKG6lVSGZgYNpbsiaAkdab6ZgOxe52p7+Kid3W3u3bxR4Vfd/o21dmN7jSt0IwgZ4v5MUd26FEtXE9w==}

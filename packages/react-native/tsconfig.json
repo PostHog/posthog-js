@@ -14,7 +14,11 @@
     "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
-    "target": "ES2018"
+    "target": "ES2018",
+    "paths": {
+      "react": ["./node_modules/@types/react"],
+      "react-native": ["./node_modules/react-native"]
+    }
   },
   "include": ["index.ts", "src/**/*.ts", "src/**/*.tsx"]
 }

@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { JSX } from 'react'
 import { Path, Svg, SvgProps } from 'react-native-svg'
 
 export const SatisfiedEmoji = (props: SvgProps): JSX.Element => (

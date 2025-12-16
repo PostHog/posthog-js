@@ -8,20 +8,21 @@
         "dev-crossdomain": "NEXT_PUBLIC_CROSSDOMAIN=1 next dev --experimental-https",
         "build": "next build --no-lint",
         "start": "next start",
-        "lint": "next lint"
+        "lint": "next lint",
+        "localdev": "./bin/localdev.sh"
     },
     "dependencies": {
         "@lottiefiles/react-lottie-player": "^3.5.4",
         "@types/node": "18.13.0",
-        "@types/react": "18.3.16",
-        "@types/react-dom": "18.3.5",
+        "@types/react": "19.2.7",
+        "@types/react-dom": "19.2.3",
         "cookie": "^0.7.2",
         "eslint": "^8.57.1",
         "hls.js": "^1.5.15",
-        "next": "14.2.33",
+        "next": "^15.5.7",
         "posthog-js": "*",
-        "react": "18.3.1",
-        "react-dom": "18.3.1",
+        "react": "19.2.1",
+        "react-dom": "19.2.1",
         "socket.io": "^4.8.1",
         "socket.io-client": "^4.8.1",
         "typescript": "4.9.5"

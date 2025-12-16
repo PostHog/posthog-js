@@ -21,13 +21,16 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
       distDir,
       ...userConfig
     } = await resolveUserConfig(userNextConfig, phase, defaultConfig)
-    return {
+    const nextConfig = {
       ...userConfig,
       distDir,
-      productionBrowserSourceMaps: sourceMapEnabled,
       webpack: withWebpackConfig(userWebPackConfig, resolvedConfig),
       compiler: withCompilerConfig(userCompilerConfig, resolvedConfig),
     }
+    if (turbopackEnabled && sourceMapEnabled) {
+      nextConfig.productionBrowserSourceMaps = true
+    }
+    return nextConfig
   }
 }
 
@@ -53,13 +56,24 @@ function resolveUserConfig(
 function withWebpackConfig(userWebpackConfig: NextConfig['webpack'], posthogConfig: ResolvedPluginConfig) {
   const defaultWebpackConfig = userWebpackConfig || ((config: any) => config)
   const sourceMapEnabled = posthogConfig.sourcemaps.enabled
+  const turbopackEnabled = isTurbopackEnabled()
   return (config: any, options: any) => {
-    const turbopackEnabled = isTurbopackEnabled()
     const webpackConfig = defaultWebpackConfig(config, options)
+    const isServer = options.isServer
     if (sourceMapEnabled) {
       if (!turbopackEnabled) {
         webpackConfig.plugins = webpackConfig.plugins || []
-        webpackConfig.plugins.push(new PosthogWebpackPlugin(posthogConfig))
+        let currentConfig = posthogConfig
+        if (isServer) {
+          currentConfig = {
+            ...posthogConfig,
+            sourcemaps: {
+              ...posthogConfig.sourcemaps,
+              deleteAfterUpload: false,
+            },
+          }
+        }
+        webpackConfig.plugins.push(new PosthogWebpackPlugin(currentConfig))
       }
     }
     return webpackConfig

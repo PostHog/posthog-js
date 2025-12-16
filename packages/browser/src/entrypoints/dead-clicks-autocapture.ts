@@ -20,6 +20,10 @@ function asClick(event: MouseEvent): DeadClickCandidate | null {
     return null
 }
 
+function hasModifierKey(event: MouseEvent): boolean {
+    return event.ctrlKey || event.metaKey || event.altKey || event.shiftKey
+}
+
 function checkTimeout(value: number | undefined, thresholdMs: number) {
     return isNumber(value) && value >= thresholdMs
 }
@@ -38,6 +42,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         scroll_threshold_ms: 100,
         selection_change_threshold_ms: 100,
         mutation_threshold_ms: 2500,
+        capture_clicks_with_modifier_keys: false,
         __onCapture: defaultOnCapture,
     })
 
@@ -50,6 +55,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             selection_change_threshold_ms:
                 providedConfig?.selection_change_threshold_ms ?? defaultConfig.selection_change_threshold_ms,
             mutation_threshold_ms: providedConfig?.mutation_threshold_ms ?? defaultConfig.mutation_threshold_ms,
+            capture_clicks_with_modifier_keys:
+                providedConfig?.capture_clicks_with_modifier_keys ?? defaultConfig.capture_clicks_with_modifier_keys,
             __onCapture: defaultConfig.__onCapture,
         }
     }
@@ -151,6 +158,10 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
 
     private _ignoreClick(click: DeadClickCandidate | null): boolean {
         if (!click) {
+            return true
+        }
+
+        if (!this._config.capture_clicks_with_modifier_keys && hasModifierKey(click.originalEvent)) {
             return true
         }
 

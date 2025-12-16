@@ -3,6 +3,7 @@ import type { SegmentAnalytics } from './extensions/segment-integration'
 import { PostHog } from './posthog-core'
 import { KnownUnsafeEditableEvent } from '@posthog/core'
 import { Survey, SurveyConfig } from './posthog-surveys-types'
+import { ConversationsRemoteConfig } from './posthog-conversations-types'
 // only importing types here, so won't affect the bundle
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SAMPLED } from './extensions/replay/external/triggerMatching'
@@ -277,6 +278,16 @@ export type DeadClicksAutoCaptureConfig = {
     mutation_threshold_ms?: number
 
     /**
+     * By default, clicks with modifier keys (ctrl, shift, alt, meta/cmd) held down are not considered dead clicks,
+     * since these typically indicate intentional actions like "open in new tab".
+     *
+     * Set this to true to capture dead clicks even when modifier keys are held.
+     *
+     * @default false
+     */
+    capture_clicks_with_modifier_keys?: boolean
+
+    /**
      * Allows setting behavior for when a dead click is captured.
      * For e.g. to support capture to heatmaps
      *
@@ -525,11 +536,25 @@ export interface PostHogConfig {
     disable_surveys_automatic_display: boolean
 
     /**
+     * Determines whether PostHog should disable all product tours functionality.
+     *
+     * @default true (disabled until feature is ready for GA)
+     */
+    disable_product_tours: boolean
+
+    /**
      * Survey-specific configuration options.
      *
      * @default undefined
      */
     surveys?: SurveyConfig
+
+    /**
+     * Determines whether PostHog should disable all conversations functionality.
+     *
+     * @default false
+     */
+    disable_conversations: boolean
 
     /**
      * Determines whether PostHog should disable web experiments.
@@ -1603,6 +1628,11 @@ export interface RemoteConfig {
     surveys?: boolean | Survey[]
 
     /**
+     * Whether product tours are enabled
+     */
+    productTours?: boolean
+
+    /**
      * Parameters for the toolbar
      */
     toolbarParams: ToolbarParams
@@ -1646,6 +1676,11 @@ export interface RemoteConfig {
      * Indicates if the team has any flags enabled (if not we don't need to load them)
      */
     hasFeatureFlags?: boolean
+
+    /**
+     * Conversations widget configuration
+     */
+    conversations?: boolean | ConversationsRemoteConfig
 }
 
 /**
@@ -1658,6 +1693,7 @@ export interface FlagsResponse extends RemoteConfig {
     errorsWhileComputingFlags: boolean
     requestId?: string
     flags: Record<string, FeatureFlagDetail>
+    evaluatedAt?: number
 }
 
 export type SiteAppGlobals = {

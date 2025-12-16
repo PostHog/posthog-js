@@ -109,16 +109,6 @@ jobs:
           -F prerelease=false \
           -F generate_release_notes=false
 
-      - name: Dispatch generate-references for ${{ matrix.package.name }}
-        if: steps.check-package-version.outputs.is-new-version == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh workflow run generate-references.yml \
-            --ref main \
-            --field package_name="${{ matrix.package.name }}" \
-            --field package_path="${{ steps.get-package-path.outputs.path }}"
-
       ########################################################
       ############## posthog-js auto-update ##################
       - name: Dispatch posthog upgrade for ${{ matrix.package.name }}
@@ -151,7 +141,7 @@ jobs:
                  }
                }'
       ####################################################
-      # a CDP destination is set-up to alert when we get this event
+      # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
       - name: Send failure event to PostHog
         if: ${{ failure() }}
         uses: PostHog/posthog-github-action@v0.1
@@ -165,6 +155,6 @@ jobs:
               "commitMessage": "${{ github.event.head_commit.message }}",
               "commitAuthor": "${{ github.event.head_commit.author.name }}",
               "ref": "${{ github.ref }}",
-              "matrixPackage": "${{ matrix.package.name }}",
+              "packageName": "${{ matrix.package.name }}",
               "packageVersion": "${{ steps.check-package-version.outputs.committed-version }}"
             }

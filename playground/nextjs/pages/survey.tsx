@@ -6,6 +6,7 @@ export default function SurveyForm() {
     const posthog = usePostHog()
     const [surveys, setSurveys] = useState([] as unknown as Survey[])
     const [selectedSurvey, setSelectedSurvey] = useState('')
+    const [eventInput, setEventInput] = useState('')
 
     const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
         setSelectedSurvey(event.target.value)
@@ -53,20 +54,37 @@ export default function SurveyForm() {
                 </button>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+                <p>
+                    read{' '}
+                    <a href="https://github.com/PostHog/posthog/blob/master/frontend/src/scenes/surveys/CONTRIBUTING.md">
+                        CONTRIBUTING.md
+                    </a>{' '}
+                    for a guide on how to test surveys locally!
+                </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
                 <div id="survey-container">
                     <h1>hello world</h1>
                 </div>
             </div>
 
-            <div className='flex flex-col border border-2 p-2 items-center'>
-                <h2>test survey delay &amp; cancellation</h2>
-                <div className='flex flex-col items-center gap-6'>
-                    <div className='flex gap-2'>
-                        <button onClick={() => posthog.capture('survey trigger event')}>trigger <pre>survey trigger event</pre></button>
-                        <button onClick={() => posthog.capture('survey cancel event')}>trigger <pre>survey cancel event</pre></button>
-                    </div>
-                    <p>create a survey with a pop-up delay and triggers on "survey trigger event" and/or "survey cancel event" to test</p>
+            <div className="flex flex-col items-center gap-3">
+                <div className="flex gap-2">
+                    <input
+                        type="text"
+                        placeholder="event name"
+                        value={eventInput}
+                        className="border border-1 p-2"
+                        onChange={(e) => setEventInput(e.target.value)}
+                    />
+                    <button onClick={() => posthog.capture(eventInput)}>send event</button>
                 </div>
+                <span className="flex">
+                    <em>
+                        calls <pre className="inline">posthog.capture('{eventInput}')</pre>
+                    </em>
+                </span>
             </div>
 
             {/* Add spacer to push the bottom button down */}

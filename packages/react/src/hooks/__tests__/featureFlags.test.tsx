@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { renderHook } from '@testing-library/react-hooks'
+import { renderHook } from '@testing-library/react'
 import { PostHogProvider, PostHog } from '../../context'
 import { useFeatureFlagPayload, useFeatureFlagVariantKey, useFeatureFlagEnabled, useActiveFeatureFlags } from '../index'
 

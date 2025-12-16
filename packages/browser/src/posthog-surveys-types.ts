@@ -11,14 +11,16 @@ export enum SurveyEventType {
     Cancellation = 'cancelEvents',
 }
 
+export type PropertyFilters = {
+    [propertyName: string]: {
+        values: string[]
+        operator: PropertyMatchType
+    }
+}
+
 export interface SurveyEventWithFilters {
     name: string
-    propertyFilters?: {
-        [propertyName: string]: {
-            values: string[]
-            operator: PropertyMatchType
-        }
-    }
+    propertyFilters?: PropertyFilters
 }
 
 export enum SurveyWidgetType {
@@ -84,6 +86,10 @@ export interface SurveyAppearance {
     zIndex?: string
     disabledButtonOpacity?: string
     boxPadding?: string
+    inputTextColor?: string
+    inputBackgroundColor?: string
+    // Hide the X (cancel) button - defaults to false (show the button)
+    hideCancelButton?: boolean
 }
 
 export enum SurveyType {
@@ -256,6 +262,8 @@ export type ActionStepStringMatching = 'contains' | 'exact' | 'regex'
 export interface ActionStepType {
     event?: string | null
     selector?: string | null
+    /** pre-compiled regex pattern for matching selector against $elements_chain */
+    selector_regex?: string | null
     /** @deprecated Only `selector` should be used now. */
     tag_name?: string
     text?: string | null
@@ -267,6 +275,13 @@ export interface ActionStepType {
     url?: string | null
     /** @default StringMatching.Contains */
     url_matching?: ActionStepStringMatching | null
+    /** Property filters for action step matching */
+    properties?: {
+        key: string
+        value?: string | number | boolean | (string | number | boolean)[] | null
+        operator?: PropertyMatchType
+        type?: string
+    }[]
 }
 
 export enum SurveyEventName {
@@ -311,6 +326,17 @@ export type DisplaySurveyOptions = DisplaySurveyPopoverOptions | DisplaySurveyIn
 
 export interface SurveyConfig {
     prefillFromUrl?: boolean
+    /**
+     * @deprecated No longer used. Surveys will automatically advance past
+     * prefilled questions with skipSubmitButton enabled. If partial response
+     * collection is enabled, partial responses for pre-filled questions will
+     * be submitted automatically on page load.
+     */
     autoSubmitIfComplete?: boolean
+    /**
+     * @deprecated No longer used. Pre-filled responses are now sent
+     * immediately when partial responses are enabled, or all required
+     * quesions have been pre-filled.
+     */
     autoSubmitDelay?: number
 }

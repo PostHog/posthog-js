@@ -1,5 +1,153 @@
 # posthog-js
 
+## 1.307.0
+
+### Minor Changes
+
+- [#2700](https://github.com/PostHog/posthog-js/pull/2700) [`bb64696`](https://github.com/PostHog/posthog-js/commit/bb64696cc589f1b37e3fd864c10ee68bc0ee50a6) Thanks [@veryayskiy](https://github.com/veryayskiy)! - conversations widget
+  (2025-12-16)
+
+## 1.306.2
+
+### Patch Changes
+
+- [#2730](https://github.com/PostHog/posthog-js/pull/2730) [`79184bd`](https://github.com/PostHog/posthog-js/commit/79184bdd385d7413718ba9b10f9a9d7a68fdc350) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - include synthetic exception in console.error capture
+  (2025-12-15)
+
+## 1.306.1
+
+### Patch Changes
+
+- [#2746](https://github.com/PostHog/posthog-js/pull/2746) [`515c18f`](https://github.com/PostHog/posthog-js/commit/515c18fd32505cfe7afaa88f9950f0cdda2ecd8f) Thanks [@ksvat](https://github.com/ksvat)! - Update which network masking function usage
+  (2025-12-13)
+
+## 1.306.0
+
+### Minor Changes
+
+- [#2733](https://github.com/PostHog/posthog-js/pull/2733) [`e97857c`](https://github.com/PostHog/posthog-js/commit/e97857cb62ce3d11e39de3fea734ba4d56a40298) Thanks [@adboio](https://github.com/adboio)! - support hideCancelButton in survey appearance
+  (2025-12-12)
+
+### Patch Changes
+
+- [#2725](https://github.com/PostHog/posthog-js/pull/2725) [`90a0f14`](https://github.com/PostHog/posthog-js/commit/90a0f143e639b898fc698f247ec8e08ea3db9ddf) Thanks [@ordehi](https://github.com/ordehi)! - fix: include initial person props in $identify when group() called first
+  (2025-12-12)
+
+## 1.305.0
+
+### Minor Changes
+
+- [#2732](https://github.com/PostHog/posthog-js/pull/2732) [`8496933`](https://github.com/PostHog/posthog-js/commit/849693303ef3527dd348c7c6e55c1f1780af13fe) Thanks [@adboio](https://github.com/adboio)! - support survey steps in product tours
+  (2025-12-11)
+
+## 1.304.0
+
+### Minor Changes
+
+- [#2723](https://github.com/PostHog/posthog-js/pull/2723) [`ecd68fb`](https://github.com/PostHog/posthog-js/commit/ecd68fbfa37bb0b6c692665818e630b9c604eb17) Thanks [@adboio](https://github.com/adboio)! - product tours: support auto-show config, add modal steps
+  (2025-12-10)
+
+## 1.303.1
+
+### Patch Changes
+
+- [#2719](https://github.com/PostHog/posthog-js/pull/2719) [`3f9e3d2`](https://github.com/PostHog/posthog-js/commit/3f9e3d2730acbfc00f8d53efa4e2d72558527549) Thanks [@ksvat](https://github.com/ksvat)! - Update rrweb version used
+  (2025-12-10)
+
+## 1.303.0
+
+### Minor Changes
+
+- [#2720](https://github.com/PostHog/posthog-js/pull/2720) [`915da62`](https://github.com/PostHog/posthog-js/commit/915da624eca3368f2f0d8143d4973bff4f2c67ef) Thanks [@adboio](https://github.com/adboio)! - product tours super-alpha
+  (2025-12-10)
+
+## 1.302.2
+
+### Patch Changes
+
+- [#2696](https://github.com/PostHog/posthog-js/pull/2696) [`daeacdb`](https://github.com/PostHog/posthog-js/commit/daeacdb4ca39d4274e3dd51908562b9d83c74f96) Thanks [@ksvat](https://github.com/ksvat)! - Update @posthog/rrweb dependencies to 0.0.33
+  (2025-12-05)
+
+## 1.302.1
+
+### Patch Changes
+
+- [#2694](https://github.com/PostHog/posthog-js/pull/2694) [`0d2e26b`](https://github.com/PostHog/posthog-js/commit/0d2e26bcbb8c4ae67470fdfeb3bb53382aa30bd7) Thanks [@ksvat](https://github.com/ksvat)! - Restart session recording after opt_in_capture() called
+  (2025-12-05)
+
+## 1.302.0
+
+### Minor Changes
+
+- [#2693](https://github.com/PostHog/posthog-js/pull/2693) [`4458da7`](https://github.com/PostHog/posthog-js/commit/4458da7cafa64749059eea6e6a1ef056f64fea98) Thanks [@adboio](https://github.com/adboio)! - fix(surveys): prefilled questions for hosted surveys
+  (2025-12-04)
+
+## 1.301.2
+
+### Patch Changes
+
+- [#2690](https://github.com/PostHog/posthog-js/pull/2690) [`e9c00fd`](https://github.com/PostHog/posthog-js/commit/e9c00fd451f6ee648ff40dcad538d38bfd5f3ff4) Thanks [@robbie-c](https://github.com/robbie-c)! - Related to https://www.wiz.io/blog/critical-vulnerability-in-react-cve-2025-55182
+
+    We didn't include any of the vulnerable deps in any of our packages, however we did have them as dev / test / example project dependencies.
+
+    There was no way that any of these vulnerable packages were included in any of our published packages.
+
+    We've now patched out those dependencies.
+
+    Out of an abundance of caution, let's create a new release of all of our packages. (2025-12-04)
+
+- Updated dependencies [[`e9c00fd`](https://github.com/PostHog/posthog-js/commit/e9c00fd451f6ee648ff40dcad538d38bfd5f3ff4)]:
+    - @posthog/core@1.7.1
+
+## 1.301.1
+
+### Patch Changes
+
+- [#2666](https://github.com/PostHog/posthog-js/pull/2666) [`2004d36`](https://github.com/PostHog/posthog-js/commit/2004d369854d1467ae01120340cfa475ea8c42d5) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: session id rotation relied on in-memory cache which would be stale after log idle periods - particularly with multiple windows in play
+  (2025-12-04)
+
+## 1.301.0
+
+### Minor Changes
+
+- [#2676](https://github.com/PostHog/posthog-js/pull/2676) [`973bf70`](https://github.com/PostHog/posthog-js/commit/973bf70e4e9e9ea9dd4761c89c0ba8e1f212e941) Thanks [@adboio](https://github.com/adboio)! - support actions with all filter options
+  (2025-12-04)
+
+## 1.300.0
+
+### Minor Changes
+
+- [#2603](https://github.com/PostHog/posthog-js/pull/2603) [`e1617d9`](https://github.com/PostHog/posthog-js/commit/e1617d91255b23dc39b1dcb15b05ae64c735d9d0) Thanks [@dmarticus](https://github.com/dmarticus)! - add $feature_flag_evaluated_at properties to $feature_flag_called events
+  (2025-12-03)
+
+### Patch Changes
+
+- [#2670](https://github.com/PostHog/posthog-js/pull/2670) [`4487d6b`](https://github.com/PostHog/posthog-js/commit/4487d6b28e4f76696f13cea5d08dfceda3aa2cd9) Thanks [@pauldambra](https://github.com/pauldambra)! - A click while holding a modifier key (CTRL, ALT, CMD, Windows) shouldn't ever count as a dead click - so that we don't pick up e.g. open in a new tab as a dead click
+  (2025-12-03)
+
+- [#2677](https://github.com/PostHog/posthog-js/pull/2677) [`0e67750`](https://github.com/PostHog/posthog-js/commit/0e6775030aa43d24588f2e6dbe624e8d8a1f6d7c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - chore: allow customizing text input and background for surveys
+  (2025-12-03)
+- Updated dependencies [[`e1617d9`](https://github.com/PostHog/posthog-js/commit/e1617d91255b23dc39b1dcb15b05ae64c735d9d0)]:
+    - @posthog/core@1.7.0
+
+## 1.299.0
+
+### Minor Changes
+
+- [#2641](https://github.com/PostHog/posthog-js/pull/2641) [`f9c4dba`](https://github.com/PostHog/posthog-js/commit/f9c4dbac52823bafab41b948c59db1ee20c5d16c) Thanks [@adboio](https://github.com/adboio)! - add survey cancellation events
+  (2025-12-01)
+
+- [#2642](https://github.com/PostHog/posthog-js/pull/2642) [`37e4f76`](https://github.com/PostHog/posthog-js/commit/37e4f7600355137285aa98758e530bc01d699d85) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Add new `payload` entry to the `EarlyAccessFeature` type
+  (2025-12-01)
+
+- [#2661](https://github.com/PostHog/posthog-js/pull/2661) [`aaad806`](https://github.com/PostHog/posthog-js/commit/aaad8061cf90ee37728e6f9c42d41779d6f40902) Thanks [@adboio](https://github.com/adboio)! - add support for surveys triggered by actions with event property filters
+  (2025-12-01)
+
+### Patch Changes
+
+- [#2582](https://github.com/PostHog/posthog-js/pull/2582) [`21365ff`](https://github.com/PostHog/posthog-js/commit/21365ff0db5d02f4e8b14e5ae81448c2b6526bc7) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: properly cleanup in network plugin
+  (2025-12-01)
+
 ## 1.298.1
 
 ### Patch Changes
@@ -181,19 +329,16 @@
     ```
 
     **URL format:** `?q0=1&q1=8&auto_submit=true`
-
     - `q{N}` = question index (0-based)
     - Value = choice index or rating value
     - `auto_submit=true` enables auto-submission
 
     **Supported question types:**
-
     - Single choice (choice index)
     - Multiple choice (multiple q{N} params)
     - Rating (numeric value, validated against scale)
 
     **Use cases:**
-
     - Pre-filled NPS surveys from email campaigns
     - One-click survey responses from notifications
     - SMS surveys with embedded feedback

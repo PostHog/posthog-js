@@ -1,5 +1,43 @@
 # posthog-react-native
 
+## 4.14.4
+
+### Patch Changes
+
+- [#2764](https://github.com/PostHog/posthog-js/pull/2764) [`8368cbc`](https://github.com/PostHog/posthog-js/commit/8368cbcc3c29e362f2658e580f4956e0037469f7) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: posthog-cli finds the correct path on android gradle plugin
+  (2025-12-16)
+
+## 4.14.3
+
+### Patch Changes
+
+- [#2697](https://github.com/PostHog/posthog-js/pull/2697) [`0c3bd5e`](https://github.com/PostHog/posthog-js/commit/0c3bd5eb1fe7fa94bb78ed1282922d613cc37e95) Thanks [@robbie-c](https://github.com/robbie-c)! - Support getting locale and timezone from expo-localization >= 14
+  (2025-12-05)
+
+## 4.14.2
+
+### Patch Changes
+
+- [#2690](https://github.com/PostHog/posthog-js/pull/2690) [`e9c00fd`](https://github.com/PostHog/posthog-js/commit/e9c00fd451f6ee648ff40dcad538d38bfd5f3ff4) Thanks [@robbie-c](https://github.com/robbie-c)! - Related to https://www.wiz.io/blog/critical-vulnerability-in-react-cve-2025-55182
+
+  We didn't include any of the vulnerable deps in any of our packages, however we did have them as dev / test / example project dependencies.
+
+  There was no way that any of these vulnerable packages were included in any of our published packages.
+
+  We've now patched out those dependencies.
+
+  Out of an abundance of caution, let's create a new release of all of our packages. (2025-12-04)
+
+- Updated dependencies [[`e9c00fd`](https://github.com/PostHog/posthog-js/commit/e9c00fd451f6ee648ff40dcad538d38bfd5f3ff4)]:
+  - @posthog/core@1.7.1
+
+## 4.14.1
+
+### Patch Changes
+
+- Updated dependencies [[`e1617d9`](https://github.com/PostHog/posthog-js/commit/e1617d91255b23dc39b1dcb15b05ae64c735d9d0)]:
+  - @posthog/core@1.7.0
+
 ## 4.14.0
 
 ### Minor Changes
@@ -107,7 +145,6 @@
 ### Patch Changes
 
 - [#2493](https://github.com/PostHog/posthog-js/pull/2493) [`7ec7be5`](https://github.com/PostHog/posthog-js/commit/7ec7be5917090ae00f988035ff1e0f6f727e6660) Thanks [@ordehi](https://github.com/ordehi)! - **Bug Fixes:**
-
   - Fixed surveys with URL or CSS selector targeting incorrectly showing in React Native
     - **Breaking behavior change**: Surveys configured with URL or CSS selector targeting will no longer appear in React Native apps (this was always the intended behavior)
     - **Action required**: If you have surveys that should show in React Native, remove URL/selector conditions and use feature flags or device type targeting instead

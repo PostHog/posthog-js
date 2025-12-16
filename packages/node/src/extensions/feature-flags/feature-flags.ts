@@ -77,8 +77,8 @@ class FeatureFlagsPoller {
   backOffCount: number = 0
   onLoad?: (count: number) => void
   private cacheProvider?: FlagDefinitionCacheProvider
-  private hasAttemptedCacheLoad: boolean = false
   private loadingPromise?: Promise<void>
+  private flagsEtag?: string
 
   constructor({
     pollingInterval,
@@ -582,21 +582,19 @@ class FeatureFlagsPoller {
   }
 
   async loadFeatureFlags(forceReload = false): Promise<void> {
-    // On first load, try to initialize from cache (if a cache provider is configured)
-    if (this.cacheProvider && !this.hasAttemptedCacheLoad) {
-      this.hasAttemptedCacheLoad = true
-      await this.loadFromCache('Loaded flags from cache')
+    if (this.loadedSuccessfullyOnce && !forceReload) {
+      return
     }
 
-    // If a fetch is already in progress, wait for it
-    if (this.loadingPromise) {
-      return this.loadingPromise
-    }
-
-    if (!this.loadedSuccessfullyOnce || forceReload) {
+    if (!this.loadingPromise) {
       this.loadingPromise = this._loadFeatureFlags()
-      await this.loadingPromise
+        .catch((err) => this.logMsgIfDebug(() => console.debug(`[FEATURE FLAGS] Failed to load feature flags: ${err}`)))
+        .finally(() => {
+          this.loadingPromise = undefined
+        })
     }
+
+    return this.loadingPromise
   }
 
   /**
@@ -627,7 +625,7 @@ class FeatureFlagsPoller {
       this.poller = undefined
     }
 
-    this.poller = setTimeout(() => this._loadFeatureFlags(), this.getPollingInterval())
+    this.poller = setTimeout(() => this.loadFeatureFlags(true), this.getPollingInterval())
 
     try {
       let shouldFetch = true
@@ -686,6 +684,16 @@ class FeatureFlagsPoller {
       // both the background poller and any subsequent manual calls can keep trying to load flags
       // once the issue (quota, permission, rate limit, etc.) is resolved.
       switch (res.status) {
+        case 304:
+          // Not Modified - flags haven't changed, keep using cached data
+          this.logMsgIfDebug(() => console.debug('[FEATURE FLAGS] Flags not modified (304), using cached data'))
+          // Update ETag if server sent one (304 can include updated ETag per HTTP spec)
+          this.flagsEtag = res.headers?.get('ETag') ?? this.flagsEtag
+          this.loadedSuccessfullyOnce = true
+          this.shouldBeginExponentialBackoff = false
+          this.backOffCount = 0
+          return
+
         case 401:
           // Invalid API key
           this.shouldBeginExponentialBackoff = true
@@ -729,6 +737,10 @@ class FeatureFlagsPoller {
             return
           }
 
+          // Store ETag from response for subsequent conditional requests
+          // Clear it if server stops sending one
+          this.flagsEtag = res.headers?.get('ETag') ?? undefined
+
           const flagData: FlagDefinitionCacheData = {
             flags: (responseJson.flags as PostHogFeatureFlag[]) ?? [],
             groupTypeMapping: (responseJson.group_type_mapping as Record<string, string>) || {},
@@ -764,26 +776,33 @@ class FeatureFlagsPoller {
       if (err instanceof ClientError) {
         this.onError?.(err)
       }
-    } finally {
-      this.loadingPromise = undefined
     }
   }
 
-  private getPersonalApiKeyRequestOptions(method: 'GET' | 'POST' | 'PUT' | 'PATCH' = 'GET'): PostHogFetchOptions {
+  private getPersonalApiKeyRequestOptions(
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' = 'GET',
+    etag?: string
+  ): PostHogFetchOptions {
+    const headers: { [key: string]: string } = {
+      ...this.customHeaders,
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${this.personalApiKey}`,
+    }
+
+    if (etag) {
+      headers['If-None-Match'] = etag
+    }
+
     return {
       method,
-      headers: {
-        ...this.customHeaders,
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.personalApiKey}`,
-      },
+      headers,
     }
   }
 
   _requestFeatureFlagDefinitions(): Promise<PostHogFetchResponse> {
     const url = `${this.host}/api/feature_flag/local_evaluation?token=${this.projectApiKey}&send_cohorts`
 
-    const options = this.getPersonalApiKeyRequestOptions()
+    const options = this.getPersonalApiKeyRequestOptions('GET', this.flagsEtag)
 
     let abortTimeout = null
 
