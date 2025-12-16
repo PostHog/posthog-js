@@ -168,6 +168,43 @@ export type PostHogFeatureFlag = {
   experiment_set: number[]
 }
 
+/**
+ * Error type constants for the $feature_flag_error property.
+ *
+ * These values are sent in analytics events to track flag evaluation failures.
+ * They should not be changed without considering impact on existing dashboards
+ * and queries that filter on these values.
+ *
+ * Error values:
+ *   ERRORS_WHILE_COMPUTING: Server returned errorsWhileComputingFlags=true
+ *   FLAG_MISSING: Requested flag not in API response
+ *   QUOTA_LIMITED: Rate/quota limit exceeded
+ *   TIMEOUT: Request timed out
+ *   CONNECTION_ERROR: Network connectivity issue
+ *   UNKNOWN_ERROR: Unexpected exceptions
+ *
+ * For API errors with status codes, use the apiError() method which returns
+ * a string like "api_error_500".
+ */
+export const FeatureFlagError = {
+  ERRORS_WHILE_COMPUTING: 'errors_while_computing_flags',
+  FLAG_MISSING: 'flag_missing',
+  QUOTA_LIMITED: 'quota_limited',
+  TIMEOUT: 'timeout',
+  CONNECTION_ERROR: 'connection_error',
+  UNKNOWN_ERROR: 'unknown_error',
+
+  /**
+   * Generate API error string with status code.
+   *
+   * @param status - HTTP status code from the API error
+   * @returns Error string like "api_error_500"
+   */
+  apiError: (status: number | string): string => `api_error_${status}`,
+} as const
+
+export type FeatureFlagErrorType = (typeof FeatureFlagError)[keyof Omit<typeof FeatureFlagError, 'apiError'>] | string
+
 export interface IPostHog {
   /**
    * @description Capture allows you to capture anything a user does within your system,
