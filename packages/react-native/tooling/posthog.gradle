@@ -82,7 +82,7 @@ plugins.withId('com.android.application') {
                             injected.execOps.exec {
                                 workingDir reactRoot
 
-                                def cliPackage = "posthog-cli"
+                                def cliPackage = resolvePostHogCliPackagePath(reactRoot)
                                 def args = [cliPackage]
 
                                 args.addAll(["exp", "hermes", "clone",
@@ -103,7 +103,7 @@ plugins.withId('com.android.application') {
                             injected.execOps.exec {
                                 workingDir reactRoot
 
-                                def cliPackage = "posthog-cli"
+                                def cliPackage = resolvePostHogCliPackagePath(reactRoot)
                                 def args = [cliPackage]
 
                                 def sourcemapDir = sourcemapOutput.getParent()
@@ -155,6 +155,31 @@ plugins.withId('com.android.application') {
             }
         }
     }
+}
+
+def resolvePostHogCliPackagePath(reactRoot) {
+    def resolvedCliPath = null
+    try {
+        resolvedCliPath = new File(["node", "--print", "require.resolve('@posthog/cli/package.json')"].execute(null, rootDir).text.trim()).getParentFile();
+    } catch (Throwable ignored) { // Check if it's located in .pnpm
+        try {
+            def pnpmRefPath = reactRoot.toString() + "/node_modules/@posthog/cli/node_modules/.bin/posthog-cli"
+            def postHogCliFile = new File(pnpmRefPath)
+
+            if (postHogCliFile.exists()) {
+                def cliFileText = postHogCliFile.text
+                def matcher = cliFileText =~ /NODE_PATH="([^"]*?)@posthog\/cli\//
+
+                if (matcher.find()) {
+                    def match = matcher.group(1)
+                    resolvedCliPath = new File(match + "@posthog/cli")
+                }
+            }
+        } catch (Throwable ignored2) {} // if the resolve fails we fallback to the default path
+    }
+
+    def cliPackage = resolvedCliPath != null && resolvedCliPath.exists() ? resolvedCliPath.getAbsolutePath() : "$reactRoot/node_modules/@posthog/cli"
+    return cliPackage
 }
 
 def resolvePostHogReactNativeSDKPath(reactRoot) {
