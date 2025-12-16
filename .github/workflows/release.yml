@@ -64,6 +64,11 @@ jobs:
                   app_id: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_APP_ID }}
                   private_key: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_PRIVATE_KEY }} # Secrets available only inside the `NPM Release` environment, requires approval from a maintainer
 
+            - name: Set up Git
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+
             - name: Checkout repository
               uses: actions/checkout@v4
               with:
@@ -132,6 +137,11 @@ jobs:
                   ref: main
                   fetch-depth: 0
 
+            - name: Set up Git
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+
             - name: Setup environment
               uses: ./.github/actions/setup
               with:
@@ -149,11 +159,6 @@ jobs:
               uses: PostHog/check-package-version@v2.1.0
               with:
                   path: ${{ steps.get-package-path.outputs.path }}
-
-            - name: Set up Git
-              run: |
-                  git config user.name "github-actions[bot]"
-                  git config user.email "github-actions[bot]@users.noreply.github.com"
 
             - name: Install and build dependencies
               if: steps.check-package-version.outputs.is-new-version == 'true'
