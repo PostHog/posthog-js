@@ -228,9 +228,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
         logger.info('Loaded ticket ID from storage', { ticketId: this._currentTicketId })
 
         const savedState = this._persistence.loadWidgetState()
-        let initialState = ConversationsWidgetState.CLOSED
+        let initialState: ConversationsWidgetState = 'closed'
         if (savedState === 'open') {
-            initialState = ConversationsWidgetState.OPEN
+            initialState = 'open'
         }
 
         // Get initial user traits (from PostHog person properties or saved)
@@ -352,7 +352,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._persistence.saveWidgetState(state)
 
         // Mark messages as read when widget opens
-        if (state === ConversationsWidgetState.OPEN) {
+        if (state === 'open') {
             if (this._unreadCount > 0 && this._currentTicketId) {
                 this._markMessagesAsRead()
             }

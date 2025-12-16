@@ -2,7 +2,6 @@
 import { ConversationsManager } from '../../../extensions/conversations/external'
 import {
     ConversationsRemoteConfig,
-    ConversationsWidgetState,
     Message,
     SendMessageResponse,
     GetMessagesResponse,
@@ -183,7 +182,7 @@ describe('ConversationsManager', () => {
             expect(mockPosthog.capture).toHaveBeenCalledWith(
                 '$conversations_widget_state_changed',
                 expect.objectContaining({
-                    state: ConversationsWidgetState.OPEN,
+                    state: 'open',
                 })
             )
         })
@@ -201,7 +200,7 @@ describe('ConversationsManager', () => {
             expect(mockPosthog.capture).toHaveBeenCalledWith(
                 '$conversations_widget_state_changed',
                 expect.objectContaining({
-                    state: ConversationsWidgetState.CLOSED,
+                    state: 'closed',
                 })
             )
         })
@@ -476,7 +475,7 @@ describe('ConversationsManager', () => {
             expect(mockPosthog.capture).toHaveBeenCalledWith(
                 '$conversations_widget_state_changed',
                 expect.objectContaining({
-                    state: ConversationsWidgetState.OPEN,
+                    state: 'open',
                 })
             )
         })

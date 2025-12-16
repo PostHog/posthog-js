@@ -169,17 +169,7 @@ export interface Ticket {
 /**
  * Visual state of the conversations widget
  */
-export enum ConversationsWidgetState {
-    /**
-     * Widget is completely hidden (only button visible)
-     */
-    CLOSED = 'closed',
-
-    /**
-     * Widget is fully open (full chat interface)
-     */
-    OPEN = 'open',
-}
+export type ConversationsWidgetState = 'open' | 'closed'
 
 /**
  * Response from sending a message

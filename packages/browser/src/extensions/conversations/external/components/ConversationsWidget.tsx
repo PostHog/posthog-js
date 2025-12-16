@@ -49,7 +49,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         const needsIdentification = this._needsIdentification(props.config, userTraits)
 
         this.state = {
-            state: props.initialState || ConversationsWidgetState.CLOSED,
+            state: props.initialState || 'closed',
             messages: [],
             inputValue: '',
             isLoading: false,
@@ -99,7 +99,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         }
 
         // Focus input and scroll to bottom when opening
-        if (this.state.state === ConversationsWidgetState.OPEN && prevState.state !== ConversationsWidgetState.OPEN) {
+        if (this.state.state === 'open' && prevState.state !== 'open') {
             this._focusInput()
             this._scrollToBottom()
         }
@@ -131,15 +131,12 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
 
     private _handleToggleOpen = () => {
         this.setState((prevState) => ({
-            state:
-                prevState.state === ConversationsWidgetState.OPEN
-                    ? ConversationsWidgetState.CLOSED
-                    : ConversationsWidgetState.OPEN,
+            state: prevState.state === 'open' ? 'closed' : 'open',
         }))
     }
 
     private _handleClose = () => {
-        this.setState({ state: ConversationsWidgetState.CLOSED })
+        this.setState({ state: 'closed' })
     }
 
     private _handleInputChange = (e: Event) => {
@@ -290,21 +287,21 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
      * Public method to show the widget
      */
     show() {
-        this.setState({ state: ConversationsWidgetState.OPEN })
+        this.setState({ state: 'open' })
     }
 
     /**
      * Public method to hide the widget
      */
     hide() {
-        this.setState({ state: ConversationsWidgetState.CLOSED })
+        this.setState({ state: 'closed' })
     }
 
     /**
      * Public method to close the widget completely
      */
     close() {
-        this.setState({ state: ConversationsWidgetState.CLOSED })
+        this.setState({ state: 'closed' })
     }
 
     /**
@@ -415,7 +412,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         const styles = getStyles(primaryColor)
 
         // Button only (closed state)
-        if (state === ConversationsWidgetState.CLOSED) {
+        if (state === 'closed') {
             return (
                 <OpenChatButton
                     primaryColor={primaryColor}
