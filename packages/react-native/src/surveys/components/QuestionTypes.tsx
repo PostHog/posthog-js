@@ -48,15 +48,15 @@ export function OpenTextQuestion({
           style={[
             styles.textInput,
             {
-              backgroundColor: appearance.inputBackgroundColor,
-              color: getContrastingTextColor(appearance.inputBackgroundColor),
+              backgroundColor: appearance.inputBackground,
+              color: getContrastingTextColor(appearance.inputBackground),
             },
           ]}
           multiline
           numberOfLines={4}
           placeholder={appearance.placeholder}
           placeholderTextColor={
-            getContrastingTextColor(appearance.inputBackgroundColor) === 'black'
+            getContrastingTextColor(appearance.inputBackground) === 'black'
               ? 'rgba(0, 0, 0, 0.5)'
               : 'rgba(255, 255, 255, 0.5)'
           }
@@ -229,14 +229,14 @@ export function MultipleChoiceQuestion({
           const isOpenChoice = choice === openChoice
           const isSelected = selectedChoices.includes(choice)
 
-          const inputTextColor = getContrastingTextColor(appearance.inputBackgroundColor)
+          const inputTextColor = getContrastingTextColor(appearance.inputBackground)
 
           return (
             <Pressable
               key={idx}
               style={[
                 styles.choiceOption,
-                { backgroundColor: appearance.inputBackgroundColor },
+                { backgroundColor: appearance.inputBackground },
                 isSelected ? { borderColor: getContrastingTextColor(appearance.backgroundColor) } : {},
               ]}
               onPress={() => {
