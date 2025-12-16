@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.307.0
+
+### Minor Changes
+
+- [#2700](https://github.com/PostHog/posthog-js/pull/2700) [`bb64696`](https://github.com/PostHog/posthog-js/commit/bb64696cc589f1b37e3fd864c10ee68bc0ee50a6) Thanks [@veryayskiy](https://github.com/veryayskiy)! - conversations widget
+  (2025-12-16)
+
 ## 1.306.2
 
 ### Patch Changes
