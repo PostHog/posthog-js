@@ -714,10 +714,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           errors.push(FeatureFlagError.ERRORS_WHILE_COMPUTING)
         }
 
-        // Note: quotaLimited detection is not currently supported because the core library
-        // filters out the quotaLimited field before returning to us. The Python SDK throws
-        // a QuotaLimitError exception which we don't have here.
-        // TODO: Consider updating the core library to preserve quotaLimited info.
+        if (flagsResponse.quotaLimited?.includes('feature_flags')) {
+          errors.push(FeatureFlagError.QUOTA_LIMITED)
+        }
 
         flagDetail = flagsResponse.flags[key]
 

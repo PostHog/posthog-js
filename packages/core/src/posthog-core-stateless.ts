@@ -734,6 +734,7 @@ export abstract class PostHogCoreStateless {
         featureFlags: {},
         featureFlagPayloads: {},
         requestId: flagsResponse?.requestId,
+        quotaLimited: flagsResponse.quotaLimited,
       }
     }
 

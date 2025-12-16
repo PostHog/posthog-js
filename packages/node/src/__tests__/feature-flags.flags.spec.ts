@@ -453,30 +453,10 @@ describe('feature flag error tracking', () => {
     expect(capturedMessage.properties.$feature_flag_error).toBe(FeatureFlagError.ERRORS_WHILE_COMPUTING)
   })
 
-  // Note: quota_limited detection is not currently supported in the Node SDK
-  // because the core library filters out the quotaLimited field before returning.
-  // This differs from the Python SDK which throws a QuotaLimitError exception.
-  // TODO: Consider updating the core library to preserve quotaLimited info.
-  it.skip('sets $feature_flag_error to quota_limited when quota limited', async () => {
+  it('sets $feature_flag_error to quota_limited when quota limited', async () => {
+    // When quota limited, the core library returns empty flags but preserves quotaLimited info
     const flagsResponse: PostHogV2FlagsResponse = {
-      flags: {
-        'some-flag': {
-          key: 'some-flag',
-          enabled: true,
-          variant: undefined,
-          reason: {
-            code: 'boolean',
-            condition_index: 1,
-            description: 'Matched condition set 1',
-          },
-          metadata: {
-            id: 1,
-            version: 1,
-            payload: undefined,
-            description: 'description',
-          },
-        },
-      },
+      flags: {},
       errorsWhileComputingFlags: false,
       quotaLimited: ['feature_flags'],
       requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
@@ -495,10 +475,14 @@ describe('feature flag error tracking', () => {
 
     const result = await posthog.getFeatureFlag('some-flag', 'some-distinct-id')
 
-    expect(result).toBe(true)
+    // Flag is undefined because quota limiting returns empty flags
+    expect(result).toBe(undefined)
 
     await waitForPromises()
-    expect(capturedMessage.properties.$feature_flag_error).toBe(FeatureFlagError.QUOTA_LIMITED)
+    // Both quota_limited and flag_missing are reported since the flag is not in the empty response
+    expect(capturedMessage.properties.$feature_flag_error).toBe(
+      `${FeatureFlagError.QUOTA_LIMITED},${FeatureFlagError.FLAG_MISSING}`
+    )
   })
 
   it('sets $feature_flag_error to unknown_error when request fails completely', async () => {
