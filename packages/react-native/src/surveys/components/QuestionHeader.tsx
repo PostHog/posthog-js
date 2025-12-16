@@ -16,11 +16,7 @@ export function QuestionHeader({
   descriptionContentType?: SurveyQuestionDescriptionContentType
   appearance: SurveyAppearanceTheme
 }): JSX.Element {
-  const logger = createLogger('ADAM')
-
   const textColor = getContrastingTextColor(appearance.backgroundColor)
-  logger.info(`text color: ${textColor}`)
-  logger.info(`appearance: ${JSON.stringify(appearance, null, 2)}`)
 
   return (
     <View style={styles.container}>
