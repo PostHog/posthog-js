@@ -1,5 +1,13 @@
 # @posthog/nextjs-config
 
+## 1.7.2
+
+### Patch Changes
+
+- Updated dependencies [[`2603a8d`](https://github.com/PostHog/posthog-js/commit/2603a8d6e1021cd8f84e8b61be77ce268435ebde)]:
+  - @posthog/core@1.8.0
+  - @posthog/webpack-plugin@1.2.2
+
 ## 1.7.1
 
 ### Patch Changes
