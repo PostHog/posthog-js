@@ -48,12 +48,18 @@ jobs:
                     echo "has-changesets=true" >> "$GITHUB_OUTPUT"
                   fi
 
+    notify-approval-needed:
+        name: Notify Slack - Approval Needed
+        needs: check-changesets
+        if: needs.check-changesets.outputs.has-changesets == 'true'
+        uses: ./.github/workflows/notify-slack-release-approval.yml
+
     version-bump:
         name: Bump versions and commit to main
-        needs: check-changesets
+        needs: [check-changesets, notify-approval-needed]
         runs-on: ubuntu-latest
         if: needs.check-changesets.outputs.has-changesets == 'true'
-        environment: 'NPM Release' # This will require an approval from a maintainer
+        environment: 'NPM Release' # This will require an approval from a maintainer, they are notified in Slack above
         outputs:
             committed: ${{ steps.commit-version-bump.outputs.committed }}
         steps:
