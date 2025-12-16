@@ -59,7 +59,7 @@
     "@types/semver": "^7.7.0",
     "@types/jest": "catalog:",
     "jest": "catalog:",
-    "next": "^15.5.7",
+    "next": "^15.5.9",
     "ts-jest": "catalog:"
   },
   "peerDependencies": {
