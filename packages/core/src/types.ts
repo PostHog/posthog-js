@@ -300,6 +300,7 @@ export type SurveyAppearance = {
   submitButtonTextColor?: string
   ratingButtonColor?: string
   ratingButtonActiveColor?: string
+  inputBackground?: string
   autoDisappear?: boolean
   displayThankYouMessage?: boolean
   thankYouMessageHeader?: string

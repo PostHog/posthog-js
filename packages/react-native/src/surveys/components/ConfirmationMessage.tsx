@@ -28,7 +28,9 @@ export function ConfirmationMessage({
     <View style={styleOverrides}>
       <View style={styles.thankYouMessageContainer}>
         <Text style={[styles.thankYouMessageHeader, { color: textColor }]}>{header}</Text>
-        {shouldRenderDescription(description, contentType) && <Text>{description}</Text>}
+        {shouldRenderDescription(description, contentType) && (
+          <Text style={{ color: textColor, opacity: 0.8 }}>{description}</Text>
+        )}
       </View>
       {isModal && (
         <BottomSection
