@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.14.4
+
+### Patch Changes
+
+- [#2764](https://github.com/PostHog/posthog-js/pull/2764) [`8368cbc`](https://github.com/PostHog/posthog-js/commit/8368cbcc3c29e362f2658e580f4956e0037469f7) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: posthog-cli finds the correct path on android gradle plugin
+  (2025-12-16)
+
 ## 4.14.3
 
 ### Patch Changes
@@ -138,7 +145,6 @@
 ### Patch Changes
 
 - [#2493](https://github.com/PostHog/posthog-js/pull/2493) [`7ec7be5`](https://github.com/PostHog/posthog-js/commit/7ec7be5917090ae00f988035ff1e0f6f727e6660) Thanks [@ordehi](https://github.com/ordehi)! - **Bug Fixes:**
-
   - Fixed surveys with URL or CSS selector targeting incorrectly showing in React Native
     - **Breaking behavior change**: Surveys configured with URL or CSS selector targeting will no longer appear in React Native apps (this was always the intended behavior)
     - **Action required**: If you have surveys that should show in React Native, remove URL/selector conditions and use feature flags or device type targeting instead
