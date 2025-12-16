@@ -344,7 +344,6 @@
         "_scrollToBottom",
         "_secure",
         "_sendRequest",
-        "_send_request",
         "_send_retriable_request",
         "_sessionDuration",
         "_sessionHasBeenIdleTooLong",
