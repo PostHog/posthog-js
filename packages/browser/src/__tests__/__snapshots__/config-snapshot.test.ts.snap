@@ -186,15 +186,6 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true"
   ],
-  "conversations": [
-    "undefined",
-    {
-      "position": [
-        "undefined",
-        "{ bottom?: string | undefined; right?: string | undefined; left?: string | undefined; top?: string | undefined; }"
-      ]
-    }
-  ],
   "disable_web_experiments": [
     "false",
     "true"
