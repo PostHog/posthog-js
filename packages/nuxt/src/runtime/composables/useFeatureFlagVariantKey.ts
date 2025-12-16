@@ -30,6 +30,9 @@ export function useFeatureFlagVariantKey(flag: string) {
   onMounted(() => {
     if (!posthog) return
 
+    // Set initial value in case it wasn't available during setup
+    featureFlagVariantKey.value = posthog.getFeatureFlag(flag)
+
     // Update when feature flags are loaded
     unsubscribe = posthog.onFeatureFlags?.(() => {
       featureFlagVariantKey.value = posthog.getFeatureFlag(flag)

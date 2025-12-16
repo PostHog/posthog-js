@@ -30,6 +30,9 @@ export function useFeatureFlagEnabled(flag: string) {
   onMounted(() => {
     if (!posthog) return
 
+    // Set initial value in case it wasn't available during setup
+    featureEnabled.value = posthog.isFeatureEnabled(flag)
+
     // Update when feature flags are loaded
     unsubscribe = posthog.onFeatureFlags?.(() => {
       featureEnabled.value = posthog.isFeatureEnabled(flag)

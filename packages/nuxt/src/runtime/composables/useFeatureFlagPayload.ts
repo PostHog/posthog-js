@@ -31,6 +31,9 @@ export function useFeatureFlagPayload(flag: string) {
   onMounted(() => {
     if (!posthog) return
 
+    // Set initial value in case it wasn't available during setup
+    featureFlagPayload.value = posthog.getFeatureFlagPayload(flag)
+
     // Update when feature flags are loaded
     unsubscribe = posthog.onFeatureFlags?.(() => {
       featureFlagPayload.value = posthog.getFeatureFlagPayload(flag)
