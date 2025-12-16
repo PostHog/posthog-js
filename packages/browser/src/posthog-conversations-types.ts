@@ -1,20 +1,4 @@
 /**
- * Configuration options for the conversations widget
- */
-export interface ConversationsConfig {
-    /**
-     * Custom positioning for the widget button
-     * @default { bottom: '20px', right: '20px' }
-     */
-    position?: {
-        bottom?: string
-        right?: string
-        left?: string
-        top?: string
-    }
-}
-
-/**
  * Remote configuration for conversations from the PostHog server
  */
 export interface ConversationsRemoteConfig {

@@ -3,7 +3,7 @@ import type { SegmentAnalytics } from './extensions/segment-integration'
 import { PostHog } from './posthog-core'
 import { KnownUnsafeEditableEvent } from '@posthog/core'
 import { Survey, SurveyConfig } from './posthog-surveys-types'
-import { ConversationsConfig, ConversationsRemoteConfig } from './posthog-conversations-types'
+import { ConversationsRemoteConfig } from './posthog-conversations-types'
 // only importing types here, so won't affect the bundle
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SAMPLED } from './extensions/replay/external/triggerMatching'
@@ -555,13 +555,6 @@ export interface PostHogConfig {
      * @default false
      */
     disable_conversations: boolean
-
-    /**
-     * Conversations widget configuration options.
-     *
-     * @default undefined
-     */
-    conversations?: ConversationsConfig
 
     /**
      * Determines whether PostHog should disable web experiments.
