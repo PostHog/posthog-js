@@ -17,7 +17,32 @@ const getDeviceType = (): string => {
   } else if (Platform.OS === 'web') {
     // Check user agent to determine if it's desktop or mobile
     const ua = navigator.userAgent
-    const isMobileOrTablet = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(ua)
+
+    // Comprehensive mobile and tablet detection based on browser package logic
+    const isMobileOrTablet =
+      // iOS devices
+      /iPhone|iPod|iPad/i.test(ua) ||
+      // Android devices - check for mobile keyword or specific tablet models
+      (/Android/i.test(ua) &&
+        (/Mobile/i.test(ua) ||
+          // Android tablets that don't have 'Mobile' in UA
+          /(9138B|TB782B|Nexus [97]|pixel c|HUAWEISHT|BTV|noble nook|smart ultra 6)/i.test(ua))) ||
+      // Windows Phone
+      /(Windows Phone|WPDesktop|IEMobile)/i.test(ua) ||
+      // BlackBerry
+      /(BlackBerry|PlayBook|BB10)/i.test(ua) ||
+      // Other mobile browsers and devices
+      /webOS|Opera Mini|UCWEB|UCBrowser/i.test(ua) ||
+      // Kindle devices
+      /(kf[a-z]{2}wi|aeo[c-r]{2})( bui|\))/i.test(ua) ||
+      /(kf[a-z]+)( bui|\)).+silk\//i.test(ua) ||
+      // Generic mobile/tablet keywords
+      /(Mobile|Tablet|pda)/i.test(ua) ||
+      // Nokia
+      /Nokia/i.test(ua) ||
+      // Kobo e-readers
+      /(kobo)\s(ereader|touch)/i.test(ua)
+
     deviceType = isMobileOrTablet ? 'Mobile' : 'Desktop'
   }
   return deviceType
