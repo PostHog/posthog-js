@@ -296,7 +296,7 @@ describe('flags v2', () => {
         })
       })
 
-      it('captures event with $feature_flag_error', async () => {
+      it('captures event with $feature_flag_error=unknown_error', async () => {
         let capturedMessage: any
         posthog.on('capture', (message) => {
           capturedMessage = message
