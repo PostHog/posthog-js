@@ -43,7 +43,7 @@
   "license": "MIT",
   "dependencies": {
     "@posthog/cli": "catalog:",
-    "semver": "^7.7.2",
+    "semver": "^7.7.3",
     "@posthog/core": "workspace:*",
     "@posthog/webpack-plugin": "workspace:*"
   },
