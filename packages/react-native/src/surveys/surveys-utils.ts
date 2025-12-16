@@ -37,6 +37,8 @@ export function shouldRenderDescription(
 }
 
 export const defaultBackgroundColor = '#eeeded' as const
+export const defaultDescriptionOpacity = 0.8
+export const defaultRatingLabelOpacity = 0.7
 
 export type SurveyAppearanceTheme = Omit<
   Required<SurveyAppearance>,
@@ -48,6 +50,7 @@ export const defaultSurveyAppearance: SurveyAppearanceTheme = {
   submitButtonTextColor: 'white',
   ratingButtonColor: 'white',
   ratingButtonActiveColor: 'black',
+  inputBackground: 'white',
   borderColor: '#c9c6c6',
   placeholder: 'Start typing...',
   displayThankYouMessage: true,
@@ -290,7 +293,11 @@ export function getContrastingTextColor(color: string): 'black' | 'white' {
 
 function hex2rgb(c: string): string {
   if (c.startsWith('#')) {
-    const hexColor = c.replace(/^#/, '')
+    let hexColor = c.replace(/^#/, '')
+    // Handle 3-character shorthand (e.g., #111 -> #111111, #abc -> #aabbcc)
+    if (/^[0-9A-Fa-f]{3}$/.test(hexColor)) {
+      hexColor = hexColor[0] + hexColor[0] + hexColor[1] + hexColor[1] + hexColor[2] + hexColor[2]
+    }
     if (!/^[0-9A-Fa-f]{6}$/.test(hexColor)) {
       return 'rgb(255, 255, 255)'
     }
