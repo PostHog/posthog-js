@@ -363,6 +363,36 @@ describe('survey-event-receiver', () => {
             registeredHook('purchase', createEventPayload('purchase', { any_prop: 'any_value' }))
             expect(surveyEventReceiver.getSurveys()).toContain('no-filters-test')
         })
+
+        it('activates survey with gt (greater than) numeric property match', () => {
+            const survey = createSurveyWithPropertyFilters('gt-test', 'purchase', {
+                amount: { values: ['100'], operator: 'gt' },
+            })
+
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([survey])
+            const registeredHook = mockAddCaptureHook.mock.calls[0][0]
+
+            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+
+            registeredHook('purchase', createEventPayload('purchase', { amount: 150 }))
+            expect(surveyEventReceiver.getSurveys()).toContain('gt-test')
+        })
+
+        it('activates survey with lt (less than) numeric property match', () => {
+            const survey = createSurveyWithPropertyFilters('lt-test', 'purchase', {
+                amount: { values: ['100'], operator: 'lt' },
+            })
+
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([survey])
+            const registeredHook = mockAddCaptureHook.mock.calls[0][0]
+
+            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+
+            registeredHook('purchase', createEventPayload('purchase', { amount: 50 }))
+            expect(surveyEventReceiver.getSurveys()).toContain('lt-test')
+        })
     })
 
     describe('action based surveys', () => {

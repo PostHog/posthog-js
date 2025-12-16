@@ -1,7 +1,7 @@
 import { isNull, isUndefined } from '@posthog/core'
 import { jsonStringify } from '../request'
-import { PropertyFilters } from '../posthog-surveys-types'
-import type { Properties, PropertyMatchType } from '../types'
+import { PropertyFilters, PropertyOperator } from '../posthog-surveys-types'
+import type { Properties } from '../types'
 import { isMatchingRegex } from './regex-utils'
 
 export function getPersonPropertiesHash(
@@ -12,7 +12,7 @@ export function getPersonPropertiesHash(
     return jsonStringify({ distinct_id, userPropertiesToSet, userPropertiesToSetOnce })
 }
 
-export const propertyComparisons: Record<PropertyMatchType, (targets: string[], values: string[]) => boolean> = {
+export const propertyComparisons: Record<PropertyOperator, (targets: string[], values: string[]) => boolean> = {
     exact: (targets, values) => values.some((value) => targets.some((target) => value === target)),
     is_not: (targets, values) => values.every((value) => targets.every((target) => value !== target)),
     regex: (targets, values) => values.some((value) => targets.some((target) => isMatchingRegex(value, target))),
@@ -21,6 +21,16 @@ export const propertyComparisons: Record<PropertyMatchType, (targets: string[], 
         values.map(toLowerCase).some((value) => targets.map(toLowerCase).some((target) => value.includes(target))),
     not_icontains: (targets, values) =>
         values.map(toLowerCase).every((value) => targets.map(toLowerCase).every((target) => !value.includes(target))),
+    gt: (targets, values) =>
+        values.some((value) => {
+            const numValue = parseFloat(value)
+            return !isNaN(numValue) && targets.some((t) => numValue > parseFloat(t))
+        }),
+    lt: (targets, values) =>
+        values.some((value) => {
+            const numValue = parseFloat(value)
+            return !isNaN(numValue) && targets.some((t) => numValue < parseFloat(t))
+        }),
 }
 
 const toLowerCase = (v: string): string => v.toLowerCase()
