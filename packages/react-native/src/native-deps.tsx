@@ -15,7 +15,10 @@ const getDeviceType = (): string => {
   if (Platform.OS === 'macos' || Platform.OS === 'windows') {
     deviceType = 'Desktop'
   } else if (Platform.OS === 'web') {
-    deviceType = 'Web'
+    // Check user agent to determine if it's desktop or mobile
+    const ua = navigator.userAgent
+    const isMobileOrTablet = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(ua)
+    deviceType = isMobileOrTablet ? 'Mobile' : 'Desktop'
   }
   return deviceType
 }
