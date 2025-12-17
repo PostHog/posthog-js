@@ -407,4 +407,8 @@ export class PostHogSurveys {
         }
         this._surveyManager.cancelSurvey(surveyId)
     }
+
+    handlePageUnload(): void {
+        this._surveyManager?.handlePageUnload()
+    }
 }

@@ -882,6 +882,8 @@ export class PostHog {
     }
 
     _handle_unload(): void {
+        this.surveys.handlePageUnload()
+
         if (!this.config.request_batching) {
             if (this._shouldCapturePageleave()) {
                 this.capture('$pageleave', null, { transport: 'sendBeacon' })
