@@ -1633,6 +1633,11 @@ export interface RemoteConfig {
     productTours?: boolean
 
     /**
+     * Whether capturing logs is enabled
+     */
+    logCapture?: boolean
+
+    /**
      * Parameters for the toolbar
      */
     toolbarParams: ToolbarParams
