@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.16.0
+
+### Minor Changes
+
+- [#2776](https://github.com/PostHog/posthog-js/pull/2776) [`32db4b3`](https://github.com/PostHog/posthog-js/commit/32db4b378c5d40747454085de135174c2c176849) Thanks [@adboio](https://github.com/adboio)! - support event property filters on surveys
+  (2025-12-17)
+
 ## 4.15.0
 
 ### Minor Changes
