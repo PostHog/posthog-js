@@ -54,14 +54,14 @@ export function OpenTextQuestion({
             styles.textInput,
             {
               backgroundColor: appearance.inputBackground,
-              color: getContrastingTextColor(appearance.inputBackground),
+              color: appearance.inputTextColor ?? getContrastingTextColor(appearance.inputBackground),
             },
           ]}
           multiline
           numberOfLines={4}
           placeholder={appearance.placeholder}
           placeholderTextColor={
-            getContrastingTextColor(appearance.inputBackground) === 'black'
+            (appearance.inputTextColor ?? getContrastingTextColor(appearance.inputBackground)) === 'black'
               ? 'rgba(0, 0, 0, 0.5)'
               : 'rgba(255, 255, 255, 0.5)'
           }
@@ -160,12 +160,18 @@ export function RatingQuestion({
         </View>
         <View style={styles.ratingText}>
           <Text
-            style={{ color: getContrastingTextColor(appearance.backgroundColor), opacity: defaultRatingLabelOpacity }}
+            style={{
+              color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor),
+              opacity: defaultRatingLabelOpacity,
+            }}
           >
             {question.lowerBoundLabel}
           </Text>
           <Text
-            style={{ color: getContrastingTextColor(appearance.backgroundColor), opacity: defaultRatingLabelOpacity }}
+            style={{
+              color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor),
+              opacity: defaultRatingLabelOpacity,
+            }}
           >
             {question.upperBoundLabel}
           </Text>
@@ -195,7 +201,10 @@ export function RatingButton({
   setActiveNumber: (num: number) => void
 }): JSX.Element {
   const backgroundColor = active ? appearance.ratingButtonActiveColor : appearance.ratingButtonColor
-  const textColor = getContrastingTextColor(backgroundColor)
+  // Active state always auto-calculates for contrast; inactive uses inputTextColor override if provided
+  const textColor = active
+    ? getContrastingTextColor(backgroundColor)
+    : (appearance.inputTextColor ?? getContrastingTextColor(backgroundColor))
 
   return (
     <TouchableOpacity
@@ -238,7 +247,7 @@ export function MultipleChoiceQuestion({
           const isOpenChoice = choice === openChoice
           const isSelected = selectedChoices.includes(choice)
 
-          const inputTextColor = getContrastingTextColor(appearance.inputBackground)
+          const choiceTextColor = appearance.inputTextColor ?? getContrastingTextColor(appearance.inputBackground)
 
           return (
             <Pressable
@@ -259,7 +268,7 @@ export function MultipleChoiceQuestion({
               }}
             >
               <View style={styles.choiceText}>
-                <Text style={{ flexGrow: 1, color: inputTextColor }}>
+                <Text style={{ flexGrow: 1, color: choiceTextColor }}>
                   {choice}
                   {isOpenChoice ? ':' : ''}
                 </Text>
