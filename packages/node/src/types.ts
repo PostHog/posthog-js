@@ -179,31 +179,16 @@ export type PostHogFeatureFlag = {
  *   ERRORS_WHILE_COMPUTING: Server returned errorsWhileComputingFlags=true
  *   FLAG_MISSING: Requested flag not in API response
  *   QUOTA_LIMITED: Rate/quota limit exceeded
- *   TIMEOUT: Request timed out
- *   CONNECTION_ERROR: Network connectivity issue
  *   UNKNOWN_ERROR: Unexpected exceptions
- *
- * For API errors with status codes, use the apiError() method which returns
- * a string like "api_error_500".
  */
 export const FeatureFlagError = {
   ERRORS_WHILE_COMPUTING: 'errors_while_computing_flags',
   FLAG_MISSING: 'flag_missing',
   QUOTA_LIMITED: 'quota_limited',
-  TIMEOUT: 'timeout',
-  CONNECTION_ERROR: 'connection_error',
   UNKNOWN_ERROR: 'unknown_error',
-
-  /**
-   * Generate API error string with status code.
-   *
-   * @param status - HTTP status code from the API error
-   * @returns Error string like "api_error_500"
-   */
-  apiError: (status: number | string): string => `api_error_${status}`,
 } as const
 
-export type FeatureFlagErrorType = (typeof FeatureFlagError)[keyof Omit<typeof FeatureFlagError, 'apiError'>] | string
+export type FeatureFlagErrorType = (typeof FeatureFlagError)[keyof typeof FeatureFlagError] | string
 
 export interface IPostHog {
   /**
