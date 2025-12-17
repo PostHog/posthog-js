@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.308.0
+
+### Minor Changes
+
+- [#2736](https://github.com/PostHog/posthog-js/pull/2736) [`9871ee0`](https://github.com/PostHog/posthog-js/commit/9871ee0058f633465598fcba6fdd87bd44216b6d) Thanks [@adboio](https://github.com/adboio)! - build tour-specific survey step
+  (2025-12-17)
+
+- [#2777](https://github.com/PostHog/posthog-js/pull/2777) [`72b8595`](https://github.com/PostHog/posthog-js/commit/72b8595a09e8606ee9201ce264b5c65e6b5b0c0d) Thanks [@adboio](https://github.com/adboio)! - support lt/gt operator in survey event property filters
+  (2025-12-17)
+
 ## 1.307.2
 
 ### Patch Changes
