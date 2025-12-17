@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.16.1
+
+### Patch Changes
+
+- [#2763](https://github.com/PostHog/posthog-js/pull/2763) [`c9c0e4d`](https://github.com/PostHog/posthog-js/commit/c9c0e4d658f73a022151a273f258df0201738219) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: captureTouches errors with reanimated styles
+  (2025-12-17)
+
 ## 4.16.0
 
 ### Minor Changes

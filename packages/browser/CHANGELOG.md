@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.309.0
+
+### Minor Changes
+
+- [#2783](https://github.com/PostHog/posthog-js/pull/2783) [`0163c71`](https://github.com/PostHog/posthog-js/commit/0163c714de1a42227fa3f947f239897d440caaa3) Thanks [@adboio](https://github.com/adboio)! - product tours: enable click-element-to-progress steps
+  (2025-12-17)
+
+- [#2745](https://github.com/PostHog/posthog-js/pull/2745) [`ee5e76d`](https://github.com/PostHog/posthog-js/commit/ee5e76d5170fe5ebbc022f3dda3b27811e14fff0) Thanks [@adboio](https://github.com/adboio)! - reduce bundle size for product tours
+  (2025-12-17)
+
 ## 1.308.0
 
 ### Minor Changes

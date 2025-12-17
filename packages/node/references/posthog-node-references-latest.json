@@ -769,7 +769,7 @@
             {
               "id": "using_$set_and_$set_once",
               "name": "Using $set and $set_once",
-              "code": "\n\n// Using $set and $set_once\nclient.identify({\n  distinctId: 'user_123',\n  properties: {\n    $set: { name: 'John Doe', email: 'john@example.com' },\n    $set_once: { first_login: new Date().toISOString() }\n  }\n})\n\n\n\n"
+              "code": "\n\n// Using $set and $set_once\nclient.identify({\n  distinctId: 'user_123',\n  properties: {\n    $set: { name: 'John Doe', email: 'john@example.com' },\n    $set_once: { first_login: new Date().toISOString() }\n    $anon_distinct_id: 'anonymous_user_456'\n  }\n})\n\n\n\n"
             }
           ],
           "releaseTag": "public",
