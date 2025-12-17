@@ -85,7 +85,7 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * - $app_namespace: App bundle identifier / namespace
    * - $os_name: Operating system name
    * - $os_version: Operating system version
-   * - $device_type: Device type (Mobile, Desktop, Web)
+   * - $device_type: Device type (Mobile, Desktop)
    * - $lib: Name of the SDK library
    * - $lib_version: Version of the SDK library
    *
