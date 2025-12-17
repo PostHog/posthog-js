@@ -90,7 +90,6 @@ jobs:
                   commit-message: 'chore(deps): Update ${{ github.event.inputs.package_name }} to ${{ github.event.inputs.package_version }}'
                   branch: ${{ steps.generate-branch-name.outputs.branch_name }}
                   delete-branch: true
-                  labels: automerge
                   title: 'chore(deps): Update ${{ github.event.inputs.package_name }} to ${{ github.event.inputs.package_version }}'
                   body: |
                       ## Changes
@@ -103,6 +102,13 @@ jobs:
               shell: bash
               run: |
                   echo "PostHog pull request for ${{ github.event.inputs.package_name }} version ${{ github.event.inputs.package_version }} ready: ${{ steps.main-repo-pr.outputs.pull-request-url }}"
+
+            - name: Enable automerge
+              env:
+                  GH_TOKEN: ${{ secrets.POSTHOG_BOT_PAT }}
+                  PR_NUMBER: ${{ steps.main-repo-pr.outputs.pull-request-number }}
+              run: |
+                  gh pr merge "$PR_NUMBER" --auto --merge
 
             - name: Get approver token
               id: approver
