@@ -26,6 +26,7 @@ export interface ProductTourSurveyQuestion {
 export interface ProductTourStep {
     id: string
     selector?: string
+    progressionTrigger: 'button' | 'click'
     content: JSONContent | null
     /** Inline survey question config - if present, this is a survey step */
     survey?: ProductTourSurveyQuestion
@@ -88,4 +89,9 @@ export const DEFAULT_PRODUCT_TOUR_APPEARANCE: Required<ProductTourAppearance> = 
     borderRadius: 8,
     borderColor: '#e5e7eb',
     whiteLabel: false,
+}
+
+export interface ShowTourOptions {
+    reason?: ProductTourRenderReason
+    enableStrictValidation?: boolean
 }

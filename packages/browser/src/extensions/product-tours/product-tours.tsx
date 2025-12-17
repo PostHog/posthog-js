@@ -5,9 +5,15 @@ import {
     ProductTourCallback,
     ProductTourDismissReason,
     ProductTourRenderReason,
+    ShowTourOptions,
 } from '../../posthog-product-tours-types'
 import { SurveyEventName, SurveyEventProperties } from '../../posthog-surveys-types'
-import { findElementBySelector, getElementMetadata, getProductTourStylesheet } from './product-tours-utils'
+import {
+    findElementBySelector,
+    getElementMetadata,
+    getProductTourStylesheet,
+    normalizeUrl,
+} from './product-tours-utils'
 import { ProductTourTooltip } from './components/ProductTourTooltip'
 import { ProductTourSurveyStep } from './components/ProductTourSurveyStep'
 import { createLogger } from '../../utils/logger'
@@ -34,8 +40,13 @@ function doesTourUrlMatch(tour: ProductTour): boolean {
         return false
     }
 
-    const targets = [conditions.url]
     const matchType = conditions.urlMatchType || SurveyMatchType.Icontains
+
+    if (matchType === SurveyMatchType.Exact) {
+        return normalizeUrl(href) === normalizeUrl(conditions.url)
+    }
+
+    const targets = [conditions.url]
     return propertyComparisons[matchType](targets, [href])
 }
 
@@ -232,7 +243,9 @@ export class ProductTourManager {
         return true
     }
 
-    showTour(tour: ProductTour, reason: ProductTourRenderReason = 'auto'): void {
+    showTour(tour: ProductTour, options?: ShowTourOptions): void {
+        const renderReason: ProductTourRenderReason = options?.reason ?? 'auto'
+
         // Validate all step selectors before showing the tour
         // Steps without selectors are modal steps and don't need validation
         const selectorFailures: Array<{
@@ -280,20 +293,20 @@ export class ProductTourManager {
 
             const failedSelectors = selectorFailures.map((f) => `Step ${f.stepIndex}: "${f.selector}" (${f.error})`)
             logger.warn(
-                `Tour "${tour.name}" (${tour.id}) not shown: ${selectorFailures.length} selector(s) failed to match:\n  - ${failedSelectors.join('\n  - ')}`
+                `Tour "${tour.name}" (${tour.id}): ${selectorFailures.length} selector(s) failed to match:\n  - ${failedSelectors.join('\n  - ')}${options?.enableStrictValidation === true ? '\n\nenableStrictValidation is true, not displaying tour.' : ''}`
             )
-            return
+            if (options?.enableStrictValidation === true) return
         }
 
         this._activeTour = tour
         this._currentStepIndex = 0
-        this._renderReason = reason
+        this._renderReason = renderReason
 
         this._captureEvent('product tour shown', {
             $product_tour_id: tour.id,
             $product_tour_name: tour.name,
             $product_tour_iteration: tour.current_iteration || 1,
-            $product_tour_render_reason: reason,
+            $product_tour_render_reason: renderReason,
         })
 
         this._renderCurrentStep()
@@ -305,7 +318,7 @@ export class ProductTourManager {
             const tour = tours.find((t) => t.id === tourId)
             if (tour) {
                 logger.info(`found tour: `, tour)
-                this.showTour(tour, 'api')
+                this.showTour(tour, { reason: 'api' })
             } else {
                 logger.info('could not find tour', tourId)
             }
@@ -382,7 +395,7 @@ export class ProductTourManager {
         this._cleanup()
     }
 
-    private _renderCurrentStep(): void {
+    private _renderCurrentStep(retryCount: number = 0): void {
         if (!this._activeTour) {
             return
         }
@@ -410,7 +423,24 @@ export class ProductTourManager {
 
         const result = findElementBySelector(step.selector)
 
+        const previousStep = this._currentStepIndex > 0 ? this._activeTour.steps[this._currentStepIndex - 1] : null
+        const shouldWaitForElement = previousStep?.progressionTrigger === 'click'
+
+        // 2s total timeout
+        const maxRetries = 20
+        const retryTimeout = 100
+
         if (result.error === 'not_found' || result.error === 'not_visible') {
+            // if previous step was click-to-progress, give some time for the next element
+            if (shouldWaitForElement && retryCount < maxRetries) {
+                setTimeout(() => {
+                    this._renderCurrentStep(retryCount + 1)
+                }, retryTimeout)
+                return
+            }
+
+            const waitDurationMs = retryCount * retryTimeout
+
             this._captureEvent('product tour step selector failed', {
                 $product_tour_id: this._activeTour.id,
                 $product_tour_step_id: step.id,
@@ -419,10 +449,13 @@ export class ProductTourManager {
                 $product_tour_error: result.error,
                 $product_tour_matches_count: result.matchCount,
                 $product_tour_failure_phase: 'runtime',
+                $product_tour_waited_for_element: shouldWaitForElement,
+                $product_tour_wait_duration_ms: waitDurationMs,
             })
 
             logger.warn(
-                `Tour "${this._activeTour.name}" dismissed: element for step ${this._currentStepIndex} became unavailable (${result.error})`
+                `Tour "${this._activeTour.name}" dismissed: element for step ${this._currentStepIndex} became unavailable (${result.error})` +
+                    (shouldWaitForElement ? ` after waiting ${waitDurationMs}ms` : '')
             )
             this.dismissTour('element_unavailable')
             return
@@ -613,7 +646,7 @@ export class ProductTourManager {
                 }
 
                 logger.info(`Tour ${tour.id} triggered by click on ${tour.trigger_selector}`)
-                this.showTour(tour, 'trigger')
+                this.showTour(tour, { reason: 'trigger' })
             }
 
             addEventListener(currentElement, 'click', listener)
