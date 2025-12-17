@@ -322,7 +322,12 @@ const extractTokenCount = (value: unknown): number | undefined => {
   if (typeof value === 'number') {
     return value
   }
-  if (value && typeof value === 'object' && 'total' in value && typeof (value as { total: unknown }).total === 'number') {
+  if (
+    value &&
+    typeof value === 'object' &&
+    'total' in value &&
+    typeof (value as { total: unknown }).total === 'number'
+  ) {
     return (value as { total: number }).total
   }
   return undefined

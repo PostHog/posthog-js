@@ -113,7 +113,12 @@ const createMockV2Model = (modelId: string): LanguageModelV2 => {
 // Helper to extract numeric token value from V2 (number) or V3 (object with .total) formats
 const extractTokenValue = (value: unknown): number => {
   if (typeof value === 'number') return value
-  if (value && typeof value === 'object' && 'total' in value && typeof (value as { total: unknown }).total === 'number') {
+  if (
+    value &&
+    typeof value === 'object' &&
+    'total' in value &&
+    typeof (value as { total: unknown }).total === 'number'
+  ) {
     return (value as { total: number }).total
   }
   return 0
