@@ -51,8 +51,23 @@ jobs:
     notify-approval-needed:
         name: Notify Slack - Approval Needed
         needs: check-changesets
+        runs-on: ubuntu-latest
         if: needs.check-changesets.outputs.has-changesets == 'true'
-        uses: ./.github/workflows/notify-slack-release-approval.yml
+        outputs:
+            slack_ts: ${{ steps.notify.outputs.slack_ts }}
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Send Slack notification
+              id: notify
+              uses: ./.github/actions/notify-slack-release-approval
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  slack_user_group_id: ${{ vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID }}
 
     version-bump:
         name: Bump versions and commit to main
@@ -63,6 +78,15 @@ jobs:
         outputs:
             committed: ${{ steps.commit-version-bump.outputs.committed }}
         steps:
+            - name: Notify Slack - Approved
+              uses: ./.github/actions/slack-thread-reply
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '✅ Release approved! Version bump in progress...'
+                  emoji_reaction: 'white_check_mark'
+
             - name: Get GitHub App token
               id: releaser
               uses: getsentry/action-github-app-token@97c9e23528286821f97fba885c1b1123284b29cc # v2
@@ -260,3 +284,31 @@ jobs:
                         "packageName": "${{ matrix.package.name }}",
                         "packageVersion": "${{ steps.check-package-version.outputs.committed-version }}"
                       }
+
+            - name: Notify Slack - Failed
+              if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
+              uses: ./.github/actions/slack-thread-reply
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '❌ Failed to publish `${{ matrix.package.name }}`! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  emoji_reaction: 'x'
+
+    notify-released:
+        name: Notify Slack - Released
+        needs: [notify-approval-needed, publish]
+        runs-on: ubuntu-latest
+        if: always() && needs.publish.result == 'success'
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Notify Slack - Released
+              uses: ./.github/actions/slack-thread-reply
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '🚀 All packages published successfully!'
+                  emoji_reaction: 'rocket'
