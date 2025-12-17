@@ -8,6 +8,7 @@ import { OptionalReactNativeDeviceInfo } from './optional/OptionalReactNativeDev
 import { PostHogCustomAppProperties, PostHogCustomStorage } from './types'
 import { OptionalReactNativeLocalize } from './optional/OptionalReactNativeLocalize'
 import { OptionalExpoFileSystemLegacy } from './optional/OptionalExpoFileSystemLegacy'
+import { detectDeviceType } from '@posthog/core'
 
 const getDeviceType = (): string => {
   let deviceType = 'Mobile'
@@ -18,29 +19,7 @@ const getDeviceType = (): string => {
     // Check user agent to determine if it's desktop or mobile
     const ua = typeof navigator !== 'undefined' && navigator.userAgent ? navigator.userAgent : ''
 
-    // Comprehensive mobile and tablet detection based on browser package logic
-    const isMobileOrTablet =
-      // iOS devices
-      /iPhone|iPod|iPad/i.test(ua) ||
-      // Android devices - all should be classified as Mobile
-      /Android/i.test(ua) ||
-      // Windows Phone
-      /(Windows Phone|WPDesktop|IEMobile)/i.test(ua) ||
-      // BlackBerry
-      /(BlackBerry|PlayBook|BB10)/i.test(ua) ||
-      // Other mobile browsers and devices
-      /webOS|Opera Mini|UCWEB|UCBrowser/i.test(ua) ||
-      // Kindle devices
-      /(kf[a-z]{2}wi|aeo[c-r]{2})( bui|\))/i.test(ua) ||
-      /(kf[a-z]+)( bui|\)).+silk\//i.test(ua) ||
-      // Generic mobile/tablet keywords
-      /(Mobile|Tablet|pda)/i.test(ua) ||
-      // Nokia
-      /Nokia/i.test(ua) ||
-      // Kobo e-readers
-      /(kobo)\s(ereader|touch)/i.test(ua)
-
-    deviceType = isMobileOrTablet ? 'Mobile' : 'Desktop'
+    deviceType = detectDeviceType(ua)
   }
   return deviceType
 }

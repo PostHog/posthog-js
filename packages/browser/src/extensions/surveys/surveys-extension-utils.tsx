@@ -22,7 +22,7 @@ import {
 } from '../../utils/survey-utils'
 import { isArray, isNullish } from '@posthog/core'
 
-import { detectDeviceType } from '../../utils/user-agent-utils'
+import { detectDeviceType } from '@posthog/core'
 import { propertyComparisons } from '../../utils/property-utils'
 import { PropertyMatchType } from '../../types'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
