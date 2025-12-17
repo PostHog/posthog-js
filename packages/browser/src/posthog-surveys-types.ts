@@ -11,10 +11,13 @@ export enum SurveyEventType {
     Cancellation = 'cancelEvents',
 }
 
+// Extended operator type to include numeric operators not in PropertyMatchType
+export type PropertyOperator = PropertyMatchType | 'gt' | 'lt'
+
 export type PropertyFilters = {
     [propertyName: string]: {
         values: string[]
-        operator: PropertyMatchType
+        operator: PropertyOperator
     }
 }
 
