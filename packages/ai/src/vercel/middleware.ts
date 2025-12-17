@@ -317,6 +317,53 @@ const extractAdditionalTokenValues = (providerMetadata: unknown): Record<string,
   return {}
 }
 
+// Helper to extract numeric token value from V2 (number) or V3 (object with .total) usage formats
+const extractTokenCount = (value: unknown): number | undefined => {
+  if (typeof value === 'number') {
+    return value
+  }
+  if (value && typeof value === 'object' && 'total' in value && typeof (value as { total: unknown }).total === 'number') {
+    return (value as { total: number }).total
+  }
+  return undefined
+}
+
+// Helper to extract reasoning tokens from V2 (usage.reasoningTokens) or V3 (usage.outputTokens.reasoning)
+const extractReasoningTokens = (usage: Record<string, unknown>): unknown => {
+  // V2 style: top-level reasoningTokens
+  if ('reasoningTokens' in usage) {
+    return usage.reasoningTokens
+  }
+  // V3 style: nested in outputTokens.reasoning
+  if (
+    'outputTokens' in usage &&
+    usage.outputTokens &&
+    typeof usage.outputTokens === 'object' &&
+    'reasoning' in usage.outputTokens
+  ) {
+    return (usage.outputTokens as { reasoning: unknown }).reasoning
+  }
+  return undefined
+}
+
+// Helper to extract cached input tokens from V2 (usage.cachedInputTokens) or V3 (usage.inputTokens.cacheRead)
+const extractCacheReadTokens = (usage: Record<string, unknown>): unknown => {
+  // V2 style: top-level cachedInputTokens
+  if ('cachedInputTokens' in usage) {
+    return usage.cachedInputTokens
+  }
+  // V3 style: nested in inputTokens.cacheRead
+  if (
+    'inputTokens' in usage &&
+    usage.inputTokens &&
+    typeof usage.inputTokens === 'object' &&
+    'cacheRead' in usage.inputTokens
+  ) {
+    return (usage.inputTokens as { cacheRead: unknown }).cacheRead
+  }
+  return undefined
+}
+
 /**
  * Wraps a Vercel AI SDK language model (V2 or V3) with PostHog tracing.
  * Automatically detects the model version and applies appropriate instrumentation.
@@ -361,11 +408,13 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
 
         const webSearchCount = extractWebSearchCount(providerMetadata, result.usage)
 
+        // V2 usage has simple numbers, V3 has objects with .total - normalize both
+        const usageObj = result.usage as Record<string, unknown>
         const usage = {
-          inputTokens: result.usage.inputTokens,
-          outputTokens: result.usage.outputTokens,
-          reasoningTokens: result.usage.reasoningTokens,
-          cacheReadInputTokens: result.usage.cachedInputTokens,
+          inputTokens: extractTokenCount(result.usage.inputTokens),
+          outputTokens: extractTokenCount(result.usage.outputTokens),
+          reasoningTokens: extractReasoningTokens(usageObj),
+          cacheReadInputTokens: extractCacheReadTokens(usageObj),
           webSearchCount,
           ...additionalTokenValues,
         }
@@ -490,11 +539,12 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             if (chunk.type === 'finish') {
               providerMetadata = chunk.providerMetadata
               const additionalTokenValues = extractAdditionalTokenValues(providerMetadata)
+              const chunkUsage = (chunk.usage as Record<string, unknown>) || {}
               usage = {
-                inputTokens: chunk.usage?.inputTokens,
-                outputTokens: chunk.usage?.outputTokens,
-                reasoningTokens: chunk.usage?.reasoningTokens,
-                cacheReadInputTokens: chunk.usage?.cachedInputTokens,
+                inputTokens: extractTokenCount(chunk.usage?.inputTokens),
+                outputTokens: extractTokenCount(chunk.usage?.outputTokens),
+                reasoningTokens: extractReasoningTokens(chunkUsage),
+                cacheReadInputTokens: extractCacheReadTokens(chunkUsage),
                 ...additionalTokenValues,
               }
             }

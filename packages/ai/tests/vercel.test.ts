@@ -34,12 +34,18 @@ const getPromptText = (content: any): string => {
   return ''
 }
 
+// Helper to create V3-style token usage object
+const v3TokenUsage = (input: number, output: number, reasoning?: number) => ({
+  inputTokens: { total: input, noCache: input, cacheRead: undefined, cacheWrite: undefined },
+  outputTokens: { total: output, text: output - (reasoning ?? 0), reasoning: reasoning },
+})
+
 // Create a mock V3 model (AI SDK 6)
 const createMockV3Model = (modelId: string): LanguageModelV3 => {
   const mockResponses = {
-    'What is 9 + 10?': { text: '19', usage: { inputTokens: 10, outputTokens: 2 } },
-    'What is 10 + 11?': { text: '21', usage: { inputTokens: 10, outputTokens: 2 } },
-    'What is 12 + 13?': { text: '25', usage: { inputTokens: 10, outputTokens: 2 } },
+    'What is 9 + 10?': { text: '19', usage: v3TokenUsage(10, 2) },
+    'What is 10 + 11?': { text: '21', usage: v3TokenUsage(10, 2) },
+    'What is 12 + 13?': { text: '25', usage: v3TokenUsage(10, 2) },
   }
 
   return {
@@ -52,7 +58,7 @@ const createMockV3Model = (modelId: string): LanguageModelV3 => {
       const promptText = getPromptText(userMessage?.content)
       const response = mockResponses[promptText as keyof typeof mockResponses] || {
         text: 'Unknown',
-        usage: { inputTokens: 5, outputTokens: 1 },
+        usage: v3TokenUsage(5, 1),
       }
 
       return {
@@ -104,17 +110,29 @@ const createMockV2Model = (modelId: string): LanguageModelV2 => {
   } as LanguageModelV2
 }
 
+// Helper to extract numeric token value from V2 (number) or V3 (object with .total) formats
+const extractTokenValue = (value: unknown): number => {
+  if (typeof value === 'number') return value
+  if (value && typeof value === 'object' && 'total' in value && typeof (value as { total: unknown }).total === 'number') {
+    return (value as { total: number }).total
+  }
+  return 0
+}
+
 // Simulate what generateText does - works with both V2 and V3
 const simulateGenerateText = async ({ model, prompt }: { model: any; prompt: string }) => {
   const messages = [{ role: 'user' as const, content: [{ type: 'text' as const, text: prompt }] }]
   const result = await model.doGenerate({ prompt: messages })
 
+  const promptTokens = extractTokenValue(result.usage.inputTokens)
+  const completionTokens = extractTokenValue(result.usage.outputTokens)
+
   return {
     text: result.content[0]?.text || result.text,
     usage: {
-      promptTokens: result.usage.inputTokens,
-      completionTokens: result.usage.outputTokens,
-      totalTokens: result.usage.inputTokens + result.usage.outputTokens,
+      promptTokens,
+      completionTokens,
+      totalTokens: promptTokens + completionTokens,
     },
   }
 }
@@ -201,7 +219,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         { type: 'tool-input-end', id: 'tc-1' },
         {
           type: 'finish',
-          usage: { inputTokens: 20, outputTokens: 15, totalTokens: 35 },
+          usage: v3TokenUsage(20, 15),
           finishReason: 'stop',
         },
       ]
@@ -388,13 +406,13 @@ describe('Vercel AI SDK - Dual Version Support', () => {
     })
 
     it.each([
-      ['v2', createMockV2Model],
-      ['v3', createMockV3Model],
-    ])('should track tools in %s models when provided', async (_version, createModel) => {
+      ['v2', createMockV2Model, { inputTokens: 15, outputTokens: 5 }],
+      ['v3', createMockV3Model, v3TokenUsage(15, 5)],
+    ])('should track tools in %s models when provided', async (_version, createModel, usageFormat) => {
       const baseModel = createModel('gpt-4')
       baseModel.doGenerate = jest.fn().mockImplementation(async () => ({
         text: 'Using tool',
-        usage: { inputTokens: 15, outputTokens: 5 },
+        usage: usageFormat,
         content: [{ type: 'text', text: 'Using tool' }],
         response: { modelId: 'gpt-4' },
         providerMetadata: {},
@@ -448,14 +466,17 @@ describe('Vercel AI SDK - Dual Version Support', () => {
   })
 
   describe('Mixed reasoning and text content', () => {
-    it.each(['v2', 'v3'] as const)('should handle reasoning in %s streaming', async (version) => {
+    it.each([
+      ['v2', { inputTokens: 10, outputTokens: 8, totalTokens: 18, reasoningTokens: 5 }],
+      ['v3', v3TokenUsage(10, 8, 5)],
+    ] as const)('should handle reasoning in %s streaming', async (version, usageFormat) => {
       const streamParts = [
         { type: 'reasoning-delta' as const, id: 'r-1', delta: 'Thinking about ' },
         { type: 'reasoning-delta' as const, id: 'r-1', delta: 'the answer.' },
         { type: 'text-delta' as const, id: 't-1', delta: 'The answer is 19.' },
         {
           type: 'finish' as const,
-          usage: { inputTokens: 10, outputTokens: 8, totalTokens: 18, reasoningTokens: 5 },
+          usage: usageFormat,
           finishReason: 'stop' as const,
         },
       ]
