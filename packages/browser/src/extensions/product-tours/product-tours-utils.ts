@@ -209,6 +209,10 @@ export function renderTipTapContent(content: any): string {
     }
 }
 
+export function normalizeUrl(url: string): string {
+    return url.endsWith('/') ? url.slice(0, -1) : url
+}
+
 function escapeHtml(text: string): string {
     const div = document.createElement('div')
     div.textContent = text
