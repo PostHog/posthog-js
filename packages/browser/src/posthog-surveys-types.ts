@@ -291,6 +291,7 @@ export enum SurveyEventName {
     SHOWN = 'survey shown',
     DISMISSED = 'survey dismissed',
     SENT = 'survey sent',
+    ABANDONED = 'survey abandoned',
 }
 
 export enum SurveyEventProperties {

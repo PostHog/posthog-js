@@ -26,6 +26,7 @@ import {
     SURVEY_LOGGER as logger,
 } from '../utils/survey-utils'
 import { isNull, isUndefined } from '@posthog/core'
+import { SURVEYS } from '../constants'
 import { uuidv7 } from '../uuidv7'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import { Cancel } from './surveys/components/QuestionHeader'
@@ -52,6 +53,7 @@ import {
     hasWaitPeriodPassed,
     isSurveyInProgress,
     sendSurveyEvent,
+    sendSurveyAbandonedEvent,
     setInProgressSurveyState,
     SurveyContext,
     getSurveyStylesheet,
@@ -234,6 +236,20 @@ export class SurveyManager {
         this._posthog = posthog
         // This is used to track the survey that is currently in focus. We only show one survey at a time.
         this._surveyInFocus = null
+    }
+
+    public handlePageUnload = (): void => {
+        // we don't use getSurveys to avoid adding extra API calls here.
+        // if no surveys are cached, there's nothing to do anyways
+        const surveys = this._posthog.get_property(SURVEYS) as Survey[] | undefined
+        if (!surveys) {
+            return
+        }
+        for (const survey of surveys) {
+            if (isSurveyInProgress(survey)) {
+                sendSurveyAbandonedEvent(survey, this._posthog)
+            }
+        }
     }
 
     private _clearSurveyTimeout(surveyId: string) {

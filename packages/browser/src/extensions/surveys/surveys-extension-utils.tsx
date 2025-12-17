@@ -16,6 +16,7 @@ import { document as _document, window as _window, userAgent } from '../../utils
 import {
     getSurveyInteractionProperty,
     getSurveySeenKey,
+    getSurveyAbandonedKey,
     SURVEY_LOGGER as logger,
     setSurveySeenOnLocalStorage,
     SURVEY_IN_PROGRESS_PREFIX,
@@ -432,6 +433,30 @@ export const sendSurveyEvent = ({
     }
 }
 
+const _surveyHasResponses = (inProgressSurvey: InProgressSurveyState | null) => {
+    return Object.values(inProgressSurvey?.responses || {}).filter((resp) => !isNullish(resp)).length > 0
+}
+
+const _buildSurveyEventProperties = (
+    survey: Survey,
+    inProgressSurvey: InProgressSurveyState | null,
+    posthog: PostHog
+) => ({
+    [SurveyEventProperties.SURVEY_NAME]: survey.name,
+    [SurveyEventProperties.SURVEY_ID]: survey.id,
+    [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
+    [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
+    [SurveyEventProperties.SURVEY_PARTIALLY_COMPLETED]: _surveyHasResponses(inProgressSurvey),
+    sessionRecordingUrl: posthog.get_session_replay_url?.(),
+    ...inProgressSurvey?.responses,
+    [SurveyEventProperties.SURVEY_SUBMISSION_ID]: inProgressSurvey?.surveySubmissionId,
+    [SurveyEventProperties.SURVEY_QUESTIONS]: survey.questions.map((question) => ({
+        id: question.id,
+        question: question.question,
+        response: getSurveyResponseValue(inProgressSurvey?.responses || {}, question.id),
+    })),
+})
+
 export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
     if (!posthog) {
         logger.error('[survey dismissed] event not captured, PostHog instance not found.')
@@ -443,29 +468,46 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
 
     const inProgressSurvey = getInProgressSurveyState(survey)
     posthog.capture(SurveyEventName.DISMISSED, {
-        [SurveyEventProperties.SURVEY_NAME]: survey.name,
-        [SurveyEventProperties.SURVEY_ID]: survey.id,
-        [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
-        [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
-        // check if the survey is partially completed
-        [SurveyEventProperties.SURVEY_PARTIALLY_COMPLETED]:
-            Object.values(inProgressSurvey?.responses || {}).filter((resp) => !isNullish(resp)).length > 0,
-        sessionRecordingUrl: posthog.get_session_replay_url?.(),
-        ...inProgressSurvey?.responses,
-        [SurveyEventProperties.SURVEY_SUBMISSION_ID]: inProgressSurvey?.surveySubmissionId,
-        [SurveyEventProperties.SURVEY_QUESTIONS]: survey.questions.map((question) => ({
-            id: question.id,
-            question: question.question,
-            response: getSurveyResponseValue(inProgressSurvey?.responses || {}, question.id),
-        })),
+        ..._buildSurveyEventProperties(survey, inProgressSurvey, posthog),
         $set: {
             [getSurveyInteractionProperty(survey, 'dismissed')]: true,
         },
     })
-    // Clear in-progress state on dismissal
     clearInProgressSurveyState(survey)
     setSurveySeenOnLocalStorage(survey)
     window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: survey.id } }))
+}
+
+export const sendSurveyAbandonedEvent = (survey: Survey, posthog?: PostHog) => {
+    if (!posthog) {
+        logger.error('[survey abandoned] event not captured, PostHog instance not found.')
+        return
+    }
+
+    const abandonedKey = getSurveyAbandonedKey(survey)
+    try {
+        if (localStorage.getItem(abandonedKey) === 'true') {
+            return
+        }
+    } catch {
+        // localStorage not available
+        return
+    }
+
+    const inProgressSurvey = getInProgressSurveyState(survey)
+    if (!inProgressSurvey) {
+        return
+    }
+
+    try {
+        localStorage.setItem(abandonedKey, 'true')
+    } catch {
+        // localStorage not available
+    }
+
+    posthog.capture(SurveyEventName.ABANDONED, _buildSurveyEventProperties(survey, inProgressSurvey, posthog), {
+        transport: 'sendBeacon',
+    })
 }
 
 // Use the Fisher-yates algorithm to shuffle this array
