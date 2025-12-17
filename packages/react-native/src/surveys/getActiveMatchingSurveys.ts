@@ -1,43 +1,8 @@
-import { canActivateRepeatedly, hasEvents } from './surveys-utils'
+import { canActivateRepeatedly, hasEvents, surveyValidationMap } from './surveys-utils'
 import { currentDeviceType } from '../native-deps'
 import { FeatureFlagValue, Survey, SurveyMatchType } from '@posthog/core'
 
 const ANY_FLAG_VARIANT = 'any'
-
-const isMatchingRegex = function (value: string, pattern: string): boolean {
-  if (!isValidRegex(pattern)) {
-    return false
-  }
-
-  try {
-    return new RegExp(pattern).test(value)
-  } catch {
-    return false
-  }
-}
-
-const isValidRegex = function (str: string): boolean {
-  try {
-    new RegExp(str)
-  } catch {
-    return false
-  }
-  return true
-}
-
-const surveyValidationMap: Record<SurveyMatchType, (targets: string[], value: string) => boolean> = {
-  icontains: (targets, value) => targets.some((target) => value.toLowerCase().includes(target.toLowerCase())),
-
-  not_icontains: (targets, value) => targets.every((target) => !value.toLowerCase().includes(target.toLowerCase())),
-
-  regex: (targets, value) => targets.some((target) => isMatchingRegex(value, target)),
-
-  not_regex: (targets, value) => targets.every((target) => !isMatchingRegex(value, target)),
-
-  exact: (targets, value) => targets.some((target) => value === target),
-
-  is_not: (targets, value) => targets.every((target) => value !== target),
-}
 
 function defaultMatchType(matchType?: SurveyMatchType): SurveyMatchType {
   return matchType ?? SurveyMatchType.Icontains
@@ -48,11 +13,9 @@ function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
     return true
   }
 
-  const deviceType = currentDeviceType
-  return surveyValidationMap[defaultMatchType(survey.conditions.deviceTypesMatchType)](
-    survey.conditions.deviceTypes,
-    deviceType
-  )
+  return surveyValidationMap[defaultMatchType(survey.conditions.deviceTypesMatchType)](survey.conditions.deviceTypes, [
+    currentDeviceType,
+  ])
 }
 
 function isSurveyFlagEnabled(flagKey: string | undefined, flags: Record<string, FeatureFlagValue>): boolean {
