@@ -9,13 +9,93 @@ import {
   SurveyAppearance,
   SurveyPosition,
   SurveyQuestionDescriptionContentType,
+  SurveyMatchType,
 } from '@posthog/core'
 
-/**
- * Utility function to check if some value is an integer
- * @param value The value to check
- * @returns Truthy if the value is an integer
- */
+// Extended operator type to include numeric operators not in core SurveyMatchType
+export type PropertyOperator = SurveyMatchType | 'gt' | 'lt'
+
+export type PropertyFilters = {
+  [propertyName: string]: {
+    values: string[]
+    operator: PropertyOperator
+  }
+}
+
+export interface SurveyEventWithFilters {
+  name: string
+  propertyFilters?: PropertyFilters
+}
+
+const isValidRegex = (str: string): boolean => {
+  try {
+    new RegExp(str)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export const isMatchingRegex = (value: string, pattern: string): boolean => {
+  if (!isValidRegex(pattern)) {
+    return false
+  }
+  try {
+    return new RegExp(pattern).test(value)
+  } catch {
+    return false
+  }
+}
+
+export const surveyValidationMap: Record<PropertyOperator, (targets: string[], values: string[]) => boolean> = {
+  [SurveyMatchType.Icontains]: (targets, values) =>
+    values.some((value) => targets.some((target) => value.toLowerCase().includes(target.toLowerCase()))),
+  [SurveyMatchType.NotIcontains]: (targets, values) =>
+    values.every((value) => targets.every((target) => !value.toLowerCase().includes(target.toLowerCase()))),
+  [SurveyMatchType.Regex]: (targets, values) =>
+    values.some((value) => targets.some((target) => isMatchingRegex(value, target))),
+  [SurveyMatchType.NotRegex]: (targets, values) =>
+    values.every((value) => targets.every((target) => !isMatchingRegex(value, target))),
+  [SurveyMatchType.Exact]: (targets, values) => values.some((value) => targets.some((target) => value === target)),
+  [SurveyMatchType.IsNot]: (targets, values) => values.every((value) => targets.every((target) => value !== target)),
+  gt: (targets, values) =>
+    values.some((value) => {
+      const numValue = parseFloat(value)
+      return !isNaN(numValue) && targets.some((t) => numValue > parseFloat(t))
+    }),
+  lt: (targets, values) =>
+    values.some((value) => {
+      const numValue = parseFloat(value)
+      return !isNaN(numValue) && targets.some((t) => numValue < parseFloat(t))
+    }),
+}
+
+export function matchPropertyFilters(
+  propertyFilters: PropertyFilters | undefined,
+  eventProperties: Record<string, unknown> | undefined
+): boolean {
+  if (!propertyFilters) {
+    return true
+  }
+
+  return Object.entries(propertyFilters).every(([propertyName, filter]) => {
+    const eventPropertyValue = eventProperties?.[propertyName]
+
+    if (eventPropertyValue === undefined || eventPropertyValue === null) {
+      return false
+    }
+
+    const values = [String(eventPropertyValue)]
+
+    const comparisonFunction = surveyValidationMap[filter.operator]
+    if (!comparisonFunction) {
+      return false
+    }
+
+    return comparisonFunction(filter.values, values)
+  })
+}
+
 function isInteger(value: unknown): boolean {
   return typeof value === 'number' && Number.isInteger(value)
 }
@@ -37,6 +117,8 @@ export function shouldRenderDescription(
 }
 
 export const defaultBackgroundColor = '#eeeded' as const
+export const defaultDescriptionOpacity = 0.8
+export const defaultRatingLabelOpacity = 0.7
 
 export type SurveyAppearanceTheme = Omit<
   Required<SurveyAppearance>,
@@ -48,6 +130,7 @@ export const defaultSurveyAppearance: SurveyAppearanceTheme = {
   submitButtonTextColor: 'white',
   ratingButtonColor: 'white',
   ratingButtonActiveColor: 'black',
+  inputBackground: 'white',
   borderColor: '#c9c6c6',
   placeholder: 'Start typing...',
   displayThankYouMessage: true,
@@ -290,7 +373,11 @@ export function getContrastingTextColor(color: string): 'black' | 'white' {
 
 function hex2rgb(c: string): string {
   if (c.startsWith('#')) {
-    const hexColor = c.replace(/^#/, '')
+    let hexColor = c.replace(/^#/, '')
+    // Handle 3-character shorthand (e.g., #111 -> #111111, #abc -> #aabbcc)
+    if (/^[0-9A-Fa-f]{3}$/.test(hexColor)) {
+      hexColor = hexColor[0] + hexColor[0] + hexColor[1] + hexColor[1] + hexColor[2] + hexColor[2]
+    }
     if (!/^[0-9A-Fa-f]{6}$/.test(hexColor)) {
       return 'rgb(255, 255, 255)'
     }

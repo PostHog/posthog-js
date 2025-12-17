@@ -1,3 +1,5 @@
+import { PropertyMatchType } from './types'
+
 export interface JSONContent {
     type?: string
     attrs?: Record<string, any>
@@ -6,15 +8,37 @@ export interface JSONContent {
     text?: string
 }
 
+export type ProductTourSurveyQuestionType = 'open' | 'rating'
+
+export interface ProductTourSurveyQuestion {
+    type: ProductTourSurveyQuestionType
+    questionText: string
+    /** Rating display type - emoji or number */
+    display?: 'emoji' | 'number'
+    /** Rating scale - 3 or 5 for emoji, 5 or 10 for number */
+    scale?: 3 | 5 | 10
+    /** Label for low end of rating scale (e.g., "Not likely") */
+    lowerBoundLabel?: string
+    /** Label for high end of rating scale (e.g., "Very likely") */
+    upperBoundLabel?: string
+}
+
 export interface ProductTourStep {
     id: string
     selector?: string
+    progressionTrigger: 'button' | 'click'
     content: JSONContent | null
+    /** Inline survey question config - if present, this is a survey step */
+    survey?: ProductTourSurveyQuestion
+    /** ID of the auto-created survey for this step (set by backend) */
+    linkedSurveyId?: string
+    /** ID of the survey question (set by backend, used for event tracking) */
+    linkedSurveyQuestionId?: string
 }
 
 export interface ProductTourConditions {
     url?: string
-    urlMatchType?: 'exact' | 'contains' | 'regex'
+    urlMatchType?: PropertyMatchType
     selector?: string
 }
 
@@ -65,4 +89,9 @@ export const DEFAULT_PRODUCT_TOUR_APPEARANCE: Required<ProductTourAppearance> = 
     borderRadius: 8,
     borderColor: '#e5e7eb',
     whiteLabel: false,
+}
+
+export interface ShowTourOptions {
+    reason?: ProductTourRenderReason
+    enableStrictValidation?: boolean
 }

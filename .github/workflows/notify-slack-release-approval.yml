@@ -1,0 +1,139 @@
+name: 'Notify Slack - Release Approval Needed'
+permissions:
+    contents: read
+
+on:
+    workflow_dispatch:
+    workflow_call:
+        inputs:
+            slack_webhook_url:
+                description: 'Slack Webhook URL (overrides vars.APPROVALS_CLIENT_LIBRARIES_SLACK_WEBHOOK_URL)'
+                required: false
+                type: string
+                default: ''
+            slack_user_group_id:
+                description: 'Slack User Group ID for mentions (overrides vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID)'
+                required: false
+                type: string
+                default: ''
+
+jobs:
+    notify:
+        name: Send Slack Notification
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Get latest tag info
+              id: get-tag-info
+              run: |
+                  # Fetch all tags
+                  git fetch --tags --force
+
+                  # Get the most recent tag (sorted by date, not version)
+                  LATEST_TAG=$(git tag --sort=-creatordate | head -n 1)
+
+                  if [ -z "$LATEST_TAG" ]; then
+                    echo "No tags found, using initial commit"
+                    LATEST_TAG=$(git rev-list --max-parents=0 HEAD)
+                  fi
+
+                  echo "latest_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+
+                  # Get current commit SHA
+                  CURRENT_SHA=$(git rev-parse HEAD)
+                  echo "current_sha=$CURRENT_SHA" >> "$GITHUB_OUTPUT"
+                  echo "current_sha_short=${CURRENT_SHA:0:7}" >> "$GITHUB_OUTPUT"
+
+                  # Get commit count
+                  COMMIT_COUNT=$(git rev-list --count "$LATEST_TAG"..HEAD 2>/dev/null || echo "N/A")
+                  echo "commit_count=$COMMIT_COUNT" >> "$GITHUB_OUTPUT"
+
+            - name: Prepare user group mention
+              id: prepare-mention
+              env:
+                  SLACK_USER_GROUP_ID: ${{ inputs.slack_user_group_id || vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID }}
+              run: |
+                  echo "group_mention=<!subteam^$SLACK_USER_GROUP_ID|@group-client-libraries>" >> "$GITHUB_OUTPUT"
+
+            - name: Send Slack notification
+              uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
+              with:
+                  webhook: ${{ inputs.slack_webhook_url || vars.APPROVALS_CLIENT_LIBRARIES_SLACK_WEBHOOK_URL }}
+                  webhook-type: incoming-webhook
+                  payload: |
+                      {
+                        "text": "🚀 Release Approval Needed for ${{ github.repository }}",
+                        "blocks": [
+                          {
+                            "type": "header",
+                            "text": {
+                              "type": "plain_text",
+                              "text": "🚀 Release Approval Needed - ${{ github.repository }}",
+                              "emoji": true
+                            }
+                          },
+                          {
+                            "type": "section",
+                            "text": {
+                              "type": "mrkdwn",
+                              "text": "A new release is ready for approval in the `${{ github.repository }}` repository."
+                            }
+                          },
+                          {
+                            "type": "section",
+                            "fields": [
+                              {
+                                "type": "mrkdwn",
+                                "text": "*Repository:*\n<https://github.com/${{ github.repository }}|${{ github.repository }}>"
+                              },
+                              {
+                                "type": "mrkdwn",
+                                "text": "*Latest Tag:*\n`${{ steps.get-tag-info.outputs.latest_tag }}`"
+                              },
+                              {
+                                "type": "mrkdwn",
+                                "text": "*Current Commit:*\n`${{ steps.get-tag-info.outputs.current_sha_short }}`"
+                              },
+                              {
+                                "type": "mrkdwn",
+                                "text": "*Commits since tag:*\n${{ steps.get-tag-info.outputs.commit_count }}"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "section",
+                            "text": {
+                              "type": "mrkdwn",
+                              "text": "${{ steps.prepare-mention.outputs.group_mention }} Please review and approve the release."
+                            }
+                          },
+                          {
+                            "type": "actions",
+                            "elements": [
+                              {
+                                "type": "button",
+                                "text": {
+                                  "type": "plain_text",
+                                  "text": "View Diff on GitHub",
+                                  "emoji": true
+                                },
+                                "url": "https://github.com/${{ github.repository }}/compare/${{ steps.get-tag-info.outputs.latest_tag }}...main"
+                              },
+                              {
+                                "type": "button",
+                                "text": {
+                                  "type": "plain_text",
+                                  "text": "Approve/Reject on GitHub",
+                                  "emoji": true
+                                },
+                                "url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                                "style": "primary"
+                              }
+                            ]
+                          }
+                        ]
+                      }

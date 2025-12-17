@@ -1,5 +1,11 @@
 # posthog-ai
 
+## 7.2.2
+
+### Patch Changes
+
+- [#2761](https://github.com/PostHog/posthog-js/pull/2761) [`6f5db7c`](https://github.com/PostHog/posthog-js/commit/6f5db7cb6d96bcd67193f0ad0e08ec7756be8c67) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates: - Updated dependency [`@anthropic-ai/sdk@^0.71.2` ↗︎](https://www.npmjs.com/package/@anthropic-ai/sdk/v/0.71.2) (from `^0.67.1`, in `dependencies`) - Updated dependency [`@google/genai@^1.33.0` ↗︎](https://www.npmjs.com/package/@google/genai/v/1.33.0) (from `^1.31.0`, in `dependencies`) - Updated dependency [`@langchain/core@^1.1.5` ↗︎](https://www.npmjs.com/package/@langchain/core/v/1.1.5) (from `^1.1.4`, in `dependencies`) - Updated dependency [`ai@^5.0.113` ↗︎](https://www.npmjs.com/package/ai/v/5.0.113) (from `^5.0.107`, in `dependencies`) - Updated dependency [`langchain@^1.2.0` ↗︎](https://www.npmjs.com/package/langchain/v/1.2.0) (from `^1.1.5`, in `dependencies`) (2025-12-16)
+
 ## 7.2.1
 
 ### Patch Changes
@@ -56,7 +62,6 @@
 ### Major Changes
 
 - [#2554](https://github.com/PostHog/posthog-js/pull/2554) [`8e8d2f5`](https://github.com/PostHog/posthog-js/commit/8e8d2f530f0676463b6e36a710f4301119960e2e) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Update LLM provider SDKs to latest versions
-
   - `openai`: **5.20.1 → 6.8.1**
   - `@anthropic-ai/sdk`: 0.63.1 → 0.67.0
   - `@google/genai`: 1.19.0 → 1.29.0

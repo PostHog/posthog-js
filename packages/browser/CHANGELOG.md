@@ -1,5 +1,86 @@
 # posthog-js
 
+## 1.309.1
+
+### Patch Changes
+
+- Updated dependencies [[`6b0aabf`](https://github.com/PostHog/posthog-js/commit/6b0aabff893e44d1710b7d122a68bf023f4e0bd5)]:
+    - @posthog/core@1.8.1
+
+## 1.309.0
+
+### Minor Changes
+
+- [#2783](https://github.com/PostHog/posthog-js/pull/2783) [`0163c71`](https://github.com/PostHog/posthog-js/commit/0163c714de1a42227fa3f947f239897d440caaa3) Thanks [@adboio](https://github.com/adboio)! - product tours: enable click-element-to-progress steps
+  (2025-12-17)
+
+- [#2745](https://github.com/PostHog/posthog-js/pull/2745) [`ee5e76d`](https://github.com/PostHog/posthog-js/commit/ee5e76d5170fe5ebbc022f3dda3b27811e14fff0) Thanks [@adboio](https://github.com/adboio)! - reduce bundle size for product tours
+  (2025-12-17)
+
+## 1.308.0
+
+### Minor Changes
+
+- [#2736](https://github.com/PostHog/posthog-js/pull/2736) [`9871ee0`](https://github.com/PostHog/posthog-js/commit/9871ee0058f633465598fcba6fdd87bd44216b6d) Thanks [@adboio](https://github.com/adboio)! - build tour-specific survey step
+  (2025-12-17)
+
+- [#2777](https://github.com/PostHog/posthog-js/pull/2777) [`72b8595`](https://github.com/PostHog/posthog-js/commit/72b8595a09e8606ee9201ce264b5c65e6b5b0c0d) Thanks [@adboio](https://github.com/adboio)! - support lt/gt operator in survey event property filters
+  (2025-12-17)
+
+## 1.307.2
+
+### Patch Changes
+
+- Updated dependencies [[`2603a8d`](https://github.com/PostHog/posthog-js/commit/2603a8d6e1021cd8f84e8b61be77ce268435ebde)]:
+    - @posthog/core@1.8.0
+
+## 1.307.1
+
+### Patch Changes
+
+- [#2708](https://github.com/PostHog/posthog-js/pull/2708) [`3b7f30c`](https://github.com/PostHog/posthog-js/commit/3b7f30cfb5ea1ae743ca0e3471b33f7ba5ff1d0b) Thanks [@andehen](https://github.com/andehen)! - Include $device_id when fetching feature flags
+  (2025-12-16)
+
+## 1.307.0
+
+### Minor Changes
+
+- [#2700](https://github.com/PostHog/posthog-js/pull/2700) [`bb64696`](https://github.com/PostHog/posthog-js/commit/bb64696cc589f1b37e3fd864c10ee68bc0ee50a6) Thanks [@veryayskiy](https://github.com/veryayskiy)! - conversations widget
+  (2025-12-16)
+
+## 1.306.2
+
+### Patch Changes
+
+- [#2730](https://github.com/PostHog/posthog-js/pull/2730) [`79184bd`](https://github.com/PostHog/posthog-js/commit/79184bdd385d7413718ba9b10f9a9d7a68fdc350) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - include synthetic exception in console.error capture
+  (2025-12-15)
+
+## 1.306.1
+
+### Patch Changes
+
+- [#2746](https://github.com/PostHog/posthog-js/pull/2746) [`515c18f`](https://github.com/PostHog/posthog-js/commit/515c18fd32505cfe7afaa88f9950f0cdda2ecd8f) Thanks [@ksvat](https://github.com/ksvat)! - Update which network masking function usage
+  (2025-12-13)
+
+## 1.306.0
+
+### Minor Changes
+
+- [#2733](https://github.com/PostHog/posthog-js/pull/2733) [`e97857c`](https://github.com/PostHog/posthog-js/commit/e97857cb62ce3d11e39de3fea734ba4d56a40298) Thanks [@adboio](https://github.com/adboio)! - support hideCancelButton in survey appearance
+  (2025-12-12)
+
+### Patch Changes
+
+- [#2725](https://github.com/PostHog/posthog-js/pull/2725) [`90a0f14`](https://github.com/PostHog/posthog-js/commit/90a0f143e639b898fc698f247ec8e08ea3db9ddf) Thanks [@ordehi](https://github.com/ordehi)! - fix: include initial person props in $identify when group() called first
+  (2025-12-12)
+
+## 1.305.0
+
+### Minor Changes
+
+- [#2732](https://github.com/PostHog/posthog-js/pull/2732) [`8496933`](https://github.com/PostHog/posthog-js/commit/849693303ef3527dd348c7c6e55c1f1780af13fe) Thanks [@adboio](https://github.com/adboio)! - support survey steps in product tours
+  (2025-12-11)
+
 ## 1.304.0
 
 ### Minor Changes

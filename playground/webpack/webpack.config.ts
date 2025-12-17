@@ -10,6 +10,18 @@ const config: webpack.Configuration = {
         filename: 'bundle.js',
         path: path.resolve(__dirname, 'dist'),
     },
+    module: {
+        rules: [
+            {
+                test: /\.tsx?$/,
+                use: 'ts-loader',
+                exclude: /node_modules/,
+            },
+        ],
+    },
+    resolve: {
+        extensions: ['.tsx', '.ts', '.js'],
+    },
     plugins: [
         new PosthogWebpackPlugin({
             personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY,

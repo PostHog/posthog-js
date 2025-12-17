@@ -1,5 +1,26 @@
 # @posthog/rollup-plugin
 
+## 1.1.5
+
+### Patch Changes
+
+- Updated dependencies [[`6b0aabf`](https://github.com/PostHog/posthog-js/commit/6b0aabff893e44d1710b7d122a68bf023f4e0bd5)]:
+    - @posthog/core@1.8.1
+
+## 1.1.4
+
+### Patch Changes
+
+- Updated dependencies [[`2603a8d`](https://github.com/PostHog/posthog-js/commit/2603a8d6e1021cd8f84e8b61be77ce268435ebde)]:
+    - @posthog/core@1.8.0
+
+## 1.1.3
+
+### Patch Changes
+
+- [#2741](https://github.com/PostHog/posthog-js/pull/2741) [`5c14781`](https://github.com/PostHog/posthog-js/commit/5c14781dc0b791e3fbdc3d9507dc52ccf1eb9ca4) Thanks [@hpouillot](https://github.com/hpouillot)! - fix sourcemap upload with complex file path
+  (2025-12-13)
+
 ## 1.1.2
 
 ### Patch Changes

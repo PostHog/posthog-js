@@ -3223,4 +3223,196 @@ describe('Lazy SessionRecording', () => {
             })
         })
     })
+
+    describe('URL masking with maskCapturedNetworkRequestFn', () => {
+        it('uses maskCapturedNetworkRequestFn to mask page URLs when configured', () => {
+            const maskFn = jest.fn((data) => {
+                // CapturedNetworkRequest uses 'name' for the URL
+                if (data.name) {
+                    return { ...data, name: data.name.replace(/token=[^&]+/, 'token=[REDACTED]') }
+                }
+                return data
+            })
+
+            posthog.config.session_recording.maskCapturedNetworkRequestFn = maskFn
+
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/' },
+                })
+            )
+            sessionRecording['_onScriptLoaded']()
+
+            // Emit a meta event with a URL containing a sensitive token
+            _emit(
+                createMetaSnapshot({
+                    data: { href: 'https://example.com/?token=secret123&other=value' },
+                })
+            )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Verify the masking function was called with 'name' property
+            expect(maskFn).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    name: 'https://example.com/?token=secret123&other=value',
+                })
+            )
+
+            // Verify the URL was masked in the captured snapshot
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'https://example.com/?token=[REDACTED]&other=value',
+                            },
+                        }),
+                    ],
+                }),
+                expect.anything()
+            )
+        })
+
+        it('falls back to deprecated maskNetworkRequestFn when maskCapturedNetworkRequestFn is not set', () => {
+            const deprecatedMaskFn = jest.fn((data) => {
+                if (data.url) {
+                    return { ...data, url: data.url.replace(/token=[^&]+/, 'token=[REDACTED]') }
+                }
+                return data
+            })
+
+            posthog.config.session_recording.maskNetworkRequestFn = deprecatedMaskFn
+
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/' },
+                })
+            )
+            sessionRecording['_onScriptLoaded']()
+
+            // Emit a meta event with a URL containing a sensitive token
+            _emit(
+                createMetaSnapshot({
+                    data: { href: 'https://example.com/?token=secret123' },
+                })
+            )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Verify the deprecated masking function was called
+            expect(deprecatedMaskFn).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    url: 'https://example.com/?token=secret123',
+                })
+            )
+
+            // Verify the URL was masked
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'https://example.com/?token=[REDACTED]',
+                            },
+                        }),
+                    ],
+                }),
+                expect.anything()
+            )
+        })
+
+        it('prefers maskCapturedNetworkRequestFn over deprecated maskNetworkRequestFn', () => {
+            const newMaskFn = jest.fn((data) => ({ ...data, name: 'masked-by-new' }))
+            const deprecatedMaskFn = jest.fn((data) => ({ ...data, url: 'masked-by-deprecated' }))
+
+            posthog.config.session_recording.maskCapturedNetworkRequestFn = newMaskFn
+            posthog.config.session_recording.maskNetworkRequestFn = deprecatedMaskFn
+
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/' },
+                })
+            )
+            sessionRecording['_onScriptLoaded']()
+
+            _emit(
+                createMetaSnapshot({
+                    data: { href: 'https://example.com/?token=secret' },
+                })
+            )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Should only call the new function, not the deprecated one
+            expect(newMaskFn).toHaveBeenCalled()
+            expect(deprecatedMaskFn).not.toHaveBeenCalled()
+
+            // Should use the result from the new function
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'masked-by-new',
+                            },
+                        }),
+                    ],
+                }),
+                expect.anything()
+            )
+        })
+
+        it('supports backward compatibility when maskCapturedNetworkRequestFn returns url instead of name', () => {
+            // Some users might mistakenly return 'url' property instead of 'name'
+            const maskFn = jest.fn((data) => {
+                if (data.name) {
+                    return { url: data.name.replace(/token=[^&]+/, 'token=[REDACTED]') }
+                }
+                return data
+            })
+
+            posthog.config.session_recording.maskCapturedNetworkRequestFn = maskFn
+
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/' },
+                })
+            )
+            sessionRecording['_onScriptLoaded']()
+
+            _emit(
+                createMetaSnapshot({
+                    data: { href: 'https://example.com/?token=secret123' },
+                })
+            )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Verify the masking function was called with 'name' property
+            expect(maskFn).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    name: 'https://example.com/?token=secret123',
+                })
+            )
+
+            // Should still work even though user returned 'url' instead of 'name'
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'https://example.com/?token=[REDACTED]',
+                            },
+                        }),
+                    ],
+                }),
+                expect.anything()
+            )
+        })
+    })
 })

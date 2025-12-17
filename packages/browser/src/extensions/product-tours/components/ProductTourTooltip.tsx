@@ -240,6 +240,14 @@ export function ProductTourTooltip({
         e.stopPropagation()
     }
 
+    const handleSpotlightClick = (e: MouseEvent) => {
+        e.stopPropagation()
+        if (targetElement) {
+            targetElement.click()
+        }
+        onNext()
+    }
+
     const isLastStep = displayedStepIndex >= totalSteps - 1
     const isFirstStep = displayedStepIndex === 0
 
@@ -295,6 +303,7 @@ export function ProductTourTooltip({
                                     Back
                                 </button>
                             )}
+                            {/* modal steps cannot have action triggers, so we always show the next/done button */}
                             <button class="ph-tour-button ph-tour-button--primary" onClick={onNext}>
                                 {isLastStep ? 'Done' : 'Next'}
                             </button>
@@ -322,16 +331,21 @@ export function ProductTourTooltip({
 
             <div
                 class="ph-tour-spotlight"
-                style={
-                    isVisible && spotlightStyle
+                style={{
+                    ...(isVisible && spotlightStyle
                         ? spotlightStyle
                         : {
                               top: '50%',
                               left: '50%',
                               width: '0px',
                               height: '0px',
-                          }
-                }
+                          }),
+                    ...(displayedStep.progressionTrigger === 'click' && {
+                        pointerEvents: 'auto',
+                        cursor: 'pointer',
+                    }),
+                }}
+                onClick={displayedStep.progressionTrigger === 'click' ? handleSpotlightClick : undefined}
             />
 
             <div
@@ -367,9 +381,11 @@ export function ProductTourTooltip({
                                 Back
                             </button>
                         )}
-                        <button class="ph-tour-button ph-tour-button--primary" onClick={onNext}>
-                            {isLastStep ? 'Done' : 'Next'}
-                        </button>
+                        {displayedStep.progressionTrigger === 'button' && (
+                            <button class="ph-tour-button ph-tour-button--primary" onClick={onNext}>
+                                {isLastStep ? 'Done' : 'Next'}
+                            </button>
+                        )}
                     </div>
                 </div>
 

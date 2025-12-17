@@ -1,5 +1,19 @@
 # @posthog/core
 
+## 1.8.1
+
+### Patch Changes
+
+- [#2769](https://github.com/PostHog/posthog-js/pull/2769) [`6b0aabf`](https://github.com/PostHog/posthog-js/commit/6b0aabff893e44d1710b7d122a68bf023f4e0bd5) Thanks [@marandaneto](https://github.com/marandaneto)! - chore: move the user-agent-utils from the browser to the core package
+  (2025-12-17)
+
+## 1.8.0
+
+### Minor Changes
+
+- [#2774](https://github.com/PostHog/posthog-js/pull/2774) [`2603a8d`](https://github.com/PostHog/posthog-js/commit/2603a8d6e1021cd8f84e8b61be77ce268435ebde) Thanks [@adboio](https://github.com/adboio)! - fix survey text color on react native
+  (2025-12-16)
+
 ## 1.7.1
 
 ### Patch Changes

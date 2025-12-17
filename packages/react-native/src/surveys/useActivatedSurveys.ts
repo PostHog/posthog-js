@@ -1,21 +1,29 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import { hasEvents } from './surveys-utils'
+import { hasEvents, matchPropertyFilters, PropertyFilters, SurveyEventWithFilters } from './surveys-utils'
 import { Survey } from '@posthog/core'
 import { PostHog } from '../posthog-rn'
 
 const SURVEY_SHOWN_EVENT_NAME = 'survey shown'
 
+interface EventSurveyConfig {
+  surveyId: string
+  propertyFilters?: PropertyFilters
+}
+
 export function useActivatedSurveys(posthog: PostHog, surveys: Survey[]): ReadonlySet<string> {
   const [activatedSurveys, setActivatedSurveys] = useState<ReadonlySet<string>>(new Set())
 
   const eventMap = useMemo(() => {
-    const newEventMap = new Map<string, string[]>()
+    const newEventMap = new Map<string, EventSurveyConfig[]>()
     for (const survey of surveys.filter(hasEvents)) {
-      for (const event of survey.conditions?.events?.values ?? []) {
-        const knownSurveys = newEventMap.get(event.name) ?? []
-        knownSurveys.push(survey.id)
-        newEventMap.set(event.name, knownSurveys)
+      for (const event of (survey.conditions?.events?.values ?? []) as SurveyEventWithFilters[]) {
+        const configs = newEventMap.get(event.name) ?? []
+        configs.push({
+          surveyId: survey.id,
+          propertyFilters: event.propertyFilters,
+        })
+        newEventMap.set(event.name, configs)
       }
     }
     return newEventMap
@@ -23,12 +31,18 @@ export function useActivatedSurveys(posthog: PostHog, surveys: Survey[]): Readon
 
   useEffect(() => {
     if (eventMap.size > 0) {
-      return posthog.on('capture', (payload: { event: string; properties?: { $survey_id?: string } }) => {
+      return posthog.on('capture', (payload: { event: string; properties?: Record<string, unknown> }) => {
         if (eventMap.has(payload.event)) {
-          setActivatedSurveys((current) => new Set([...current, ...(eventMap.get(payload.event) ?? [])]))
+          const configs = eventMap.get(payload.event) ?? []
+          const matchingSurveyIds = configs
+            .filter((config) => matchPropertyFilters(config.propertyFilters, payload.properties))
+            .map((config) => config.surveyId)
+
+          if (matchingSurveyIds.length > 0) {
+            setActivatedSurveys((current) => new Set([...current, ...matchingSurveyIds]))
+          }
         } else if (payload.event === SURVEY_SHOWN_EVENT_NAME) {
-          // remove survey that from activatedSurveys here.
-          const surveyId = payload.properties?.$survey_id
+          const surveyId = payload.properties?.$survey_id as string | undefined
           if (surveyId) {
             setActivatedSurveys((current) => {
               if (!current.has(surveyId)) {

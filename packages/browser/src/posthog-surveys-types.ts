@@ -11,10 +11,13 @@ export enum SurveyEventType {
     Cancellation = 'cancelEvents',
 }
 
+// Extended operator type to include numeric operators not in PropertyMatchType
+export type PropertyOperator = PropertyMatchType | 'gt' | 'lt'
+
 export type PropertyFilters = {
     [propertyName: string]: {
         values: string[]
-        operator: PropertyMatchType
+        operator: PropertyOperator
     }
 }
 
@@ -88,6 +91,8 @@ export interface SurveyAppearance {
     boxPadding?: string
     inputTextColor?: string
     inputBackgroundColor?: string
+    // Hide the X (cancel) button - defaults to false (show the button)
+    hideCancelButton?: boolean
 }
 
 export enum SurveyType {
@@ -298,6 +303,7 @@ export enum SurveyEventProperties {
     SURVEY_SUBMISSION_ID = '$survey_submission_id',
     SURVEY_QUESTIONS = '$survey_questions',
     SURVEY_COMPLETED = '$survey_completed',
+    PRODUCT_TOUR_ID = '$product_tour_id',
 }
 
 export enum DisplaySurveyType {

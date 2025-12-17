@@ -151,6 +151,11 @@ const plugins = (es5, noExternal) => [
                               // we don't mangle _surveyManager as it's used by external surveys to paint them on the dom directly
                               '_surveyManager',
 
+                              // used in conversations - external bundle needs to access these on the posthog instance
+                              '_conversationsManager',
+                              '_conversations',
+                              '_send_request', // called by conversations external bundle
+
                               // part of setup/teardown code, preserve these out of caution
                               '_init',
                               '_dom_loaded',

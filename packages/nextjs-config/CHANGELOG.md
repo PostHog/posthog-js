@@ -1,5 +1,40 @@
 # @posthog/nextjs-config
 
+## 1.7.3
+
+### Patch Changes
+
+- Updated dependencies [[`6b0aabf`](https://github.com/PostHog/posthog-js/commit/6b0aabff893e44d1710b7d122a68bf023f4e0bd5)]:
+  - @posthog/core@1.8.1
+  - @posthog/webpack-plugin@1.2.3
+
+## 1.7.2
+
+### Patch Changes
+
+- Updated dependencies [[`2603a8d`](https://github.com/PostHog/posthog-js/commit/2603a8d6e1021cd8f84e8b61be77ce268435ebde)]:
+  - @posthog/core@1.8.0
+  - @posthog/webpack-plugin@1.2.2
+
+## 1.7.1
+
+### Patch Changes
+
+- Updated dependencies [[`c5f3f65`](https://github.com/PostHog/posthog-js/commit/c5f3f6509fefeb4ad74c11f188fc03c4f0199236)]:
+  - @posthog/webpack-plugin@1.2.1
+
+## 1.7.0
+
+### Minor Changes
+
+- [#2741](https://github.com/PostHog/posthog-js/pull/2741) [`5c14781`](https://github.com/PostHog/posthog-js/commit/5c14781dc0b791e3fbdc3d9507dc52ccf1eb9ca4) Thanks [@hpouillot](https://github.com/hpouillot)! - upgrade webpack-plugin package
+  (2025-12-13)
+
+### Patch Changes
+
+- Updated dependencies [[`5c14781`](https://github.com/PostHog/posthog-js/commit/5c14781dc0b791e3fbdc3d9507dc52ccf1eb9ca4)]:
+  - @posthog/webpack-plugin@1.2.0
+
 ## 1.6.4
 
 ### Patch Changes

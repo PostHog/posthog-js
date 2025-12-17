@@ -7,6 +7,8 @@
         "clean:dep": "rm -rf node_modules && pnpm -r exec rm -rf node_modules",
         "lint": "turbo lint",
         "lint:fix": "turbo lint:fix",
+        "lint:playground": "prettier --check 'playground/**/*.{ts,tsx,js,jsx,mjs,json,md}' && eslint 'playground/**/*.{ts,tsx,js,jsx,mjs}'",
+        "lint:playground:fix": "prettier --write 'playground/**/*.{ts,tsx,js,jsx,mjs,json,md}' && eslint --fix 'playground/**/*.{ts,tsx,js,jsx,mjs}'",
         "test": "turbo test",
         "test:unit": "turbo test:unit",
         "test:functional": "turbo test:functional",

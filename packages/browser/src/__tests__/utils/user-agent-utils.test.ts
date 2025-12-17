@@ -1,7 +1,7 @@
 import uaParserDeviceTestCases from './device.test.json'
 import { isUndefined } from '@posthog/core'
 import uaParserOSTestCases from './os-test.json'
-import { detectBrowser, detectBrowserVersion, detectDeviceType, detectOS } from '../../utils/user-agent-utils'
+import { detectBrowser, detectBrowserVersion, detectDeviceType, detectOS } from '@posthog/core'
 
 describe('user-agent-utils', () => {
     describe('user agent', () => {

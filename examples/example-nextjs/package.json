@@ -2,7 +2,7 @@
     "name": "example-nextjs",
     "version": "0.1.0",
     "private": true,
-    "packageManager": "pnpm@10.15.0",
+    "packageManager": "pnpm@10.23.0",
     "scripts": {
         "dev": "next dev",
         "dev:turbo": "next dev --turbo",
@@ -15,7 +15,7 @@
         "@posthog/nextjs-config": "*",
         "@posthog/react": "*",
         "posthog-node": "*",
-        "next": "^15.5.7",
+        "next": "^14",
         "posthog-js": "*",
         "react": "^19.2.1",
         "react-dom": "^19.2.1"

@@ -182,6 +182,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
       ]
     }
   ],
+  "disable_conversations": [
+    "false",
+    "true"
+  ],
   "disable_web_experiments": [
     "false",
     "true"

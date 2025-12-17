@@ -7,14 +7,6 @@ import { buildErrorPropertiesBuilder } from '../posthog-exceptions'
 const logger = createLogger('[ExceptionAutocapture]')
 const errorPropertiesBuilder = buildErrorPropertiesBuilder()
 
-function errorToProperties({ event, error }: { event: Event | string; error?: Error }) {
-    return errorPropertiesBuilder.buildFromUnknown(error || event, {
-        mechanism: {
-            handled: false,
-        },
-    })
-}
-
 const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) => {
     const win = window as any
     if (!win) {
@@ -23,7 +15,11 @@ const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) 
     const originalOnError = win.onerror
 
     win.onerror = function (...args: ErrorEventArgs): boolean {
-        const errorProperties = errorToProperties({ event: args[0], error: args[4] })
+        const error = args[4]
+        const event = args[0]
+        const errorProperties = errorPropertiesBuilder.buildFromUnknown(error || event, {
+            mechanism: { handled: false },
+        })
         captureFn(errorProperties)
         return originalOnError?.(...args) ?? false
     }
@@ -44,7 +40,9 @@ const wrapUnhandledRejection = (captureFn: (props: ErrorTracking.ErrorProperties
     const originalOnUnhandledRejection = win.onunhandledrejection
 
     win.onunhandledrejection = function (ev: PromiseRejectionEvent): boolean {
-        const errorProperties = errorToProperties({ event: ev })
+        const errorProperties = errorPropertiesBuilder.buildFromUnknown(ev, {
+            mechanism: { handled: false },
+        })
         captureFn(errorProperties)
         return originalOnUnhandledRejection?.apply(win, [ev]) ?? false
     }
@@ -67,7 +65,10 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
     con.error = function (...args: any[]): void {
         const event = args.join(' ')
         const error = args.find((arg) => arg instanceof Error)
-        const errorProperties = errorToProperties({ error, event })
+        const errorProperties = errorPropertiesBuilder.buildFromUnknown(error || event, {
+            mechanism: { handled: false },
+            syntheticException: new Error('PostHog syntheticException'),
+        })
         captureFn(errorProperties)
         return originalConsoleError?.(...args)
     }

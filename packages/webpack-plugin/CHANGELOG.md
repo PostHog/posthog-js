@@ -1,5 +1,33 @@
 # @posthog/webpack-plugin
 
+## 1.2.3
+
+### Patch Changes
+
+- Updated dependencies [[`6b0aabf`](https://github.com/PostHog/posthog-js/commit/6b0aabff893e44d1710b7d122a68bf023f4e0bd5)]:
+    - @posthog/core@1.8.1
+
+## 1.2.2
+
+### Patch Changes
+
+- Updated dependencies [[`2603a8d`](https://github.com/PostHog/posthog-js/commit/2603a8d6e1021cd8f84e8b61be77ce268435ebde)]:
+    - @posthog/core@1.8.0
+
+## 1.2.1
+
+### Patch Changes
+
+- [#2753](https://github.com/PostHog/posthog-js/pull/2753) [`c5f3f65`](https://github.com/PostHog/posthog-js/commit/c5f3f6509fefeb4ad74c11f188fc03c4f0199236) Thanks [@hpouillot](https://github.com/hpouillot)! - add webpack as peer dependency
+  (2025-12-15)
+
+## 1.2.0
+
+### Minor Changes
+
+- [#2741](https://github.com/PostHog/posthog-js/pull/2741) [`5c14781`](https://github.com/PostHog/posthog-js/commit/5c14781dc0b791e3fbdc3d9507dc52ccf1eb9ca4) Thanks [@hpouillot](https://github.com/hpouillot)! - fix sourcemap upload with complex file path
+  use SourceMapDevToolPlugin to customize sourcemap generation (2025-12-13)
+
 ## 1.1.4
 
 ### Patch Changes

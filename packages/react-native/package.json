@@ -1,6 +1,6 @@
 {
   "name": "posthog-react-native",
-  "version": "4.14.3",
+  "version": "4.16.2",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -43,6 +43,8 @@
   },
   "devDependencies": {
     "@babel/cli": "^7.19.3",
+    "@babel/plugin-transform-class-properties": "^7.27.1",
+    "@babel/plugin-transform-private-methods": "^7.27.1",
     "@babel/plugin-transform-private-property-in-object": "^7.27.1",
     "@posthog-tooling/rollup-utils": "workspace:*",
     "@posthog-tooling/tsconfig-base": "workspace:*",

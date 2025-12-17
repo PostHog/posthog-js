@@ -8,6 +8,7 @@ import {
     SiteAppLoader,
     SessionStartReason,
 } from '../types'
+import type { ConversationsRemoteConfig } from '../posthog-conversations-types'
 // only importing types here, so won't affect the bundle
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SessionRecordingStatus, TriggerType } from '../extensions/replay/external/triggerMatching'
@@ -159,6 +160,7 @@ export type PostHogExtensionKind =
     | 'lazy-recorder'
     | 'tracing-headers'
     | 'surveys'
+    | 'conversations'
     | 'product-tours'
     | 'dead-clicks-autocapture'
     | 'remote-config'
@@ -182,6 +184,13 @@ export interface LazyLoadedSessionRecordingInterface {
 export interface LazyLoadedDeadClicksAutocaptureInterface {
     start: (observerTarget: Node) => void
     stop: () => void
+}
+
+export interface LazyLoadedConversationsInterface {
+    enable: () => void
+    disable: () => void
+    destroy: () => void
+    reset: () => void
 }
 
 interface PostHogExtensions {
@@ -220,6 +229,7 @@ interface PostHogExtensions {
         [K in ExternalIntegrationKind]?: { start: (posthog: PostHog) => void; stop: () => void }
     }
     initSessionRecording?: (ph: PostHog) => LazyLoadedSessionRecordingInterface
+    initConversations?: (config: ConversationsRemoteConfig, posthog: PostHog) => LazyLoadedConversationsInterface
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win

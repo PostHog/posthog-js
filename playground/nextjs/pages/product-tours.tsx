@@ -212,10 +212,16 @@ export default function ProductTours() {
                         <button id="btn-create" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
                             Create New
                         </button>
-                        <button id="btn-import" className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">
+                        <button
+                            id="btn-import"
+                            className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+                        >
                             Import Data
                         </button>
-                        <button id="btn-export" className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700">
+                        <button
+                            id="btn-export"
+                            className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700"
+                        >
                             Export
                         </button>
                         <button id="btn-share" className="bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700">
@@ -231,22 +237,38 @@ export default function ProductTours() {
                         <aside className="w-48 bg-gray-50 rounded p-3">
                             <ul className="space-y-2">
                                 <li>
-                                    <a id="sidebar-dashboard" href="#" className="block px-3 py-2 rounded hover:bg-gray-200">
+                                    <a
+                                        id="sidebar-dashboard"
+                                        href="#"
+                                        className="block px-3 py-2 rounded hover:bg-gray-200"
+                                    >
                                         Dashboard
                                     </a>
                                 </li>
                                 <li>
-                                    <a id="sidebar-reports" href="#" className="block px-3 py-2 rounded hover:bg-gray-200">
+                                    <a
+                                        id="sidebar-reports"
+                                        href="#"
+                                        className="block px-3 py-2 rounded hover:bg-gray-200"
+                                    >
                                         Reports
                                     </a>
                                 </li>
                                 <li>
-                                    <a id="sidebar-users" href="#" className="block px-3 py-2 rounded hover:bg-gray-200">
+                                    <a
+                                        id="sidebar-users"
+                                        href="#"
+                                        className="block px-3 py-2 rounded hover:bg-gray-200"
+                                    >
                                         Users
                                     </a>
                                 </li>
                                 <li>
-                                    <a id="sidebar-billing" href="#" className="block px-3 py-2 rounded hover:bg-gray-200">
+                                    <a
+                                        id="sidebar-billing"
+                                        href="#"
+                                        className="block px-3 py-2 rounded hover:bg-gray-200"
+                                    >
                                         Billing
                                     </a>
                                 </li>
