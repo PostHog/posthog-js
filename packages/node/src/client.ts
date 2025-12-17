@@ -421,6 +421,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *   properties: {
    *     $set: { name: 'John Doe', email: 'john@example.com' },
    *     $set_once: { first_login: new Date().toISOString() }
+   *     $anon_distinct_id: 'anonymous_user_456'
    *   }
    * })
    * ```
@@ -429,24 +430,18 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param data - The identify data containing distinctId and properties
    */
-  identify({ distinctId, properties, disableGeoip }: IdentifyMessage): void {
+  identify({ distinctId, properties = {}, disableGeoip }: IdentifyMessage): void {
     // Catch properties passed as $set and move them to the top level
-
-    // promote $set and $set_once to top level
-    const userPropsOnce = properties?.$set_once
-    delete properties?.$set_once
-
-    // if no $set is provided we assume all properties are $set
-    const userProps = properties?.$set || properties
-
-    super.identifyStateless(
-      distinctId,
-      {
-        $set: userProps,
-        $set_once: userPropsOnce,
-      },
-      { disableGeoip }
-    )
+    const { $set, $set_once, $anon_distinct_id, ...rest } = properties
+    // if no $set is provided we assume all rest properties are $set
+    const setProps = $set || rest
+    const setOnceProps = $set_once || {}
+    const eventProperties = {
+      $set: setProps,
+      $set_once: setOnceProps,
+      $anon_distinct_id: $anon_distinct_id ?? undefined,
+    }
+    super.identifyStateless(distinctId, eventProperties, { disableGeoip })
   }
 
   /**
@@ -469,22 +464,18 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param data - The identify data containing distinctId and properties
    * @returns Promise that resolves when the identify is processed
    */
-  async identifyImmediate({ distinctId, properties, disableGeoip }: IdentifyMessage): Promise<void> {
-    // promote $set and $set_once to top level
-    const userPropsOnce = properties?.$set_once
-    delete properties?.$set_once
-
-    // if no $set is provided we assume all properties are $set
-    const userProps = properties?.$set || properties
-
-    await super.identifyStatelessImmediate(
-      distinctId,
-      {
-        $set: userProps,
-        $set_once: userPropsOnce,
-      },
-      { disableGeoip }
-    )
+  async identifyImmediate({ distinctId, properties = {}, disableGeoip }: IdentifyMessage): Promise<void> {
+    // Catch properties passed as $set and move them to the top level
+    const { $set, $set_once, $anon_distinct_id, ...rest } = properties
+    // if no $set is provided we assume all rest properties are $set
+    const setProps = $set || rest
+    const setOnceProps = $set_once || {}
+    const eventProperties = {
+      $set: setProps,
+      $set_once: setOnceProps,
+      $anon_distinct_id: $anon_distinct_id ?? undefined,
+    }
+    super.identifyStatelessImmediate(distinctId, eventProperties, { disableGeoip })
   }
 
   /**
