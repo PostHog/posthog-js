@@ -1,5 +1,14 @@
 # posthog-react-native
 
+## 4.16.2
+
+### Patch Changes
+
+- [#2769](https://github.com/PostHog/posthog-js/pull/2769) [`6b0aabf`](https://github.com/PostHog/posthog-js/commit/6b0aabff893e44d1710b7d122a68bf023f4e0bd5) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: React Native on web should report hardware type as Desktop or Mobile, not Web
+  (2025-12-17)
+- Updated dependencies [[`6b0aabf`](https://github.com/PostHog/posthog-js/commit/6b0aabff893e44d1710b7d122a68bf023f4e0bd5)]:
+  - @posthog/core@1.8.1
+
 ## 4.16.1
 
 ### Patch Changes
