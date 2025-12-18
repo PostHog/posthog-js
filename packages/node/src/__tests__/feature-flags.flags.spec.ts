@@ -1,5 +1,5 @@
 import { PostHog } from '@/entrypoints/index.node'
-import { PostHogOptions } from '@/types'
+import { FeatureFlagError, PostHogOptions } from '@/types'
 import { apiImplementation, apiImplementationV4, waitForPromises } from './utils'
 import { PostHogV2FlagsResponse } from '@posthog/core'
 
@@ -296,7 +296,7 @@ describe('flags v2', () => {
         })
       })
 
-      it('captures no events', async () => {
+      it('captures event with $feature_flag_error=unknown_error', async () => {
         let capturedMessage: any
         posthog.on('capture', (message) => {
           capturedMessage = message
@@ -304,7 +304,9 @@ describe('flags v2', () => {
 
         await posthog.getFeatureFlag('error-flag', 'some-distinct-id')
         await waitForPromises()
-        expect(capturedMessage).toBeUndefined()
+        expect(capturedMessage).toBeDefined()
+        expect(capturedMessage.event).toBe('$feature_flag_called')
+        expect(capturedMessage.properties.$feature_flag_error).toBe('unknown_error')
       })
     })
   })
@@ -378,5 +380,222 @@ describe('flags v1', () => {
       await waitForPromises()
       expect(capturedMessage).toBeUndefined()
     })
+  })
+})
+
+describe('feature flag error tracking', () => {
+  it('sets $feature_flag_error to flag_missing when flag is not in response', async () => {
+    const flagsResponse: PostHogV2FlagsResponse = {
+      flags: {},
+      errorsWhileComputingFlags: false,
+      requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+      evaluatedAt: 1640995200000,
+    }
+    mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+    let capturedMessage: any
+    posthog.on('capture', (message) => {
+      capturedMessage = message
+    })
+
+    const result = await posthog.getFeatureFlag('non-existent-flag', 'some-distinct-id')
+
+    expect(result).toBe(undefined)
+
+    await waitForPromises()
+    expect(capturedMessage.properties.$feature_flag_error).toBe(FeatureFlagError.FLAG_MISSING)
+  })
+
+  it('sets $feature_flag_error to errors_while_computing_flags when errorsWhileComputingFlags is true', async () => {
+    const flagsResponse: PostHogV2FlagsResponse = {
+      flags: {
+        'some-flag': {
+          key: 'some-flag',
+          enabled: true,
+          variant: undefined,
+          reason: {
+            code: 'boolean',
+            condition_index: 1,
+            description: 'Matched condition set 1',
+          },
+          metadata: {
+            id: 1,
+            version: 1,
+            payload: undefined,
+            description: 'description',
+          },
+        },
+      },
+      errorsWhileComputingFlags: true,
+      requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+      evaluatedAt: 1640995200000,
+    }
+    mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+    let capturedMessage: any
+    posthog.on('capture', (message) => {
+      capturedMessage = message
+    })
+
+    const result = await posthog.getFeatureFlag('some-flag', 'some-distinct-id')
+
+    expect(result).toBe(true)
+
+    await waitForPromises()
+    expect(capturedMessage.properties.$feature_flag_error).toBe(FeatureFlagError.ERRORS_WHILE_COMPUTING)
+  })
+
+  it('sets $feature_flag_error to quota_limited when quota limited', async () => {
+    // When quota limited, the core library returns empty flags but preserves quotaLimited info
+    const flagsResponse: PostHogV2FlagsResponse = {
+      flags: {},
+      errorsWhileComputingFlags: false,
+      quotaLimited: ['feature_flags'],
+      requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+      evaluatedAt: 1640995200000,
+    }
+    mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+    let capturedMessage: any
+    posthog.on('capture', (message) => {
+      capturedMessage = message
+    })
+
+    const result = await posthog.getFeatureFlag('some-flag', 'some-distinct-id')
+
+    // Flag is undefined because quota limiting returns empty flags
+    expect(result).toBe(undefined)
+
+    await waitForPromises()
+    // Both quota_limited and flag_missing are reported since the flag is not in the empty response
+    expect(capturedMessage.properties.$feature_flag_error).toBe(
+      `${FeatureFlagError.QUOTA_LIMITED},${FeatureFlagError.FLAG_MISSING}`
+    )
+  })
+
+  it('sets $feature_flag_error to unknown_error when request fails completely', async () => {
+    mockedFetch.mockImplementation(() => Promise.reject(new Error('Network error')))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+    let capturedMessage: any
+    posthog.on('capture', (message) => {
+      capturedMessage = message
+    })
+
+    const result = await posthog.getFeatureFlag('some-flag', 'some-distinct-id')
+
+    expect(result).toBe(undefined)
+
+    await waitForPromises()
+    expect(capturedMessage.properties.$feature_flag_error).toBe(FeatureFlagError.UNKNOWN_ERROR)
+  })
+
+  it('joins multiple errors with commas', async () => {
+    const flagsResponse: PostHogV2FlagsResponse = {
+      flags: {},
+      errorsWhileComputingFlags: true,
+      requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+      evaluatedAt: 1640995200000,
+    }
+    mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+    let capturedMessage: any
+    posthog.on('capture', (message) => {
+      capturedMessage = message
+    })
+
+    const result = await posthog.getFeatureFlag('missing-flag', 'some-distinct-id')
+
+    expect(result).toBe(undefined)
+
+    await waitForPromises()
+    // Should contain both errors joined with commas
+    expect(capturedMessage.properties.$feature_flag_error).toBe(
+      `${FeatureFlagError.ERRORS_WHILE_COMPUTING},${FeatureFlagError.FLAG_MISSING}`
+    )
+  })
+
+  it('does not set $feature_flag_error when there are no errors', async () => {
+    const flagsResponse: PostHogV2FlagsResponse = {
+      flags: {
+        'some-flag': {
+          key: 'some-flag',
+          enabled: true,
+          variant: undefined,
+          reason: {
+            code: 'boolean',
+            condition_index: 1,
+            description: 'Matched condition set 1',
+          },
+          metadata: {
+            id: 1,
+            version: 1,
+            payload: undefined,
+            description: 'description',
+          },
+        },
+      },
+      errorsWhileComputingFlags: false,
+      requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+      evaluatedAt: 1640995200000,
+    }
+    mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+    let capturedMessage: any
+    posthog.on('capture', (message) => {
+      capturedMessage = message
+    })
+
+    const result = await posthog.getFeatureFlag('some-flag', 'some-distinct-id')
+
+    expect(result).toBe(true)
+
+    await waitForPromises()
+    expect(capturedMessage.properties.$feature_flag_error).toBeUndefined()
+  })
+
+  it('does not capture events when sendFeatureFlagEvents is false', async () => {
+    mockedFetch.mockImplementation(() => Promise.reject(new Error('Network error')))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+    let capturedMessage: any
+    posthog.on('capture', (message) => {
+      capturedMessage = message
+    })
+
+    const result = await posthog.getFeatureFlag('some-flag', 'some-distinct-id', {
+      sendFeatureFlagEvents: false,
+    })
+
+    expect(result).toBe(undefined)
+
+    await waitForPromises()
+    expect(capturedMessage).toBeUndefined()
   })
 })
