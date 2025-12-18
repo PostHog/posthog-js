@@ -143,10 +143,15 @@ export function convertPrefillToResponses(survey: Survey, prefillParams: Prefill
  *
  * @param questions - The survey questions array
  * @param prefilledIndices - Array of question indices that have been prefilled
- * @returns The question index to start at
+ * @returns Object with startQuestionIndex and map of questions which have been skipped
  */
-export function calculatePrefillStartIndex(questions: SurveyQuestion[], prefilledIndices: number[]): number {
+export function calculatePrefillStartIndex(
+    questions: SurveyQuestion[],
+    prefilledIndices: number[],
+    responses: Record<string, any>
+): { startQuestionIndex: number; skippedResponses: Record<string, any> } {
     let startQuestionIndex = 0
+    const skippedResponses: Record<string, any> = {}
 
     for (let i = 0; i < questions.length; i++) {
         // stop at the first question that is not prefilled
@@ -158,11 +163,16 @@ export function calculatePrefillStartIndex(questions: SurveyQuestion[], prefille
         // only advance if the prefilled question has skipSubmitButton
         if (question && 'skipSubmitButton' in question && question.skipSubmitButton) {
             startQuestionIndex = i + 1
+            if (!question.id) continue
+            const responseKey = getSurveyResponseKey(question.id)
+            if (!isUndefined(responses[responseKey])) {
+                skippedResponses[responseKey] = responses[responseKey]
+            }
         } else {
             // show question if skipSubmitButton is false, even if prefilled
             break
         }
     }
 
-    return startQuestionIndex
+    return { startQuestionIndex, skippedResponses }
 }
