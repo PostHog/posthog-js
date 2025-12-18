@@ -53,6 +53,67 @@ export default defineNuxtConfig({
 const { $posthog } = useNuxtApp()
 ```
 
+## Composables
+
+The module provides auto-imported composables for working with feature flags:
+
+### `usePostHog()`
+
+Returns the PostHog client instance.
+
+```vue
+<script setup>
+const posthog = usePostHog()
+
+posthog.capture('event_name')
+</script>
+```
+
+### `useFeatureFlagEnabled(flag: string)`
+
+Returns a reactive ref that checks if a feature flag is enabled (returns `true`/`false`/`undefined`).
+
+```vue
+<script setup>
+const isEnabled = useFeatureFlagEnabled('my-flag')
+</script>
+
+<template>
+  <div v-if="isEnabled">Feature is enabled!</div>
+</template>
+```
+
+### `useFeatureFlagVariantKey(flag: string)`
+
+Returns a reactive ref containing the feature flag value/variant (returns the variant string, `true`/`false`, or `undefined`).
+
+```vue
+<script setup>
+const variant = useFeatureFlagVariantKey('my-flag')
+</script>
+
+<template>
+  <div v-if="variant === 'variant-a'">Show variant A</div>
+  <div v-else-if="variant === 'variant-b'">Show variant B</div>
+</template>
+```
+
+### `useFeatureFlagPayload(flag: string)`
+
+Returns a reactive ref containing the feature flag payload (returns any JSON value or `undefined`).
+
+```vue
+<script setup>
+const payload = useFeatureFlagPayload('config-flag')
+</script>
+
+<template>
+  <div v-if="payload">Config value: {{ payload.value }}</div>
+</template>
+```
+
+All these composables automatically update when feature flags are loaded or changed.
+
 4. On the server side, the PostHog client instance initialized by the plugin is intended exclusively for error tracking. If you require additional PostHog client functionality for other purposes, please instantiate a separate client within your application as needed.
 
 ## FAQ
