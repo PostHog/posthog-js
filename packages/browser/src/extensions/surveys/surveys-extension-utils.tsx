@@ -120,34 +120,34 @@ export const addSurveyCSSVariablesToElement = (
         appearance?.submitButtonTextColor || getContrastingTextColor(effectiveAppearance.submitButtonColor)
     )
     hostStyle.setProperty('--ph-survey-rating-bg-color', effectiveAppearance.ratingButtonColor)
-    hostStyle.setProperty(
-        '--ph-survey-rating-text-color',
-        getContrastingTextColor(effectiveAppearance.ratingButtonColor)
-    )
     hostStyle.setProperty('--ph-survey-rating-active-bg-color', effectiveAppearance.ratingButtonActiveColor)
+    // Active rating text is always auto-calculated for contrast with active background
     hostStyle.setProperty(
         '--ph-survey-rating-active-text-color',
         getContrastingTextColor(effectiveAppearance.ratingButtonActiveColor)
     )
+    // Primary text color: use override if provided, otherwise auto-calculate from background
     hostStyle.setProperty(
         '--ph-survey-text-primary-color',
-        getContrastingTextColor(effectiveAppearance.backgroundColor)
+        appearance?.textColor || getContrastingTextColor(effectiveAppearance.backgroundColor)
     )
     hostStyle.setProperty('--ph-survey-text-subtle-color', effectiveAppearance.textSubtleColor)
     hostStyle.setProperty('--ph-widget-color', effectiveAppearance.widgetColor)
     hostStyle.setProperty('--ph-widget-text-color', getContrastingTextColor(effectiveAppearance.widgetColor))
     hostStyle.setProperty('--ph-widget-z-index', effectiveAppearance.zIndex)
 
-    // Use user-provided inputBackgroundColor, or fallback to internal default (with slight adjustment for white backgrounds)
-    let inputBgColor = appearance?.inputBackgroundColor || effectiveAppearance.inputBackground
-    if (!appearance?.inputBackgroundColor && effectiveAppearance.backgroundColor === 'white') {
+    // Use user-provided inputBackground (or deprecated inputBackgroundColor for backwards compat)
+    // Fallback to internal default, with slight adjustment for white backgrounds
+    const userInputBg = appearance?.inputBackground || appearance?.inputBackgroundColor
+    let inputBgColor = userInputBg || effectiveAppearance.inputBackground
+    if (!userInputBg && effectiveAppearance.backgroundColor === 'white') {
         inputBgColor = '#f8f8f8'
     }
     hostStyle.setProperty('--ph-survey-input-background', inputBgColor)
-    hostStyle.setProperty(
-        '--ph-survey-input-text-color',
-        appearance?.inputTextColor || getContrastingTextColor(inputBgColor)
-    )
+    // Input text color applies to both text inputs and inactive rating buttons
+    const inputTextColor = appearance?.inputTextColor || getContrastingTextColor(inputBgColor)
+    hostStyle.setProperty('--ph-survey-input-text-color', inputTextColor)
+    hostStyle.setProperty('--ph-survey-rating-text-color', inputTextColor)
     hostStyle.setProperty('--ph-survey-scrollbar-thumb-color', effectiveAppearance.scrollbarThumbColor)
     hostStyle.setProperty('--ph-survey-scrollbar-track-color', effectiveAppearance.scrollbarTrackColor)
     hostStyle.setProperty('--ph-survey-outline-color', effectiveAppearance.outlineColor)

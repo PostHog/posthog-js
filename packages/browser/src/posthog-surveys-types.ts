@@ -5,6 +5,7 @@
  */
 
 import type { PropertyMatchType } from './types'
+import type { SurveyAppearance as CoreSurveyAppearance } from '@posthog/core'
 
 export enum SurveyEventType {
     Activation = 'events',
@@ -52,47 +53,26 @@ export enum SurveyTabPosition {
     Bottom = 'bottom',
 }
 
-export interface SurveyAppearance {
-    // keep in sync with frontend/src/types.ts -> SurveyAppearance
-    backgroundColor?: string
-    submitButtonColor?: string
-    // text color is deprecated, use auto contrast text color instead
-    textColor?: string
-    // deprecate submit button text eventually
-    submitButtonText?: string
-    submitButtonTextColor?: string
+// Extends core SurveyAppearance with browser-specific fields
+// Omit 'position' from core because browser's SurveyPosition has additional values (e.g., NextToTrigger)
+export interface SurveyAppearance extends Omit<CoreSurveyAppearance, 'position'> {
+    // Browser-specific fields not in core
+    /** @deprecated - not currently used */
     descriptionTextColor?: string
-    ratingButtonColor?: string
-    ratingButtonActiveColor?: string
     ratingButtonHoverColor?: string
     whiteLabel?: boolean
-    autoDisappear?: boolean
-    displayThankYouMessage?: boolean
-    thankYouMessageHeader?: string
-    thankYouMessageDescription?: string
-    thankYouMessageDescriptionContentType?: SurveyQuestionDescriptionContentType
-    thankYouMessageCloseButtonText?: string
-    borderColor?: string
-    position?: SurveyPosition
     tabPosition?: SurveyTabPosition
-    placeholder?: string
-    shuffleQuestions?: boolean
-    surveyPopupDelaySeconds?: number
-    // widget options
-    widgetType?: SurveyWidgetType
-    widgetSelector?: string
-    widgetLabel?: string
-    widgetColor?: string
     fontFamily?: string
-    // questionable: Not in frontend/src/types.ts -> SurveyAppearance, but used in site app
     maxWidth?: string
     zIndex?: string
     disabledButtonOpacity?: string
     boxPadding?: string
-    inputTextColor?: string
+    /** @deprecated Use inputBackground instead (inherited from core) */
     inputBackgroundColor?: string
     // Hide the X (cancel) button - defaults to false (show the button)
     hideCancelButton?: boolean
+    // Browser's SurveyPosition has more options than core (e.g., NextToTrigger)
+    position?: SurveyPosition
 }
 
 export enum SurveyType {
