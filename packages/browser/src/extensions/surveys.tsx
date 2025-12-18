@@ -470,7 +470,11 @@ export class SurveyManager {
 
             // calculate which question to start at based on prefilled questions
             const prefilledIndices = Object.keys(params).map((k) => parseInt(k, 10))
-            const startQuestionIndex = calculatePrefillStartIndex(survey.questions, prefilledIndices)
+            const { startQuestionIndex, skippedResponses } = calculatePrefillStartIndex(
+                survey.questions,
+                prefilledIndices,
+                responses
+            )
             const isSurveyCompleted = startQuestionIndex >= survey.questions.length
 
             setInProgressSurveyState(survey, {
@@ -481,11 +485,16 @@ export class SurveyManager {
 
             logger.info('[Survey Prefill] Stored prefilled responses in localStorage')
 
-            // send prefilled responses if partial responses enabled or survey is complete
-            if (survey.enable_partial_responses || isSurveyCompleted) {
-                logger.info(`[Survey Prefill] Auto-submitting survey (completed: ${isSurveyCompleted})`)
+            /**
+             * auto-submit some survey events on pageload only if:
+             * 1) survey is complete, OR
+             * 2) partial responses are enabled AND the skipped questions were set to auto-submit
+             */
+            const shouldAutoSubmitPrefilled =
+                Object.keys(skippedResponses).length > 0 && survey.enable_partial_responses
+            if (shouldAutoSubmitPrefilled || isSurveyCompleted) {
                 sendSurveyEvent({
-                    responses,
+                    responses: isSurveyCompleted ? responses : skippedResponses,
                     survey,
                     surveySubmissionId: submissionId,
                     posthog: this._posthog,
