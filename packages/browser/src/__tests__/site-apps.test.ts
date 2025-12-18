@@ -463,4 +463,99 @@ describe('SiteApps', () => {
             expect(siteAppsInstance.apps).toEqual({})
         })
     })
+
+    describe('loaded callback timing with site apps', () => {
+        it('loaded callback fires after remote config when opt_in_site_apps is true', (done) => {
+            jest.setTimeout(10000)
+            let remoteConfigLoaded = false
+
+            // Mock the remote config loader
+            assignableWindow.__PosthogExtensions__ = {
+                loadExternalDependency: jest.fn((_instance, _name, callback) => {
+                    setTimeout(() => {
+                        // Simulate remote config loading
+                        assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                            [token]: {
+                                config: {},
+                                siteApps: [
+                                    {
+                                        id: '1',
+                                        init: jest.fn(() => ({
+                                            processEvent: jest.fn(),
+                                        })),
+                                    },
+                                ],
+                            },
+                        } as any
+                        remoteConfigLoaded = true
+                        callback()
+                    }, 100)
+                }),
+            }
+
+            const persistence = new PostHogPersistence(defaultConfig as PostHogConfig)
+            const config: Partial<PostHogConfig> = {
+                ...defaultConfig,
+                opt_in_site_apps: true,
+                __preview_remote_config: true,
+                loaded: () => {
+                    // Verify remote config was loaded before loaded callback
+                    expect(remoteConfigLoaded).toBe(true)
+                    // Verify site app loaders are accessible
+                    expect((window as any)._POSTHOG_REMOTE_CONFIG[token].siteApps).toHaveLength(1)
+                    done()
+                },
+            }
+
+            posthog = new PostHog()
+            posthog._init(token, config, 'testname', persistence)
+        }, 10000)
+
+        it('loaded callback fires immediately when opt_in_site_apps is false', (done) => {
+            jest.setTimeout(10000)
+
+            const persistence = new PostHogPersistence(defaultConfig as PostHogConfig)
+            const config: Partial<PostHogConfig> = {
+                ...defaultConfig,
+                opt_in_site_apps: false,
+                loaded: () => {
+                    // Loaded should fire immediately, so remote config won't be loaded yet
+                    expect((window as any)._POSTHOG_REMOTE_CONFIG).toBeUndefined()
+                    done()
+                },
+            }
+
+            posthog = new PostHog()
+            posthog._init(token, config, 'testname', persistence)
+        }, 10000)
+
+        it('loaded callback fires even if remote config times out', (done) => {
+            jest.setTimeout(10000)
+            jest.useFakeTimers()
+
+            // Mock slow remote config loader
+            assignableWindow.__PosthogExtensions__ = {
+                loadExternalDependency: jest.fn(() => {
+                    // Never call callback to simulate timeout
+                }),
+            }
+
+            const persistence = new PostHogPersistence(defaultConfig as PostHogConfig)
+            const config: Partial<PostHogConfig> = {
+                ...defaultConfig,
+                opt_in_site_apps: true,
+                __preview_remote_config: true,
+                loaded: () => {
+                    done()
+                    jest.useRealTimers()
+                },
+            }
+
+            posthog = new PostHog()
+            posthog._init(token, config, 'testname', persistence)
+
+            // Fast-forward time by 5 seconds to trigger timeout
+            jest.advanceTimersByTime(5000)
+        }, 10000)
+    })
 })

@@ -20,6 +20,7 @@ export const PageHeader = () => {
                     <div className="flex-1" />
                     <div className="flex items-center gap-2">
                         <Link href="/survey">Surveys</Link>
+                        <Link href="/site-apps-race-condition">Site Apps Debug</Link>
                         <Link href="/replay-examples/animations">Animations</Link>
                         <Link href="/replay-examples/iframe">Iframe</Link>
                         <Link href="/replay-examples/canvas">Canvas</Link>
