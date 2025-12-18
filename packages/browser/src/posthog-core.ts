@@ -916,6 +916,30 @@ export class PostHog implements PostHogInterface {
     }
 
     _loaded(): void {
+        // When opt_in_site_apps is enabled, defer the loaded callback until remote config arrives
+        // so user code inside `loaded` can rely on window._POSTHOG_REMOTE_CONFIG and siteApps.
+        if (this.config.opt_in_site_apps) {
+            this._remoteConfigLoader = new RemoteConfigLoader(this)
+
+            // Safety net: fire loaded even if remote config hangs or silently fails.
+            const timeout = setTimeout(() => {
+                logger.warn('Remote config loading timed out. Firing loaded callback anyway.')
+                this._fireLoadedCallback()
+            }, 5000)
+
+            this._remoteConfigLoader.load(() => {
+                clearTimeout(timeout)
+                this._fireLoadedCallback()
+            })
+            return
+        }
+
+        this._fireLoadedCallback()
+        this._remoteConfigLoader = new RemoteConfigLoader(this)
+        this._remoteConfigLoader.load()
+    }
+
+    private _fireLoadedCallback(): void {
         try {
             this.config.loaded(this)
         } catch (err) {
@@ -944,9 +968,6 @@ export class PostHog implements PostHogInterface {
                 }
             }, 1)
         }
-
-        this._remoteConfigLoader = new RemoteConfigLoader(this)
-        this._remoteConfigLoader.load()
     }
 
     _start_queue_if_opted_in(): void {

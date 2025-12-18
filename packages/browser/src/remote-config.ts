@@ -40,19 +40,21 @@ export class RemoteConfigLoader {
         })
     }
 
-    load(): void {
+    load(onComplete?: () => void): void {
         try {
             // Attempt 1 - use the pre-loaded config if it came as part of the token-specific array.js
             if (this.remoteConfig) {
                 logger.info('Using preloaded remote config', this.remoteConfig)
                 this._onRemoteConfig(this.remoteConfig)
                 this._startRefreshInterval()
+                onComplete?.()
                 return
             }
 
             if (this._instance._shouldDisableFlags()) {
                 // This setting is essentially saying "dont call external APIs" hence we respect it here
                 logger.warn('Remote config is disabled. Falling back to local config.')
+                onComplete?.()
                 return
             }
 
@@ -64,15 +66,18 @@ export class RemoteConfigLoader {
                     this._loadRemoteConfigJSON((config) => {
                         this._onRemoteConfig(config)
                         this._startRefreshInterval()
+                        onComplete?.()
                     })
                     return
                 }
 
                 this._onRemoteConfig(config)
                 this._startRefreshInterval()
+                onComplete?.()
             })
         } catch (error) {
             logger.error('Error loading remote config', error)
+            onComplete?.()
         }
     }
 
