@@ -8,8 +8,18 @@ import { isObject } from '@posthog/core'
 import { beforeEach, expect } from '@jest/globals'
 import { HEATMAPS_ENABLED_SERVER_SIDE } from '../constants'
 import { Heatmaps } from '../heatmaps'
+import { assignableWindow } from '../utils/globals'
+
+import '../entrypoints/heatmaps'
 
 jest.useFakeTimers()
+
+beforeEach(() => {
+    assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+    assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn().mockImplementation((_ph, _name, cb) => {
+        cb()
+    })
+})
 
 describe('heatmaps', () => {
     let posthog: PostHog
@@ -266,11 +276,13 @@ describe('heatmaps', () => {
     })
 
     it('starts dead clicks autocapture with the correct config', () => {
-        const heatmapsDeadClicksInstance = posthog.heatmaps['_deadClicksCapture']
+        const lazyLoadedHeatmaps = posthog.heatmaps['_lazyLoadedHeatmaps']
+        expect(lazyLoadedHeatmaps).toBeDefined()
+        const heatmapsDeadClicksInstance = lazyLoadedHeatmaps['_deadClicksCapture']
         expect(heatmapsDeadClicksInstance.isEnabled(heatmapsDeadClicksInstance)).toBe(true)
         // this is a little nasty but the binding to this makes the function not directly comparable
         expect(JSON.stringify(heatmapsDeadClicksInstance.onCapture)).toEqual(
-            JSON.stringify(posthog.heatmaps['_onDeadClick'].bind(posthog.heatmaps))
+            JSON.stringify(lazyLoadedHeatmaps['_onDeadClick'].bind(lazyLoadedHeatmaps))
         )
     })
 

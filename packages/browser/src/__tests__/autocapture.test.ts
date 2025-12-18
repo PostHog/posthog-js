@@ -1,21 +1,25 @@
 /// <reference lib="dom" />
 /* eslint-disable compat/compat */
 
+import { Autocapture } from '../extensions/autocapture'
 import {
-    Autocapture,
     getAugmentPropertiesFromElement,
     getDefaultProperties,
     getPropertiesFromElement,
     previousElementSibling,
-} from '../autocapture'
-import { shouldCaptureDomEvent } from '../autocapture-utils'
+} from '../extensions/autocapture/external'
+import { shouldCaptureDomEvent } from '../extensions/autocapture/autocapture-utils'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import { AutocaptureConfig, FlagsResponse, PostHogConfig, RageclickConfig } from '../types'
 import { PostHog } from '../posthog-core'
-import { window } from '../utils/globals'
+import { assignableWindow, window } from '../utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { isUndefined } from '@posthog/core'
+
+// Import the lazy-loaded implementation and register it on the window
+// This simulates what happens when the external script is loaded
+import '../entrypoints/autocapture'
 
 // JS DOM doesn't have ClipboardEvent, so we need to mock it
 // see https://github.com/jsdom/jsdom/issues/1568
@@ -75,6 +79,15 @@ describe('Autocapture system', () => {
             // eslint-disable-next-line compat/compat
             value: new URL('https://example.com'),
         })
+
+        // Mock loadExternalDependency to call the callback immediately
+        // The initAutocapture function is already registered via the import above
+        assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+        assignableWindow.__PosthogExtensions__.loadExternalDependency = jest
+            .fn()
+            .mockImplementation((_ph: PostHog, _name: string, cb: (err?: Error) => void) => {
+                cb()
+            })
 
         beforeSendMock = jest.fn().mockImplementation((...args) => args)
 
@@ -1181,8 +1194,6 @@ describe('Autocapture system', () => {
     describe('afterFlagsResponse()', () => {
         beforeEach(() => {
             document.title = 'test page'
-
-            jest.spyOn(autocapture, '_addDomEventHandlers')
         })
 
         it('should not be enabled before the flags response', () => {
@@ -1222,32 +1233,34 @@ describe('Autocapture system', () => {
             }
         )
 
-        it('should call _addDomEventHandlders if autocapture is true in client config', () => {
+        it('should initialize handlers if autocapture is true in client config', () => {
             posthog.config.autocapture = true
             autocapture.onRemoteConfig({} as FlagsResponse)
-            expect(autocapture['_addDomEventHandlers']).toHaveBeenCalled()
+            expect(autocapture['_initialized']).toBe(true)
         })
 
-        it('should not call _addDomEventHandlders if autocapture is opted out in server config', () => {
+        it('should initialize handlers even if autocapture is opted out in server config', () => {
             autocapture.onRemoteConfig({ autocapture_opt_out: true } as FlagsResponse)
-            expect(autocapture['_addDomEventHandlers']).not.toHaveBeenCalled()
+            expect(autocapture['_initialized']).toBe(true)
         })
 
-        it('should not call _addDomEventHandlders if autocapture is disabled in client config', () => {
-            expect(autocapture['_addDomEventHandlers']).not.toHaveBeenCalled()
+        it('should not initialize handlers if autocapture is disabled in client config', () => {
+            autocapture['_initialized'] = false
             posthog.config.autocapture = false
 
             autocapture.onRemoteConfig({} as FlagsResponse)
 
-            expect(autocapture['_addDomEventHandlers']).not.toHaveBeenCalled()
+            expect(autocapture['_initialized']).toBe(false)
         })
 
-        it('should NOT call _addDomEventHandlders when the token has already been initialized', () => {
-            autocapture.onRemoteConfig({} as FlagsResponse)
-            expect(autocapture['_addDomEventHandlers']).toHaveBeenCalledTimes(1)
+        it('should only initialize handlers once', () => {
+            const spy = jest.spyOn(autocapture as any, '_addDomEventHandlers')
+            autocapture['_initialized'] = false
 
             autocapture.onRemoteConfig({} as FlagsResponse)
-            expect(autocapture['_addDomEventHandlers']).toHaveBeenCalledTimes(1)
+            autocapture.onRemoteConfig({} as FlagsResponse)
+
+            expect(spy).toHaveBeenCalledTimes(1)
         })
     })
 
