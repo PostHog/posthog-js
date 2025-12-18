@@ -841,26 +841,21 @@ export class PostHog {
     }
 
     _loaded(): void {
-        // If site apps are enabled, wait for remote config to load before calling the loaded callback
-        // This ensures site apps are available in the loaded callback
         if (this.config.opt_in_site_apps) {
             const loader = new RemoteConfigLoader(this)
 
-            // Set a timeout to ensure loaded callback fires even if remote config fails
             const timeout = setTimeout(() => {
                 logger.warn('Remote config loading timed out. Firing loaded callback anyway.')
                 this._fireLoadedCallback()
-            }, 5000) // 5 second timeout
+            }, 5000)
 
             loader.load(() => {
                 clearTimeout(timeout)
                 this._fireLoadedCallback()
             })
 
-            // Still load feature flags in parallel
             this.featureFlags.flags()
         } else {
-            // Original behavior: fire loaded callback immediately, then load remote config
             this._fireLoadedCallback()
             new RemoteConfigLoader(this).load()
             this.featureFlags.flags()
