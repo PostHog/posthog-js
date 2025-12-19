@@ -26,7 +26,6 @@
     "@posthog-tooling/rollup-utils": "workspace:*",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@types/jest": "catalog:",
-    "ai": "^6.0.0-beta.138",
     "jest": "catalog:",
     "node-fetch": "^3.3.2",
     "posthog-node": "workspace:*"
@@ -54,14 +53,10 @@
   },
   "peerDependencies": {
     "@ai-sdk/provider": "^2.0.0 || ^3.0.0-beta.0",
-    "ai": "^5.0.0 || ^6.0.0-beta.0",
     "posthog-node": "^5.0.0"
   },
   "peerDependenciesMeta": {
     "@ai-sdk/provider": {
-      "optional": true
-    },
-    "ai": {
       "optional": true
     }
   },
