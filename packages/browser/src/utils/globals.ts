@@ -160,6 +160,7 @@ export type PostHogExtensionKind =
     | 'lazy-recorder'
     | 'tracing-headers'
     | 'surveys'
+    | 'logs'
     | 'conversations'
     | 'product-tours'
     | 'dead-clicks-autocapture'
@@ -211,6 +212,7 @@ interface PostHogExtensions {
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
     generateSurveys?: (posthog: PostHog, isSurveysEnabled: boolean) => any | undefined
     generateProductTours?: (posthog: PostHog, isEnabled: boolean) => any | undefined
+    initializeLogs?: (posthog: PostHog) => any | undefined
     postHogWebVitalsCallbacks?: {
         onLCP: (metric: any) => void
         onCLS: (metric: any) => void

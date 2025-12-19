@@ -34,6 +34,7 @@ import {
     SurveyEventProperties,
     SurveyRenderReason,
 } from './posthog-surveys-types'
+import { PostHogLogs } from './posthog-logs'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
@@ -317,6 +318,7 @@ export class PostHog {
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
     conversations: PostHogConversations
+    logs: PostHogLogs
     experiments: WebExperiments
     toolbar: Toolbar
     exceptions: PostHogExceptions
@@ -394,6 +396,7 @@ export class PostHog {
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
         this.conversations = new PostHogConversations(this)
+        this.logs = new PostHogLogs(this)
         this.experiments = new WebExperiments(this)
         this.exceptions = new PostHogExceptions(this)
         this.rateLimiter = new RateLimiter(this)
@@ -707,6 +710,10 @@ export class PostHog {
 
         initTasks.push(() => {
             this.surveys.loadIfEnabled()
+        })
+
+        initTasks.push(() => {
+            this.logs.loadIfEnabled()
         })
 
         initTasks.push(() => {
