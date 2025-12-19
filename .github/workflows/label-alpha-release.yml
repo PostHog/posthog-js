@@ -34,12 +34,14 @@ jobs:
     needs: check-permissions
     if: needs.check-permissions.outputs.require-result == 'true' &&
       contains(github.event.pull_request.labels.*.name, 'release alpha')
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.ref }}
-          token: ${{ secrets.POSTHOG_BOT_PAT }}
           fetch-depth: 0
 
       - uses: ./.github/actions/setup
@@ -65,5 +67,3 @@ jobs:
       - name: Publish the alpha in the npm registry
         run: pnpm publish --access public --tag alpha
         working-directory: packages/browser
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
