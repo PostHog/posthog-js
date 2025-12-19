@@ -11,7 +11,7 @@ export default function ProductTours() {
 
     useEffect(() => {
         try {
-            posthog?.productTours.getProductTours((fetchedTours: ProductTour[]) => {
+            posthog?.productTours?.getProductTours((fetchedTours: ProductTour[]) => {
                 setLoading(false)
                 setTours(fetchedTours)
                 if (fetchedTours.length > 0) {
