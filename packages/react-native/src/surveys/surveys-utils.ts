@@ -120,10 +120,14 @@ export const defaultBackgroundColor = '#eeeded' as const
 export const defaultDescriptionOpacity = 0.8
 export const defaultRatingLabelOpacity = 0.7
 
+// textColor and inputTextColor are optional overrides (auto-calculated if not provided)
 export type SurveyAppearanceTheme = Omit<
   Required<SurveyAppearance>,
-  'widgetSelector' | 'widgetType' | 'widgetColor' | 'widgetLabel' | 'shuffleQuestions'
->
+  'widgetSelector' | 'widgetType' | 'widgetColor' | 'widgetLabel' | 'shuffleQuestions' | 'textColor' | 'inputTextColor'
+> & {
+  textColor?: string
+  inputTextColor?: string
+}
 export const defaultSurveyAppearance: SurveyAppearanceTheme = {
   backgroundColor: defaultBackgroundColor,
   submitButtonColor: 'black',

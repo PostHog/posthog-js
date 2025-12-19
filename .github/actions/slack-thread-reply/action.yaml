@@ -1,0 +1,48 @@
+name: 'Slack Thread Reply'
+description: 'Reply to a Slack thread'
+
+inputs:
+    slack_bot_token:
+        description: 'Slack Bot Token, requires `chat:write` scope.'
+        required: true
+    slack_channel_id:
+        description: 'Slack Channel ID'
+        required: true
+    thread_ts:
+        description: 'Slack message timestamp to reply to'
+        required: true
+    message:
+        description: 'Message text to post'
+        required: true
+    emoji_reaction:
+        description: 'Emoji to react to the original message with (without colons), requires bot token to include `reactions:write` scope'
+        required: false
+        default: ''
+
+runs:
+    using: 'composite'
+    steps:
+        - name: Add emoji reaction
+          if: ${{ inputs.emoji_reaction != '' }}
+          uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
+          with:
+              method: reactions.add
+              token: ${{ inputs.slack_bot_token }}
+              payload: |
+                  {
+                    "channel": "${{ inputs.slack_channel_id }}",
+                    "timestamp": "${{ inputs.thread_ts }}",
+                    "name": "${{ inputs.emoji_reaction }}"
+                  }
+
+        - name: Send thread reply
+          uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
+          with:
+              method: chat.postMessage
+              token: ${{ inputs.slack_bot_token }}
+              payload: |
+                  {
+                    "channel": "${{ inputs.slack_channel_id }}",
+                    "thread_ts": "${{ inputs.thread_ts }}",
+                    "text": "${{ inputs.message }}"
+                  }

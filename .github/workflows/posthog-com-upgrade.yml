@@ -69,7 +69,6 @@ jobs:
           commit-message: "chore(deps): Update ${{ github.event.inputs.package_name }} to ${{ github.event.inputs.package_version }}"
           branch: ${{ steps.generate-branch-name.outputs.branch_name }}
           delete-branch: true
-          labels: automerge
           title: "chore(deps): Update ${{ github.event.inputs.package_name }} to ${{ github.event.inputs.package_version }}"
           body: |
             ## Changes
@@ -82,6 +81,13 @@ jobs:
         shell: bash
         run: |
           echo "PostHog.com pull request for ${{ github.event.inputs.package_name }} version ${{ github.event.inputs.package_version }} ready: ${{ steps.com-repo-pr.outputs.pull-request-url }}"
+
+      - name: Enable automerge
+        env:
+          GH_TOKEN: ${{ secrets.POSTHOG_BOT_PAT }}
+          PR_NUMBER: ${{ steps.com-repo-pr.outputs.pull-request-number }}
+        run: |
+          gh pr merge "$PR_NUMBER" --auto --merge
 
       # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
       - name: Send failure event to PostHog
