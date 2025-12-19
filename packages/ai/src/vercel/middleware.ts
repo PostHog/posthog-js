@@ -386,6 +386,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
     posthogProperties: {
       ...options.posthogProperties,
       $ai_framework: 'vercel',
+      $ai_framework_version: model.specificationVersion === 'v3' ? '6' : '5',
     },
   }
 
