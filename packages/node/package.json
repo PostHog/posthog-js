@@ -37,11 +37,13 @@
   "module": "dist/entrypoints/index.node.mjs",
   "types": "dist/entrypoints/index.node.d.ts",
   "dependencies": {
-    "@posthog/core": "workspace:*"
+    "@posthog/core": "workspace:*",
+    "eventsource": "^2.0.2"
   },
   "devDependencies": {
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
+    "@types/eventsource": "^1.1.15",
     "@types/express": "^5.0.5",
     "@types/jest": "catalog:",
     "@types/node": "^20.0.0",
