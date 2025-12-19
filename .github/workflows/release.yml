@@ -64,7 +64,7 @@ jobs:
             - name: Send Slack notification
               id: notify
               continue-on-error: true # Don't block release if Slack notification fails
-              uses: ./.github/actions/notify-slack-release-approval
+              uses: posthog/.github/.github/actions/notify-slack-release-approval@9b04bf3288aca2b4cd3883070858b034b4f7f334
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -96,7 +96,7 @@ jobs:
         steps:
             - name: Notify Slack - Approved
               continue-on-error: true # Don't block release if Slack notification fails
-              uses: ./.github/actions/slack-thread-reply
+              uses: posthog/.github/.github/actions/slack-thread-reply@9b04bf3288aca2b4cd3883070858b034b4f7f334
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -305,7 +305,7 @@ jobs:
             - name: Notify Slack - Failed
               if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
               continue-on-error: true # Don't mask real failure with Slack failure
-              uses: ./.github/actions/slack-thread-reply
+              uses: posthog/.github/.github/actions/slack-thread-reply@9b04bf3288aca2b4cd3883070858b034b4f7f334
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -324,7 +324,7 @@ jobs:
 
             - name: Notify Slack - Released
               continue-on-error: true # Slack failure shouldn't mark release as failed
-              uses: ./.github/actions/slack-thread-reply
+              uses: posthog/.github/.github/actions/slack-thread-reply@9b04bf3288aca2b4cd3883070858b034b4f7f334
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
