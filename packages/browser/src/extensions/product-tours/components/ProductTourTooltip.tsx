@@ -1,20 +1,16 @@
 import { h } from 'preact'
 import { useEffect, useState, useCallback, useRef } from 'preact/hooks'
 import { ProductTour, ProductTourStep, ProductTourDismissReason } from '../../../posthog-product-tours-types'
-import {
-    calculateTooltipPosition,
-    getSpotlightStyle,
-    mergeAppearance,
-    renderTipTapContent,
-    TooltipPosition,
-} from '../product-tours-utils'
+import { calculateTooltipPosition, getSpotlightStyle, TooltipPosition } from '../product-tours-utils'
 import { addEventListener } from '../../../utils'
 import { window as _window } from '../../../utils/globals'
-import { IconPosthogLogo, cancelSVG } from '../../surveys/icons'
+import { ProductTourTooltipInner } from './ProductTourTooltipInner'
+import { ProductTourSurveyStepInner } from './ProductTourSurveyStepInner'
+import { isNull } from '@posthog/core'
 
 const window = _window as Window & typeof globalThis
 
-type TransitionState = 'initializing' | 'entering' | 'visible' | 'exiting'
+type TransitionState = 'entering' | 'visible' | 'exiting'
 
 export interface ProductTourTooltipProps {
     tour: ProductTour
@@ -25,6 +21,7 @@ export interface ProductTourTooltipProps {
     onNext: () => void
     onPrevious: () => void
     onDismiss: (reason: ProductTourDismissReason) => void
+    onSurveySubmit?: (response: string | number | null) => void
 }
 
 function getOppositePosition(position: TooltipPosition): TooltipPosition {
@@ -90,6 +87,8 @@ function scrollToElement(element: HTMLElement, resolve: () => void): void {
     }, 500)
 }
 
+const TRANSITION_DURATION = 150
+
 export function ProductTourTooltip({
     tour,
     step,
@@ -99,9 +98,9 @@ export function ProductTourTooltip({
     onNext,
     onPrevious,
     onDismiss,
+    onSurveySubmit,
 }: ProductTourTooltipProps): h.JSX.Element {
-    const appearance = mergeAppearance(tour.appearance)
-    const [transitionState, setTransitionState] = useState<TransitionState>('initializing')
+    const [transitionState, setTransitionState] = useState<TransitionState>('entering')
     const [position, setPosition] = useState<ReturnType<typeof calculateTooltipPosition> | null>(null)
     const [spotlightStyle, setSpotlightStyle] = useState<ReturnType<typeof getSpotlightStyle> | null>(null)
 
@@ -110,99 +109,70 @@ export function ProductTourTooltip({
 
     const previousStepRef = useRef(stepIndex)
     const isTransitioningRef = useRef(false)
-    const isFirstRender = useRef(true)
 
-    const isModalStep = !targetElement
+    // Modal and survey steps are both centered on screen
+    const isCentered = displayedStep.type === 'modal' || displayedStep.type === 'survey'
 
     const updatePosition = useCallback(() => {
-        if (isModalStep) {
-            return
-        }
+        if (!targetElement) return
         const rect = targetElement.getBoundingClientRect()
         setPosition(calculateTooltipPosition(rect))
         setSpotlightStyle(getSpotlightStyle(rect))
-    }, [targetElement, isModalStep])
+    }, [targetElement])
 
     useEffect(() => {
+        const currentStepIndex = stepIndex
         const isStepChange = previousStepRef.current !== stepIndex
 
-        const currentStepIndex = stepIndex
+        const finishEntering = () => {
+            if (previousStepRef.current !== currentStepIndex) return
+            setTransitionState('visible')
+            isTransitioningRef.current = false
+        }
 
-        if (isFirstRender.current) {
-            isFirstRender.current = false
+        const enterStep = () => {
+            // Only scroll/position for element steps
+            if (targetElement && step.type === 'element') {
+                scrollToElement(targetElement, () => {
+                    if (previousStepRef.current !== currentStepIndex) return
+                    updatePosition()
+                    setTimeout(finishEntering, 50)
+                })
+            } else {
+                setTimeout(finishEntering, 50)
+            }
+        }
+
+        if (!isStepChange) {
             previousStepRef.current = stepIndex
             isTransitioningRef.current = true
+            enterStep()
+            return
+        }
 
-            if (isModalStep) {
-                // Modal steps are just centered on screen - no positioning needed
-                setTransitionState('visible')
-                isTransitioningRef.current = false
-                return
+        previousStepRef.current = stepIndex
+        isTransitioningRef.current = true
+        setTransitionState('exiting')
+
+        setTimeout(() => {
+            if (previousStepRef.current !== currentStepIndex) return
+
+            // Reset position for element steps to prevent flash at old position
+            if (step.type === 'element') {
+                setPosition(null)
+                setSpotlightStyle(null)
             }
 
-            scrollToElement(targetElement, () => {
-                if (previousStepRef.current !== currentStepIndex) {
-                    return
-                }
+            setDisplayedStep(step)
+            setDisplayedStepIndex(stepIndex)
+            setTransitionState('entering')
 
-                const rect = targetElement.getBoundingClientRect()
-                setPosition(calculateTooltipPosition(rect))
-                setSpotlightStyle(getSpotlightStyle(rect))
-                setTransitionState('visible')
-                isTransitioningRef.current = false
-            })
-            return
-        }
-
-        if (isStepChange) {
-            previousStepRef.current = stepIndex
-            isTransitioningRef.current = true
-
-            setTransitionState('exiting')
-
-            setTimeout(() => {
-                if (previousStepRef.current !== currentStepIndex) {
-                    return
-                }
-
-                setDisplayedStep(step)
-                setDisplayedStepIndex(stepIndex)
-                setTransitionState('entering')
-
-                if (isModalStep) {
-                    // Modal steps don't need scrolling or position calculation
-                    setTimeout(() => {
-                        if (previousStepRef.current !== currentStepIndex) {
-                            return
-                        }
-                        setTransitionState('visible')
-                        isTransitioningRef.current = false
-                    }, 50)
-                    return
-                }
-
-                scrollToElement(targetElement, () => {
-                    if (previousStepRef.current !== currentStepIndex) {
-                        return
-                    }
-
-                    updatePosition()
-                    setTimeout(() => {
-                        if (previousStepRef.current !== currentStepIndex) {
-                            return
-                        }
-                        setTransitionState('visible')
-                        isTransitioningRef.current = false
-                    }, 50)
-                })
-            }, 150)
-        }
-    }, [targetElement, stepIndex, step, updatePosition, isModalStep])
+            enterStep()
+        }, TRANSITION_DURATION)
+    }, [targetElement, stepIndex, step, updatePosition])
 
     useEffect(() => {
-        if (transitionState !== 'visible' || isModalStep) {
-            return
-        }
+        if (transitionState !== 'visible' || isCentered) return
 
         const handleUpdate = () => {
             if (!isTransitioningRef.current) {
@@ -217,7 +187,7 @@ export function ProductTourTooltip({
             window?.removeEventListener('scroll', handleUpdate, true)
             window?.removeEventListener('resize', handleUpdate)
         }
-    }, [updatePosition, transitionState, isModalStep])
+    }, [updatePosition, transitionState, isCentered])
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -248,156 +218,88 @@ export function ProductTourTooltip({
         onNext()
     }
 
-    const isLastStep = displayedStepIndex >= totalSteps - 1
-    const isFirstStep = displayedStepIndex === 0
-
-    const containerStyle = {
-        '--ph-tour-background-color': appearance.backgroundColor,
-        '--ph-tour-text-color': appearance.textColor,
-        '--ph-tour-button-color': appearance.buttonColor,
-        '--ph-tour-button-text-color': appearance.buttonTextColor,
-        '--ph-tour-border-radius': `${appearance.borderRadius}px`,
-        '--ph-tour-border-color': appearance.borderColor,
-    } as h.JSX.CSSProperties
-
-    const isReady = isModalStep || (transitionState !== 'initializing' && position && spotlightStyle)
     const isVisible = transitionState === 'visible'
+    const isSurvey = displayedStep.type === 'survey'
 
-    if (!isReady) {
-        return (
-            <div class="ph-tour-container" style={containerStyle}>
-                <div class="ph-tour-click-overlay" onClick={handleOverlayClick} />
-                <div class="ph-tour-spotlight" style={{ top: '50%', left: '50%', width: '0px', height: '0px' }} />
-            </div>
-        )
-    }
+    // For element steps, don't render until position is calculated
+    const isPositionReady = isCentered || !isNull(position)
 
-    // Modal step: centered on screen with overlay dimming, no spotlight/arrow
-    if (isModalStep) {
-        return (
-            <div class="ph-tour-container" style={containerStyle}>
-                <div class="ph-tour-click-overlay" onClick={handleOverlayClick} />
-                <div class="ph-tour-modal-overlay" />
-                <div class="ph-tour-tooltip ph-tour-tooltip--modal" onClick={handleTooltipClick}>
-                    <button
-                        class="ph-tour-dismiss"
-                        onClick={() => onDismiss('user_clicked_skip')}
-                        aria-label="Close tour"
-                    >
-                        {cancelSVG}
-                    </button>
-
-                    <div
-                        class="ph-tour-content"
-                        dangerouslySetInnerHTML={{ __html: renderTipTapContent(displayedStep.content) }}
-                    />
-
-                    <div class="ph-tour-footer">
-                        <span class="ph-tour-progress">
-                            {displayedStepIndex + 1} of {totalSteps}
-                        </span>
-
-                        <div class="ph-tour-buttons">
-                            {!isFirstStep && (
-                                <button class="ph-tour-button ph-tour-button--secondary" onClick={onPrevious}>
-                                    Back
-                                </button>
-                            )}
-                            {/* modal steps cannot have action triggers, so we always show the next/done button */}
-                            <button class="ph-tour-button ph-tour-button--primary" onClick={onNext}>
-                                {isLastStep ? 'Done' : 'Next'}
-                            </button>
-                        </div>
-                    </div>
-
-                    {!appearance.whiteLabel && (
-                        <a
-                            href="https://posthog.com/product-tours"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="ph-tour-branding"
-                        >
-                            Tour by {IconPosthogLogo}
-                        </a>
-                    )}
-                </div>
-            </div>
-        )
-    }
+    const tooltipStyle = isCentered
+        ? {
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+          }
+        : {
+              top: position ? `${position.top}px` : '0',
+              left: position ? `${position.left}px` : '0',
+          }
 
     return (
-        <div class="ph-tour-container" style={containerStyle}>
+        <div class="ph-tour-container">
             <div class="ph-tour-click-overlay" onClick={handleOverlayClick} />
 
+            {/* Modal overlay - visible for centered steps */}
+            <div
+                class="ph-tour-modal-overlay"
+                style={{
+                    opacity: isCentered && isVisible ? 1 : 0,
+                    transition: `opacity ${TRANSITION_DURATION}ms ease-out`,
+                    pointerEvents: isCentered ? 'auto' : 'none',
+                }}
+            />
+
+            {/* Spotlight - visible for element steps */}
             <div
                 class="ph-tour-spotlight"
                 style={{
-                    ...(isVisible && spotlightStyle
+                    ...(isVisible && isPositionReady && spotlightStyle
                         ? spotlightStyle
-                        : {
-                              top: '50%',
-                              left: '50%',
-                              width: '0px',
-                              height: '0px',
-                          }),
-                    ...(displayedStep.progressionTrigger === 'click' && {
-                        pointerEvents: 'auto',
-                        cursor: 'pointer',
-                    }),
+                        : { top: '50%', left: '50%', width: '0px', height: '0px' }),
+                    opacity: !isCentered && isVisible && isPositionReady ? 1 : 0,
+                    transition: `opacity ${TRANSITION_DURATION}ms ease-out`,
+                    ...(displayedStep.progressionTrigger === 'click' &&
+                        !isCentered && {
+                            pointerEvents: 'auto',
+                            cursor: 'pointer',
+                        }),
                 }}
-                onClick={displayedStep.progressionTrigger === 'click' ? handleSpotlightClick : undefined}
+                onClick={displayedStep.progressionTrigger === 'click' && !isCentered ? handleSpotlightClick : undefined}
             />
 
             <div
-                class={`ph-tour-tooltip ${isVisible ? 'ph-tour-tooltip--visible' : 'ph-tour-tooltip--hidden'}`}
+                class={`ph-tour-tooltip ${isCentered ? 'ph-tour-tooltip--modal' : ''} ${isSurvey ? 'ph-tour-survey-step' : ''}`}
                 style={{
-                    top: `${position!.top}px`,
-                    left: `${position!.left}px`,
-                    opacity: isVisible ? 1 : 0,
-                    transform: isVisible ? 'translateY(0)' : 'translateY(10px)',
-                    transition: 'opacity 0.15s ease-out, transform 0.15s ease-out',
+                    ...tooltipStyle,
+                    opacity: isVisible && isPositionReady ? 1 : 0,
+                    transition: `opacity ${TRANSITION_DURATION}ms ease-out`,
                 }}
                 onClick={handleTooltipClick}
             >
-                <div class={`ph-tour-arrow ph-tour-arrow--${getOppositePosition(position!.position)}`} />
+                {!isCentered && position && (
+                    <div class={`ph-tour-arrow ph-tour-arrow--${getOppositePosition(position.position)}`} />
+                )}
 
-                <button class="ph-tour-dismiss" onClick={() => onDismiss('user_clicked_skip')} aria-label="Close tour">
-                    {cancelSVG}
-                </button>
-
-                <div
-                    class="ph-tour-content"
-                    dangerouslySetInnerHTML={{ __html: renderTipTapContent(displayedStep.content) }}
-                />
-
-                <div class="ph-tour-footer">
-                    <span class="ph-tour-progress">
-                        {displayedStepIndex + 1} of {totalSteps}
-                    </span>
-
-                    <div class="ph-tour-buttons">
-                        {!isFirstStep && (
-                            <button class="ph-tour-button ph-tour-button--secondary" onClick={onPrevious}>
-                                Back
-                            </button>
-                        )}
-                        {displayedStep.progressionTrigger === 'button' && (
-                            <button class="ph-tour-button ph-tour-button--primary" onClick={onNext}>
-                                {isLastStep ? 'Done' : 'Next'}
-                            </button>
-                        )}
-                    </div>
-                </div>
-
-                {!appearance.whiteLabel && (
-                    <a
-                        href="https://posthog.com/product-tours"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="ph-tour-branding"
-                    >
-                        Tour by {IconPosthogLogo}
-                    </a>
+                {isSurvey ? (
+                    <ProductTourSurveyStepInner
+                        step={displayedStep}
+                        appearance={tour.appearance}
+                        stepIndex={displayedStepIndex}
+                        totalSteps={totalSteps}
+                        onSubmit={onSurveySubmit}
+                        onPrevious={onPrevious}
+                        onDismiss={() => onDismiss('user_clicked_skip')}
+                    />
+                ) : (
+                    <ProductTourTooltipInner
+                        step={displayedStep}
+                        appearance={tour.appearance}
+                        stepIndex={displayedStepIndex}
+                        totalSteps={totalSteps}
+                        onNext={onNext}
+                        onPrevious={onPrevious}
+                        onDismiss={() => onDismiss('user_clicked_skip')}
+                    />
                 )}
             </div>
         </div>

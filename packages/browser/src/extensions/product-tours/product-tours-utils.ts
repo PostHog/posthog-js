@@ -5,6 +5,7 @@ import {
 } from '../../posthog-product-tours-types'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
 import { document as _document, window as _window } from '../../utils/globals'
+import { getFontFamily, getContrastingTextColor, hexToRgba } from '../surveys/surveys-extension-utils'
 
 import productTourStyles from './product-tour.css'
 
@@ -118,9 +119,6 @@ export function calculateTooltipPosition(targetRect: DOMRect): PositionResult {
         left = targetRect.left + targetRect.width / 2 - TOOLTIP_WIDTH / 2
     }
 
-    top = Math.max(TOOLTIP_MARGIN, Math.min(top, viewportHeight - TOOLTIP_HEIGHT_ESTIMATE - TOOLTIP_MARGIN))
-    left = Math.max(TOOLTIP_MARGIN, Math.min(left, viewportWidth - TOOLTIP_WIDTH - TOOLTIP_MARGIN))
-
     return { top, left, position }
 }
 
@@ -133,22 +131,31 @@ export function getSpotlightStyle(targetRect: DOMRect, padding: number = 8): Rec
     }
 }
 
-export function mergeAppearance(appearance?: ProductTourAppearance): Required<ProductTourAppearance> {
-    return {
-        ...DEFAULT_PRODUCT_TOUR_APPEARANCE,
-        ...appearance,
-    }
-}
+export function addProductTourCSSVariablesToElement(element: HTMLElement, appearance?: ProductTourAppearance): void {
+    const merged = { ...DEFAULT_PRODUCT_TOUR_APPEARANCE, ...appearance }
+    const style = element.style
 
-export function appearanceToCssVars(appearance: Required<ProductTourAppearance>): Record<string, string> {
-    return {
-        '--ph-tour-background-color': appearance.backgroundColor,
-        '--ph-tour-text-color': appearance.textColor,
-        '--ph-tour-button-color': appearance.buttonColor,
-        '--ph-tour-button-text-color': appearance.buttonTextColor,
-        '--ph-tour-border-radius': `${appearance.borderRadius}px`,
-        '--ph-tour-border-color': appearance.borderColor,
-    }
+    // User-customizable variables
+    style.setProperty('--ph-tour-background-color', merged.backgroundColor)
+    style.setProperty('--ph-tour-text-color', merged.textColor)
+    style.setProperty('--ph-tour-button-color', merged.buttonColor)
+    style.setProperty('--ph-tour-border-radius', `${merged.borderRadius}px`)
+    style.setProperty('--ph-tour-button-border-radius', `${merged.buttonBorderRadius}px`)
+    style.setProperty('--ph-tour-border-color', merged.borderColor)
+    style.setProperty('--ph-tour-font-family', getFontFamily(merged.fontFamily))
+
+    // Derived colors
+    style.setProperty('--ph-tour-text-secondary-color', hexToRgba(merged.textColor, 0.6))
+    style.setProperty('--ph-tour-branding-text-color', getContrastingTextColor(merged.backgroundColor))
+    style.setProperty('--ph-tour-button-text-color', getContrastingTextColor(merged.buttonColor))
+    style.setProperty('--ph-tour-box-shadow', merged.boxShadow)
+    style.setProperty('--ph-tour-overlay-color', merged.showOverlay ? 'rgba(0, 0, 0, 0.5)' : 'transparent')
+
+    // Internal styling variables (not customizable)
+    style.setProperty('--ph-tour-button-secondary-color', 'transparent')
+    style.setProperty('--ph-tour-button-secondary-text-color', merged.textColor)
+    style.setProperty('--ph-tour-max-width', '320px')
+    style.setProperty('--ph-tour-padding', '16px')
 }
 
 export function renderTipTapContent(content: any): string {

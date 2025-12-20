@@ -9,13 +9,13 @@ import {
 } from '../../posthog-product-tours-types'
 import { SurveyEventName, SurveyEventProperties } from '../../posthog-surveys-types'
 import {
+    addProductTourCSSVariablesToElement,
     findElementBySelector,
     getElementMetadata,
     getProductTourStylesheet,
     normalizeUrl,
 } from './product-tours-utils'
 import { ProductTourTooltip } from './components/ProductTourTooltip'
-import { ProductTourSurveyStep } from './components/ProductTourSurveyStep'
 import { createLogger } from '../../utils/logger'
 import { document as _document, window as _window } from '../../utils/globals'
 import { localStore } from '../../storage'
@@ -88,8 +88,8 @@ interface TriggerListenerData {
     tour: ProductTour
 }
 
-function retrieveTourShadow(tourId: string): { shadow: ShadowRoot; isNewlyCreated: boolean } {
-    const containerClass = `${CONTAINER_CLASS}-${tourId}`
+function retrieveTourShadow(tour: ProductTour): { shadow: ShadowRoot; isNewlyCreated: boolean } {
+    const containerClass = `${CONTAINER_CLASS}-${tour.id}`
     const existingDiv = document.querySelector(`.${containerClass}`)
 
     if (existingDiv && existingDiv.shadowRoot) {
@@ -101,6 +101,9 @@ function retrieveTourShadow(tourId: string): { shadow: ShadowRoot; isNewlyCreate
 
     const div = document.createElement('div')
     div.className = containerClass
+
+    addProductTourCSSVariablesToElement(div, tour.appearance)
+
     const shadow = div.attachShadow({ mode: 'open' })
 
     const stylesheet = getProductTourStylesheet()
@@ -471,13 +474,18 @@ export class ProductTourManager {
         const step = this._activeTour.steps[this._currentStepIndex]
 
         // Survey step - render native survey step component
-        if (step.survey) {
-            this._renderSurveyStep()
+        if (step.type === 'survey') {
+            if (step.survey) {
+                this._renderSurveyStep()
+            } else {
+                logger.warn('Unable to render survey step - survey data not found')
+            }
+
             return
         }
 
         // Modal step (no selector) - render without a target element
-        if (!step.selector) {
+        if (step.type === 'modal') {
             this._captureEvent('product tour step shown', {
                 $product_tour_id: this._activeTour.id,
                 $product_tour_step_id: step.id,
@@ -486,6 +494,11 @@ export class ProductTourManager {
             })
 
             this._renderTooltipWithPreact(null)
+            return
+        }
+
+        if (!step.selector) {
+            logger.warn('Unable to render element step - no selector defined.')
             return
         }
 
@@ -564,13 +577,17 @@ export class ProductTourManager {
         this._renderTooltipWithPreact(element)
     }
 
-    private _renderTooltipWithPreact(element: HTMLElement | null): void {
+    private _renderTooltipWithPreact(
+        element: HTMLElement | null,
+        onSurveySubmit?: (response: string | number | null) => void,
+        onDismissOverride?: (reason: ProductTourDismissReason) => void
+    ): void {
         if (!this._activeTour) {
             return
         }
 
         const step = this._activeTour.steps[this._currentStepIndex]
-        const { shadow } = retrieveTourShadow(this._activeTour.id)
+        const { shadow } = retrieveTourShadow(this._activeTour)
 
         render(
             <ProductTourTooltip
@@ -581,7 +598,8 @@ export class ProductTourManager {
                 targetElement={element}
                 onNext={this.nextStep}
                 onPrevious={this.previousStep}
-                onDismiss={this.dismissTour}
+                onDismiss={onDismissOverride || this.dismissTour}
+                onSurveySubmit={onSurveySubmit}
             />,
             shadow
         )
@@ -611,8 +629,6 @@ export class ProductTourManager {
             [SurveyEventProperties.PRODUCT_TOUR_ID]: tourId,
             sessionRecordingUrl: this._instance.get_session_replay_url?.(),
         })
-
-        const { shadow } = retrieveTourShadow(this._activeTour.id)
 
         const handleSubmit = (response: string | number | null) => {
             const responseKey = questionId ? `$survey_response_${questionId}` : '$survey_response'
@@ -654,18 +670,7 @@ export class ProductTourManager {
             this.dismissTour(reason)
         }
 
-        render(
-            <ProductTourSurveyStep
-                tour={this._activeTour}
-                step={step}
-                stepIndex={this._currentStepIndex}
-                totalSteps={this._activeTour.steps.length}
-                onSubmit={handleSubmit}
-                onPrevious={this.previousStep}
-                onDismiss={handleDismiss}
-            />,
-            shadow
-        )
+        this._renderTooltipWithPreact(null, handleSubmit, handleDismiss)
 
         logger.info(`Rendered survey step for tour step ${this._currentStepIndex}`)
     }

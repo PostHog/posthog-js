@@ -12,6 +12,7 @@
     --ph-tour-border-color: #e5e7eb;
 
     --ph-tour-border-radius: 8px;
+    --ph-tour-button-border-radius: 6px;
     --ph-tour-box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     --ph-tour-max-width: 320px;
     --ph-tour-padding: 16px;
@@ -184,7 +185,7 @@
     padding: 8px 16px;
     font-size: 14px;
     font-weight: 500;
-    border-radius: 6px;
+    border-radius: var(--ph-tour-button-border-radius);
     border: none;
     cursor: pointer;
     transition:
@@ -233,7 +234,7 @@
 }
 
 .ph-tour-dismiss:hover {
-    background: var(--ph-tour-border-color);
+    background: rgba(0, 0, 0, 0.08);
     color: var(--ph-tour-text-color);
 }
 
@@ -246,12 +247,12 @@
     padding-top: 12px;
     border-top: 1px solid var(--ph-tour-border-color);
     font-size: 11px;
-    color: var(--ph-tour-text-secondary-color);
+    color: var(--ph-tour-branding-text-color, var(--ph-tour-text-secondary-color));
     text-decoration: none;
 }
 
 .ph-tour-branding:hover {
-    color: var(--ph-tour-text-color);
+    color: var(--ph-tour-branding-text-color, var(--ph-tour-text-color));
 }
 
 .ph-tour-branding svg {
@@ -401,30 +402,3 @@
     color: var(--ph-tour-button-text-color);
 }
 
-@keyframes ph-tour-fade-in {
-    from {
-        opacity: 0;
-        transform: translateY(4px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-@keyframes ph-tour-modal-fade-in {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-}
-
-.ph-tour-tooltip {
-    animation: ph-tour-fade-in 0.2s ease-out;
-}
-
-.ph-tour-tooltip--modal {
-    animation: ph-tour-modal-fade-in 0.2s ease-out;
-}

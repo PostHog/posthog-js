@@ -9,6 +9,8 @@ export interface JSONContent {
     text?: string
 }
 
+export type ProductTourStepType = 'element' | 'modal' | 'survey'
+
 export type ProductTourSurveyQuestionType = 'open' | 'rating'
 
 export interface ProductTourSurveyQuestion {
@@ -26,6 +28,7 @@ export interface ProductTourSurveyQuestion {
 
 export interface ProductTourStep {
     id: string
+    type: ProductTourStepType
     selector?: string
     progressionTrigger: 'button' | 'click'
     content: JSONContent | null
@@ -57,9 +60,12 @@ export interface ProductTourAppearance {
     backgroundColor?: string
     textColor?: string
     buttonColor?: string
-    buttonTextColor?: string
     borderRadius?: number
+    buttonBorderRadius?: number
     borderColor?: string
+    fontFamily?: string
+    boxShadow?: string
+    showOverlay?: boolean
     whiteLabel?: boolean
 }
 
@@ -95,9 +101,12 @@ export const DEFAULT_PRODUCT_TOUR_APPEARANCE: Required<ProductTourAppearance> = 
     backgroundColor: '#ffffff',
     textColor: '#1d1f27',
     buttonColor: '#1d1f27',
-    buttonTextColor: '#ffffff',
     borderRadius: 8,
+    buttonBorderRadius: 6,
     borderColor: '#e5e7eb',
+    fontFamily: 'system-ui',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+    showOverlay: true,
     whiteLabel: false,
 }
 
