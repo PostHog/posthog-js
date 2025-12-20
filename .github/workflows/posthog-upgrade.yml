@@ -53,7 +53,7 @@ jobs:
                   PACKAGE_NAME: ${{ github.event.inputs.package_name }}
                   PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
               run: |
-                  OUTGOING_VERSION=$(jq ".dependencies[$PACKAGE_NAME]' package.json -r)
+                  OUTGOING_VERSION=$(jq ".dependencies[\"$PACKAGE_NAME\"]" package.json -r)
                   echo "outgoing-version=$OUTGOING_VERSION" >> "$GITHUB_OUTPUT"
                   for i in $(seq 1 $RETRY_TIMES); do
                       # Retry loop because of npm being _eventually_ consistent
@@ -67,6 +67,8 @@ jobs:
             - name: Install new package version in hedgebox-dummy
               shell: bash
               env:
+                  RETRY_TIMES: 20
+                  RETRY_WAIT_SECONDS: 5
                   PACKAGE_NAME: ${{ github.event.inputs.package_name }}
                   PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
               run: |
@@ -82,9 +84,6 @@ jobs:
                   else
                       echo "hedgebox-dummy folder not found, skipping"
                   fi
-              env:
-                  RETRY_TIMES: 20
-                  RETRY_WAIT_SECONDS: 5
 
             - name: Generate branch name
               id: generate-branch-name
