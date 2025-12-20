@@ -47,9 +47,10 @@ jobs:
                     --error \
                     --metrics=off \
                     --verbose \
+                    --exclude ./docs/ \
+                    --exclude ./examples/ \
                     --exclude ./packages/ \
                     --exclude ./playground/ \
-                    --exclude ./docs/ \
                     --exclude ./tooling/ \
                     .
 
