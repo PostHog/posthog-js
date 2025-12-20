@@ -48,6 +48,8 @@ jobs:
               id: pnpm-upgrade
               shell: bash
               env:
+                  RETRY_TIMES: 20
+                  RETRY_WAIT_SECONDS: 5
                   PACKAGE_NAME: ${{ github.event.inputs.package_name }}
                   PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
               run: |
@@ -61,9 +63,6 @@ jobs:
                           [ $i -ne $RETRY_TIMES ] && sleep $RETRY_WAIT_SECONDS || false
                       fi
                   done
-              env:
-                  RETRY_TIMES: 20
-                  RETRY_WAIT_SECONDS: 5
 
             - name: Install new package version in hedgebox-dummy
               shell: bash
