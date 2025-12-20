@@ -15,7 +15,6 @@ on:
                 type: string
 
 permissions:
-    actions: write
     contents: read
 
 jobs:
@@ -24,11 +23,18 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
+            - name: Get upgrader token
+              id: upgrader
+              uses: getsentry/action-github-app-token@97c9e23528286821f97fba885c1b1123284b29cc # v2
+              with:
+                  app_id: ${{ secrets.GH_APP_POSTHOG_JS_UPGRADER_APP_ID }}
+                  private_key: ${{ secrets.GH_APP_POSTHOG_JS_UPGRADER_PRIVATE_KEY }}
+
             - name: Check out main repo
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
               with:
                   repository: 'PostHog/posthog'
-                  token: ${{ secrets.POSTHOG_BOT_PAT }}
+                  token: ${{ steps.upgrader.outputs.token }}
 
             - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin v4.2.0
 
@@ -86,7 +92,7 @@ jobs:
               id: main-repo-pr
               uses: peter-evans/create-pull-request@18f7dc018cc2cd597073088f7c7591b9d1c02672 #v3.14.0
               with:
-                  token: ${{ secrets.POSTHOG_BOT_PAT }}
+                  token: ${{ steps.upgrader.outputs.token }}
                   commit-message: 'chore(deps): Update ${{ github.event.inputs.package_name }} to ${{ github.event.inputs.package_version }}'
                   branch: ${{ steps.generate-branch-name.outputs.branch_name }}
                   delete-branch: true
@@ -103,36 +109,13 @@ jobs:
               run: |
                   echo "PostHog pull request for ${{ github.event.inputs.package_name }} version ${{ github.event.inputs.package_version }} ready: ${{ steps.main-repo-pr.outputs.pull-request-url }}"
 
+            # the `upgrader` GitHub App has permission to merge PRs in the `posthog` repo without requiring approval
             - name: Enable automerge
               env:
-                  GH_TOKEN: ${{ secrets.POSTHOG_BOT_PAT }}
+                  GH_TOKEN: ${{ steps.upgrader.outputs.token }}
                   PR_NUMBER: ${{ steps.main-repo-pr.outputs.pull-request-number }}
               run: |
                   gh pr merge "$PR_NUMBER" --auto --merge
-
-            - name: Get approver token
-              id: approver
-              uses: getsentry/action-github-app-token@97c9e23528286821f97fba885c1b1123284b29cc # v2
-              with:
-                  app_id: ${{ secrets.GH_APP_POSTHOG_APPROVER_APP_ID }}
-                  private_key: ${{ secrets.GH_APP_POSTHOG_APPROVER_PRIVATE_KEY }}
-
-            - name: Stamp PR
-              shell: bash
-              run: |
-                  # unbelievably github has a race condition where if you commit and
-                  # approve too quickly on a PR with "auto-merge" enabled it can miss
-                  # the new commit in the merge commit (but it looks like the PR has the change)
-                  # Sleep 5 should work
-                  sleep 5
-                  pull_number=${{ steps.main-repo-pr.outputs.pull-request-number }}
-                  curl -L \
-                  -X POST \
-                  -H "Accept: application/vnd.github+json" \
-                  -H "Authorization: Bearer ${{ steps.approver.outputs.token }}" \
-                  -H "X-GitHub-Api-Version: 2022-11-28" \
-                  https://api.github.com/repos/posthog/posthog/pulls/${pull_number}/reviews \
-                  -d '{"body":"${{ github.event.inputs.package_name }} auto approved.","event":"APPROVE","comments":[]}'
 
             # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
             - name: Send failure event to PostHog
