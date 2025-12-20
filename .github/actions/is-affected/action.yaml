@@ -21,12 +21,15 @@ runs:
     - name: Check if package is affected
       id: check-affected
       shell: bash
+      env:
+        PACKAGE_NAME: ${{ inputs.package-name }}
+        BRANCH_NAME: ${{inputs.branch}}
       run: |
-        AFFECTED=$(pnpm exec turbo run build '--filter=${{ inputs.package-name }}...[origin/${{inputs.branch}}...HEAD]' --dry=json)
+        AFFECTED=$(pnpm exec turbo run build "--filter=$PACKAGE_NAME...[origin/$BRANCH_NAME...HEAD]" --dry=json)
         IS_AFFECTED=$(echo "$AFFECTED" | jq '.tasks | length > 0')
         if [ "$IS_AFFECTED" = "true" ]; then
-          echo "The package ${{ inputs.package-name }} is affected by changes"
+          echo "The package $PACKAGE_NAME is affected by changes"
         else
-          echo "The package ${{ inputs.package-name }} is not affected by changes"
+          echo "The package $PACKAGE_NAME is not affected by changes"
         fi
         echo "is-affected=$IS_AFFECTED" >> $GITHUB_OUTPUT
