@@ -15,7 +15,6 @@ on:
 jobs:
   generate-references:
     name: Generate SDK references
-    permissions:
     runs-on: ubuntu-22.04
 
     steps:
