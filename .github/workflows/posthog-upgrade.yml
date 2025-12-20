@@ -109,7 +109,6 @@ jobs:
               run: |
                   echo "PostHog pull request for ${{ github.event.inputs.package_name }} version ${{ github.event.inputs.package_version }} ready: ${{ steps.main-repo-pr.outputs.pull-request-url }}"
 
-            # the `upgrader` GitHub App has permission to merge PRs in the `posthog` repo without requiring approval
             - name: Enable automerge
               env:
                   GH_TOKEN: ${{ steps.upgrader.outputs.token }}
