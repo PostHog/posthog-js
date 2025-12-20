@@ -35,19 +35,24 @@ jobs:
         run: pnpm build
 
       - name: Generate references for ${{ github.event.inputs.package_name }}
-        run: pnpm exec turbo --filter="${{ github.event.inputs.package_name }}" generate-references
+        env:
+          PACKAGE_NAME: ${{ github.event.inputs.package_name }}
+        run: pnpm exec turbo --filter="$PACKAGE_NAME" generate-references
 
       - name: Check for changes in references
         id: changes
+        env:
+          PACKAGE_NAME: ${{ github.event.inputs.package_name }}
+          PACKAGE_PATH: ${{ github.event.inputs.package_path }}
         run: |
-          PACKAGE_DIR="${{ github.event.inputs.package_path }}/references/"
+          PACKAGE_DIR="$PACKAGE_PATH/references/"
           if [ -n "$(git status --porcelain "$PACKAGE_DIR")" ]; then
             echo "changed=true" >> $GITHUB_OUTPUT
-            echo "New references generated for ${{ github.event.inputs.package_name }}:"
+            echo "New references generated for $PACKAGE_NAME:"
             git status --porcelain "$PACKAGE_DIR"
           else
             echo "changed=false" >> $GITHUB_OUTPUT
-            echo "No new references generated for ${{ github.event.inputs.package_name }}"
+            echo "No new references generated for $PACKAGE_NAME"
           fi
           
       - uses: stefanzweifel/git-auto-commit-action@778341af668090896ca464160c2def5d1d1a3eb0
