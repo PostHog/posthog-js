@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSR Hydration Compatibility Test</title>
+    <script src="vendor/preact.umd.js"></script>
+    <script src="vendor/preact-hooks.umd.js"></script>
+    <script src="vendor/preact-compat.umd.js"></script>
+</head>
+<body>
+    <!-- This simulates server-rendered HTML that Preact will hydrate -->
+    <div id="root"><div class="app"><h1>SSR Hydration Test</h1><p>This content simulates server-rendered HTML</p><button id="test-btn">Click me</button></div></div>
+
+    <!-- This script simulates a framework bundle that was server-rendered -->
+    <!-- The bug was: PostHog's insertBefore would insert BEFORE this script -->
+    <script id="framework-bundle">
+        console.log('[Framework] Framework bundle loaded');
+    </script>
+
+    <script>
+        // Capture any hydration-related console errors/warnings
+        window.hydrationErrors = [];
+        const originalError = console.error;
+        const originalWarn = console.warn;
+
+        console.error = function(...args) {
+            const message = args.join(' ');
+            window.hydrationErrors.push(message);
+            originalError.apply(console, args);
+        };
+
+        console.warn = function(...args) {
+            const message = args.join(' ');
+            if (message.includes('hydrat') || message.includes('mismatch') || message.includes('did not match')) {
+                window.hydrationErrors.push(message);
+            }
+            originalWarn.apply(console, args);
+        };
+
+        // Store DOM state BEFORE PostHog loads
+        window.initialBodyChildCount = document.body.children.length;
+        window.initialFirstScriptId = document.querySelector('body > script')?.id;
+    </script>
+
+    <script src="/dist/array.js"></script>
+
+    <script>
+        // Define performHydration BEFORE posthog.init() since loaded callback may fire synchronously
+        window.performHydration = function() {
+            console.log('[Preact] Starting hydration...');
+
+            var h = preact.h;
+            var hydrate = preactCompat.hydrate;
+
+            // Component that matches the server-rendered HTML exactly
+            function App() {
+                return h('div', { class: 'app' },
+                    h('h1', null, 'SSR Hydration Test'),
+                    h('p', null, 'This content simulates server-rendered HTML'),
+                    h('button', { id: 'test-btn' }, 'Click me')
+                );
+            }
+
+            var container = document.getElementById('root');
+
+            try {
+                hydrate(h(App), container);
+                console.log('[Preact] Hydration completed successfully');
+            } catch (e) {
+                console.error('[Preact] Hydration error:', e.message);
+                window.hydrationErrors.push(e.message);
+            }
+
+            // Signal test complete
+            window.testComplete = true;
+        };
+
+        window.posthog.init('test-token', {
+            api_host: 'https://localhost:1234',
+            persistence: 'memory',
+            bootstrap: {
+                distinctID: 'test-user'
+            },
+            loaded: function(posthog) {
+                // Check if body DOM was mutated
+                const currentFirstScriptId = document.querySelector('body > script')?.id;
+                const currentBodyChildCount = document.body.children.length;
+
+                window.domMutated = window.initialFirstScriptId !== currentFirstScriptId;
+                window.newScriptsAdded = currentBodyChildCount > window.initialBodyChildCount ||
+                                         document.querySelectorAll('head > script').length > 0;
+
+                console.log('[PostHog] Loaded, DOM state:', {
+                    domMutated: window.domMutated,
+                    newScriptsAdded: window.newScriptsAdded
+                });
+
+                // Now perform hydration with Preact
+                window.performHydration();
+            }
+        });
+    </script>
+</body>
+</html>

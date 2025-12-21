@@ -62,13 +62,7 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
             return callback('prepare_external_dependency_script returned null')
         }
 
-        const scripts = document.querySelectorAll('body > script')
-        if (scripts.length > 0) {
-            scripts[0].parentNode?.insertBefore(scriptTag, scripts[0])
-        } else {
-            // In exceptional situations this call might load before the DOM is fully ready.
-            document.body.appendChild(scriptTag)
-        }
+        document.head.appendChild(scriptTag)
     }
 
     if (document?.body) {
