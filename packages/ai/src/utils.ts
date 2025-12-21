@@ -534,7 +534,7 @@ export type SendEventToPosthogParams = {
   eventType?: AIEvent
   distinctId?: string
   traceId: string
-  model: string
+  model?: string
   provider: string
   input: any
   output: any
