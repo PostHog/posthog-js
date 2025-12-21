@@ -15,16 +15,21 @@ on:
 jobs:
   generate-references:
     name: Generate SDK references
-    permissions:
-      contents: write
     runs-on: ubuntu-22.04
 
     steps:
+      - name: Get app token
+        id: app-token
+        uses: getsentry/action-github-app-token@97c9e23528286821f97fba885c1b1123284b29cc # v2
+        with:
+          app_id: ${{ secrets.GH_APP_POSTHOG_JS_TESTS_APP_ID }}
+          private_key: ${{ secrets.GH_APP_POSTHOG_JS_TESTS_PRIVATE_KEY }}
+
       - name: Checkout the repository
-        uses: actions/checkout@85e6279cec87321a52edac9c87bce653a07cf6c2
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          token: ${{ secrets.POSTHOG_BOT_PAT }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Setup environment
         uses: ./.github/actions/setup
@@ -55,7 +60,7 @@ jobs:
             echo "No new references generated for $PACKAGE_NAME"
           fi
           
-      - uses: stefanzweifel/git-auto-commit-action@778341af668090896ca464160c2def5d1d1a3eb0
+      - uses: stefanzweifel/git-auto-commit-action@778341af668090896ca464160c2def5d1d1a3eb0 # v6.0.1
         if: steps.changes.outputs.changed == 'true'
         with:
           commit_message: "Update generated references"

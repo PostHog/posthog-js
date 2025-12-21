@@ -7,13 +7,19 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Get app token
+        id: app-token
+        uses: getsentry/action-github-app-token@97c9e23528286821f97fba885c1b1123284b29cc # v2
+        with:
+          app_id: ${{ secrets.GH_APP_POSTHOG_JS_TESTS_APP_ID }}
+          private_key: ${{ secrets.GH_APP_POSTHOG_JS_TESTS_PRIVATE_KEY }}
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          token: ${{ secrets.POSTHOG_BOT_PAT }}
+          token: ${{ steps.app-token.outputs.token }}
       - name: Generate changeset
-        uses: the-guild-org/changesets-dependencies-action@f11b16181c79e07d62b112c2f32c9db534a9df09 # pin v1.2.2
+        uses: the-guild-org/changesets-dependencies-action@f11b16181c79e07d62b112c2f32c9db534a9df09 # v1.2.2
         env:
-          # we must use a PAT, otherwise the PR's tests won't run after this commit
-          GITHUB_TOKEN: ${{ secrets.POSTHOG_BOT_PAT }}
+          # this commits to the branch so we can't use the default GITHUB_TOKEN, otherwise Actions won't trigger
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
