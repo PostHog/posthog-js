@@ -329,7 +329,7 @@ export class WrappedCompletions extends Completions {
           await sendEventToPosthog({
             client: this.phClient,
             ...posthogParams,
-            model: String(openAIParams.model ?? ''),
+            model: openAIParams.model,
             provider: 'openai',
             input: sanitizeOpenAI(openAIParams.messages),
             output: [],
@@ -448,7 +448,7 @@ export class WrappedResponses extends Responses {
               await sendEventToPosthog({
                 client: this.phClient,
                 ...posthogParams,
-                model: openAIParams.model ?? modelFromResponse ?? '',
+                model: openAIParams.model ?? modelFromResponse,
                 provider: 'openai',
                 input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
                 output: finalContent,
@@ -474,7 +474,7 @@ export class WrappedResponses extends Responses {
               await sendEventToPosthog({
                 client: this.phClient,
                 ...posthogParams,
-                model: openAIParams.model ?? '',
+                model: openAIParams.model,
                 provider: 'openai',
                 input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
                 output: [],
@@ -503,7 +503,7 @@ export class WrappedResponses extends Responses {
             await sendEventToPosthog({
               client: this.phClient,
               ...posthogParams,
-              model: openAIParams.model ?? result.model ?? '',
+              model: openAIParams.model ?? result.model,
               provider: 'openai',
               input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
               output: formattedOutput,
@@ -532,7 +532,7 @@ export class WrappedResponses extends Responses {
           await sendEventToPosthog({
             client: this.phClient,
             ...posthogParams,
-            model: String(openAIParams.model ?? ''),
+            model: openAIParams.model,
             provider: 'openai',
             input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
             output: [],
@@ -576,7 +576,7 @@ export class WrappedResponses extends Responses {
           await sendEventToPosthog({
             client: this.phClient,
             ...posthogParams,
-            model: openAIParams.model ?? result.model ?? '',
+            model: openAIParams.model ?? result.model,
             provider: 'openai',
             input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
             output: result.output,
@@ -602,7 +602,7 @@ export class WrappedResponses extends Responses {
           await sendEventToPosthog({
             client: this.phClient,
             ...posthogParams,
-            model: String(openAIParams.model ?? ''),
+            model: openAIParams.model,
             provider: 'openai',
             input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
             output: [],
@@ -868,7 +868,7 @@ export class WrappedTranscriptions extends Transcriptions {
             await sendEventToPosthog({
               client: this.phClient,
               ...posthogParams,
-              model: String(openAIParams.model ?? ''),
+              model: openAIParams.model,
               provider: 'openai',
               input: openAIParams.prompt,
               output: result.text,
@@ -893,7 +893,7 @@ export class WrappedTranscriptions extends Transcriptions {
           await sendEventToPosthog({
             client: this.phClient,
             ...posthogParams,
-            model: String(openAIParams.model ?? ''),
+            model: openAIParams.model,
             provider: 'openai',
             input: openAIParams.prompt,
             output: [],

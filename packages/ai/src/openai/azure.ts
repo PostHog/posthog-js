@@ -405,7 +405,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               await sendEventToPosthog({
                 client: this.phClient,
                 ...posthogParams,
-                model: openAIParams.model ?? modelFromResponse ?? '',
+                model: openAIParams.model ?? modelFromResponse,
                 provider: 'azure',
                 input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
                 output: finalContent,
@@ -424,7 +424,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               await sendEventToPosthog({
                 client: this.phClient,
                 ...posthogParams,
-                model: openAIParams.model ?? '',
+                model: openAIParams.model,
                 provider: 'azure',
                 input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
                 output: [],
@@ -451,7 +451,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             await sendEventToPosthog({
               client: this.phClient,
               ...posthogParams,
-              model: openAIParams.model ?? result.model ?? '',
+              model: openAIParams.model ?? result.model,
               provider: 'azure',
               input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
               output: result.output,
@@ -478,7 +478,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           await sendEventToPosthog({
             client: this.phClient,
             ...posthogParams,
-            model: openAIParams.model ?? '',
+            model: openAIParams.model,
             provider: 'azure',
             input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
             output: [],
@@ -516,7 +516,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
         await sendEventToPosthog({
           client: this.phClient,
           ...posthogParams,
-          model: openAIParams.model ?? result.model ?? '',
+          model: openAIParams.model ?? result.model,
           provider: 'azure',
           input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
           output: result.output,
@@ -537,7 +537,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
         await sendEventToPosthog({
           client: this.phClient,
           ...posthogParams,
-          model: String(openAIParams.model ?? ''),
+          model: openAIParams.model,
           provider: 'azure',
           input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
           output: [],
