@@ -271,7 +271,7 @@ export interface HeatmapConfig {
     flush_interval_milliseconds: number
 }
 
-export type ConfigDefaults = '2025-11-30' | '2025-05-24' | 'unset'
+export type ConfigDefaults = '2026-01-30' | '2025-11-30' | '2025-05-24' | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
@@ -844,6 +844,15 @@ export interface PostHogConfig {
     prepare_external_dependency_stylesheet?: (stylesheet: HTMLStyleElement) => HTMLStyleElement | null
 
     /**
+     * Where to inject external dependency scripts (recorder, surveys, etc.) in the DOM.
+     * - 'body': Injects scripts into document.body (legacy behavior)
+     * - 'head': Injects scripts into document.head (avoids SSR hydration errors)
+     *
+     * @default 'body' (or 'head' when defaults >= '2026-01-30')
+     */
+    external_scripts_inject_target?: 'body' | 'head'
+
+    /**
      * Determines whether PostHog should enable recording console logs.
      * When undefined, it falls back to the remote config setting.
      *
@@ -971,6 +980,7 @@ export interface PostHogConfig {
      * - `'unset'`: Use legacy default behaviors
      * - `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')
      * - `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)
+     * - `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)
      *
      * @default 'unset'
      */
