@@ -1,0 +1,3 @@
+onlyBuiltDependencies:
+  - "@posthog/cli"
+pnpmfile: ../.pnpmfile.cjs

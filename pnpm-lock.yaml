@@ -31,8 +31,8 @@ catalogs:
       specifier: ^7.27.1
       version: 7.28.5
     '@posthog/cli':
-      specifier: ~0.5.17
-      version: 0.5.17
+      specifier: ~0.5.20
+      version: 0.5.20
     '@rslib/core':
       specifier: 0.10.6
       version: 0.10.6
@@ -468,7 +468,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.5.17
+        version: 0.5.20
       '@posthog/core':
         specifier: workspace:*
         version: link:../core
@@ -539,7 +539,7 @@ importers:
         version: 4.1.3(magicast@0.3.5)
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.5.17
+        version: 0.5.20
       '@posthog/core':
         specifier: workspace:*
         version: link:../core
@@ -742,7 +742,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.5.17
+        version: 0.5.20
       '@posthog/core':
         specifier: workspace:*
         version: link:../core
@@ -789,7 +789,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.5.17
+        version: 0.5.20
       '@posthog/core':
         specifier: workspace:*
         version: link:../core
@@ -3314,8 +3314,8 @@ packages:
   '@poppinss/exception@1.2.2':
     resolution: {integrity: sha512-m7bpKCD4QMlFCjA/nKTs23fuvoVFoA83brRKmObCUNmi/9tVu8Ve3w4YQAnJu4q3Tjf5fr685HYIC/IA2zHRSg==}
 
-  '@posthog/cli@0.5.17':
-    resolution: {integrity: sha512-PHwUEBNxIZvR4h/v2fJF2WciHW4nEpOInv/AIR+SjCjnkSaxtScaDrGtJ7NEITB/FYYxQOU51bYca9bK780xUQ==}
+  '@posthog/cli@0.5.20':
+    resolution: {integrity: sha512-Rgo7ppkZNmH/StfdxYY7aT+fHx+TKS8kc2qU3r+bDDNa1hGUaT/PQJF6W8jSDlAcaZVuDQDWA0ofnVXgjXjMTw==}
     engines: {node: '>=14', npm: '>=6'}
     hasBin: true
 
@@ -4855,8 +4855,8 @@ packages:
   axios-proxy-builder@0.1.2:
     resolution: {integrity: sha512-6uBVsBZzkB3tCC8iyx59mCjQckhB8+GQrI9Cop8eC7ybIsvs/KtnNgEBfRMSEa7GqK2VBGUzgjNYMdPIfotyPA==}
 
-  axios@1.12.2:
-    resolution: {integrity: sha512-vMJzPewAlRyOgxV2dU0Cuz2O8zzzx9VYtbJOaBgXFeLc4IV/Eg50n4LowmehOOR61S8ZMpc2K5Sa7g6A4jfkUw==}
+  axios@1.13.2:
+    resolution: {integrity: sha512-VPk9ebNqPcy5lRGuSlKx752IlDatOjT9paPlm8A7yOuW2Fbvp4X3JznJtT4f0GzGLLiWE9W8onz51SqLYwzGaA==}
 
   b4a@1.7.3:
     resolution: {integrity: sha512-5Q2mfq2WfGuFp3uS//0s6baOJLMoVduPYVeNmDYxu5OUA1/cBfvr2RIS7vi62LdNj/urk1hfmj867I3qt6uZ7Q==}
@@ -16427,9 +16427,9 @@ snapshots:
 
   '@poppinss/exception@1.2.2': {}
 
-  '@posthog/cli@0.5.17':
+  '@posthog/cli@0.5.20':
     dependencies:
-      axios: 1.12.2
+      axios: 1.13.2
       axios-proxy-builder: 0.1.2
       console.table: 0.10.0
       detect-libc: 2.1.2
@@ -18422,7 +18422,7 @@ snapshots:
     dependencies:
       tunnel: 0.0.6
 
-  axios@1.12.2:
+  axios@1.13.2:
     dependencies:
       follow-redirects: 1.15.9
       form-data: 4.0.4
