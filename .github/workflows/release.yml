@@ -63,11 +63,27 @@ jobs:
 
             - name: Send Slack notification
               id: notify
+              continue-on-error: true # Don't block release if Slack notification fails
               uses: ./.github/actions/notify-slack-release-approval
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   slack_user_group_id: ${{ vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID }}
+
+            - name: Send Slack failure event to PostHog
+              if: ${{ steps.notify.outcome == 'failure' }}
+              uses: PostHog/posthog-github-action@v0.1
+              with:
+                  posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
+                  event: 'sdk-slack-notification-failure'
+                  properties: >-
+                      {
+                        "step": "notify-approval-needed",
+                        "workflow": "release",
+                        "repository": "${{ github.repository }}",
+                        "run_id": "${{ github.run_id }}",
+                        "run_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                      }
 
     version-bump:
         name: Bump versions and commit to main
@@ -79,6 +95,7 @@ jobs:
             committed: ${{ steps.commit-version-bump.outputs.committed }}
         steps:
             - name: Notify Slack - Approved
+              continue-on-error: true # Don't block release if Slack notification fails
               uses: ./.github/actions/slack-thread-reply
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
@@ -287,6 +304,7 @@ jobs:
 
             - name: Notify Slack - Failed
               if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
+              continue-on-error: true # Don't mask real failure with Slack failure
               uses: ./.github/actions/slack-thread-reply
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
@@ -305,6 +323,7 @@ jobs:
               uses: actions/checkout@v4
 
             - name: Notify Slack - Released
+              continue-on-error: true # Slack failure shouldn't mark release as failed
               uses: ./.github/actions/slack-thread-reply
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}

@@ -28,7 +28,9 @@ runs:
               git fetch --tags --force
 
               # Get the most recent tag (sorted by date, not version)
-              LATEST_TAG=$(git tag --sort=-creatordate | head -n 1)
+              # Note: Store all tags first to avoid SIGPIPE (exit 141) when piping to head
+              ALL_TAGS=$(git tag --sort=-creatordate)
+              LATEST_TAG=$(echo "$ALL_TAGS" | head -n 1)
 
               if [ -z "$LATEST_TAG" ]; then
                 echo "No tags found, using initial commit"
