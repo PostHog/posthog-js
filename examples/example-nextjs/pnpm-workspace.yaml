@@ -1,2 +1,2 @@
 pnpmfile: ../.pnpmfile.cjs
-nodeLinker: "isolated"
+nodeLinker: "hoisted"

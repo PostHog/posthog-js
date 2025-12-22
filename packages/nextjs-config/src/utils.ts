@@ -17,14 +17,21 @@ export async function processSourceMaps(posthogOptions: ResolvedPluginConfig, di
   const cliOptions = []
   cliOptions.push('sourcemap', 'process')
   cliOptions.push('--directory', directory)
+
   if (posthogOptions.sourcemaps.project) {
     cliOptions.push('--project', posthogOptions.sourcemaps.project)
   }
+
   if (posthogOptions.sourcemaps.version) {
     cliOptions.push('--version', posthogOptions.sourcemaps.version)
   }
+
   if (posthogOptions.sourcemaps.deleteAfterUpload) {
     cliOptions.push('--delete-after')
+  }
+
+  if (posthogOptions.sourcemaps.batchSize) {
+    cliOptions.push('--batch-size', posthogOptions.sourcemaps.batchSize.toString())
   }
 
   const logLevel = `posthog_cli=${posthogOptions.logLevel}`
