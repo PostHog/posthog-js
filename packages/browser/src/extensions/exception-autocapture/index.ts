@@ -64,6 +64,7 @@ export class ExceptionObserver {
     startIfEnabledOrStop(): void {
         if (this.isEnabled) {
             logger.info('enabled')
+            this._stopCapturing()
             this._loadScript(this._startCapturing)
         } else {
             this._stopCapturing()
