@@ -1534,29 +1534,23 @@ export type SessionRecordingPersistedConfig = Omit<
     minimumDurationMilliseconds: number | null | undefined
 }
 
-export type SessionRecordingRemoteConfig = SessionRecordingCanvasOptions & {
-    endpoint?: string
-    consoleLogRecordingEnabled?: boolean
-    // the API returns a decimal between 0 and 1 as a string
-    sampleRate?: string | null
-    minimumDurationMilliseconds?: number
-    linkedFlag?: string | FlagVariant | null
-    networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
-    masking?: Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>
-    urlTriggers?: SessionRecordingUrlTrigger[]
-    scriptConfig?: { script?: string | undefined }
-    urlBlocklist?: SessionRecordingUrlTrigger[]
-    eventTriggers?: string[]
-    /**
-     * Controls how event, url, sampling, and linked flag triggers are combined
-     *
-     * `any` means that if any of the triggers match, the session will be recorded
-     * `all` means that all the triggers must match for the session to be recorded
-     *
-     * originally it was (event || url) && (sampling || linked flag)
-     * which nobody wanted, now the default is all
-     */
-    triggerMatchType?: 'any' | 'all'
+export type SessionRecordingRemoteConfig = SessionRecordingCanvasOptions &
+    Omit<SDKPolicyConfig, 'sampleRate' | 'eventsTriggers' | 'linkedFeatureFlag'> & {
+        endpoint?: string
+        consoleLogRecordingEnabled?: boolean
+        // the API returns a decimal between 0 and 1 as a string
+        sampleRate?: string | null
+        linkedFlag?: string | FlagVariant | null
+        eventTriggers?: string[]
+        networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
+        masking?: Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>
+        scriptConfig?: { script?: string | undefined }
+    }
+
+export type ErrorTrackingRemoteConfig = SDKPolicyConfig & {
+    autocaptureExceptions?: boolean
+    captureExtensionExceptions?: boolean
+    suppressionRules?: ErrorTrackingSuppressionRule[]
 }
 
 /**
@@ -1606,11 +1600,7 @@ export interface RemoteConfig {
     /**
      * Error tracking configuration options
      */
-    errorTracking?: {
-        autocaptureExceptions?: boolean
-        captureExtensionExceptions?: boolean
-        suppressionRules?: ErrorTrackingSuppressionRule[]
-    }
+    errorTracking?: ErrorTrackingRemoteConfig
 
     /**
      * This is currently in development and may have breaking changes without a major version bump
@@ -1933,9 +1923,27 @@ export type ErrorEventArgs = [
 export const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debug'] as const
 export declare type SeverityLevel = (typeof severityLevels)[number]
 
-export interface SessionRecordingUrlTrigger {
+export interface SDKPolicyConfigUrlTrigger {
     url: string
     matching: 'regex'
+}
+export interface SDKPolicyConfig {
+    sampleRate?: number | null
+    minimumDurationMilliseconds?: number | null
+    linkedFeatureFlag?: string | FlagVariant | null
+    urlTriggers?: SDKPolicyConfigUrlTrigger[]
+    urlBlocklist?: SDKPolicyConfigUrlTrigger[]
+    eventTriggers?: string[]
+    /**
+     * Controls how event, url, sampling, and linked flag triggers are combined
+     *
+     * `any` means that if any of the triggers match, the session will be recorded
+     * `all` means that all the triggers must match for the session to be recorded
+     *
+     * originally it was (event || url) && (sampling || linked flag)
+     * which nobody wanted, now the default is all
+     */
+    triggerMatchType?: 'any' | 'all'
 }
 
 export type PropertyMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'
