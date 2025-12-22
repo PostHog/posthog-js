@@ -13,6 +13,7 @@ export interface PostHogRollupPluginOptions {
         project?: string
         version?: string
         deleteAfterUpload?: boolean
+        batchSize?: number
     }
 }
 
@@ -27,6 +28,7 @@ interface ResolvedPostHogRollupPluginOptions {
         project?: string
         version?: string
         deleteAfterUpload: boolean
+        batchSize?: number
     }
 }
 
@@ -68,6 +70,9 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
             if (posthogOptions.sourcemaps.deleteAfterUpload) {
                 args.push('--delete-after')
             }
+            if (posthogOptions.sourcemaps.batchSize) {
+                args.push('--batch-size', posthogOptions.sourcemaps.batchSize.toString())
+            }
             await spawnLocal(cliPath, args, {
                 env: {
                     ...process.env,
@@ -104,6 +109,7 @@ function resolveOptions(userOptions: PostHogRollupPluginOptions): ResolvedPostHo
         sourcemaps: {
             enabled: userSourcemaps.enabled ?? true,
             deleteAfterUpload: userSourcemaps.deleteAfterUpload ?? true,
+            batchSize: userSourcemaps.batchSize,
         },
     }
     return posthogOptions

@@ -13,6 +13,7 @@ export interface PluginConfig {
         project?: string
         version?: string
         deleteAfterUpload?: boolean
+        batchSize?: number
     }
 }
 
@@ -25,6 +26,7 @@ export interface ResolvedPluginConfig extends PluginConfig {
         project?: string
         version?: string
         deleteAfterUpload: boolean
+        batchSize?: number
     }
 }
 
@@ -51,6 +53,7 @@ export function resolveConfig(options: PluginConfig): ResolvedPluginConfig {
             project: sourcemaps.project,
             version: sourcemaps.version,
             deleteAfterUpload: sourcemaps.deleteAfterUpload ?? true,
+            batchSize: sourcemaps.batchSize,
         },
     }
 }

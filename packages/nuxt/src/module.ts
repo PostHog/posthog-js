@@ -18,6 +18,7 @@ interface SourcemapsConfig {
   project?: string
   logLevel?: LogLevel
   deleteAfterUpload?: boolean
+  batchSize?: number
 }
 
 export interface ModuleOptions {
@@ -179,6 +180,10 @@ function getUploadArgs(directory: string, sourcemapsConfig: SourcemapsConfig) {
 
   if (sourcemapsConfig.deleteAfterUpload ?? true) {
     processOptions.push('--delete-after')
+  }
+
+  if (sourcemapsConfig.batchSize) {
+    processOptions.push('--batch-size', sourcemapsConfig.batchSize.toString())
   }
 
   return processOptions

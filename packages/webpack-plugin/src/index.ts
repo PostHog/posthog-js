@@ -51,9 +51,11 @@ export class PosthogWebpackPlugin {
 
     async processSourceMaps(compilation: webpack.Compilation, config: ResolvedPluginConfig): Promise<void> {
         const outputDirectory = compilation.outputOptions.path
+        const args = []
 
         // chunks are output outside of the output directory for server chunks
-        const args = ['sourcemap', 'process']
+        args.push('sourcemap', 'process')
+
         const chunkArray = Array.from(compilation.chunks)
 
         if (chunkArray.length == 0) {
@@ -80,11 +82,15 @@ export class PosthogWebpackPlugin {
             args.push('--delete-after')
         }
 
+        if (config.sourcemaps.batchSize) {
+            args.push('--batch-size', config.sourcemaps.batchSize.toString())
+        }
+
         await spawnLocal(config.cliBinaryPath, args, {
             cwd: process.cwd(),
             env: {
-                ...process.env,
                 RUST_LOG: `posthog_cli=${config.logLevel}`,
+                ...process.env,
                 POSTHOG_CLI_HOST: config.host,
                 POSTHOG_CLI_TOKEN: config.personalApiKey,
                 POSTHOG_CLI_ENV_ID: config.envId,
