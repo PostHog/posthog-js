@@ -1,5 +1,27 @@
 # posthog-ai
 
+## 7.3.0
+
+### Minor Changes
+
+- [#2711](https://github.com/PostHog/posthog-js/pull/2711) [`8c3a21e`](https://github.com/PostHog/posthog-js/commit/8c3a21e6b857752677af50ccc7b0c7b5821e1a6d) Thanks [@andrewm4894](https://github.com/andrewm4894)! - Add support for both Vercel AI SDK 5 and 6
+
+  Changes:
+  - Runtime version detection via `model.specificationVersion`
+  - Support both `LanguageModelV2` (SDK 5) and `LanguageModelV3` (SDK 6)
+  - `@ai-sdk/provider` is now an optional peer dependency (supports both v2 and v3)
+  - Removed unused `ai` peer dependency (only type imports from `@ai-sdk/provider` are used)
+  - No breaking changes - existing SDK 5 users can continue without modification (2025-12-22)
+
+### Patch Changes
+
+- [#2789](https://github.com/PostHog/posthog-js/pull/2789) [`6b415a0`](https://github.com/PostHog/posthog-js/commit/6b415a07c69f36cbfadb181ba7e8606e9a4e92f0) Thanks [@andrewm4894](https://github.com/andrewm4894)! - fix: extract model from response for OpenAI stored prompts
+
+  When using OpenAI stored prompts, the model is defined in the OpenAI dashboard rather than passed in the API request. This change adds a fallback to extract the model from the response object when not provided in kwargs. (2025-12-22)
+
+- Updated dependencies [[`04065b9`](https://github.com/PostHog/posthog-js/commit/04065b9942da4545553859af5195587e5348bceb)]:
+  - posthog-node@5.18.0
+
 ## 7.2.2
 
 ### Patch Changes

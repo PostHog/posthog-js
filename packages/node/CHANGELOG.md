@@ -1,5 +1,17 @@
 # posthog-node
 
+## 5.18.0
+
+### Minor Changes
+
+- [#2782](https://github.com/PostHog/posthog-js/pull/2782) [`04065b9`](https://github.com/PostHog/posthog-js/commit/04065b9942da4545553859af5195587e5348bceb) Thanks [@haacked](https://github.com/haacked)! - Add $feature_flag_error to $feature_flag_called events when an error occurred while trying evaluate a flag
+  (2025-12-22)
+
+### Patch Changes
+
+- Updated dependencies [[`b676b4d`](https://github.com/PostHog/posthog-js/commit/b676b4d7342c8c3b64960aa55630b2810366014e)]:
+  - @posthog/core@1.9.0
+
 ## 5.17.4
 
 ### Patch Changes

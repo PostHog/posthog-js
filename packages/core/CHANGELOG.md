@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.9.0
+
+### Minor Changes
+
+- [#2787](https://github.com/PostHog/posthog-js/pull/2787) [`b676b4d`](https://github.com/PostHog/posthog-js/commit/b676b4d7342c8c3b64960aa55630b2810366014e) Thanks [@lucasheriques](https://github.com/lucasheriques)! - feat: allow customizing text colors on web and react native
+  (2025-12-22)
+
 ## 1.8.1
 
 ### Patch Changes

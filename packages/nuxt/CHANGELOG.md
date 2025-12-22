@@ -1,5 +1,21 @@
 # @posthog/nuxt
 
+## 1.4.0
+
+### Minor Changes
+
+- [#2778](https://github.com/PostHog/posthog-js/pull/2778) [`a4d8fcf`](https://github.com/PostHog/posthog-js/commit/a4d8fcf05962968fac8277e0acca7677cf3c2ab7) Thanks [@dmarticus](https://github.com/dmarticus)! - Added feature flag composables to the Nuxt module
+  (2025-12-22)
+
+### Patch Changes
+
+- [#2804](https://github.com/PostHog/posthog-js/pull/2804) [`5c2cea5`](https://github.com/PostHog/posthog-js/commit/5c2cea5afea46527120d6cf6ff37956ffb98ebef) Thanks [@hpouillot](https://github.com/hpouillot)! - add batchSize option for sourcemap upload control
+  (2025-12-22)
+- Updated dependencies [[`04065b9`](https://github.com/PostHog/posthog-js/commit/04065b9942da4545553859af5195587e5348bceb), [`6851061`](https://github.com/PostHog/posthog-js/commit/68510612c18fe6513b54dcf4545ca52196fc2dfd), [`f7372c8`](https://github.com/PostHog/posthog-js/commit/f7372c8eb62d46ef8fc72da1a394014be21b0108), [`96f42be`](https://github.com/PostHog/posthog-js/commit/96f42be6e1026862d1f64a914d8b180735cd3bfd), [`2c54d15`](https://github.com/PostHog/posthog-js/commit/2c54d1552c7d57359107ea8eb725353407a28f6e), [`b676b4d`](https://github.com/PostHog/posthog-js/commit/b676b4d7342c8c3b64960aa55630b2810366014e)]:
+  - posthog-node@5.18.0
+  - posthog-js@1.310.0
+  - @posthog/core@1.9.0
+
 ## 1.3.25
 
 ### Patch Changes

@@ -1,5 +1,19 @@
 # posthog-react-native
 
+## 4.17.0
+
+### Minor Changes
+
+- [#2787](https://github.com/PostHog/posthog-js/pull/2787) [`b676b4d`](https://github.com/PostHog/posthog-js/commit/b676b4d7342c8c3b64960aa55630b2810366014e) Thanks [@lucasheriques](https://github.com/lucasheriques)! - feat: allow customizing text colors on web and react native
+  (2025-12-22)
+
+### Patch Changes
+
+- [#2791](https://github.com/PostHog/posthog-js/pull/2791) [`3e533de`](https://github.com/PostHog/posthog-js/commit/3e533de1e8b52f64fa28762114f4e279d2c55406) Thanks [@adboio](https://github.com/adboio)! - surveys fix: do not dismiss keyboard on submit button tap
+  (2025-12-22)
+- Updated dependencies [[`b676b4d`](https://github.com/PostHog/posthog-js/commit/b676b4d7342c8c3b64960aa55630b2810366014e)]:
+  - @posthog/core@1.9.0
+
 ## 4.16.2
 
 ### Patch Changes

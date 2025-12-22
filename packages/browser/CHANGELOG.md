@@ -1,5 +1,29 @@
 # posthog-js
 
+## 1.310.0
+
+### Minor Changes
+
+- [#2770](https://github.com/PostHog/posthog-js/pull/2770) [`6851061`](https://github.com/PostHog/posthog-js/commit/68510612c18fe6513b54dcf4545ca52196fc2dfd) Thanks [@daibhin](https://github.com/daibhin)! - feat: allow exception autocapture to be programatically enabled / disabled
+  (2025-12-22)
+
+- [#2792](https://github.com/PostHog/posthog-js/pull/2792) [`f7372c8`](https://github.com/PostHog/posthog-js/commit/f7372c8eb62d46ef8fc72da1a394014be21b0108) Thanks [@adboio](https://github.com/adboio)! - add event/action triggers for product tours
+  (2025-12-22)
+
+- [#2790](https://github.com/PostHog/posthog-js/pull/2790) [`96f42be`](https://github.com/PostHog/posthog-js/commit/96f42be6e1026862d1f64a914d8b180735cd3bfd) Thanks [@adboio](https://github.com/adboio)! - fix: hosted survey auto-submit behavior only submits skipped questions
+  (2025-12-22)
+
+- [#2786](https://github.com/PostHog/posthog-js/pull/2786) [`2c54d15`](https://github.com/PostHog/posthog-js/commit/2c54d1552c7d57359107ea8eb725353407a28f6e) Thanks [@adboio](https://github.com/adboio)! - emit new "survey abandoned" event on pageleave
+  (2025-12-22)
+
+- [#2787](https://github.com/PostHog/posthog-js/pull/2787) [`b676b4d`](https://github.com/PostHog/posthog-js/commit/b676b4d7342c8c3b64960aa55630b2810366014e) Thanks [@lucasheriques](https://github.com/lucasheriques)! - feat: allow customizing text colors on web and react native
+  (2025-12-22)
+
+### Patch Changes
+
+- Updated dependencies [[`b676b4d`](https://github.com/PostHog/posthog-js/commit/b676b4d7342c8c3b64960aa55630b2810366014e)]:
+    - @posthog/core@1.9.0
+
 ## 1.309.1
 
 ### Patch Changes

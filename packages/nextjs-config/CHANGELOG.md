@@ -1,5 +1,15 @@
 # @posthog/nextjs-config
 
+## 1.7.4
+
+### Patch Changes
+
+- [#2804](https://github.com/PostHog/posthog-js/pull/2804) [`5c2cea5`](https://github.com/PostHog/posthog-js/commit/5c2cea5afea46527120d6cf6ff37956ffb98ebef) Thanks [@hpouillot](https://github.com/hpouillot)! - add batchSize option for sourcemap upload control
+  (2025-12-22)
+- Updated dependencies [[`5c2cea5`](https://github.com/PostHog/posthog-js/commit/5c2cea5afea46527120d6cf6ff37956ffb98ebef), [`b676b4d`](https://github.com/PostHog/posthog-js/commit/b676b4d7342c8c3b64960aa55630b2810366014e)]:
+  - @posthog/webpack-plugin@1.2.4
+  - @posthog/core@1.9.0
+
 ## 1.7.3
 
 ### Patch Changes
