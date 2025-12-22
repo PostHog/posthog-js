@@ -1,5 +1,40 @@
 # posthog-react-native
 
+## 4.16.2
+
+### Patch Changes
+
+- [#2769](https://github.com/PostHog/posthog-js/pull/2769) [`6b0aabf`](https://github.com/PostHog/posthog-js/commit/6b0aabff893e44d1710b7d122a68bf023f4e0bd5) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: React Native on web should report hardware type as Desktop or Mobile, not Web
+  (2025-12-17)
+- Updated dependencies [[`6b0aabf`](https://github.com/PostHog/posthog-js/commit/6b0aabff893e44d1710b7d122a68bf023f4e0bd5)]:
+  - @posthog/core@1.8.1
+
+## 4.16.1
+
+### Patch Changes
+
+- [#2763](https://github.com/PostHog/posthog-js/pull/2763) [`c9c0e4d`](https://github.com/PostHog/posthog-js/commit/c9c0e4d658f73a022151a273f258df0201738219) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: captureTouches errors with reanimated styles
+  (2025-12-17)
+
+## 4.16.0
+
+### Minor Changes
+
+- [#2776](https://github.com/PostHog/posthog-js/pull/2776) [`32db4b3`](https://github.com/PostHog/posthog-js/commit/32db4b378c5d40747454085de135174c2c176849) Thanks [@adboio](https://github.com/adboio)! - support event property filters on surveys
+  (2025-12-17)
+
+## 4.15.0
+
+### Minor Changes
+
+- [#2774](https://github.com/PostHog/posthog-js/pull/2774) [`2603a8d`](https://github.com/PostHog/posthog-js/commit/2603a8d6e1021cd8f84e8b61be77ce268435ebde) Thanks [@adboio](https://github.com/adboio)! - fix survey text color on react native
+  (2025-12-16)
+
+### Patch Changes
+
+- Updated dependencies [[`2603a8d`](https://github.com/PostHog/posthog-js/commit/2603a8d6e1021cd8f84e8b61be77ce268435ebde)]:
+  - @posthog/core@1.8.0
+
 ## 4.14.4
 
 ### Patch Changes

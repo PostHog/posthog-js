@@ -363,6 +363,36 @@ describe('survey-event-receiver', () => {
             registeredHook('purchase', createEventPayload('purchase', { any_prop: 'any_value' }))
             expect(surveyEventReceiver.getSurveys()).toContain('no-filters-test')
         })
+
+        it('activates survey with gt (greater than) numeric property match', () => {
+            const survey = createSurveyWithPropertyFilters('gt-test', 'purchase', {
+                amount: { values: ['100'], operator: 'gt' },
+            })
+
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([survey])
+            const registeredHook = mockAddCaptureHook.mock.calls[0][0]
+
+            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+
+            registeredHook('purchase', createEventPayload('purchase', { amount: 150 }))
+            expect(surveyEventReceiver.getSurveys()).toContain('gt-test')
+        })
+
+        it('activates survey with lt (less than) numeric property match', () => {
+            const survey = createSurveyWithPropertyFilters('lt-test', 'purchase', {
+                amount: { values: ['100'], operator: 'lt' },
+            })
+
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([survey])
+            const registeredHook = mockAddCaptureHook.mock.calls[0][0]
+
+            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+
+            registeredHook('purchase', createEventPayload('purchase', { amount: 50 }))
+            expect(surveyEventReceiver.getSurveys()).toContain('lt-test')
+        })
     })
 
     describe('action based surveys', () => {
@@ -591,6 +621,84 @@ describe('survey-event-receiver', () => {
 
             registeredHook('some_other_event')
             expect(mockCancelPendingSurvey).not.toHaveBeenCalled()
+        })
+
+        it('cancels survey when cancel event property filter matches', () => {
+            const surveyWithCancelPropertyFilter: Survey = {
+                ...surveyWithCancelEvent,
+                id: 'survey-cancel-prop-filter',
+                conditions: {
+                    events: { values: [{ name: 'trigger_event' }] },
+                    cancelEvents: {
+                        values: [
+                            {
+                                name: 'cancel_event',
+                                propertyFilters: {
+                                    reason: { values: ['user_navigated_away'], operator: 'exact' },
+                                },
+                            },
+                        ],
+                    },
+                },
+            } as unknown as Survey
+
+            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) =>
+                callback([surveyWithCancelPropertyFilter])
+            )
+
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([surveyWithCancelPropertyFilter])
+            const registeredHook = mockAddCaptureHook.mock.calls[0][0]
+
+            registeredHook('trigger_event')
+            expect(surveyEventReceiver.getSurveys()).toContain('survey-cancel-prop-filter')
+
+            registeredHook('cancel_event', {
+                event: 'cancel_event',
+                properties: { reason: 'user_navigated_away' },
+            } as CaptureResult)
+
+            expect(mockCancelPendingSurvey).toHaveBeenCalledWith('survey-cancel-prop-filter')
+            expect(surveyEventReceiver.getSurveys()).not.toContain('survey-cancel-prop-filter')
+        })
+
+        it('does not cancel survey when cancel event property filter does not match', () => {
+            const surveyWithCancelPropertyFilter: Survey = {
+                ...surveyWithCancelEvent,
+                id: 'survey-cancel-prop-filter',
+                conditions: {
+                    events: { values: [{ name: 'trigger_event' }] },
+                    cancelEvents: {
+                        values: [
+                            {
+                                name: 'cancel_event',
+                                propertyFilters: {
+                                    reason: { values: ['user_navigated_away'], operator: 'exact' },
+                                },
+                            },
+                        ],
+                    },
+                },
+            } as unknown as Survey
+
+            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) =>
+                callback([surveyWithCancelPropertyFilter])
+            )
+
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([surveyWithCancelPropertyFilter])
+            const registeredHook = mockAddCaptureHook.mock.calls[0][0]
+
+            registeredHook('trigger_event')
+            expect(surveyEventReceiver.getSurveys()).toContain('survey-cancel-prop-filter')
+
+            registeredHook('cancel_event', {
+                event: 'cancel_event',
+                properties: { reason: 'some_other_reason' },
+            } as CaptureResult)
+
+            expect(mockCancelPendingSurvey).not.toHaveBeenCalled()
+            expect(surveyEventReceiver.getSurveys()).toContain('survey-cancel-prop-filter')
         })
     })
 })

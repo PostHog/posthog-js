@@ -263,6 +263,144 @@
     display: none !important;
 }
 
+/* Survey step styles */
+.ph-tour-survey-step {
+    min-width: 300px;
+}
+
+.ph-tour-survey-question {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--ph-tour-text-color);
+    margin-bottom: 16px;
+    padding-right: 24px;
+    line-height: 1.4;
+}
+
+.ph-tour-survey-input-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.ph-tour-survey-textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--ph-tour-border-color);
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: var(--ph-tour-font-family);
+    color: var(--ph-tour-text-color);
+    background: #ffffff;
+    resize: vertical;
+    min-height: 80px;
+    box-sizing: border-box;
+}
+
+.ph-tour-survey-textarea:focus {
+    outline: none;
+    border-color: var(--ph-tour-button-color);
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.05);
+}
+
+.ph-tour-survey-textarea::placeholder {
+    color: var(--ph-tour-text-secondary-color);
+}
+
+.ph-tour-survey-submit {
+    align-self: flex-end;
+}
+
+/* Rating container */
+.ph-tour-survey-rating-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.ph-tour-survey-rating-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--ph-tour-text-secondary-color);
+}
+
+/* Emoji rating */
+.ph-tour-survey-rating-emoji {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+}
+
+.ph-tour-survey-emoji-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 2px solid var(--ph-tour-border-color);
+    border-radius: 8px;
+    background: var(--ph-tour-background-color);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.ph-tour-survey-emoji-button:hover {
+    border-color: var(--ph-tour-button-color);
+    background: rgba(0, 0, 0, 0.02);
+}
+
+.ph-tour-survey-emoji-button--active {
+    border-color: var(--ph-tour-button-color);
+    background: var(--ph-tour-button-color);
+}
+
+.ph-tour-survey-emoji-button--active svg {
+    fill: var(--ph-tour-button-text-color);
+}
+
+.ph-tour-survey-emoji-button svg {
+    width: 28px;
+    height: 28px;
+    fill: var(--ph-tour-text-color);
+    transition: fill 0.15s ease;
+}
+
+/* Number rating */
+.ph-tour-survey-rating-numbers {
+    display: grid;
+    gap: 6px;
+}
+
+.ph-tour-survey-number-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 4px;
+    border: 1px solid var(--ph-tour-border-color);
+    border-radius: 4px;
+    background: var(--ph-tour-background-color);
+    font-size: 13px;
+    font-weight: 500;
+    font-family: var(--ph-tour-font-family);
+    color: var(--ph-tour-text-color);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.ph-tour-survey-number-button:hover {
+    border-color: var(--ph-tour-button-color);
+    background: rgba(0, 0, 0, 0.02);
+}
+
+.ph-tour-survey-number-button--active {
+    border-color: var(--ph-tour-button-color);
+    background: var(--ph-tour-button-color);
+    color: var(--ph-tour-button-text-color);
+}
+
 @keyframes ph-tour-fade-in {
     from {
         opacity: 0;

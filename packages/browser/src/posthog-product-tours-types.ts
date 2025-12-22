@@ -1,4 +1,5 @@
 import { PropertyMatchType } from './types'
+import { SurveyActionType, SurveyEventWithFilters } from './posthog-surveys-types'
 
 export interface JSONContent {
     type?: string
@@ -26,17 +27,30 @@ export interface ProductTourSurveyQuestion {
 export interface ProductTourStep {
     id: string
     selector?: string
+    progressionTrigger: 'button' | 'click'
     content: JSONContent | null
     /** Inline survey question config - if present, this is a survey step */
     survey?: ProductTourSurveyQuestion
     /** ID of the auto-created survey for this step (set by backend) */
     linkedSurveyId?: string
+    /** ID of the survey question (set by backend, used for event tracking) */
+    linkedSurveyQuestionId?: string
 }
 
 export interface ProductTourConditions {
     url?: string
     urlMatchType?: PropertyMatchType
     selector?: string
+    autoShowDelaySeconds?: number
+    events?: {
+        values: SurveyEventWithFilters[]
+    } | null
+    cancelEvents?: {
+        values: SurveyEventWithFilters[]
+    } | null
+    actions?: {
+        values: SurveyActionType[]
+    } | null
 }
 
 export interface ProductTourAppearance {
@@ -63,7 +77,6 @@ export interface ProductTour {
     steps: ProductTourStep[]
     internal_targeting_flag_key?: string
     linked_flag_key?: string
-    trigger_selector?: string
 }
 
 export type ProductTourCallback = (tours: ProductTour[], context?: { isLoaded: boolean; error?: string }) => void
@@ -76,7 +89,7 @@ export type ProductTourDismissReason =
     | 'escape_key'
     | 'element_unavailable'
 
-export type ProductTourRenderReason = 'auto' | 'api' | 'trigger'
+export type ProductTourRenderReason = 'auto' | 'api' | 'trigger' | 'event'
 
 export const DEFAULT_PRODUCT_TOUR_APPEARANCE: Required<ProductTourAppearance> = {
     backgroundColor: '#ffffff',
@@ -86,4 +99,9 @@ export const DEFAULT_PRODUCT_TOUR_APPEARANCE: Required<ProductTourAppearance> = 
     borderRadius: 8,
     borderColor: '#e5e7eb',
     whiteLabel: false,
+}
+
+export interface ShowTourOptions {
+    reason?: ProductTourRenderReason
+    enableStrictValidation?: boolean
 }

@@ -12,6 +12,7 @@ export default function Home() {
     const flags = useActiveFeatureFlags()
 
     const [time, setTime] = useState('')
+    const [modalOpen, setModalOpen] = useState(false)
     const consentGiven = cookieConsentGiven()
 
     useEffect(() => {
@@ -112,7 +113,42 @@ export default function Home() {
                 <button onClick={() => posthog?.reset()} id="set-user-properties">
                     Reset
                 </button>
+                <button onClick={() => setModalOpen(true)}>Open Modal</button>
             </div>
+
+            {modalOpen && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0,0,0,0.5)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 1000,
+                    }}
+                    onClick={() => setModalOpen(false)}
+                >
+                    <div
+                        style={{
+                            backgroundColor: 'white',
+                            padding: '24px',
+                            borderRadius: '8px',
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <h3>Modal</h3>
+                        <button data-attr="surprise-modal-button">Button inside modal</button>
+                        <br />
+                        <button onClick={() => setModalOpen(false)} style={{ marginTop: '12px' }}>
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {isClient && (
                 <>

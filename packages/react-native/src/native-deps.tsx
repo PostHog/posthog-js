@@ -8,6 +8,7 @@ import { OptionalReactNativeDeviceInfo } from './optional/OptionalReactNativeDev
 import { PostHogCustomAppProperties, PostHogCustomStorage } from './types'
 import { OptionalReactNativeLocalize } from './optional/OptionalReactNativeLocalize'
 import { OptionalExpoFileSystemLegacy } from './optional/OptionalExpoFileSystemLegacy'
+import { detectDeviceType } from '@posthog/core'
 
 const getDeviceType = (): string => {
   let deviceType = 'Mobile'
@@ -15,7 +16,10 @@ const getDeviceType = (): string => {
   if (Platform.OS === 'macos' || Platform.OS === 'windows') {
     deviceType = 'Desktop'
   } else if (Platform.OS === 'web') {
-    deviceType = 'Web'
+    // Check user agent to determine if it's desktop or mobile
+    const ua = typeof navigator !== 'undefined' && navigator.userAgent ? navigator.userAgent : ''
+
+    deviceType = detectDeviceType(ua)
   }
   return deviceType
 }

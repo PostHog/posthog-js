@@ -17,6 +17,7 @@ export function doesSurveyActivateByAction(survey: Pick<Survey, 'conditions'>): 
 
 export const SURVEY_SEEN_PREFIX = 'seenSurvey_'
 export const SURVEY_IN_PROGRESS_PREFIX = 'inProgressSurvey_'
+export const SURVEY_ABANDONED_PREFIX = 'abandonedSurvey_'
 
 export const getSurveyInteractionProperty = (
     survey: Pick<Survey, 'id' | 'current_iteration'>,
@@ -30,13 +31,20 @@ export const getSurveyInteractionProperty = (
     return surveyProperty
 }
 
-export const getSurveySeenKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {
-    let surveySeenKey = `${SURVEY_SEEN_PREFIX}${survey.id}`
+const getSurveyStorageKey = (prefix: string, survey: Pick<Survey, 'id' | 'current_iteration'>): string => {
+    let key = `${prefix}${survey.id}`
     if (survey.current_iteration && survey.current_iteration > 0) {
-        surveySeenKey = `${SURVEY_SEEN_PREFIX}${survey.id}_${survey.current_iteration}`
+        key = `${prefix}${survey.id}_${survey.current_iteration}`
     }
+    return key
+}
 
-    return surveySeenKey
+export const getSurveySeenKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {
+    return getSurveyStorageKey(SURVEY_SEEN_PREFIX, survey)
+}
+
+export const getSurveyAbandonedKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {
+    return getSurveyStorageKey(SURVEY_ABANDONED_PREFIX, survey)
 }
 
 export const setSurveySeenOnLocalStorage = (survey: Pick<Survey, 'id' | 'current_iteration'>) => {

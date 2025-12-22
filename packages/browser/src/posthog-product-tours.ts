@@ -1,123 +1,80 @@
 import { PostHog } from './posthog-core'
 import { ProductTour, ProductTourCallback } from './posthog-product-tours-types'
+import { PRODUCT_TOURS_ENABLED_SERVER_SIDE } from './constants'
 import { RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
-import { isNullish, isUndefined, isArray } from '@posthog/core'
+import { isArray, isNullish } from '@posthog/core'
 import { assignableWindow } from './utils/globals'
 
 const logger = createLogger('[Product Tours]')
 
 const PRODUCT_TOURS_STORAGE_KEY = 'ph_product_tours'
-const PRODUCT_TOURS_FEATURE_FLAG = 'product-tours-2025'
 
 interface ProductTourManagerInterface {
     start: () => void
     stop: () => void
     showTourById: (tourId: string) => void
+    previewTour: (tour: ProductTour) => void
     dismissTour: (reason: string) => void
     nextStep: () => void
     previousStep: () => void
     getActiveProductTours: (callback: ProductTourCallback) => void
     resetTour: (tourId: string) => void
     resetAllTours: () => void
+    cancelPendingTour: (tourId: string) => void
+}
+
+const isProductToursEnabled = (instance: PostHog): boolean => {
+    if (instance.config.disable_product_tours) {
+        return false
+    }
+    return !!instance.persistence?.get_property(PRODUCT_TOURS_ENABLED_SERVER_SIDE)
 }
 
 export class PostHogProductTours {
     private _instance: PostHog
-    private _cachedTours: ProductTour[] | null = null
     private _productTourManager: ProductTourManagerInterface | null = null
-    private _isProductToursEnabled?: boolean = undefined
-    private _isInitializing: boolean = false
+    private _cachedTours: ProductTour[] | null = null
 
     constructor(instance: PostHog) {
         this._instance = instance
     }
 
     onRemoteConfig(response: RemoteConfig): void {
-        if (this._instance.config.disable_product_tours) {
-            logger.info('Product tours disabled via config')
-            return
+        if (this._instance.persistence) {
+            this._instance.persistence.register({
+                [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: !!response?.productTours,
+            })
         }
-
-        const productTours = response['productTours']
-        if (isNullish(productTours)) {
-            logger.info('Product tours not enabled in remote config')
-            return
-        }
-
-        this._isProductToursEnabled = productTours
-        logger.info(`Remote config received, isProductToursEnabled: ${this._isProductToursEnabled}`)
         this.loadIfEnabled()
     }
 
     loadIfEnabled(): void {
-        if (this._productTourManager) {
+        if (this._productTourManager || !isProductToursEnabled(this._instance)) {
             return
         }
-        if (this._isInitializing) {
-            logger.info('Already initializing product tours, skipping...')
-            return
-        }
-        if (this._instance.config.disable_product_tours) {
-            logger.info('Product tours disabled via config')
-            return
-        }
-
-        const phExtensions = assignableWindow?.__PosthogExtensions__
-        if (!phExtensions) {
-            logger.error('PostHog Extensions not found.')
-            return
-        }
-
-        const featureFlagEnabled = this._instance.featureFlags?.isFeatureEnabled(PRODUCT_TOURS_FEATURE_FLAG)
-
-        if (isUndefined(this._isProductToursEnabled) && !featureFlagEnabled) {
-            logger.info('Waiting for remote config or feature flag to enable product tours')
-            return
-        }
-
-        const isEnabled = this._isProductToursEnabled || featureFlagEnabled
-        if (!isEnabled) {
-            logger.info('Product tours not enabled')
-            return
-        }
-
-        this._isInitializing = true
-
-        try {
-            const generateProductTours = phExtensions.generateProductTours
-            if (generateProductTours) {
-                this._completeInitialization(generateProductTours, isEnabled)
-                return
-            }
-
-            const loadExternalDependency = phExtensions.loadExternalDependency
-            if (!loadExternalDependency) {
-                logger.error('PostHog loadExternalDependency extension not found.')
-                this._isInitializing = false
-                return
-            }
-
-            loadExternalDependency(this._instance, 'product-tours', (err) => {
-                if (err || !phExtensions.generateProductTours) {
-                    logger.error('Could not load product tours script', err)
-                } else {
-                    this._completeInitialization(phExtensions.generateProductTours, isEnabled)
-                }
-                this._isInitializing = false
-            })
-        } catch (e) {
-            logger.error('Error initializing product tours', e)
-            this._isInitializing = false
-        }
+        this._loadScript(() => this._startProductTours())
     }
 
-    private _completeInitialization(
-        generateProductToursFn: (instance: PostHog, isEnabled: boolean) => ProductTourManagerInterface | undefined,
-        isEnabled: boolean
-    ): void {
-        this._productTourManager = generateProductToursFn(this._instance, isEnabled) || null
-        logger.info('Product tours loaded successfully')
+    private _loadScript(cb: () => void): void {
+        if (assignableWindow.__PosthogExtensions__?.generateProductTours) {
+            cb()
+            return
+        }
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'product-tours', (err) => {
+            if (err) {
+                logger.error('Could not load product tours script', err)
+                return
+            }
+            cb()
+        })
+    }
+
+    private _startProductTours(): void {
+        if (this._productTourManager || !assignableWindow.__PosthogExtensions__?.generateProductTours) {
+            return
+        }
+        this._productTourManager = assignableWindow.__PosthogExtensions__.generateProductTours(this._instance, true)
     }
 
     getProductTours(callback: ProductTourCallback, forceReload: boolean = false): void {
@@ -152,7 +109,6 @@ export class PostHogProductTours {
                 }
 
                 const tours: ProductTour[] = isArray(response.json.product_tours) ? response.json.product_tours : []
-
                 this._cachedTours = tours
 
                 if (persistence) {
@@ -166,7 +122,6 @@ export class PostHogProductTours {
 
     getActiveProductTours(callback: ProductTourCallback): void {
         if (isNullish(this._productTourManager)) {
-            logger.warn('Product tours not loaded yet')
             callback([], { isLoaded: false, error: 'Product tours not loaded' })
             return
         }
@@ -174,8 +129,21 @@ export class PostHogProductTours {
     }
 
     showProductTour(tourId: string): void {
-        logger.info(`showProductTour(${tourId})`)
         this._productTourManager?.showTourById(tourId)
+    }
+
+    // force load product tours extension and render a tour,
+    // ignoring all display conditions.
+    previewTour(tour: ProductTour): void {
+        if (this._productTourManager) {
+            this._productTourManager.previewTour(tour)
+            return
+        }
+
+        this._loadScript(() => {
+            this._startProductTours()
+            this._productTourManager?.previewTour(tour)
+        })
     }
 
     dismissProductTour(): void {
@@ -192,11 +160,7 @@ export class PostHogProductTours {
 
     clearCache(): void {
         this._cachedTours = null
-
-        const persistence = this._instance.persistence
-        if (persistence) {
-            persistence.unregister(PRODUCT_TOURS_STORAGE_KEY)
-        }
+        this._instance.persistence?.unregister(PRODUCT_TOURS_STORAGE_KEY)
     }
 
     resetTour(tourId: string): void {
@@ -205,5 +169,9 @@ export class PostHogProductTours {
 
     resetAllTours(): void {
         this._productTourManager?.resetAllTours()
+    }
+
+    cancelPendingTour(tourId: string): void {
+        this._productTourManager?.cancelPendingTour(tourId)
     }
 }

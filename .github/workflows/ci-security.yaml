@@ -20,7 +20,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - name: Checkout code
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
             - name: Ensure SHA pinned actions
               uses: zgosalvez/github-actions-ensure-sha-pinned-actions@9e9574ef04ea69da568d6249bd69539ccc704e74 # v4.0.0
               with:
@@ -28,3 +28,29 @@ jobs:
                       actions/
                       PostHog/
                       github/codeql-action/
+
+    semgrep:
+        runs-on: ubuntu-latest
+        container:
+            image: returntocorp/semgrep
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v6
+
+            - name: Run Semgrep
+              run: |
+                  semgrep \
+                    --config "p/owasp-top-ten" \
+                    --config "p/security-audit" \
+                    --config "p/trailofbits" \
+                    --error \
+                    --metrics=off \
+                    --verbose \
+                    --exclude ./docs/ \
+                    --exclude ./examples/ \
+                    --exclude ./packages/ \
+                    --exclude ./playground/ \
+                    --exclude ./tooling/ \
+                    .
+

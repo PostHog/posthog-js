@@ -18,8 +18,6 @@ const openTextQuestion = {
 }
 
 test.describe('surveys - event property filtering', () => {
-    test.skip(true, 'Consistently fails and blocking other PRs 🙈')
-
     test('shows survey when event name matches without property filters', async ({ page, context }) => {
         const surveysAPICall = page.route('**/surveys/**', async (route) => {
             await route.fulfill({
@@ -47,8 +45,10 @@ test.describe('surveys - event property filtering', () => {
             })
         })
 
+        const surveysResponse = page.waitForResponse('**/surveys/**')
         await start(startOptions, page, context)
         await surveysAPICall
+        await surveysResponse
 
         // Survey should not be visible initially
         await expect(page.locator('.PostHogSurvey-event-survey-1').locator('.survey-form')).not.toBeInViewport()
@@ -98,8 +98,10 @@ test.describe('surveys - event property filtering', () => {
             })
         })
 
+        const surveysResponse = page.waitForResponse('**/surveys/**')
         await start(startOptions, page, context)
         await surveysAPICall
+        await surveysResponse
 
         // Survey should not be visible initially
         await expect(page.locator('.PostHogSurvey-exact-filter-survey').locator('.survey-form')).not.toBeInViewport()
@@ -160,8 +162,10 @@ test.describe('surveys - event property filtering', () => {
             })
         })
 
+        const surveysResponse = page.waitForResponse('**/surveys/**')
         await start(startOptions, page, context)
         await surveysAPICall
+        await surveysResponse
 
         // Trigger event with excluded property value
         await page.evaluate(() => {
@@ -217,8 +221,10 @@ test.describe('surveys - event property filtering', () => {
             })
         })
 
+        const surveysResponse = page.waitForResponse('**/surveys/**')
         await start(startOptions, page, context)
         await surveysAPICall
+        await surveysResponse
 
         // Trigger event with non-matching URL
         await page.evaluate(() => {
@@ -274,8 +280,10 @@ test.describe('surveys - event property filtering', () => {
             })
         })
 
+        const surveysResponse = page.waitForResponse('**/surveys/**')
         await start(startOptions, page, context)
         await surveysAPICall
+        await surveysResponse
 
         // Trigger event with non-matching search query
         await page.evaluate(() => {
@@ -337,8 +345,10 @@ test.describe('surveys - event property filtering', () => {
             })
         })
 
+        const surveysResponse = page.waitForResponse('**/surveys/**')
         await start(startOptions, page, context)
         await surveysAPICall
+        await surveysResponse
 
         // Trigger event that matches only first condition
         await page.evaluate(() => {
@@ -396,8 +406,10 @@ test.describe('surveys - event property filtering', () => {
             })
         })
 
+        const surveysResponse = page.waitForResponse('**/surveys/**')
         await start(startOptions, page, context)
         await surveysAPICall
+        await surveysResponse
 
         // Trigger event without the required property
         await page.evaluate(() => {
@@ -447,8 +459,10 @@ test.describe('surveys - event property filtering', () => {
             })
         })
 
+        const surveysResponse = page.waitForResponse('**/surveys/**')
         await start(startOptions, page, context)
         await surveysAPICall
+        await surveysResponse
 
         // Trigger event with URL that matches the excluded pattern
         await page.evaluate(() => {
@@ -504,8 +518,10 @@ test.describe('surveys - event property filtering', () => {
             })
         })
 
+        const surveysResponse = page.waitForResponse('**/surveys/**')
         await start(startOptions, page, context)
         await surveysAPICall
+        await surveysResponse
 
         // Trigger event with query containing excluded term (case-insensitive)
         await page.evaluate(() => {
@@ -561,8 +577,10 @@ test.describe('surveys - event property filtering', () => {
             })
         })
 
+        const surveysResponse = page.waitForResponse('**/surveys/**')
         await start(startOptions, page, context)
         await surveysAPICall
+        await surveysResponse
 
         // Survey should not be visible initially
         await expect(page.locator('.PostHogSurvey-event-capture-survey').locator('.survey-form')).not.toBeInViewport()

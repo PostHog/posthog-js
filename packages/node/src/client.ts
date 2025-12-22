@@ -14,6 +14,8 @@ import {
 } from '@posthog/core'
 import {
   EventMessage,
+  FeatureFlagError,
+  FeatureFlagErrorType,
   GroupIdentifyMessage,
   IdentifyMessage,
   IPostHog,
@@ -421,6 +423,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *   properties: {
    *     $set: { name: 'John Doe', email: 'john@example.com' },
    *     $set_once: { first_login: new Date().toISOString() }
+   *     $anon_distinct_id: 'anonymous_user_456'
    *   }
    * })
    * ```
@@ -429,24 +432,18 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param data - The identify data containing distinctId and properties
    */
-  identify({ distinctId, properties, disableGeoip }: IdentifyMessage): void {
+  identify({ distinctId, properties = {}, disableGeoip }: IdentifyMessage): void {
     // Catch properties passed as $set and move them to the top level
-
-    // promote $set and $set_once to top level
-    const userPropsOnce = properties?.$set_once
-    delete properties?.$set_once
-
-    // if no $set is provided we assume all properties are $set
-    const userProps = properties?.$set || properties
-
-    super.identifyStateless(
-      distinctId,
-      {
-        $set: userProps,
-        $set_once: userPropsOnce,
-      },
-      { disableGeoip }
-    )
+    const { $set, $set_once, $anon_distinct_id, ...rest } = properties
+    // if no $set is provided we assume all rest properties are $set
+    const setProps = $set || rest
+    const setOnceProps = $set_once || {}
+    const eventProperties = {
+      $set: setProps,
+      $set_once: setOnceProps,
+      $anon_distinct_id: $anon_distinct_id ?? undefined,
+    }
+    super.identifyStateless(distinctId, eventProperties, { disableGeoip })
   }
 
   /**
@@ -469,22 +466,18 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param data - The identify data containing distinctId and properties
    * @returns Promise that resolves when the identify is processed
    */
-  async identifyImmediate({ distinctId, properties, disableGeoip }: IdentifyMessage): Promise<void> {
-    // promote $set and $set_once to top level
-    const userPropsOnce = properties?.$set_once
-    delete properties?.$set_once
-
-    // if no $set is provided we assume all properties are $set
-    const userProps = properties?.$set || properties
-
-    await super.identifyStatelessImmediate(
-      distinctId,
-      {
-        $set: userProps,
-        $set_once: userPropsOnce,
-      },
-      { disableGeoip }
-    )
+  async identifyImmediate({ distinctId, properties = {}, disableGeoip }: IdentifyMessage): Promise<void> {
+    // Catch properties passed as $set and move them to the top level
+    const { $set, $set_once, $anon_distinct_id, ...rest } = properties
+    // if no $set is provided we assume all rest properties are $set
+    const setProps = $set || rest
+    const setOnceProps = $set_once || {}
+    const eventProperties = {
+      $set: setProps,
+      $set_once: setOnceProps,
+      $anon_distinct_id: $anon_distinct_id ?? undefined,
+    }
+    super.identifyStatelessImmediate(distinctId, eventProperties, { disableGeoip })
   }
 
   /**
@@ -682,27 +675,52 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     )
 
     const flagWasLocallyEvaluated = response !== undefined
-    let requestId = undefined
-    let evaluatedAt = undefined
+    let requestId: string | undefined = undefined
+    let evaluatedAt: number | undefined = undefined
     let flagDetail: FeatureFlagDetail | undefined = undefined
+    let featureFlagError: FeatureFlagErrorType | undefined = undefined
+
     if (!flagWasLocallyEvaluated && !onlyEvaluateLocally) {
-      const remoteResponse = await super.getFeatureFlagDetailStateless(
-        key,
+      // Call getFeatureFlagDetailsStateless directly to get access to error information
+      const flagsResponse = await super.getFeatureFlagDetailsStateless(
         distinctId,
         groups,
         personProperties,
         groupProperties,
-        disableGeoip
+        disableGeoip,
+        [key]
       )
 
-      if (remoteResponse === undefined) {
-        return undefined
-      }
+      if (flagsResponse === undefined) {
+        // Request failed (network error, timeout, etc.)
+        featureFlagError = FeatureFlagError.UNKNOWN_ERROR
+      } else {
+        requestId = flagsResponse.requestId
+        evaluatedAt = flagsResponse.evaluatedAt
 
-      flagDetail = remoteResponse.response
-      response = getFeatureFlagValue(flagDetail)
-      requestId = remoteResponse?.requestId
-      evaluatedAt = remoteResponse?.evaluatedAt
+        // Track errors from the response
+        const errors: string[] = []
+
+        if (flagsResponse.errorsWhileComputingFlags) {
+          errors.push(FeatureFlagError.ERRORS_WHILE_COMPUTING)
+        }
+
+        if (flagsResponse.quotaLimited?.includes('feature_flags')) {
+          errors.push(FeatureFlagError.QUOTA_LIMITED)
+        }
+
+        flagDetail = flagsResponse.flags[key]
+
+        if (flagDetail === undefined) {
+          errors.push(FeatureFlagError.FLAG_MISSING)
+        }
+
+        if (errors.length > 0) {
+          featureFlagError = errors.join(',')
+        }
+
+        response = getFeatureFlagValue(flagDetail)
+      }
     }
 
     const featureFlagReportedKey = `${key}_${response}`
@@ -720,20 +738,27 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       } else {
         this.distinctIdHasSentFlagCalls[distinctId] = [featureFlagReportedKey]
       }
+
+      const properties: Record<string, any> = {
+        $feature_flag: key,
+        $feature_flag_response: response,
+        $feature_flag_id: flagDetail?.metadata?.id,
+        $feature_flag_version: flagDetail?.metadata?.version,
+        $feature_flag_reason: flagDetail?.reason?.description ?? flagDetail?.reason?.code,
+        locally_evaluated: flagWasLocallyEvaluated,
+        [`$feature/${key}`]: response,
+        $feature_flag_request_id: requestId,
+        $feature_flag_evaluated_at: evaluatedAt,
+      }
+
+      if (featureFlagError) {
+        properties.$feature_flag_error = featureFlagError
+      }
+
       this.capture({
         distinctId,
         event: '$feature_flag_called',
-        properties: {
-          $feature_flag: key,
-          $feature_flag_response: response,
-          $feature_flag_id: flagDetail?.metadata?.id,
-          $feature_flag_version: flagDetail?.metadata?.version,
-          $feature_flag_reason: flagDetail?.reason?.description ?? flagDetail?.reason?.code,
-          locally_evaluated: flagWasLocallyEvaluated,
-          [`$feature/${key}`]: response,
-          $feature_flag_request_id: requestId,
-          $feature_flag_evaluated_at: evaluatedAt,
-        },
+        properties,
         groups,
         disableGeoip,
       })

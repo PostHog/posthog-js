@@ -9,7 +9,12 @@ import {
   VeryDissatisfiedEmoji,
   VerySatisfiedEmoji,
 } from '../icons'
-import { getContrastingTextColor, getDisplayOrderChoices, SurveyAppearanceTheme } from '../surveys-utils'
+import {
+  defaultRatingLabelOpacity,
+  getContrastingTextColor,
+  getDisplayOrderChoices,
+  SurveyAppearanceTheme,
+} from '../surveys-utils'
 import {
   SurveyQuestion,
   SurveyRatingDisplay,
@@ -41,13 +46,27 @@ export function OpenTextQuestion({
         question={question.question}
         description={question.description}
         descriptionContentType={question.descriptionContentType}
+        appearance={appearance}
       />
       <View style={styles.textInputContainer}>
         <TextInput
-          style={styles.textInput}
+          style={[
+            styles.textInput,
+            {
+              backgroundColor: appearance.inputBackground,
+              color: appearance.inputTextColor ?? getContrastingTextColor(appearance.inputBackground),
+            },
+          ]}
           multiline
           numberOfLines={4}
           placeholder={appearance.placeholder}
+          placeholderTextColor={
+            getContrastingTextColor(
+              appearance.inputTextColor ?? getContrastingTextColor(appearance.inputBackground)
+            ) === 'white'
+              ? 'rgba(0, 0, 0, 0.5)'
+              : 'rgba(255, 255, 255, 0.5)'
+          }
           onChangeText={setText}
           value={text}
         />
@@ -77,6 +96,7 @@ export function LinkQuestion({
         question={question.question}
         description={question.description}
         descriptionContentType={question.descriptionContentType}
+        appearance={appearance}
       />
       <BottomSection
         text={question.buttonText ?? appearance.submitButtonText ?? 'Submit'}
@@ -106,6 +126,7 @@ export function RatingQuestion({
         question={question.question}
         description={question.description}
         descriptionContentType={question.descriptionContentType}
+        appearance={appearance}
       />
       <View style={styles.ratingSection}>
         <View style={styles.ratingOptions}>
@@ -140,8 +161,22 @@ export function RatingQuestion({
           )}
         </View>
         <View style={styles.ratingText}>
-          <Text>{question.lowerBoundLabel}</Text>
-          <Text>{question.upperBoundLabel}</Text>
+          <Text
+            style={{
+              color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor),
+              opacity: defaultRatingLabelOpacity,
+            }}
+          >
+            {question.lowerBoundLabel}
+          </Text>
+          <Text
+            style={{
+              color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor),
+              opacity: defaultRatingLabelOpacity,
+            }}
+          >
+            {question.upperBoundLabel}
+          </Text>
         </View>
       </View>
       <BottomSection
@@ -168,7 +203,10 @@ export function RatingButton({
   setActiveNumber: (num: number) => void
 }): JSX.Element {
   const backgroundColor = active ? appearance.ratingButtonActiveColor : appearance.ratingButtonColor
-  const textColor = getContrastingTextColor(backgroundColor)
+  // Active state always auto-calculates for contrast; inactive uses inputTextColor override if provided
+  const textColor = active
+    ? getContrastingTextColor(backgroundColor)
+    : (appearance.inputTextColor ?? getContrastingTextColor(backgroundColor))
 
   return (
     <TouchableOpacity
@@ -204,16 +242,23 @@ export function MultipleChoiceQuestion({
         question={question.question}
         description={question.description}
         descriptionContentType={question.descriptionContentType}
+        appearance={appearance}
       />
       <View style={styles.multipleChoiceOptions}>
         {choices.map((choice: string, idx: number) => {
           const isOpenChoice = choice === openChoice
           const isSelected = selectedChoices.includes(choice)
 
+          const choiceTextColor = appearance.inputTextColor ?? getContrastingTextColor(appearance.inputBackground)
+
           return (
             <Pressable
               key={idx}
-              style={[styles.choiceOption, isSelected ? { borderColor: 'black' } : {}]}
+              style={[
+                styles.choiceOption,
+                { backgroundColor: appearance.inputBackground },
+                isSelected ? { borderColor: getContrastingTextColor(appearance.backgroundColor) } : {},
+              ]}
               onPress={() => {
                 if (allowMultiple) {
                   setSelectedChoices(
@@ -225,7 +270,7 @@ export function MultipleChoiceQuestion({
               }}
             >
               <View style={styles.choiceText}>
-                <Text style={{ flexGrow: 1 }}>
+                <Text style={{ flexGrow: 1, color: choiceTextColor }}>
                   {choice}
                   {isOpenChoice ? ':' : ''}
                 </Text>
@@ -294,7 +339,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 10,
     marginVertical: 10,
-    backgroundColor: 'white',
     fontSize: 16,
   },
   ratingSection: {
@@ -343,7 +387,6 @@ const styles = StyleSheet.create({
     borderColor: 'grey',
     borderRadius: 5,
     padding: 10,
-    backgroundColor: 'white',
   },
   choiceText: {
     flexDirection: 'row',

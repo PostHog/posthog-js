@@ -5,16 +5,27 @@ import {
     ProductTourCallback,
     ProductTourDismissReason,
     ProductTourRenderReason,
+    ShowTourOptions,
 } from '../../posthog-product-tours-types'
-import { DisplaySurveyType, SurveyEventName, SurveyEventProperties } from '../../posthog-surveys-types'
-import { findElementBySelector, getElementMetadata, getProductTourStylesheet } from './product-tours-utils'
+import { SurveyEventName, SurveyEventProperties } from '../../posthog-surveys-types'
+import {
+    findElementBySelector,
+    getElementMetadata,
+    getProductTourStylesheet,
+    normalizeUrl,
+} from './product-tours-utils'
 import { ProductTourTooltip } from './components/ProductTourTooltip'
+import { ProductTourSurveyStep } from './components/ProductTourSurveyStep'
 import { createLogger } from '../../utils/logger'
 import { document as _document, window as _window } from '../../utils/globals'
 import { localStore } from '../../storage'
 import { addEventListener } from '../../utils'
 import { isNull, SurveyMatchType } from '@posthog/core'
 import { propertyComparisons } from '../../utils/property-utils'
+import { TOUR_COMPLETED_KEY_PREFIX, TOUR_DISMISSED_KEY_PREFIX } from './constants'
+import { doesTourActivateByAction, doesTourActivateByEvent } from '../../utils/product-tour-utils'
+import { TOOLBAR_ID } from '../../constants'
+import { ProductTourEventReceiver } from '../../utils/product-tour-event-receiver'
 
 const logger = createLogger('[Product Tours]')
 
@@ -33,22 +44,14 @@ function doesTourUrlMatch(tour: ProductTour): boolean {
         return false
     }
 
-    const targets = [conditions.url]
     const matchType = conditions.urlMatchType || SurveyMatchType.Icontains
+
+    if (matchType === SurveyMatchType.Exact) {
+        return normalizeUrl(href) === normalizeUrl(conditions.url)
+    }
+
+    const targets = [conditions.url]
     return propertyComparisons[matchType](targets, [href])
-}
-
-function doesTourSelectorMatch(tour: ProductTour): boolean {
-    const conditions = tour.conditions
-    if (!conditions?.selector) {
-        return true
-    }
-
-    try {
-        return !isNull(document.querySelector(conditions.selector))
-    } catch {
-        return false
-    }
 }
 
 function isTourInDateRange(tour: ProductTour): boolean {
@@ -72,7 +75,7 @@ function isTourInDateRange(tour: ProductTour): boolean {
 }
 
 function checkTourConditions(tour: ProductTour): boolean {
-    return isTourInDateRange(tour) && doesTourUrlMatch(tour) && doesTourSelectorMatch(tour)
+    return isTourInDateRange(tour) && doesTourUrlMatch(tour)
 }
 
 const CONTAINER_CLASS = 'ph-product-tour-container'
@@ -126,13 +129,16 @@ export class ProductTourManager {
     private _instance: PostHog
     private _activeTour: ProductTour | null = null
     private _currentStepIndex: number = 0
-    private _renderReason: ProductTourRenderReason = 'auto'
+    private _isPreviewMode: boolean = false
     private _checkInterval: ReturnType<typeof setInterval> | null = null
     private _triggerSelectorListeners: Map<string, TriggerListenerData> = new Map()
-    private _surveyEventUnsubscribe: (() => void) | null = null
+    private _pendingTourTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map()
+    private _eventReceiver: ProductTourEventReceiver
+    private _registeredEventTourIds: Set<string> = new Set()
 
     constructor(instance: PostHog) {
         this._instance = instance
+        this._eventReceiver = new ProductTourEventReceiver(instance)
     }
 
     start(): void {
@@ -155,6 +161,7 @@ export class ProductTourManager {
         }
         document.removeEventListener('visibilitychange', this._handleVisibilityChange)
         this._removeAllTriggerListeners()
+        this._cancelAllPendingTours()
         this._cleanup()
     }
 
@@ -171,7 +178,11 @@ export class ProductTourManager {
     }
 
     private _evaluateAndDisplayTours(): void {
-        // Use getProductTours (not getActiveProductTours) because trigger_selector tours
+        if (document?.getElementById(TOOLBAR_ID)) {
+            return
+        }
+
+        // Use getProductTours (not getActiveProductTours) because selector-triggered tours
         // should work even if completed/dismissed
         this._instance.productTours?.getProductTours((tours) => {
             if (tours.length === 0) {
@@ -181,21 +192,56 @@ export class ProductTourManager {
 
             const activeTriggerTourIds = new Set<string>()
 
-            for (const tour of tours) {
-                // Determine the trigger selector - explicit trigger_selector takes precedence,
-                // otherwise use conditions.selector for click-only tours (auto_launch=false)
-                const triggerSelector = tour.trigger_selector || (!tour.auto_launch ? tour.conditions?.selector : null)
+            const unregisteredEventTours = tours.filter(
+                (tour: ProductTour) =>
+                    !this._registeredEventTourIds.has(tour.id) &&
+                    (doesTourActivateByEvent(tour) || doesTourActivateByAction(tour))
+            )
+            if (unregisteredEventTours.length > 0) {
+                this._eventReceiver.register(unregisteredEventTours)
+                unregisteredEventTours.forEach((tour) => this._registeredEventTourIds.add(tour.id))
+            }
 
-                // Tours with a trigger selector: always attach listener
-                // These are "on-demand" tours that show when clicked
+            const eventActivatedTourIds = this._activeTour ? [] : this._eventReceiver.getTours()
+
+            /**
+             * tours can be shown three ways, really:
+             *
+             * 1) selector clicks
+             * 2a) auto-show immediately
+             * 2b) auto-show after event/action
+             *
+             * (1) and (2[a|b]) are fully independent of each other
+             */
+            for (const tour of tours) {
+                // 1) SELECTOR CLICK TRIGGER - just attach an event listener and keep going
+                const triggerSelector = tour.conditions?.selector
                 if (triggerSelector) {
                     activeTriggerTourIds.add(tour.id)
-                    this._manageTriggerSelectorListener({ ...tour, trigger_selector: triggerSelector })
+                    this._manageTriggerSelectorListener(tour, triggerSelector)
                 }
 
-                // Only auto-show if auto_launch is enabled
-                if (tour.auto_launch && !this._activeTour && this._isTourEligible(tour)) {
-                    this.showTour(tour)
+                // skip auto-launch checks if a tour is already active
+                if (this._activeTour) {
+                    continue
+                }
+
+                // 2) AUTO-LAUNCH
+                const hasEventOrActionTriggers = doesTourActivateByAction(tour) || doesTourActivateByEvent(tour)
+
+                if (tour.auto_launch && this._isTourEligible(tour)) {
+                    // tour should auto-launch, and the current session is eligible
+
+                    if (!hasEventOrActionTriggers) {
+                        // 2a) AUTO-SHOW WITH NO EVENT/ACTION
+                        this._showOrQueueTour(tour, 'auto')
+                        continue
+                    }
+
+                    // 2b) AUTO-SHOW, BUT WAIT FOR EVENT/ACTION
+                    if (eventActivatedTourIds.includes(tour.id)) {
+                        this._showOrQueueTour(tour, 'event')
+                    }
                 }
             }
 
@@ -207,14 +253,25 @@ export class ProductTourManager {
         })
     }
 
+    private _showOrQueueTour(tour: ProductTour, reason: ProductTourRenderReason): void {
+        const delaySeconds = tour.conditions?.autoShowDelaySeconds || 0
+        if (delaySeconds > 0) {
+            if (!this.isTourPending(tour.id)) {
+                this.queueTourWithDelay(tour.id, delaySeconds, reason)
+            }
+        } else {
+            this.showTour(tour, { reason })
+        }
+    }
+
     private _isTourEligible(tour: ProductTour): boolean {
         if (!checkTourConditions(tour)) {
             logger.info(`Tour ${tour.id} failed conditions check`)
             return false
         }
 
-        const completedKey = `ph_product_tour_completed_${tour.id}`
-        const dismissedKey = `ph_product_tour_dismissed_${tour.id}`
+        const completedKey = `${TOUR_COMPLETED_KEY_PREFIX}${tour.id}`
+        const dismissedKey = `${TOUR_DISMISSED_KEY_PREFIX}${tour.id}`
 
         if (localStore._get(completedKey) || localStore._get(dismissedKey)) {
             logger.info(`Tour ${tour.id} already completed or dismissed`)
@@ -232,7 +289,11 @@ export class ProductTourManager {
         return true
     }
 
-    showTour(tour: ProductTour, reason: ProductTourRenderReason = 'auto'): void {
+    showTour(tour: ProductTour, options?: ShowTourOptions): void {
+        const renderReason: ProductTourRenderReason = options?.reason ?? 'auto'
+
+        this.cancelPendingTour(tour.id)
+
         // Validate all step selectors before showing the tour
         // Steps without selectors are modal steps and don't need validation
         const selectorFailures: Array<{
@@ -280,36 +341,46 @@ export class ProductTourManager {
 
             const failedSelectors = selectorFailures.map((f) => `Step ${f.stepIndex}: "${f.selector}" (${f.error})`)
             logger.warn(
-                `Tour "${tour.name}" (${tour.id}) not shown: ${selectorFailures.length} selector(s) failed to match:\n  - ${failedSelectors.join('\n  - ')}`
+                `Tour "${tour.name}" (${tour.id}): ${selectorFailures.length} selector(s) failed to match:\n  - ${failedSelectors.join('\n  - ')}${options?.enableStrictValidation === true ? '\n\nenableStrictValidation is true, not displaying tour.' : ''}`
             )
-            return
+            if (options?.enableStrictValidation === true) return
         }
 
         this._activeTour = tour
         this._currentStepIndex = 0
-        this._renderReason = reason
 
         this._captureEvent('product tour shown', {
             $product_tour_id: tour.id,
             $product_tour_name: tour.name,
             $product_tour_iteration: tour.current_iteration || 1,
-            $product_tour_render_reason: reason,
+            $product_tour_render_reason: renderReason,
         })
 
         this._renderCurrentStep()
     }
 
-    showTourById(tourId: string): void {
+    showTourById(tourId: string, reason?: ProductTourRenderReason): void {
         logger.info(`showTourById(${tourId})`)
         this._instance.productTours?.getProductTours((tours) => {
             const tour = tours.find((t) => t.id === tourId)
             if (tour) {
-                logger.info(`found tour: `, tour)
-                this.showTour(tour, 'api')
+                this.showTour(tour, { reason: reason ?? 'api' })
             } else {
-                logger.info('could not find tour', tourId)
+                logger.warn('could not find tour', tourId)
             }
         })
+    }
+
+    previewTour(tour: ProductTour): void {
+        logger.info(`Previewing tour ${tour.id}`)
+
+        this._cleanup()
+
+        this._isPreviewMode = true
+        this._activeTour = tour
+        this._currentStepIndex = 0
+
+        this._renderCurrentStep()
     }
 
     nextStep = (): void => {
@@ -356,7 +427,13 @@ export class ProductTourManager {
             $product_tour_dismiss_reason: reason,
         })
 
-        localStore._set(`ph_product_tour_dismissed_${this._activeTour.id}`, true)
+        if (!this._isPreviewMode) {
+            localStore._set(`${TOUR_DISMISSED_KEY_PREFIX}${this._activeTour.id}`, true)
+        }
+
+        window.dispatchEvent(
+            new CustomEvent('PHProductTourDismissed', { detail: { tourId: this._activeTour.id, reason } })
+        )
 
         this._cleanup()
     }
@@ -371,27 +448,31 @@ export class ProductTourManager {
             $product_tour_steps_count: this._activeTour.steps.length,
         })
 
-        localStore._set(`ph_product_tour_completed_${this._activeTour.id}`, true)
+        if (!this._isPreviewMode) {
+            localStore._set(`${TOUR_COMPLETED_KEY_PREFIX}${this._activeTour.id}`, true)
 
-        this._instance.capture('$set', {
-            $set: {
-                [`$product_tour_completed/${this._activeTour.id}`]: true,
-            },
-        })
+            this._instance.capture('$set', {
+                $set: {
+                    [`$product_tour_completed/${this._activeTour.id}`]: true,
+                },
+            })
+        }
+
+        window.dispatchEvent(new CustomEvent('PHProductTourCompleted', { detail: { tourId: this._activeTour.id } }))
 
         this._cleanup()
     }
 
-    private _renderCurrentStep(): void {
+    private _renderCurrentStep(retryCount: number = 0): void {
         if (!this._activeTour) {
             return
         }
 
         const step = this._activeTour.steps[this._currentStepIndex]
 
-        // Survey step - display the linked survey and listen for completion
-        if (step.linkedSurveyId) {
-            this._renderSurveyStep(step.linkedSurveyId)
+        // Survey step - render native survey step component
+        if (step.survey) {
+            this._renderSurveyStep()
             return
         }
 
@@ -410,7 +491,24 @@ export class ProductTourManager {
 
         const result = findElementBySelector(step.selector)
 
+        const previousStep = this._currentStepIndex > 0 ? this._activeTour.steps[this._currentStepIndex - 1] : null
+        const shouldWaitForElement = previousStep?.progressionTrigger === 'click'
+
+        // 2s total timeout
+        const maxRetries = 20
+        const retryTimeout = 100
+
         if (result.error === 'not_found' || result.error === 'not_visible') {
+            // if previous step was click-to-progress, give some time for the next element
+            if (shouldWaitForElement && retryCount < maxRetries) {
+                setTimeout(() => {
+                    this._renderCurrentStep(retryCount + 1)
+                }, retryTimeout)
+                return
+            }
+
+            const waitDurationMs = retryCount * retryTimeout
+
             this._captureEvent('product tour step selector failed', {
                 $product_tour_id: this._activeTour.id,
                 $product_tour_step_id: step.id,
@@ -419,10 +517,13 @@ export class ProductTourManager {
                 $product_tour_error: result.error,
                 $product_tour_matches_count: result.matchCount,
                 $product_tour_failure_phase: 'runtime',
+                $product_tour_waited_for_element: shouldWaitForElement,
+                $product_tour_wait_duration_ms: waitDurationMs,
             })
 
             logger.warn(
-                `Tour "${this._activeTour.name}" dismissed: element for step ${this._currentStepIndex} became unavailable (${result.error})`
+                `Tour "${this._activeTour.name}" dismissed: element for step ${this._currentStepIndex} became unavailable (${result.error})` +
+                    (shouldWaitForElement ? ` after waiting ${waitDurationMs}ms` : '')
             )
             this.dismissTour('element_unavailable')
             return
@@ -486,14 +587,17 @@ export class ProductTourManager {
         )
     }
 
-    private _renderSurveyStep(surveyId: string): void {
+    private _renderSurveyStep(): void {
         if (!this._activeTour) {
             return
         }
 
+        const tourId = this._activeTour.id
         const step = this._activeTour.steps[this._currentStepIndex]
+        const surveyId = step.linkedSurveyId
+        const questionId = step.linkedSurveyQuestionId
+        const questionText = step.survey?.questionText || ''
 
-        // Emit tour step shown event
         this._captureEvent('product tour step shown', {
             $product_tour_id: this._activeTour.id,
             $product_tour_step_id: step.id,
@@ -502,43 +606,68 @@ export class ProductTourManager {
             $product_tour_linked_survey_id: surveyId,
         })
 
-        // Clean up any existing survey event listener
-        this._cleanupSurveyListener()
-
-        // Set up listener for survey events
-        this._surveyEventUnsubscribe = this._instance.on(
-            'eventCaptured',
-            (data: { event: string; properties?: Record<string, any> }) => {
-                const eventSurveyId = data.properties?.[SurveyEventProperties.SURVEY_ID]
-                if (eventSurveyId !== surveyId) {
-                    return
-                }
-
-                if (data.event === SurveyEventName.SENT) {
-                    logger.info(`Survey ${surveyId} completed, advancing tour`)
-                    this._cleanupSurveyListener()
-                    this.nextStep()
-                } else if (data.event === SurveyEventName.DISMISSED) {
-                    logger.info(`Survey ${surveyId} dismissed, dismissing tour`)
-                    this._cleanupSurveyListener()
-                    this.dismissTour('user_clicked_skip')
-                }
-            }
-        )
-
-        // Display the survey
-        this._instance.surveys?.displaySurvey(surveyId, {
-            ignoreConditions: true,
-            ignoreDelay: true,
-            displayType: DisplaySurveyType.Popover,
+        this._captureEvent(SurveyEventName.SHOWN, {
+            [SurveyEventProperties.SURVEY_ID]: surveyId,
+            [SurveyEventProperties.PRODUCT_TOUR_ID]: tourId,
+            sessionRecordingUrl: this._instance.get_session_replay_url?.(),
         })
 
-        logger.info(`Displayed survey ${surveyId} for tour step ${this._currentStepIndex}`)
-    }
+        const { shadow } = retrieveTourShadow(this._activeTour.id)
 
-    private _cleanupSurveyListener(): void {
-        this._surveyEventUnsubscribe?.()
-        this._surveyEventUnsubscribe = null
+        const handleSubmit = (response: string | number | null) => {
+            const responseKey = questionId ? `$survey_response_${questionId}` : '$survey_response'
+            this._captureEvent(SurveyEventName.SENT, {
+                [SurveyEventProperties.SURVEY_ID]: surveyId,
+                [SurveyEventProperties.PRODUCT_TOUR_ID]: tourId,
+                [SurveyEventProperties.SURVEY_QUESTIONS]: [
+                    {
+                        id: questionId,
+                        question: questionText,
+                        response: response,
+                    },
+                ],
+                [SurveyEventProperties.SURVEY_COMPLETED]: true,
+                sessionRecordingUrl: this._instance.get_session_replay_url?.(),
+                ...(!isNull(response) && { [responseKey]: response }),
+            })
+
+            logger.info(`Survey ${surveyId} completed`, !isNull(response) ? `with response: ${response}` : '(skipped)')
+            this.nextStep()
+        }
+
+        const handleDismiss = (reason: ProductTourDismissReason) => {
+            this._captureEvent(SurveyEventName.DISMISSED, {
+                [SurveyEventProperties.SURVEY_ID]: surveyId,
+                [SurveyEventProperties.PRODUCT_TOUR_ID]: tourId,
+                [SurveyEventProperties.SURVEY_QUESTIONS]: [
+                    {
+                        id: questionId,
+                        question: questionText,
+                        response: null,
+                    },
+                ],
+                [SurveyEventProperties.SURVEY_PARTIALLY_COMPLETED]: false,
+                sessionRecordingUrl: this._instance.get_session_replay_url?.(),
+            })
+
+            logger.info(`Survey ${surveyId} dismissed`)
+            this.dismissTour(reason)
+        }
+
+        render(
+            <ProductTourSurveyStep
+                tour={this._activeTour}
+                step={step}
+                stepIndex={this._currentStepIndex}
+                totalSteps={this._activeTour.steps.length}
+                onSubmit={handleSubmit}
+                onPrevious={this.previousStep}
+                onDismiss={handleDismiss}
+            />,
+            shadow
+        )
+
+        logger.info(`Rendered survey step for tour step ${this._currentStepIndex}`)
     }
 
     private _cleanup(): void {
@@ -546,18 +675,13 @@ export class ProductTourManager {
             removeTourFromDom(this._activeTour.id)
         }
 
-        this._cleanupSurveyListener()
         this._activeTour = null
         this._currentStepIndex = 0
-        this._renderReason = 'auto'
+        this._isPreviewMode = false
     }
 
-    private _manageTriggerSelectorListener(tour: ProductTour): void {
-        if (!tour.trigger_selector) {
-            return
-        }
-
-        const currentElement = document.querySelector(tour.trigger_selector)
+    private _manageTriggerSelectorListener(tour: ProductTour, selector: string): void {
+        const currentElement = document.querySelector(selector)
         const existingListenerData = this._triggerSelectorListeners.get(tour.id)
 
         if (!currentElement) {
@@ -585,14 +709,20 @@ export class ProductTourManager {
                     return
                 }
 
-                logger.info(`Tour ${tour.id} triggered by click on ${tour.trigger_selector}`)
-                this.showTour(tour, 'trigger')
+                // manual triggers only check launch status + URL, no other conditions
+                if (!checkTourConditions(tour)) {
+                    logger.warn(`Tour ${tour.id} trigger clicked but failed conditions check`)
+                    return
+                }
+
+                logger.info(`Tour ${tour.id} triggered by click on ${selector}`)
+                this.showTour(tour, { reason: 'trigger' })
             }
 
             addEventListener(currentElement, 'click', listener)
             currentElement.setAttribute(TRIGGER_LISTENER_ATTRIBUTE, tour.id)
             this._triggerSelectorListeners.set(tour.id, { element: currentElement, listener, tour })
-            logger.info(`Attached trigger listener for tour ${tour.id} on ${tour.trigger_selector}`)
+            logger.info(`Attached trigger listener for tour ${tour.id} on ${selector}`)
         }
     }
 
@@ -613,6 +743,9 @@ export class ProductTourManager {
     }
 
     private _captureEvent(eventName: string, properties: Record<string, any>): void {
+        if (this._isPreviewMode) {
+            return
+        }
         this._instance.capture(eventName, properties)
     }
 
@@ -630,8 +763,8 @@ export class ProductTourManager {
     }
 
     resetTour(tourId: string): void {
-        localStore._remove(`ph_product_tour_completed_${tourId}`)
-        localStore._remove(`ph_product_tour_dismissed_${tourId}`)
+        localStore._remove(`${TOUR_COMPLETED_KEY_PREFIX}${tourId}`)
+        localStore._remove(`${TOUR_DISMISSED_KEY_PREFIX}${tourId}`)
     }
 
     resetAllTours(): void {
@@ -642,10 +775,40 @@ export class ProductTourManager {
         const keysToRemove: string[] = []
         for (let i = 0; i < storage.length; i++) {
             const key = storage.key(i)
-            if (key?.startsWith('ph_product_tour_completed_') || key?.startsWith('ph_product_tour_dismissed_')) {
+            if (key?.startsWith(TOUR_COMPLETED_KEY_PREFIX) || key?.startsWith(TOUR_DISMISSED_KEY_PREFIX)) {
                 keysToRemove.push(key)
             }
         }
         keysToRemove.forEach((key) => localStore._remove(key))
+    }
+
+    cancelPendingTour(tourId: string): void {
+        const timeout = this._pendingTourTimeouts.get(tourId)
+        if (timeout) {
+            clearTimeout(timeout)
+            this._pendingTourTimeouts.delete(tourId)
+            logger.info(`Cancelled pending tour: ${tourId}`)
+        }
+    }
+
+    private _cancelAllPendingTours(): void {
+        this._pendingTourTimeouts.forEach((timeout) => clearTimeout(timeout))
+        this._pendingTourTimeouts.clear()
+    }
+
+    isTourPending(tourId: string): boolean {
+        return this._pendingTourTimeouts.has(tourId)
+    }
+
+    queueTourWithDelay(tourId: string, delaySeconds: number, reason?: ProductTourRenderReason): void {
+        logger.info(`Queueing tour ${tourId} with ${delaySeconds}s delay`)
+
+        const timeoutId = setTimeout(() => {
+            this._pendingTourTimeouts.delete(tourId)
+            logger.info(`Delay elapsed for tour ${tourId}, showing now`)
+            this.showTourById(tourId, reason)
+        }, delaySeconds * 1000)
+
+        this._pendingTourTimeouts.set(tourId, timeoutId)
     }
 }

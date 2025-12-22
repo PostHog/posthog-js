@@ -78,7 +78,7 @@ export interface PostHogCustomAppProperties {
   $device_name?: string | null
   /** Model identifier like "iPhone13,2" or "SM-S921B" */
   $device_model?: string | null
-  /** Device type ("Mobile" | "Desktop" | "Web") */
+  /** Device type ("Mobile" | "Desktop") */
   $device_type?: string | null
   /** Operating system name like iOS or Android */
   $os_name?: string | null

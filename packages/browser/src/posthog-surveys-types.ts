@@ -5,16 +5,20 @@
  */
 
 import type { PropertyMatchType } from './types'
+import type { SurveyAppearance as CoreSurveyAppearance } from '@posthog/core'
 
 export enum SurveyEventType {
     Activation = 'events',
     Cancellation = 'cancelEvents',
 }
 
+// Extended operator type to include numeric operators not in PropertyMatchType
+export type PropertyOperator = PropertyMatchType | 'gt' | 'lt'
+
 export type PropertyFilters = {
     [propertyName: string]: {
         values: string[]
-        operator: PropertyMatchType
+        operator: PropertyOperator
     }
 }
 
@@ -49,47 +53,26 @@ export enum SurveyTabPosition {
     Bottom = 'bottom',
 }
 
-export interface SurveyAppearance {
-    // keep in sync with frontend/src/types.ts -> SurveyAppearance
-    backgroundColor?: string
-    submitButtonColor?: string
-    // text color is deprecated, use auto contrast text color instead
-    textColor?: string
-    // deprecate submit button text eventually
-    submitButtonText?: string
-    submitButtonTextColor?: string
+// Extends core SurveyAppearance with browser-specific fields
+// Omit 'position' from core because browser's SurveyPosition has additional values (e.g., NextToTrigger)
+export interface SurveyAppearance extends Omit<CoreSurveyAppearance, 'position'> {
+    // Browser-specific fields not in core
+    /** @deprecated - not currently used */
     descriptionTextColor?: string
-    ratingButtonColor?: string
-    ratingButtonActiveColor?: string
     ratingButtonHoverColor?: string
     whiteLabel?: boolean
-    autoDisappear?: boolean
-    displayThankYouMessage?: boolean
-    thankYouMessageHeader?: string
-    thankYouMessageDescription?: string
-    thankYouMessageDescriptionContentType?: SurveyQuestionDescriptionContentType
-    thankYouMessageCloseButtonText?: string
-    borderColor?: string
-    position?: SurveyPosition
     tabPosition?: SurveyTabPosition
-    placeholder?: string
-    shuffleQuestions?: boolean
-    surveyPopupDelaySeconds?: number
-    // widget options
-    widgetType?: SurveyWidgetType
-    widgetSelector?: string
-    widgetLabel?: string
-    widgetColor?: string
     fontFamily?: string
-    // questionable: Not in frontend/src/types.ts -> SurveyAppearance, but used in site app
     maxWidth?: string
     zIndex?: string
     disabledButtonOpacity?: string
     boxPadding?: string
-    inputTextColor?: string
+    /** @deprecated Use inputBackground instead (inherited from core) */
     inputBackgroundColor?: string
     // Hide the X (cancel) button - defaults to false (show the button)
     hideCancelButton?: boolean
+    // Browser's SurveyPosition has more options than core (e.g., NextToTrigger)
+    position?: SurveyPosition
 }
 
 export enum SurveyType {
@@ -288,6 +271,7 @@ export enum SurveyEventName {
     SHOWN = 'survey shown',
     DISMISSED = 'survey dismissed',
     SENT = 'survey sent',
+    ABANDONED = 'survey abandoned',
 }
 
 export enum SurveyEventProperties {
@@ -300,6 +284,7 @@ export enum SurveyEventProperties {
     SURVEY_SUBMISSION_ID = '$survey_submission_id',
     SURVEY_QUESTIONS = '$survey_questions',
     SURVEY_COMPLETED = '$survey_completed',
+    PRODUCT_TOUR_ID = '$product_tour_id',
 }
 
 export enum DisplaySurveyType {
