@@ -1,6 +1,10 @@
-import { ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS, ERROR_TRACKING_SUPPRESSION_RULES } from './constants'
+import {
+    ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS,
+    ERROR_TRACKING_POLICY_CONFIG,
+    ERROR_TRACKING_SUPPRESSION_RULES,
+} from './constants'
 import { PostHog } from './posthog-core'
-import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
+import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig, SDKPolicyConfig } from './types'
 import { createLogger } from './utils/logger'
 import { propertyComparisons } from './utils/property-utils'
 import { isString, isArray, ErrorTracking, isNullish } from '@posthog/core'
@@ -29,16 +33,31 @@ export function buildErrorPropertiesBuilder() {
 export class PostHogExceptions {
     private readonly _instance: PostHog
     private _suppressionRules: ErrorTrackingSuppressionRule[] = []
+    private _policyConfig: SDKPolicyConfig | null = null
     private _errorPropertiesBuilder: ErrorTracking.ErrorPropertiesBuilder = buildErrorPropertiesBuilder()
 
     constructor(instance: PostHog) {
         this._instance = instance
         this._suppressionRules = this._instance.persistence?.get_property(ERROR_TRACKING_SUPPRESSION_RULES) ?? []
+        this._policyConfig = this._instance.persistence?.get_property(ERROR_TRACKING_POLICY_CONFIG)
     }
+
+    // sampleRate
+    // linkedFeatureFlag
+    // urlTriggers
+    // urlBlocklist
+    // eventTriggers
+    // triggerMatchType
 
     onRemoteConfig(response: RemoteConfig) {
         const suppressionRules = response.errorTracking?.suppressionRules ?? []
         const captureExtensionExceptions = response.errorTracking?.captureExtensionExceptions
+        const sampleRate = response.errorTracking?.sampleRate
+        const linkedFeatureFlag = response.errorTracking?.linkedFeatureFlag
+        const urlTriggers = response.errorTracking?.urlTriggers
+        const urlBlocklist = response.errorTracking?.urlBlocklist
+        const eventTriggers = response.errorTracking?.eventTriggers
+        const triggerMatchType = response.errorTracking?.triggerMatchType
 
         // store this in-memory in case persistence is disabled
         this._suppressionRules = suppressionRules
@@ -47,6 +66,14 @@ export class PostHogExceptions {
             this._instance.persistence.register({
                 [ERROR_TRACKING_SUPPRESSION_RULES]: this._suppressionRules,
                 [ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS]: captureExtensionExceptions,
+                [ERROR_TRACKING_POLICY_CONFIG]: {
+                    sampleRate,
+                    linkedFeatureFlag,
+                    urlTriggers,
+                    urlBlocklist,
+                    eventTriggers,
+                    triggerMatchType,
+                },
             })
         }
     }
