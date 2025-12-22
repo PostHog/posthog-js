@@ -3062,6 +3062,8 @@ describe('Lazy SessionRecording', () => {
             expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_starting', {
                 previousSessionId: sessionId,
                 previousWindowId: 'windowId',
+                nextSessionId: newSessionId,
+                nextWindowId: newWindowId,
                 changeReason: {
                     noSessionId: false,
                     activityTimeout: true,
@@ -3105,6 +3107,8 @@ describe('Lazy SessionRecording', () => {
             expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_starting', {
                 previousSessionId: sessionId,
                 previousWindowId: 'windowId',
+                nextSessionId: newSessionId,
+                nextWindowId: newWindowId,
                 changeReason: {
                     noSessionId: false,
                     activityTimeout: false,
@@ -3221,6 +3225,144 @@ describe('Lazy SessionRecording', () => {
                     })
                 )
             })
+        })
+
+        it('routes $session_starting and $session_ending events to correct session IDs', () => {
+            const currentSessionId = sessionId
+            const currentWindowId = 'windowId'
+            const newSessionId = 'new-session-id'
+            const newWindowId = 'new-window-id'
+
+            // Spy on posthog.capture to verify session IDs
+            const captureSpy = jest.spyOn(posthog, 'capture')
+            captureSpy.mockClear()
+
+            // Create a $session_ending event with payload containing session IDs
+            const sessionEndingEvent = createCustomSnapshot(
+                {},
+                {
+                    currentSessionId: currentSessionId,
+                    currentWindowId: currentWindowId,
+                    nextSessionId: newSessionId,
+                    nextWindowId: newWindowId,
+                    lastActivityTimestamp: Date.now(),
+                },
+                '$session_ending'
+            )
+
+            // Emit the $session_ending event
+            _emit(sessionEndingEvent)
+
+            // Flush to capture
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Verify $session_ending is routed to currentSessionId (old session)
+            expect(captureSpy).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({
+                    $session_id: currentSessionId,
+                    $window_id: currentWindowId,
+                    $snapshot_data: expect.arrayContaining([
+                        expect.objectContaining({
+                            type: EventType.Custom,
+                            data: expect.objectContaining({ tag: '$session_ending' }),
+                        }),
+                    ]),
+                }),
+                expect.anything()
+            )
+
+            captureSpy.mockClear()
+
+            // Now simulate session ID change on the recorder instance
+            // This would normally happen via stop/start in _onSessionIdCallback
+            sessionRecording['_lazyLoadedSessionRecording']['_sessionId'] = newSessionId
+            sessionRecording['_lazyLoadedSessionRecording']['_windowId'] = newWindowId
+            sessionRecording['_lazyLoadedSessionRecording']['_buffer'] = {
+                size: 0,
+                data: [],
+                sessionId: newSessionId,
+                windowId: newWindowId,
+            }
+
+            // Create a $session_starting event with payload containing session IDs
+            const sessionStartingEvent = createCustomSnapshot(
+                {},
+                {
+                    previousSessionId: currentSessionId,
+                    previousWindowId: currentWindowId,
+                    nextSessionId: newSessionId,
+                    nextWindowId: newWindowId,
+                    lastActivityTimestamp: Date.now(),
+                },
+                '$session_starting'
+            )
+
+            // Emit the $session_starting event
+            _emit(sessionStartingEvent)
+
+            // Flush to capture
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Verify $session_starting is routed to nextSessionId (new session)
+            expect(captureSpy).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({
+                    $session_id: newSessionId,
+                    $window_id: newWindowId,
+                    $snapshot_data: expect.arrayContaining([
+                        expect.objectContaining({
+                            type: EventType.Custom,
+                            data: expect.objectContaining({ tag: '$session_starting' }),
+                        }),
+                    ]),
+                }),
+                expect.anything()
+            )
+        })
+
+        it('uses targetSessionId from event payload to correctly route lifecycle events', () => {
+            const oldSessionId = sessionId
+            const newSessionId = 'new-session-after-change'
+
+            // Ensure recorder is not idle
+            sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = false
+
+            // Emit an event to the old session
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(1)
+
+            // Now simulate the recorder instance having transitioned to the new session
+            // (This happens in _onSessionIdCallback after stop/start)
+            sessionRecording['_lazyLoadedSessionRecording']['_sessionId'] = newSessionId
+            sessionRecording['_lazyLoadedSessionRecording']['_windowId'] = 'new-window-id'
+
+            // Emit a $session_starting event for the NEW session
+            // Even though the buffer still has the old sessionId, this event should be routed to the new session
+            const sessionStartingEvent = createCustomSnapshot(
+                {},
+                {
+                    previousSessionId: oldSessionId,
+                    previousWindowId: 'windowId',
+                    nextSessionId: newSessionId,
+                    nextWindowId: 'new-window-id',
+                    lastActivityTimestamp: Date.now(),
+                },
+                '$session_starting'
+            )
+
+            _emit(sessionStartingEvent)
+
+            // The buffer should now have been flushed because buffer.sessionId (old) !== targetSessionId (new)
+            // and a new buffer should be created with the new session ID
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].sessionId).toBe(newSessionId)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].windowId).toBe('new-window-id')
+
+            // The buffer should only have the new event, not the old one
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(1)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data[0].data.tag).toBe(
+                '$session_starting'
+            )
         })
     })
 
