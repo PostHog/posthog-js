@@ -15,7 +15,6 @@ on:
         type: string
 
 permissions:
-  actions: write
   contents: read
 
 jobs:
@@ -24,64 +23,88 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Get upgrader token
+        id: upgrader
+        uses: getsentry/action-github-app-token@97c9e23528286821f97fba885c1b1123284b29cc # v2
+        with:
+          app_id: ${{ secrets.GH_APP_POSTHOG_JS_UPGRADER_APP_ID }}
+          private_key: ${{ secrets.GH_APP_POSTHOG_JS_UPGRADER_PRIVATE_KEY }}
+
       - name: Check out PostHog.com repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: "PostHog/posthog.com"
-          token: ${{ secrets.POSTHOG_BOT_PAT }}
+          token: ${{ steps.upgrader.outputs.token }}
+
+      - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin v4.2.0
 
       - name: Set up Node.js
-        uses: actions/setup-node@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin v4.2.0
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: yarn
+          cache: pnpm
 
       - name: Install new package version in PostHog.com repo
-        id: yarn-upgrade
+        id: pnpm-upgrade
         shell: bash
+        env:
+          RETRY_TIMES: 20
+          RETRY_WAIT_SECONDS: 5
+          PACKAGE_NAME: ${{ github.event.inputs.package_name }}
+          PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
         run: |
-          OUTGOING_VERSION=$(jq '.dependencies["${{ github.event.inputs.package_name }}"]' package.json -r)
+          OUTGOING_VERSION=$(jq ".dependencies[\"$PACKAGE_NAME\"]" package.json -r)
           echo "outgoing-version=$OUTGOING_VERSION" >> "$GITHUB_OUTPUT"
           for i in $(seq 1 $RETRY_TIMES); do
               # Retry loop because of npm being _eventually_ consistent
-              if yarn upgrade ${{ github.event.inputs.package_name }}@${{ github.event.inputs.package_version }}; then
+              if pnpm -r upgrade "$PACKAGE_NAME@$PACKAGE_VERSION"; then
                   break
               else
                   [ $i -ne $RETRY_TIMES ] && sleep $RETRY_WAIT_SECONDS || false
               fi
           done
-        env:
-          RETRY_TIMES: 20
-          RETRY_WAIT_SECONDS: 5
 
       - name: Generate branch name
         id: generate-branch-name
         shell: bash
+        env:
+          PACKAGE_NAME: ${{ github.event.inputs.package_name }}
+          PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
         run: |
-          PACKAGE_NAME_SANITIZED=$(echo "${{ github.event.inputs.package_name }}" | sed 's/@//g' | sed 's/\//-/g')
-          echo "branch_name=${PACKAGE_NAME_SANITIZED}-${{ github.event.inputs.package_version }}" >> "$GITHUB_OUTPUT"
+          PACKAGE_NAME_SANITIZED=$(echo "$PACKAGE_NAME" | sed 's/@//g' | sed 's/\//-/g')
+          echo "branch_name=${PACKAGE_NAME_SANITIZED}-$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Create PostHog.com repo pull request
         id: com-repo-pr
-        uses: peter-evans/create-pull-request@18f7dc018cc2cd597073088f7c7591b9d1c02672 #v3.14.0
+        uses: peter-evans/create-pull-request@98357b18bf14b5342f975ff684046ec3b2a07725 # v8.0.0
         with:
-          token: ${{ secrets.POSTHOG_BOT_PAT }}
+          token: ${{ steps.upgrader.outputs.token }}
           commit-message: "chore(deps): Update ${{ github.event.inputs.package_name }} to ${{ github.event.inputs.package_version }}"
           branch: ${{ steps.generate-branch-name.outputs.branch_name }}
           delete-branch: true
-          labels: automerge
           title: "chore(deps): Update ${{ github.event.inputs.package_name }} to ${{ github.event.inputs.package_version }}"
           body: |
             ## Changes
 
             ${{ github.event.inputs.package_name }} version ${{ github.event.inputs.package_version }} has been released. This updates PostHog.com to use it.
 
-            https://github.com/PostHog/posthog-js/compare/${{ github.event.inputs.package_name }}@${{ steps.yarn-upgrade.outputs.outgoing-version }}...${{ github.event.inputs.package_name }}@${{ github.event.inputs.package_version }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${{ github.event.inputs.package_name }}?activeTab=version)
+            https://github.com/PostHog/posthog-js/compare/${{ github.event.inputs.package_name }}@${{ steps.pnpm-upgrade.outputs.outgoing-version }}...${{ github.event.inputs.package_name }}@${{ github.event.inputs.package_version }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${{ github.event.inputs.package_name }}?activeTab=version)
 
       - name: Output pull request result
         shell: bash
+        env:
+          PACKAGE_NAME: ${{ github.event.inputs.package_name }}
+          PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
+          PR_URL: ${{ steps.com-repo-pr.outputs.pull-request-url }}
         run: |
-          echo "PostHog.com pull request for ${{ github.event.inputs.package_name }} version ${{ github.event.inputs.package_version }} ready: ${{ steps.com-repo-pr.outputs.pull-request-url }}"
+          echo "PostHog.com pull request for $PACKAGE_NAME version $PACKAGE_VERSION ready: $PR_URL"
+
+      - name: Enable automerge
+        env:
+          GH_TOKEN: ${{ steps.upgrader.outputs.token }}
+          PR_NUMBER: ${{ steps.com-repo-pr.outputs.pull-request-number }}
+        run: |
+          gh pr merge "$PR_NUMBER" --auto --squash
 
       # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
       - name: Send failure event to PostHog

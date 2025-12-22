@@ -14,12 +14,14 @@ interface ProductTourManagerInterface {
     start: () => void
     stop: () => void
     showTourById: (tourId: string) => void
+    previewTour: (tour: ProductTour) => void
     dismissTour: (reason: string) => void
     nextStep: () => void
     previousStep: () => void
     getActiveProductTours: (callback: ProductTourCallback) => void
     resetTour: (tourId: string) => void
     resetAllTours: () => void
+    cancelPendingTour: (tourId: string) => void
 }
 
 const isProductToursEnabled = (instance: PostHog): boolean => {
@@ -72,8 +74,7 @@ export class PostHogProductTours {
         if (this._productTourManager || !assignableWindow.__PosthogExtensions__?.generateProductTours) {
             return
         }
-        this._productTourManager =
-            assignableWindow.__PosthogExtensions__.generateProductTours(this._instance, true) || null
+        this._productTourManager = assignableWindow.__PosthogExtensions__.generateProductTours(this._instance, true)
     }
 
     getProductTours(callback: ProductTourCallback, forceReload: boolean = false): void {
@@ -131,6 +132,20 @@ export class PostHogProductTours {
         this._productTourManager?.showTourById(tourId)
     }
 
+    // force load product tours extension and render a tour,
+    // ignoring all display conditions.
+    previewTour(tour: ProductTour): void {
+        if (this._productTourManager) {
+            this._productTourManager.previewTour(tour)
+            return
+        }
+
+        this._loadScript(() => {
+            this._startProductTours()
+            this._productTourManager?.previewTour(tour)
+        })
+    }
+
     dismissProductTour(): void {
         this._productTourManager?.dismissTour('user_clicked_skip')
     }
@@ -154,5 +169,9 @@ export class PostHogProductTours {
 
     resetAllTours(): void {
         this._productTourManager?.resetAllTours()
+    }
+
+    cancelPendingTour(tourId: string): void {
+        this._productTourManager?.cancelPendingTour(tourId)
     }
 }

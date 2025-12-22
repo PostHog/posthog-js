@@ -1,4 +1,5 @@
 import { PropertyMatchType } from './types'
+import { SurveyActionType, SurveyEventWithFilters } from './posthog-surveys-types'
 
 export interface JSONContent {
     type?: string
@@ -40,6 +41,16 @@ export interface ProductTourConditions {
     url?: string
     urlMatchType?: PropertyMatchType
     selector?: string
+    autoShowDelaySeconds?: number
+    events?: {
+        values: SurveyEventWithFilters[]
+    } | null
+    cancelEvents?: {
+        values: SurveyEventWithFilters[]
+    } | null
+    actions?: {
+        values: SurveyActionType[]
+    } | null
 }
 
 export interface ProductTourAppearance {
@@ -66,7 +77,6 @@ export interface ProductTour {
     steps: ProductTourStep[]
     internal_targeting_flag_key?: string
     linked_flag_key?: string
-    trigger_selector?: string
 }
 
 export type ProductTourCallback = (tours: ProductTour[], context?: { isLoaded: boolean; error?: string }) => void
@@ -79,7 +89,7 @@ export type ProductTourDismissReason =
     | 'escape_key'
     | 'element_unavailable'
 
-export type ProductTourRenderReason = 'auto' | 'api' | 'trigger'
+export type ProductTourRenderReason = 'auto' | 'api' | 'trigger' | 'event'
 
 export const DEFAULT_PRODUCT_TOUR_APPEARANCE: Required<ProductTourAppearance> = {
     backgroundColor: '#ffffff',

@@ -52,6 +52,7 @@ import {
     EarlyAccessFeatureCallback,
     EarlyAccessFeatureStage,
     EventName,
+    ExceptionAutoCaptureConfig,
     FeatureFlagsCallback,
     JsonType,
     OverrideConfig,
@@ -729,7 +730,7 @@ export class PostHog {
 
         initTasks.push(() => {
             this.exceptionObserver = new ExceptionObserver(this)
-            this.exceptionObserver.startIfEnabled()
+            this.exceptionObserver.startIfEnabledOrStop()
         })
 
         initTasks.push(() => {
@@ -2701,9 +2702,12 @@ export class PostHog {
                 }
             }
 
+            this.exceptionObserver?.onConfigChange()
+
             this.sessionRecording?.startIfEnabledOrStop()
             this.autocapture?.startIfEnabled()
             this.heatmaps?.startIfEnabled()
+            this.exceptionObserver?.startIfEnabledOrStop()
             this.surveys.loadIfEnabled()
             this._sync_opt_out_with_persistence()
             this.externalIntegrations?.startIfEnabledOrStop()
@@ -2855,6 +2859,53 @@ export class PostHog {
             ...errorToProperties,
             ...additionalProperties,
         })
+    }
+
+    /**
+     * turns exception autocapture on, and updates the config option `capture_exceptions` to the provided config (or `true`)
+     *
+     * {@label Error tracking}
+     *
+     * @public
+     *
+     * @example
+     * ```js
+     * // Start with default exception autocapture rules. No-op if already enabled
+     * posthog.startExceptionAutocapture()
+     * ```
+     *
+     * @example
+     * ```js
+     * // Start and override controls
+     * posthog.startExceptionAutocapture({
+     *   // you don't have to send all of these (unincluded values will use the default)
+     *   capture_unhandled_errors: true || false,
+     *   capture_unhandled_rejections: true || false,
+     *   capture_console_errors: true || false
+     * })
+     * ```
+     *
+     * @param config - optional configuration option to control the exception autocapture behavior
+     */
+    startExceptionAutocapture(config?: ExceptionAutoCaptureConfig): void {
+        this.set_config({ capture_exceptions: config ?? true })
+    }
+
+    /**
+     * turns exception autocapture off by updating the config option `capture_exceptions` to `false`
+     *
+     * {@label Error tracking}
+     *
+     * @public
+     *
+     * @example
+     * ```js
+     * // Stop capturing exceptions automatically
+     * posthog.stopExceptionAutocapture()
+     * ```
+     */
+    stopExceptionAutocapture(): void {
+        this.set_config({ capture_exceptions: false })
     }
 
     /**
