@@ -298,18 +298,34 @@ function nameToHex(name: string) {
     }[name.toLowerCase()]
 }
 
-function hex2rgb(c: string) {
-    if (c[0] === '#') {
-        const hexColor = c.replace(/^#/, '')
+export function hex2rgb(c: string): string {
+    if (c.startsWith('#')) {
+        let hexColor = c.replace(/^#/, '')
+        // Handle 3-character shorthand (e.g., #111 -> #111111, #abc -> #aabbcc)
+        if (/^[0-9A-Fa-f]{3}$/.test(hexColor)) {
+            hexColor = hexColor[0] + hexColor[0] + hexColor[1] + hexColor[1] + hexColor[2] + hexColor[2]
+        }
+        if (!/^[0-9A-Fa-f]{6}$/.test(hexColor)) {
+            return 'rgb(255, 255, 255)'
+        }
         const r = parseInt(hexColor.slice(0, 2), 16)
         const g = parseInt(hexColor.slice(2, 4), 16)
         const b = parseInt(hexColor.slice(4, 6), 16)
-        return 'rgb(' + r + ',' + g + ',' + b + ')'
+        return `rgb(${r},${g},${b})`
     }
     return 'rgb(255, 255, 255)'
 }
 
-function getContrastingTextColor(color: string = defaultSurveyAppearance.backgroundColor) {
+export function hexToRgba(hex: string, opacity: number): string {
+    const rgb = hex2rgb(hex)
+    const match = rgb.match(/^rgb\((\d+),(\d+),(\d+)\)$/)
+    if (!match) {
+        return hex
+    }
+    return `rgba(${match[1]}, ${match[2]}, ${match[3]}, ${opacity})`
+}
+
+export function getContrastingTextColor(color: string = defaultSurveyAppearance.backgroundColor) {
     let rgb
     if (color[0] === '#') {
         rgb = hex2rgb(color)

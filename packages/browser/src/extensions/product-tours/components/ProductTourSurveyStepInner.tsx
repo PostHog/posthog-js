@@ -1,12 +1,6 @@
 import { h } from 'preact'
 import { useState, useRef, useEffect } from 'preact/hooks'
-import {
-    ProductTour,
-    ProductTourStep,
-    ProductTourDismissReason,
-    ProductTourSurveyQuestion,
-} from '../../../posthog-product-tours-types'
-import { mergeAppearance } from '../product-tours-utils'
+import { ProductTourStep, ProductTourAppearance, ProductTourSurveyQuestion } from '../../../posthog-product-tours-types'
 import { cancelSVG, IconPosthogLogo } from '../../surveys/icons'
 import {
     dissatisfiedEmoji,
@@ -16,14 +10,14 @@ import {
     verySatisfiedEmoji,
 } from '../../surveys/icons'
 
-export interface ProductTourSurveyStepProps {
-    tour: ProductTour
+export interface ProductTourSurveyStepInnerProps {
     step: ProductTourStep
+    appearance?: ProductTourAppearance
     stepIndex: number
     totalSteps: number
-    onSubmit: (response: string | number | null) => void
-    onPrevious: () => void
-    onDismiss: (reason: ProductTourDismissReason) => void
+    onPrevious?: () => void
+    onSubmit?: (response: string | number | null) => void
+    onDismiss?: () => void
 }
 
 const threeScaleEmojis = [dissatisfiedEmoji, neutralEmoji, satisfiedEmoji]
@@ -44,21 +38,25 @@ function OpenTextInput({
     value,
     onChange,
     onSubmit,
+    isInteractive,
 }: {
     value: string
     onChange: (text: string) => void
-    onSubmit: () => void
+    onSubmit?: () => void
+    isInteractive: boolean
 }): h.JSX.Element {
     const inputRef = useRef<HTMLTextAreaElement>(null)
 
     useEffect(() => {
-        setTimeout(() => inputRef.current?.focus(), 100)
-    }, [])
+        if (isInteractive) {
+            setTimeout(() => inputRef.current?.focus(), 100)
+        }
+    }, [isInteractive])
 
     const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Enter' && e.metaKey) {
+        if (e.key === 'Enter' && e.metaKey && isInteractive) {
             e.preventDefault()
-            onSubmit()
+            onSubmit?.()
         }
     }
 
@@ -71,6 +69,8 @@ function OpenTextInput({
             value={value}
             onInput={(e) => onChange((e.target as HTMLTextAreaElement).value)}
             onKeyDown={handleKeyDown}
+            disabled={!isInteractive}
+            style={isInteractive ? undefined : { cursor: 'default' }}
         />
     )
 }
@@ -78,18 +78,23 @@ function OpenTextInput({
 function RatingInput({
     survey,
     onSubmit,
+    isInteractive,
 }: {
     survey: ProductTourSurveyQuestion
-    onSubmit: (rating: number) => void
+    onSubmit?: (rating: number) => void
+    isInteractive: boolean
 }): h.JSX.Element {
     const [selectedRating, setSelectedRating] = useState<number | null>(null)
     const display = survey.display || 'emoji'
     const scale = survey.scale || 5
 
     const handleSelect = (rating: number) => {
+        if (!isInteractive) {
+            return
+        }
         setSelectedRating(rating)
         // Auto-submit on selection for ratings
-        onSubmit(rating)
+        onSubmit?.(rating)
     }
 
     if (display === 'emoji') {
@@ -106,6 +111,7 @@ function RatingInput({
                                 type="button"
                                 class={`ph-tour-survey-emoji-button ${isActive ? 'ph-tour-survey-emoji-button--active' : ''}`}
                                 onClick={() => handleSelect(rating)}
+                                style={isInteractive ? undefined : { cursor: 'default' }}
                                 aria-label={`Rate ${rating}`}
                             >
                                 {emoji}
@@ -139,6 +145,7 @@ function RatingInput({
                             type="button"
                             class={`ph-tour-survey-number-button ${isActive ? 'ph-tour-survey-number-button--active' : ''}`}
                             onClick={() => handleSelect(num)}
+                            style={isInteractive ? undefined : { cursor: 'default' }}
                             aria-label={`Rate ${num}`}
                         >
                             {num}
@@ -156,99 +163,89 @@ function RatingInput({
     )
 }
 
-export function ProductTourSurveyStep({
-    tour,
+export function ProductTourSurveyStepInner({
     step,
+    appearance,
     stepIndex,
     totalSteps,
-    onSubmit,
     onPrevious,
+    onSubmit,
     onDismiss,
-}: ProductTourSurveyStepProps): h.JSX.Element {
+}: ProductTourSurveyStepInnerProps): h.JSX.Element {
     const [textValue, setTextValue] = useState('')
-    const appearance = mergeAppearance(tour.appearance)
     const survey = step.survey
+    const whiteLabel = appearance?.whiteLabel ?? false
     const isFirstStep = stepIndex === 0
     const isOpenText = survey?.type === 'open'
 
+    const isInteractive = !!(onPrevious || onSubmit || onDismiss)
+    const cursorStyle = isInteractive ? undefined : { cursor: 'default' }
+
     const handleTextSubmit = () => {
-        onSubmit(textValue.trim() || null)
+        onSubmit?.(textValue.trim() || null)
     }
 
     if (!survey) {
         return <div />
     }
 
-    const handleOverlayClick = (e: MouseEvent) => {
-        e.stopPropagation()
-        onDismiss('user_clicked_outside')
-    }
-
-    const handleCardClick = (e: MouseEvent) => {
-        e.stopPropagation()
-    }
-
-    const containerStyle = {
-        '--ph-tour-background-color': appearance.backgroundColor,
-        '--ph-tour-text-color': appearance.textColor,
-        '--ph-tour-button-color': appearance.buttonColor,
-        '--ph-tour-button-text-color': appearance.buttonTextColor,
-        '--ph-tour-border-radius': `${appearance.borderRadius}px`,
-        '--ph-tour-border-color': appearance.borderColor,
-    } as h.JSX.CSSProperties
-
     return (
-        <div class="ph-tour-container" style={containerStyle}>
-            <div class="ph-tour-click-overlay" onClick={handleOverlayClick} />
-            <div class="ph-tour-modal-overlay" />
+        <>
+            <button class="ph-tour-dismiss" onClick={onDismiss} aria-label="Close survey" style={cursorStyle}>
+                {cancelSVG}
+            </button>
 
-            <div class="ph-tour-tooltip ph-tour-tooltip--modal ph-tour-survey-step" onClick={handleCardClick}>
-                <button
-                    class="ph-tour-dismiss"
-                    onClick={() => onDismiss('user_clicked_skip')}
-                    aria-label="Close survey"
-                >
-                    {cancelSVG}
-                </button>
+            <div class="ph-tour-survey-question">{survey.questionText}</div>
 
-                <div class="ph-tour-survey-question">{survey.questionText}</div>
+            {isOpenText ? (
+                <OpenTextInput
+                    value={textValue}
+                    onChange={setTextValue}
+                    onSubmit={handleTextSubmit}
+                    isInteractive={isInteractive}
+                />
+            ) : (
+                <RatingInput survey={survey} onSubmit={onSubmit} isInteractive={isInteractive} />
+            )}
 
-                {isOpenText ? (
-                    <OpenTextInput value={textValue} onChange={setTextValue} onSubmit={handleTextSubmit} />
-                ) : (
-                    <RatingInput survey={survey} onSubmit={onSubmit} />
-                )}
+            <div class="ph-tour-footer">
+                <span class="ph-tour-progress">
+                    {stepIndex + 1} of {totalSteps}
+                </span>
 
-                <div class="ph-tour-footer">
-                    <span class="ph-tour-progress">
-                        {stepIndex + 1} of {totalSteps}
-                    </span>
-
-                    <div class="ph-tour-buttons">
-                        {!isFirstStep && (
-                            <button class="ph-tour-button ph-tour-button--secondary" onClick={onPrevious}>
-                                Back
-                            </button>
-                        )}
-                        {isOpenText && (
-                            <button class="ph-tour-button ph-tour-button--primary" onClick={handleTextSubmit}>
-                                Submit
-                            </button>
-                        )}
-                    </div>
+                <div class="ph-tour-buttons">
+                    {!isFirstStep && (
+                        <button
+                            class="ph-tour-button ph-tour-button--secondary"
+                            onClick={onPrevious}
+                            style={cursorStyle}
+                        >
+                            Back
+                        </button>
+                    )}
+                    {isOpenText && (
+                        <button
+                            class="ph-tour-button ph-tour-button--primary"
+                            onClick={handleTextSubmit}
+                            style={cursorStyle}
+                        >
+                            Submit
+                        </button>
+                    )}
                 </div>
-
-                {!appearance.whiteLabel && (
-                    <a
-                        href="https://posthog.com/product-tours"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="ph-tour-branding"
-                    >
-                        Survey by {IconPosthogLogo}
-                    </a>
-                )}
             </div>
-        </div>
+
+            {!whiteLabel && (
+                <a
+                    href={isInteractive ? 'https://posthog.com/product-tours' : undefined}
+                    target={isInteractive ? '_blank' : undefined}
+                    rel={isInteractive ? 'noopener noreferrer' : undefined}
+                    class="ph-tour-branding"
+                    style={isInteractive ? undefined : { cursor: 'default', pointerEvents: 'none' }}
+                >
+                    Survey by {IconPosthogLogo}
+                </a>
+            )}
+        </>
     )
 }
