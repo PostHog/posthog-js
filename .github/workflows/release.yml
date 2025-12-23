@@ -50,7 +50,7 @@ jobs:
         name: Notify Slack - Approval Needed
         needs: check-changesets
         if: needs.check-changesets.outputs.has-changesets == 'true'
-        uses: posthog/.github/.github/workflows/notify-approval-needed.yml@main
+        uses: PostHog/.github/.github/workflows/notify-approval-needed.yml@main
         with:
             slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
             slack_user_group_id: ${{ vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID }}
@@ -73,7 +73,7 @@ jobs:
         steps:
             - name: Notify Slack - Approved
               continue-on-error: true # Don't block release if Slack notification fails
-              uses: posthog/.github/.github/actions/slack-thread-reply@main
+              uses: PostHog/.github/.github/actions/slack-thread-reply@main
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -288,7 +288,7 @@ jobs:
             - name: Notify Slack - Failed
               continue-on-error: true # Slack failure shouldn't mark release as failed
               if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
-              uses: posthog/.github/.github/actions/slack-thread-reply@main
+              uses: PostHog/.github/.github/actions/slack-thread-reply@main
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -307,7 +307,7 @@ jobs:
 
             - name: Notify Slack - Released
               continue-on-error: true # Slack failure shouldn't mark release as failed
-              uses: posthog/.github/.github/actions/slack-thread-reply@main
+              uses: PostHog/.github/.github/actions/slack-thread-reply@main
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
