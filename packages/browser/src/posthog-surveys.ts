@@ -33,6 +33,8 @@ export class PostHogSurveys {
     private _isFetchingSurveys: boolean = false
     private _isInitializingSurveys: boolean = false
     private _surveyCallbacks: SurveyCallback[] = []
+    // Queue for callbacks waiting for an in-flight fetch to complete
+    private _pendingFetchCallbacks: SurveyCallback[] = []
 
     constructor(private readonly _instance: PostHog) {
         // we set this to undefined here because we need the persistence storage for this type
@@ -203,12 +205,10 @@ export class PostHogSurveys {
             })
         }
 
-        // Prevent concurrent API calls
+        // If a fetch is in progress, queue this callback to be called when it completes
         if (this._isFetchingSurveys) {
-            return callback([], {
-                isLoaded: false,
-                error: 'Surveys are already being loaded',
-            })
+            this._pendingFetchCallbacks.push(callback)
+            return
         }
 
         try {
@@ -222,14 +222,18 @@ export class PostHogSurveys {
                 timeout: this._instance.config.surveys_request_timeout_ms,
                 callback: (response) => {
                     this._isFetchingSurveys = false
+                    // Get all callbacks that were waiting for this fetch
+                    const pendingCallbacks = this._pendingFetchCallbacks
+                    this._pendingFetchCallbacks = []
+
                     const statusCode = response.statusCode
                     if (statusCode !== 200 || !response.json) {
                         const error = `Surveys API could not be loaded, status: ${statusCode}`
                         logger.error(error)
-                        return callback([], {
-                            isLoaded: false,
-                            error,
-                        })
+                        const errorContext = { isLoaded: false, error }
+                        callback([], errorContext)
+                        this._callPendingCallbacks(pendingCallbacks, [], errorContext)
+                        return
                     }
                     const surveys = response.json.surveys || []
 
@@ -244,9 +248,9 @@ export class PostHogSurveys {
                     }
 
                     this._instance.persistence?.register({ [SURVEYS]: surveys })
-                    return callback(surveys, {
-                        isLoaded: true,
-                    })
+                    const successContext = { isLoaded: true }
+                    callback(surveys, successContext)
+                    this._callPendingCallbacks(pendingCallbacks, surveys, successContext)
                 },
             })
         } catch (e) {
@@ -265,6 +269,21 @@ export class PostHogSurveys {
                 this.getSurveys(callback)
             } catch (error) {
                 logger.error('Error in survey callback', error)
+            }
+        }
+    }
+
+    /** Helper to call pending callbacks with error isolation */
+    private _callPendingCallbacks(
+        callbacks: SurveyCallback[],
+        surveys: Survey[],
+        context: { isLoaded: boolean; error?: string }
+    ): void {
+        for (const cb of callbacks) {
+            try {
+                cb(surveys, context)
+            } catch (error) {
+                logger.error('Error in pending survey callback', error)
             }
         }
     }
