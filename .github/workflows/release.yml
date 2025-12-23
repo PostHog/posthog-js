@@ -306,6 +306,7 @@ jobs:
               uses: actions/checkout@v4
 
             - name: Notify Slack - Released
+              continue-on-error: true # Slack failure shouldn't mark release as failed
               uses: posthog/.github/.github/actions/slack-thread-reply@main
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
