@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.310.1
+
+### Patch Changes
+
+- [#2797](https://github.com/PostHog/posthog-js/pull/2797) [`8b1a39a`](https://github.com/PostHog/posthog-js/commit/8b1a39afc03bfe1117a7013c4f91326c7d355a14) Thanks [@adboio](https://github.com/adboio)! - product tours: support custom appearance, clean up animations
+  (2025-12-23)
+
 ## 1.310.0
 
 ### Minor Changes
