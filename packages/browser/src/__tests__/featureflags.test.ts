@@ -2632,4 +2632,45 @@ describe('updateFlags', () => {
 
         expect(featureFlags.isFeatureEnabled('test-flag')).toBe(true)
     })
+
+    it('should replace existing flags by default', () => {
+        // Set initial flags
+        featureFlags.receivedFeatureFlags({
+            flags: createFlagDetails({ 'flag-a': true, 'flag-b': true }),
+        })
+
+        expect(featureFlags.getFlagVariants()).toEqual({
+            'flag-a': true,
+            'flag-b': true,
+        })
+
+        // Update without merge - should replace
+        featureFlags.receivedFeatureFlags({
+            flags: createFlagDetails({ 'flag-c': true }),
+        })
+
+        expect(featureFlags.getFlagVariants()).toEqual({
+            'flag-c': true,
+        })
+        expect(featureFlags.isFeatureEnabled('flag-a')).toBe(undefined)
+    })
+
+    it('should merge flags when errorsWhileComputingFlags is true', () => {
+        // Set initial flags
+        featureFlags.receivedFeatureFlags({
+            flags: createFlagDetails({ 'flag-a': true, 'flag-b': true }),
+        })
+
+        // Update with errorsWhileComputingFlags - should merge
+        featureFlags.receivedFeatureFlags({
+            flags: createFlagDetails({ 'flag-c': true }),
+            errorsWhileComputingFlags: true,
+        })
+
+        expect(featureFlags.getFlagVariants()).toEqual({
+            'flag-a': true,
+            'flag-b': true,
+            'flag-c': true,
+        })
+    })
 })

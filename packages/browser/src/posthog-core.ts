@@ -1700,11 +1700,18 @@ export class PostHog {
      *
      * @example
      * ```js
-     * // Update flags from server-evaluated values
+     * // Replace all flags with server-evaluated values
      * posthog.updateFlags({
      *   'my-flag': true,
      *   'my-experiment': 'variant-a'
      * })
+     *
+     * // Merge with existing flags (update only specified flags)
+     * posthog.updateFlags(
+     *   { 'my-flag': true },
+     *   undefined,
+     *   { merge: true }
+     * )
      *
      * // With payloads
      * posthog.updateFlags(
@@ -1715,20 +1722,31 @@ export class PostHog {
      *
      * @param flags - An object mapping flag keys to their values (boolean or string variant)
      * @param payloads - Optional object mapping flag keys to their JSON payloads
+     * @param options - Optional settings. Use `{ merge: true }` to merge with existing flags instead of replacing.
      * @public
      */
-    updateFlags(flags: Record<string, boolean | string>, payloads?: Record<string, JsonType>): void {
+    updateFlags(
+        flags: Record<string, boolean | string>,
+        payloads?: Record<string, JsonType>,
+        options?: { merge?: boolean }
+    ): void {
+        // If merging, combine with existing flags
+        const existingFlags = options?.merge ? this.featureFlags.getFlagVariants() : {}
+        const existingPayloads = options?.merge ? this.featureFlags.getFlagPayloads() : {}
+        const mergedFlags = { ...existingFlags, ...flags }
+        const mergedPayloads = { ...existingPayloads, ...payloads }
+
         // Convert simple flags to v4 format to avoid deprecation warning
         const flagDetails: Record<string, FeatureFlagDetail> = {}
-        for (const [key, value] of Object.entries(flags)) {
+        for (const [key, value] of Object.entries(mergedFlags)) {
             const isVariant = typeof value === 'string'
             flagDetails[key] = {
                 key,
                 enabled: isVariant ? true : !!value,
                 variant: isVariant ? value : undefined,
                 reason: undefined,
-                metadata: payloads?.[key]
-                    ? { id: 0, version: undefined, description: undefined, payload: payloads[key] }
+                metadata: mergedPayloads?.[key]
+                    ? { id: 0, version: undefined, description: undefined, payload: mergedPayloads[key] }
                     : undefined,
             }
         }
