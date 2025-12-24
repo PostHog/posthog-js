@@ -276,6 +276,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true"
   ],
+  "__preview_extra_scheduling": [
+    "undefined",
+    "false",
+    "true"
+  ],
   "session_recording": {
     "blockClass": [
       "undefined",

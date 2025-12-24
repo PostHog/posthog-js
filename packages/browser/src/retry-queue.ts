@@ -6,6 +6,7 @@ import { window } from './utils/globals'
 import { PostHog } from './posthog-core'
 import { extendURLParams } from './request'
 import { addEventListener } from './utils'
+import { scheduler } from './utils/scheduler'
 
 const thirtyMinutes = 30 * 60 * 1000
 
@@ -142,9 +143,9 @@ export class RetryQueue {
         this._queue = notToFlush
 
         if (toFlush.length > 0) {
-            for (const { requestOptions } of toFlush) {
-                this.retriableRequest(requestOptions)
-            }
+            scheduler.processEach(toFlush, ({ requestOptions }) => this.retriableRequest(requestOptions), {
+                priority: 'high',
+            })
         }
     }
 
