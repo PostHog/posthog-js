@@ -207,8 +207,9 @@ export class PostHogSurveys {
             })
         }
 
-        // If a fetch is already in progress, reuse that promise
-        if (this._getSurveysInFlightPromise) {
+        // If a fetch is already in progress and Promise is available, reuse that promise
+        // In browsers without Promise (IE11), we skip this optimization and just make concurrent requests
+        if (typeof Promise !== 'undefined' && this._getSurveysInFlightPromise) {
             this._getSurveysInFlightPromise.then(({ surveys, context }) => callback(surveys, context))
             return
         }
@@ -217,10 +218,12 @@ export class PostHogSurveys {
         // We need to assign the promise before starting the request, because
         // in tests (and potentially in some edge cases) the callback may fire synchronously
         let resolvePromise: (value: { surveys: Survey[]; context: { isLoaded: boolean; error?: string } }) => void
-        // eslint-disable-next-line compat/compat
-        this._getSurveysInFlightPromise = new Promise((resolve) => {
-            resolvePromise = resolve
-        })
+        if (typeof Promise !== 'undefined') {
+            // eslint-disable-next-line compat/compat
+            this._getSurveysInFlightPromise = new Promise((resolve) => {
+                resolvePromise = resolve
+            })
+        }
 
         this._instance._send_request({
             url: this._instance.requestRouter.endpointFor('api', `/api/surveys/?token=${this._instance.config.token}`),
@@ -235,7 +238,7 @@ export class PostHogSurveys {
                     logger.error(error)
                     const context = { isLoaded: false, error }
                     callback([], context)
-                    resolvePromise({ surveys: [], context })
+                    resolvePromise?.({ surveys: [], context })
                     return
                 }
                 const surveys = response.json.surveys || []
@@ -253,7 +256,7 @@ export class PostHogSurveys {
                 this._instance.persistence?.register({ [SURVEYS]: surveys })
                 const context = { isLoaded: true }
                 callback(surveys, context)
-                resolvePromise({ surveys, context })
+                resolvePromise?.({ surveys, context })
             },
         })
     }
