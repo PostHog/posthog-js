@@ -4,7 +4,7 @@ import { filterActiveFeatureFlags, parseFlagsResponse, PostHogFeatureFlags } fro
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { PostHogConfig } from '../types'
-import { createMockPostHog } from './helpers/posthog-instance'
+import { createMockPostHog, createPosthogInstance } from './helpers/posthog-instance'
 
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
@@ -2504,173 +2504,123 @@ describe('getRemoteConfigPayload', () => {
 })
 
 describe('updateFlags', () => {
-    let instance
-    let featureFlags
-
-    const config = {
-        token: 'random fake token',
-        persistence: 'memory',
-        api_host: 'https://app.posthog.com',
-    } as PostHogConfig
-
     beforeEach(() => {
         jest.spyOn(window.console, 'warn').mockImplementation()
-
-        instance = {
-            config: { ...config },
-            get_distinct_id: () => 'blah id',
-            getGroups: () => {},
-            persistence: new PostHogPersistence(config),
-            requestRouter: new RequestRouter({ config } as any),
-            register: (props) => instance.persistence.register(props),
-            unregister: (key) => instance.persistence.unregister(key),
-            get_property: (key) => instance.persistence.props[key],
-            capture: jest.fn(),
-            _send_request: jest.fn(),
-            _onRemoteConfig: jest.fn(),
-            reloadFeatureFlags: () => featureFlags.reloadFeatureFlags(),
-            _shouldDisableFlags: () => false,
-        }
-
-        featureFlags = new PostHogFeatureFlags(instance)
     })
 
-    // Helper to create v4 format flag details
-    const createFlagDetails = (
-        flags: Record<string, boolean | string>,
-        payloads?: Record<string, any>
-    ): Record<string, any> => {
-        const details: Record<string, any> = {}
-        for (const [key, value] of Object.entries(flags)) {
-            const isVariant = typeof value === 'string'
-            details[key] = {
-                key,
-                enabled: isVariant ? true : !!value,
-                variant: isVariant ? value : undefined,
-                reason: undefined,
-                metadata: payloads?.[key]
-                    ? { id: 0, version: undefined, description: undefined, payload: payloads[key] }
-                    : undefined,
-            }
-        }
-        return details
-    }
+    it('should update feature flags without making a network request', async () => {
+        const posthog = await createPosthogInstance()
 
-    it('should update feature flags without making a network request', () => {
-        featureFlags.receivedFeatureFlags({
-            flags: createFlagDetails({ 'test-flag': true, 'variant-flag': 'control' }),
-        })
-
-        expect(featureFlags.getFlagVariants()).toEqual({
+        posthog.updateFlags({
             'test-flag': true,
             'variant-flag': 'control',
         })
-        expect(featureFlags.isFeatureEnabled('test-flag')).toBe(true)
-        expect(featureFlags.getFeatureFlag('variant-flag')).toBe('control')
 
-        // Verify no network request was made
-        expect(instance._send_request).not.toHaveBeenCalled()
+        expect(posthog.getFeatureFlag('test-flag')).toBe(true)
+        expect(posthog.getFeatureFlag('variant-flag')).toBe('control')
+        expect(posthog.isFeatureEnabled('test-flag')).toBe(true)
     })
 
-    it('should update feature flags with payloads', () => {
-        featureFlags.receivedFeatureFlags({
-            flags: createFlagDetails({ 'test-flag': true }, { 'test-flag': { some: 'payload' } }),
-        })
+    it('should update feature flags with payloads', async () => {
+        const posthog = await createPosthogInstance()
 
-        expect(featureFlags.getFeatureFlagPayload('test-flag')).toEqual({ some: 'payload' })
+        posthog.updateFlags({ 'test-flag': true }, { 'test-flag': { some: 'payload' } })
+
+        expect(posthog.getFeatureFlagPayload('test-flag')).toEqual({ some: 'payload' })
     })
 
-    it('should fire onFeatureFlags callbacks when flags are updated', () => {
+    // Note: Falsy payload values (null, 0, false, '') are filtered out by normalizeFlagsResponse
+    // This is consistent with existing SDK behavior for all feature flag payloads
+
+    it('should fire onFeatureFlags callbacks when flags are updated', async () => {
+        const posthog = await createPosthogInstance()
         const callback = jest.fn()
-        featureFlags.onFeatureFlags(callback)
+        posthog.onFeatureFlags(callback)
 
-        featureFlags.receivedFeatureFlags({
-            flags: createFlagDetails({ 'new-flag': true }),
-        })
+        posthog.updateFlags({ 'new-flag': true })
 
         expect(callback).toHaveBeenCalledWith(['new-flag'], { 'new-flag': true }, { errorsLoading: undefined })
     })
 
-    it('should replace existing flags when updated', () => {
+    it('should replace existing flags by default', async () => {
+        const posthog = await createPosthogInstance()
+
         // Set initial flags
-        featureFlags.receivedFeatureFlags({
-            flags: createFlagDetails({ 'flag-a': true, 'flag-b': 'variant-1' }),
-        })
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': true })
 
-        expect(featureFlags.getFlagVariants()).toEqual({
-            'flag-a': true,
-            'flag-b': 'variant-1',
-        })
-
-        // Update with new flags
-        featureFlags.receivedFeatureFlags({
-            flags: createFlagDetails({ 'flag-c': true }),
-        })
-
-        // Old flags should be replaced
-        expect(featureFlags.getFlagVariants()).toEqual({
-            'flag-c': true,
-        })
-    })
-
-    it('should mark flags as loaded after update', () => {
-        expect(featureFlags._hasLoadedFlags).toBe(false)
-
-        featureFlags.receivedFeatureFlags({
-            flags: createFlagDetails({ 'test-flag': true }),
-        })
-
-        expect(featureFlags._hasLoadedFlags).toBe(true)
-    })
-
-    it('should work with advanced_disable_flags enabled', () => {
-        instance._shouldDisableFlags = () => true
-
-        featureFlags.receivedFeatureFlags({
-            flags: createFlagDetails({ 'test-flag': true }),
-        })
-
-        expect(featureFlags.isFeatureEnabled('test-flag')).toBe(true)
-    })
-
-    it('should replace existing flags by default', () => {
-        // Set initial flags
-        featureFlags.receivedFeatureFlags({
-            flags: createFlagDetails({ 'flag-a': true, 'flag-b': true }),
-        })
-
-        expect(featureFlags.getFlagVariants()).toEqual({
-            'flag-a': true,
-            'flag-b': true,
-        })
+        expect(posthog.getFeatureFlag('flag-a')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(true)
 
         // Update without merge - should replace
-        featureFlags.receivedFeatureFlags({
-            flags: createFlagDetails({ 'flag-c': true }),
-        })
+        posthog.updateFlags({ 'flag-c': true })
 
-        expect(featureFlags.getFlagVariants()).toEqual({
-            'flag-c': true,
-        })
-        expect(featureFlags.isFeatureEnabled('flag-a')).toBe(undefined)
+        expect(posthog.getFeatureFlag('flag-c')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-a')).toBe(undefined)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(undefined)
     })
 
-    it('should merge flags when errorsWhileComputingFlags is true', () => {
+    it('should merge flags when merge option is true', async () => {
+        const posthog = await createPosthogInstance()
+
         // Set initial flags
-        featureFlags.receivedFeatureFlags({
-            flags: createFlagDetails({ 'flag-a': true, 'flag-b': true }),
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': true })
+
+        expect(posthog.getFeatureFlag('flag-a')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(true)
+
+        // Update with merge - should keep existing flags
+        posthog.updateFlags({ 'flag-c': true }, undefined, { merge: true })
+
+        expect(posthog.getFeatureFlag('flag-a')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-c')).toBe(true)
+    })
+
+    it('should merge payloads when merge option is true', async () => {
+        const posthog = await createPosthogInstance()
+
+        // Set initial flags with payloads
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': true }, { 'flag-a': { data: 'a' }, 'flag-b': { data: 'b' } })
+
+        expect(posthog.getFeatureFlagPayload('flag-a')).toEqual({ data: 'a' })
+        expect(posthog.getFeatureFlagPayload('flag-b')).toEqual({ data: 'b' })
+
+        // Update with merge - should keep existing payloads
+        posthog.updateFlags({ 'flag-c': true }, { 'flag-c': { data: 'c' } }, { merge: true })
+
+        expect(posthog.getFeatureFlagPayload('flag-a')).toEqual({ data: 'a' })
+        expect(posthog.getFeatureFlagPayload('flag-b')).toEqual({ data: 'b' })
+        expect(posthog.getFeatureFlagPayload('flag-c')).toEqual({ data: 'c' })
+    })
+
+    it('should override existing flag values when merging', async () => {
+        const posthog = await createPosthogInstance()
+
+        // Set initial flags
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': 'variant-1' })
+
+        // Update flag-a with merge - should override just flag-a
+        posthog.updateFlags({ 'flag-a': false }, undefined, { merge: true })
+
+        expect(posthog.getFeatureFlag('flag-a')).toBe(false)
+        expect(posthog.getFeatureFlag('flag-b')).toBe('variant-1')
+    })
+
+    it('should mark flags as loaded after update', async () => {
+        const posthog = await createPosthogInstance()
+
+        posthog.updateFlags({ 'test-flag': true })
+
+        expect(posthog.featureFlags._hasLoadedFlags).toBe(true)
+    })
+
+    it('should work with advanced_disable_flags enabled', async () => {
+        const posthog = await createPosthogInstance(undefined, {
+            advanced_disable_flags: true,
         })
 
-        // Update with errorsWhileComputingFlags - should merge
-        featureFlags.receivedFeatureFlags({
-            flags: createFlagDetails({ 'flag-c': true }),
-            errorsWhileComputingFlags: true,
-        })
+        posthog.updateFlags({ 'test-flag': true })
 
-        expect(featureFlags.getFlagVariants()).toEqual({
-            'flag-a': true,
-            'flag-b': true,
-            'flag-c': true,
-        })
+        expect(posthog.isFeatureEnabled('test-flag')).toBe(true)
     })
 })

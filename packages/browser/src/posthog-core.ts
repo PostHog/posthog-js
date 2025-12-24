@@ -1745,7 +1745,8 @@ export class PostHog {
                 enabled: isVariant ? true : !!value,
                 variant: isVariant ? value : undefined,
                 reason: undefined,
-                metadata: mergedPayloads?.[key]
+                metadata:
+                mergedPayloads?.[key] !== undefined
                     ? { id: 0, version: undefined, description: undefined, payload: mergedPayloads[key] }
                     : undefined,
             }
