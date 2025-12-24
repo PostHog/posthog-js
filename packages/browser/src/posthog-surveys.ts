@@ -219,7 +219,6 @@ export class PostHogSurveys {
         // in tests (and potentially in some edge cases) the callback may fire synchronously
         let resolvePromise: (value: { surveys: Survey[]; context: { isLoaded: boolean; error?: string } }) => void
         if (typeof Promise !== 'undefined') {
-            // eslint-disable-next-line compat/compat
             this._getSurveysInFlightPromise = new Promise((resolve) => {
                 resolvePromise = resolve
             })
