@@ -561,11 +561,8 @@ describe('posthog-surveys', () => {
                 // Flush the promise microtask queue
                 await Promise.resolve()
 
-                // The callback should have been called with the actual surveys, not empty array
+                // The callback should have been called with the actual surveys
                 expect(callback).toHaveBeenCalledWith(mockSurveys, { isLoaded: true })
-                expect(callback).not.toHaveBeenCalledWith([], expect.objectContaining({
-                    error: 'Surveys are already being loaded',
-                }))
             })
 
             it('should not load surveys in cookieless mode without consent', () => {
@@ -642,6 +639,31 @@ describe('posthog-surveys', () => {
                 expect(callback1).toHaveBeenCalledWith(mockSurveys, { isLoaded: true })
                 expect(callback2).toHaveBeenCalledWith(mockSurveys, { isLoaded: true })
                 expect(surveys['_getSurveysInFlightPromise']).toBeNull()
+            })
+
+            it('should propagate errors to all promise subscribers', async () => {
+                // Start a fetch that will fail
+                mockPostHog._send_request.mockImplementation(({ callback }) => {
+                    setTimeout(() => {
+                        callback({ statusCode: 500 })
+                    }, 100)
+                })
+
+                const callback1 = jest.fn()
+                const callback2 = jest.fn()
+
+                // Both callers subscribe to the same in-flight request
+                surveys.getSurveys(callback1)
+                surveys.getSurveys(callback2)
+
+                // Complete the request with error
+                jest.advanceTimersByTime(100)
+                await Promise.resolve()
+
+                // Both callbacks should receive the error
+                const expectedError = { isLoaded: false, error: 'Surveys API could not be loaded, status: 500' }
+                expect(callback1).toHaveBeenCalledWith([], expectedError)
+                expect(callback2).toHaveBeenCalledWith([], expectedError)
             })
 
             it('should clear promise after successful API call', () => {
