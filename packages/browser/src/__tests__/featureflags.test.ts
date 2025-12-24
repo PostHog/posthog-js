@@ -2502,3 +2502,134 @@ describe('getRemoteConfigPayload', () => {
         })
     })
 })
+
+describe('updateFlags', () => {
+    let instance
+    let featureFlags
+
+    const config = {
+        token: 'random fake token',
+        persistence: 'memory',
+        api_host: 'https://app.posthog.com',
+    } as PostHogConfig
+
+    beforeEach(() => {
+        jest.spyOn(window.console, 'warn').mockImplementation()
+
+        instance = {
+            config: { ...config },
+            get_distinct_id: () => 'blah id',
+            getGroups: () => {},
+            persistence: new PostHogPersistence(config),
+            requestRouter: new RequestRouter({ config } as any),
+            register: (props) => instance.persistence.register(props),
+            unregister: (key) => instance.persistence.unregister(key),
+            get_property: (key) => instance.persistence.props[key],
+            capture: jest.fn(),
+            _send_request: jest.fn(),
+            _onRemoteConfig: jest.fn(),
+            reloadFeatureFlags: () => featureFlags.reloadFeatureFlags(),
+            _shouldDisableFlags: () => false,
+        }
+
+        featureFlags = new PostHogFeatureFlags(instance)
+    })
+
+    // Helper to create v4 format flag details
+    const createFlagDetails = (
+        flags: Record<string, boolean | string>,
+        payloads?: Record<string, any>
+    ): Record<string, any> => {
+        const details: Record<string, any> = {}
+        for (const [key, value] of Object.entries(flags)) {
+            const isVariant = typeof value === 'string'
+            details[key] = {
+                key,
+                enabled: isVariant ? true : !!value,
+                variant: isVariant ? value : undefined,
+                reason: undefined,
+                metadata: payloads?.[key]
+                    ? { id: 0, version: undefined, description: undefined, payload: payloads[key] }
+                    : undefined,
+            }
+        }
+        return details
+    }
+
+    it('should update feature flags without making a network request', () => {
+        featureFlags.receivedFeatureFlags({
+            flags: createFlagDetails({ 'test-flag': true, 'variant-flag': 'control' }),
+        })
+
+        expect(featureFlags.getFlagVariants()).toEqual({
+            'test-flag': true,
+            'variant-flag': 'control',
+        })
+        expect(featureFlags.isFeatureEnabled('test-flag')).toBe(true)
+        expect(featureFlags.getFeatureFlag('variant-flag')).toBe('control')
+
+        // Verify no network request was made
+        expect(instance._send_request).not.toHaveBeenCalled()
+    })
+
+    it('should update feature flags with payloads', () => {
+        featureFlags.receivedFeatureFlags({
+            flags: createFlagDetails({ 'test-flag': true }, { 'test-flag': { some: 'payload' } }),
+        })
+
+        expect(featureFlags.getFeatureFlagPayload('test-flag')).toEqual({ some: 'payload' })
+    })
+
+    it('should fire onFeatureFlags callbacks when flags are updated', () => {
+        const callback = jest.fn()
+        featureFlags.onFeatureFlags(callback)
+
+        featureFlags.receivedFeatureFlags({
+            flags: createFlagDetails({ 'new-flag': true }),
+        })
+
+        expect(callback).toHaveBeenCalledWith(['new-flag'], { 'new-flag': true }, { errorsLoading: undefined })
+    })
+
+    it('should replace existing flags when updated', () => {
+        // Set initial flags
+        featureFlags.receivedFeatureFlags({
+            flags: createFlagDetails({ 'flag-a': true, 'flag-b': 'variant-1' }),
+        })
+
+        expect(featureFlags.getFlagVariants()).toEqual({
+            'flag-a': true,
+            'flag-b': 'variant-1',
+        })
+
+        // Update with new flags
+        featureFlags.receivedFeatureFlags({
+            flags: createFlagDetails({ 'flag-c': true }),
+        })
+
+        // Old flags should be replaced
+        expect(featureFlags.getFlagVariants()).toEqual({
+            'flag-c': true,
+        })
+    })
+
+    it('should mark flags as loaded after update', () => {
+        expect(featureFlags._hasLoadedFlags).toBe(false)
+
+        featureFlags.receivedFeatureFlags({
+            flags: createFlagDetails({ 'test-flag': true }),
+        })
+
+        expect(featureFlags._hasLoadedFlags).toBe(true)
+    })
+
+    it('should work with advanced_disable_flags enabled', () => {
+        instance._shouldDisableFlags = () => true
+
+        featureFlags.receivedFeatureFlags({
+            flags: createFlagDetails({ 'test-flag': true }),
+        })
+
+        expect(featureFlags.isFeatureEnabled('test-flag')).toBe(true)
+    })
+})

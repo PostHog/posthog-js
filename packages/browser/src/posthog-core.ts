@@ -53,6 +53,7 @@ import {
     EarlyAccessFeatureStage,
     EventName,
     ExceptionAutoCaptureConfig,
+    FeatureFlagDetail,
     FeatureFlagsCallback,
     JsonType,
     OverrideConfig,
@@ -1686,6 +1687,55 @@ export class PostHog {
      */
     reloadFeatureFlags(): void {
         this.featureFlags.reloadFeatureFlags()
+    }
+
+    /**
+     * Manually update feature flag values without making a network request.
+     *
+     * This is useful when you have feature flag values from an external source
+     * (e.g., server-side evaluation, edge middleware) and want to inject them
+     * into the client SDK.
+     *
+     * {@label Feature flags}
+     *
+     * @example
+     * ```js
+     * // Update flags from server-evaluated values
+     * posthog.updateFlags({
+     *   'my-flag': true,
+     *   'my-experiment': 'variant-a'
+     * })
+     *
+     * // With payloads
+     * posthog.updateFlags(
+     *   { 'my-flag': true },
+     *   { 'my-flag': { some: 'data' } }
+     * )
+     * ```
+     *
+     * @param flags - An object mapping flag keys to their values (boolean or string variant)
+     * @param payloads - Optional object mapping flag keys to their JSON payloads
+     * @public
+     */
+    updateFlags(flags: Record<string, boolean | string>, payloads?: Record<string, JsonType>): void {
+        // Convert simple flags to v4 format to avoid deprecation warning
+        const flagDetails: Record<string, FeatureFlagDetail> = {}
+        for (const [key, value] of Object.entries(flags)) {
+            const isVariant = typeof value === 'string'
+            flagDetails[key] = {
+                key,
+                enabled: isVariant ? true : !!value,
+                variant: isVariant ? value : undefined,
+                reason: undefined,
+                metadata: payloads?.[key]
+                    ? { id: 0, version: undefined, description: undefined, payload: payloads[key] }
+                    : undefined,
+            }
+        }
+
+        this.featureFlags.receivedFeatureFlags({
+            flags: flagDetails,
+        })
     }
 
     /**
