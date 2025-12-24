@@ -30,11 +30,13 @@ export class PostHogSurveys {
     private _isSurveysEnabled?: boolean = undefined
     public _surveyEventReceiver: SurveyEventReceiver | null
     private _surveyManager: SurveyManager | null = null
-    private _isFetchingSurveys: boolean = false
     private _isInitializingSurveys: boolean = false
     private _surveyCallbacks: SurveyCallback[] = []
-    // Queue for callbacks waiting for an in-flight fetch to complete
-    private _pendingFetchCallbacks: SurveyCallback[] = []
+    // Promise for in-flight survey fetch - allows multiple callers to await the same request
+    private _getSurveysInFlightPromise: Promise<{
+        surveys: Survey[]
+        context: { isLoaded: boolean; error?: string }
+    }> | null = null
 
     constructor(private readonly _instance: PostHog) {
         // we set this to undefined here because we need the persistence storage for this type
@@ -205,58 +207,54 @@ export class PostHogSurveys {
             })
         }
 
-        // If a fetch is in progress, queue this callback to be called when it completes
-        if (this._isFetchingSurveys) {
-            this._pendingFetchCallbacks.push(callback)
+        // If a fetch is already in progress, reuse that promise
+        if (this._getSurveysInFlightPromise) {
+            this._getSurveysInFlightPromise.then(({ surveys, context }) => callback(surveys, context))
             return
         }
 
-        try {
-            this._isFetchingSurveys = true
-            this._instance._send_request({
-                url: this._instance.requestRouter.endpointFor(
-                    'api',
-                    `/api/surveys/?token=${this._instance.config.token}`
-                ),
-                method: 'GET',
-                timeout: this._instance.config.surveys_request_timeout_ms,
-                callback: (response) => {
-                    this._isFetchingSurveys = false
-                    // Get all callbacks that were waiting for this fetch
-                    const pendingCallbacks = this._pendingFetchCallbacks
-                    this._pendingFetchCallbacks = []
+        // Create a new promise for this fetch that other callers can reuse
+        // We need to assign the promise before starting the request, because
+        // in tests (and potentially in some edge cases) the callback may fire synchronously
+        let resolvePromise: (value: { surveys: Survey[]; context: { isLoaded: boolean; error?: string } }) => void
+        this._getSurveysInFlightPromise = new Promise((resolve) => {
+            resolvePromise = resolve
+        })
 
-                    const statusCode = response.statusCode
-                    if (statusCode !== 200 || !response.json) {
-                        const error = `Surveys API could not be loaded, status: ${statusCode}`
-                        logger.error(error)
-                        const errorContext = { isLoaded: false, error }
-                        callback([], errorContext)
-                        this._callPendingCallbacks(pendingCallbacks, [], errorContext)
-                        return
-                    }
-                    const surveys = response.json.surveys || []
+        this._instance._send_request({
+            url: this._instance.requestRouter.endpointFor('api', `/api/surveys/?token=${this._instance.config.token}`),
+            method: 'GET',
+            timeout: this._instance.config.surveys_request_timeout_ms,
+            callback: (response) => {
+                this._getSurveysInFlightPromise = null
 
-                    const eventOrActionBasedSurveys = surveys.filter(
-                        (survey: Survey) =>
-                            isSurveyRunning(survey) &&
-                            (doesSurveyActivateByEvent(survey) || doesSurveyActivateByAction(survey))
-                    )
+                const statusCode = response.statusCode
+                if (statusCode !== 200 || !response.json) {
+                    const error = `Surveys API could not be loaded, status: ${statusCode}`
+                    logger.error(error)
+                    const context = { isLoaded: false, error }
+                    callback([], context)
+                    resolvePromise({ surveys: [], context })
+                    return
+                }
+                const surveys = response.json.surveys || []
 
-                    if (eventOrActionBasedSurveys.length > 0) {
-                        this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
-                    }
+                const eventOrActionBasedSurveys = surveys.filter(
+                    (survey: Survey) =>
+                        isSurveyRunning(survey) &&
+                        (doesSurveyActivateByEvent(survey) || doesSurveyActivateByAction(survey))
+                )
 
-                    this._instance.persistence?.register({ [SURVEYS]: surveys })
-                    const successContext = { isLoaded: true }
-                    callback(surveys, successContext)
-                    this._callPendingCallbacks(pendingCallbacks, surveys, successContext)
-                },
-            })
-        } catch (e) {
-            this._isFetchingSurveys = false
-            throw e
-        }
+                if (eventOrActionBasedSurveys.length > 0) {
+                    this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
+                }
+
+                this._instance.persistence?.register({ [SURVEYS]: surveys })
+                const context = { isLoaded: true }
+                callback(surveys, context)
+                resolvePromise({ surveys, context })
+            },
+        })
     }
 
     /** Helper method to notify all registered callbacks */
@@ -269,21 +267,6 @@ export class PostHogSurveys {
                 this.getSurveys(callback)
             } catch (error) {
                 logger.error('Error in survey callback', error)
-            }
-        }
-    }
-
-    /** Helper to call pending callbacks with error isolation */
-    private _callPendingCallbacks(
-        callbacks: SurveyCallback[],
-        surveys: Survey[],
-        context: { isLoaded: boolean; error?: string }
-    ): void {
-        for (const cb of callbacks) {
-            try {
-                cb(surveys, context)
-            } catch (error) {
-                logger.error('Error in pending survey callback', error)
             }
         }
     }

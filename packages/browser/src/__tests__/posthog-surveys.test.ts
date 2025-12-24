@@ -523,15 +523,12 @@ describe('posthog-surveys', () => {
                 expect(callback).toHaveBeenCalledTimes(1)
             })
 
-            it('should call onSurveysLoaded callback with surveys even when generateSurveys triggers an async fetch', () => {
+            it('should call onSurveysLoaded callback with surveys even when generateSurveys triggers an async fetch', async () => {
                 // This test reproduces a race condition on first page load:
-                // 1. generateSurveys is called, which starts an async API fetch (sets _isFetchingSurveys = true)
+                // 1. generateSurveys is called, which starts an async API fetch
                 // 2. onSurveysLoaded callbacks fire, which call getSurveys
-                // 3. getSurveys sees _isFetchingSurveys = true and returns empty array with error
-                // 4. Later, the original fetch completes and surveys are rendered
-                //
-                // The expected behavior is that onSurveysLoaded should wait for the
-                // in-flight fetch to complete and return the surveys.
+                // 3. getSurveys reuses the in-flight promise instead of returning an error
+                // 4. When the fetch completes, all callbacks receive the surveys
 
                 const mockSurveys = [{ id: 'test-survey' }]
                 const callback = jest.fn()
@@ -558,9 +555,11 @@ describe('posthog-surveys', () => {
                 surveys.onSurveysLoaded(callback)
                 surveys.loadIfEnabled()
 
-                // At this point, the callback was called but with empty array due to race condition
                 // Let the async fetch complete
                 jest.advanceTimersByTime(100)
+
+                // Flush the promise microtask queue
+                await Promise.resolve()
 
                 // The callback should have been called with the actual surveys, not empty array
                 expect(callback).toHaveBeenCalledWith(mockSurveys, { isLoaded: true })
@@ -612,84 +611,68 @@ describe('posthog-surveys', () => {
                 expect(mockCallback).toHaveBeenCalledWith(mockSurveys, {
                     isLoaded: true,
                 })
-                expect(surveys['_isFetchingSurveys']).toBe(false)
             })
 
-            it('should queue callbacks when a fetch is in progress and call them when fetch completes', () => {
-                // Simulate a fetch already in progress
-                surveys['_isFetchingSurveys'] = true
+            it('should reuse in-flight promise when fetch is in progress', async () => {
+                // Start a fetch that doesn't complete immediately
+                mockPostHog._send_request.mockImplementation(({ callback }) => {
+                    setTimeout(() => {
+                        callback({ statusCode: 200, json: { surveys: mockSurveys } })
+                    }, 100)
+                })
 
-                surveys.getSurveys(mockCallback)
+                const callback1 = jest.fn()
+                const callback2 = jest.fn()
 
-                // Should not make a new API call
-                expect(mockPostHog._send_request).not.toHaveBeenCalled()
-                // Callback should be queued, not immediately called
-                expect(mockCallback).not.toHaveBeenCalled()
-                expect(surveys['_pendingFetchCallbacks']).toContain(mockCallback)
+                // First call starts the fetch
+                surveys.getSurveys(callback1)
+                expect(surveys['_getSurveysInFlightPromise']).not.toBeNull()
+
+                // Second call should reuse the promise, not start a new request
+                surveys.getSurveys(callback2)
+                expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+
+                // Complete the request
+                jest.advanceTimersByTime(100)
+
+                // Flush the promise microtask queue
+                await Promise.resolve()
+
+                // Both callbacks should receive the surveys
+                expect(callback1).toHaveBeenCalledWith(mockSurveys, { isLoaded: true })
+                expect(callback2).toHaveBeenCalledWith(mockSurveys, { isLoaded: true })
+                expect(surveys['_getSurveysInFlightPromise']).toBeNull()
             })
 
-            it('should call all pending callbacks when fetch fails', () => {
-                const pendingCallback = jest.fn()
-
-                mockPostHog._send_request.mockImplementation(({ callback: reqCallback }) => {
-                    // Simulate queued callback before response arrives
-                    surveys['_pendingFetchCallbacks'] = [pendingCallback]
-                    reqCallback({ statusCode: 500 })
-                })
-
-                surveys.getSurveys(mockCallback)
-
-                // Both callbacks should receive the error
-                expect(mockCallback).toHaveBeenCalledWith([], {
-                    isLoaded: false,
-                    error: 'Surveys API could not be loaded, status: 500',
-                })
-                expect(pendingCallback).toHaveBeenCalledWith([], {
-                    isLoaded: false,
-                    error: 'Surveys API could not be loaded, status: 500',
-                })
-                // Queue should be cleared
-                expect(surveys['_pendingFetchCallbacks']).toEqual([])
-            })
-
-            it('should reset _isFetchingSurveys after successful API call', () => {
+            it('should clear promise after successful API call', () => {
                 mockPostHog._send_request.mockImplementation(({ callback }) => {
                     callback({ statusCode: 200, json: { surveys: mockSurveys } })
                 })
 
                 surveys.getSurveys(mockCallback)
 
-                expect(surveys['_isFetchingSurveys']).toBe(false)
+                expect(surveys['_getSurveysInFlightPromise']).toBeNull()
                 expect(mockCallback).toHaveBeenCalledWith(mockSurveys, {
                     isLoaded: true,
                 })
                 expect(mockPostHog.persistence?.register).toHaveBeenCalledWith({ [SURVEYS]: mockSurveys })
             })
 
-            it('should reset _isFetchingSurveys after failed API call (non-200 status)', () => {
+            it('should clear promise after failed API call (non-200 status)', () => {
                 mockPostHog._send_request.mockImplementation(({ callback }) => {
                     callback({ statusCode: 500 })
                 })
 
                 surveys.getSurveys(mockCallback)
 
-                expect(surveys['_isFetchingSurveys']).toBe(false)
+                expect(surveys['_getSurveysInFlightPromise']).toBeNull()
                 expect(mockCallback).toHaveBeenCalledWith([], {
                     isLoaded: false,
                     error: 'Surveys API could not be loaded, status: 500',
                 })
             })
 
-            it('should reset _isFetchingSurveys when API call throws error', () => {
-                mockPostHog._send_request.mockImplementation(() => {
-                    throw new Error('Network error')
-                })
-
-                expect(() => surveys.getSurveys(mockCallback)).toThrow('Network error')
-                expect(surveys['_isFetchingSurveys']).toBe(false)
-            })
-
-            it('should reset _isFetchingSurveys when request times out', () => {
+            it('should clear promise when request times out', () => {
                 // Mock a request that will timeout
                 mockPostHog._send_request.mockImplementation(({ callback }) => {
                     // Simulate a timeout by calling callback with status 0
@@ -698,7 +681,7 @@ describe('posthog-surveys', () => {
 
                 surveys.getSurveys(mockCallback)
 
-                expect(surveys['_isFetchingSurveys']).toBe(false)
+                expect(surveys['_getSurveysInFlightPromise']).toBeNull()
                 expect(mockCallback).toHaveBeenCalledWith([], {
                     isLoaded: false,
                     error: 'Surveys API could not be loaded, status: 0',
@@ -720,13 +703,13 @@ describe('posthog-surveys', () => {
 
                 surveys.getSurveys(mockCallback)
 
-                // Initially the flag should be true
-                expect(surveys['_isFetchingSurveys']).toBe(true)
+                // Initially promise should exist
+                expect(surveys['_getSurveysInFlightPromise']).not.toBeNull()
 
                 // After the response comes in
                 jest.advanceTimersByTime(100)
 
-                expect(surveys['_isFetchingSurveys']).toBe(false)
+                expect(surveys['_getSurveysInFlightPromise']).toBeNull()
                 expect(mockCallback).toHaveBeenCalledWith(delayedSurveys, {
                     isLoaded: true,
                 })
