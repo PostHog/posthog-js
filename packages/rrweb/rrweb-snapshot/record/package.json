@@ -1,0 +1,5 @@
+{
+    "main": "../dist/record.cjs",
+    "module": "../dist/record.js",
+    "types": "../dist/record.d.ts"
+}

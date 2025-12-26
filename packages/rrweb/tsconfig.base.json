@@ -1,0 +1,39 @@
+{
+    "compilerOptions": {
+        "composite": true,
+        /**
+         * @see https://vitejs.dev/guide/features.html#target
+         */
+        "esModuleInterop": true,
+        "target": "ESNext",
+        "module": "ESNext",
+        "moduleResolution": "Node",
+        "rootDir": "src",
+        "outDir": "dist",
+        "lib": ["es2020", "dom"],
+        "sourceMap": true,
+        "skipLibCheck": true,
+        "declaration": true,
+        "verbatimModuleSyntax": true,
+        "strict": true,
+        "removeComments": true,
+        "noImplicitAny": true,
+        "strictNullChecks": true,
+        "preserveConstEnums": true,
+        "strictBindCallApply": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "forceConsistentCasingInFileNames": true,
+        "downlevelIteration": true,
+
+        // needed for vite
+        /**
+         * @see https://vitejs.dev/guide/features.html#isolatedmodules
+         */
+        "isolatedModules": true,
+
+        "types": ["vite/client"]
+    },
+    "exclude": ["**/vite.config.ts", "**/vitest.config.ts", "**/test"],
+    "compileOnSave": true
+}

@@ -1,0 +1,21 @@
+{
+    "extends": "../../tsconfig.base.json",
+    "include": ["src"],
+    "exclude": ["vite.config.ts"],
+    "compilerOptions": {
+        "rootDir": "src",
+        "tsBuildInfoFile": "./tsconfig.tsbuildinfo",
+        "types": ["vite/client", "dom-mediacapture-transform"]
+    },
+    "references": [
+        {
+            "path": "../../rrdom"
+        },
+        {
+            "path": "../../rrweb"
+        },
+        {
+            "path": "../../rrweb-snapshot"
+        }
+    ]
+}

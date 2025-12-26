@@ -160,6 +160,9 @@ jobs:
                     - name: '@posthog/rollup-plugin'
                     - name: '@posthog/types'
                     - name: '@posthog/webpack-plugin'
+                    - name: '@posthog/rrweb'
+                    - name: '@posthog/rrweb-types'
+                    - name: '@posthog/rrweb-plugin-console-record'
 
         steps:
             - name: Checkout repository

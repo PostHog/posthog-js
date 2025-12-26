@@ -68,6 +68,45 @@ jobs:
           build: true
       - run: pnpm test:functional
 
+  rrweb:
+    name: rrweb tests
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          build: false
+
+      - name: Check if rrweb packages changed
+        id: changed
+        run: |
+          CHANGED=$(git diff --name-only origin/main...HEAD | grep -c '^packages/rrweb/' || true)
+          echo "rrweb-changed=$([[ $CHANGED -gt 0 ]] && echo true || echo false)" >> $GITHUB_OUTPUT
+
+      - name: Build rrweb packages
+        if: steps.changed.outputs.rrweb-changed == 'true'
+        run: pnpm turbo run build --filter='./packages/rrweb/**' --concurrency=1
+
+      - name: Install Chrome for Puppeteer
+        if: steps.changed.outputs.rrweb-changed == 'true'
+        run: pnpm --filter @posthog/rrweb exec puppeteer browsers install chrome
+
+      - name: Run rrweb tests
+        if: steps.changed.outputs.rrweb-changed == 'true'
+        run: xvfb-run --server-args="-screen 0 1920x1080x24" pnpm turbo run test --filter='./packages/rrweb/**'
+
+      - name: Upload diff images on failure
+        uses: actions/upload-artifact@v4
+        if: failure() && steps.changed.outputs.rrweb-changed == 'true'
+        with:
+          name: rrweb-image-diff
+          path: packages/rrweb/**/__image_snapshots__/__diff_output__/*.png
+          if-no-files-found: ignore
+
   lint:
     name: Lint
     runs-on: ubuntu-22.04

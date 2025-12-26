@@ -1,0 +1,17 @@
+{
+    "extends": "../tsconfig.base.json",
+    "include": ["src"],
+    "compilerOptions": {
+        "rootDir": "src",
+        "tsBuildInfoFile": "./tsconfig.tsbuildinfo",
+        "types": ["node", "vite/client"]
+    },
+    "references": [
+        {
+            "path": "../rrdom"
+        },
+        {
+            "path": "../types"
+        }
+    ]
+}

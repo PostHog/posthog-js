@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Base64 Image Compression Test</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+        background: #f0f0f0;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      h1 {
+        color: #333;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 10px;
+      }
+      .image-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+        margin-top: 20px;
+      }
+      .image-box {
+        border: 1px solid #ddd;
+        padding: 10px;
+        border-radius: 4px;
+        text-align: center;
+      }
+      .image-box img {
+        max-width: 100%;
+        display: block;
+        margin: 10px auto;
+        border: 1px solid #ccc;
+      }
+      .image-box p {
+        margin: 5px 0;
+        font-size: 14px;
+        color: #666;
+      }
+      #mutation-target {
+        margin-top: 30px;
+        padding: 20px;
+        background: #f9f9f9;
+        border: 2px dashed #ccc;
+        border-radius: 4px;
+        min-height: 100px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Base64 Image Compression Test</h1>
+
+      <div class="image-grid">
+        <div class="image-box">
+          <p><strong>Small PNG (1x1 pixel)</strong></p>
+          <img
+            id="small-image"
+            src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
+            alt="Small red pixel"
+            width="100"
+            height="100"
+            style="image-rendering: pixelated;"
+          />
+          <p>Should be recompressed to WebP</p>
+        </div>
+
+        <div class="image-box">
+          <p><strong>Medium PNG (16x16 gradient)</strong></p>
+          <img
+            id="medium-image"
+            src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAABJSURBVDiNY2AYBaNgFIwCoAAggBhIBP8h+D8DA8N/SjCIjYxBbGQM4oPEkDEMYmNikBgyRjaAZAAQwNRA/0YBqQAggBgYhg4AANm8Awz/4Ll3AAAAAElFTkSuQmCC"
+            alt="Medium gradient"
+            width="100"
+            height="100"
+          />
+          <p>Should be recompressed to WebP</p>
+        </div>
+      </div>
+
+      <div id="mutation-target">
+        <p><em>Mutation target - large image will be added here</em></p>
+      </div>
+    </div>
+
+    <script>
+      // Make these functions available globally for tests
+      window.addLargeImage = function() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 300;
+        canvas.height = 300;
+        const ctx = canvas.getContext('2d');
+
+        // Create a gradient (this compresses well but is still large in PNG format)
+        const gradient = ctx.createLinearGradient(0, 0, 300, 300);
+        gradient.addColorStop(0, '#ff0000');
+        gradient.addColorStop(0.5, '#00ff00');
+        gradient.addColorStop(1, '#0000ff');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 300, 300);
+
+        // Add text
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Dynamically Added', 150, 140);
+        ctx.fillText('Large Image', 150, 170);
+
+        const img = document.createElement('img');
+        img.id = 'dynamic-large-image';
+        img.src = canvas.toDataURL('image/png'); // Large PNG
+        img.alt = 'Dynamically added large image';
+        img.style.maxWidth = '100%';
+        img.style.border = '2px solid #007bff';
+        img.style.borderRadius = '4px';
+
+        const target = document.getElementById('mutation-target');
+        target.innerHTML = '<p><strong>Large image added (mutation triggered)</strong></p>';
+        target.appendChild(img);
+      };
+
+      window.addHugeImage = function() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 500;
+        canvas.height = 500;
+        const ctx = canvas.getContext('2d');
+
+        // Simple pattern to keep file size down but still trigger replacement
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, 500, 500);
+        ctx.fillStyle = 'yellow';
+        ctx.font = 'bold 48px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('TOO LARGE', 250, 250);
+        ctx.fillText('REPLACED!', 250, 310);
+
+        const img = document.createElement('img');
+        img.id = 'dynamic-huge-image';
+        img.src = canvas.toDataURL('image/png');
+        img.alt = 'Huge image that should be replaced';
+        img.style.maxWidth = '100%';
+        img.style.border = '2px solid #dc3545';
+        img.style.borderRadius = '4px';
+
+        const target = document.getElementById('mutation-target');
+        target.innerHTML += '<p><strong>Huge image (should show stripes)</strong></p>';
+        target.appendChild(img);
+      };
+    </script>
+  </body>
+</html>
