@@ -1,6 +1,7 @@
 import { extend } from './utils'
 import { PersistentStore, Properties } from './types'
 import {
+    DEVICE_ID,
     DISTINCT_ID,
     ENABLE_PERSON_PROCESSING,
     INITIAL_PERSON_INFO,
@@ -259,6 +260,7 @@ export const localStore: PersistentStore = {
 // This solves issues with cookies having too much data in them causing headers too large
 // Also makes sure we don't have to send a ton of data to the server
 const COOKIE_PERSISTED_PROPERTIES = [
+    DEVICE_ID,
     DISTINCT_ID,
     SESSION_ID,
     SESSION_RECORDING_IS_SAMPLED,
