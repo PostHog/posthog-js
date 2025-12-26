@@ -1,0 +1,87 @@
+{
+    "name": "@posthog/rrweb-snapshot",
+    "version": "0.0.34",
+    "description": "rrweb's component to take a snapshot of DOM, aka DOM serializer",
+    "scripts": {
+        "retest": "vitest run",
+        "test": "pnpm build && vitest run",
+        "test:watch": "vitest watch",
+        "retest:update": "vitest run --update",
+        "test:update": "pnpm build && vitest run --update",
+        "bench": "vite build && vitest bench",
+        "dev": "vite build --watch",
+        "build": "pnpm turbo prepublish",
+        "check-types": "tsc --noEmit",
+        "prepublish": "pnpm check-types && vite build",
+        "lint": "pnpm eslint src"
+    },
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/PostHog/posthog-rrweb.git"
+    },
+    "main": "./dist/rrweb-snapshot.cjs",
+    "module": "./dist/rrweb-snapshot.js",
+    "unpkg": "./dist/rrweb-snapshot.umd.cjs",
+    "typings": "dist/rrweb-snapshot.d.ts",
+    "exports": {
+        ".": {
+            "import": {
+                "types": "./dist/rrweb-snapshot.d.ts",
+                "default": "./dist/rrweb-snapshot.js"
+            },
+            "require": {
+                "types": "./dist/rrweb-snapshot.d.cts",
+                "default": "./dist/rrweb-snapshot.cjs"
+            }
+        },
+        "./record": {
+            "import": {
+                "types": "./dist/record.d.ts",
+                "default": "./dist/record.js"
+            },
+            "require": {
+                "types": "./dist/record.d.cts",
+                "default": "./dist/record.cjs"
+            }
+        },
+        "./replay": {
+            "import": {
+                "types": "./dist/replay.d.ts",
+                "default": "./dist/replay.js"
+            },
+            "require": {
+                "types": "./dist/replay.d.cts",
+                "default": "./dist/replay.cjs"
+            }
+        }
+    },
+    "files": [
+        "dist",
+        "package.json"
+    ],
+    "author": "yanzhen@smartx.com",
+    "license": "MIT",
+    "devDependencies": {
+        "@posthog/rrweb-types": "workspace:*",
+        "@posthog/rrweb-utils": "workspace:*",
+        "@types/jsdom": "^20.0.0",
+        "esbuild": "^0.25.0",
+        "happy-dom": "^15.11.7",
+        "esbuild-plugin-umd-wrapper": "^3.0.0",
+        "jsdom": "^22.1.0",
+        "@types/node": "^18.15.11",
+        "puppeteer": "^23.11.1",
+        "ts-node": "^7.0.1",
+        "tslib": "^1.9.3",
+        "typescript": "catalog:",
+        "vite": "^6.2.0",
+        "vite-plugin-dts": "^4.5.4",
+        "vitest": "^1.4.0"
+    },
+    "dependencies": {
+        "@types/postcss-safe-parser": "^5.0.4",
+        "postcss": "^8.5.1",
+        "postcss-safe-parser": "^7.0.1"
+    }
+}

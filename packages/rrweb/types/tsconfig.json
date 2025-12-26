@@ -1,0 +1,11 @@
+{
+    "extends": "../tsconfig.base.json",
+    "include": ["src"],
+    "exclude": ["vite.config.ts"],
+    "compilerOptions": {
+        "rootDir": "src",
+        "tsBuildInfoFile": "./tsconfig.tsbuildinfo",
+        "types": ["vite/client"]
+    },
+    "references": []
+}
