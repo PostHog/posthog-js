@@ -7,6 +7,7 @@
 // This key is deprecated, but we want to check for it to see whether aliasing is allowed.
 export const PEOPLE_DISTINCT_ID_KEY = '$people_distinct_id'
 export const DISTINCT_ID = 'distinct_id'
+export const DEVICE_ID = '$device_id'
 export const ALIAS_ID_KEY = '__alias'
 export const CAMPAIGN_IDS_KEY = '__cmpns'
 export const EVENT_TIMERS_KEY = '__timers'
