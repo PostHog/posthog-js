@@ -1,0 +1,54 @@
+{
+    "name": "@posthog/rrweb-replay",
+    "version": "0.0.19",
+    "scripts": {
+        "dev": "vite build --watch",
+        "build": "pnpm turbo run prepublish --concurrency=1",
+        "test": "vitest run",
+        "test:watch": "vitest watch",
+        "check-types": "tsc -noEmit",
+        "prepublish": "tsc -noEmit && vite build",
+        "lint": "pnpm eslint src/**/*.ts"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/PostHog/posthog-rrweb.git"
+    },
+    "license": "MIT",
+    "type": "module",
+    "main": "./dist/rrweb-replay.cjs",
+    "module": "./dist/rrweb-replay.js",
+    "unpkg": "./dist/rrweb-replay.umd.cjs",
+    "typings": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "import": {
+                "types": "./dist/index.d.ts",
+                "default": "./dist/rrweb-replay.js"
+            },
+            "require": {
+                "types": "./dist/index.d.cts",
+                "default": "./dist/rrweb-replay.cjs"
+            }
+        },
+        "./dist/style.css": "./dist/style.css"
+    },
+    "files": [
+        "dist",
+        "package.json"
+    ],
+    "devDependencies": {
+        "puppeteer": "^23.11.1",
+        "vite": "^6.2.0",
+        "vite-plugin-dts": "3.9.1",
+        "vitest": "^1.4.0",
+        "typescript": "^5.4.5"
+    },
+    "dependencies": {
+        "@posthog/rrweb-types": "workspace:*",
+        "@posthog/rrweb": "workspace:*"
+    },
+    "browserslist": [
+        "supports es6-class"
+    ]
+}
