@@ -40,15 +40,20 @@ export function OpenTextQuestion({
   onSubmit: (text: string) => void
 }): JSX.Element {
   const [text, setText] = useState('')
-  const [validationError, setValidationError] = useState<string | null>(null)
+  const [showError, setShowError] = useState(false)
+
+  // Memoize validation error to avoid recalculating on every render
+  const validationError = useMemo(
+    () => getValidationError(text, question.validation, question.optional),
+    [text, question.validation, question.optional]
+  )
 
   const handleSubmit = () => {
-    const error = getValidationError(text, question.validation, question.optional)
-    if (error) {
-      setValidationError(error)
+    if (validationError) {
+      setShowError(true)
       return
     }
-    setValidationError(null)
+    setShowError(false)
     onSubmit(text.trim())
   }
 
@@ -67,7 +72,7 @@ export function OpenTextQuestion({
             {
               backgroundColor: appearance.inputBackground,
               color: appearance.inputTextColor ?? getContrastingTextColor(appearance.inputBackground),
-              borderColor: validationError ? '#dc3545' : appearance.borderColor,
+              borderColor: showError && validationError ? '#dc3545' : appearance.borderColor,
             },
           ]}
           multiline
@@ -82,17 +87,17 @@ export function OpenTextQuestion({
           }
           onChangeText={(newText) => {
             setText(newText)
-            if (validationError) {
-              setValidationError(null)
+            if (showError) {
+              setShowError(false)
             }
           }}
           value={text}
         />
-        {validationError && <Text style={styles.validationError}>{validationError}</Text>}
+        {showError && validationError && <Text style={styles.validationError}>{validationError}</Text>}
       </View>
       <BottomSection
         text={question.buttonText ?? appearance.submitButtonText}
-        submitDisabled={!!getValidationError(text, question.validation, question.optional)}
+        submitDisabled={!!validationError}
         appearance={appearance}
         onSubmit={handleSubmit}
       />
