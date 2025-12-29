@@ -2623,4 +2623,65 @@ describe('updateFlags', () => {
 
         expect(posthog.isFeatureEnabled('test-flag')).toBe(true)
     })
+
+    it('should not make any network requests', async () => {
+        const posthog = await createPosthogInstance()
+        const sendRequestSpy = jest.spyOn(posthog, '_send_request')
+
+        posthog.updateFlags({ 'test-flag': true })
+
+        expect(sendRequestSpy).not.toHaveBeenCalled()
+    })
+
+    it('should handle empty flags object', async () => {
+        const posthog = await createPosthogInstance()
+
+        // Set initial flags
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': 'variant-1' })
+        expect(posthog.getFeatureFlag('flag-a')).toBe(true)
+
+        // Update with empty object - should clear all flags
+        posthog.updateFlags({})
+
+        expect(posthog.getFeatureFlag('flag-a')).toBe(undefined)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(undefined)
+        expect(posthog.featureFlags.getFlags()).toEqual([])
+    })
+
+    it('should persist flags to storage', async () => {
+        const posthog = await createPosthogInstance()
+
+        posthog.updateFlags(
+            { 'persisted-flag': true, 'variant-flag': 'control' },
+            { 'persisted-flag': { data: 'test' } }
+        )
+
+        // Verify persistence was updated with correct data
+        expect(posthog.persistence?.props.$feature_flag_details).toEqual({
+            'persisted-flag': {
+                key: 'persisted-flag',
+                enabled: true,
+                variant: undefined,
+                reason: undefined,
+                metadata: {
+                    id: 0,
+                    version: undefined,
+                    description: undefined,
+                    payload: { data: 'test' },
+                },
+            },
+            'variant-flag': {
+                key: 'variant-flag',
+                enabled: true,
+                variant: 'control',
+                reason: undefined,
+                metadata: undefined,
+            },
+        })
+        expect(posthog.persistence?.props.$enabled_feature_flags).toEqual({
+            'persisted-flag': true,
+            'variant-flag': 'control',
+        })
+        expect(posthog.persistence?.props.$active_feature_flags).toEqual(['persisted-flag', 'variant-flag'])
+    })
 })
