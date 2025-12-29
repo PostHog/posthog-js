@@ -356,6 +356,19 @@ export enum SurveyQuestionDescriptionContentType {
   Text = 'text',
 }
 
+// Survey validation types
+export enum SurveyValidationType {
+  MinLength = 'min_length',
+  MaxLength = 'max_length',
+  Email = 'email',
+}
+
+export interface SurveyValidationRule {
+  type: SurveyValidationType
+  value?: number
+  errorMessage?: string
+}
+
 type SurveyQuestionBase = {
   question: string
   id: string
@@ -365,6 +378,7 @@ type SurveyQuestionBase = {
   buttonText?: string
   originalQuestionIndex: number
   branching?: NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching
+  validation?: SurveyValidationRule[]
 }
 
 export type BasicSurveyQuestion = SurveyQuestionBase & {
