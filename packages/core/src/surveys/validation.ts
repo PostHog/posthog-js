@@ -2,13 +2,13 @@ import { SurveyValidationRule, SurveyValidationType } from '../types'
 
 /**
  * Validates a survey open text response.
- * Returns an error message string if invalid, or empty string if valid.
+ * Returns an error message string if invalid, or false if valid.
  */
 export function getValidationError(
   value: string,
   rules: SurveyValidationRule[] | undefined,
   optional: boolean | undefined
-): string {
+): string | false {
   const trimmed = value.trim()
 
   // Required check (with whitespace fix) - applies to ALL required questions
@@ -18,7 +18,7 @@ export function getValidationError(
 
   // If optional and empty, skip other validations
   if (trimmed === '') {
-    return ''
+    return false
   }
 
   // Apply validation rules (only if configured)
@@ -40,23 +40,17 @@ export function getValidationError(
     }
   }
 
-  return '' // Valid
+  return false
 }
 
 /**
- * Helper to extract minLength value from validation rules
+ * Helper to extract a length value from validation rules by type
  */
-export function getMinLengthFromRules(rules: SurveyValidationRule[] | undefined): number | undefined {
+export function getLengthFromRules(
+  rules: SurveyValidationRule[] | undefined,
+  type: SurveyValidationType
+): number | undefined {
   if (!rules) return undefined
-  const rule = rules.find((r) => r.type === SurveyValidationType.MinLength)
-  return rule?.value
-}
-
-/**
- * Helper to extract maxLength value from validation rules
- */
-export function getMaxLengthFromRules(rules: SurveyValidationRule[] | undefined): number | undefined {
-  if (!rules) return undefined
-  const rule = rules.find((r) => r.type === SurveyValidationType.MaxLength)
+  const rule = rules.find((r) => r.type === type)
   return rule?.value
 }

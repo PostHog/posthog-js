@@ -72,7 +72,7 @@ export function OpenTextQuestion({
             {
               backgroundColor: appearance.inputBackground,
               color: appearance.inputTextColor ?? getContrastingTextColor(appearance.inputBackground),
-              borderColor: showError && validationError ? '#dc3545' : appearance.borderColor,
+              borderColor: appearance.borderColor,
             },
           ]}
           multiline
@@ -93,7 +93,6 @@ export function OpenTextQuestion({
           }}
           value={text}
         />
-        {showError && validationError && <Text style={styles.validationError}>{validationError}</Text>}
       </View>
       <BottomSection
         text={question.buttonText ?? appearance.submitButtonText}
@@ -101,6 +100,7 @@ export function OpenTextQuestion({
         appearance={appearance}
         onSubmit={handleSubmit}
       />
+      {showError && validationError && <Text style={styles.validationError}>{validationError}</Text>}
     </View>
   )
 }

@@ -14,8 +14,8 @@ import {
     isNumber,
     isString,
     getValidationError,
-    getMinLengthFromRules,
-    getMaxLengthFromRules,
+    getLengthFromRules,
+    SurveyValidationType,
 } from '@posthog/core'
 import { dissatisfiedEmoji, neutralEmoji, satisfiedEmoji, veryDissatisfiedEmoji, verySatisfiedEmoji } from '../icons'
 import { getDisplayOrderChoices, useSurveyContext } from '../surveys-extension-utils'
@@ -97,6 +97,7 @@ export function OpenTextQuestion({
         }
         return ''
     })
+    const [showError, setShowError] = useState(false)
 
     useEffect(() => {
         setTimeout(() => {
@@ -114,23 +115,20 @@ export function OpenTextQuestion({
     }, [text, question.validation, question.optional])
 
     const handleSubmit = () => {
-        // Validate before submitting
         if (validationError) {
-            inputRef.current?.setCustomValidity(validationError)
-            inputRef.current?.reportValidity()
+            setShowError(true)
             return
         }
-        inputRef.current?.setCustomValidity('')
+        setShowError(false)
         onSubmit(text.trim())
     }
 
     const handlePreviewSubmit = () => {
         if (validationError) {
-            inputRef.current?.setCustomValidity(validationError)
-            inputRef.current?.reportValidity()
+            setShowError(true)
             return
         }
-        inputRef.current?.setCustomValidity('')
+        setShowError(false)
         onPreviewSubmit(text.trim())
     }
 
@@ -143,12 +141,13 @@ export function OpenTextQuestion({
                     id={htmlFor}
                     rows={4}
                     placeholder={appearance?.placeholder}
-                    minLength={getMinLengthFromRules(question.validation)}
-                    maxLength={getMaxLengthFromRules(question.validation)}
+                    minLength={getLengthFromRules(question.validation, SurveyValidationType.MinLength)}
+                    maxLength={getLengthFromRules(question.validation, SurveyValidationType.MaxLength)}
                     onInput={(e) => {
                         setText(e.currentTarget.value)
-                        // Clear custom validity when user types
-                        e.currentTarget.setCustomValidity('')
+                        if (showError) {
+                            setShowError(false)
+                        }
                         e.stopPropagation()
                     }}
                     onKeyDown={(e) => {
@@ -164,6 +163,7 @@ export function OpenTextQuestion({
                 onSubmit={handleSubmit}
                 onPreviewSubmit={handlePreviewSubmit}
             />
+            {showError && validationError && <div className="validation-error">{validationError}</div>}
         </Fragment>
     )
 }

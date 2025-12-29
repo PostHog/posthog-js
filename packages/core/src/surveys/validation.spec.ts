@@ -1,4 +1,4 @@
-import { getValidationError, getMinLengthFromRules, getMaxLengthFromRules } from './validation'
+import { getValidationError, getLengthFromRules } from './validation'
 import { SurveyValidationType, SurveyValidationRule } from '../types'
 
 describe('getValidationError', () => {
@@ -12,26 +12,26 @@ describe('getValidationError', () => {
       expect(getValidationError('\t\n', undefined, false)).toBe('This field is required')
     })
 
-    it('returns empty for valid content when required', () => {
-      expect(getValidationError('hello', undefined, false)).toBe('')
+    it('returns false for valid content when required', () => {
+      expect(getValidationError('hello', undefined, false)).toBe(false)
     })
 
-    it('returns empty for empty when optional', () => {
-      expect(getValidationError('', undefined, true)).toBe('')
+    it('returns false for empty when optional', () => {
+      expect(getValidationError('', undefined, true)).toBe(false)
     })
 
-    it('returns empty for whitespace when optional', () => {
-      expect(getValidationError('   ', undefined, true)).toBe('')
+    it('returns false for whitespace when optional', () => {
+      expect(getValidationError('   ', undefined, true)).toBe(false)
     })
   })
 
   describe('backwards compat - no validation rules', () => {
     it('works when validation is undefined', () => {
-      expect(getValidationError('hello', undefined, false)).toBe('')
+      expect(getValidationError('hello', undefined, false)).toBe(false)
     })
 
     it('works when validation is empty array', () => {
-      expect(getValidationError('hello', [], false)).toBe('')
+      expect(getValidationError('hello', [], false)).toBe(false)
     })
   })
 
@@ -42,12 +42,12 @@ describe('getValidationError', () => {
       expect(getValidationError('abc', rules, false)).toBe('Please enter at least 5 characters')
     })
 
-    it('returns empty when exact length', () => {
-      expect(getValidationError('abcde', rules, false)).toBe('')
+    it('returns false when exact length', () => {
+      expect(getValidationError('abcde', rules, false)).toBe(false)
     })
 
-    it('returns empty when longer than min', () => {
-      expect(getValidationError('abcdefgh', rules, false)).toBe('')
+    it('returns false when longer than min', () => {
+      expect(getValidationError('abcdefgh', rules, false)).toBe(false)
     })
 
     it('uses custom error message if provided', () => {
@@ -65,12 +65,12 @@ describe('getValidationError', () => {
       expect(getValidationError('12345678901', rules, false)).toBe('Please enter no more than 10 characters')
     })
 
-    it('returns empty when exact length', () => {
-      expect(getValidationError('1234567890', rules, false)).toBe('')
+    it('returns false when exact length', () => {
+      expect(getValidationError('1234567890', rules, false)).toBe(false)
     })
 
-    it('returns empty when shorter than max', () => {
-      expect(getValidationError('12345', rules, false)).toBe('')
+    it('returns false when shorter than max', () => {
+      expect(getValidationError('12345', rules, false)).toBe(false)
     })
   })
 
@@ -89,31 +89,25 @@ describe('getValidationError', () => {
     })
 
     it('passes when in range', () => {
-      expect(getValidationError('1234567', rules, false)).toBe('')
+      expect(getValidationError('1234567', rules, false)).toBe(false)
     })
   })
 })
 
-describe('getMinLengthFromRules', () => {
+describe('getLengthFromRules', () => {
   it('returns undefined when no rules', () => {
-    expect(getMinLengthFromRules(undefined)).toBeUndefined()
+    expect(getLengthFromRules(undefined, SurveyValidationType.MinLength)).toBeUndefined()
   })
 
-  it('returns undefined when no minLength rule', () => {
-    expect(getMinLengthFromRules([{ type: SurveyValidationType.MaxLength, value: 10 }])).toBeUndefined()
+  it('returns undefined when requested type not present', () => {
+    expect(getLengthFromRules([{ type: SurveyValidationType.MaxLength, value: 10 }], SurveyValidationType.MinLength)).toBeUndefined()
   })
 
-  it('returns value when minLength rule exists', () => {
-    expect(getMinLengthFromRules([{ type: SurveyValidationType.MinLength, value: 5 }])).toBe(5)
-  })
-})
-
-describe('getMaxLengthFromRules', () => {
-  it('returns undefined when no rules', () => {
-    expect(getMaxLengthFromRules(undefined)).toBeUndefined()
+  it('returns minLength value when present', () => {
+    expect(getLengthFromRules([{ type: SurveyValidationType.MinLength, value: 5 }], SurveyValidationType.MinLength)).toBe(5)
   })
 
-  it('returns value when maxLength rule exists', () => {
-    expect(getMaxLengthFromRules([{ type: SurveyValidationType.MaxLength, value: 100 }])).toBe(100)
+  it('returns maxLength value when present', () => {
+    expect(getLengthFromRules([{ type: SurveyValidationType.MaxLength, value: 100 }], SurveyValidationType.MaxLength)).toBe(100)
   })
 })

@@ -7,21 +7,21 @@ describe('Survey Validation in React Native', () => {
     })
 
     it('accepts valid content for required fields', () => {
-      expect(getValidationError('hello', undefined, false)).toBe('')
+      expect(getValidationError('hello', undefined, false)).toBe(false)
     })
 
     it('accepts empty for optional fields', () => {
-      expect(getValidationError('', undefined, true)).toBe('')
+      expect(getValidationError('', undefined, true)).toBe(false)
     })
   })
 
   describe('backwards compatibility', () => {
     it('handles surveys without validation field', () => {
-      expect(getValidationError('hello', undefined, false)).toBe('')
+      expect(getValidationError('hello', undefined, false)).toBe(false)
     })
 
     it('handles empty validation array', () => {
-      expect(getValidationError('hello', [], false)).toBe('')
+      expect(getValidationError('hello', [], false)).toBe(false)
     })
   })
 
@@ -29,13 +29,13 @@ describe('Survey Validation in React Native', () => {
     it('validates minLength', () => {
       const rules = [{ type: SurveyValidationType.MinLength, value: 5 }]
       expect(getValidationError('abc', rules, false)).toContain('at least 5')
-      expect(getValidationError('abcdef', rules, false)).toBe('')
+      expect(getValidationError('abcdef', rules, false)).toBe(false)
     })
 
     it('validates maxLength', () => {
       const rules = [{ type: SurveyValidationType.MaxLength, value: 10 }]
       expect(getValidationError('12345678901', rules, false)).toContain('no more than 10')
-      expect(getValidationError('12345', rules, false)).toBe('')
+      expect(getValidationError('12345', rules, false)).toBe(false)
     })
   })
 })

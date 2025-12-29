@@ -558,6 +558,14 @@
     }
 }
 
+/* Validation Error */
+.validation-error {
+    color: #dc3545;
+    font-size: 13px;
+    text-align: center;
+    padding: 8px 0 0;
+}
+
 /* Cancel Button (Circular X button) */
 .form-cancel {
     background: white;
