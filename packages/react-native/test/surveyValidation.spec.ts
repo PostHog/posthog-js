@@ -37,11 +37,5 @@ describe('Survey Validation in React Native', () => {
       expect(getValidationError('12345678901', rules, false)).toContain('no more than 10')
       expect(getValidationError('12345', rules, false)).toBe('')
     })
-
-    it('validates email', () => {
-      const rules = [{ type: SurveyValidationType.Email }]
-      expect(getValidationError('invalid', rules, false)).toContain('valid email')
-      expect(getValidationError('test@example.com', rules, false)).toBe('')
-    })
   })
 })

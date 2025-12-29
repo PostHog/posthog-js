@@ -74,79 +74,6 @@ describe('getValidationError', () => {
     })
   })
 
-  describe('email validation', () => {
-    const rules: SurveyValidationRule[] = [{ type: SurveyValidationType.Email }]
-
-    it('returns error for plain text', () => {
-      expect(getValidationError('notanemail', rules, false)).toBe('Please enter a valid email address')
-    })
-
-    it('returns error for missing domain', () => {
-      expect(getValidationError('test@', rules, false)).toBe('Please enter a valid email address')
-    })
-
-    it('returns error for missing TLD', () => {
-      expect(getValidationError('test@example', rules, false)).toBe('Please enter a valid email address')
-    })
-
-    it('returns error for @ at start', () => {
-      expect(getValidationError('@example.com', rules, false)).toBe('Please enter a valid email address')
-    })
-
-    it('returns error for multiple @', () => {
-      expect(getValidationError('test@@example.com', rules, false)).toBe('Please enter a valid email address')
-      expect(getValidationError('test@test@example.com', rules, false)).toBe('Please enter a valid email address')
-    })
-
-    it('returns error for dot at start of domain', () => {
-      expect(getValidationError('test@.example.com', rules, false)).toBe('Please enter a valid email address')
-    })
-
-    it('returns error for dot at end of domain', () => {
-      expect(getValidationError('test@example.', rules, false)).toBe('Please enter a valid email address')
-    })
-
-    it('returns empty for valid email', () => {
-      expect(getValidationError('test@example.com', rules, false)).toBe('')
-    })
-
-    it('returns empty for valid email with subdomain', () => {
-      expect(getValidationError('test@mail.example.com', rules, false)).toBe('')
-    })
-
-    it('returns empty for email with plus addressing', () => {
-      expect(getValidationError('test+tag@example.com', rules, false)).toBe('')
-    })
-
-    it('handles potentially ReDoS patterns quickly (linear time)', () => {
-      // This pattern would cause exponential backtracking with vulnerable regex
-      // Using linear-time check ensures this completes instantly
-      // The pattern !@!.!.!.!. would actually pass (has @, local part, and dots in domain)
-      // Test with a pattern that would hang with backtracking but fail validation
-      const maliciousInput = '!'.repeat(100) + '@'
-      expect(getValidationError(maliciousInput, rules, false)).toBe('Please enter a valid email address')
-    })
-  })
-
-  describe('combined validators', () => {
-    const rules: SurveyValidationRule[] = [
-      { type: SurveyValidationType.MinLength, value: 5 },
-      { type: SurveyValidationType.Email },
-    ]
-
-    it('fails minLength first (order matters)', () => {
-      expect(getValidationError('a@b', rules, false)).toBe('Please enter at least 5 characters')
-    })
-
-    it('fails email after passing length', () => {
-      expect(getValidationError('notanemail', rules, false)).toBe('Please enter a valid email address')
-    })
-
-    it('passes when both rules satisfied', () => {
-      expect(getValidationError('test@example.com', rules, false)).toBe('')
-    })
-  })
-
   describe('minLength + maxLength combined', () => {
     const rules: SurveyValidationRule[] = [
       { type: SurveyValidationType.MinLength, value: 5 },
@@ -173,7 +100,7 @@ describe('getMinLengthFromRules', () => {
   })
 
   it('returns undefined when no minLength rule', () => {
-    expect(getMinLengthFromRules([{ type: SurveyValidationType.Email }])).toBeUndefined()
+    expect(getMinLengthFromRules([{ type: SurveyValidationType.MaxLength, value: 10 }])).toBeUndefined()
   })
 
   it('returns value when minLength rule exists', () => {

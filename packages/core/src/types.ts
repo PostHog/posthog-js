@@ -360,7 +360,6 @@ export enum SurveyQuestionDescriptionContentType {
 export enum SurveyValidationType {
   MinLength = 'min_length',
   MaxLength = 'max_length',
-  Email = 'email',
 }
 
 export interface SurveyValidationRule {
