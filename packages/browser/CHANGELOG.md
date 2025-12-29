@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.310.2
+
+### Patch Changes
+
+- [#2812](https://github.com/PostHog/posthog-js/pull/2812) [`ad42eae`](https://github.com/PostHog/posthog-js/commit/ad42eaea16305719e93ea98e75b6ee39eff38f30) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix(surveys): queue callbacks when fetch is in progress instead of returning error
+  (2025-12-29)
+
+- [#2814](https://github.com/PostHog/posthog-js/pull/2814) [`3da6a4c`](https://github.com/PostHog/posthog-js/commit/3da6a4c739530db69d185d064f9d784c73cf404e) Thanks [@jurajmajerik](https://github.com/jurajmajerik)! - Persist $device_id to cookies so it survives localStorage clears
+  (2025-12-29)
+
 ## 1.310.1
 
 ### Patch Changes
