@@ -4,7 +4,7 @@ import { filterActiveFeatureFlags, parseFlagsResponse, PostHogFeatureFlags } fro
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { PostHogConfig } from '../types'
-import { createMockPostHog } from './helpers/posthog-instance'
+import { createMockPostHog, createPosthogInstance } from './helpers/posthog-instance'
 
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
@@ -2500,5 +2500,188 @@ describe('getRemoteConfigPayload', () => {
                 })
             )
         })
+    })
+})
+
+describe('updateFlags', () => {
+    beforeEach(() => {
+        jest.spyOn(window.console, 'warn').mockImplementation()
+    })
+
+    it('should update feature flags without making a network request', async () => {
+        const posthog = await createPosthogInstance()
+
+        posthog.updateFlags({
+            'test-flag': true,
+            'variant-flag': 'control',
+        })
+
+        expect(posthog.getFeatureFlag('test-flag')).toBe(true)
+        expect(posthog.getFeatureFlag('variant-flag')).toBe('control')
+        expect(posthog.isFeatureEnabled('test-flag')).toBe(true)
+    })
+
+    it('should update feature flags with payloads', async () => {
+        const posthog = await createPosthogInstance()
+
+        posthog.updateFlags({ 'test-flag': true }, { 'test-flag': { some: 'payload' } })
+
+        expect(posthog.getFeatureFlagPayload('test-flag')).toEqual({ some: 'payload' })
+    })
+
+    // Note: Falsy payload values (null, 0, false, '') are filtered out by normalizeFlagsResponse
+    // This is consistent with existing SDK behavior for all feature flag payloads
+
+    it('should fire onFeatureFlags callbacks when flags are updated', async () => {
+        const posthog = await createPosthogInstance()
+        const callback = jest.fn()
+        posthog.onFeatureFlags(callback)
+
+        posthog.updateFlags({ 'new-flag': true })
+
+        expect(callback).toHaveBeenCalledWith(['new-flag'], { 'new-flag': true }, { errorsLoading: undefined })
+    })
+
+    it('should replace existing flags by default', async () => {
+        const posthog = await createPosthogInstance()
+
+        // Set initial flags
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': true })
+
+        expect(posthog.getFeatureFlag('flag-a')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(true)
+
+        // Update without merge - should replace
+        posthog.updateFlags({ 'flag-c': true })
+
+        expect(posthog.getFeatureFlag('flag-c')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-a')).toBe(undefined)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(undefined)
+    })
+
+    it('should merge flags when merge option is true', async () => {
+        const posthog = await createPosthogInstance()
+
+        // Set initial flags
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': true })
+
+        expect(posthog.getFeatureFlag('flag-a')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(true)
+
+        // Update with merge - should keep existing flags
+        posthog.updateFlags({ 'flag-c': true }, undefined, { merge: true })
+
+        expect(posthog.getFeatureFlag('flag-a')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-c')).toBe(true)
+    })
+
+    it('should merge payloads when merge option is true', async () => {
+        const posthog = await createPosthogInstance()
+
+        // Set initial flags with payloads
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': true }, { 'flag-a': { data: 'a' }, 'flag-b': { data: 'b' } })
+
+        expect(posthog.getFeatureFlagPayload('flag-a')).toEqual({ data: 'a' })
+        expect(posthog.getFeatureFlagPayload('flag-b')).toEqual({ data: 'b' })
+
+        // Update with merge - should keep existing payloads
+        posthog.updateFlags({ 'flag-c': true }, { 'flag-c': { data: 'c' } }, { merge: true })
+
+        expect(posthog.getFeatureFlagPayload('flag-a')).toEqual({ data: 'a' })
+        expect(posthog.getFeatureFlagPayload('flag-b')).toEqual({ data: 'b' })
+        expect(posthog.getFeatureFlagPayload('flag-c')).toEqual({ data: 'c' })
+    })
+
+    it('should override existing flag values when merging', async () => {
+        const posthog = await createPosthogInstance()
+
+        // Set initial flags
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': 'variant-1' })
+
+        // Update flag-a with merge - should override just flag-a
+        posthog.updateFlags({ 'flag-a': false }, undefined, { merge: true })
+
+        expect(posthog.getFeatureFlag('flag-a')).toBe(false)
+        expect(posthog.getFeatureFlag('flag-b')).toBe('variant-1')
+    })
+
+    it('should mark flags as loaded after update', async () => {
+        const posthog = await createPosthogInstance()
+
+        posthog.updateFlags({ 'test-flag': true })
+
+        expect(posthog.featureFlags._hasLoadedFlags).toBe(true)
+    })
+
+    it('should work with advanced_disable_flags enabled', async () => {
+        const posthog = await createPosthogInstance(undefined, {
+            advanced_disable_flags: true,
+        })
+
+        posthog.updateFlags({ 'test-flag': true })
+
+        expect(posthog.isFeatureEnabled('test-flag')).toBe(true)
+    })
+
+    it('should not make any network requests', async () => {
+        const posthog = await createPosthogInstance()
+        const sendRequestSpy = jest.spyOn(posthog, '_send_request')
+
+        posthog.updateFlags({ 'test-flag': true })
+
+        expect(sendRequestSpy).not.toHaveBeenCalled()
+    })
+
+    it('should handle empty flags object', async () => {
+        const posthog = await createPosthogInstance()
+
+        // Set initial flags
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': 'variant-1' })
+        expect(posthog.getFeatureFlag('flag-a')).toBe(true)
+
+        // Update with empty object - should clear all flags
+        posthog.updateFlags({})
+
+        expect(posthog.getFeatureFlag('flag-a')).toBe(undefined)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(undefined)
+        expect(posthog.featureFlags.getFlags()).toEqual([])
+    })
+
+    it('should persist flags to storage', async () => {
+        const posthog = await createPosthogInstance()
+
+        posthog.updateFlags(
+            { 'persisted-flag': true, 'variant-flag': 'control' },
+            { 'persisted-flag': { data: 'test' } }
+        )
+
+        // Verify persistence was updated with correct data
+        expect(posthog.persistence?.props.$feature_flag_details).toEqual({
+            'persisted-flag': {
+                key: 'persisted-flag',
+                enabled: true,
+                variant: undefined,
+                reason: undefined,
+                metadata: {
+                    id: 0,
+                    version: undefined,
+                    description: undefined,
+                    payload: { data: 'test' },
+                },
+            },
+            'variant-flag': {
+                key: 'variant-flag',
+                enabled: true,
+                variant: 'control',
+                reason: undefined,
+                metadata: undefined,
+            },
+        })
+        expect(posthog.persistence?.props.$enabled_feature_flags).toEqual({
+            'persisted-flag': true,
+            'variant-flag': 'control',
+        })
+        expect(posthog.persistence?.props.$active_feature_flags).toEqual(['persisted-flag', 'variant-flag'])
     })
 })

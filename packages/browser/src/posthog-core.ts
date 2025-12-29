@@ -53,6 +53,7 @@ import {
     EarlyAccessFeatureStage,
     EventName,
     ExceptionAutoCaptureConfig,
+    FeatureFlagDetail,
     FeatureFlagsCallback,
     JsonType,
     OverrideConfig,
@@ -1686,6 +1687,74 @@ export class PostHog {
      */
     reloadFeatureFlags(): void {
         this.featureFlags.reloadFeatureFlags()
+    }
+
+    /**
+     * Manually update feature flag values without making a network request.
+     *
+     * This is useful when you have feature flag values from an external source
+     * (e.g., server-side evaluation, edge middleware) and want to inject them
+     * into the client SDK.
+     *
+     * {@label Feature flags}
+     *
+     * @example
+     * ```js
+     * // Replace all flags with server-evaluated values
+     * posthog.updateFlags({
+     *   'my-flag': true,
+     *   'my-experiment': 'variant-a'
+     * })
+     *
+     * // Merge with existing flags (update only specified flags)
+     * posthog.updateFlags(
+     *   { 'my-flag': true },
+     *   undefined,
+     *   { merge: true }
+     * )
+     *
+     * // With payloads
+     * posthog.updateFlags(
+     *   { 'my-flag': true },
+     *   { 'my-flag': { some: 'data' } }
+     * )
+     * ```
+     *
+     * @param flags - An object mapping flag keys to their values (boolean or string variant)
+     * @param payloads - Optional object mapping flag keys to their JSON payloads
+     * @param options - Optional settings. Use `{ merge: true }` to merge with existing flags instead of replacing.
+     * @public
+     */
+    updateFlags(
+        flags: Record<string, boolean | string>,
+        payloads?: Record<string, JsonType>,
+        options?: { merge?: boolean }
+    ): void {
+        // If merging, combine with existing flags
+        const existingFlags = options?.merge ? this.featureFlags.getFlagVariants() : {}
+        const existingPayloads = options?.merge ? this.featureFlags.getFlagPayloads() : {}
+        const finalFlags = { ...existingFlags, ...flags }
+        const finalPayloads = { ...existingPayloads, ...payloads }
+
+        // Convert simple flags to v4 format to avoid deprecation warning
+        const flagDetails: Record<string, FeatureFlagDetail> = {}
+        for (const [key, value] of Object.entries(finalFlags)) {
+            const isVariant = typeof value === 'string'
+            flagDetails[key] = {
+                key,
+                enabled: isVariant ? true : Boolean(value),
+                variant: isVariant ? value : undefined,
+                reason: undefined,
+                // id: 0 indicates manually injected flags (not from server evaluation)
+                metadata: !isUndefined(finalPayloads?.[key])
+                    ? { id: 0, version: undefined, description: undefined, payload: finalPayloads[key] }
+                    : undefined,
+            }
+        }
+
+        this.featureFlags.receivedFeatureFlags({
+            flags: flagDetails,
+        })
     }
 
     /**
