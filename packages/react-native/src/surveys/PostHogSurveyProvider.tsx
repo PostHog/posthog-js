@@ -67,7 +67,7 @@ export type PostHogSurveyProviderProps = {
   overrideAppearanceWithDefault?: boolean
 
   /**
-   * The keyboard avoiding behavior for the survey modal (KeyboardAvoidingView), applied only to Android devices.
+   * The keyboard avoiding behavior for the survey modal (KeyboardAvoidingView) - applied only to Android devices.
    * - 'padding': Adds padding to avoid keyboard (recommended)
    * - 'height': Resizes the view height (default, for legacy - may cause flickering on some Android devices)
    * @default 'height'
