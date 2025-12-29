@@ -153,7 +153,10 @@ const defaultsThatVaryByConfig = (
 ): Pick<PostHogConfig, 'rageclick' | 'capture_pageview' | 'session_recording'> => ({
     rageclick: defaults && defaults >= '2025-11-30' ? { content_ignorelist: true } : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
-    session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
+    session_recording: {
+        ...(defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {}),
+        ...(defaults && defaults >= '2026-01-01' ? { compress_snapshot_requests: Compression.None } : {}),
+    },
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
@@ -1205,7 +1208,7 @@ export class PostHog {
             method: 'POST',
             url: options?._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint),
             data,
-            compression: 'best-available',
+            compression: options?.compression ?? 'best-available',
             batchKey: options?._batchKey,
         }
 

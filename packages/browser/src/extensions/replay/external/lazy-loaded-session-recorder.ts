@@ -31,7 +31,7 @@ import {
 } from './triggerMatching'
 import { estimateSize, INCREMENTAL_SNAPSHOT_EVENT_TYPE, truncateLargeConsoleLogs } from './sessionrecording-utils'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
-import { assignableWindow, LazyLoadedSessionRecordingInterface, window, document } from '../../../utils/globals'
+import { assignableWindow, document, LazyLoadedSessionRecordingInterface, window } from '../../../utils/globals'
 import { addEventListener } from '../../../utils'
 import { MutationThrottler } from './mutation-throttler'
 import { createLogger } from '../../../utils/logger'
@@ -50,9 +50,9 @@ import {
 import {
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_IS_SAMPLED,
-    SESSION_RECORDING_OVERRIDE_SAMPLING,
-    SESSION_RECORDING_OVERRIDE_LINKED_FLAG,
     SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER,
+    SESSION_RECORDING_OVERRIDE_LINKED_FLAG,
+    SESSION_RECORDING_OVERRIDE_SAMPLING,
     SESSION_RECORDING_OVERRIDE_URL_TRIGGER,
     SESSION_RECORDING_PAST_MINIMUM_DURATION,
     SESSION_RECORDING_REMOTE_CONFIG,
@@ -1198,6 +1198,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             _noTruncate: true,
             _batchKey: SESSION_RECORDING_BATCH_KEY,
             skip_client_rate_limiting: true,
+            compression: this._instance.config.session_recording?.compress_snapshot_requests ?? 'best-available',
         })
     }
 

@@ -437,6 +437,19 @@ describe('request', () => {
                     'application/x-www-form-urlencoded'
                 )
             })
+
+            it('should send plain JSON when Compression.None is set', () => {
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/',
+                        method: 'POST',
+                        compression: Compression.None,
+                        data: { foo: 'bar' },
+                    })
+                )
+                expect(mockedXHR.send.mock.calls[0][0]).toMatchInlineSnapshot(`"{"foo":"bar"}"`)
+                expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/json')
+            })
         })
 
         describe('sendBeacon', () => {
@@ -519,6 +532,31 @@ describe('request', () => {
                 "�      �VJ��W�RJJ,R� ��+�
                    "
             `)
+            })
+
+            it('should send plain JSON with compression=none in URL when Compression.None is set', async () => {
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/',
+                        method: 'POST',
+                        compression: Compression.None,
+                        data: { foo: 'bar' },
+                    })
+                )
+
+                expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
+                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=none&beacon=1',
+                    expect.any(Blob)
+                )
+                const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
+
+                const reader = new FileReader()
+                const result = await new Promise((resolve) => {
+                    reader.onload = () => resolve(reader.result)
+                    reader.readAsText(blob)
+                })
+
+                expect(result).toMatchInlineSnapshot(`"{"foo":"bar"}"`)
             })
         })
     })

@@ -1358,6 +1358,13 @@ export interface SessionRecordingOptions {
      * @default false
      */
     strictMinimumDuration?: boolean
+
+    /**
+     * Controls HTTP compression for snapshot requests.
+     *
+     * @default 'gzip-js' ('none' for defaults >= '2026-01-01')
+     */
+    compress_snapshot_requests?: RequestWithOptions['compression']
 }
 
 export type SessionIdChangedCallback = (
@@ -1369,6 +1376,7 @@ export type SessionIdChangedCallback = (
 export enum Compression {
     GZipJS = 'gzip-js',
     Base64 = 'base64',
+    None = 'none',
 }
 
 // Request types - these should be kept minimal to what request.ts needs
@@ -1477,6 +1485,12 @@ export interface CaptureOptions {
      * If set, overrides the current timestamp
      */
     timestamp?: Date
+
+    /**
+     * Allow callers to override compression per event
+     * for example SessionReplay already compresses its contents so can skip compression
+     */
+    compression?: RequestWithOptions['compression']
 }
 
 export type FlagVariant = { flag: string; variant: string }

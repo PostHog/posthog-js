@@ -350,6 +350,34 @@ describe('posthog core', () => {
 
             expect(captureResult.properties.$current_url).toEqual('http://localhost/')
         })
+
+        it.each([
+            ['none', 'none'],
+            ['gzip-js', 'gzip-js'],
+            ['base64', 'base64'],
+        ])('passes compression option %s through to _send_request', (compressionOption, expectedCompression) => {
+            const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
+
+            posthog.capture('event-name', { foo: 'bar' }, { compression: compressionOption as any })
+
+            expect(posthog._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    compression: expectedCompression,
+                })
+            )
+        })
+
+        it('defaults to best-available compression when no compression option specified', () => {
+            const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
+
+            posthog.capture('event-name', { foo: 'bar' })
+
+            expect(posthog._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    compression: 'best-available',
+                })
+            )
+        })
     })
 
     describe('_afterFlagsResponse', () => {

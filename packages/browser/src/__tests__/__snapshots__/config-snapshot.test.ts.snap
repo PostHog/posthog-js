@@ -391,6 +391,13 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "undefined",
       "false",
       "true"
+    ],
+    "compress_snapshot_requests": [
+      "undefined",
+      "Compression.GZipJS",
+      "Compression.Base64",
+      "Compression.None",
+      "\\"best-available\\""
     ]
   },
   "error_tracking": {

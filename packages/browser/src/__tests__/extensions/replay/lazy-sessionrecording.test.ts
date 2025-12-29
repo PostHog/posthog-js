@@ -223,6 +223,7 @@ describe('Lazy SessionRecording', () => {
                 maskAllInputs: false,
                 // not the default but makes for easier test assertions
                 compress_events: false,
+                compress_snapshot_requests: 'none',
             },
             persistence: 'memory',
         })
@@ -933,6 +934,7 @@ describe('Lazy SessionRecording', () => {
                         _noTruncate: true,
                         _url: 'https://test.com/s/',
                         skip_client_rate_limiting: true,
+                        compression: 'none',
                     }
                 )
 
@@ -1033,6 +1035,7 @@ describe('Lazy SessionRecording', () => {
                         _noTruncate: true,
                         _url: 'https://test.com/s/',
                         skip_client_rate_limiting: true,
+                        compression: 'none',
                     }
                 )
 
@@ -1061,6 +1064,7 @@ describe('Lazy SessionRecording', () => {
                         _noTruncate: true,
                         _url: 'https://test.com/s/',
                         skip_client_rate_limiting: true,
+                        compression: 'none',
                     }
                 )
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
@@ -1181,6 +1185,7 @@ describe('Lazy SessionRecording', () => {
                 _noTruncate: true,
                 _url: 'https://test.com/s/',
                 skip_client_rate_limiting: true,
+                compression: 'none',
             }
 
             beforeEach(() => {
@@ -1451,6 +1456,7 @@ describe('Lazy SessionRecording', () => {
                     _noTruncate: true,
                     _batchKey: 'recordings',
                     skip_client_rate_limiting: true,
+                    compression: 'none',
                 }
             )
         })
@@ -1494,6 +1500,7 @@ describe('Lazy SessionRecording', () => {
                     _noTruncate: true,
                     _batchKey: 'recordings',
                     skip_client_rate_limiting: true,
+                    compression: 'none',
                 }
             )
         })
@@ -1599,6 +1606,7 @@ describe('Lazy SessionRecording', () => {
                     _noTruncate: true,
                     _batchKey: 'recordings',
                     skip_client_rate_limiting: true,
+                    compression: 'none',
                 }
             )
 
@@ -3412,6 +3420,52 @@ describe('Lazy SessionRecording', () => {
                     ],
                 }),
                 expect.anything()
+            )
+        })
+    })
+
+    describe('compress_snapshot_requests config', () => {
+        it.each([
+            ['none', 'none'],
+            ['gzip-js', 'gzip-js'],
+            ['best-available', 'best-available'],
+        ])('uses %s compression when compress_snapshot_requests is set to %s', (configValue, expectedValue) => {
+            posthog.config.session_recording.compress_snapshot_requests = configValue as any
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/' },
+                })
+            )
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.anything(),
+                expect.objectContaining({
+                    compression: expectedValue,
+                })
+            )
+        })
+
+        it('defaults to best-available when compress_snapshot_requests is not set', () => {
+            posthog.config.session_recording.compress_snapshot_requests = undefined
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/' },
+                })
+            )
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.anything(),
+                expect.objectContaining({
+                    compression: 'best-available',
+                })
             )
         })
     })

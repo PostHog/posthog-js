@@ -326,4 +326,18 @@ test.describe('Session recording - array.js', () => {
         expect(targetEvent!['properties']['$sdk_debug_current_session_duration']).toBeDefined()
         expect(targetEvent!['properties']['$sdk_debug_session_start']).toBeDefined()
     })
+
+    test('sends session recording snapshots with compression=none', async ({ page }) => {
+        await page.resetCapturedEvents()
+
+        const recordingRequestPromise = page.waitForRequest((request) => {
+            return request.url().includes('/ses/') && request.method() === 'POST'
+        })
+
+        await page.locator('[data-cy-input]').type('hello posthog!')
+        const recordingRequest = await recordingRequestPromise
+
+        expect(recordingRequest.url()).toContain('compression=none')
+        expect(recordingRequest.headers()['content-type']).toEqual('application/json')
+    })
 })
