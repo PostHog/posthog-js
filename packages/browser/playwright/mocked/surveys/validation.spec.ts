@@ -16,7 +16,7 @@ const appearanceWithThanks = {
 
 test.describe('survey validation', () => {
     test('required field rejects whitespace-only input', async ({ page, context }) => {
-        await page.route('**/surveys/**', async (route) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
             await route.fulfill({
                 json: {
                     surveys: [
@@ -40,6 +40,7 @@ test.describe('survey validation', () => {
         })
 
         await start(startOptions, page, context)
+        await surveysAPICall
 
         // Wait for survey to appear
         await expect(page.locator('.PostHogSurvey-validation-test-1')).toBeVisible()
@@ -54,7 +55,7 @@ test.describe('survey validation', () => {
     })
 
     test('required field accepts valid input after trim', async ({ page, context }) => {
-        await page.route('**/surveys/**', async (route) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
             await route.fulfill({
                 json: {
                     surveys: [
@@ -79,6 +80,7 @@ test.describe('survey validation', () => {
         })
 
         await start(startOptions, page, context)
+        await surveysAPICall
         await expect(page.locator('.PostHogSurvey-validation-test-2')).toBeVisible()
 
         // Type valid content with surrounding whitespace
@@ -90,7 +92,7 @@ test.describe('survey validation', () => {
     })
 
     test('backwards compat - old survey without validation field works', async ({ page, context }) => {
-        await page.route('**/surveys/**', async (route) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
             await route.fulfill({
                 json: {
                     surveys: [
@@ -116,6 +118,7 @@ test.describe('survey validation', () => {
         })
 
         await start(startOptions, page, context)
+        await surveysAPICall
         await expect(page.locator('.PostHogSurvey-validation-test-3')).toBeVisible()
 
         await page.locator('textarea').fill('valid response')
@@ -126,7 +129,7 @@ test.describe('survey validation', () => {
     })
 
     test('minLength validation prevents short input', async ({ page, context }) => {
-        await page.route('**/surveys/**', async (route) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
             await route.fulfill({
                 json: {
                     surveys: [
@@ -151,6 +154,7 @@ test.describe('survey validation', () => {
         })
 
         await start(startOptions, page, context)
+        await surveysAPICall
         await expect(page.locator('.PostHogSurvey-validation-test-4')).toBeVisible()
 
         await page.locator('textarea').fill('short')
@@ -161,7 +165,7 @@ test.describe('survey validation', () => {
     })
 
     test('email validation rejects invalid email', async ({ page, context }) => {
-        await page.route('**/surveys/**', async (route) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
             await route.fulfill({
                 json: {
                     surveys: [
@@ -186,6 +190,7 @@ test.describe('survey validation', () => {
         })
 
         await start(startOptions, page, context)
+        await surveysAPICall
         await expect(page.locator('.PostHogSurvey-validation-test-5')).toBeVisible()
 
         await page.locator('textarea').fill('notanemail')
@@ -196,7 +201,7 @@ test.describe('survey validation', () => {
     })
 
     test('email validation accepts valid email', async ({ page, context }) => {
-        await page.route('**/surveys/**', async (route) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
             await route.fulfill({
                 json: {
                     surveys: [
@@ -222,6 +227,7 @@ test.describe('survey validation', () => {
         })
 
         await start(startOptions, page, context)
+        await surveysAPICall
         await expect(page.locator('.PostHogSurvey-validation-test-6')).toBeVisible()
 
         await page.locator('textarea').fill('test@example.com')
