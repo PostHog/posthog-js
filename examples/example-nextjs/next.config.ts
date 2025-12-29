@@ -1,7 +1,6 @@
 /* eslint-env node */
 
 import { withPostHogConfig } from '@posthog/nextjs-config'
-import packageJson from './package.json' with { type: 'json' }
 
 const nextConfig = {
     /* config options here */
@@ -15,7 +14,6 @@ export default withPostHogConfig(nextConfig, {
     logLevel: 'debug',
     sourcemaps: {
         project: 'example-nextjs',
-        version: packageJson.version,
         deleteAfterUpload: true,
         batchSize: 50, // Optional. Default to 50
     },
