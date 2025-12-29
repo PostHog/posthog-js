@@ -1,5 +1,13 @@
 # posthog-js
 
+## 1.311.0
+
+### Minor Changes
+
+- [#2813](https://github.com/PostHog/posthog-js/pull/2813) [`4b7443c`](https://github.com/PostHog/posthog-js/commit/4b7443c10e93d4647c84751e07500c416b140457) Thanks [@ordehi](https://github.com/ordehi)! - feat(flags): add updateFlags() method for injecting flags without network request
+
+    Adds `posthog.updateFlags(flags, payloads?, options?)` to inject feature flag values from an external source (e.g., server-side evaluation, edge middleware) without making a network request. Supports `{ merge: true }` option to merge with existing flags instead of replacing. (2025-12-29)
+
 ## 1.310.2
 
 ### Patch Changes
