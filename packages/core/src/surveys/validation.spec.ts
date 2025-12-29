@@ -100,14 +100,20 @@ describe('getLengthFromRules', () => {
   })
 
   it('returns undefined when requested type not present', () => {
-    expect(getLengthFromRules([{ type: SurveyValidationType.MaxLength, value: 10 }], SurveyValidationType.MinLength)).toBeUndefined()
+    expect(
+      getLengthFromRules([{ type: SurveyValidationType.MaxLength, value: 10 }], SurveyValidationType.MinLength)
+    ).toBeUndefined()
   })
 
   it('returns minLength value when present', () => {
-    expect(getLengthFromRules([{ type: SurveyValidationType.MinLength, value: 5 }], SurveyValidationType.MinLength)).toBe(5)
+    expect(
+      getLengthFromRules([{ type: SurveyValidationType.MinLength, value: 5 }], SurveyValidationType.MinLength)
+    ).toBe(5)
   })
 
   it('returns maxLength value when present', () => {
-    expect(getLengthFromRules([{ type: SurveyValidationType.MaxLength, value: 100 }], SurveyValidationType.MaxLength)).toBe(100)
+    expect(
+      getLengthFromRules([{ type: SurveyValidationType.MaxLength, value: 100 }], SurveyValidationType.MaxLength)
+    ).toBe(100)
   })
 })
