@@ -97,8 +97,6 @@ export function OpenTextQuestion({
         }
         return ''
     })
-    const [showError, setShowError] = useState(false)
-
     useEffect(() => {
         setTimeout(() => {
             if (!isPreviewMode) {
@@ -114,21 +112,31 @@ export function OpenTextQuestion({
         return getValidationError(text, question.validation, question.optional)
     }, [text, question.validation, question.optional])
 
+    // Build requirements hint message
+    const minLength = getLengthFromRules(question.validation, SurveyValidationType.MinLength)
+    const maxLength = getLengthFromRules(question.validation, SurveyValidationType.MaxLength)
+    const requirementsHint = useMemo(() => {
+        if (minLength && maxLength) {
+            return `Enter ${minLength}-${maxLength} characters`
+        } else if (minLength) {
+            return `Enter at least ${minLength} characters`
+        } else if (maxLength) {
+            return `Maximum ${maxLength} characters`
+        }
+        return null
+    }, [minLength, maxLength])
+
     const handleSubmit = () => {
         if (validationError) {
-            setShowError(true)
             return
         }
-        setShowError(false)
         onSubmit(text.trim())
     }
 
     const handlePreviewSubmit = () => {
         if (validationError) {
-            setShowError(true)
             return
         }
-        setShowError(false)
         onPreviewSubmit(text.trim())
     }
 
@@ -141,13 +149,10 @@ export function OpenTextQuestion({
                     id={htmlFor}
                     rows={4}
                     placeholder={appearance?.placeholder}
-                    minLength={getLengthFromRules(question.validation, SurveyValidationType.MinLength)}
-                    maxLength={getLengthFromRules(question.validation, SurveyValidationType.MaxLength)}
+                    minLength={minLength}
+                    maxLength={maxLength}
                     onInput={(e) => {
                         setText(e.currentTarget.value)
-                        if (showError) {
-                            setShowError(false)
-                        }
                         e.stopPropagation()
                     }}
                     onKeyDown={(e) => {
@@ -155,6 +160,7 @@ export function OpenTextQuestion({
                     }}
                     value={text}
                 />
+                {requirementsHint && <div className="validation-hint">{requirementsHint}</div>}
             </div>
             <BottomSection
                 text={question.buttonText || 'Submit'}
@@ -163,7 +169,6 @@ export function OpenTextQuestion({
                 onSubmit={handleSubmit}
                 onPreviewSubmit={handlePreviewSubmit}
             />
-            {showError && validationError && <div className="validation-error">{validationError}</div>}
         </Fragment>
     )
 }

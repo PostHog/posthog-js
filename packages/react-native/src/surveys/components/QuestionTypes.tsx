@@ -23,6 +23,8 @@ import {
   RatingSurveyQuestion,
   MultipleSurveyQuestion,
   getValidationError,
+  getLengthFromRules,
+  SurveyValidationType,
 } from '@posthog/core'
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
@@ -40,7 +42,6 @@ export function OpenTextQuestion({
   onSubmit: (text: string) => void
 }): JSX.Element {
   const [text, setText] = useState('')
-  const [showError, setShowError] = useState(false)
 
   // Memoize validation error to avoid recalculating on every render
   const validationError = useMemo(
@@ -48,12 +49,24 @@ export function OpenTextQuestion({
     [text, question.validation, question.optional]
   )
 
+  // Build requirements hint message
+  const minLength = getLengthFromRules(question.validation, SurveyValidationType.MinLength)
+  const maxLength = getLengthFromRules(question.validation, SurveyValidationType.MaxLength)
+  const requirementsHint = useMemo(() => {
+    if (minLength && maxLength) {
+      return `Enter ${minLength}-${maxLength} characters`
+    } else if (minLength) {
+      return `Enter at least ${minLength} characters`
+    } else if (maxLength) {
+      return `Maximum ${maxLength} characters`
+    }
+    return null
+  }, [minLength, maxLength])
+
   const handleSubmit = () => {
     if (validationError) {
-      setShowError(true)
       return
     }
-    setShowError(false)
     onSubmit(text.trim())
   }
 
@@ -85,14 +98,19 @@ export function OpenTextQuestion({
               ? 'rgba(0, 0, 0, 0.5)'
               : 'rgba(255, 255, 255, 0.5)'
           }
-          onChangeText={(newText) => {
-            setText(newText)
-            if (showError) {
-              setShowError(false)
-            }
-          }}
+          onChangeText={setText}
           value={text}
         />
+        {requirementsHint && (
+          <Text
+            style={[
+              styles.validationHint,
+              { color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor) },
+            ]}
+          >
+            {requirementsHint}
+          </Text>
+        )}
       </View>
       <BottomSection
         text={question.buttonText ?? appearance.submitButtonText}
@@ -100,7 +118,6 @@ export function OpenTextQuestion({
         appearance={appearance}
         onSubmit={handleSubmit}
       />
-      {showError && validationError && <Text style={styles.validationError}>{validationError}</Text>}
     </View>
   )
 }
@@ -421,9 +438,9 @@ const styles = StyleSheet.create({
   openEndedInput: {
     padding: 5,
   },
-  validationError: {
-    color: '#dc3545',
+  validationHint: {
     fontSize: 12,
+    opacity: 0.7,
     marginTop: 4,
   },
 })
