@@ -8,7 +8,7 @@ import {
     SurveyAppearance,
     SurveyQuestionType,
 } from '../../../posthog-surveys-types'
-import { isArray, isNull, isNumber, isString } from '@posthog/core'
+import { isArray, isNull, isNumber, isString, getValidationError, getMinLengthFromRules, getMaxLengthFromRules } from '@posthog/core'
 import { dissatisfiedEmoji, neutralEmoji, satisfiedEmoji, veryDissatisfiedEmoji, verySatisfiedEmoji } from '../icons'
 import { getDisplayOrderChoices, useSurveyContext } from '../surveys-extension-utils'
 import { BottomSection } from './BottomSection'
@@ -100,6 +100,32 @@ export function OpenTextQuestion({
 
     const htmlFor = `surveyQuestion${displayQuestionIndex}`
 
+    // Validation logic
+    const validationError = useMemo(() => {
+        return getValidationError(text, question.validation, question.optional)
+    }, [text, question.validation, question.optional])
+
+    const handleSubmit = () => {
+        // Validate before submitting
+        if (validationError) {
+            inputRef.current?.setCustomValidity(validationError)
+            inputRef.current?.reportValidity()
+            return
+        }
+        inputRef.current?.setCustomValidity('')
+        onSubmit(text.trim())
+    }
+
+    const handlePreviewSubmit = () => {
+        if (validationError) {
+            inputRef.current?.setCustomValidity(validationError)
+            inputRef.current?.reportValidity()
+            return
+        }
+        inputRef.current?.setCustomValidity('')
+        onPreviewSubmit(text.trim())
+    }
+
     return (
         <Fragment>
             <div className="question-container">
@@ -109,8 +135,12 @@ export function OpenTextQuestion({
                     id={htmlFor}
                     rows={4}
                     placeholder={appearance?.placeholder}
+                    minLength={getMinLengthFromRules(question.validation)}
+                    maxLength={getMaxLengthFromRules(question.validation)}
                     onInput={(e) => {
                         setText(e.currentTarget.value)
+                        // Clear custom validity when user types
+                        e.currentTarget.setCustomValidity('')
                         e.stopPropagation()
                     }}
                     onKeyDown={(e) => {
@@ -121,10 +151,10 @@ export function OpenTextQuestion({
             </div>
             <BottomSection
                 text={question.buttonText || 'Submit'}
-                submitDisabled={!text && !question.optional}
+                submitDisabled={!!validationError}
                 appearance={appearance}
-                onSubmit={() => onSubmit(text)}
-                onPreviewSubmit={() => onPreviewSubmit(text)}
+                onSubmit={handleSubmit}
+                onPreviewSubmit={handlePreviewSubmit}
             />
         </Fragment>
     )
