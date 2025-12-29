@@ -1,9 +1,7 @@
 name: 'Release'
 
 permissions:
-    contents: write
-    actions: write
-    id-token: write
+    contents: read
 
 on:
     pull_request:
@@ -51,52 +49,31 @@ jobs:
     notify-approval-needed:
         name: Notify Slack - Approval Needed
         needs: check-changesets
-        runs-on: ubuntu-latest
         if: needs.check-changesets.outputs.has-changesets == 'true'
-        outputs:
-            slack_ts: ${{ steps.notify.outputs.slack_ts }}
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0
-
-            - name: Send Slack notification
-              id: notify
-              continue-on-error: true # Don't block release if Slack notification fails
-              uses: ./.github/actions/notify-slack-release-approval
-              with:
-                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
-                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
-                  slack_user_group_id: ${{ vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID }}
-
-            - name: Send Slack failure event to PostHog
-              if: ${{ steps.notify.outcome == 'failure' }}
-              uses: PostHog/posthog-github-action@v0.1
-              with:
-                  posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
-                  event: 'sdk-slack-notification-failure'
-                  properties: >-
-                      {
-                        "step": "notify-approval-needed",
-                        "workflow": "release",
-                        "repository": "${{ github.repository }}",
-                        "run_id": "${{ github.run_id }}",
-                        "run_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-                      }
+        uses: PostHog/.github/.github/workflows/notify-approval-needed.yml@main
+        with:
+            slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+            slack_user_group_id: ${{ vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID }}
+        secrets:
+            slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+            posthog_project_api_key: ${{ secrets.POSTHOG_PROJECT_API_KEY }}
 
     version-bump:
         name: Bump versions and commit to main
         needs: [check-changesets, notify-approval-needed]
         runs-on: ubuntu-latest
-        if: needs.check-changesets.outputs.has-changesets == 'true'
+        # Use `always()` to ensure the job runs even if the notify-approval-needed job fails
+        # but still depend on it to be able to use `needs.notify-approval-needed.outputs.slack_ts`
+        if: always() && needs.check-changesets.outputs.has-changesets == 'true'
         environment: 'NPM Release' # This will require an approval from a maintainer, they are notified in Slack above
+        permissions:
+            contents: write
         outputs:
             committed: ${{ steps.commit-version-bump.outputs.committed }}
         steps:
             - name: Notify Slack - Approved
               continue-on-error: true # Don't block release if Slack notification fails
-              uses: ./.github/actions/slack-thread-reply
+              uses: PostHog/.github/.github/actions/slack-thread-reply@main
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -106,10 +83,10 @@ jobs:
 
             - name: Get GitHub App token
               id: releaser
-              uses: getsentry/action-github-app-token@97c9e23528286821f97fba885c1b1123284b29cc # v2
+              uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
               with:
-                  app_id: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_APP_ID }}
-                  private_key: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_PRIVATE_KEY }} # Secrets available only inside the `NPM Release` environment, requires approval from a maintainer
+                  app-id: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_APP_ID }}
+                  private-key: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_PRIVATE_KEY }} # Secrets available only inside the `NPM Release` environment, requires approval from a maintainer
 
             - name: Checkout repository
               uses: actions/checkout@v4
@@ -158,9 +135,15 @@ jobs:
 
     publish:
         name: Publish packages
-        needs: version-bump
+        needs: [version-bump, notify-approval-needed]
         runs-on: ubuntu-latest
-        if: needs.version-bump.outputs.committed == 'true'
+        # Use `always()` to ensure the job runs even if the check-release-label job fails
+        # but still depend on it to be able to use `needs.notify-approval-needed.outputs.slack_ts`
+        if: always() && needs.version-bump.outputs.committed == 'true'
+        permissions:
+            contents: write
+            actions: write
+            id-token: write
         strategy:
             fail-fast: false
             matrix:
@@ -303,31 +286,31 @@ jobs:
                       }
 
             - name: Notify Slack - Failed
+              continue-on-error: true # Slack failure shouldn't mark release as failed
               if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
-              continue-on-error: true # Don't mask real failure with Slack failure
-              uses: ./.github/actions/slack-thread-reply
+              uses: PostHog/.github/.github/actions/slack-thread-reply@main
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '❌ Failed to publish `${{ matrix.package.name }}`! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  message: '❌ Failed to release `${{ matrix.package.name }}@v${{ steps.check-package-version.outputs.committed-version }}`! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
                   emoji_reaction: 'x'
 
     notify-released:
         name: Notify Slack - Released
         needs: [notify-approval-needed, publish]
         runs-on: ubuntu-latest
-        if: always() && needs.publish.result == 'success'
+        if: always() && needs.publish.result == 'success' && needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
             - name: Checkout repository
               uses: actions/checkout@v4
 
             - name: Notify Slack - Released
               continue-on-error: true # Slack failure shouldn't mark release as failed
-              uses: ./.github/actions/slack-thread-reply
+              uses: PostHog/.github/.github/actions/slack-thread-reply@main
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '🚀 All packages published successfully!'
+                  message: '🚀 All packages released successfully!'
                   emoji_reaction: 'rocket'

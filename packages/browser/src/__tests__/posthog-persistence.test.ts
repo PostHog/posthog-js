@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import { PostHogPersistence } from '../posthog-persistence'
-import { INITIAL_PERSON_INFO, SESSION_ID, USER_STATE } from '../constants'
+import { DEVICE_ID, INITIAL_PERSON_INFO, SESSION_ID, USER_STATE } from '../constants'
 import { PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
@@ -153,9 +153,10 @@ describe('persistence', () => {
             expect(document.cookie).toEqual('')
 
             const lib = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
-            lib.register({ distinct_id: 'test', test_prop: 'test_val' })
+            lib.register({ distinct_id: 'test', test_prop: 'test_val', [DEVICE_ID]: 'device-123' })
             expect(document.cookie).toContain(
                 `ph__posthog=${encode({
+                    $device_id: 'device-123',
                     distinct_id: 'test',
                 })}`
             )
@@ -164,6 +165,7 @@ describe('persistence', () => {
             lib.register({ otherProp: 'prop' })
             expect(document.cookie).toContain(
                 `ph__posthog=${encode({
+                    $device_id: 'device-123',
                     distinct_id: 'test',
                 })}`
             )
@@ -171,6 +173,7 @@ describe('persistence', () => {
             lib.register({ [SESSION_ID]: [1000, 'sid', 2000] })
             expect(document.cookie).toContain(
                 `ph__posthog=${encode({
+                    $device_id: 'device-123',
                     distinct_id: 'test',
                     $sesid: [1000, 'sid', 2000],
                 })}`
@@ -179,6 +182,7 @@ describe('persistence', () => {
             lib.register({ [INITIAL_PERSON_INFO]: { u: 'https://www.example.com', r: 'https://www.referrer.com' } })
             expect(document.cookie).toContain(
                 `ph__posthog=${encode({
+                    $device_id: 'device-123',
                     distinct_id: 'test',
                     $sesid: [1000, 'sid', 2000],
                     $initial_person_info: { u: 'https://www.example.com', r: 'https://www.referrer.com' },
@@ -190,8 +194,10 @@ describe('persistence', () => {
 
             const newLib = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
 
+            // $device_id should be recovered from cookies after localStorage is cleared
             expect(newLib.props).toEqual({
                 distinct_id: 'test',
+                $device_id: 'device-123',
                 $sesid: [1000, 'sid', 2000],
                 $initial_person_info: { u: 'https://www.example.com', r: 'https://www.referrer.com' },
             })

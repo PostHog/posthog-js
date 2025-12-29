@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.17.1
+
+### Patch Changes
+
+- [#2809](https://github.com/PostHog/posthog-js/pull/2809) [`8fd7c76`](https://github.com/PostHog/posthog-js/commit/8fd7c766efbc4c9445c4ce72cfb6b761520e7f1f) Thanks [@adboio](https://github.com/adboio)! - add control for keyboard avoiding behavior on android
+  (2025-12-29)
+
 ## 4.17.0
 
 ### Minor Changes

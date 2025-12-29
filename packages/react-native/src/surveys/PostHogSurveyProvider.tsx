@@ -66,6 +66,14 @@ export type PostHogSurveyProviderProps = {
    */
   overrideAppearanceWithDefault?: boolean
 
+  /**
+   * The keyboard avoiding behavior for the survey modal (KeyboardAvoidingView), applied only to Android devices.
+   * - 'padding': Adds padding to avoid keyboard (recommended)
+   * - 'height': Resizes the view height (default, for legacy - may cause flickering on some Android devices)
+   * @default 'height'
+   */
+  androidKeyboardBehavior?: 'padding' | 'height'
+
   client?: PostHog
 
   children: React.ReactNode
@@ -165,7 +173,13 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
     <ActiveSurveyContext.Provider value={activeContext}>
       <FeedbackSurveyContext.Provider value={{ surveys, activeSurvey, setActiveSurvey }}>
         {props.children}
-        {shouldShowModal && <SurveyModal appearance={surveyAppearance} {...activeContext} />}
+        {shouldShowModal && (
+          <SurveyModal
+            appearance={surveyAppearance}
+            androidKeyboardBehavior={props.androidKeyboardBehavior}
+            {...activeContext}
+          />
+        )}
       </FeedbackSurveyContext.Provider>
     </ActiveSurveyContext.Provider>
   )
