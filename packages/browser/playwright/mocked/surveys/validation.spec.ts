@@ -42,15 +42,16 @@ test.describe('survey validation', () => {
         await start(startOptions, page, context)
         await surveysAPICall
 
-        // Wait for survey to appear
-        await expect(page.locator('.PostHogSurvey-validation-test-1')).toBeVisible()
+        // Wait for survey form to appear
+        await expect(page.locator('.PostHogSurvey-validation-test-1').locator('.survey-form')).toBeVisible()
 
         // Type only spaces
         await page.locator('textarea').fill('   ')
-        await page.locator('button:has-text("Submit")').click()
 
-        // Survey should still be visible (validation failed)
-        await expect(page.locator('.PostHogSurvey-validation-test-1')).toBeVisible()
+        // Submit button should be disabled (validation failed - whitespace only)
+        await expect(page.locator('button:has-text("Submit")')).toBeDisabled()
+
+        // Survey form should still be visible
         await expect(page.locator('.PostHogSurvey-validation-test-1').locator('.survey-form')).toBeVisible()
     })
 
@@ -81,7 +82,7 @@ test.describe('survey validation', () => {
 
         await start(startOptions, page, context)
         await surveysAPICall
-        await expect(page.locator('.PostHogSurvey-validation-test-2')).toBeVisible()
+        await expect(page.locator('.PostHogSurvey-validation-test-2').locator('.survey-form')).toBeVisible()
 
         // Type valid content with surrounding whitespace
         await page.locator('textarea').fill('  valid response  ')
@@ -119,12 +120,12 @@ test.describe('survey validation', () => {
 
         await start(startOptions, page, context)
         await surveysAPICall
-        await expect(page.locator('.PostHogSurvey-validation-test-3')).toBeVisible()
+        await expect(page.locator('.PostHogSurvey-validation-test-3').locator('.survey-form')).toBeVisible()
 
         await page.locator('textarea').fill('valid response')
         await page.locator('button:has-text("Submit")').click()
 
-        // Should submit successfully
+        // Should show thank you message (submitted successfully)
         await expect(page.locator('.PostHogSurvey-validation-test-3')).toContainText('Thanks')
     })
 
@@ -155,12 +156,14 @@ test.describe('survey validation', () => {
 
         await start(startOptions, page, context)
         await surveysAPICall
-        await expect(page.locator('.PostHogSurvey-validation-test-4')).toBeVisible()
+        await expect(page.locator('.PostHogSurvey-validation-test-4').locator('.survey-form')).toBeVisible()
 
         await page.locator('textarea').fill('short')
-        await page.locator('button:has-text("Submit")').click()
 
-        // Survey should still be visible (validation failed)
+        // Submit button should be disabled (validation failed - too short)
+        await expect(page.locator('button:has-text("Submit")')).toBeDisabled()
+
+        // Survey form should still be visible
         await expect(page.locator('.PostHogSurvey-validation-test-4').locator('.survey-form')).toBeVisible()
     })
 
@@ -191,12 +194,14 @@ test.describe('survey validation', () => {
 
         await start(startOptions, page, context)
         await surveysAPICall
-        await expect(page.locator('.PostHogSurvey-validation-test-5')).toBeVisible()
+        await expect(page.locator('.PostHogSurvey-validation-test-5').locator('.survey-form')).toBeVisible()
 
         await page.locator('textarea').fill('notanemail')
-        await page.locator('button:has-text("Submit")').click()
 
-        // Survey should still be visible (validation failed)
+        // Submit button should be disabled (validation failed - invalid email)
+        await expect(page.locator('button:has-text("Submit")')).toBeDisabled()
+
+        // Survey form should still be visible
         await expect(page.locator('.PostHogSurvey-validation-test-5').locator('.survey-form')).toBeVisible()
     })
 
@@ -228,12 +233,12 @@ test.describe('survey validation', () => {
 
         await start(startOptions, page, context)
         await surveysAPICall
-        await expect(page.locator('.PostHogSurvey-validation-test-6')).toBeVisible()
+        await expect(page.locator('.PostHogSurvey-validation-test-6').locator('.survey-form')).toBeVisible()
 
         await page.locator('textarea').fill('test@example.com')
         await page.locator('button:has-text("Submit")').click()
 
-        // Should submit successfully
+        // Should show thank you message (submitted successfully)
         await expect(page.locator('.PostHogSurvey-validation-test-6')).toContainText('Thanks')
     })
 })
