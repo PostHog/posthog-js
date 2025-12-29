@@ -1733,20 +1733,21 @@ export class PostHog {
         // If merging, combine with existing flags
         const existingFlags = options?.merge ? this.featureFlags.getFlagVariants() : {}
         const existingPayloads = options?.merge ? this.featureFlags.getFlagPayloads() : {}
-        const mergedFlags = { ...existingFlags, ...flags }
-        const mergedPayloads = { ...existingPayloads, ...payloads }
+        const finalFlags = { ...existingFlags, ...flags }
+        const finalPayloads = { ...existingPayloads, ...payloads }
 
         // Convert simple flags to v4 format to avoid deprecation warning
         const flagDetails: Record<string, FeatureFlagDetail> = {}
-        for (const [key, value] of Object.entries(mergedFlags)) {
+        for (const [key, value] of Object.entries(finalFlags)) {
             const isVariant = typeof value === 'string'
             flagDetails[key] = {
                 key,
-                enabled: isVariant ? true : !!value,
+                enabled: isVariant ? true : Boolean(value),
                 variant: isVariant ? value : undefined,
                 reason: undefined,
-                metadata: !isUndefined(mergedPayloads?.[key])
-                    ? { id: 0, version: undefined, description: undefined, payload: mergedPayloads[key] }
+                // id: 0 indicates manually injected flags (not from server evaluation)
+                metadata: !isUndefined(finalPayloads?.[key])
+                    ? { id: 0, version: undefined, description: undefined, payload: finalPayloads[key] }
                     : undefined,
             }
         }
