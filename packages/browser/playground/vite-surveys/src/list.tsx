@@ -10,29 +10,6 @@ import {
 
 const surveys = [
     {
-        id: 'survey-validation-test',
-        name: 'Validation Test',
-        type: SurveyType.Popover,
-        description: 'Test validation - required field, min 5 chars, max 50 chars',
-        questions: [
-            {
-                type: SurveyQuestionType.Open,
-                question: 'Enter between 5-50 characters (required)',
-                optional: false,
-                validation: [
-                    { type: 'min_length', value: 5 },
-                    { type: 'max_length', value: 50 },
-                ],
-            } as BasicSurveyQuestion,
-        ],
-        linked_flag_key: null,
-        targeting_flag_key: null,
-        appearance: {},
-        conditions: null,
-        start_date: null,
-        end_date: null,
-    },
-    {
         id: 'survey-1',
         name: 'some_name',
         type: SurveyType.Popover,
