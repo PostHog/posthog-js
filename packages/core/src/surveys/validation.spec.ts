@@ -89,12 +89,42 @@ describe('getValidationError', () => {
       expect(getValidationError('test@example', rules, false)).toBe('Please enter a valid email address')
     })
 
+    it('returns error for @ at start', () => {
+      expect(getValidationError('@example.com', rules, false)).toBe('Please enter a valid email address')
+    })
+
+    it('returns error for multiple @', () => {
+      expect(getValidationError('test@@example.com', rules, false)).toBe('Please enter a valid email address')
+      expect(getValidationError('test@test@example.com', rules, false)).toBe('Please enter a valid email address')
+    })
+
+    it('returns error for dot at start of domain', () => {
+      expect(getValidationError('test@.example.com', rules, false)).toBe('Please enter a valid email address')
+    })
+
+    it('returns error for dot at end of domain', () => {
+      expect(getValidationError('test@example.', rules, false)).toBe('Please enter a valid email address')
+    })
+
     it('returns empty for valid email', () => {
       expect(getValidationError('test@example.com', rules, false)).toBe('')
     })
 
     it('returns empty for valid email with subdomain', () => {
       expect(getValidationError('test@mail.example.com', rules, false)).toBe('')
+    })
+
+    it('returns empty for email with plus addressing', () => {
+      expect(getValidationError('test+tag@example.com', rules, false)).toBe('')
+    })
+
+    it('handles potentially ReDoS patterns quickly (linear time)', () => {
+      // This pattern would cause exponential backtracking with vulnerable regex
+      // Using linear-time check ensures this completes instantly
+      // The pattern !@!.!.!.!. would actually pass (has @, local part, and dots in domain)
+      // Test with a pattern that would hang with backtracking but fail validation
+      const maliciousInput = '!'.repeat(100) + '@'
+      expect(getValidationError(maliciousInput, rules, false)).toBe('Please enter a valid email address')
     })
   })
 

@@ -8,7 +8,15 @@ import {
     SurveyAppearance,
     SurveyQuestionType,
 } from '../../../posthog-surveys-types'
-import { isArray, isNull, isNumber, isString, getValidationError, getMinLengthFromRules, getMaxLengthFromRules } from '@posthog/core'
+import {
+    isArray,
+    isNull,
+    isNumber,
+    isString,
+    getValidationError,
+    getMinLengthFromRules,
+    getMaxLengthFromRules,
+} from '@posthog/core'
 import { dissatisfiedEmoji, neutralEmoji, satisfiedEmoji, veryDissatisfiedEmoji, verySatisfiedEmoji } from '../icons'
 import { getDisplayOrderChoices, useSurveyContext } from '../surveys-extension-utils'
 import { BottomSection } from './BottomSection'

@@ -1825,7 +1825,8 @@ describe('preview renders', () => {
         console.log('Found textarea:', !!textarea)
 
         await act(async () => {
-            fireEvent.change(textarea!, { target: { value: 'Test answer' } })
+            // Use fireEvent.input to trigger onInput handler (change event fires on blur)
+            fireEvent.input(textarea!, { target: { value: 'Test answer' } })
         })
 
         // Find and click the submit button (using button type="button" instead of form-submit class)
