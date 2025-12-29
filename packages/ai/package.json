@@ -45,7 +45,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
     "@google/genai": "^1.33.0",
-    "@langchain/core": "^1.1.5",
+    "@langchain/core": "^1.1.8",
     "langchain": "^1.2.0",
     "openai": "^6.10.0",
     "uuid": "^11.1.0",
