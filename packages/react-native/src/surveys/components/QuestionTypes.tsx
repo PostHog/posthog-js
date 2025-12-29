@@ -22,6 +22,7 @@ import {
   LinkSurveyQuestion,
   RatingSurveyQuestion,
   MultipleSurveyQuestion,
+  getValidationError,
 } from '@posthog/core'
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
@@ -39,6 +40,17 @@ export function OpenTextQuestion({
   onSubmit: (text: string) => void
 }): JSX.Element {
   const [text, setText] = useState('')
+  const [validationError, setValidationError] = useState<string | null>(null)
+
+  const handleSubmit = () => {
+    const error = getValidationError(text, question.validation, question.optional)
+    if (error) {
+      setValidationError(error)
+      return
+    }
+    setValidationError(null)
+    onSubmit(text.trim())
+  }
 
   return (
     <View>
@@ -55,6 +67,7 @@ export function OpenTextQuestion({
             {
               backgroundColor: appearance.inputBackground,
               color: appearance.inputTextColor ?? getContrastingTextColor(appearance.inputBackground),
+              borderColor: validationError ? '#dc3545' : appearance.borderColor,
             },
           ]}
           multiline
@@ -67,15 +80,21 @@ export function OpenTextQuestion({
               ? 'rgba(0, 0, 0, 0.5)'
               : 'rgba(255, 255, 255, 0.5)'
           }
-          onChangeText={setText}
+          onChangeText={(newText) => {
+            setText(newText)
+            if (validationError) {
+              setValidationError(null)
+            }
+          }}
           value={text}
         />
+        {validationError && <Text style={styles.validationError}>{validationError}</Text>}
       </View>
       <BottomSection
         text={question.buttonText ?? appearance.submitButtonText}
-        submitDisabled={!text && !question.optional}
+        submitDisabled={!!getValidationError(text, question.validation, question.optional)}
         appearance={appearance}
-        onSubmit={() => onSubmit(text)}
+        onSubmit={handleSubmit}
       />
     </View>
   )
@@ -396,5 +415,10 @@ const styles = StyleSheet.create({
   },
   openEndedInput: {
     padding: 5,
+  },
+  validationError: {
+    color: '#dc3545',
+    fontSize: 12,
+    marginTop: 4,
   },
 })
