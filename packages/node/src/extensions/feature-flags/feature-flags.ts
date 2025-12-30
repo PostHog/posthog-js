@@ -634,6 +634,8 @@ class FeatureFlagsPoller {
   private beginBackoff(): void {
     this.shouldBeginExponentialBackoff = true
     this.backOffCount += 1
+    // Use the same backoff interval as the poller to avoid overwhelming
+    // the server with on-demand requests while polling is backed off.
     this.nextFetchAllowedAt = Date.now() + this.getPollingInterval()
   }
 
