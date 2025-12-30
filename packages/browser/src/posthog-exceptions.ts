@@ -106,6 +106,11 @@ export class PostHogExceptions {
                 logger.info('Skipping exception capture because it was thrown by the PostHog SDK')
                 return
             }
+
+            if (this._shouldSampleException()) {
+                logger.info('Skipping exception capture of the policy sample rate')
+                return
+            }
         }
 
         return this._instance.capture('$exception', properties, {
@@ -144,6 +149,14 @@ export class PostHogExceptions {
             })
             return rule.type === 'OR' ? results.some(Boolean) : results.every(Boolean)
         })
+    }
+
+    private _shouldSampleException(): boolean {
+        return this._policyConfig
+            ? this._policyConfig.sampleRate
+                ? Math.random() < this._policyConfig.sampleRate
+                : false
+            : false
     }
 
     private _isExtensionException(exceptionList: ErrorTracking.ExceptionList): boolean {
