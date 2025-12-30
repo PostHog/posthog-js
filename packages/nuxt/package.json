@@ -1,6 +1,6 @@
 {
   "name": "@posthog/nuxt",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "description": "Nuxt module for Posthog 🦔",
   "repository": {
     "type": "git",

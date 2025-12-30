@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.18.1
+
+### Patch Changes
+
+- [#2825](https://github.com/PostHog/posthog-js/pull/2825) [`5a4a8e2`](https://github.com/PostHog/posthog-js/commit/5a4a8e23eddb034f6a77e3cdccdd84db2c5d3a4a) Thanks [@haacked](https://github.com/haacked)! - getFeatureFlag() respects exponential backoff for HTTP 401, 403, and 429 responses.
+  (2025-12-30)
+
 ## 5.18.0
 
 ### Minor Changes
