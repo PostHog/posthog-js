@@ -4,10 +4,26 @@ import { Compression, RequestWithOptions, RequestResponse } from './types'
 import { formDataToQuery } from './utils/request-utils'
 
 import { logger } from './utils/logger'
-import { AbortController, fetch, navigator, XMLHttpRequest } from './utils/globals'
-import { gzipSync, strToU8 } from 'fflate'
+import { AbortController, CompressionStream, fetch, navigator, XMLHttpRequest } from './utils/globals'
 
 import { _base64Encode } from './utils/encode-utils'
+
+/* eslint-disable compat/compat */
+let sendChain: Promise<void> = Promise.resolve()
+
+export const _resetSendChain = (): void => {
+    sendChain = Promise.resolve()
+}
+
+const gzipCompress = (data: string): Promise<Blob | null> => {
+    if (!CompressionStream) {
+        return Promise.resolve(null)
+    }
+    const stream = new Blob([data]).stream()
+    const compressedStream = stream.pipeThrough(new CompressionStream('gzip'))
+    return new Response(compressedStream).blob()
+}
+/* eslint-enable compat/compat */
 
 // eslint-disable-next-line compat/compat
 export const SUPPORTS_REQUEST = !!XMLHttpRequest || !!fetch
@@ -26,6 +42,7 @@ type EncodedBody = {
     contentType: string
     body: string | BlobPart
     estimatedSize: number
+    compression?: Compression
 }
 
 /**
@@ -68,18 +85,21 @@ const encodeToDataString = (data: string | Record<string, any>): string => {
     return 'data=' + encodeURIComponent(typeof data === 'string' ? data : jsonStringify(data))
 }
 
-const encodePostData = ({ data, compression }: RequestWithOptions): EncodedBody | undefined => {
+const encodePostData = async ({ data, compression }: RequestWithOptions): Promise<EncodedBody | undefined> => {
     if (!data) {
         return
     }
 
     if (compression === Compression.GZipJS) {
-        const gzipData = gzipSync(strToU8(jsonStringify(data)), { mtime: 0 })
-        const blob = new Blob([gzipData], { type: CONTENT_TYPE_PLAIN })
-        return {
-            contentType: CONTENT_TYPE_PLAIN,
-            body: blob,
-            estimatedSize: blob.size,
+        const blob = await gzipCompress(jsonStringify(data))
+        // Falls through to plain JSON if compression fails (e.g. CompressionStream unavailable in ES5)
+        if (blob) {
+            return {
+                contentType: CONTENT_TYPE_PLAIN,
+                body: blob,
+                estimatedSize: blob.size,
+                compression: Compression.GZipJS,
+            }
         }
     }
 
@@ -91,6 +111,7 @@ const encodePostData = ({ data, compression }: RequestWithOptions): EncodedBody 
             contentType: CONTENT_TYPE_FORM,
             body: encodedBody,
             estimatedSize: new Blob([encodedBody]).size,
+            compression: Compression.Base64,
         }
     }
 
@@ -102,10 +123,12 @@ const encodePostData = ({ data, compression }: RequestWithOptions): EncodedBody 
     }
 }
 
-const xhr = (options: RequestWithOptions) => {
+const xhr = async (options: RequestWithOptions) => {
+    const { contentType, body, compression } = (await encodePostData(options)) ?? {}
+    const url = extendURLParams(options.url, { compression })
+
     const req = new XMLHttpRequest!()
-    req.open(options.method || 'GET', options.url, true)
-    const { contentType, body } = encodePostData(options) ?? {}
+    req.open(options.method || 'GET', url, true)
 
     each(options.headers, function (headerValue, headerName) {
         req.setRequestHeader(headerName, headerValue)
@@ -144,8 +167,9 @@ const xhr = (options: RequestWithOptions) => {
     req.send(body)
 }
 
-const _fetch = (options: RequestWithOptions) => {
-    const { contentType, body, estimatedSize } = encodePostData(options) ?? {}
+const _fetch = async (options: RequestWithOptions) => {
+    const { contentType, body, estimatedSize, compression } = (await encodePostData(options)) ?? {}
+    const url = extendURLParams(options.url, { compression })
 
     // eslint-disable-next-line compat/compat
     const headers = new Headers()
@@ -156,8 +180,6 @@ const _fetch = (options: RequestWithOptions) => {
     if (contentType) {
         headers.append('Content-Type', contentType)
     }
-
-    const url = options.url
     let aborter: { signal: any; timeout: ReturnType<typeof setTimeout> } | null = null
 
     if (AbortController) {
@@ -206,20 +228,15 @@ const _fetch = (options: RequestWithOptions) => {
             options.callback?.({ statusCode: 0, text: error })
         })
         .finally(() => (aborter ? clearTimeout(aborter.timeout) : null))
-
-    return
 }
 
-const _sendBeacon = (options: RequestWithOptions) => {
+const _sendBeacon = async (options: RequestWithOptions) => {
     // beacon documentation https://w3c.github.io/beacon/
     // beacons format the message and use the type property
 
-    const url = extendURLParams(options.url, {
-        beacon: '1',
-    })
-
     try {
-        const { contentType, body } = encodePostData(options) ?? {}
+        const { contentType, body, compression } = (await encodePostData(options)) ?? {}
+        const url = extendURLParams(options.url, { beacon: '1', compression })
         // sendBeacon requires a blob so we convert it
         const sendBeaconBody = typeof body === 'string' ? new Blob([body], { type: contentType }) : body
         navigator!.sendBeacon!(url, sendBeaconBody)
@@ -231,7 +248,7 @@ const _sendBeacon = (options: RequestWithOptions) => {
 
 const AVAILABLE_TRANSPORTS: {
     transport: RequestWithOptions['transport']
-    method: (options: RequestWithOptions) => void
+    method: (options: RequestWithOptions) => Promise<void>
 }[] = []
 
 // We add the transports in order of preference
@@ -257,7 +274,7 @@ if (navigator?.sendBeacon) {
 }
 
 // This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
-export const request = (_options: RequestWithOptions) => {
+export const request = (_options: RequestWithOptions): void => {
     // Clone the options so we don't modify the original object
     const options = { ..._options }
     options.timeout = options.timeout || 60000
@@ -265,7 +282,6 @@ export const request = (_options: RequestWithOptions) => {
     options.url = extendURLParams(options.url, {
         _: new Date().getTime().toString(),
         ver: Config.LIB_VERSION,
-        compression: options.compression,
     })
 
     const transport = options.transport ?? 'fetch'
@@ -281,5 +297,5 @@ export const request = (_options: RequestWithOptions) => {
         throw new Error('No available transport method')
     }
 
-    transportMethod(options)
+    sendChain = sendChain.then(() => transportMethod(options))
 }

@@ -1398,6 +1398,10 @@ export interface RequestWithOptions {
     noRetries?: boolean
     disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]
     disableXHRCredentials?: boolean
+    /**
+     * If GZIP compression is set but is not available (e.g. ES5 browsers do not support CompressionStream)
+     * we fall back to sending plain JSON payloads
+     */
     compression?: Compression | 'best-available'
     fetchOptions?: {
         cache?: RequestInit['cache']
