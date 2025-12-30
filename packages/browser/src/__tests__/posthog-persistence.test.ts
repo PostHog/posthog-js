@@ -5,7 +5,7 @@ import { PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
-import { resetLocalStorageSupported, resetSessionStorageSupported, sessionStore } from '../storage'
+import { cookieStore, resetLocalStorageSupported, resetSessionStorageSupported, sessionStore } from '../storage'
 import { defaultPostHog } from './helpers/posthog-instance'
 import Mock = jest.Mock
 
@@ -196,6 +196,36 @@ describe('persistence', () => {
                 $sesid: [1000, 'sid', 2000],
                 $initial_person_info: { u: 'https://www.example.com', r: 'https://www.referrer.com' },
             })
+        })
+
+        it('should persist custom properties to cookies when using localStorage+cookie', () => {
+            const customProp = 'my_custom_prop'
+            const token = uuidv7()
+
+            const posthog = defaultPostHog().init(
+                token,
+                {
+                    persistence: 'localStorage+cookie',
+                    cookie_persisted_properties: [customProp],
+                },
+                uuidv7()
+            )
+
+            posthog.persistence?.register({ [customProp]: 'test_value' })
+
+            // Get the persistence name from the instance
+            const persistenceName = (posthog.persistence as any)._name
+
+            // Verify the custom property is in the cookie
+            const cookieData = cookieStore._parse(persistenceName)
+            expect(cookieData[customProp]).toBe('test_value')
+
+            // Verify it's also in localStorage (full props)
+            const localStorageData = JSON.parse(localStorage.getItem(persistenceName) || '{}')
+            expect(localStorageData[customProp]).toBe('test_value')
+
+            // Verify default properties are also in cookie
+            expect(cookieData.distinct_id).toBeDefined()
         })
 
         it('should allow swapping between storage methods', () => {
