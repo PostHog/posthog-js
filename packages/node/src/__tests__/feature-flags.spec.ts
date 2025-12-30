@@ -5248,3 +5248,358 @@ describe('ETag support for local evaluation polling', () => {
     expect(fetchCalls[2].options.headers['If-None-Match']).toBe('"etag-v2"')
   })
 })
+
+describe('error handling and backoff', () => {
+  let posthog: PostHog
+
+  jest.useFakeTimers()
+
+  afterEach(async () => {
+    await posthog.shutdown()
+  })
+
+  /**
+   * Helper to create a mock fetch that returns a specific status code for flag requests.
+   * Returns 200 for all other endpoints.
+   */
+  function createMockFetch(statusCode: number, onFlagFetch?: () => void): jest.Mock & { callCount: number } {
+    let callCount = 0
+    const mockFetch = jest.fn((url: string) => {
+      if ((url as string).includes('api/feature_flag/local_evaluation')) {
+        callCount++
+        onFlagFetch?.()
+        return Promise.resolve({
+          status: statusCode,
+          text: () => Promise.resolve(statusCode === 401 ? 'Unauthorized' : 'Error'),
+          json: () => Promise.resolve({ error: 'Error' }),
+          headers: {
+            get: () => null,
+          },
+        })
+      }
+
+      // Handle other endpoints (batch, etc.)
+      return Promise.resolve({
+        status: 200,
+        text: () => Promise.resolve('ok'),
+        json: () => Promise.resolve({ status: 'ok' }),
+      })
+    }) as jest.Mock & { callCount: number }
+
+    Object.defineProperty(mockFetch, 'callCount', {
+      get: () => callCount,
+    })
+
+    return mockFetch
+  }
+
+  it('should block on-demand fetches during backoff period after 401', async () => {
+    const mockFetch = createMockFetch(401)
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: 30000,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await waitForPromises()
+    expect(mockFetch.callCount).toBe(1)
+
+    // On-demand fetches should be blocked during backoff
+    await posthog.getFeatureFlag('test-flag', 'user-1')
+    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-2')
+    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-3')
+    await waitForPromises()
+
+    expect(mockFetch.callCount).toBe(1)
+  })
+
+  it('should block on-demand fetches during backoff period after 403', async () => {
+    const mockFetch = createMockFetch(403)
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: 30000,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await waitForPromises()
+    expect(mockFetch.callCount).toBe(1)
+
+    // On-demand fetches should be blocked during backoff
+    await posthog.getFeatureFlag('test-flag', 'user-1')
+    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-2')
+    await waitForPromises()
+
+    expect(mockFetch.callCount).toBe(1)
+  })
+
+  it('should block on-demand fetches during backoff period after 429', async () => {
+    const mockFetch = createMockFetch(429)
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: 30000,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await waitForPromises()
+    expect(mockFetch.callCount).toBe(1)
+
+    // On-demand fetches should be blocked during backoff
+    await posthog.getFeatureFlag('test-flag', 'user-1')
+    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-2')
+    await waitForPromises()
+
+    expect(mockFetch.callCount).toBe(1)
+  })
+
+  it('should allow on-demand fetches after backoff period expires', async () => {
+    // Use real timers for this test to avoid jest.useFakeTimers() resetting Date.now mock
+    jest.useRealTimers()
+
+    let fetchCallCount = 0
+    // Track time to simulate time passing
+    let mockTime = Date.now()
+    const originalDateNow = Date.now
+    Date.now = () => mockTime
+
+    const mockFetch = jest.fn((url: string) => {
+      if ((url as string).includes('api/feature_flag/local_evaluation')) {
+        fetchCallCount++
+        // Always return 401 to keep triggering backoff
+        return Promise.resolve({
+          status: 401,
+          text: () => Promise.resolve('Unauthorized'),
+          json: () => Promise.resolve({ error: 'Invalid API key' }),
+          headers: {
+            get: () => null,
+          },
+        })
+      }
+      return Promise.resolve({
+        status: 200,
+        text: () => Promise.resolve('ok'),
+        json: () => Promise.resolve({ status: 'ok' }),
+      })
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: 1000, // Use small interval for faster test
+      ...posthogImmediateResolveOptions,
+    })
+
+    // Wait for initial fetch with a short delay
+    await new Promise((r) => setTimeout(r, 50))
+    expect(fetchCallCount).toBe(1)
+
+    // On-demand fetch should be blocked during backoff
+    await posthog.getFeatureFlag('test-flag', 'user-1')
+    expect(fetchCallCount).toBe(1)
+
+    // Advance mock time past the exponential backoff period
+    // After first 401: backOffCount=1, interval = min(60000, 1000 * 2^1) = 2000ms
+    mockTime += 2001
+
+    // Now on-demand fetch should be allowed (backoff expired based on Date.now())
+    await posthog.getFeatureFlag('test-flag', 'user-2')
+
+    // fetchCallCount should be 2 (on-demand fetch was allowed after backoff expired)
+    expect(fetchCallCount).toBe(2)
+
+    // Restore Date.now and fake timers
+    Date.now = originalDateNow
+    jest.useFakeTimers()
+  })
+
+  it('should increase backoff intervals exponentially (2s → 4s → 8s)', async () => {
+    // Verifies exponential backoff: interval = min(60s, baseInterval * 2^backoffCount)
+    // With baseInterval=1000ms: 2000ms → 4000ms → 8000ms
+    jest.useRealTimers()
+
+    let fetchCallCount = 0
+    let mockTime = Date.now()
+    const originalDateNow = Date.now
+    Date.now = () => mockTime
+
+    const mockFetch = jest.fn((url: string) => {
+      if ((url as string).includes('api/feature_flag/local_evaluation')) {
+        fetchCallCount++
+        return Promise.resolve({
+          status: 401,
+          text: () => Promise.resolve('Unauthorized'),
+          json: () => Promise.resolve({ error: 'Invalid API key' }),
+          headers: { get: () => null },
+        })
+      }
+      return Promise.resolve({ status: 200, text: () => Promise.resolve('ok'), json: () => Promise.resolve({}) })
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: 1000,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await new Promise((r) => setTimeout(r, 50))
+    expect(fetchCallCount).toBe(1) // Initial fetch, backoff = 2s
+
+    // Advance past 2s backoff, trigger second error
+    mockTime += 2001
+    await posthog.getFeatureFlag('test', 'user')
+    expect(fetchCallCount).toBe(2) // backoff now = 4s
+
+    // 2s is NOT enough anymore
+    mockTime += 2001
+    await posthog.getFeatureFlag('test', 'user')
+    expect(fetchCallCount).toBe(2) // Still blocked
+
+    // 4s total is enough
+    mockTime += 2000
+    await posthog.getFeatureFlag('test', 'user')
+    expect(fetchCallCount).toBe(3) // backoff now = 8s
+
+    // 4s is NOT enough anymore
+    mockTime += 4001
+    await posthog.getFeatureFlag('test', 'user')
+    expect(fetchCallCount).toBe(3) // Still blocked
+
+    // 8s total is enough
+    mockTime += 4000
+    await posthog.getFeatureFlag('test', 'user')
+    expect(fetchCallCount).toBe(4) // Exponential backoff verified!
+
+    Date.now = originalDateNow
+    jest.useFakeTimers()
+  })
+
+  it('should clear backoff after successful response', async () => {
+    let fetchCallCount = 0
+    const mockFetch = jest.fn((url: string) => {
+      if ((url as string).includes('api/feature_flag/local_evaluation')) {
+        fetchCallCount++
+        if (fetchCallCount === 1) {
+          // First fetch: return 401 to trigger backoff
+          return Promise.resolve({
+            status: 401,
+            text: () => Promise.resolve('Unauthorized'),
+            json: () => Promise.resolve({ error: 'Invalid API key' }),
+            headers: {
+              get: () => null,
+            },
+          })
+        } else {
+          // Subsequent fetches: return 200 success
+          return Promise.resolve({
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                flags: [{ id: 1, key: 'test-flag', active: true, filters: { groups: [] } }],
+                group_type_mapping: {},
+                cohorts: {},
+              }),
+            headers: {
+              get: () => null,
+            },
+          })
+        }
+      }
+      return Promise.resolve({
+        status: 200,
+        text: () => Promise.resolve('ok'),
+        json: () => Promise.resolve({ status: 'ok' }),
+      })
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: 30000,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await waitForPromises()
+    expect(fetchCallCount).toBe(1) // Initial 401
+
+    // Use reloadFeatureFlags to trigger a retry (uses forceReload=true, bypasses backoff)
+    await posthog.reloadFeatureFlags()
+    await waitForPromises()
+    expect(fetchCallCount).toBe(2) // Retry succeeded with 200
+
+    // Now on-demand fetch should work immediately (backoff cleared by 200 response)
+    await posthog.getFeatureFlag('test-flag', 'user-1')
+    await waitForPromises()
+
+    // The getFeatureFlag call should not trigger another fetch because
+    // loadedSuccessfullyOnce is now true (flags loaded successfully)
+    // This verifies the backoff was cleared and normal operation resumed
+    expect(fetchCallCount).toBe(2)
+  })
+
+  it('should allow reloadFeatureFlags() to bypass backoff', async () => {
+    let fetchCallCount = 0
+    const mockFetch = jest.fn((url: string) => {
+      if ((url as string).includes('api/feature_flag/local_evaluation')) {
+        fetchCallCount++
+        // Always return 401 to keep backoff active
+        return Promise.resolve({
+          status: 401,
+          text: () => Promise.resolve('Unauthorized'),
+          json: () => Promise.resolve({ error: 'Invalid API key' }),
+          headers: {
+            get: () => null,
+          },
+        })
+      }
+      return Promise.resolve({
+        status: 200,
+        text: () => Promise.resolve('ok'),
+        json: () => Promise.resolve({ status: 'ok' }),
+      })
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: 30000,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await waitForPromises()
+    expect(fetchCallCount).toBe(1) // Initial fetch
+
+    // On-demand fetch should be blocked
+    await posthog.getFeatureFlag('test-flag', 'user-1')
+    await waitForPromises()
+    expect(fetchCallCount).toBe(1) // Still blocked
+
+    // reloadFeatureFlags uses forceReload=true internally, should bypass backoff
+    await posthog.reloadFeatureFlags()
+    await waitForPromises()
+
+    // reloadFeatureFlags should have bypassed backoff and made a new fetch
+    expect(fetchCallCount).toBe(2)
+
+    // On-demand fetch should still be blocked (new backoff started after 401)
+    await posthog.getFeatureFlag('test-flag', 'user-2')
+    await waitForPromises()
+    expect(fetchCallCount).toBe(2) // Still blocked
+  })
+})
