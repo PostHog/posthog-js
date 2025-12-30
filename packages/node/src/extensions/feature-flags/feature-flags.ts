@@ -79,6 +79,7 @@ class FeatureFlagsPoller {
   private cacheProvider?: FlagDefinitionCacheProvider
   private loadingPromise?: Promise<void>
   private flagsEtag?: string
+  private nextFetchAllowedAt?: number
 
   constructor({
     pollingInterval,
@@ -586,6 +587,13 @@ class FeatureFlagsPoller {
       return
     }
 
+    // Respect backoff for on-demand fetches (e.g., from getFeatureFlag calls).
+    // The poller uses forceReload=true and has already waited the backoff period.
+    if (!forceReload && this.nextFetchAllowedAt && Date.now() < this.nextFetchAllowedAt) {
+      this.logMsgIfDebug(() => console.debug('[FEATURE FLAGS] Skipping fetch, in backoff period'))
+      return
+    }
+
     if (!this.loadingPromise) {
       this.loadingPromise = this._loadFeatureFlags()
         .catch((err) => this.logMsgIfDebug(() => console.debug(`[FEATURE FLAGS] Failed to load feature flags: ${err}`)))
@@ -617,6 +625,28 @@ class FeatureFlagsPoller {
     }
 
     return Math.min(SIXTY_SECONDS, this.pollingInterval * 2 ** this.backOffCount)
+  }
+
+  /**
+   * Enter backoff state after receiving an error response (401, 403, 429).
+   * This enables exponential backoff for the poller and blocks on-demand fetches.
+   */
+  private beginBackoff(): void {
+    this.shouldBeginExponentialBackoff = true
+    this.backOffCount += 1
+    // Use the same backoff interval as the poller to avoid overwhelming
+    // the server with on-demand requests while polling is backed off.
+    this.nextFetchAllowedAt = Date.now() + this.getPollingInterval()
+  }
+
+  /**
+   * Clear backoff state after a successful response (200, 304).
+   * This resets the polling interval and allows on-demand fetches immediately.
+   */
+  private clearBackoff(): void {
+    this.shouldBeginExponentialBackoff = false
+    this.backOffCount = 0
+    this.nextFetchAllowedAt = undefined
   }
 
   async _loadFeatureFlags(): Promise<void> {
@@ -690,14 +720,12 @@ class FeatureFlagsPoller {
           // Update ETag if server sent one (304 can include updated ETag per HTTP spec)
           this.flagsEtag = res.headers?.get('ETag') ?? this.flagsEtag
           this.loadedSuccessfullyOnce = true
-          this.shouldBeginExponentialBackoff = false
-          this.backOffCount = 0
+          this.clearBackoff()
           return
 
         case 401:
           // Invalid API key
-          this.shouldBeginExponentialBackoff = true
-          this.backOffCount += 1
+          this.beginBackoff()
           throw new ClientError(
             `Your project key or personal API key is invalid. Setting next polling interval to ${this.getPollingInterval()}ms. More information: https://posthog.com/docs/api#rate-limiting`
           )
@@ -715,16 +743,14 @@ class FeatureFlagsPoller {
 
         case 403:
           // Permissions issue
-          this.shouldBeginExponentialBackoff = true
-          this.backOffCount += 1
+          this.beginBackoff()
           throw new ClientError(
             `Your personal API key does not have permission to fetch feature flag definitions for local evaluation. Setting next polling interval to ${this.getPollingInterval()}ms. Are you sure you're using the correct personal and Project API key pair? More information: https://posthog.com/docs/api/overview`
           )
 
         case 429:
           // Rate limited
-          this.shouldBeginExponentialBackoff = true
-          this.backOffCount += 1
+          this.beginBackoff()
           throw new ClientError(
             `You are being rate limited. Setting next polling interval to ${this.getPollingInterval()}ms. More information: https://posthog.com/docs/api#rate-limiting`
           )
@@ -748,8 +774,7 @@ class FeatureFlagsPoller {
           }
 
           this.updateFlagState(flagData)
-          this.shouldBeginExponentialBackoff = false
-          this.backOffCount = 0
+          this.clearBackoff()
 
           if (this.cacheProvider && shouldFetch) {
             // Only notify the cache if it's actually expecting new data
