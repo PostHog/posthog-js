@@ -842,24 +842,41 @@ export class PostHog {
 
     _loaded(): void {
         if (this.config.opt_in_site_apps) {
+            // When site apps are enabled, we need to ensure remote config is loaded BEFORE
+            // firing the loaded callback. This fixes a race condition where the loaded callback
+            // would fire before window._POSTHOG_REMOTE_CONFIG was populated, preventing site
+            // apps from auto-initializing.
             const loader = new RemoteConfigLoader(this)
+            let callbackFired = false
 
+            // Guard to prevent the loaded callback from firing twice (once from timeout,
+            // once from successful remote config load)
+            const fireLoadedCallback = () => {
+                if (callbackFired) return
+                callbackFired = true
+                this._fireLoadedCallback()
+            }
+
+            // Fallback: Fire loaded callback after 5s even if remote config fails to load.
+            // This ensures the SDK doesn't get stuck if remote config loading fails.
             const timeout = setTimeout(() => {
                 logger.warn('Remote config loading timed out. Firing loaded callback anyway.')
-                this._fireLoadedCallback()
+                fireLoadedCallback()
             }, 5000)
 
+            // Wait for remote config to load, then fire the loaded callback
             loader.load(() => {
                 clearTimeout(timeout)
-                this._fireLoadedCallback()
+                fireLoadedCallback()
             })
-
-            this.featureFlags.flags()
         } else {
+            // Default behavior: Fire loaded callback immediately and load remote config
+            // in the background (no need to wait)
             this._fireLoadedCallback()
             new RemoteConfigLoader(this).load()
-            this.featureFlags.flags()
         }
+
+        this.featureFlags.flags()
     }
 
     private _fireLoadedCallback(): void {
