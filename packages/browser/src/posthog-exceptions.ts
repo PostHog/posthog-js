@@ -42,38 +42,27 @@ export class PostHogExceptions {
         this._policyConfig = this._instance.persistence?.get_property(ERROR_TRACKING_POLICY_CONFIG)
     }
 
-    // sampleRate
-    // linkedFeatureFlag
-    // urlTriggers
-    // urlBlocklist
-    // eventTriggers
-    // triggerMatchType
-
     onRemoteConfig(response: RemoteConfig) {
         const suppressionRules = response.errorTracking?.suppressionRules ?? []
         const captureExtensionExceptions = response.errorTracking?.captureExtensionExceptions
-        const sampleRate = response.errorTracking?.sampleRate
-        const linkedFeatureFlag = response.errorTracking?.linkedFeatureFlag
-        const urlTriggers = response.errorTracking?.urlTriggers
-        const urlBlocklist = response.errorTracking?.urlBlocklist
-        const eventTriggers = response.errorTracking?.eventTriggers
-        const triggerMatchType = response.errorTracking?.triggerMatchType
+        const policyConfig = {
+            sampleRate: response.errorTracking?.sampleRate,
+            linkedFeatureFlag: response.errorTracking?.linkedFeatureFlag,
+            urlTriggers: response.errorTracking?.urlTriggers,
+            urlBlocklist: response.errorTracking?.urlBlocklist,
+            eventTriggers: response.errorTracking?.eventTriggers,
+            triggerMatchType: response.errorTracking?.triggerMatchType,
+        }
 
         // store this in-memory in case persistence is disabled
         this._suppressionRules = suppressionRules
+        this._policyConfig = policyConfig
 
         if (this._instance.persistence) {
             this._instance.persistence.register({
                 [ERROR_TRACKING_SUPPRESSION_RULES]: this._suppressionRules,
                 [ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS]: captureExtensionExceptions,
-                [ERROR_TRACKING_POLICY_CONFIG]: {
-                    sampleRate,
-                    linkedFeatureFlag,
-                    urlTriggers,
-                    urlBlocklist,
-                    eventTriggers,
-                    triggerMatchType,
-                },
+                [ERROR_TRACKING_POLICY_CONFIG]: policyConfig,
             })
         }
     }
