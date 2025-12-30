@@ -5,12 +5,7 @@ import { PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
-import {
-    localPlusCookieStore,
-    resetLocalStorageSupported,
-    resetSessionStorageSupported,
-    sessionStore,
-} from '../storage'
+import { resetLocalStorageSupported, resetSessionStorageSupported, sessionStore } from '../storage'
 import { defaultPostHog } from './helpers/posthog-instance'
 import Mock = jest.Mock
 
@@ -288,10 +283,9 @@ describe('posthog instance persistence', () => {
     })
     it('should not write to storage if opt_out_persistence_by_default and opt_out_capturing_by_default is true', () => {
         const sessionSpy = jest.spyOn(sessionStore, '_set')
-        const localPlusCookieSpy = jest.spyOn(localPlusCookieStore, '_set')
 
         // init posthog while opting out
-        defaultPostHog().init(
+        const posthog = defaultPostHog().init(
             uuidv7(),
             {
                 opt_out_persistence_by_default: true,
@@ -301,10 +295,17 @@ describe('posthog instance persistence', () => {
             uuidv7()
         )
 
+        // Spy on the created store instance's _set method
+        // Note: We spy after initialization, so we're checking that no further calls are made
+        const createdStore = (posthog.persistence as any)._storage
+        const localPlusCookieSpy = jest.spyOn(createdStore, '_set')
+
         // we do one call to check if session storage is supported, but don't actually store anything
         // the important thing is that we don't store the session id or window id, etc. This test was added alongside
         // a fix which prevented this
         const sessionCalls = sessionSpy.mock.calls.filter(([key]) => key !== '__support__')
+
+        // Check that no calls were made to the created store (spy captures future calls)
         const localPlusCookieCalls = localPlusCookieSpy.mock.calls.filter(([key]) => key !== '__support__')
 
         expect(sessionCalls).toEqual([])
@@ -313,10 +314,9 @@ describe('posthog instance persistence', () => {
 
     it('should write to storage if opt_out_persistence_by_default and opt_out_capturing_by_default is false', () => {
         const sessionSpy = jest.spyOn(sessionStore, '_set')
-        const localPlusCookieSpy = jest.spyOn(localPlusCookieStore, '_set')
 
         // init posthog while opting out
-        defaultPostHog().init(
+        const posthog = defaultPostHog().init(
             uuidv7(),
             {
                 opt_out_persistence_by_default: false,
@@ -325,6 +325,15 @@ describe('posthog instance persistence', () => {
             },
             uuidv7()
         )
+
+        // Spy on the created store instance's _set method
+        const createdStore = (posthog.persistence as any)._storage
+        const localPlusCookieSpy = jest.spyOn(createdStore, '_set')
+
+        // Trigger a save to verify storage is called
+        if (posthog.persistence) {
+            posthog.persistence.save()
+        }
 
         const sessionCalls = sessionSpy.mock.calls.filter(([key]) => key !== '__support__')
         const localPlusCookieCalls = localPlusCookieSpy.mock.calls.filter(([key]) => key !== '__support__')

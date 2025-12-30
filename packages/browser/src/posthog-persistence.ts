@@ -1,7 +1,7 @@
 /* eslint camelcase: "off" */
 
 import { each, extend, include, stripEmptyProperties } from './utils'
-import { cookieStore, localPlusCookieStore, localStore, memoryStore, sessionStore } from './storage'
+import { cookieStore, createLocalPlusCookieStore, localStore, memoryStore, sessionStore } from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
 import {
     ENABLED_FEATURE_FLAGS,
@@ -99,23 +99,37 @@ export class PostHogPersistence {
         }
 
         let store: PersistentStore
+
         // We handle storage type in a case-insensitive way for backwards compatibility
         const storage_type = config['persistence'].toLowerCase() as Lowercase<PostHogConfig['persistence']>
-        if (storage_type === 'localstorage' && localStore._is_supported()) {
+        if (storage_type === 'localstorage') {
             store = localStore
-        } else if (storage_type === 'localstorage+cookie' && localPlusCookieStore._is_supported()) {
-            store = localPlusCookieStore
-        } else if (storage_type === 'sessionstorage' && sessionStore._is_supported()) {
+        } else if (storage_type === 'localstorage+cookie') {
+            const customCookieProperties = config['cookie_persisted_properties'] || []
+            store = createLocalPlusCookieStore(customCookieProperties)
+        } else if (storage_type === 'sessionstorage') {
             store = sessionStore
         } else if (storage_type === 'memory') {
             store = memoryStore
         } else if (storage_type === 'cookie') {
             store = cookieStore
-        } else if (localPlusCookieStore._is_supported()) {
-            // selected storage type wasn't supported, fallback to 'localstorage+cookie' if possible
-            store = localPlusCookieStore
         } else {
+            // UNREACHABLE CODE - `storage_type` is `never` but we need this to guarantee
+            // TS doesn't think `store` is possibly `undefined`
             store = cookieStore
+        }
+
+        // If the chosen storage type is not supported,
+        // we fallback to 'localstorage+cookie' or 'cookie'
+        if (!store._is_supported()) {
+            const customCookieProperties = config['cookie_persisted_properties'] || []
+            const customStore = createLocalPlusCookieStore(customCookieProperties)
+
+            if (customStore._is_supported()) {
+                store = customStore
+            } else {
+                store = cookieStore
+            }
         }
 
         return store
