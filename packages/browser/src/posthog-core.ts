@@ -3203,6 +3203,7 @@ export class PostHog {
             // we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
             this.reset(true)
             this.sessionManager?.destroy()
+            this.pageViewManager?.destroy()
             this.sessionManager = new SessionIdManager(this)
             if (this.persistence) {
                 this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
@@ -3274,6 +3275,7 @@ export class PostHog {
                 $device_id: null,
             })
             this.sessionManager?.destroy()
+            this.pageViewManager?.destroy()
             this.sessionManager = undefined
             this.sessionPropsManager = undefined
             this.sessionRecording?.stopRecording()
