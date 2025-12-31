@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.17.2
+
+### Patch Changes
+
+- [#2833](https://github.com/PostHog/posthog-js/pull/2833) [`c7c3140`](https://github.com/PostHog/posthog-js/commit/c7c3140a20957d71072f355be4744a6cdb315360) Thanks [@ioannisj](https://github.com/ioannisj)! - fix expo web export build error
+  (2025-12-31)
+
 ## 4.17.1
 
 ### Patch Changes
