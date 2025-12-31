@@ -44,6 +44,16 @@ const parseName = (config: PostHogConfig): string => {
     }
 }
 
+const isArrayContentsEqual = (arr1: readonly string[], arr2: readonly string[]): boolean => {
+    if (arr1.length !== arr2.length) {
+        return false
+    }
+
+    const sortedArr1 = [...arr1].sort()
+    const sortedArr2 = [...arr2].sort()
+    return sortedArr1.every((item, index) => item === sortedArr2[index])
+}
+
 /**
  * PostHog Persistence Object
  * @constructor
@@ -340,16 +350,21 @@ export class PostHogPersistence {
         this.set_cross_subdomain(config['cross_subdomain_cookie'])
         this.set_secure(config['secure_cookie'])
 
-        if (config.persistence !== oldConfig.persistence) {
-            // If the persistence type has changed, we need to migrate the data.
+        // If the persistence type has changed, we need to migrate the data.
+        // Same applies if the cookie_persisted_properties has changed.
+        if (
+            config.persistence !== oldConfig.persistence ||
+            !isArrayContentsEqual(config.cookie_persisted_properties || [], oldConfig.cookie_persisted_properties || [])
+        ) {
             const newStore = this._buildStorage(config)
             const props = this.props
 
-            // clear the old store
+            // Clear the old store
             this.clear()
+
+            // Set up the new store data
             this._storage = newStore
             this.props = props
-
             this.save()
         }
     }
