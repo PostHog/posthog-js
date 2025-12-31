@@ -82,6 +82,47 @@ describe('persistence', () => {
             saveMock.mockClear()
         })
 
+        it('should rebuild storage when cookie_persisted_properties changes via update_config', () => {
+            const encode = (props: any) => encodeURIComponent(JSON.stringify(props))
+            const expectedProps = () => ({
+                distinct_id: 'test',
+                test_prop: 'test_val',
+                custom_prop: 'custom_value',
+            })
+
+            let config = makePostHogConfig('test', 'localStorage+cookie')
+            const lib = new PostHogPersistence(config)
+            lib.register(expectedProps())
+
+            // Initially, custom_prop should NOT be in cookies (only default properties)
+            expect(document.cookie).toContain(
+                `ph__posthog=${encode({
+                    distinct_id: 'test',
+                })}`
+            )
+            expect(document.cookie).not.toContain('custom_prop')
+
+            // Now update config to include custom_prop in cookie_persisted_properties
+            const newConfig = {
+                ...makePostHogConfig('test', 'localStorage+cookie'),
+                cookie_persisted_properties: ['custom_prop'],
+            }
+            lib.update_config(newConfig, config)
+            config = newConfig
+
+            // After update, custom_prop should now be in cookies
+            expect(document.cookie).toContain(
+                `ph__posthog=${encode({
+                    distinct_id: 'test',
+                    custom_prop: 'custom_value',
+                })}`
+            )
+
+            // Properties should still be the same
+            expect(lib.props).toEqual(expectedProps())
+            expect(localStorage.getItem('ph__posthog')).toEqual(JSON.stringify(expectedProps()))
+        })
+
         it('should set direct referrer', () => {
             referrer = ''
             library.update_referrer_info()
