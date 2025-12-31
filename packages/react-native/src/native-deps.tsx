@@ -151,7 +151,7 @@ const buildLegacyStorage = (filesystem: any): PostHogCustomStorage => {
 export const buildOptimisiticAsyncStorage = (): PostHogCustomStorage => {
   // On web platform during SSR (no window), return a no-op storage to avoid crashes
   // This allows the SDK to initialize safely during static export (e.g., Expo web export)
-  if (Platform.OS === 'web' && typeof window === 'undefined') {
+  if (Platform.OS === 'web' && typeof (globalThis as any).window === 'undefined') {
     return {
       getItem: () => null,
       setItem: () => {},
