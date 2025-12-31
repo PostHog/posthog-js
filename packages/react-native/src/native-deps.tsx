@@ -149,6 +149,15 @@ const buildLegacyStorage = (filesystem: any): PostHogCustomStorage => {
 }
 
 export const buildOptimisiticAsyncStorage = (): PostHogCustomStorage => {
+  // On web platform during SSR (no window), return a no-op storage to avoid crashes
+  // This allows the SDK to initialize safely during static export (e.g., Expo web export)
+  if (Platform.OS === 'web' && typeof (globalThis as any).window === 'undefined') {
+    return {
+      getItem: () => null,
+      setItem: () => {},
+    }
+  }
+
   // expo-file-system is not supported on web and macos, so we need to use the react-native-async-storage package instead
   // see https://github.com/PostHog/posthog-js-lite/blob/5fb7bee96f739b243dfea5589e2027f16629e8cd/posthog-react-native/src/optional/OptionalExpoFileSystem.ts#L7-L11
   const supportedPlatform = Platform.OS !== 'web' && Platform.OS !== 'macos'
