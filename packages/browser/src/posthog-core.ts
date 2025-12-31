@@ -3205,6 +3205,7 @@ export class PostHog {
             this.sessionManager?.destroy()
             this.pageViewManager?.destroy()
             this.sessionManager = new SessionIdManager(this)
+            this.pageViewManager = new PageViewManager(this)
             if (this.persistence) {
                 this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
             }
