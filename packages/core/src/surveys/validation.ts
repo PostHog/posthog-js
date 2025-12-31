@@ -63,10 +63,7 @@ export function getLengthFromRules(
  * - Required questions: min=1 is redundant (required already means "enter something")
  * - Optional questions: min=1 is useless (user can skip, or if they type anything it's ≥1 char)
  */
-export function getRequirementsHint(
-  minLength: number | undefined,
-  maxLength: number | undefined
-): string | undefined {
+export function getRequirementsHint(minLength: number | undefined, maxLength: number | undefined): string | undefined {
   // Skip showing hint for min=1 - it's always redundant/useless
   const effectiveMin = minLength === 1 ? undefined : minLength
 
