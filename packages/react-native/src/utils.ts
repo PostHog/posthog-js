@@ -29,4 +29,14 @@ export function isWeb(): boolean {
   return Platform.OS === 'web'
 }
 
+/** Checks if the current platform is macOS */
+export function isMacOS(): boolean {
+  return Platform.OS === 'macos'
+}
+
+/** Checks if the current platform is Windows */
+export function isWindows(): boolean {
+  return Platform.OS === 'windows'
+}
+
 export const isHermes = () => !!GLOBAL_OBJ.HermesInternal
