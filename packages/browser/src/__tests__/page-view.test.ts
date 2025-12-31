@@ -260,5 +260,48 @@ describe('PageView ID manager', () => {
 
             expect(unsubscribe).toHaveBeenCalled()
         })
+
+        it('should handle sessionManager being undefined (cookieless mode)', () => {
+            // In cookieless mode, sessionManager is undefined
+            instance = {
+                config: {},
+                sessionManager: undefined,
+                scrollManager: { resetContext: jest.fn(), getContext: jest.fn() },
+            } as unknown as PostHog
+
+            // Should not throw
+            expect(() => {
+                pageViewManager = new PageViewManager(instance)
+            }).not.toThrow()
+
+            // PageViewManager should still work for pageviews
+            const props = pageViewManager.doPageView(new Date(), 'pv-1')
+            expect(props.$pageview_id).toBe('pv-1')
+
+            // destroy should not throw either
+            expect(() => {
+                pageViewManager.destroy()
+            }).not.toThrow()
+        })
+
+        it('should handle destroy being called multiple times', () => {
+            const unsubscribe = jest.fn()
+            const mockOnSessionId = jest.fn(() => unsubscribe)
+
+            instance = {
+                config: {},
+                sessionManager: { onSessionId: mockOnSessionId },
+                scrollManager: { resetContext: jest.fn(), getContext: jest.fn() },
+            } as unknown as PostHog
+
+            pageViewManager = new PageViewManager(instance)
+
+            // Call destroy multiple times
+            pageViewManager.destroy()
+            pageViewManager.destroy()
+
+            // Should only unsubscribe once
+            expect(unsubscribe).toHaveBeenCalledTimes(1)
+        })
     })
 })

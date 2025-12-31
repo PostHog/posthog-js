@@ -43,7 +43,7 @@ export class PageViewManager {
         this._unsubscribeSessionId = this._instance.sessionManager?.onSessionId(this._onSessionIdChange)
     }
 
-    private _onSessionIdChange: SessionIdChangedCallback = (_sessionId, _windowId, changeReason) => {
+    private _onSessionIdChange: SessionIdChangedCallback = (sessionId, _windowId, changeReason) => {
         // Only act on actual session rotations, not initial session creation
         if (!changeReason) {
             return
@@ -54,6 +54,10 @@ export class PageViewManager {
         // - activityTimeout: 30 min idle (default, configurable up to 10 hours)
         // - sessionPastMaximumLength: 24 hour max session
         if (changeReason.noSessionId || changeReason.activityTimeout || changeReason.sessionPastMaximumLength) {
+            logger.info('[PageViewManager] Session rotated, clearing pageview state', {
+                sessionId,
+                changeReason,
+            })
             this._currentPageview = undefined
             this._instance.scrollManager.resetContext()
         }
