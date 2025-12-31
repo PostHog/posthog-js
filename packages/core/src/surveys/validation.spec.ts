@@ -1,4 +1,4 @@
-import { getValidationError, getLengthFromRules } from './validation'
+import { getValidationError, getLengthFromRules, getRequirementsHint } from './validation'
 import { SurveyValidationType, SurveyValidationRule } from '../types'
 
 describe('getValidationError', () => {
@@ -115,5 +115,54 @@ describe('getLengthFromRules', () => {
     expect(
       getLengthFromRules([{ type: SurveyValidationType.MaxLength, value: 100 }], SurveyValidationType.MaxLength)
     ).toBe(100)
+  })
+})
+
+describe('getRequirementsHint', () => {
+  describe('min=1 edge case', () => {
+    it('returns undefined for min=1 (redundant/useless hint)', () => {
+      expect(getRequirementsHint(1, undefined)).toBeUndefined()
+    })
+
+    it('returns undefined for min=1 even with maxLength', () => {
+      // min=1 is still redundant, but maxLength hint should show
+      expect(getRequirementsHint(1, 100)).toBe('Maximum 100 characters')
+    })
+  })
+
+  describe('minLength only', () => {
+    it('returns hint for min > 1', () => {
+      expect(getRequirementsHint(5, undefined)).toBe('Enter at least 5 characters')
+    })
+
+    it('uses singular for min=2 (edge case after min=1 is hidden)', () => {
+      expect(getRequirementsHint(2, undefined)).toBe('Enter at least 2 characters')
+    })
+  })
+
+  describe('maxLength only', () => {
+    it('returns hint for maxLength', () => {
+      expect(getRequirementsHint(undefined, 100)).toBe('Maximum 100 characters')
+    })
+
+    it('uses singular for max=1', () => {
+      expect(getRequirementsHint(undefined, 1)).toBe('Maximum 1 character')
+    })
+  })
+
+  describe('minLength + maxLength', () => {
+    it('returns combined hint when both present', () => {
+      expect(getRequirementsHint(5, 100)).toBe('Enter 5-100 characters')
+    })
+
+    it('shows only maxLength when min=1', () => {
+      expect(getRequirementsHint(1, 50)).toBe('Maximum 50 characters')
+    })
+  })
+
+  describe('no constraints', () => {
+    it('returns undefined when no min or max', () => {
+      expect(getRequirementsHint(undefined, undefined)).toBeUndefined()
+    })
   })
 })

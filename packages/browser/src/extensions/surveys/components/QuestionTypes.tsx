@@ -15,6 +15,7 @@ import {
     isString,
     getValidationError,
     getLengthFromRules,
+    getRequirementsHint,
     SurveyValidationType,
 } from '@posthog/core'
 import { dissatisfiedEmoji, neutralEmoji, satisfiedEmoji, veryDissatisfiedEmoji, verySatisfiedEmoji } from '../icons'
@@ -115,16 +116,7 @@ export function OpenTextQuestion({
     // Build requirements hint message
     const minLength = getLengthFromRules(question.validation, SurveyValidationType.MinLength)
     const maxLength = getLengthFromRules(question.validation, SurveyValidationType.MaxLength)
-    const requirementsHint = useMemo(() => {
-        if (minLength && maxLength) {
-            return `Enter ${minLength}-${maxLength} characters`
-        } else if (minLength) {
-            return `Enter at least ${minLength} characters`
-        } else if (maxLength) {
-            return `Maximum ${maxLength} characters`
-        }
-        return null
-    }, [minLength, maxLength])
+    const requirementsHint = useMemo(() => getRequirementsHint(minLength, maxLength), [minLength, maxLength])
 
     const handleSubmit = () => {
         if (validationError) {
