@@ -1,6 +1,7 @@
 import { PageViewManager } from '../page-view'
 import { PostHog } from '../posthog-core'
 import { ScrollManager } from '../scroll-manager'
+import { SessionIdChangedCallback } from '../types'
 
 const mockWindowGetter = jest.fn()
 jest.mock('../utils/globals', () => ({
@@ -124,6 +125,183 @@ describe('PageView ID manager', () => {
             expect(firstPageView.$prev_pageview_pathname).toBeUndefined()
             const secondPageView = pageViewIdManager.doPageView(secondTimestamp, pageviewId2)
             expect(secondPageView.$prev_pageview_pathname).toEqual('/pathname')
+        })
+    })
+
+    describe('session rotation handling', () => {
+        let instance: PostHog
+        let pageViewManager: PageViewManager
+        let sessionIdCallback: SessionIdChangedCallback
+
+        beforeEach(() => {
+            const mockOnSessionId = jest.fn((callback: SessionIdChangedCallback) => {
+                sessionIdCallback = callback
+                return () => {} // unsubscribe function
+            })
+
+            instance = {
+                config: {},
+                sessionManager: {
+                    onSessionId: mockOnSessionId,
+                },
+                scrollManager: {
+                    resetContext: jest.fn(),
+                    getContext: jest.fn(),
+                },
+            } as unknown as PostHog
+
+            pageViewManager = new PageViewManager(instance)
+            mockWindowGetter.mockReturnValue({
+                location: { pathname: '/page-a' },
+            })
+        })
+
+        it('should subscribe to session changes on construction', () => {
+            expect(instance.sessionManager!.onSessionId).toHaveBeenCalledTimes(1)
+        })
+
+        it('should clear state on activity timeout session rotation', () => {
+            // Setup: Create initial pageview
+            pageViewManager.doPageView(new Date('2024-01-01T10:00:00'), 'pv-1')
+            expect(pageViewManager._currentPageview).toBeDefined()
+            expect(pageViewManager._currentPageview?.pathname).toBe('/page-a')
+
+            // Act: Simulate session rotation due to activity timeout (30 min idle)
+            sessionIdCallback('new-session-id', 'new-window-id', {
+                noSessionId: false,
+                activityTimeout: true,
+                sessionPastMaximumLength: false,
+            })
+
+            // Assert: State should be cleared
+            expect(pageViewManager._currentPageview).toBeUndefined()
+            expect(instance.scrollManager.resetContext).toHaveBeenCalled()
+        })
+
+        it('should clear state on session past maximum length', () => {
+            // Setup: Create initial pageview
+            pageViewManager.doPageView(new Date('2024-01-01T10:00:00'), 'pv-1')
+
+            // Act: Simulate session rotation due to 24 hour max length
+            sessionIdCallback('new-session-id', 'new-window-id', {
+                noSessionId: false,
+                activityTimeout: false,
+                sessionPastMaximumLength: true,
+            })
+
+            // Assert: State should be cleared
+            expect(pageViewManager._currentPageview).toBeUndefined()
+        })
+
+        it('should clear state on noSessionId (after posthog.reset())', () => {
+            // Setup: Create initial pageview
+            pageViewManager.doPageView(new Date('2024-01-01T10:00:00'), 'pv-1')
+
+            // Act: Simulate session change after posthog.reset()
+            sessionIdCallback('new-session-id', 'new-window-id', {
+                noSessionId: true,
+                activityTimeout: false,
+                sessionPastMaximumLength: false,
+            })
+
+            // Assert: State should be cleared
+            expect(pageViewManager._currentPageview).toBeUndefined()
+            expect(instance.scrollManager.resetContext).toHaveBeenCalled()
+        })
+
+        it('should NOT clear state when changeReason is undefined (initial session)', () => {
+            // Setup: Create initial pageview
+            pageViewManager.doPageView(new Date('2024-01-01T10:00:00'), 'pv-1')
+
+            // Act: Simulate initial session creation (no changeReason)
+            sessionIdCallback('session-id', 'window-id', undefined)
+
+            // Assert: State should remain - this is just initial session, not a rotation
+            expect(pageViewManager._currentPageview).toBeDefined()
+        })
+
+        it('should not include $prev_pageview_duration after session rotation', () => {
+            // Setup: Create pageview in session 1
+            const session1Time = new Date('2024-01-01T10:00:00')
+            pageViewManager.doPageView(session1Time, 'pv-1')
+
+            // Simulate 35 minutes passing then session rotation
+            sessionIdCallback('session-2', 'window-2', {
+                noSessionId: false,
+                activityTimeout: true,
+                sessionPastMaximumLength: false,
+            })
+
+            // Act: First pageview in new session (35 min later)
+            const session2Time = new Date('2024-01-01T10:35:00')
+            mockWindowGetter.mockReturnValue({
+                location: { pathname: '/page-b' },
+            })
+            const properties = pageViewManager.doPageView(session2Time, 'pv-2')
+
+            // Assert: Should NOT have $prev_pageview_duration (would be 35 min cross-session)
+            expect(properties.$prev_pageview_duration).toBeUndefined()
+            expect(properties.$prev_pageview_pathname).toBeUndefined()
+            expect(properties.$pageview_id).toBe('pv-2')
+        })
+
+        it('should cleanup subscription on destroy', () => {
+            const unsubscribe = jest.fn()
+            const mockOnSessionId = jest.fn(() => unsubscribe)
+
+            instance = {
+                config: {},
+                sessionManager: { onSessionId: mockOnSessionId },
+                scrollManager: { resetContext: jest.fn(), getContext: jest.fn() },
+            } as unknown as PostHog
+
+            pageViewManager = new PageViewManager(instance)
+            pageViewManager.destroy()
+
+            expect(unsubscribe).toHaveBeenCalled()
+        })
+
+        it('should handle sessionManager being undefined (cookieless mode)', () => {
+            // In cookieless mode, sessionManager is undefined
+            instance = {
+                config: {},
+                sessionManager: undefined,
+                scrollManager: { resetContext: jest.fn(), getContext: jest.fn() },
+            } as unknown as PostHog
+
+            // Should not throw
+            expect(() => {
+                pageViewManager = new PageViewManager(instance)
+            }).not.toThrow()
+
+            // PageViewManager should still work for pageviews
+            const props = pageViewManager.doPageView(new Date(), 'pv-1')
+            expect(props.$pageview_id).toBe('pv-1')
+
+            // destroy should not throw either
+            expect(() => {
+                pageViewManager.destroy()
+            }).not.toThrow()
+        })
+
+        it('should handle destroy being called multiple times', () => {
+            const unsubscribe = jest.fn()
+            const mockOnSessionId = jest.fn(() => unsubscribe)
+
+            instance = {
+                config: {},
+                sessionManager: { onSessionId: mockOnSessionId },
+                scrollManager: { resetContext: jest.fn(), getContext: jest.fn() },
+            } as unknown as PostHog
+
+            pageViewManager = new PageViewManager(instance)
+
+            // Call destroy multiple times
+            pageViewManager.destroy()
+            pageViewManager.destroy()
+
+            // Should only unsubscribe once
+            expect(unsubscribe).toHaveBeenCalledTimes(1)
         })
     })
 })

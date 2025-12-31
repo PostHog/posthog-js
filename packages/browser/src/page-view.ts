@@ -3,6 +3,7 @@ import { PostHog } from './posthog-core'
 import { clampToRange, isUndefined } from '@posthog/core'
 import { extend } from './utils'
 import { logger } from './utils/logger'
+import { SessionIdChangedCallback } from './types'
 
 interface PageViewEventProperties {
     $pageview_id?: string
@@ -31,9 +32,40 @@ interface PageViewEventProperties {
 export class PageViewManager {
     _currentPageview?: { timestamp: Date; pageViewId: string | undefined; pathname: string | undefined }
     _instance: PostHog
+    private _unsubscribeSessionId?: () => void
 
     constructor(instance: PostHog) {
         this._instance = instance
+        this._setupSessionRotationHandler()
+    }
+
+    private _setupSessionRotationHandler(): void {
+        this._unsubscribeSessionId = this._instance.sessionManager?.onSessionId(this._onSessionIdChange)
+    }
+
+    private _onSessionIdChange: SessionIdChangedCallback = (sessionId, _windowId, changeReason) => {
+        // Only act on actual session rotations, not initial session creation
+        if (!changeReason) {
+            return
+        }
+
+        // Clear state when session changes for any of these reasons:
+        // - noSessionId: after posthog.reset() or forced idle reset
+        // - activityTimeout: 30 min idle (default, configurable up to 10 hours)
+        // - sessionPastMaximumLength: 24 hour max session
+        if (changeReason.noSessionId || changeReason.activityTimeout || changeReason.sessionPastMaximumLength) {
+            logger.info('[PageViewManager] Session rotated, clearing pageview state', {
+                sessionId,
+                changeReason,
+            })
+            this._currentPageview = undefined
+            this._instance.scrollManager.resetContext()
+        }
+    }
+
+    destroy(): void {
+        this._unsubscribeSessionId?.()
+        this._unsubscribeSessionId = undefined
     }
 
     doPageView(timestamp: Date, pageViewId?: string): PageViewEventProperties {
