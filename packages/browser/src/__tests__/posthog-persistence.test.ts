@@ -211,10 +211,13 @@ describe('persistence', () => {
                 uuidv7()
             )
 
-            posthog.persistence?.register({ [customProp]: 'test_value' })
+            const persistence = posthog.persistence as PostHogPersistence
+
+            persistence.register({ [customProp]: 'test_value' })
 
             // Get the persistence name from the instance
-            const persistenceName = (posthog.persistence as any)._name
+            // @ts-expect-error - _name is private and only accessible within class 'PostHogPersistence'
+            const persistenceName = persistence._name
 
             // Verify the custom property is in the cookie
             const cookieData = cookieStore._parse(persistenceName)
@@ -226,6 +229,9 @@ describe('persistence', () => {
 
             // Verify default properties are also in cookie
             expect(cookieData.distinct_id).toBeDefined()
+
+            // Make sure we clean up after ourselves to avoid affecting other tests
+            persistence.clear()
         })
 
         it('should allow swapping between storage methods', () => {
