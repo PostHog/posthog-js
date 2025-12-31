@@ -1,6 +1,6 @@
 import { Platform } from 'react-native'
 import { OptionalAsyncStorage } from './optional/OptionalAsyncStorage'
-import { isMacOS, isWeb, isWindows } from './utils'
+import { GLOBAL_OBJ, isMacOS, isWeb, isWindows } from './utils'
 import { OptionalExpoApplication } from './optional/OptionalExpoApplication'
 import { OptionalExpoDevice } from './optional/OptionalExpoDevice'
 import { OptionalExpoFileSystem } from './optional/OptionalExpoFileSystem'
@@ -149,14 +149,11 @@ const buildLegacyStorage = (filesystem: any): PostHogCustomStorage => {
   }
 }
 
-export const buildOptimisiticAsyncStorage = (): PostHogCustomStorage => {
-  // On web platform during SSR (no window), return a no-op storage to avoid crashes
-  // This allows the SDK to initialize safely during static export (e.g., Expo web export)
-  if (isWeb() && typeof (globalThis as any).window === 'undefined') {
-    return {
-      getItem: () => null,
-      setItem: () => {},
-    }
+export const buildOptimisiticAsyncStorage = (): PostHogCustomStorage | undefined => {
+  // On web platform during SSR (no window), skip file storage
+  // The caller will fall back to memory storage
+  if (isWeb() && typeof (GLOBAL_OBJ as any)?.window === 'undefined') {
+    return undefined
   }
 
   // expo-file-system is not supported on web and macos, so we need to use the react-native-async-storage package instead

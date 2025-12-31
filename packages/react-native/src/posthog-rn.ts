@@ -177,8 +177,13 @@ export class PostHog extends PostHogCore {
 
     let storagePromise: Promise<void> | undefined
 
+    let theStorage: PostHogCustomStorage | undefined
     if (this._persistence === 'file') {
-      this._storage = new PostHogRNStorage(options?.customStorage ?? buildOptimisiticAsyncStorage())
+      theStorage = options?.customStorage ?? buildOptimisiticAsyncStorage()
+    }
+
+    if (theStorage) {
+      this._storage = new PostHogRNStorage(theStorage)
       storagePromise = this._storage.preloadPromise
     } else {
       this._storage = new PostHogRNSyncMemoryStorage()
