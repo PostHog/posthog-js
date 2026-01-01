@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.313.0
+
+### Minor Changes
+
+- [#2832](https://github.com/PostHog/posthog-js/pull/2832) [`f050f6c`](https://github.com/PostHog/posthog-js/commit/f050f6c0175b80a0b143b0c02e18ea77a4e4f605) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Introduce custom cookie properties for localStorage+cookie persistence using the new `cookie_persisted_properties` property. This allows people to opt-in to store properties in cookies even in `localstorage+cookies` mode
+  (2026-01-01)
+
 ## 1.312.0
 
 ### Minor Changes
