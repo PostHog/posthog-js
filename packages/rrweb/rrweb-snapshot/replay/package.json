@@ -1,0 +1,5 @@
+{
+    "main": "../dist/replay.cjs",
+    "module": "../dist/replay.js",
+    "types": "../dist/replay.d.ts"
+}
