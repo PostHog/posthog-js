@@ -39,3 +39,13 @@ next-env.d.ts
 certificates
 
 pnpm-lock.yaml
+
+# benchmark investigation scripts and results
+benchmark.sh
+compare.sh
+run-benchmark.sh
+lighthouse-benchmark.mjs
+inp-benchmark.mjs
+compare-inp.mjs
+lighthouse-results/
+inp-results/
