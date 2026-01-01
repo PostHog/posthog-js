@@ -161,31 +161,38 @@ test.describe('retry queue', () => {
             window.posthog.capture('test-offline-event', { test: 'data' })
         })
 
-        // Wait for initial request to be queued and sent
-        await page.waitForTimeout(3000)
+        // Wait for initial request to be sent and fail
+        while (captureRequests.length < 1) {
+            await page.waitForTimeout(100)
+        }
 
-        // Simulate going offline
+        // Wait long enough for the retry to be scheduled AND for its retryAt time to pass
+        // The retry delay is 3s base + up to 1.5s jitter = max 4.5s
+        // Wait 6 seconds to ensure the retryAt time has passed
+        await page.waitForTimeout(6000)
+
+        // Go offline before the retry queue polls and flushes
         await context.setOffline(true)
 
-        // Wait a bit while offline (less than retry interval)
-        await page.waitForTimeout(3000)
-
-        // Should not have made many more requests while offline
-        const requestsWhileOffline = captureRequests.length
+        const requestsBeforeOnline = captureRequests.length
 
         // Switch to success mode and come back online
         shouldSucceed = true
         await context.setOffline(false)
 
-        // Trigger the online event
+        // Trigger the online event - this should cause an immediate flush
         await page.evaluate(() => {
             window.dispatchEvent(new Event('online'))
         })
 
-        // Wait for the retry to happen after coming online
-        await page.waitForTimeout(3000)
+        // Poll until we see more requests (with timeout)
+        const startTime = Date.now()
+        const timeout = 10000
+        while (captureRequests.length <= requestsBeforeOnline && Date.now() - startTime < timeout) {
+            await page.waitForTimeout(100)
+        }
 
         // Should have made at least one more request after coming online
-        expect(captureRequests.length).toBeGreaterThan(requestsWhileOffline)
+        expect(captureRequests.length).toBeGreaterThan(requestsBeforeOnline)
     })
 })

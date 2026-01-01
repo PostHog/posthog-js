@@ -5,6 +5,7 @@
 // it doesn't include recorder which doesn't support IE11,
 // and it doesn't include "web-vitals" which doesn't support IE11
 
+import 'core-js/features/promise'
 import 'core-js/features/object/entries'
 import 'core-js/features/object/from-entries'
 

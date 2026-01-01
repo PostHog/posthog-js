@@ -253,6 +253,7 @@ export const fetch = global?.fetch
 export const XMLHttpRequest =
     global?.XMLHttpRequest && 'withCredentials' in new global.XMLHttpRequest() ? global.XMLHttpRequest : undefined
 export const AbortController = global?.AbortController
+export const CompressionStream = global?.CompressionStream
 export const userAgent = navigator?.userAgent
 export const assignableWindow: AssignableWindow = win ?? ({} as any)
 
