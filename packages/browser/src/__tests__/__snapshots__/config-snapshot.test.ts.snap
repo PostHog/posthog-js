@@ -98,6 +98,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "undefined",
     "string"
   ],
+  "cookie_persisted_properties": [
+    "undefined",
+    "readonly string[]"
+  ],
   "loaded": "(posthog_instance: PostHog) => void",
   "save_referrer": [
     "false",

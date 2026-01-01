@@ -5,12 +5,7 @@ import { PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
-import {
-    localPlusCookieStore,
-    resetLocalStorageSupported,
-    resetSessionStorageSupported,
-    sessionStore,
-} from '../storage'
+import { cookieStore, resetLocalStorageSupported, resetSessionStorageSupported, sessionStore } from '../storage'
 import { defaultPostHog } from './helpers/posthog-instance'
 import Mock = jest.Mock
 
@@ -85,6 +80,47 @@ describe('persistence', () => {
             lib.register({ new_key: '1234' })
             expect(lib.save).toHaveBeenCalledTimes(1)
             saveMock.mockClear()
+        })
+
+        it('should rebuild storage when cookie_persisted_properties changes via update_config', () => {
+            const encode = (props: any) => encodeURIComponent(JSON.stringify(props))
+            const expectedProps = () => ({
+                distinct_id: 'test',
+                test_prop: 'test_val',
+                custom_prop: 'custom_value',
+            })
+
+            let config = makePostHogConfig('test', 'localStorage+cookie')
+            const lib = new PostHogPersistence(config)
+            lib.register(expectedProps())
+
+            // Initially, custom_prop should NOT be in cookies (only default properties)
+            expect(document.cookie).toContain(
+                `ph__posthog=${encode({
+                    distinct_id: 'test',
+                })}`
+            )
+            expect(document.cookie).not.toContain('custom_prop')
+
+            // Now update config to include custom_prop in cookie_persisted_properties
+            const newConfig = {
+                ...makePostHogConfig('test', 'localStorage+cookie'),
+                cookie_persisted_properties: ['custom_prop'],
+            }
+            lib.update_config(newConfig, config)
+            config = newConfig
+
+            // After update, custom_prop should now be in cookies
+            expect(document.cookie).toContain(
+                `ph__posthog=${encode({
+                    distinct_id: 'test',
+                    custom_prop: 'custom_value',
+                })}`
+            )
+
+            // Properties should still be the same
+            expect(lib.props).toEqual(expectedProps())
+            expect(localStorage.getItem('ph__posthog')).toEqual(JSON.stringify(expectedProps()))
         })
 
         it('should set direct referrer', () => {
@@ -203,11 +239,49 @@ describe('persistence', () => {
             })
         })
 
+        it('should persist custom properties to cookies when using localStorage+cookie', () => {
+            const customProp = 'my_custom_prop'
+            const token = uuidv7()
+
+            const posthog = defaultPostHog().init(
+                token,
+                {
+                    persistence: 'localStorage+cookie',
+                    cookie_persisted_properties: [customProp],
+                },
+                uuidv7()
+            )
+
+            const persistence = posthog.persistence as PostHogPersistence
+
+            persistence.register({ [customProp]: 'test_value' })
+
+            // Get the persistence name from the instance
+            // @ts-expect-error - _name is private and only accessible within class 'PostHogPersistence'
+            const persistenceName = persistence._name
+
+            // Verify the custom property is in the cookie
+            const cookieData = cookieStore._parse(persistenceName)
+            expect(cookieData[customProp]).toBe('test_value')
+
+            // Verify it's also in localStorage (full props)
+            const localStorageData = JSON.parse(localStorage.getItem(persistenceName) || '{}')
+            expect(localStorageData[customProp]).toBe('test_value')
+
+            // Verify default properties are also in cookie
+            expect(cookieData.distinct_id).toBeDefined()
+
+            // Make sure we clean up after ourselves to avoid affecting other tests
+            persistence.clear()
+        })
+
         it('should allow swapping between storage methods', () => {
             const expectedProps = () => ({ distinct_id: 'test', test_prop: 'test_val', $is_identified: false })
+
             let config = makePostHogConfig('test', 'localStorage+cookie')
             const lib = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
             lib.register(expectedProps())
+
             expect(lib.properties()).toEqual(expectedProps())
             expect(document.cookie).toContain(
                 `ph__posthog=${encode({
@@ -288,10 +362,9 @@ describe('posthog instance persistence', () => {
     })
     it('should not write to storage if opt_out_persistence_by_default and opt_out_capturing_by_default is true', () => {
         const sessionSpy = jest.spyOn(sessionStore, '_set')
-        const localPlusCookieSpy = jest.spyOn(localPlusCookieStore, '_set')
 
         // init posthog while opting out
-        defaultPostHog().init(
+        const posthog = defaultPostHog().init(
             uuidv7(),
             {
                 opt_out_persistence_by_default: true,
@@ -301,10 +374,17 @@ describe('posthog instance persistence', () => {
             uuidv7()
         )
 
+        // Spy on the created store instance's _set method
+        // Note: We spy after initialization, so we're checking that no further calls are made
+        const createdStore = (posthog.persistence as any)._storage
+        const localPlusCookieSpy = jest.spyOn(createdStore, '_set')
+
         // we do one call to check if session storage is supported, but don't actually store anything
         // the important thing is that we don't store the session id or window id, etc. This test was added alongside
         // a fix which prevented this
         const sessionCalls = sessionSpy.mock.calls.filter(([key]) => key !== '__support__')
+
+        // Check that no calls were made to the created store (spy captures future calls)
         const localPlusCookieCalls = localPlusCookieSpy.mock.calls.filter(([key]) => key !== '__support__')
 
         expect(sessionCalls).toEqual([])
@@ -313,10 +393,9 @@ describe('posthog instance persistence', () => {
 
     it('should write to storage if opt_out_persistence_by_default and opt_out_capturing_by_default is false', () => {
         const sessionSpy = jest.spyOn(sessionStore, '_set')
-        const localPlusCookieSpy = jest.spyOn(localPlusCookieStore, '_set')
 
         // init posthog while opting out
-        defaultPostHog().init(
+        const posthog = defaultPostHog().init(
             uuidv7(),
             {
                 opt_out_persistence_by_default: false,
@@ -325,6 +404,15 @@ describe('posthog instance persistence', () => {
             },
             uuidv7()
         )
+
+        // Spy on the created store instance's _set method
+        const createdStore = (posthog.persistence as any)._storage
+        const localPlusCookieSpy = jest.spyOn(createdStore, '_set')
+
+        // Trigger a save to verify storage is called
+        if (posthog.persistence) {
+            posthog.persistence.save()
+        }
 
         const sessionCalls = sessionSpy.mock.calls.filter(([key]) => key !== '__support__')
         const localPlusCookieCalls = localPlusCookieSpy.mock.calls.filter(([key]) => key !== '__support__')

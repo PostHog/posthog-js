@@ -412,6 +412,15 @@ export interface PostHogConfig {
     cookie_name?: string
 
     /**
+     * List of custom property names that should be stored in cookies (in addition to the default ones)
+     * when using 'localStorage+cookie' persistence mode. This allows these properties to be shared
+     * across subdomains when cross_subdomain_cookie is enabled.
+     *
+     * @default []
+     */
+    cookie_persisted_properties?: readonly string[]
+
+    /**
      * A function to be called once the PostHog scripts have loaded successfully.
      *
      * @param posthog_instance - The PostHog instance that has been loaded.
