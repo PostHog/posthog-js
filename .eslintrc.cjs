@@ -95,5 +95,5 @@ module.exports = {
             },
         },
     ],
-    ignorePatterns: ['node_modules', 'dist', 'next-env.d.ts', '.next'],
+    ignorePatterns: ['node_modules', 'dist', 'next-env.d.ts', '.next', 'packages/browser/playground/hydration/vendor'],
 }
