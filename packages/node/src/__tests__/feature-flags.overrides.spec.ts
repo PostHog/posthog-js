@@ -279,7 +279,7 @@ describe('overrideFeatureFlags', () => {
       expect(await posthog.getFeatureFlag('payloads', 'user-123')).toBe('variant-a')
     })
 
-    it('should handle zero value as override', async () => {
+    it('should handle empty string as override value', async () => {
       mockedFetch.mockImplementation(apiImplementation({ localFlags: { flags: [] } }))
 
       posthog = new PostHog('TEST_API_KEY', {
@@ -290,12 +290,88 @@ describe('overrideFeatureFlags', () => {
 
       await waitForPromises()
 
-      // Note: FeatureFlagValue is string | boolean, not number
-      // But if someone passes a number, it should still work as a truthy check
+      // Empty string is a falsy value but should still be returned (not undefined)
       posthog.overrideFeatureFlags({ 'my-flag': '' as any })
 
-      // Empty string is a falsy value but should still be returned
       expect(await posthog.getFeatureFlag('my-flag', 'user-123')).toBe('')
+    })
+
+    it('should replace all flag overrides when passed empty object', async () => {
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: { flags: [] } }))
+
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+
+      await waitForPromises()
+
+      // Set initial overrides
+      posthog.overrideFeatureFlags({ 'flag-a': true, 'flag-b': 'variant' })
+      expect(await posthog.getFeatureFlag('flag-a', 'user-123')).toBe(true)
+
+      // Empty object replaces with empty overrides (effectively clearing)
+      posthog.overrideFeatureFlags({})
+
+      expect(await posthog.getFeatureFlag('flag-a', 'user-123')).toBe(undefined)
+      expect(await posthog.getFeatureFlag('flag-b', 'user-123')).toBe(undefined)
+    })
+
+    it('should clear only flags when flags is false but preserve payload overrides', async () => {
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: { flags: [] } }))
+
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+
+      await waitForPromises()
+
+      // Set both flag and payload overrides
+      posthog.overrideFeatureFlags({
+        flags: { 'my-flag': 'variant-a' },
+        payloads: { 'my-flag': { data: 'preserved' } },
+      })
+
+      expect(await posthog.getFeatureFlag('my-flag', 'user-123')).toBe('variant-a')
+      expect(await posthog.getFeatureFlagPayload('my-flag', 'user-123')).toEqual({ data: 'preserved' })
+
+      // Clear only flag overrides
+      posthog.overrideFeatureFlags({ flags: false })
+
+      // Flag should be undefined, but payload should still be overridden
+      expect(await posthog.getFeatureFlag('my-flag', 'user-123')).toBe(undefined)
+      expect(await posthog.getFeatureFlagPayload('my-flag', 'user-123')).toEqual({ data: 'preserved' })
+    })
+
+    it('should clear only payloads when payloads is false but preserve flag overrides', async () => {
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: { flags: [] } }))
+
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+
+      await waitForPromises()
+
+      // Set both flag and payload overrides
+      posthog.overrideFeatureFlags({
+        flags: { 'my-flag': 'variant-a' },
+        payloads: { 'my-flag': { data: 'will-be-cleared' } },
+      })
+
+      expect(await posthog.getFeatureFlag('my-flag', 'user-123')).toBe('variant-a')
+      expect(await posthog.getFeatureFlagPayload('my-flag', 'user-123')).toEqual({ data: 'will-be-cleared' })
+
+      // Clear only payload overrides
+      posthog.overrideFeatureFlags({ payloads: false })
+
+      // Flag should still be overridden, but payload should fall back to evaluation (null = not found)
+      expect(await posthog.getFeatureFlag('my-flag', 'user-123')).toBe('variant-a')
+      expect(await posthog.getFeatureFlagPayload('my-flag', 'user-123')).toBeNull()
     })
   })
 })

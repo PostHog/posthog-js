@@ -1255,10 +1255,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     // Array syntax: ['flag-a', 'flag-b'] -> { 'flag-a': true, 'flag-b': true }
     if (Array.isArray(overrides)) {
-      this._flagOverrides = {}
-      for (const flag of overrides) {
-        this._flagOverrides[flag] = true
-      }
+      this._flagOverrides = Object.fromEntries(overrides.map((flag) => [flag, true]))
       return
     }
 
@@ -1269,10 +1266,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         if (options.flags === false) {
           this._flagOverrides = undefined
         } else if (Array.isArray(options.flags)) {
-          this._flagOverrides = {}
-          for (const flag of options.flags) {
-            this._flagOverrides[flag] = true
-          }
+          this._flagOverrides = Object.fromEntries(options.flags.map((flag) => [flag, true]))
         } else if (options.flags !== undefined) {
           this._flagOverrides = { ...options.flags }
         }
