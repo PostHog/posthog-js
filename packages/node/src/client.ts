@@ -16,9 +16,11 @@ import {
   EventMessage,
   FeatureFlagError,
   FeatureFlagErrorType,
+  FeatureFlagOverrideOptions,
   GroupIdentifyMessage,
   IdentifyMessage,
   IPostHog,
+  OverrideFeatureFlagsOptions,
   PostHogOptions,
   SendFeatureFlagsOptions,
 } from './types'
@@ -49,6 +51,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private maxCacheSize: number
   public readonly options: PostHogOptions
   protected readonly context?: IPostHogContext
+
+  // Feature flag overrides for local testing/development
+  private _flagOverrides?: Record<string, FeatureFlagValue>
+  private _payloadOverrides?: Record<string, JsonType>
 
   distinctIdHasSentFlagCalls: Record<string, string[]>
 
@@ -645,6 +651,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       disableGeoip?: boolean
     }
   ): Promise<FeatureFlagValue | undefined> {
+    // Check for overrides first - they take precedence over all evaluation
+    if (this._flagOverrides !== undefined && key in this._flagOverrides) {
+      return this._flagOverrides[key]
+    }
+
     const { groups, disableGeoip } = options || {}
     let { onlyEvaluateLocally, sendFeatureFlagEvents, personProperties, groupProperties } = options || {}
 
@@ -815,6 +826,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       disableGeoip?: boolean
     }
   ): Promise<JsonType | undefined> {
+    // Check for payload overrides first - they take precedence over all evaluation
+    if (this._payloadOverrides !== undefined && key in this._payloadOverrides) {
+      return this._payloadOverrides[key]
+    }
+
     const { groups, disableGeoip } = options || {}
     let { onlyEvaluateLocally, personProperties, groupProperties } = options || {}
 
@@ -1123,6 +1139,20 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       }
     }
 
+    // Apply overrides last - they take precedence over all evaluation
+    if (this._flagOverrides !== undefined) {
+      featureFlags = {
+        ...featureFlags,
+        ...this._flagOverrides,
+      }
+    }
+    if (this._payloadOverrides !== undefined) {
+      featureFlagPayloads = {
+        ...featureFlagPayloads,
+        ...this._payloadOverrides,
+      }
+    }
+
     return { featureFlags, featureFlagPayloads }
   }
 
@@ -1188,6 +1218,122 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   async reloadFeatureFlags(): Promise<void> {
     await this.featureFlagsPoller?.loadFeatureFlags(true)
+  }
+
+  /**
+   * Override feature flags locally. Useful for testing and local development.
+   * Overridden flags take precedence over both local evaluation and remote evaluation.
+   *
+   * @example
+   * ```ts
+   * // Clear all overrides
+   * client.overrideFeatureFlags(false)
+   *
+   * // Enable a list of flags (sets them to true)
+   * client.overrideFeatureFlags(['flag-a', 'flag-b'])
+   *
+   * // Set specific flag values/variants
+   * client.overrideFeatureFlags({ 'my-flag': 'variant-a', 'other-flag': true })
+   *
+   * // Set both flags and payloads
+   * client.overrideFeatureFlags({
+   *   flags: { 'my-flag': 'variant-a' },
+   *   payloads: { 'my-flag': { discount: 20 } }
+   * })
+   * ```
+   *
+   * {@label Feature flags}
+   *
+   * @param overrides - Flag overrides configuration
+   */
+  overrideFeatureFlags(overrides: OverrideFeatureFlagsOptions): void {
+    if (overrides === false) {
+      this._flagOverrides = undefined
+      this._payloadOverrides = undefined
+      return
+    }
+
+    // Array syntax: ['flag-a', 'flag-b'] -> { 'flag-a': true, 'flag-b': true }
+    if (Array.isArray(overrides)) {
+      this._flagOverrides = {}
+      for (const flag of overrides) {
+        this._flagOverrides[flag] = true
+      }
+      return
+    }
+
+    if (this._isFeatureFlagOverrideOptions(overrides)) {
+      const options = overrides
+
+      if ('flags' in options) {
+        if (options.flags === false) {
+          this._flagOverrides = undefined
+        } else if (Array.isArray(options.flags)) {
+          this._flagOverrides = {}
+          for (const flag of options.flags) {
+            this._flagOverrides[flag] = true
+          }
+        } else if (options.flags !== undefined) {
+          this._flagOverrides = { ...options.flags }
+        }
+      }
+
+      if ('payloads' in options) {
+        if (options.payloads === false) {
+          this._payloadOverrides = undefined
+        } else if (options.payloads !== undefined) {
+          this._payloadOverrides = { ...options.payloads }
+        }
+      }
+
+      return
+    }
+
+    // Fallback: treat as Record<string, FeatureFlagValue>
+    this._flagOverrides = { ...overrides }
+  }
+
+  /**
+   * Type guard to check if overrides is a FeatureFlagOverrideOptions object.
+   *
+   * This distinguishes between:
+   * - { flags: { 'flag-a': true } } -> FeatureFlagOverrideOptions (flags is an object/array/false)
+   * - { flags: true } -> Record<string, FeatureFlagValue> (a flag named "flags" with value true)
+   */
+  private _isFeatureFlagOverrideOptions(overrides: unknown): overrides is FeatureFlagOverrideOptions {
+    if (typeof overrides !== 'object' || overrides === null || Array.isArray(overrides)) {
+      return false
+    }
+
+    const obj = overrides as Record<string, unknown>
+
+    // Check if 'flags' key exists and has a valid structure for FeatureFlagOverrideOptions
+    // Valid values: false, string[], or Record<string, FeatureFlagValue> (an object)
+    if ('flags' in obj) {
+      const flagsValue = obj['flags']
+      // If flags is false, an array, or a plain object - it's FeatureFlagOverrideOptions
+      // If flags is a boolean true or a string - it's a flag named "flags" with that value
+      if (
+        flagsValue === false ||
+        Array.isArray(flagsValue) ||
+        (typeof flagsValue === 'object' && flagsValue !== null)
+      ) {
+        return true
+      }
+    }
+
+    // Check if 'payloads' key exists and has a valid structure for FeatureFlagOverrideOptions
+    // Valid values: false or Record<string, JsonType> (an object)
+    if ('payloads' in obj) {
+      const payloadsValue = obj['payloads']
+      // If payloads is false or a plain object - it's FeatureFlagOverrideOptions
+      // If payloads is a string or boolean true - it's a flag named "payloads" with that value
+      if (payloadsValue === false || (typeof payloadsValue === 'object' && payloadsValue !== null)) {
+        return true
+      }
+    }
+
+    return false
   }
 
   protected abstract initializeContext(): IPostHogContext | undefined

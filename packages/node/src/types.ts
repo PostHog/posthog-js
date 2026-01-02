@@ -55,6 +55,37 @@ export type FlagProperty = {
 
 export type FlagPropertyValue = string | number | (string | number)[] | boolean
 
+/**
+ * Options for overriding feature flags.
+ *
+ * Supports multiple formats:
+ * - `false` - Clear all overrides
+ * - `string[]` - Enable a list of flags (sets them to `true`)
+ * - `Record<string, FeatureFlagValue>` - Set specific flag values/variants
+ * - `FeatureFlagOverrideOptions` - Set both flag values and payloads
+ */
+export type OverrideFeatureFlagsOptions =
+  | false // Clear all overrides
+  | string[] // Enable list of flags
+  | Record<string, FeatureFlagValue> // Set specific variants
+  | FeatureFlagOverrideOptions
+
+export type FeatureFlagOverrideOptions = {
+  /**
+   * Flag overrides. Can be:
+   * - `false` to clear flag overrides
+   * - `string[]` to enable a list of flags
+   * - `Record<string, FeatureFlagValue>` to set specific values/variants
+   */
+  flags?: false | string[] | Record<string, FeatureFlagValue>
+  /**
+   * Payload overrides for flags.
+   * - `false` to clear payload overrides
+   * - `Record<string, JsonType>` to set specific payloads
+   */
+  payloads?: false | Record<string, JsonType>
+}
+
 export type FeatureFlagCondition = {
   properties: FlagProperty[]
   rollout_percentage?: number
@@ -358,6 +389,32 @@ export interface IPostHog {
    * already polled automatically at a regular interval.
    */
   reloadFeatureFlags(): Promise<void>
+
+  /**
+   * @description Override feature flags locally. Useful for testing and local development.
+   * Overridden flags take precedence over both local evaluation and remote evaluation.
+   *
+   * @example
+   * ```ts
+   * // Clear all overrides
+   * posthog.overrideFeatureFlags(false)
+   *
+   * // Enable a list of flags (sets them to true)
+   * posthog.overrideFeatureFlags(['flag-a', 'flag-b'])
+   *
+   * // Set specific flag values/variants
+   * posthog.overrideFeatureFlags({ 'my-flag': 'variant-a', 'other-flag': true })
+   *
+   * // Set both flags and payloads
+   * posthog.overrideFeatureFlags({
+   *   flags: { 'my-flag': 'variant-a' },
+   *   payloads: { 'my-flag': { discount: 20 } }
+   * })
+   * ```
+   *
+   * @param overrides - Flag overrides configuration
+   */
+  overrideFeatureFlags(overrides: OverrideFeatureFlagsOptions): void
 
   /**
    * @description Run a function with specific context that will be applied to all events captured within that context.
