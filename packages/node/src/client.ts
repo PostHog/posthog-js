@@ -1262,23 +1262,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     if (this._isFeatureFlagOverrideOptions(overrides)) {
-      const options = overrides
-
-      if ('flags' in options) {
-        if (options.flags === false) {
+      if ('flags' in overrides) {
+        if (overrides.flags === false) {
           this._flagOverrides = undefined
-        } else if (Array.isArray(options.flags)) {
-          this._flagOverrides = flagArrayToRecord(options.flags)
-        } else if (options.flags !== undefined) {
-          this._flagOverrides = { ...options.flags }
+        } else if (Array.isArray(overrides.flags)) {
+          this._flagOverrides = flagArrayToRecord(overrides.flags)
+        } else if (overrides.flags !== undefined) {
+          this._flagOverrides = { ...overrides.flags }
         }
       }
 
-      if ('payloads' in options) {
-        if (options.payloads === false) {
+      if ('payloads' in overrides) {
+        if (overrides.payloads === false) {
           this._payloadOverrides = undefined
-        } else if (options.payloads !== undefined) {
-          this._payloadOverrides = { ...options.payloads }
+        } else if (overrides.payloads !== undefined) {
+          this._payloadOverrides = { ...overrides.payloads }
         }
       }
 
