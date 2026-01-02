@@ -50,6 +50,7 @@
     ],
     "dependencies": {
         "@posthog/core": "workspace:*",
+        "@posthog/types": "workspace:*",
         "core-js": "^3.38.1",
         "fflate": "^0.4.8",
         "preact": "^10.19.3",

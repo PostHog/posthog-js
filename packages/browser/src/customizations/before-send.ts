@@ -69,7 +69,7 @@ export function sampleBySessionId(percent: number): BeforeSendFn {
  * @param eventNames an array of event names to sample, sampling is applied across events not per event name
  * @param percent a number from 0 to 1, 1 means always send, 0 means never send the event
  */
-export function sampleByEvent(eventNames: KnownEventName[], percent: number): BeforeSendFn {
+export function sampleByEvent(eventNames: (KnownEventName | string)[], percent: number): BeforeSendFn {
     return (captureResult: CaptureResult | null): CaptureResult | null => {
         if (!captureResult) {
             return null

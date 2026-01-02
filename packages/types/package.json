@@ -1,0 +1,43 @@
+{
+    "name": "@posthog/types",
+    "version": "1.313.0",
+    "description": "Type definitions for the PostHog JavaScript SDK",
+    "license": "MIT",
+    "main": "dist/index.js",
+    "module": "dist/index.mjs",
+    "types": "dist/index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/PostHog/posthog-js.git",
+        "directory": "packages/types"
+    },
+    "files": [
+        "dist",
+        "src",
+        "!src/__tests__"
+    ],
+    "scripts": {
+        "clean": "rimraf dist",
+        "lint": "eslint src",
+        "lint:fix": "eslint src --fix",
+        "build": "rslib build",
+        "dev": "rslib build -w",
+        "test:unit": "jest",
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "require": "./dist/index.js",
+            "import": "./dist/index.mjs"
+        }
+    },
+    "devDependencies": {
+        "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@rslib/core": "catalog:",
+        "@types/jest": "catalog:",
+        "jest": "catalog:",
+        "ts-jest": "catalog:",
+        "typescript": "catalog:"
+    }
+}

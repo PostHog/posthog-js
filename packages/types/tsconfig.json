@@ -1,0 +1,12 @@
+{
+    "extends": "@posthog-tooling/tsconfig-base",
+    "compilerOptions": {
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "declaration": true,
+        "declarationMap": true,
+        "lib": ["es2022", "DOM"]
+    },
+    "include": ["src/**/*"],
+    "exclude": ["node_modules", "dist", "src/__tests__"]
+}

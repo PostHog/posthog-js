@@ -17,7 +17,7 @@ import {
 } from './autocapture-utils'
 
 import RageClick from './extensions/rageclick'
-import { AutocaptureConfig, COPY_AUTOCAPTURE_EVENT, EventName, Properties, RemoteConfig } from './types'
+import { AutocaptureConfig, EventName, Properties, RemoteConfig } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
@@ -27,6 +27,8 @@ import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
 import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
 import { includes } from '@posthog/core'
+
+const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
 
 const logger = createLogger('[AutoCapture]')
 
