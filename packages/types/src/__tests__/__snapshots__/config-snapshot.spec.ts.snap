@@ -318,7 +318,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     ],
     "maskInputOptions": [
       "undefined",
-      "Partial<{ color: boolean; date: boolean; 'datetime-local': boolean; email: boolean; month: boolean; number: boolean; range: boolean; search: boolean; tel: boolean; text: boolean; time: boolean; url: boolean; week: boolean; textarea: boolean; select: boolean; password: boolean; }>"
+      "Partial<MaskInputOptions>"
     ],
     "maskInputFn": [
       "undefined",
@@ -328,7 +328,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "slimDOMOptions": [
       "undefined",
       "true",
-      "Partial<{ script: boolean; comment: boolean; headFavicon: boolean; headWhitespace: boolean; headMetaDescKeywords: boolean; headMetaSocial: boolean; headMetaRobots: boolean; headMetaHttpEquiv: boolean; headMetaAuthorship: boolean; headMetaVerification: boolean; headTitleMutations: boolean; }>",
+      "Partial<SlimDOMOptions>",
       "\\"all\\""
     ],
     "collectFonts": [

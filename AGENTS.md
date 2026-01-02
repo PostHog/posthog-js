@@ -13,7 +13,7 @@ This is a pnpm monorepo containing multiple PostHog JavaScript SDKs and developm
 
 ## Folder Structure
 
-- `./packages` - All JS SDKs that are distributed as npm packages (9 packages)
+- `./packages` - All JS SDKs that are distributed as npm packages
 - `./playground` - Projects to test packages locally during development
 - `./examples` - Simple example projects demonstrating how to install and use our SDKs
 - `./target` - Generated tarballs for SDK packages (created by `pnpm package`)
@@ -26,15 +26,16 @@ The repository contains the following SDK packages in `./packages/`:
 
 | Package          | Name                     | Description                                     |
 | ---------------- | ------------------------ | ----------------------------------------------- |
+| `core/`          | `@posthog/core`          | Shared core functionality used by multiple SDKs |
 | `browser/`       | `posthog-js`             | Main browser SDK for capturing events and usage |
 | `web/`           | `posthog-js-lite`        | Lightweight browser SDK                         |
-| `core/`          | `@posthog/core`          | Shared core functionality used by multiple SDKs |
+| `ai/`            | `@posthog/ai`            | AI integrations for Node.js                     |
 | `node/`          | `posthog-node`           | Node.js backend SDK (requires Node >= 20)       |
 | `react/`         | `@posthog/react`         | React components and hooks                      |
 | `react-native/`  | `posthog-react-native`   | React Native mobile SDK                         |
 | `nuxt/`          | `@posthog/nuxt`          | Nuxt framework module                           |
 | `nextjs-config/` | `@posthog/nextjs-config` | Next.js configuration helper                    |
-| `ai/`            | `@posthog/ai`            | AI integrations for Node.js                     |
+| `types/`         | `@posthog/types`         | TypeScript type definitions for the SDK         |
 
 ## Workspace
 
