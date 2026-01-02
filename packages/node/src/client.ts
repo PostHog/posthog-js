@@ -1247,6 +1247,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param overrides - Flag overrides configuration
    */
   overrideFeatureFlags(overrides: OverrideFeatureFlagsOptions): void {
+    const flagArrayToRecord = (flags: string[]) => Object.fromEntries(flags.map((f) => [f, true]))
+
     if (overrides === false) {
       this._flagOverrides = undefined
       this._payloadOverrides = undefined
@@ -1255,7 +1257,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     // Array syntax: ['flag-a', 'flag-b'] -> { 'flag-a': true, 'flag-b': true }
     if (Array.isArray(overrides)) {
-      this._flagOverrides = Object.fromEntries(overrides.map((flag) => [flag, true]))
+      this._flagOverrides = flagArrayToRecord(overrides)
       return
     }
 
@@ -1266,7 +1268,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         if (options.flags === false) {
           this._flagOverrides = undefined
         } else if (Array.isArray(options.flags)) {
-          this._flagOverrides = Object.fromEntries(options.flags.map((flag) => [flag, true]))
+          this._flagOverrides = flagArrayToRecord(options.flags)
         } else if (options.flags !== undefined) {
           this._flagOverrides = { ...options.flags }
         }
