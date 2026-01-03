@@ -5,7 +5,7 @@ import {
     TRIGGER_PENDING,
 } from '../../../extensions/replay/external/triggerMatching'
 import { createMockPostHog } from '../../helpers/posthog-instance'
-import { SessionRecordingUrlTrigger } from '../../../types'
+import { SDKPolicyConfigUrlTrigger } from '../../../types'
 import { SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION } from '../../../constants'
 
 describe('checkUrlTriggerConditions - activation loop detection', () => {
@@ -24,10 +24,7 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
         })
     }
 
-    const configureTriggers = (
-        triggers: SessionRecordingUrlTrigger[],
-        blocklist: SessionRecordingUrlTrigger[] = []
-    ) => {
+    const configureTriggers = (triggers: SDKPolicyConfigUrlTrigger[], blocklist: SDKPolicyConfigUrlTrigger[] = []) => {
         urlTriggerMatching.onConfig({
             urlTriggers: triggers,
             urlBlocklist: blocklist,

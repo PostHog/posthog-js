@@ -3,7 +3,7 @@ import {
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
 } from '../../../constants'
 import { PostHog } from '../../../posthog-core'
-import { FlagVariant, RemoteConfig, SessionRecordingPersistedConfig, SessionRecordingUrlTrigger } from '../../../types'
+import { FlagVariant, RemoteConfig, SessionRecordingPersistedConfig, SDKPolicyConfigUrlTrigger } from '../../../types'
 import { isNullish, isBoolean, isString, isObject } from '@posthog/core'
 import { window } from '../../../utils/globals'
 
@@ -53,7 +53,7 @@ export type SessionRecordingStatus = (typeof sessionRecordingStatuses)[number]
 // while we have both lazy and eager loaded replay we might get either type of config
 type ReplayConfigType = RemoteConfig | SessionRecordingPersistedConfig
 
-function sessionRecordingUrlTriggerMatches(url: string, triggers: SessionRecordingUrlTrigger[]) {
+function SDKPolicyConfigUrlTriggerMatches(url: string, triggers: SDKPolicyConfigUrlTrigger[]) {
     return triggers.some((trigger) => {
         switch (trigger.matching) {
             case 'regex':
@@ -128,8 +128,8 @@ const isEagerLoadedConfig = (x: ReplayConfigType): x is RemoteConfig => {
 }
 
 export class URLTriggerMatching implements TriggerStatusMatching {
-    _urlTriggers: SessionRecordingUrlTrigger[] = []
-    _urlBlocklist: SessionRecordingUrlTrigger[] = []
+    _urlTriggers: SDKPolicyConfigUrlTrigger[] = []
+    _urlBlocklist: SDKPolicyConfigUrlTrigger[] = []
 
     urlBlocked: boolean = false
 
@@ -191,7 +191,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         const url = window.location.href
 
         const wasBlocked = this.urlBlocked
-        const isNowBlocked = sessionRecordingUrlTriggerMatches(url, this._urlBlocklist)
+        const isNowBlocked = SDKPolicyConfigUrlTriggerMatches(url, this._urlBlocklist)
 
         if (wasBlocked && isNowBlocked) {
             return
@@ -204,7 +204,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         }
 
         const isActivated = this._urlTriggerStatus(sessionId) === TRIGGER_ACTIVATED
-        const urlMatches = sessionRecordingUrlTriggerMatches(url, this._urlTriggers)
+        const urlMatches = SDKPolicyConfigUrlTriggerMatches(url, this._urlTriggers)
 
         if (!isActivated && urlMatches) {
             onActivate('url')
