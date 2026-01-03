@@ -373,24 +373,24 @@ packages:
     resolution: {integrity: sha512-nn5ozdjYQpUCZlWGuxcJY/KpxkWQs4DcbMCmKojjyrYDEAGy4Ce19NN4v5MduafTwJlbKc99UA8YhSVqq9yPZA==}
     engines: {node: '>=12.4.0'}
 
-  '@posthog/cli@0.5.17':
-    resolution: {integrity: sha512-PHwUEBNxIZvR4h/v2fJF2WciHW4nEpOInv/AIR+SjCjnkSaxtScaDrGtJ7NEITB/FYYxQOU51bYca9bK780xUQ==}
+  '@posthog/cli@0.5.20':
+    resolution: {integrity: sha512-Rgo7ppkZNmH/StfdxYY7aT+fHx+TKS8kc2qU3r+bDDNa1hGUaT/PQJF6W8jSDlAcaZVuDQDWA0ofnVXgjXjMTw==}
     engines: {node: '>=14', npm: '>=6'}
     hasBin: true
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-jtTmi1dPAcGA50p5iBhMS887gQ0UZJ3caByjEVAA65VDYlDIOzlkbauCU62V3UFO5ybGAzTbsfHxQcX3exA1Lw==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.8.1
+    resolution: {integrity: sha512-zG9xi0JvzbdA9Qkmdqr0c1OLcHaEQJmHT9P+B1HNWoSYJx9hV/5G6lR0iom7ZJz/99/ylLxWlDEQ4Vqy2AqIwg==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.9.0
 
   '@posthog/nextjs-config@file:../../target/posthog-nextjs-config.tgz':
-    resolution: {integrity: sha512-Xvl4u8dNFOd+dC+1ZlZMZhYFKwsH5zPQtIwYuYi8iuHhXq7/l3q2/eqA8itoKWM0+YAGmqHQFpwARI5C/iXupQ==, tarball: file:../../target/posthog-nextjs-config.tgz}
-    version: 1.7.3
+    resolution: {integrity: sha512-WxSp6kqRMJyXICpOk9dTNKXpEd2Q+eHrpcawjADupox5BxztUx1HA6UMNxGFNZtkRYAahQBfxs+AUlUUhr/uZg==, tarball: file:../../target/posthog-nextjs-config.tgz}
+    version: 1.7.4
     engines: {node: '>=20'}
     peerDependencies:
       next: '>12.1.0'
 
   '@posthog/react@file:../../target/posthog-react.tgz':
-    resolution: {integrity: sha512-2oPbBodzBM0Ei86KHTRt9i1MW/bscMiWQWF/zSNVJbqkXCgH3yFirMhO0VGzBXcZrWKy4bmpx6NN5A1jWHEKtg==, tarball: file:../../target/posthog-react.tgz}
+    resolution: {integrity: sha512-Tz9MsWf4RSA4EN9QH/4yF0W3iutzNKUtP2jfg5gad8mA6Ly2sVZAoB1gf+eKPy9hvr8K3TymNzlv023kTETSpA==, tarball: file:../../target/posthog-react.tgz}
     version: 1.5.2
     peerDependencies:
       '@types/react': '>=16.8.0'
@@ -401,8 +401,8 @@ packages:
         optional: true
 
   '@posthog/webpack-plugin@file:../../target/posthog-webpack-plugin.tgz':
-    resolution: {integrity: sha512-Bjy1u/2J3lq6jAoCfMK/B7HAYMoS/dcj6Z5eCBIKKux4P+aINjiXeWdstiI3gljOzxofl8VezIa9BQNh5J+0VA==, tarball: file:../../target/posthog-webpack-plugin.tgz}
-    version: 1.2.3
+    resolution: {integrity: sha512-XxsBqJb4jpgfDZI2u4kvayQEMHmq26LiWinFMQRyRfiIg0M9B757wy/5nrRzHcE0tIdO7XNuoCIFBnAlFazZIQ==, tarball: file:../../target/posthog-webpack-plugin.tgz}
+    version: 1.2.4
     peerDependencies:
       webpack: ^5
 
@@ -1626,12 +1626,12 @@ packages:
     engines: {node: ^10 || ^12 || >=14}
 
   posthog-js@file:../../target/posthog-js.tgz:
-    resolution: {integrity: sha512-wPfrZRfGQMHoZ8Us/YmPfZM8NMm+3bR1/i+SorSXRcY3d3O+WuOocJ0kH3yIykl+h0uZNH8eJ9Jt3pNpM938tg==, tarball: file:../../target/posthog-js.tgz}
-    version: 1.309.1
+    resolution: {integrity: sha512-qHShcqXjPM+6Cs/VdoNqQ2o3yFS+YILf5IT844M9sj92YD9UbP0PiJoFi0ye5GBAAg0gCnUN+RdFM352Y463WA==, tarball: file:../../target/posthog-js.tgz}
+    version: 1.310.1
 
   posthog-node@file:../../target/posthog-node.tgz:
-    resolution: {integrity: sha512-sgf6fFhmNJSPhOEXdicFTBuVTQHFfmZGsmqTtOu7j92INJB9rcgkqIDoU9w2tx7MJc+LacJPRKYz3KWOSmvvnQ==, tarball: file:../../target/posthog-node.tgz}
-    version: 5.17.4
+    resolution: {integrity: sha512-DKhWWqT/6dgtmXyFf7RoDcgUbasOQ4Pz1KDiWlSVR5MaYVLrDs4lu7I5eKMacOuPb5IiQFOWB/11bMUvVR+5qQ==, tarball: file:../../target/posthog-node.tgz}
+    version: 5.18.0
     engines: {node: '>=20'}
 
   preact@10.28.0:
@@ -2251,7 +2251,7 @@ snapshots:
 
   '@nolyfill/is-core-module@1.0.39': {}
 
-  '@posthog/cli@0.5.17':
+  '@posthog/cli@0.5.20':
     dependencies:
       axios: 1.13.2
       axios-proxy-builder: 0.1.2
@@ -2267,7 +2267,7 @@ snapshots:
 
   '@posthog/nextjs-config@file:../../target/posthog-nextjs-config.tgz(next@15.5.9(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(webpack@5.103.0)':
     dependencies:
-      '@posthog/cli': 0.5.17
+      '@posthog/cli': 0.5.20
       '@posthog/core': file:../../target/posthog-core.tgz
       '@posthog/webpack-plugin': file:../../target/posthog-webpack-plugin.tgz(webpack@5.103.0)
       next: 15.5.9(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -2285,7 +2285,7 @@ snapshots:
 
   '@posthog/webpack-plugin@file:../../target/posthog-webpack-plugin.tgz(webpack@5.103.0)':
     dependencies:
-      '@posthog/cli': 0.5.17
+      '@posthog/cli': 0.5.20
       '@posthog/core': file:../../target/posthog-core.tgz
       webpack: 5.103.0
     transitivePeerDependencies:
