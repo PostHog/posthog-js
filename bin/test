@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+#/ Usage: bin/test [options] [package] [-- test-args]
+#/ Description: Runs tests for a specific package or all packages
+#/
+#/ Options:
+#/   -a, --all         Run tests for all packages
+#/   -u, --unit        Run unit tests only
+#/   -f, --functional  Run functional tests only
+#/   -e, --e2e         Run e2e tests only
+#/   -h, --help        Show this help message
+#/
+#/ Packages:
+#/   ai, browser, core, nextjs-config, node, react-native,
+#/   react, rollup-plugin, web, webpack-plugin
+#/
+#/ Examples:
+#/   bin/test node              Run all tests for posthog-node
+#/   bin/test browser --unit    Run unit tests for posthog-js (browser)
+#/   bin/test --all             Run tests for all packages
+#/   bin/test                   Interactive package selection
+
+source bin/helpers/_utils.sh
+set_source_and_root_dir
+
+# Check if dependencies are installed and packages are built
+if [[ ! -d "node_modules" ]] || [[ ! -d "packages/core/dist" ]]; then
+    fatal "Project not set up. Run 'bin/build' first."
+fi
+
+# Available packages (directory names)
+PACKAGES=(
+    "ai"
+    "browser"
+    "core"
+    "nextjs-config"
+    "node"
+    "react-native"
+    "react"
+    "rollup-plugin"
+    "web"
+    "webpack-plugin"
+)
+
+# Package display names for the menu
+declare -A PACKAGE_NAMES=(
+    ["ai"]="@posthog/ai"
+    ["browser"]="posthog-js"
+    ["core"]="@posthog/core"
+    ["nextjs-config"]="@posthog/nextjs-config"
+    ["node"]="posthog-node"
+    ["react-native"]="posthog-react-native"
+    ["react"]="@posthog/react"
+    ["rollup-plugin"]="@posthog/rollup-plugin"
+    ["web"]="posthog-js-lite"
+    ["webpack-plugin"]="@posthog/webpack-plugin"
+)
+
+run_all=false
+test_type=""
+package=""
+test_args=()
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -a|--all)
+            run_all=true
+            shift
+            ;;
+        -u|--unit)
+            test_type="unit"
+            shift
+            ;;
+        -f|--functional)
+            test_type="functional"
+            shift
+            ;;
+        -e|--e2e)
+            test_type="e2e"
+            shift
+            ;;
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        --)
+            shift
+            test_args=("$@")
+            break
+            ;;
+        -*)
+            fatal "Unknown option: $1"
+            ;;
+        *)
+            if [[ -z "$package" ]]; then
+                package="$1"
+            else
+                test_args+=("$1")
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Normalize package name (handle aliases)
+normalize_package() {
+    local input="$1"
+    case "$input" in
+        posthog-js|js)
+            echo "browser"
+            ;;
+        posthog-node)
+            echo "node"
+            ;;
+        posthog-react-native|rn)
+            echo "react-native"
+            ;;
+        posthog-js-lite|lite)
+            echo "web"
+            ;;
+        @posthog/*)
+            # Strip @posthog/ prefix
+            echo "${input#@posthog/}"
+            ;;
+        *)
+            echo "$input"
+            ;;
+    esac
+}
+
+# Check if package exists
+package_exists() {
+    local pkg="$1"
+    [[ -d "packages/$pkg" ]]
+}
+
+# Check if a package has a specific npm script
+package_has_script() {
+    local pkg="$1"
+    local script="$2"
+    grep -q "\"$script\":" "packages/$pkg/package.json" 2>/dev/null
+}
+
+# Get the test command for a package
+get_test_command() {
+    local pkg="$1"
+    local type="$2"
+
+    if [[ -n "$type" ]]; then
+        echo "test:$type"
+    elif package_has_script "$pkg" "test"; then
+        echo "test"
+    else
+        # Fall back to test:unit if no "test" script exists
+        echo "test:unit"
+    fi
+}
+
+# Run tests for a single package
+run_package_tests() {
+    local pkg="$1"
+    local cmd
+    cmd=$(get_test_command "$pkg" "$test_type")
+
+    local filter_name="${PACKAGE_NAMES[$pkg]:-$pkg}"
+    print_color blue "Running tests for $filter_name (packages/$pkg)…"
+
+    if [[ ${#test_args[@]} -gt 0 ]]; then
+        pnpm --filter "$filter_name" run "$cmd" -- "${test_args[@]}"
+    else
+        pnpm --filter "$filter_name" run "$cmd"
+    fi
+}
+
+# Show interactive menu
+show_menu() {
+    echo ""
+    print_color blue "Select a package to test:"
+    echo ""
+
+    local i=1
+    for pkg in "${PACKAGES[@]}"; do
+        local display_name="${PACKAGE_NAMES[$pkg]:-$pkg}"
+        printf "  %2d) %-20s (%s)\n" "$i" "$pkg" "$display_name"
+        ((i++))
+    done
+
+    echo ""
+    printf "  %2d) all                  (run all tests)\n" "$i"
+    echo ""
+
+    read -r -p "Enter selection [1-$i]: " selection
+
+    if [[ "$selection" -eq "$i" ]]; then
+        run_all=true
+    elif [[ "$selection" -ge 1 && "$selection" -lt "$i" ]]; then
+        package="${PACKAGES[$((selection-1))]}"
+    else
+        fatal "Invalid selection: $selection"
+    fi
+}
+
+# Main logic
+if $run_all; then
+    print_color blue "Running tests for all packages…"
+
+    if [[ -n "$test_type" ]]; then
+        pnpm run "test:$test_type"
+    else
+        pnpm run test
+    fi
+elif [[ -n "$package" ]]; then
+    package=$(normalize_package "$package")
+
+    if ! package_exists "$package"; then
+        error "Package not found: $package"
+        echo ""
+        echo "Available packages:"
+        for pkg in "${PACKAGES[@]}"; do
+            echo "  - $pkg"
+        done
+        exit 1
+    fi
+
+    run_package_tests "$package"
+else
+    show_menu
+
+    if $run_all; then
+        print_color blue "Running tests for all packages…"
+        if [[ -n "$test_type" ]]; then
+            pnpm run "test:$test_type"
+        else
+            pnpm run test
+        fi
+    else
+        run_package_tests "$package"
+    fi
+fi
