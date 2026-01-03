@@ -1183,6 +1183,11 @@ export class PostHog {
                     event_name === SurveyEventName.SENT ? 'responded' : 'dismissed'
                 )]: true,
             }
+        } else if (event_name === SurveyEventName.SHOWN) {
+            data.$set = {
+                ...data.$set,
+                [SurveyEventProperties.SURVEY_LAST_SEEN_DATE]: new Date().toISOString(),
+            }
         }
 
         // Top-level $set overriding values from the one from properties is taken from the plugin-server normalizeEvent

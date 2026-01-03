@@ -285,6 +285,7 @@ export enum SurveyEventProperties {
     SURVEY_QUESTIONS = '$survey_questions',
     SURVEY_COMPLETED = '$survey_completed',
     PRODUCT_TOUR_ID = '$product_tour_id',
+    SURVEY_LAST_SEEN_DATE = '$survey_last_seen_date',
 }
 
 export enum DisplaySurveyType {
