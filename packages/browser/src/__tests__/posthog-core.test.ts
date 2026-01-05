@@ -336,6 +336,29 @@ describe('posthog core', () => {
                     },
                 })
             })
+            it('sending survey shown events should set the last seen survey date property', () => {
+                // arrange
+                const { posthog, beforeSendMock } = setup({ debug: false })
+                const survey = {
+                    id: 'testSurvey1',
+                    current_iteration: 1,
+                }
+
+                // act
+                posthog.capture(SurveyEventName.SHOWN, {
+                    [SurveyEventProperties.SURVEY_ID]: survey.id,
+                    [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
+                })
+
+                // assert
+                const capturedEvent = beforeSendMock.mock.calls[0][0]
+                expect(capturedEvent.$set).toBeDefined()
+                expect(capturedEvent.$set[SurveyEventProperties.SURVEY_LAST_SEEN_DATE]).toBeDefined()
+                // Verify it's a valid ISO date string
+                expect(new Date(capturedEvent.$set[SurveyEventProperties.SURVEY_LAST_SEEN_DATE]).toISOString()).toBe(
+                    capturedEvent.$set[SurveyEventProperties.SURVEY_LAST_SEEN_DATE]
+                )
+            })
         })
     })
 })
