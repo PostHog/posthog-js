@@ -1,7 +1,8 @@
-import { Survey, SurveyQuestion, SurveyQuestionType } from '../posthog-surveys-types'
+import { Survey, SurveyQuestion, SurveyQuestionBranchingType, SurveyQuestionType } from '../posthog-surveys-types'
 import { getSurveyResponseKey } from '../extensions/surveys/surveys-extension-utils'
 import { logger } from './logger'
 import { isUndefined } from '@posthog/core'
+import { getNextSurveyStep } from './survey-branching'
 
 /**
  * Extracted URL prefill parameters by question index
@@ -138,41 +139,57 @@ export function convertPrefillToResponses(survey: Survey, prefillParams: Prefill
 
 /**
  * Calculate which question index to start at based on prefilled questions.
- * Only advances past consecutive prefilled questions (starting from index 0)
- * that have skipSubmitButton enabled.
+ * Advances past consecutive prefilled questions (starting from index 0)
+ * that have skipSubmitButton enabled, respecting any branching logic configured
+ * on those questions.
  *
- * @param questions - The survey questions array
+ * @param survey - The full survey object (needed for branching logic)
  * @param prefilledIndices - Array of question indices that have been prefilled
+ * @param responses - Map of response keys to response values
  * @returns Object with startQuestionIndex and map of questions which have been skipped
  */
 export function calculatePrefillStartIndex(
-    questions: SurveyQuestion[],
+    survey: Survey,
     prefilledIndices: number[],
     responses: Record<string, any>
 ): { startQuestionIndex: number; skippedResponses: Record<string, any> } {
-    let startQuestionIndex = 0
+    let currentIndex = 0
     const skippedResponses: Record<string, any> = {}
 
-    for (let i = 0; i < questions.length; i++) {
-        // stop at the first question that is not prefilled
-        if (!prefilledIndices.includes(i)) {
+    while (currentIndex < survey.questions.length) {
+        // Stop if current question is not prefilled
+        if (!prefilledIndices.includes(currentIndex)) {
             break
         }
 
-        const question = questions[i]
-        // only advance if the prefilled question has skipSubmitButton
-        if (question && 'skipSubmitButton' in question && question.skipSubmitButton) {
-            startQuestionIndex = i + 1
-            if (!question.id) continue
+        const question = survey.questions[currentIndex]
+
+        // Only advance if the prefilled question has skipSubmitButton
+        if (!question || !('skipSubmitButton' in question) || !question.skipSubmitButton) {
+            // Show question if skipSubmitButton is false, even if prefilled
+            break
+        }
+
+        // Record the skipped response
+        if (question.id) {
             const responseKey = getSurveyResponseKey(question.id)
             if (!isUndefined(responses[responseKey])) {
                 skippedResponses[responseKey] = responses[responseKey]
             }
-        } else {
-            // show question if skipSubmitButton is false, even if prefilled
-            break
         }
+
+        // Use branching logic to determine the next question
+        const response = question.id ? responses[getSurveyResponseKey(question.id)] : null
+        const nextStep = getNextSurveyStep(survey, currentIndex, response)
+
+        if (nextStep === SurveyQuestionBranchingType.End) {
+            // Survey is complete - return questions.length to indicate completion
+            return { startQuestionIndex: survey.questions.length, skippedResponses }
+        }
+
+        // Move to the next question (respecting branching)
+        currentIndex = nextStep
     }
 
-    return { startQuestionIndex, skippedResponses }
+    return { startQuestionIndex: currentIndex, skippedResponses }
 }
