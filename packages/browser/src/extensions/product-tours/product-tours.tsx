@@ -787,9 +787,9 @@ export class ProductTourManager {
                     return
                 }
 
-                // manual triggers only check launch status + URL, no other conditions
-                if (!checkTourConditions(tour)) {
-                    logger.warn(`Tour ${tour.id} trigger clicked but failed conditions check`)
+                // manual triggers only check launch status, no other conditions
+                if (!isTourInDateRange(tour)) {
+                    logger.warn(`Tour ${tour.id} trigger clicked, but tour is not launched - not showing tour.`)
                     return
                 }
 
