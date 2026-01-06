@@ -28,13 +28,46 @@ export interface FormattedFunctionCall {
  */
 export interface FormattedImageContent {
   type: 'image'
-  image: string
+  image?: string
+  inlineData?: {
+    mimeType: string
+    data: string
+  }
+}
+
+/**
+ * Formatted audio content item
+ */
+export interface FormattedAudioContent {
+  type: 'audio'
+  mime_type?: string
+  data: string
+  id?: string
+  expires_at?: number
+  transcript?: string
+}
+
+/**
+ * Formatted document content item (PDFs, etc.)
+ */
+export interface FormattedDocumentContent {
+  type: 'document'
+  source: {
+    type: 'base64'
+    media_type: string
+    data: string
+  }
 }
 
 /**
  * Union type for all formatted content items
  */
-export type FormattedContentItem = FormattedTextContent | FormattedFunctionCall | FormattedImageContent
+export type FormattedContentItem =
+  | FormattedTextContent
+  | FormattedFunctionCall
+  | FormattedImageContent
+  | FormattedAudioContent
+  | FormattedDocumentContent
 
 /**
  * Array of formatted content items

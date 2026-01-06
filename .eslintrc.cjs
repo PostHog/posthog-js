@@ -72,6 +72,8 @@ module.exports = {
                 'packages/react-native/**',
                 'packages/node/**',
                 'packages/web/**',
+                'packages/webpack-plugin/**',
+                'packages/rollup-plugin/**',
                 'examples/**',
                 'playground/**',
             ],
@@ -93,5 +95,5 @@ module.exports = {
             },
         },
     ],
-    ignorePatterns: ['node_modules', 'dist'],
+    ignorePatterns: ['node_modules', 'dist', 'next-env.d.ts', '.next'],
 }

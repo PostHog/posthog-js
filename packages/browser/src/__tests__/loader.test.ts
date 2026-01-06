@@ -36,6 +36,7 @@ describe(`Module-based loader in Node env`, () => {
         posthog.capture = sandbox.spy()
         posthog.init(`test-token`, {
             disable_surveys: true,
+            disable_conversations: true,
             debug: true,
             persistence: `localStorage`,
             api_host: `https://test.com`,
@@ -67,8 +68,12 @@ describe(`Module-based loader in Node env`, () => {
         console.error = jest.fn()
         console.warn = jest.fn()
 
-        expect(posthog.init(`my-test`, { disable_surveys: true }, 'sdk-1')).toBeInstanceOf(PostHog)
-        expect(posthog.init(``, { disable_surveys: true }, 'sdk-2')).toBeInstanceOf(PostHog)
+        expect(posthog.init(`my-test`, { disable_surveys: true, disable_conversations: true }, 'sdk-1')).toBeInstanceOf(
+            PostHog
+        )
+        expect(posthog.init(``, { disable_surveys: true, disable_conversations: true }, 'sdk-2')).toBeInstanceOf(
+            PostHog
+        )
 
         expect(console.error).toHaveBeenCalledWith(
             '[PostHog.js]',
@@ -76,7 +81,9 @@ describe(`Module-based loader in Node env`, () => {
         )
 
         // Already loaded logged even when not debug
-        expect(posthog.init(`my-test`, { disable_surveys: true }, 'sdk-1')).toBeInstanceOf(PostHog)
+        expect(posthog.init(`my-test`, { disable_surveys: true, disable_conversations: true }, 'sdk-1')).toBeInstanceOf(
+            PostHog
+        )
         expect(console.warn).toHaveBeenCalledWith(
             '[PostHog.js]',
             'You have already initialized PostHog! Re-initializing is a no-op'

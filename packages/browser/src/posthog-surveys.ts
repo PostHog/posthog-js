@@ -30,9 +30,13 @@ export class PostHogSurveys {
     private _isSurveysEnabled?: boolean = undefined
     public _surveyEventReceiver: SurveyEventReceiver | null
     private _surveyManager: SurveyManager | null = null
-    private _isFetchingSurveys: boolean = false
     private _isInitializingSurveys: boolean = false
     private _surveyCallbacks: SurveyCallback[] = []
+    // Promise for in-flight survey fetch - allows multiple callers to await the same request
+    private _getSurveysInFlightPromise: Promise<{
+        surveys: Survey[]
+        context: { isLoaded: boolean; error?: string }
+    }> | null = null
 
     constructor(private readonly _instance: PostHog) {
         // we set this to undefined here because we need the persistence storage for this type
@@ -203,56 +207,57 @@ export class PostHogSurveys {
             })
         }
 
-        // Prevent concurrent API calls
-        if (this._isFetchingSurveys) {
-            return callback([], {
-                isLoaded: false,
-                error: 'Surveys are already being loaded',
+        // If a fetch is already in progress and Promise is available, reuse that promise
+        // In browsers without Promise (IE11), we skip this optimization and just make concurrent requests
+        if (typeof Promise !== 'undefined' && this._getSurveysInFlightPromise) {
+            this._getSurveysInFlightPromise.then(({ surveys, context }) => callback(surveys, context))
+            return
+        }
+
+        // Create a new promise for this fetch that other callers can reuse
+        // We need to assign the promise before starting the request, because
+        // in tests (and potentially in some edge cases) the callback may fire synchronously
+        let resolvePromise: (value: { surveys: Survey[]; context: { isLoaded: boolean; error?: string } }) => void
+        if (typeof Promise !== 'undefined') {
+            this._getSurveysInFlightPromise = new Promise((resolve) => {
+                resolvePromise = resolve
             })
         }
 
-        try {
-            this._isFetchingSurveys = true
-            this._instance._send_request({
-                url: this._instance.requestRouter.endpointFor(
-                    'api',
-                    `/api/surveys/?token=${this._instance.config.token}`
-                ),
-                method: 'GET',
-                timeout: this._instance.config.surveys_request_timeout_ms,
-                callback: (response) => {
-                    this._isFetchingSurveys = false
-                    const statusCode = response.statusCode
-                    if (statusCode !== 200 || !response.json) {
-                        const error = `Surveys API could not be loaded, status: ${statusCode}`
-                        logger.error(error)
-                        return callback([], {
-                            isLoaded: false,
-                            error,
-                        })
-                    }
-                    const surveys = response.json.surveys || []
+        this._instance._send_request({
+            url: this._instance.requestRouter.endpointFor('api', `/api/surveys/?token=${this._instance.config.token}`),
+            method: 'GET',
+            timeout: this._instance.config.surveys_request_timeout_ms,
+            callback: (response) => {
+                this._getSurveysInFlightPromise = null
 
-                    const eventOrActionBasedSurveys = surveys.filter(
-                        (survey: Survey) =>
-                            isSurveyRunning(survey) &&
-                            (doesSurveyActivateByEvent(survey) || doesSurveyActivateByAction(survey))
-                    )
+                const statusCode = response.statusCode
+                if (statusCode !== 200 || !response.json) {
+                    const error = `Surveys API could not be loaded, status: ${statusCode}`
+                    logger.error(error)
+                    const context = { isLoaded: false, error }
+                    callback([], context)
+                    resolvePromise?.({ surveys: [], context })
+                    return
+                }
+                const surveys = response.json.surveys || []
 
-                    if (eventOrActionBasedSurveys.length > 0) {
-                        this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
-                    }
+                const eventOrActionBasedSurveys = surveys.filter(
+                    (survey: Survey) =>
+                        isSurveyRunning(survey) &&
+                        (doesSurveyActivateByEvent(survey) || doesSurveyActivateByAction(survey))
+                )
 
-                    this._instance.persistence?.register({ [SURVEYS]: surveys })
-                    return callback(surveys, {
-                        isLoaded: true,
-                    })
-                },
-            })
-        } catch (e) {
-            this._isFetchingSurveys = false
-            throw e
-        }
+                if (eventOrActionBasedSurveys.length > 0) {
+                    this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
+                }
+
+                this._instance.persistence?.register({ [SURVEYS]: surveys })
+                const context = { isLoaded: true }
+                callback(surveys, context)
+                resolvePromise?.({ surveys, context })
+            },
+        })
     }
 
     /** Helper method to notify all registered callbacks */
@@ -398,5 +403,17 @@ export class PostHogSurveys {
             return
         }
         this._surveyManager.handlePopoverSurvey(surveyToDisplay)
+    }
+
+    cancelPendingSurvey(surveyId: string): void {
+        if (isNullish(this._surveyManager)) {
+            logger.warn('init was not called')
+            return
+        }
+        this._surveyManager.cancelSurvey(surveyId)
+    }
+
+    handlePageUnload(): void {
+        this._surveyManager?.handlePageUnload()
     }
 }

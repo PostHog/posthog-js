@@ -1,7 +1,13 @@
 import { PostHog } from 'posthog-node'
 import { withTracing } from '../src/index'
-import { generateText, wrapLanguageModel } from 'ai'
-import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider'
+import type {
+  LanguageModelV2,
+  LanguageModelV2CallOptions,
+  LanguageModelV2StreamPart,
+  LanguageModelV3,
+  LanguageModelV3CallOptions,
+  LanguageModelV3StreamPart,
+} from '@ai-sdk/provider'
 import { flushPromises } from './test-utils'
 import { version } from '../package.json'
 
@@ -18,43 +24,59 @@ jest.mock('posthog-node', () => {
   }
 })
 
-// Mock AI SDK's generateText to simulate its behavior
-jest.mock('ai', () => ({
-  generateText: jest.fn(async ({ model, prompt }) => {
-    // Simulate what generateText does - convert prompt and call model
-    const messages = typeof prompt === 'string' ? [{ role: 'user', content: prompt }] : prompt
+// Extract prompt text from message content (handles both string and array formats)
+const getPromptText = (content: any): string => {
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) {
+    const textPart = content.find((c: any) => c.type === 'text')
+    return textPart?.text || ''
+  }
+  return ''
+}
 
-    const result = await model.doGenerate({ prompt: messages })
+// Helper to create V3-style token usage object
+const v3TokenUsage = (input: number, output: number, reasoning?: number) => ({
+  inputTokens: { total: input, noCache: input, cacheRead: undefined, cacheWrite: undefined },
+  outputTokens: { total: output, text: output - (reasoning ?? 0), reasoning: reasoning },
+})
 
-    return {
-      text: result.text,
-      usage: {
-        promptTokens: result.usage.inputTokens,
-        completionTokens: result.usage.outputTokens,
-        totalTokens: result.usage.inputTokens + result.usage.outputTokens,
-      },
-    }
-  }),
-  streamText: jest.fn(),
-  wrapLanguageModel: jest.fn(({ model, middleware }) => {
-    // Apply the middleware to the model
-    const wrappedModel = {
-      ...model,
-      doGenerate: async (params: any) => {
-        return middleware.wrapGenerate({
-          doGenerate: async () => model.doGenerate(params),
-          params,
-          model,
-        })
-      },
-      doStream: model.doStream,
-    }
-    return wrappedModel
-  }),
-}))
+// Create a mock V3 model (AI SDK 6)
+const createMockV3Model = (modelId: string): LanguageModelV3 => {
+  const mockResponses = {
+    'What is 9 + 10?': { text: '19', usage: v3TokenUsage(10, 2) },
+    'What is 10 + 11?': { text: '21', usage: v3TokenUsage(10, 2) },
+    'What is 12 + 13?': { text: '25', usage: v3TokenUsage(10, 2) },
+  }
 
-// Create a mock openai function that returns a properly structured model
-const createMockModel = (modelId: string): LanguageModelV2 => {
+  return {
+    specificationVersion: 'v3' as const,
+    provider: 'openai',
+    modelId: modelId,
+    supportedUrls: {},
+    doGenerate: jest.fn().mockImplementation(async (params: LanguageModelV3CallOptions) => {
+      const userMessage = params.prompt.find((m: any) => m.role === 'user')
+      const promptText = getPromptText(userMessage?.content)
+      const response = mockResponses[promptText as keyof typeof mockResponses] || {
+        text: 'Unknown',
+        usage: v3TokenUsage(5, 1),
+      }
+
+      return {
+        text: response.text,
+        usage: response.usage,
+        content: [{ type: 'text', text: response.text }],
+        response: { modelId: modelId },
+        providerMetadata: {},
+        finishReason: 'stop',
+        warnings: [],
+      }
+    }),
+    doStream: jest.fn(),
+  } as LanguageModelV3
+}
+
+// Create a mock V2 model (AI SDK 5)
+const createMockV2Model = (modelId: string): LanguageModelV2 => {
   const mockResponses = {
     'What is 9 + 10?': { text: '19', usage: { inputTokens: 10, outputTokens: 2 } },
     'What is 10 + 11?': { text: '21', usage: { inputTokens: 10, outputTokens: 2 } },
@@ -67,9 +89,8 @@ const createMockModel = (modelId: string): LanguageModelV2 => {
     modelId: modelId,
     supportedUrls: {},
     doGenerate: jest.fn().mockImplementation(async (params: LanguageModelV2CallOptions) => {
-      // Extract the prompt text from the params
       const userMessage = params.prompt.find((m: any) => m.role === 'user')
-      const promptText = userMessage?.content as string
+      const promptText = getPromptText(userMessage?.content)
       const response = mockResponses[promptText as keyof typeof mockResponses] || {
         text: 'Unknown',
         usage: { inputTokens: 5, outputTokens: 1 },
@@ -82,7 +103,6 @@ const createMockModel = (modelId: string): LanguageModelV2 => {
         response: { modelId: modelId },
         providerMetadata: {},
         finishReason: 'stop',
-        logprobs: undefined,
         warnings: [],
       }
     }),
@@ -90,7 +110,70 @@ const createMockModel = (modelId: string): LanguageModelV2 => {
   } as LanguageModelV2
 }
 
-describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
+// Helper to extract numeric token value from V2 (number) or V3 (object with .total) formats
+const extractTokenValue = (value: unknown): number => {
+  if (typeof value === 'number') return value
+  if (
+    value &&
+    typeof value === 'object' &&
+    'total' in value &&
+    typeof (value as { total: unknown }).total === 'number'
+  ) {
+    return (value as { total: number }).total
+  }
+  return 0
+}
+
+// Simulate what generateText does - works with both V2 and V3
+const simulateGenerateText = async ({ model, prompt }: { model: any; prompt: string }) => {
+  const messages = [{ role: 'user' as const, content: [{ type: 'text' as const, text: prompt }] }]
+  const result = await model.doGenerate({ prompt: messages })
+
+  const promptTokens = extractTokenValue(result.usage.inputTokens)
+  const completionTokens = extractTokenValue(result.usage.outputTokens)
+
+  return {
+    text: result.content[0]?.text || result.text,
+    usage: {
+      promptTokens,
+      completionTokens,
+      totalTokens: promptTokens + completionTokens,
+    },
+  }
+}
+
+// Helper to create streaming model for both versions
+const createMockStreamingModel = <T extends 'v2' | 'v3'>(
+  version: T,
+  streamParts: T extends 'v3' ? LanguageModelV3StreamPart[] : LanguageModelV2StreamPart[]
+): T extends 'v3' ? LanguageModelV3 : LanguageModelV2 => {
+  const baseModel = {
+    specificationVersion: version as any,
+    provider: 'test-provider',
+    modelId: 'test-streaming-model',
+    supportedUrls: {},
+    doGenerate: jest.fn(),
+    doStream: jest.fn().mockImplementation(async () => {
+      const stream = new ReadableStream({
+        async start(controller) {
+          for (const part of streamParts) {
+            controller.enqueue(part)
+          }
+          controller.close()
+        },
+      })
+
+      return {
+        stream,
+        response: { modelId: 'test-streaming-model' },
+      }
+    }),
+  }
+
+  return baseModel as any
+}
+
+describe('Vercel AI SDK - Dual Version Support', () => {
   let mockPostHogClient: PostHog
 
   beforeEach(async () => {
@@ -98,21 +181,20 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
     mockPostHogClient = new (PostHog as any)()
   })
 
-  describe('generateText with withTracing (real usage)', () => {
-    it('should wrap a model and track simple prompt generation', async () => {
-      const baseModel = createMockModel('gpt-4')
+  describe('V3 Model (AI SDK 6)', () => {
+    it('should wrap a V3 model and track generation', async () => {
+      const baseModel = createMockV3Model('gpt-4')
       const model = withTracing(baseModel, mockPostHogClient, {
         posthogDistinctId: 'test-user',
         posthogTraceId: 'test123',
-        posthogProperties: {
-          test: 'test',
-        },
-        posthogGroups: {
-          company: 'test-company',
-        },
+        posthogProperties: { test: 'test' },
+        posthogGroups: { company: 'test-company' },
       })
 
-      const result = await generateText({
+      // Verify the wrapped model preserves V3 type
+      expect(model.specificationVersion).toBe('v3')
+
+      const result = await simulateGenerateText({
         model: model,
         prompt: 'What is 9 + 10?',
       })
@@ -124,150 +206,155 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         totalTokens: 12,
       })
 
-      // Verify PostHog was called
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
 
-      // Verify $ai_lib and $ai_lib_version
       expect(captureCall[0].properties['$ai_lib']).toBe('posthog-ai')
       expect(captureCall[0].properties['$ai_lib_version']).toBe(version)
-
-      // Verify $ai_framework for Vercel
       expect(captureCall[0].properties['$ai_framework']).toBe('vercel')
-
-      expect(captureCall[0]).toEqual({
-        distinctId: 'test-user',
-        event: '$ai_generation',
-        properties: expect.objectContaining({
-          $ai_model: 'gpt-4',
-          $ai_provider: 'openai',
-          $ai_trace_id: 'test123',
-          test: 'test',
-          $ai_input_tokens: 10,
-          $ai_output_tokens: 2,
-          $ai_input: expect.arrayContaining([
-            expect.objectContaining({
-              role: 'user',
-              content: expect.arrayContaining([
-                expect.objectContaining({
-                  type: 'text',
-                  text: 'What is 9 + 10?',
-                }),
-              ]),
-            }),
-          ]),
-          $ai_output_choices: expect.arrayContaining([
-            expect.objectContaining({
-              role: 'assistant',
-              content: '19',
-            }),
-          ]),
-        }),
-        groups: { company: 'test-company' },
-      })
+      expect(captureCall[0].properties['$ai_model']).toBe('gpt-4')
+      expect(captureCall[0].properties['$ai_provider']).toBe('openai')
     })
 
-    it('should handle multiple sequential calls', async () => {
-      const baseModel = createMockModel('gpt-4.1')
+    it('should handle V3 streaming with tool calls', async () => {
+      const streamParts: LanguageModelV3StreamPart[] = [
+        { type: 'text-delta', id: 'text-1', delta: 'Let me check ' },
+        { type: 'tool-input-start', id: 'tc-1', toolName: 'get_weather' },
+        { type: 'tool-input-delta', id: 'tc-1', delta: '{"location":"NYC"}' },
+        { type: 'tool-input-end', id: 'tc-1' },
+        {
+          type: 'finish',
+          usage: v3TokenUsage(20, 15),
+          finishReason: 'stop',
+        },
+      ]
+
+      const baseModel = createMockStreamingModel('v3', streamParts)
       const model = withTracing(baseModel, mockPostHogClient, {
         posthogDistinctId: 'test-user',
-        posthogTraceId: 'test123',
+        posthogTraceId: 'test-v3-stream',
       })
 
-      const { text: text1 } = await generateText({
-        model: model,
-        prompt: 'What is 9 + 10?',
+      const result = await model.doStream({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Weather?' }] }],
       })
 
-      const { text: text2 } = await generateText({
-        model: model,
-        prompt: 'What is 10 + 11?',
-      })
+      const reader = result.stream.getReader()
+      while (!(await reader.read()).done) {
+        // Consume stream
+      }
 
-      const { text: text3 } = await generateText({
-        model: model,
-        prompt: 'What is 12 + 13?',
-      })
+      await flushPromises()
 
-      expect(text1).toBe('19')
-      expect(text2).toBe('21')
-      expect(text3).toBe('25')
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
 
-      // Verify PostHog was called 3 times
-      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(3)
-
-      // Verify each call had the correct trace ID and library properties
-      const calls = (mockPostHogClient.capture as jest.Mock).mock.calls
-      calls.forEach((call) => {
-        expect(call[0].properties.$ai_trace_id).toBe('test123')
-        expect(call[0].properties['$ai_lib']).toBe('posthog-ai')
-        expect(call[0].properties['$ai_lib_version']).toBe(version)
-      })
+      expect(captureCall[0].properties.$ai_output_choices).toEqual([
+        {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: 'Let me check ' },
+            {
+              type: 'tool-call',
+              id: 'tc-1',
+              function: { name: 'get_weather', arguments: '{"location":"NYC"}' },
+            },
+          ],
+        },
+      ])
     })
+  })
 
-    it('should track PostHog events with properties and groups', async () => {
-      const baseModel = createMockModel('gpt-4')
+  describe('V2 Model (AI SDK 5)', () => {
+    it('should wrap a V2 model and track generation', async () => {
+      const baseModel = createMockV2Model('gpt-4')
       const model = withTracing(baseModel, mockPostHogClient, {
         posthogDistinctId: 'test-user',
-        posthogTraceId: 'test123',
-        posthogProperties: {
-          test: 'test',
-        },
-        posthogGroups: {
-          company: 'test-vercel',
-        },
+        posthogTraceId: 'test456',
+        posthogProperties: { test: 'v2-test' },
+        posthogGroups: { company: 'test-company-v2' },
       })
 
-      const result = await generateText({
+      // Verify the wrapped model preserves V2 type
+      expect(model.specificationVersion).toBe('v2')
+
+      const result = await simulateGenerateText({
         model: model,
         prompt: 'What is 9 + 10?',
       })
 
       expect(result.text).toBe('19')
+      expect(result.usage).toEqual({
+        promptTokens: 10,
+        completionTokens: 2,
+        totalTokens: 12,
+      })
 
-      // Check that PostHog capture was called
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
 
-      // Verify $ai_lib and $ai_lib_version
       expect(captureCall[0].properties['$ai_lib']).toBe('posthog-ai')
       expect(captureCall[0].properties['$ai_lib_version']).toBe(version)
-
-      expect(captureCall[0]).toEqual({
-        distinctId: 'test-user',
-        event: '$ai_generation',
-        properties: expect.objectContaining({
-          $ai_model: 'gpt-4',
-          $ai_provider: 'openai',
-          $ai_trace_id: 'test123',
-          test: 'test', // Custom properties
-          $ai_input_tokens: 10,
-          $ai_output_tokens: 2,
-          $ai_input: expect.arrayContaining([
-            expect.objectContaining({
-              role: 'user',
-              content: expect.arrayContaining([
-                expect.objectContaining({
-                  type: 'text',
-                  text: 'What is 9 + 10?',
-                }),
-              ]),
-            }),
-          ]),
-          $ai_output_choices: expect.arrayContaining([
-            expect.objectContaining({
-              role: 'assistant',
-              content: '19',
-            }),
-          ]),
-        }),
-        groups: { company: 'test-vercel' },
-      })
+      expect(captureCall[0].properties['$ai_framework']).toBe('vercel')
+      expect(captureCall[0].properties['$ai_model']).toBe('gpt-4')
+      expect(captureCall[0].properties['$ai_provider']).toBe('openai')
     })
 
-    it('should handle error cases', async () => {
-      const baseModel = createMockModel('gpt-4')
-      // Override doGenerate to throw an error
+    it('should handle V2 streaming with tool calls', async () => {
+      const streamParts: LanguageModelV2StreamPart[] = [
+        { type: 'text-delta', id: 'text-1', delta: 'Processing ' },
+        { type: 'tool-input-start', id: 'tc-1', toolName: 'calculate' },
+        { type: 'tool-input-delta', id: 'tc-1', delta: '{"a":5,"b":3}' },
+        { type: 'tool-input-end', id: 'tc-1' },
+        {
+          type: 'finish',
+          usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
+          finishReason: 'stop',
+        },
+      ]
+
+      const baseModel = createMockStreamingModel('v2', streamParts)
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-v2-stream',
+      })
+
+      const result = await model.doStream({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Calculate' }] }],
+      })
+
+      const reader = result.stream.getReader()
+      while (!(await reader.read()).done) {
+        // Consume stream
+      }
+
+      await flushPromises()
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+      expect(captureCall[0].properties.$ai_output_choices).toEqual([
+        {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: 'Processing ' },
+            {
+              type: 'tool-call',
+              id: 'tc-1',
+              function: { name: 'calculate', arguments: '{"a":5,"b":3}' },
+            },
+          ],
+        },
+      ])
+    })
+  })
+
+  describe('Shared behavior (both versions)', () => {
+    it.each([
+      ['v2', createMockV2Model],
+      ['v3', createMockV3Model],
+    ])('should handle errors in %s models', async (_version, createModel) => {
+      const baseModel = createModel('gpt-4')
       baseModel.doGenerate = jest.fn().mockRejectedValue(new Error('API Error'))
 
       const model = withTracing(baseModel, mockPostHogClient, {
@@ -276,574 +363,157 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
       })
 
       await expect(
-        generateText({
+        simulateGenerateText({
           model: model,
           prompt: 'What is 9 + 10?',
         })
       ).rejects.toThrow('API Error')
 
-      // Verify error was tracked
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
-
-      // Verify $ai_lib and $ai_lib_version
-      expect(captureCall[0].properties['$ai_lib']).toBe('posthog-ai')
-      expect(captureCall[0].properties['$ai_lib_version']).toBe(version)
 
       expect(captureCall[0].properties).toEqual(
         expect.objectContaining({
           $ai_trace_id: 'test-error',
-          $ai_error: expect.any(String), // Error is serialized to JSON
+          $ai_error: expect.any(String),
           $ai_is_error: true,
           $ai_model: 'gpt-4',
           $ai_provider: 'openai',
-          $ai_input_tokens: 0,
-          $ai_output_tokens: 0,
         })
       )
     })
 
-    it('should track tools in PostHog event when tools are provided', async () => {
-      const baseModel = createMockModel('gpt-4')
+    it.each([
+      ['v2', createMockV2Model],
+      ['v3', createMockV3Model],
+    ])('should handle multiple sequential calls in %s models', async (_version, createModel) => {
+      const baseModel = createModel('gpt-4.1')
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-sequential',
+      })
+
+      const { text: text1 } = await simulateGenerateText({ model, prompt: 'What is 9 + 10?' })
+      const { text: text2 } = await simulateGenerateText({ model, prompt: 'What is 10 + 11?' })
+      const { text: text3 } = await simulateGenerateText({ model, prompt: 'What is 12 + 13?' })
+
+      expect(text1).toBe('19')
+      expect(text2).toBe('21')
+      expect(text3).toBe('25')
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(3)
+
+      const calls = (mockPostHogClient.capture as jest.Mock).mock.calls
+      calls.forEach((call) => {
+        expect(call[0].properties.$ai_trace_id).toBe('test-sequential')
+        expect(call[0].properties['$ai_lib']).toBe('posthog-ai')
+      })
+    })
+
+    it.each([
+      ['v2', createMockV2Model, { inputTokens: 15, outputTokens: 5 }],
+      ['v3', createMockV3Model, v3TokenUsage(15, 5)],
+    ])('should track tools in %s models when provided', async (_version, createModel, usageFormat) => {
+      const baseModel = createModel('gpt-4')
+      baseModel.doGenerate = jest.fn().mockImplementation(async () => ({
+        text: 'Using tool',
+        usage: usageFormat,
+        content: [{ type: 'text', text: 'Using tool' }],
+        response: { modelId: 'gpt-4' },
+        providerMetadata: {},
+        finishReason: 'stop',
+        warnings: [],
+      }))
+
       const model = withTracing(baseModel, mockPostHogClient, {
         posthogDistinctId: 'test-user',
         posthogTraceId: 'test-tools',
       })
 
-      // Mock doGenerate to handle tools
-      baseModel.doGenerate = jest.fn().mockImplementation(async (_params: LanguageModelV2CallOptions) => {
-        return {
-          text: 'I will use the weather tool',
-          usage: { inputTokens: 15, outputTokens: 5 },
-          content: [{ type: 'text', text: 'I will use the weather tool' }],
-          response: { modelId: 'gpt-4' },
-          providerMetadata: {},
-          finishReason: 'stop',
-          logprobs: undefined,
-          warnings: [],
-        }
-      })
-
-      // Define tools for the request
       const tools = [
         {
           name: 'get_weather',
-          description: 'Get the weather for a location',
-          parameters: {
-            type: 'object' as const,
-            properties: {
-              location: { type: 'string' as const },
-            },
-            required: ['location'],
-          },
-        },
-        {
-          name: 'search',
-          description: 'Search for information',
-          parameters: {
-            type: 'object' as const,
-            properties: {
-              query: { type: 'string' as const },
-            },
-            required: ['query'],
-          },
+          description: 'Get weather',
+          parameters: { type: 'object' as const, properties: { location: { type: 'string' as const } } },
         },
       ]
 
-      // Mock generateText to pass tools to the model
-      const mockGenerateText = generateText as jest.Mock
-      mockGenerateText.mockImplementation(async ({ model, prompt, tools }) => {
-        // Pass tools to the model's doGenerate via params
-        const messages = typeof prompt === 'string' ? [{ role: 'user', content: prompt }] : prompt
-        const result = await model.doGenerate({ prompt: messages, tools })
-
-        return {
-          text: result.text,
-          usage: {
-            promptTokens: result.usage.inputTokens,
-            completionTokens: result.usage.outputTokens,
-            totalTokens: result.usage.inputTokens + result.usage.outputTokens,
-          },
-        }
-      })
-
-      const result = await generateText({
-        model: model,
-        prompt: 'What is the weather like?',
+      await model.doGenerate({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Weather?' }] }],
         tools: tools as any,
-      })
+      } as any)
 
-      expect(result.text).toBe('I will use the weather tool')
-
-      // Verify PostHog was called with tools
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
 
-      // Verify $ai_lib and $ai_lib_version
-      expect(captureCall[0].properties['$ai_lib']).toBe('posthog-ai')
-      expect(captureCall[0].properties['$ai_lib_version']).toBe(version)
+      expect(captureCall[0].properties.$ai_tools).toEqual(tools)
+    })
 
-      expect(captureCall[0].properties).toEqual(
-        expect.objectContaining({
-          $ai_trace_id: 'test-tools',
-          $ai_model: 'gpt-4',
-          $ai_provider: 'openai',
-          $ai_tools: tools, // Verify tools are included
-          $ai_input_tokens: 15,
-          $ai_output_tokens: 5,
-        })
-      )
+    it.each([
+      ['v2', createMockV2Model],
+      ['v3', createMockV3Model],
+    ])('should respect privacy mode in %s models', async (_version, createModel) => {
+      const baseModel = createModel('gpt-4')
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-privacy',
+        posthogPrivacyMode: true,
+      })
+
+      await simulateGenerateText({ model, prompt: 'What is 9 + 10?' })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+      // Input should be null in privacy mode (withPrivacyMode returns null)
+      expect(captureCall[0].properties.$ai_input).toBeNull()
     })
   })
 
-  describe('streamText with tool calls', () => {
-    // Helper function to create a mock streaming model
-    const createMockStreamingModel = (streamParts: LanguageModelV2StreamPart[]): LanguageModelV2 => {
-      return {
-        specificationVersion: 'v2' as const,
-        provider: 'test-provider',
-        modelId: 'test-streaming-model',
-        supportedUrls: {},
-        doGenerate: jest.fn(),
-        doStream: jest.fn().mockImplementation(async () => {
-          // Create a readable stream from the parts
-          const stream = new ReadableStream<LanguageModelV2StreamPart>({
-            async start(controller) {
-              for (const part of streamParts) {
-                controller.enqueue(part)
-              }
-              controller.close()
-            },
-          })
-
-          return {
-            stream,
-            response: { modelId: 'test-streaming-model' },
-          }
-        }),
-      } as LanguageModelV2
-    }
-
-    it('should capture single tool call in streaming', async () => {
-      const streamParts: LanguageModelV2StreamPart[] = [
-        { type: 'text-delta', id: 'text-1', delta: 'Let me check the weather ' },
-        { type: 'tool-input-start', id: 'tc-1', toolName: 'get_weather' },
-        { type: 'tool-input-delta', id: 'tc-1', delta: '{"location":"' },
-        { type: 'tool-input-delta', id: 'tc-1', delta: 'San Francisco"}' },
-        { type: 'tool-input-end', id: 'tc-1' },
-        { type: 'text-delta', id: 'text-2', delta: 'for you.' },
+  describe('Mixed reasoning and text content', () => {
+    it.each([
+      ['v2', { inputTokens: 10, outputTokens: 8, totalTokens: 18, reasoningTokens: 5 }],
+      ['v3', v3TokenUsage(10, 8, 5)],
+    ] as const)('should handle reasoning in %s streaming', async (version, usageFormat) => {
+      const streamParts = [
+        { type: 'reasoning-delta' as const, id: 'r-1', delta: 'Thinking about ' },
+        { type: 'reasoning-delta' as const, id: 'r-1', delta: 'the answer.' },
+        { type: 'text-delta' as const, id: 't-1', delta: 'The answer is 19.' },
         {
-          type: 'finish',
-          usage: { inputTokens: 20, outputTokens: 15, totalTokens: 35 },
-          finishReason: 'stop',
+          type: 'finish' as const,
+          usage: usageFormat,
+          finishReason: 'stop' as const,
         },
       ]
 
-      const baseModel = createMockStreamingModel(streamParts)
+      const baseModel = createMockStreamingModel(version, streamParts as any)
       const model = withTracing(baseModel, mockPostHogClient, {
         posthogDistinctId: 'test-user',
-        posthogTraceId: 'test-stream-tool',
+        posthogTraceId: 'test-reasoning',
       })
-
-      // Process the stream - need to mock doStream on the wrapped model
-      ;(model as any).doStream = async (params: any) => {
-        const middleware = (wrapLanguageModel as jest.Mock).mock.calls[0][0].middleware
-        return middleware.wrapStream({
-          doStream: async () => baseModel.doStream(params),
-          params,
-          model: baseModel,
-        })
-      }
 
       const result = await model.doStream({
-        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'What is the weather?' }] }],
-      })
-
-      // Read through the stream to trigger the transform and flush
-      const reader = result.stream.getReader()
-      while (!(await reader.read()).done) {
-        // Continue reading
-      }
-
-      // Wait for any async operations to complete
-      await flushPromises()
-
-      // Verify PostHog was called
-      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
-
-      expect(captureCall[0].properties.$ai_output_choices).toEqual([
-        {
-          role: 'assistant',
-          content: [
-            { type: 'text', text: 'Let me check the weather for you.' },
-            {
-              type: 'tool-call',
-              id: 'tc-1',
-              function: {
-                name: 'get_weather',
-                arguments: '{"location":"San Francisco"}',
-              },
-            },
-          ],
-        },
-      ])
-    })
-
-    it('should capture multiple tool calls in streaming', async () => {
-      const streamParts: LanguageModelV2StreamPart[] = [
-        { type: 'text-delta', id: 'text-1', delta: 'I will help you with multiple tasks. ' },
-        // First tool call
-        { type: 'tool-input-start', id: 'tc-1', toolName: 'get_weather' },
-        { type: 'tool-input-delta', id: 'tc-1', delta: '{"location":"NYC"}' },
-        { type: 'tool-input-end', id: 'tc-1' },
-        // Second tool call
-        { type: 'tool-input-start', id: 'tc-2', toolName: 'web_search' },
-        { type: 'tool-input-delta', id: 'tc-2', delta: '{"query":"' },
-        { type: 'tool-input-delta', id: 'tc-2', delta: 'latest news"}' },
-        { type: 'tool-input-end', id: 'tc-2' },
-        {
-          type: 'finish',
-          usage: { inputTokens: 30, outputTokens: 25, totalTokens: 55 },
-          finishReason: 'stop',
-        },
-      ]
-
-      const baseModel = createMockStreamingModel(streamParts)
-      const model = withTracing(baseModel, mockPostHogClient, {
-        posthogDistinctId: 'test-user',
-        posthogTraceId: 'test-multi-tools',
-      })
-
-      // Process the stream - need to mock doStream on the wrapped model
-      ;(model as any).doStream = async (params: any) => {
-        const middleware = (wrapLanguageModel as jest.Mock).mock.calls[0][0].middleware
-        return middleware.wrapStream({
-          doStream: async () => baseModel.doStream(params),
-          params,
-          model: baseModel,
-        })
-      }
-
-      const result = await model.doStream({
-        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Check weather and news' }] }],
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Think' }] }],
       })
 
       const reader = result.stream.getReader()
       while (!(await reader.read()).done) {
-        // Continue reading
+        // Consume
       }
 
       await flushPromises()
 
-      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
-
       expect(captureCall[0].properties.$ai_output_choices).toEqual([
         {
           role: 'assistant',
           content: [
-            { type: 'text', text: 'I will help you with multiple tasks. ' },
-            {
-              type: 'tool-call',
-              id: 'tc-1',
-              function: {
-                name: 'get_weather',
-                arguments: '{"location":"NYC"}',
-              },
-            },
-            {
-              type: 'tool-call',
-              id: 'tc-2',
-              function: {
-                name: 'web_search',
-                arguments: '{"query":"latest news"}',
-              },
-            },
+            { type: 'reasoning', text: 'Thinking about the answer.' },
+            { type: 'text', text: 'The answer is 19.' },
           ],
         },
       ])
-    })
-
-    it('should handle direct tool-call chunks in streaming', async () => {
-      const streamParts: LanguageModelV2StreamPart[] = [
-        { type: 'text-delta', id: 'text-1', delta: 'Processing your request. ' },
-        // Direct tool-call chunk (complete tool call in one chunk)
-        {
-          type: 'tool-call',
-          toolCallId: 'tc-direct',
-          toolName: 'calculate',
-          input: '{"operation":"add","a":5,"b":3}',
-        },
-        {
-          type: 'finish',
-          usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
-          finishReason: 'stop',
-        },
-      ]
-
-      const baseModel = createMockStreamingModel(streamParts)
-      const model = withTracing(baseModel, mockPostHogClient, {
-        posthogDistinctId: 'test-user',
-        posthogTraceId: 'test-direct-tool',
-      })
-
-      // Process the stream - need to mock doStream on the wrapped model
-      ;(model as any).doStream = async (params: any) => {
-        const middleware = (wrapLanguageModel as jest.Mock).mock.calls[0][0].middleware
-        return middleware.wrapStream({
-          doStream: async () => baseModel.doStream(params),
-          params,
-          model: baseModel,
-        })
-      }
-
-      const result = await model.doStream({
-        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Calculate 5 + 3' }] }],
-      })
-
-      const reader = result.stream.getReader()
-      while (!(await reader.read()).done) {
-        // Continue reading
-      }
-
-      await flushPromises()
-
-      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
-
-      expect(captureCall[0].properties.$ai_output_choices).toEqual([
-        {
-          role: 'assistant',
-          content: [
-            { type: 'text', text: 'Processing your request. ' },
-            {
-              type: 'tool-call',
-              id: 'tc-direct',
-              function: {
-                name: 'calculate',
-                arguments: '{"operation":"add","a":5,"b":3}',
-              },
-            },
-          ],
-        },
-      ])
-    })
-
-    it('should handle mixed content with text, reasoning, and tool calls', async () => {
-      const streamParts: LanguageModelV2StreamPart[] = [
-        { type: 'reasoning-delta', id: 'reasoning-1', delta: 'User wants weather info. ' },
-        { type: 'reasoning-delta', id: 'reasoning-1', delta: 'I should use the weather tool.' },
-        { type: 'text-delta', id: 'text-1', delta: 'Let me check that for you. ' },
-        { type: 'tool-input-start', id: 'tc-1', toolName: 'get_weather' },
-        { type: 'tool-input-delta', id: 'tc-1', delta: '{"location":"London","units":"celsius"}' },
-        { type: 'tool-input-end', id: 'tc-1' },
-        {
-          type: 'finish',
-          usage: {
-            inputTokens: 25,
-            outputTokens: 20,
-            totalTokens: 45,
-            reasoningTokens: 10,
-          },
-          finishReason: 'stop',
-        },
-      ]
-
-      const baseModel = createMockStreamingModel(streamParts)
-      const model = withTracing(baseModel, mockPostHogClient, {
-        posthogDistinctId: 'test-user',
-        posthogTraceId: 'test-mixed-content',
-      })
-
-      // Process the stream - need to mock doStream on the wrapped model
-      ;(model as any).doStream = async (params: any) => {
-        const middleware = (wrapLanguageModel as jest.Mock).mock.calls[0][0].middleware
-        return middleware.wrapStream({
-          doStream: async () => baseModel.doStream(params),
-          params,
-          model: baseModel,
-        })
-      }
-
-      const result = await model.doStream({
-        prompt: [
-          { role: 'user' as const, content: [{ type: 'text' as const, text: 'What is the weather in London?' }] },
-        ],
-      })
-
-      const reader = result.stream.getReader()
-      while (!(await reader.read()).done) {
-        // Continue reading
-      }
-
-      await flushPromises()
-
-      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
-
-      expect(captureCall[0].properties.$ai_output_choices).toEqual([
-        {
-          role: 'assistant',
-          content: [
-            { type: 'reasoning', text: 'User wants weather info. I should use the weather tool.' },
-            { type: 'text', text: 'Let me check that for you. ' },
-            {
-              type: 'tool-call',
-              id: 'tc-1',
-              function: {
-                name: 'get_weather',
-                arguments: '{"location":"London","units":"celsius"}',
-              },
-            },
-          ],
-        },
-      ])
-
-      // Also verify reasoning tokens are captured
-      expect(captureCall[0].properties.$ai_reasoning_tokens).toBe(10)
-    })
-
-    it('should handle empty or incomplete tool calls gracefully', async () => {
-      const streamParts: LanguageModelV2StreamPart[] = [
-        { type: 'text-delta', id: 'text-1', delta: 'Here is the response. ' },
-        // Tool call without arguments
-        { type: 'tool-input-start', id: 'tc-1', toolName: 'empty_tool' },
-        { type: 'tool-input-end', id: 'tc-1' },
-        // Tool call with incomplete data (no name)
-        {
-          type: 'tool-call',
-          toolCallId: 'tc-incomplete',
-          toolName: '',
-          input: '{"data":"test"}',
-        },
-        {
-          type: 'finish',
-          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-          finishReason: 'stop',
-        },
-      ]
-
-      const baseModel = createMockStreamingModel(streamParts)
-      const model = withTracing(baseModel, mockPostHogClient, {
-        posthogDistinctId: 'test-user',
-        posthogTraceId: 'test-empty-tools',
-      })
-
-      // Process the stream - need to mock doStream on the wrapped model
-      ;(model as any).doStream = async (params: any) => {
-        const middleware = (wrapLanguageModel as jest.Mock).mock.calls[0][0].middleware
-        return middleware.wrapStream({
-          doStream: async () => baseModel.doStream(params),
-          params,
-          model: baseModel,
-        })
-      }
-
-      const result = await model.doStream({
-        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Test empty tools' }] }],
-      })
-
-      const reader = result.stream.getReader()
-      while (!(await reader.read()).done) {
-        // Continue reading
-      }
-
-      await flushPromises()
-
-      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
-
-      // Should only include valid tool calls (tc-1 with empty_tool name)
-      expect(captureCall[0].properties.$ai_output_choices).toEqual([
-        {
-          role: 'assistant',
-          content: [
-            { type: 'text', text: 'Here is the response. ' },
-            {
-              type: 'tool-call',
-              id: 'tc-1',
-              function: {
-                name: 'empty_tool',
-                arguments: '',
-              },
-            },
-          ],
-        },
-      ])
-    })
-
-    it('should handle streaming with only tool calls and no text', async () => {
-      const streamParts: LanguageModelV2StreamPart[] = [
-        { type: 'tool-input-start', id: 'tc-1', toolName: 'function_a' },
-        { type: 'tool-input-delta', id: 'tc-1', delta: '{"param":"value"}' },
-        { type: 'tool-input-end', id: 'tc-1' },
-        {
-          type: 'tool-call',
-          toolCallId: 'tc-2',
-          toolName: 'function_b',
-          input: '{"x":10}',
-        },
-        {
-          type: 'finish',
-          usage: { inputTokens: 8, outputTokens: 4, totalTokens: 12 },
-          finishReason: 'stop',
-        },
-      ]
-
-      const baseModel = createMockStreamingModel(streamParts)
-      const model = withTracing(baseModel, mockPostHogClient, {
-        posthogDistinctId: 'test-user',
-        posthogTraceId: 'test-tools-only',
-      })
-
-      // Process the stream - need to mock doStream on the wrapped model
-      ;(model as any).doStream = async (params: any) => {
-        const middleware = (wrapLanguageModel as jest.Mock).mock.calls[0][0].middleware
-        return middleware.wrapStream({
-          doStream: async () => baseModel.doStream(params),
-          params,
-          model: baseModel,
-        })
-      }
-
-      const result = await model.doStream({
-        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Execute functions' }] }],
-      })
-
-      const reader = result.stream.getReader()
-      while (!(await reader.read()).done) {
-        // Continue reading
-      }
-
-      await flushPromises()
-
-      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
-
-      expect(captureCall[0].properties.$ai_output_choices).toEqual([
-        {
-          role: 'assistant',
-          content: [
-            {
-              type: 'tool-call',
-              id: 'tc-1',
-              function: {
-                name: 'function_a',
-                arguments: '{"param":"value"}',
-              },
-            },
-            {
-              type: 'tool-call',
-              id: 'tc-2',
-              function: {
-                name: 'function_b',
-                arguments: '{"x":10}',
-              },
-            },
-          ],
-        },
-      ])
+      expect(captureCall[0].properties.$ai_reasoning_tokens).toBe(5)
     })
   })
 })

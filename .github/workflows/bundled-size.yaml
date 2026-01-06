@@ -6,6 +6,11 @@ jobs:
   build:
     runs-on: ubuntu-22.04
 
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+
     steps:
       - uses: actions/checkout@v4
 
@@ -19,7 +24,7 @@ jobs:
           path: packages/browser/bundle-stats-array.html
 
       - name: Find artifact link comment if it exists
-        uses: peter-evans/find-comment@v3
+        uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # pin v4.0.0
         id: fc
         with:
           issue-number: ${{ github.event.pull_request.number }}
@@ -27,7 +32,7 @@ jobs:
           body-includes: Download bundle size visualization
 
       - name: Create or update artifact link comment
-        uses: peter-evans/create-or-update-comment@v4
+        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # pin v5.0.0
         with:
           comment-id: ${{ steps.fc.outputs.comment-id }}
           issue-number: ${{ github.event.pull_request.number }}
@@ -35,6 +40,6 @@ jobs:
             [Download bundle size visualization](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts/${{ steps.viz-upload.outputs.artifact-id }})
           edit-mode: replace
 
-      - uses: preactjs/compressed-size-action@v2
+      - uses: preactjs/compressed-size-action@946a292cd35bd1088e0d7eb92b69d1a8d5b5d76a # pin v2.8.0
         with:
           compression: "none"

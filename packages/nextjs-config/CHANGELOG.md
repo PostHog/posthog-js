@@ -1,5 +1,142 @@
 # @posthog/nextjs-config
 
+## 1.7.4
+
+### Patch Changes
+
+- [#2804](https://github.com/PostHog/posthog-js/pull/2804) [`5c2cea5`](https://github.com/PostHog/posthog-js/commit/5c2cea5afea46527120d6cf6ff37956ffb98ebef) Thanks [@hpouillot](https://github.com/hpouillot)! - add batchSize option for sourcemap upload control
+  (2025-12-22)
+- Updated dependencies [[`5c2cea5`](https://github.com/PostHog/posthog-js/commit/5c2cea5afea46527120d6cf6ff37956ffb98ebef), [`b676b4d`](https://github.com/PostHog/posthog-js/commit/b676b4d7342c8c3b64960aa55630b2810366014e)]:
+  - @posthog/webpack-plugin@1.2.4
+  - @posthog/core@1.9.0
+
+## 1.7.3
+
+### Patch Changes
+
+- Updated dependencies [[`6b0aabf`](https://github.com/PostHog/posthog-js/commit/6b0aabff893e44d1710b7d122a68bf023f4e0bd5)]:
+  - @posthog/core@1.8.1
+  - @posthog/webpack-plugin@1.2.3
+
+## 1.7.2
+
+### Patch Changes
+
+- Updated dependencies [[`2603a8d`](https://github.com/PostHog/posthog-js/commit/2603a8d6e1021cd8f84e8b61be77ce268435ebde)]:
+  - @posthog/core@1.8.0
+  - @posthog/webpack-plugin@1.2.2
+
+## 1.7.1
+
+### Patch Changes
+
+- Updated dependencies [[`c5f3f65`](https://github.com/PostHog/posthog-js/commit/c5f3f6509fefeb4ad74c11f188fc03c4f0199236)]:
+  - @posthog/webpack-plugin@1.2.1
+
+## 1.7.0
+
+### Minor Changes
+
+- [#2741](https://github.com/PostHog/posthog-js/pull/2741) [`5c14781`](https://github.com/PostHog/posthog-js/commit/5c14781dc0b791e3fbdc3d9507dc52ccf1eb9ca4) Thanks [@hpouillot](https://github.com/hpouillot)! - upgrade webpack-plugin package
+  (2025-12-13)
+
+### Patch Changes
+
+- Updated dependencies [[`5c14781`](https://github.com/PostHog/posthog-js/commit/5c14781dc0b791e3fbdc3d9507dc52ccf1eb9ca4)]:
+  - @posthog/webpack-plugin@1.2.0
+
+## 1.6.4
+
+### Patch Changes
+
+- [#2690](https://github.com/PostHog/posthog-js/pull/2690) [`e9c00fd`](https://github.com/PostHog/posthog-js/commit/e9c00fd451f6ee648ff40dcad538d38bfd5f3ff4) Thanks [@robbie-c](https://github.com/robbie-c)! - Related to https://www.wiz.io/blog/critical-vulnerability-in-react-cve-2025-55182
+
+  We didn't include any of the vulnerable deps in any of our packages, however we did have them as dev / test / example project dependencies.
+
+  There was no way that any of these vulnerable packages were included in any of our published packages.
+
+  We've now patched out those dependencies.
+
+  Out of an abundance of caution, let's create a new release of all of our packages. (2025-12-04)
+
+- Updated dependencies [[`e9c00fd`](https://github.com/PostHog/posthog-js/commit/e9c00fd451f6ee648ff40dcad538d38bfd5f3ff4)]:
+  - @posthog/core@1.7.1
+  - @posthog/webpack-plugin@1.1.4
+
+## 1.6.3
+
+### Patch Changes
+
+- Updated dependencies [[`e1617d9`](https://github.com/PostHog/posthog-js/commit/e1617d91255b23dc39b1dcb15b05ae64c735d9d0)]:
+  - @posthog/core@1.7.0
+  - @posthog/webpack-plugin@1.1.3
+
+## 1.6.2
+
+### Patch Changes
+
+- [#2660](https://github.com/PostHog/posthog-js/pull/2660) [`5f0bc7c`](https://github.com/PostHog/posthog-js/commit/5f0bc7ca755457d4bb6e2ac4f0cf7ef944034983) Thanks [@hpouillot](https://github.com/hpouillot)! - fix chunk resolution
+  (2025-12-01)
+- Updated dependencies [[`5f0bc7c`](https://github.com/PostHog/posthog-js/commit/5f0bc7ca755457d4bb6e2ac4f0cf7ef944034983)]:
+  - @posthog/webpack-plugin@1.1.2
+
+## 1.6.1
+
+### Patch Changes
+
+- Updated dependencies [[`07457bf`](https://github.com/PostHog/posthog-js/commit/07457bfece0f3e4798a2c5c68e178250139ce505)]:
+  - @posthog/webpack-plugin@1.1.1
+
+## 1.6.0
+
+### Minor Changes
+
+- [#2619](https://github.com/PostHog/posthog-js/pull/2619) [`86dab38`](https://github.com/PostHog/posthog-js/commit/86dab38e49eeac9819b1ab5f7f0c8b5df88d9f86) Thanks [@hpouillot](https://github.com/hpouillot)! - package deprecation
+  (2025-11-24)
+
+### Patch Changes
+
+- Updated dependencies [[`86dab38`](https://github.com/PostHog/posthog-js/commit/86dab38e49eeac9819b1ab5f7f0c8b5df88d9f86)]:
+  - @posthog/core@1.6.0
+  - @posthog/webpack-plugin@1.1.0
+
+## 1.5.1
+
+### Patch Changes
+
+- [#2618](https://github.com/PostHog/posthog-js/pull/2618) [`3eed1a4`](https://github.com/PostHog/posthog-js/commit/3eed1a42a50bff310fde3a91308a0f091b39e3fe) Thanks [@marandaneto](https://github.com/marandaneto)! - last version was compromised
+  (2025-11-24)
+- Updated dependencies [[`3eed1a4`](https://github.com/PostHog/posthog-js/commit/3eed1a42a50bff310fde3a91308a0f091b39e3fe)]:
+  - @posthog/core@1.5.6
+  - @posthog/webpack-plugin@1.0.1
+
+## 1.5.0
+
+### Minor Changes
+
+- [#2589](https://github.com/PostHog/posthog-js/pull/2589) [`83f5d07`](https://github.com/PostHog/posthog-js/commit/83f5d07e4ae8c2ae5c6926858b6095ebbfaf319f) Thanks [@hpouillot](https://github.com/hpouillot)! - use webpack plugin
+  (2025-11-20)
+
+### Patch Changes
+
+- Updated dependencies [[`83f5d07`](https://github.com/PostHog/posthog-js/commit/83f5d07e4ae8c2ae5c6926858b6095ebbfaf319f), [`83f5d07`](https://github.com/PostHog/posthog-js/commit/83f5d07e4ae8c2ae5c6926858b6095ebbfaf319f)]:
+  - @posthog/webpack-plugin@1.0.0
+  - @posthog/core@1.5.5
+
+## 1.4.2
+
+### Patch Changes
+
+- Updated dependencies [[`c242702`](https://github.com/PostHog/posthog-js/commit/c2427029d75cba71b78e9822f18f5e73f7442288)]:
+  - @posthog/core@1.5.4
+
+## 1.4.1
+
+### Patch Changes
+
+- Updated dependencies [[`8acd88f`](https://github.com/PostHog/posthog-js/commit/8acd88f1b71d2c7e1222c43dd121abce78ef2bab)]:
+  - @posthog/core@1.5.3
+
 ## 1.4.0
 
 ### Minor Changes

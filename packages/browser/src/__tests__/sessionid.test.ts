@@ -524,6 +524,52 @@ describe('Session ID manager', () => {
         })
     })
 
+    describe('persistence is source of truth over in-memory cache', () => {
+        // This test verifies that when persistence is updated (e.g., by another tab or after a frozen tab thaws),
+        // the session manager reads from persistence rather than trusting stale in-memory cache
+
+        const memoryConfig = {
+            persistence_name: 'test-session-memory',
+            persistence: 'memory',
+            token: 'test-token',
+        } as PostHogConfig
+
+        it.each([
+            { description: 'with stale timestamp from simulated frozen tab', offsetMs: 1000 },
+            { description: 'with exactly expired timestamp', offsetMs: 1 },
+        ])('should detect activity timeout $description', ({ offsetMs }) => {
+            const realPersistence = new PostHogPersistence(memoryConfig)
+            const testTimestamp = 1603107479471
+
+            const sessionIdManager = new SessionIdManager(
+                createMockPostHog({
+                    config: memoryConfig,
+                    persistence: realPersistence,
+                    register: jest.fn(),
+                }),
+                () => 'newUUID',
+                () => 'newUUID'
+            )
+
+            // First call establishes the session
+            const firstResult = sessionIdManager.checkAndGetSessionAndWindowId(false, testTimestamp)
+            expect(firstResult.sessionId).toBe('newUUID')
+
+            // Simulate persistence being updated externally to have a stale timestamp
+            // In a frozen tab scenario, another tab might have updated persistence,
+            // or time passed while the tab was frozen
+            const staleTimestamp = testTimestamp - (DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS * 1000 + offsetMs)
+            realPersistence.register({ [SESSION_ID]: [staleTimestamp, 'oldSessionID', staleTimestamp] })
+
+            // Second call should read from persistence and detect the activity timeout
+            const secondResult = sessionIdManager.checkAndGetSessionAndWindowId(false, testTimestamp)
+
+            // The session SHOULD rotate because persistence shows idle timeout exceeded
+            expect(secondResult.changeReason?.activityTimeout).toBe(true)
+            expect(secondResult.sessionId).not.toBe('oldSessionID')
+        })
+    })
+
     describe('destroy()', () => {
         it('clears the idle timeout timer', () => {
             jest.useFakeTimers()

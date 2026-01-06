@@ -1,5 +1,78 @@
 # posthog-ai
 
+## 7.3.0
+
+### Minor Changes
+
+- [#2711](https://github.com/PostHog/posthog-js/pull/2711) [`8c3a21e`](https://github.com/PostHog/posthog-js/commit/8c3a21e6b857752677af50ccc7b0c7b5821e1a6d) Thanks [@andrewm4894](https://github.com/andrewm4894)! - Add support for both Vercel AI SDK 5 and 6
+
+  Changes:
+  - Runtime version detection via `model.specificationVersion`
+  - Support both `LanguageModelV2` (SDK 5) and `LanguageModelV3` (SDK 6)
+  - `@ai-sdk/provider` is now an optional peer dependency (supports both v2 and v3)
+  - Removed unused `ai` peer dependency (only type imports from `@ai-sdk/provider` are used)
+  - No breaking changes - existing SDK 5 users can continue without modification (2025-12-22)
+
+### Patch Changes
+
+- [#2789](https://github.com/PostHog/posthog-js/pull/2789) [`6b415a0`](https://github.com/PostHog/posthog-js/commit/6b415a07c69f36cbfadb181ba7e8606e9a4e92f0) Thanks [@andrewm4894](https://github.com/andrewm4894)! - fix: extract model from response for OpenAI stored prompts
+
+  When using OpenAI stored prompts, the model is defined in the OpenAI dashboard rather than passed in the API request. This change adds a fallback to extract the model from the response object when not provided in kwargs. (2025-12-22)
+
+- Updated dependencies [[`04065b9`](https://github.com/PostHog/posthog-js/commit/04065b9942da4545553859af5195587e5348bceb)]:
+  - posthog-node@5.18.0
+
+## 7.2.2
+
+### Patch Changes
+
+- [#2761](https://github.com/PostHog/posthog-js/pull/2761) [`6f5db7c`](https://github.com/PostHog/posthog-js/commit/6f5db7cb6d96bcd67193f0ad0e08ec7756be8c67) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates: - Updated dependency [`@anthropic-ai/sdk@^0.71.2` ↗︎](https://www.npmjs.com/package/@anthropic-ai/sdk/v/0.71.2) (from `^0.67.1`, in `dependencies`) - Updated dependency [`@google/genai@^1.33.0` ↗︎](https://www.npmjs.com/package/@google/genai/v/1.33.0) (from `^1.31.0`, in `dependencies`) - Updated dependency [`@langchain/core@^1.1.5` ↗︎](https://www.npmjs.com/package/@langchain/core/v/1.1.5) (from `^1.1.4`, in `dependencies`) - Updated dependency [`ai@^5.0.113` ↗︎](https://www.npmjs.com/package/ai/v/5.0.113) (from `^5.0.107`, in `dependencies`) - Updated dependency [`langchain@^1.2.0` ↗︎](https://www.npmjs.com/package/langchain/v/1.2.0) (from `^1.1.5`, in `dependencies`) (2025-12-16)
+
+## 7.2.1
+
+### Patch Changes
+
+- [#2690](https://github.com/PostHog/posthog-js/pull/2690) [`e9c00fd`](https://github.com/PostHog/posthog-js/commit/e9c00fd451f6ee648ff40dcad538d38bfd5f3ff4) Thanks [@robbie-c](https://github.com/robbie-c)! - Related to https://www.wiz.io/blog/critical-vulnerability-in-react-cve-2025-55182
+
+  We didn't include any of the vulnerable deps in any of our packages, however we did have them as dev / test / example project dependencies.
+
+  There was no way that any of these vulnerable packages were included in any of our published packages.
+
+  We've now patched out those dependencies.
+
+  Out of an abundance of caution, let's create a new release of all of our packages. (2025-12-04)
+
+- Updated dependencies [[`e9c00fd`](https://github.com/PostHog/posthog-js/commit/e9c00fd451f6ee648ff40dcad538d38bfd5f3ff4)]:
+  - posthog-node@5.17.1
+
+## 7.2.0
+
+### Minor Changes
+
+- [#2619](https://github.com/PostHog/posthog-js/pull/2619) [`86dab38`](https://github.com/PostHog/posthog-js/commit/86dab38e49eeac9819b1ab5f7f0c8b5df88d9f86) Thanks [@hpouillot](https://github.com/hpouillot)! - package deprecation
+  (2025-11-24)
+
+### Patch Changes
+
+- Updated dependencies [[`86dab38`](https://github.com/PostHog/posthog-js/commit/86dab38e49eeac9819b1ab5f7f0c8b5df88d9f86)]:
+  - posthog-node@5.14.0
+
+## 7.1.2
+
+### Patch Changes
+
+- [#2618](https://github.com/PostHog/posthog-js/pull/2618) [`3eed1a4`](https://github.com/PostHog/posthog-js/commit/3eed1a42a50bff310fde3a91308a0f091b39e3fe) Thanks [@marandaneto](https://github.com/marandaneto)! - last version was compromised
+  (2025-11-24)
+- Updated dependencies [[`3eed1a4`](https://github.com/PostHog/posthog-js/commit/3eed1a42a50bff310fde3a91308a0f091b39e3fe)]:
+  - posthog-node@5.13.3
+
+## 7.1.1
+
+### Patch Changes
+
+- [#2591](https://github.com/PostHog/posthog-js/pull/2591) [`3dbf325`](https://github.com/PostHog/posthog-js/commit/3dbf325e21387cb704142c0f0592ad4616e49f8b) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Fixes a bug that incorrectly calculated cache costs for non-Anthropic Langchain providers
+  (2025-11-21)
+
 ## 7.1.0
 
 ### Minor Changes
@@ -11,7 +84,6 @@
 ### Major Changes
 
 - [#2554](https://github.com/PostHog/posthog-js/pull/2554) [`8e8d2f5`](https://github.com/PostHog/posthog-js/commit/8e8d2f530f0676463b6e36a710f4301119960e2e) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Update LLM provider SDKs to latest versions
-
   - `openai`: **5.20.1 → 6.8.1**
   - `@anthropic-ai/sdk`: 0.63.1 → 0.67.0
   - `@google/genai`: 1.19.0 → 1.29.0

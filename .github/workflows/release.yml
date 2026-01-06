@@ -1,118 +1,316 @@
-name: "Release"
+name: 'Release'
 
 permissions:
-  contents: write
-  actions: write
+    contents: read
 
 on:
-  push:
-    branches:
-      - main
+    pull_request:
+        types: [closed]
+        branches: [main]
+    workflow_dispatch:
+
+# Concurrency control: only one release process can run at a time
+# This prevents race conditions if multiple PRs with 'release' label merge simultaneously
+concurrency:
+    group: release
+    cancel-in-progress: false
 
 jobs:
-  release:
-    name: Publish
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        package:
-          - name: posthog-react-native
-          - name: posthog-node
-          - name: posthog-js-lite
-          - name: posthog-js
-          - name: "@posthog/core"
-          - name: "@posthog/react"
-          - name: "@posthog/ai"
-          - name: "@posthog/nextjs-config"
-          - name: "@posthog/nuxt"
+    check-changesets:
+        name: Check for changesets
+        runs-on: ubuntu-latest
+        # Run when PR with 'release' label is merged to main, or when manually triggered
+        if: |
+            github.event_name == 'workflow_dispatch' ||
+            (github.event_name == 'pull_request'
+             && github.event.pull_request.merged == true
+             && contains(github.event.pull_request.labels.*.name, 'release'))
+        outputs:
+            has-changesets: ${{ steps.check.outputs.has-changesets }}
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  ref: main
+                  fetch-depth: 0
 
-    steps:
-      - name: Checkout the repository
-        uses: actions/checkout@v4
+            - name: Check for changesets
+              id: check
+              run: |
+                  if [ ! -d ".changeset" ] || [ -z "$(ls -A .changeset/*.md 2>/dev/null | grep -v README.md)" ]; then
+                    echo "❌ No changesets found. Cannot proceed with release."
+                    echo "Please ensure your PR includes a changeset file."
+                    echo "has-changesets=false" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "✓ Found changesets to process"
+                    echo "has-changesets=true" >> "$GITHUB_OUTPUT"
+                  fi
 
-      - name: Setup environment
-        uses: ./.github/actions/setup
+    notify-approval-needed:
+        name: Notify Slack - Approval Needed
+        needs: check-changesets
+        if: needs.check-changesets.outputs.has-changesets == 'true'
+        uses: PostHog/.github/.github/workflows/notify-approval-needed.yml@main
         with:
-          install: false
-          build: false
+            slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+            slack_user_group_id: ${{ vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID }}
+        secrets:
+            slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+            posthog_project_api_key: ${{ secrets.POSTHOG_PROJECT_API_KEY }}
 
-      - name: Get package path
-        id: get-package-path
-        run: |
-          PACKAGE_PATH=$(pnpm list --filter=${{ matrix.package.name }} --json | jq -r '.[0].path')
-          echo "path=$PACKAGE_PATH" >> "$GITHUB_OUTPUT"
+    version-bump:
+        name: Bump versions and commit to main
+        needs: [check-changesets, notify-approval-needed]
+        runs-on: ubuntu-latest
+        # Use `always()` to ensure the job runs even if the notify-approval-needed job fails
+        # but still depend on it to be able to use `needs.notify-approval-needed.outputs.slack_ts`
+        if: always() && needs.check-changesets.outputs.has-changesets == 'true'
+        environment: 'NPM Release' # This will require an approval from a maintainer, they are notified in Slack above
+        permissions:
+            contents: write
+        outputs:
+            committed: ${{ steps.commit-version-bump.outputs.committed }}
+        steps:
+            - name: Notify Slack - Approved
+              continue-on-error: true # Don't block release if Slack notification fails
+              uses: PostHog/.github/.github/actions/slack-thread-reply@main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '✅ Release approved! Version bump in progress...'
+                  emoji_reaction: 'white_check_mark'
 
-      - name: Check ${{ matrix.package.name }} version and detect an update
-        id: check-package-version
-        uses: PostHog/check-package-version@v2.1.0
-        with:
-          path: ${{ steps.get-package-path.outputs.path }}
+            - name: Get GitHub App token
+              id: releaser
+              uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+              with:
+                  app-id: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_APP_ID }}
+                  private-key: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_PRIVATE_KEY }} # Secrets available only inside the `NPM Release` environment, requires approval from a maintainer
 
-      - name: Release package ${{ matrix.package.name }}
-        uses: ./.github/actions/release
-        if: steps.check-package-version.outputs.is-new-version == 'true'
-        with:
-          package_path: ${{ steps.get-package-path.outputs.path }}
-          package_name: ${{ matrix.package.name }}
-          package_version: ${{ steps.check-package-version.outputs.committed-version }}
-          npm_token: ${{ secrets.NPM_TOKEN }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Dispatch generate-references for ${{ matrix.package.name }}
-        if: steps.check-package-version.outputs.is-new-version == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh workflow run generate-references.yml \
-            --ref main \
-            --field package_name="${{ matrix.package.name }}" \
-            --field package_path="${{ steps.get-package-path.outputs.path }}"
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  ref: main
+                  fetch-depth: 0
+                  token: ${{ steps.releaser.outputs.token }}
 
-      - name: Dispatch posthog upgrade for ${{ matrix.package.name }}
-        if: matrix.package.name == 'posthog-js' && steps.check-package-version.outputs.is-new-version == 'true'
-        run: |
-          curl -f -X POST \
-               -H "Accept: application/vnd.github+json" \
-               -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-               https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-upgrade.yml/dispatches \
-               -d '{
-                 "ref": "main",
-                 "inputs": {
-                   "package_name": "${{ matrix.package.name }}",
-                   "package_version": "${{ steps.check-package-version.outputs.committed-version }}"
-                 }
-               }'
+            - name: Configure Git
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Dispatch posthog.com upgrade for ${{ matrix.package.name }}
-        if: matrix.package.name == 'posthog-js' && steps.check-package-version.outputs.is-new-version == 'true'
-        run: |
-          curl -f -X POST \
-               -H "Accept: application/vnd.github+json" \
-               -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-               https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-com-upgrade.yml/dispatches \
-               -d '{
-                 "ref": "main",
-                 "inputs": {
-                   "package_name": "${{ matrix.package.name }}",
-                   "package_version": "${{ steps.check-package-version.outputs.committed-version }}"
-                 }
-               }'
+            - name: Setup environment
+              uses: ./.github/actions/setup
+              with:
+                  build: false
 
-      # a CDP destination is set-up to alert when we get this event
-      - name: Send failure event to PostHog
-        if: ${{ failure() }}
-        uses: PostHog/posthog-github-action@v0.1
-        with:
-            posthog-token: '${{ secrets.POSTHOG_API_TOKEN }}'
-            event: 'posthog-js-github-release-workflow-failure'
-            properties: >-
-                {
-                  "commitSha": "${{ github.sha }}",
-                  "jobStatus": "${{ job.status }}",
-                  "commitMessage": "${{ github.event.head_commit.message }}",
-                  "commitAuthor": "${{ github.event.head_commit.author.name }}",
-                  "ref": "${{ github.ref }}",
-                  "matrixPackage": "${{ matrix.package.name }}",
-                  "packageVersion": "${{ steps.check-package-version.outputs.committed-version }}"
-                }
+            - name: Build @posthog-tooling/changelog
+              run: pnpm turbo --filter=@posthog-tooling/changelog build
+
+            - name: Update versions and changelogs
+              run: |
+                  pnpm bump && pnpm generate-references
+              env:
+                  GITHUB_TOKEN: ${{ steps.releaser.outputs.token }}
+
+            - name: Update lockfile
+              run: pnpm install
+
+            - name: Commit version bump and lockfile
+              id: commit-version-bump
+              run: |
+                  git add -A
+                  if git diff --staged --quiet; then
+                    echo "No changes to commit"
+                    echo "committed=false" >> "$GITHUB_OUTPUT"
+                  else
+                    # Use [version bump] tag to identify this as our version bump commit
+                    git commit -m "chore: update versions and lockfile [version bump]"
+                    git push origin main
+                    echo "committed=true" >> "$GITHUB_OUTPUT"
+                  fi
+              env:
+                  GITHUB_TOKEN: ${{ steps.releaser.outputs.token }}
+
+    publish:
+        name: Publish packages
+        needs: [version-bump, notify-approval-needed]
+        runs-on: ubuntu-latest
+        # Use `always()` to ensure the job runs even if the check-release-label job fails
+        # but still depend on it to be able to use `needs.notify-approval-needed.outputs.slack_ts`
+        if: always() && needs.version-bump.outputs.committed == 'true'
+        permissions:
+            contents: write
+            actions: write
+            id-token: write
+        strategy:
+            fail-fast: false
+            matrix:
+                package:
+                    - name: posthog-react-native
+                    - name: posthog-node
+                    - name: posthog-js-lite
+                    - name: posthog-js
+                    - name: '@posthog/core'
+                    - name: '@posthog/react'
+                    - name: '@posthog/ai'
+                    - name: '@posthog/nextjs-config'
+                    - name: '@posthog/nuxt'
+                    - name: '@posthog/rollup-plugin'
+                    - name: '@posthog/webpack-plugin'
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  ref: main
+                  fetch-depth: 0
+
+            - name: Configure Git
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+
+            - name: Setup environment
+              uses: ./.github/actions/setup
+              with:
+                  install: false
+                  build: false
+
+            - name: Get package path
+              id: get-package-path
+              run: |
+                  PACKAGE_PATH=$(pnpm list --filter=${{ matrix.package.name }} --json | jq -r '.[0].path')
+                  echo "path=$PACKAGE_PATH" >> "$GITHUB_OUTPUT"
+
+            - name: Check ${{ matrix.package.name }} version and detect an update
+              id: check-package-version
+              uses: PostHog/check-package-version@v2.1.0
+              with:
+                  path: ${{ steps.get-package-path.outputs.path }}
+
+            - name: Install and build dependencies
+              if: steps.check-package-version.outputs.is-new-version == 'true'
+              run: pnpm install --frozen-lockfile && pnpm build
+
+            - name: Tag repository with package_name and package_version
+              if: steps.check-package-version.outputs.is-new-version == 'true'
+              run: |
+                  git tag -a "${{ matrix.package.name }}@${{ steps.check-package-version.outputs.committed-version }}" -m "${{ matrix.package.name }}@${{ steps.check-package-version.outputs.committed-version }}"
+
+            - name: Publish ${{ matrix.package.name }} to NPM
+              if: steps.check-package-version.outputs.is-new-version == 'true'
+              run: |
+                  pnpm publish --filter=${{ matrix.package.name }} --access public
+              env:
+                  NPM_CONFIG_PROVENANCE: true
+
+            - name: Push tag to GitHub
+              if: steps.check-package-version.outputs.is-new-version == 'true'
+              shell: bash
+              run: |
+                  git push origin "${{ matrix.package.name }}@${{ steps.check-package-version.outputs.committed-version }}"
+
+            - name: Create GitHub release
+              if: steps.check-package-version.outputs.is-new-version == 'true'
+              working-directory: ${{ steps.get-package-path.outputs.path }}
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  # read from the first until the second header in the changelog file
+                  # this assumes the formatting of the file
+                  # and that this workflow is always running for the most recent entry in the file
+                  LAST_CHANGELOG_ENTRY=$(awk -v defText="see CHANGELOG.md" '/^## /{if (flag) exit; flag=1} flag && /^##$/{exit} flag; END{if (!flag) print defText}' CHANGELOG.md)
+                  gh api \
+                    --method POST \
+                    -H "Accept: application/vnd.github+json" \
+                    -H "X-GitHub-Api-Version: 2022-11-28" \
+                    /repos/posthog/posthog-js/releases \
+                    -f tag_name="${{ matrix.package.name }}@${{ steps.check-package-version.outputs.committed-version }}" \
+                    -f target_commitish='main' \
+                    -f name="${{ matrix.package.name }}@${{ steps.check-package-version.outputs.committed-version }}" \
+                    -f body="$LAST_CHANGELOG_ENTRY" \
+                    -F draft=false \
+                    -F prerelease=false \
+                    -F generate_release_notes=false
+
+            ########################################################
+            ############## posthog-js auto-update ##################
+            - name: Dispatch posthog upgrade for posthog-js
+              if: matrix.package.name == 'posthog-js' && steps.check-package-version.outputs.is-new-version == 'true'
+              run: |
+                  curl -f -X POST \
+                       -H "Accept: application/vnd.github+json" \
+                       -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                       https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-upgrade.yml/dispatches \
+                       -d '{
+                         "ref": "main",
+                         "inputs": {
+                           "package_name": "${{ matrix.package.name }}",
+                           "package_version": "${{ steps.check-package-version.outputs.committed-version }}"
+                         }
+                       }'
+
+            - name: Dispatch posthog.com upgrade for ${{ matrix.package.name }}
+              if: matrix.package.name == 'posthog-js' && steps.check-package-version.outputs.is-new-version == 'true'
+              run: |
+                  curl -f -X POST \
+                       -H "Accept: application/vnd.github+json" \
+                       -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                       https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-com-upgrade.yml/dispatches \
+                       -d '{
+                         "ref": "main",
+                         "inputs": {
+                           "package_name": "${{ matrix.package.name }}",
+                           "package_version": "${{ steps.check-package-version.outputs.committed-version }}"
+                         }
+                       }'
+
+            ####################################################
+            # Notify ourselves in case of a failure here
+            # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
+            - name: Send failure event to PostHog
+              if: ${{ failure() }}
+              uses: PostHog/posthog-github-action@v0.1
+              with:
+                  posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
+                  event: 'posthog-js-github-release-workflow-failure'
+                  properties: >-
+                      {
+                        "commitSha": "${{ github.sha }}",
+                        "jobStatus": "${{ job.status }}",
+                        "ref": "${{ github.ref }}",
+                        "packageName": "${{ matrix.package.name }}",
+                        "packageVersion": "${{ steps.check-package-version.outputs.committed-version }}"
+                      }
+
+            - name: Notify Slack - Failed
+              continue-on-error: true # Slack failure shouldn't mark release as failed
+              if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
+              uses: PostHog/.github/.github/actions/slack-thread-reply@main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '❌ Failed to release `${{ matrix.package.name }}@v${{ steps.check-package-version.outputs.committed-version }}`! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  emoji_reaction: 'x'
+
+    notify-released:
+        name: Notify Slack - Released
+        needs: [notify-approval-needed, publish]
+        runs-on: ubuntu-latest
+        if: always() && needs.publish.result == 'success' && needs.notify-approval-needed.outputs.slack_ts != ''
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Notify Slack - Released
+              continue-on-error: true # Slack failure shouldn't mark release as failed
+              uses: PostHog/.github/.github/actions/slack-thread-reply@main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '🚀 All packages released successfully!'
+                  emoji_reaction: 'rocket'

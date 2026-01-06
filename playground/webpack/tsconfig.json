@@ -1,0 +1,14 @@
+{
+    "compilerOptions": {
+        "incremental": false,
+        "rootDir": ".",
+        "baseUrl": "./src",
+        "target": "ES6",
+        "moduleResolution": "node",
+        "allowSyntheticDefaultImports": true,
+        "esModuleInterop": true,
+        "resolveJsonModule": true,
+        "skipLibCheck": true,
+        "lib": ["DOM"]
+    }
+}

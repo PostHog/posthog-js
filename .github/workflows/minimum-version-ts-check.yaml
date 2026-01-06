@@ -13,7 +13,15 @@ jobs:
     strategy:
       matrix:
         node-version: [20, 22, 24]
-        typescript-version: ["4.7.2", "5.5.4", "latest"]
+        typescript-version:
+          - version: "4.7.4"
+            extra-flags: "--moduleResolution node"
+          - version: "5.9.2"
+            extra-flags: "--moduleResolution node"
+          - version: "latest"
+            extra-flags: "--moduleResolution node"
+          - version: "6.0.0-dev.20251204"
+            extra-flags: "--ignoreConfig"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,12 +33,14 @@ jobs:
 
       # once its built we can see if we can use it on the forced version
       - name: Override TypeScript version
-        run: pnpm add typescript@${{ matrix.typescript-version }} --save-dev
-        working-directory: packages/browser
+        env:
+          TS_VERSION: ${{ matrix.typescript-version.version }}
+        run: yq -i '.catalog.typescript = strenv(TS_VERSION)' pnpm-workspace.yaml && pnpm install --no-frozen-lockfile
 
       - name: Test TypeScript Import
         run: |
-          rm test.ts || true
-          echo "import { posthog } from './dist/module'; console.log(posthog);" > test.ts
-          pnpm exec tsc test.ts --strict --target es2017 --module commonjs --moduleResolution node --noEmit --skipLibCheck
+          rm ci-ts-file.js || true
+          pnpm exec tsc --version
+          pnpm exec tsc ci-ts-file.ts --strict --target es2017 --module commonjs --skipLibCheck ${{ matrix.typescript-version.extra-flags }}
+          node ci-ts-file.js
         working-directory: packages/browser

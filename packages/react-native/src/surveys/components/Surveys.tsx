@@ -150,7 +150,10 @@ export function Questions({
   const question = surveyQuestions[currentQuestionIndex]
 
   return (
-    <ScrollView style={[styleOverrides, { flexGrow: 0 }]}>
+    <ScrollView
+      style={[styleOverrides, { flexGrow: 0 }]}
+      keyboardShouldPersistTaps="handled" // do not dismiss keyboard on submit button tap
+    >
       {getQuestionComponent({
         question,
         appearance,

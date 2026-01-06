@@ -1,4 +1,4 @@
-import { VNode, cloneElement, createContext } from 'preact'
+import { VNode, cloneElement, createContext, type JSX } from 'preact'
 import { PostHog } from '../../posthog-core'
 import {
     MultipleSurveyQuestion,
@@ -16,13 +16,14 @@ import { document as _document, window as _window, userAgent } from '../../utils
 import {
     getSurveyInteractionProperty,
     getSurveySeenKey,
+    getSurveyAbandonedKey,
     SURVEY_LOGGER as logger,
     setSurveySeenOnLocalStorage,
     SURVEY_IN_PROGRESS_PREFIX,
 } from '../../utils/survey-utils'
 import { isArray, isNullish } from '@posthog/core'
 
-import { detectDeviceType } from '../../utils/user-agent-utils'
+import { detectDeviceType } from '@posthog/core'
 import { propertyComparisons } from '../../utils/property-utils'
 import { PropertyMatchType } from '../../types'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
@@ -119,31 +120,34 @@ export const addSurveyCSSVariablesToElement = (
         appearance?.submitButtonTextColor || getContrastingTextColor(effectiveAppearance.submitButtonColor)
     )
     hostStyle.setProperty('--ph-survey-rating-bg-color', effectiveAppearance.ratingButtonColor)
-    hostStyle.setProperty(
-        '--ph-survey-rating-text-color',
-        getContrastingTextColor(effectiveAppearance.ratingButtonColor)
-    )
     hostStyle.setProperty('--ph-survey-rating-active-bg-color', effectiveAppearance.ratingButtonActiveColor)
+    // Active rating text is always auto-calculated for contrast with active background
     hostStyle.setProperty(
         '--ph-survey-rating-active-text-color',
         getContrastingTextColor(effectiveAppearance.ratingButtonActiveColor)
     )
+    // Primary text color: use override if provided, otherwise auto-calculate from background
     hostStyle.setProperty(
         '--ph-survey-text-primary-color',
-        getContrastingTextColor(effectiveAppearance.backgroundColor)
+        appearance?.textColor || getContrastingTextColor(effectiveAppearance.backgroundColor)
     )
     hostStyle.setProperty('--ph-survey-text-subtle-color', effectiveAppearance.textSubtleColor)
     hostStyle.setProperty('--ph-widget-color', effectiveAppearance.widgetColor)
     hostStyle.setProperty('--ph-widget-text-color', getContrastingTextColor(effectiveAppearance.widgetColor))
     hostStyle.setProperty('--ph-widget-z-index', effectiveAppearance.zIndex)
 
-    // Adjust input/choice background slightly if main background is white
-    if (effectiveAppearance.backgroundColor === 'white') {
-        hostStyle.setProperty('--ph-survey-input-background', '#f8f8f8')
+    // Use user-provided inputBackground (or deprecated inputBackgroundColor for backwards compat)
+    // Fallback to internal default, with slight adjustment for white backgrounds
+    const userInputBg = appearance?.inputBackground || appearance?.inputBackgroundColor
+    let inputBgColor = userInputBg || effectiveAppearance.inputBackground
+    if (!userInputBg && effectiveAppearance.backgroundColor === 'white') {
+        inputBgColor = '#f8f8f8'
     }
-
-    hostStyle.setProperty('--ph-survey-input-background', effectiveAppearance.inputBackground)
-    hostStyle.setProperty('--ph-survey-input-text-color', getContrastingTextColor(effectiveAppearance.inputBackground))
+    hostStyle.setProperty('--ph-survey-input-background', inputBgColor)
+    // Input text color applies to both text inputs and inactive rating buttons
+    const inputTextColor = appearance?.inputTextColor || getContrastingTextColor(inputBgColor)
+    hostStyle.setProperty('--ph-survey-input-text-color', inputTextColor)
+    hostStyle.setProperty('--ph-survey-rating-text-color', inputTextColor)
     hostStyle.setProperty('--ph-survey-scrollbar-thumb-color', effectiveAppearance.scrollbarThumbColor)
     hostStyle.setProperty('--ph-survey-scrollbar-track-color', effectiveAppearance.scrollbarTrackColor)
     hostStyle.setProperty('--ph-survey-outline-color', effectiveAppearance.outlineColor)
@@ -294,18 +298,34 @@ function nameToHex(name: string) {
     }[name.toLowerCase()]
 }
 
-function hex2rgb(c: string) {
-    if (c[0] === '#') {
-        const hexColor = c.replace(/^#/, '')
+export function hex2rgb(c: string): string {
+    if (c.startsWith('#')) {
+        let hexColor = c.replace(/^#/, '')
+        // Handle 3-character shorthand (e.g., #111 -> #111111, #abc -> #aabbcc)
+        if (/^[0-9A-Fa-f]{3}$/.test(hexColor)) {
+            hexColor = hexColor[0] + hexColor[0] + hexColor[1] + hexColor[1] + hexColor[2] + hexColor[2]
+        }
+        if (!/^[0-9A-Fa-f]{6}$/.test(hexColor)) {
+            return 'rgb(255, 255, 255)'
+        }
         const r = parseInt(hexColor.slice(0, 2), 16)
         const g = parseInt(hexColor.slice(2, 4), 16)
         const b = parseInt(hexColor.slice(4, 6), 16)
-        return 'rgb(' + r + ',' + g + ',' + b + ')'
+        return `rgb(${r},${g},${b})`
     }
     return 'rgb(255, 255, 255)'
 }
 
-function getContrastingTextColor(color: string = defaultSurveyAppearance.backgroundColor) {
+export function hexToRgba(hex: string, opacity: number): string {
+    const rgb = hex2rgb(hex)
+    const match = rgb.match(/^rgb\((\d+),(\d+),(\d+)\)$/)
+    if (!match) {
+        return hex
+    }
+    return `rgba(${match[1]}, ${match[2]}, ${match[3]}, ${opacity})`
+}
+
+export function getContrastingTextColor(color: string = defaultSurveyAppearance.backgroundColor) {
     let rgb
     if (color[0] === '#') {
         rgb = hex2rgb(color)
@@ -429,6 +449,30 @@ export const sendSurveyEvent = ({
     }
 }
 
+const _surveyHasResponses = (inProgressSurvey: InProgressSurveyState | null) => {
+    return Object.values(inProgressSurvey?.responses || {}).filter((resp) => !isNullish(resp)).length > 0
+}
+
+const _buildSurveyEventProperties = (
+    survey: Survey,
+    inProgressSurvey: InProgressSurveyState | null,
+    posthog: PostHog
+) => ({
+    [SurveyEventProperties.SURVEY_NAME]: survey.name,
+    [SurveyEventProperties.SURVEY_ID]: survey.id,
+    [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
+    [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
+    [SurveyEventProperties.SURVEY_PARTIALLY_COMPLETED]: _surveyHasResponses(inProgressSurvey),
+    sessionRecordingUrl: posthog.get_session_replay_url?.(),
+    ...inProgressSurvey?.responses,
+    [SurveyEventProperties.SURVEY_SUBMISSION_ID]: inProgressSurvey?.surveySubmissionId,
+    [SurveyEventProperties.SURVEY_QUESTIONS]: survey.questions.map((question) => ({
+        id: question.id,
+        question: question.question,
+        response: getSurveyResponseValue(inProgressSurvey?.responses || {}, question.id),
+    })),
+})
+
 export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
     if (!posthog) {
         logger.error('[survey dismissed] event not captured, PostHog instance not found.')
@@ -440,29 +484,46 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
 
     const inProgressSurvey = getInProgressSurveyState(survey)
     posthog.capture(SurveyEventName.DISMISSED, {
-        [SurveyEventProperties.SURVEY_NAME]: survey.name,
-        [SurveyEventProperties.SURVEY_ID]: survey.id,
-        [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
-        [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
-        // check if the survey is partially completed
-        [SurveyEventProperties.SURVEY_PARTIALLY_COMPLETED]:
-            Object.values(inProgressSurvey?.responses || {}).filter((resp) => !isNullish(resp)).length > 0,
-        sessionRecordingUrl: posthog.get_session_replay_url?.(),
-        ...inProgressSurvey?.responses,
-        [SurveyEventProperties.SURVEY_SUBMISSION_ID]: inProgressSurvey?.surveySubmissionId,
-        [SurveyEventProperties.SURVEY_QUESTIONS]: survey.questions.map((question) => ({
-            id: question.id,
-            question: question.question,
-            response: getSurveyResponseValue(inProgressSurvey?.responses || {}, question.id),
-        })),
+        ..._buildSurveyEventProperties(survey, inProgressSurvey, posthog),
         $set: {
             [getSurveyInteractionProperty(survey, 'dismissed')]: true,
         },
     })
-    // Clear in-progress state on dismissal
     clearInProgressSurveyState(survey)
     setSurveySeenOnLocalStorage(survey)
     window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: survey.id } }))
+}
+
+export const sendSurveyAbandonedEvent = (survey: Survey, posthog?: PostHog) => {
+    if (!posthog) {
+        logger.error('[survey abandoned] event not captured, PostHog instance not found.')
+        return
+    }
+
+    const abandonedKey = getSurveyAbandonedKey(survey)
+    try {
+        if (localStorage.getItem(abandonedKey) === 'true') {
+            return
+        }
+    } catch {
+        // localStorage not available
+        return
+    }
+
+    const inProgressSurvey = getInProgressSurveyState(survey)
+    if (!inProgressSurvey) {
+        return
+    }
+
+    try {
+        localStorage.setItem(abandonedKey, 'true')
+    } catch {
+        // localStorage not available
+    }
+
+    posthog.capture(SurveyEventName.ABANDONED, _buildSurveyEventProperties(survey, inProgressSurvey, posthog), {
+        transport: 'sendBeacon',
+    })
 }
 
 // Use the Fisher-yates algorithm to shuffle this array
@@ -582,7 +643,7 @@ interface RenderProps {
     component: VNode<{ className: string }>
     children: string
     renderAsHtml?: boolean
-    style?: React.CSSProperties
+    style?: JSX.CSSProperties
 }
 
 export const renderChildrenAsTextOrHtml = ({ component, children, renderAsHtml, style }: RenderProps) => {

@@ -708,6 +708,27 @@ describe('SurveyManager', () => {
             expect(firstTimeoutId).not.toEqual(secondTimeoutId)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(mockSurvey2.id)
         })
+
+        test('cancelSurvey should clear timeout and release focus for pending survey', () => {
+            surveyManager.getTestAPI().handlePopoverSurvey(mockSurvey)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(true)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(mockSurvey.id)
+
+            const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
+            surveyManager.cancelSurvey(mockSurvey.id)
+
+            expect(clearTimeoutSpy).toHaveBeenCalled()
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBeNull()
+        })
+
+        test('cancelSurvey should do nothing if survey has no pending timeout', () => {
+            // Don't schedule the survey, just try to cancel it
+            const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
+            surveyManager.cancelSurvey('non-existent-survey')
+
+            expect(clearTimeoutSpy).not.toHaveBeenCalled()
+        })
     })
 
     describe('checkFlags', () => {
@@ -766,6 +787,255 @@ describe('SurveyManager', () => {
 
             const result = surveyManager.getTestAPI().checkFlags(survey)
             expect(result).toBe(true)
+        })
+    })
+
+    describe('URL prefill auto-submit behavior', () => {
+        let mockPostHog: PostHog
+        let surveyManager: SurveyManager
+        let originalLocation: Location
+
+        beforeEach(() => {
+            localStorage.clear()
+            jest.clearAllMocks()
+
+            originalLocation = window.location
+            delete (window as any).location
+            window.location = { ...originalLocation, search: '' } as Location
+
+            mockPostHog = createMockPostHog({
+                getActiveMatchingSurveys: jest.fn(),
+                get_session_replay_url: jest.fn(),
+                capture: jest.fn(),
+                featureFlags: {
+                    isFeatureEnabled: jest.fn().mockReturnValue(true),
+                },
+            })
+
+            surveyManager = new SurveyManager(mockPostHog)
+        })
+
+        afterEach(() => {
+            window.location = originalLocation
+        })
+
+        it('should auto-submit prefilled responses when skipSubmitButton is true and enable_partial_responses is true', () => {
+            const survey: Survey = {
+                id: 'prefill-survey',
+                name: 'Prefill Survey',
+                type: SurveyType.Popover,
+                enable_partial_responses: true,
+                questions: [
+                    {
+                        id: 'q1',
+                        type: SurveyQuestionType.Rating,
+                        question: 'Rate us',
+                        scale: 10,
+                        skipSubmitButton: true,
+                    },
+                    {
+                        id: 'q2',
+                        type: SurveyQuestionType.Open,
+                        question: 'Any feedback?',
+                    },
+                ],
+                appearance: {},
+                conditions: null,
+                start_date: '2021-01-01T00:00:00.000Z',
+                end_date: null,
+                current_iteration: null,
+                current_iteration_start_date: null,
+                feature_flag_keys: [],
+                linked_flag_key: null,
+                targeting_flag_key: null,
+                internal_targeting_flag_key: null,
+            }
+
+            window.location.search = '?q0=8'
+            ;(surveyManager as any)._handleUrlPrefill(survey)
+
+            expect(mockPostHog.capture).toHaveBeenCalledWith(
+                'survey sent',
+                expect.objectContaining({
+                    $survey_id: 'prefill-survey',
+                    $survey_response_q1: 8,
+                    $survey_completed: false,
+                })
+            )
+        })
+
+        it('should NOT auto-submit when skipSubmitButton is false, even with enable_partial_responses true', () => {
+            const survey: Survey = {
+                id: 'prefill-survey-no-skip',
+                name: 'Prefill Survey No Skip',
+                type: SurveyType.Popover,
+                enable_partial_responses: true,
+                questions: [
+                    {
+                        id: 'q1',
+                        type: SurveyQuestionType.Rating,
+                        question: 'Rate us',
+                        scale: 10,
+                        skipSubmitButton: false,
+                    },
+                    {
+                        id: 'q2',
+                        type: SurveyQuestionType.Open,
+                        question: 'Any feedback?',
+                    },
+                ],
+                appearance: {},
+                conditions: null,
+                start_date: '2021-01-01T00:00:00.000Z',
+                end_date: null,
+                current_iteration: null,
+                current_iteration_start_date: null,
+                feature_flag_keys: [],
+                linked_flag_key: null,
+                targeting_flag_key: null,
+                internal_targeting_flag_key: null,
+            }
+
+            window.location.search = '?q0=8'
+            ;(surveyManager as any)._handleUrlPrefill(survey)
+
+            expect(mockPostHog.capture).not.toHaveBeenCalled()
+        })
+
+        it('should NOT auto-submit when enable_partial_responses is false, even with skipSubmitButton true', () => {
+            const survey: Survey = {
+                id: 'prefill-survey-no-partial',
+                name: 'Prefill Survey No Partial',
+                type: SurveyType.Popover,
+                enable_partial_responses: false,
+                questions: [
+                    {
+                        id: 'q1',
+                        type: SurveyQuestionType.Rating,
+                        question: 'Rate us',
+                        scale: 10,
+                        skipSubmitButton: true,
+                    },
+                    {
+                        id: 'q2',
+                        type: SurveyQuestionType.Open,
+                        question: 'Any feedback?',
+                    },
+                ],
+                appearance: {},
+                conditions: null,
+                start_date: '2021-01-01T00:00:00.000Z',
+                end_date: null,
+                current_iteration: null,
+                current_iteration_start_date: null,
+                feature_flag_keys: [],
+                linked_flag_key: null,
+                targeting_flag_key: null,
+                internal_targeting_flag_key: null,
+            }
+
+            window.location.search = '?q0=8'
+            ;(surveyManager as any)._handleUrlPrefill(survey)
+
+            expect(mockPostHog.capture).not.toHaveBeenCalled()
+        })
+
+        it('should auto-submit when all questions are prefilled with skipSubmitButton true (survey completed)', () => {
+            const survey: Survey = {
+                id: 'prefill-survey-complete',
+                name: 'Prefill Survey Complete',
+                type: SurveyType.Popover,
+                enable_partial_responses: false,
+                questions: [
+                    {
+                        id: 'q1',
+                        type: SurveyQuestionType.Rating,
+                        question: 'Rate us',
+                        scale: 10,
+                        skipSubmitButton: true,
+                    },
+                ],
+                appearance: {},
+                conditions: null,
+                start_date: '2021-01-01T00:00:00.000Z',
+                end_date: null,
+                current_iteration: null,
+                current_iteration_start_date: null,
+                feature_flag_keys: [],
+                linked_flag_key: null,
+                targeting_flag_key: null,
+                internal_targeting_flag_key: null,
+            }
+
+            window.location.search = '?q0=8'
+            ;(surveyManager as any)._handleUrlPrefill(survey)
+
+            expect(mockPostHog.capture).toHaveBeenCalledWith(
+                'survey sent',
+                expect.objectContaining({
+                    $survey_id: 'prefill-survey-complete',
+                    $survey_response_q1: 8,
+                    $survey_completed: true,
+                })
+            )
+        })
+
+        it('should only include skipped responses in auto-submit, not all prefilled responses', () => {
+            const survey: Survey = {
+                id: 'prefill-survey-partial',
+                name: 'Prefill Survey Partial',
+                type: SurveyType.Popover,
+                enable_partial_responses: true,
+                questions: [
+                    {
+                        id: 'q1',
+                        type: SurveyQuestionType.Rating,
+                        question: 'Rate us',
+                        scale: 10,
+                        skipSubmitButton: true,
+                    },
+                    {
+                        id: 'q2',
+                        type: SurveyQuestionType.Rating,
+                        question: 'Rate again',
+                        scale: 10,
+                        skipSubmitButton: false,
+                    },
+                    {
+                        id: 'q3',
+                        type: SurveyQuestionType.Open,
+                        question: 'Any feedback?',
+                    },
+                ],
+                appearance: {},
+                conditions: null,
+                start_date: '2021-01-01T00:00:00.000Z',
+                end_date: null,
+                current_iteration: null,
+                current_iteration_start_date: null,
+                feature_flag_keys: [],
+                linked_flag_key: null,
+                targeting_flag_key: null,
+                internal_targeting_flag_key: null,
+            }
+
+            window.location.search = '?q0=8&q1=5'
+            ;(surveyManager as any)._handleUrlPrefill(survey)
+
+            expect(mockPostHog.capture).toHaveBeenCalledWith(
+                'survey sent',
+                expect.objectContaining({
+                    $survey_id: 'prefill-survey-partial',
+                    $survey_response_q1: 8,
+                    $survey_completed: false,
+                })
+            )
+            expect(mockPostHog.capture).toHaveBeenCalledWith(
+                'survey sent',
+                expect.not.objectContaining({
+                    $survey_response_q2: 5,
+                })
+            )
         })
     })
 })

@@ -1,7 +1,8 @@
 import nextPackage from 'next/package.json' with { type: 'json' }
 import semver from 'semver'
-import { PostHogNextConfigComplete } from './config'
+
 import { spawnLocal } from '@posthog/core/process'
+import { ResolvedPluginConfig } from '@posthog/webpack-plugin'
 
 export function getNextJsVersion(): string {
   return nextPackage.version
@@ -12,18 +13,25 @@ export function hasCompilerHook(): boolean {
   return semver.gte(nextJsVersion, '15.4.1')
 }
 
-export async function processSourceMaps(posthogOptions: PostHogNextConfigComplete, directory: string) {
+export async function processSourceMaps(posthogOptions: ResolvedPluginConfig, directory: string) {
   const cliOptions = []
   cliOptions.push('sourcemap', 'process')
   cliOptions.push('--directory', directory)
+
   if (posthogOptions.sourcemaps.project) {
     cliOptions.push('--project', posthogOptions.sourcemaps.project)
   }
+
   if (posthogOptions.sourcemaps.version) {
     cliOptions.push('--version', posthogOptions.sourcemaps.version)
   }
+
   if (posthogOptions.sourcemaps.deleteAfterUpload) {
     cliOptions.push('--delete-after')
+  }
+
+  if (posthogOptions.sourcemaps.batchSize) {
+    cliOptions.push('--batch-size', posthogOptions.sourcemaps.batchSize.toString())
   }
 
   const logLevel = `posthog_cli=${posthogOptions.logLevel}`

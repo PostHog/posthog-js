@@ -1,4 +1,4 @@
-import React, { MouseEventHandler, useEffect, useMemo, useRef } from 'react'
+import React, { MouseEventHandler, useEffect, useMemo, useRef, JSX } from 'react'
 import { isNull } from '../../utils/type-utils'
 
 /**

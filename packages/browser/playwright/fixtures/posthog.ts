@@ -17,7 +17,7 @@ export const testPostHog = testEvents.extend<{
 
 const currentEnv = process.env
 const {
-    POSTHOG_PROJECT_KEY = 'public_key',
+    POSTHOG_PROJECT_API_KEY = 'public_key',
     POSTHOG_API_HOST = 'http://localhost:2345',
     BRANCH_NAME,
     RUN_ID,
@@ -115,7 +115,7 @@ export class PosthogPage {
                 ph.init(args.token, posthogConfig)
             },
             {
-                token: POSTHOG_PROJECT_KEY,
+                token: POSTHOG_PROJECT_API_KEY,
                 apiHost: POSTHOG_API_HOST,
                 options: {
                     ...this.baseOptions,

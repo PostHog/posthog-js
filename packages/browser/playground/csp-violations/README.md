@@ -9,7 +9,7 @@ Before running the playground, make sure to update the required env variables fo
 Create a `.env` file in the root directory with the following variables:
 
 ```bash
-POSTHOG_TOKEN=your_posthog_token
+POSTHOG_PROJECT_API_KEY=your_posthog_token
 POSTHOG_API_HOST=your_posthog_api_host  # e.g., https://app.posthog.com
 POSTHOG_UI_HOST=your_posthog_ui_host    # e.g., https://app.posthog.com
 POSTHOG_USE_SNIPPET=true                # if you want to include the posthog snippet on the playground pages to track pageviews, etc.
@@ -70,4 +70,4 @@ Each example will automatically trigger a CSP violation when the page loads, whi
 
 The server sets a Content Security Policy header that restricts what resources can be loaded. When a resource violates this policy, the browser will send a report to the specified `report-uri` endpoint.
 
-This playground is useful for testing how CSP violation reports are processed by your PostHog instance. 
+This playground is useful for testing how CSP violation reports are processed by your PostHog instance.

@@ -15,7 +15,7 @@ jobs:
       #      user-permission: ${{ steps.check-permissions.outputs.user-permission }}
       require-result: ${{ steps.check-permissions.outputs.require-result }}
     steps:
-      - uses: actions-cool/check-user-permission@v2
+      - uses: actions-cool/check-user-permission@7b90a27f92f3961b368376107661682c441f6103 # pin v2.3.0
         id: check-permissions
         with:
           require: "write"
@@ -34,12 +34,14 @@ jobs:
     needs: check-permissions
     if: needs.check-permissions.outputs.require-result == 'true' &&
       contains(github.event.pull_request.labels.*.name, 'release alpha')
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.ref }}
-          token: ${{ secrets.POSTHOG_BOT_PAT }}
           fetch-depth: 0
 
       - uses: ./.github/actions/setup
@@ -65,5 +67,3 @@ jobs:
       - name: Publish the alpha in the npm registry
         run: pnpm publish --access public --tag alpha
         working-directory: packages/browser
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

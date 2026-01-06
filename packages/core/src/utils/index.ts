@@ -6,6 +6,8 @@ export * from './number-utils'
 export * from './string-utils'
 export * from './type-utils'
 export * from './promise-queue'
+export * from './logger'
+export * from './user-agent-utils'
 
 export const STRING_FORMAT = 'utf8'
 

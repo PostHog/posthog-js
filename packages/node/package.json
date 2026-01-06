@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.11.2",
+  "version": "5.19.0",
   "description": "PostHog Node.js integration",
   "repository": {
     "type": "git",
@@ -40,10 +40,12 @@
     "@posthog/core": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
-    "jest": "catalog:",
-    "@rslib/core": "catalog:"
+    "@rslib/core": "catalog:",
+    "@types/express": "^5.0.5",
+    "@types/jest": "catalog:",
+    "@types/node": "^20.0.0",
+    "jest": "catalog:"
   },
   "keywords": [
     "posthog",
@@ -76,6 +78,9 @@
       },
       "import": "./dist/entrypoints/index.node.mjs",
       "require": "./dist/entrypoints/index.node.js"
+    },
+    "./experimental": {
+      "types": "./dist/experimental.d.ts"
     }
   }
 }

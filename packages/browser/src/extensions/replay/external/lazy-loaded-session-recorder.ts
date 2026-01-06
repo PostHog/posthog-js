@@ -62,7 +62,6 @@ import { PostHog } from '../../../posthog-core'
 import {
     CaptureResult,
     NetworkRecordOptions,
-    NetworkRequest,
     Properties,
     SessionIdChangedCallback,
     SessionRecordingOptions,
@@ -233,12 +232,32 @@ function isSessionIdleEvent(e: eventWithTime): e is eventWithTime & customEvent 
     return isCustomEvent(e, 'sessionIdle')
 }
 
+type SessionEndingPayload = {
+    lastActivityTimestamp?: number
+    currentSessionId?: string
+    currentWindowId?: string
+}
+
 function isSessionEndingEvent(e: eventWithTime): e is eventWithTime & customEvent {
     return isCustomEvent(e, '$session_ending')
 }
 
+function getSessionEndingPayload(e: eventWithTime): SessionEndingPayload | null {
+    return isSessionEndingEvent(e) ? (e.data.payload as SessionEndingPayload) : null
+}
+
+type SessionStartingPayload = {
+    lastActivityTimestamp?: number
+    nextSessionId?: string
+    nextWindowId?: string
+}
+
 function isSessionStartingEvent(e: eventWithTime): e is eventWithTime & customEvent {
     return isCustomEvent(e, '$session_starting')
+}
+
+function getSessionStartingPayload(e: eventWithTime): SessionStartingPayload | null {
+    return isSessionStartingEvent(e) ? (e.data.payload as SessionStartingPayload) : null
 }
 
 function isAllowedWhenIdle(e: eventWithTime): boolean {
@@ -492,16 +511,20 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _maskUrl(url: string): string | undefined {
         const userSessionRecordingOptions = this._instance.config.session_recording
 
+        // userSessionRecordingOptions.maskNetworkRequestFn is deprecated, fallback to it
+        if (userSessionRecordingOptions.maskCapturedNetworkRequestFn) {
+            const result = userSessionRecordingOptions.maskCapturedNetworkRequestFn({
+                name: url,
+            } as any)
+            // CapturedNetworkRequest uses 'name' for URL, but also check 'url' for compatibility
+            return result?.name ?? (result as any)?.url
+        }
+
         if (userSessionRecordingOptions.maskNetworkRequestFn) {
-            let networkRequest: NetworkRequest | null | undefined = {
+            const result = userSessionRecordingOptions.maskNetworkRequestFn({
                 url,
-            }
-
-            // TODO we should deprecate this and use the same function for this masking and the rrweb/network plugin
-            // TODO or deprecate this and provide a new clearer name so this would be `maskURLPerformanceFn` or similar
-            networkRequest = userSessionRecordingOptions.maskNetworkRequestFn(networkRequest)
-
-            return networkRequest?.url
+            })
+            return result?.url
         }
 
         return url
@@ -794,16 +817,23 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _onSessionIdCallback: SessionIdChangedCallback = (sessionId, windowId, changeReason) => {
         if (!changeReason) return
 
+        // Skip if session hasn't actually changed (callback might fire multiple times)
+        if (sessionId === this._sessionId && windowId === this._windowId) {
+            return
+        }
+
         const wasLikelyReset = changeReason.noSessionId
         const shouldLinkSessions =
             !wasLikelyReset && (changeReason.activityTimeout || changeReason.sessionPastMaximumLength)
 
-        let oldSessionId, oldWindowId
+        // Capture old IDs before start() updates them
+        const oldSessionId = this._sessionId
+        const oldWindowId = this._windowId
 
         if (shouldLinkSessions) {
-            oldSessionId = this._sessionId
-            oldWindowId = this._windowId
             this._tryAddCustomEvent('$session_ending', {
+                currentSessionId: oldSessionId,
+                currentWindowId: oldWindowId,
                 nextSessionId: sessionId,
                 nextWindowId: windowId,
                 changeReason,
@@ -823,14 +853,17 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._clearConditionalRecordingPersistence()
 
-        if (!this._stopRrweb) {
-            this.start('session_id_changed')
-        }
+        // Note: We don't call stop()/start() here because _updateWindowAndSessionIds
+        // already handles the restart. This callback fires synchronously during
+        // checkAndGetSessionAndWindowId(), so _updateWindowAndSessionIds will detect
+        // the session change and handle the restart after this callback returns.
 
         if (shouldLinkSessions) {
             this._tryAddCustomEvent('$session_starting', {
                 previousSessionId: oldSessionId,
                 previousWindowId: oldWindowId,
+                nextSessionId: sessionId,
+                nextWindowId: windowId,
                 changeReason,
                 // we'll need to correct the time of this if it's captured when idle
                 // so we don't extend reported session time with a debug event
@@ -904,7 +937,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._urlTriggerMatching.checkUrlTriggerConditions(
             () => this._pauseRecording(),
             () => this._resumeRecording(),
-            (triggerType) => this._activateTrigger(triggerType)
+            (triggerType) => this._activateTrigger(triggerType),
+            this.sessionId
         )
         // always have to check if the URL is blocked really early,
         // or you risk getting stuck in a loop
@@ -937,7 +971,34 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // TODO: Re-add ensureMaxMessageSize once we are confident in it
         const event = truncateLargeConsoleLogs(throttledEvent)
 
-        this._updateWindowAndSessionIds(event)
+        // Session lifecycle events ($session_ending, $session_starting) carry their target session ID
+        // in the payload. We must extract this BEFORE _updateWindowAndSessionIds runs, because that
+        // method triggers checkAndGetSessionAndWindowId() which would update this._sessionId.
+        // This is critical for $session_ending which must go to the OLD session, not the new one,
+        // and for $session_starting which must go to the NEW session.
+        const sessionEndingPayload = getSessionEndingPayload(event)
+        const sessionStartingPayload = getSessionStartingPayload(event)
+
+        if (sessionEndingPayload || sessionStartingPayload) {
+            // Adjust timestamp from payload to avoid artificially extending session duration
+            const payload = (sessionEndingPayload ?? sessionStartingPayload) as {
+                lastActivityTimestamp?: number
+            }
+            if (payload?.lastActivityTimestamp) {
+                event.timestamp = payload.lastActivityTimestamp
+            }
+        } else {
+            this._updateWindowAndSessionIds(event)
+        }
+
+        // Route lifecycle events using their payload IDs:
+        // - $session_ending uses currentSessionId (the old session it's ending)
+        // - $session_starting uses nextSessionId (the new session it's starting)
+        // - All other events use the current session ID
+        const targetSessionId =
+            sessionEndingPayload?.currentSessionId ?? sessionStartingPayload?.nextSessionId ?? this._sessionId
+        const targetWindowId =
+            sessionEndingPayload?.currentWindowId ?? sessionStartingPayload?.nextWindowId ?? this._windowId
 
         // When in an idle state we keep recording but don't capture the events,
         // we don't want to return early if idle is 'unknown'
@@ -957,16 +1018,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
         }
 
-        if (isSessionEndingEvent(event) || isSessionStartingEvent(event)) {
-            // session ending/starting events have a timestamp when rrweb sees them
-            // which can artificially lengthen a session
-            // we know when the last activity was based on the payload and can correct the timestamp
-            const payload = event.data.payload as { lastActivityTimestamp?: number }
-            if (payload?.lastActivityTimestamp) {
-                event.timestamp = payload.lastActivityTimestamp
-            }
-        }
-
         const eventToSend =
             (this._instance.config.session_recording.compress_events ?? true) ? compressEvent(event) : event
         const size = estimateSize(eventToSend)
@@ -974,8 +1025,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         const properties = {
             $snapshot_bytes: size,
             $snapshot_data: eventToSend,
-            $session_id: this._sessionId,
-            $window_id: this._windowId,
+            $session_id: targetSessionId,
+            $window_id: targetWindowId,
         }
 
         if (this.status === DISABLED) {
@@ -1140,12 +1191,21 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _captureSnapshotBuffered(properties: Properties) {
         const additionalBytes = 2 + (this._buffer?.data.length || 0) // 2 bytes for the array brackets and 1 byte for each comma
+
+        // Extract target session ID from properties to ensure we flush when session changes
+        // This is critical for lifecycle events ($session_ending, $session_starting) which may
+        // have different target session IDs than this._sessionId
+        const targetSessionId = properties.$session_id as string
+
         if (
             !this._isIdle && // we never want to flush when idle
             (this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
-                this._buffer.sessionId !== this._sessionId)
+                this._buffer.sessionId !== targetSessionId)
         ) {
             this._buffer = this._flushBuffer()
+            // After flushing, update buffer to use the new target session/window IDs
+            this._buffer.sessionId = targetSessionId
+            this._buffer.windowId = properties.$window_id as string
         }
 
         this._buffer.size += properties.$snapshot_bytes

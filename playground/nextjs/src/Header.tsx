@@ -28,6 +28,8 @@ export const PageHeader = () => {
                         <Link href="/ecommerce">E-commerce</Link>
                         <Link href="/toolbar-tests">Toolbar Tests</Link>
                         <Link href="/external_chat">External Chat</Link>
+                        <Link href="/product-tours">Product Tours</Link>
+                        <Link href="/hogflix">Hogflix</Link>
                     </div>
 
                     <div>

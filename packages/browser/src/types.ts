@@ -3,6 +3,7 @@ import type { SegmentAnalytics } from './extensions/segment-integration'
 import { PostHog } from './posthog-core'
 import { KnownUnsafeEditableEvent } from '@posthog/core'
 import { Survey, SurveyConfig } from './posthog-surveys-types'
+import { ConversationsRemoteConfig } from './posthog-conversations-types'
 // only importing types here, so won't affect the bundle
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SAMPLED } from './extensions/replay/external/triggerMatching'
@@ -277,6 +278,16 @@ export type DeadClicksAutoCaptureConfig = {
     mutation_threshold_ms?: number
 
     /**
+     * By default, clicks with modifier keys (ctrl, shift, alt, meta/cmd) held down are not considered dead clicks,
+     * since these typically indicate intentional actions like "open in new tab".
+     *
+     * Set this to true to capture dead clicks even when modifier keys are held.
+     *
+     * @default false
+     */
+    capture_clicks_with_modifier_keys?: boolean
+
+    /**
      * Allows setting behavior for when a dead click is captured.
      * For e.g. to support capture to heatmaps
      *
@@ -399,6 +410,15 @@ export interface PostHogConfig {
 
     /** @deprecated - Use 'persistence_name' instead */
     cookie_name?: string
+
+    /**
+     * List of custom property names that should be stored in cookies (in addition to the default ones)
+     * when using 'localStorage+cookie' persistence mode. This allows these properties to be shared
+     * across subdomains when cross_subdomain_cookie is enabled.
+     *
+     * @default []
+     */
+    cookie_persisted_properties?: readonly string[]
 
     /**
      * A function to be called once the PostHog scripts have loaded successfully.
@@ -525,11 +545,25 @@ export interface PostHogConfig {
     disable_surveys_automatic_display: boolean
 
     /**
+     * Determines whether PostHog should disable all product tours functionality.
+     *
+     * @default true (disabled until feature is ready for GA)
+     */
+    disable_product_tours: boolean
+
+    /**
      * Survey-specific configuration options.
      *
      * @default undefined
      */
     surveys?: SurveyConfig
+
+    /**
+     * Determines whether PostHog should disable all conversations functionality.
+     *
+     * @default false
+     */
+    disable_conversations: boolean
 
     /**
      * Determines whether PostHog should disable web experiments.
@@ -1603,6 +1637,11 @@ export interface RemoteConfig {
     surveys?: boolean | Survey[]
 
     /**
+     * Whether product tours are enabled
+     */
+    productTours?: boolean
+
+    /**
      * Parameters for the toolbar
      */
     toolbarParams: ToolbarParams
@@ -1646,6 +1685,11 @@ export interface RemoteConfig {
      * Indicates if the team has any flags enabled (if not we don't need to load them)
      */
     hasFeatureFlags?: boolean
+
+    /**
+     * Conversations widget configuration
+     */
+    conversations?: boolean | ConversationsRemoteConfig
 }
 
 /**
@@ -1658,6 +1702,7 @@ export interface FlagsResponse extends RemoteConfig {
     errorsWhileComputingFlags: boolean
     requestId?: string
     flags: Record<string, FeatureFlagDetail>
+    evaluatedAt?: number
 }
 
 export type SiteAppGlobals = {
@@ -1771,13 +1816,14 @@ export type SnippetArrayItem = [method: string, ...args: any[]]
 export type JsonRecord = { [key: string]: JsonType }
 export type JsonType = string | number | boolean | null | undefined | JsonRecord | Array<JsonType>
 
+// Sync this with the backend's EarlyAccessFeatureSerializer!
 /** A feature that isn't publicly available yet.*/
 export interface EarlyAccessFeature {
-    // Sync this with the backend's EarlyAccessFeatureSerializer!
     name: string
     description: string
     stage: 'concept' | 'alpha' | 'beta'
     documentationUrl: string | null
+    payload: JsonType
     flagKey: string | null
 }
 

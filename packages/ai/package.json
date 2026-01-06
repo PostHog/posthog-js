@@ -1,6 +1,6 @@
 {
   "name": "@posthog/ai",
-  "version": "7.1.0",
+  "version": "7.3.0",
   "description": "PostHog Node.js AI integrations",
   "repository": {
     "type": "git",
@@ -22,8 +22,10 @@
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "devDependencies": {
+    "@ai-sdk/provider": "^3.0.0-beta.25",
     "@posthog-tooling/rollup-utils": "workspace:*",
     "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@types/jest": "catalog:",
     "jest": "catalog:",
     "node-fetch": "^3.3.2",
     "posthog-node": "workspace:*"
@@ -41,19 +43,23 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@ai-sdk/provider": "^2.0.0",
-    "@anthropic-ai/sdk": "^0.67.0",
-    "@google/genai": "^1.29.0",
-    "@langchain/core": "^1.0.0",
+    "@anthropic-ai/sdk": "^0.71.2",
+    "@google/genai": "^1.33.0",
+    "@langchain/core": "^1.1.5",
     "@posthog/core": "workspace:*",
-    "ai": "^5.0.87",
-    "langchain": "^1.0.0",
-    "openai": "^6.8.1",
-    "uuid": "^11.0.5",
-    "zod": "^4.1.8"
+    "langchain": "^1.2.0",
+    "openai": "^6.10.0",
+    "uuid": "^11.1.0",
+    "zod": "^4.1.13"
   },
   "peerDependencies": {
+    "@ai-sdk/provider": "^2.0.0 || ^3.0.0-beta.0",
     "posthog-node": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@ai-sdk/provider": {
+      "optional": true
+    }
   },
   "files": [
     "dist"

@@ -1,110 +1,145 @@
-name: "PostHog Upgrade"
+name: 'PostHog Upgrade'
 
 on:
-  workflow_dispatch:
-    inputs:
-      package_name:
-        type: choice
-        description: "Package name to upgrade"
-        required: true
-        options:
-          - posthog-js
-      package_version:
-        description: "Package version to upgrade to"
-        required: true
-        type: string
+    workflow_dispatch:
+        inputs:
+            package_name:
+                type: choice
+                description: 'Package name to upgrade'
+                required: true
+                options:
+                    - posthog-js
+            package_version:
+                description: 'Package version to upgrade to'
+                required: true
+                type: string
 
 permissions:
-  actions: write
-  contents: read
+    contents: read
 
 jobs:
-  posthog-upgrade:
-    name: Upgrade PostHog Package
-    runs-on: ubuntu-latest
+    posthog-upgrade:
+        name: Upgrade PostHog Package
+        runs-on: ubuntu-latest
 
-    steps:
-      - name: Check out main repo
-        uses: actions/checkout@v4
-        with:
-          repository: "PostHog/posthog"
-          token: ${{ secrets.POSTHOG_BOT_PAT }}
+        steps:
+            - name: Get upgrader token
+              id: upgrader
+              uses: getsentry/action-github-app-token@97c9e23528286821f97fba885c1b1123284b29cc # v2
+              with:
+                  app_id: ${{ secrets.GH_APP_POSTHOG_JS_UPGRADER_APP_ID }}
+                  private_key: ${{ secrets.GH_APP_POSTHOG_JS_UPGRADER_PRIVATE_KEY }}
 
-      - uses: pnpm/action-setup@v4
+            - name: Check out main repo
+              uses: actions/checkout@v6
+              with:
+                  repository: 'PostHog/posthog'
+                  token: ${{ steps.upgrader.outputs.token }}
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 20
-          cache: pnpm
+            - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin v4.2.0
 
-      - name: Install new package version in main repo
-        id: pnpm-upgrade
-        shell: bash
-        run: |
-          OUTGOING_VERSION=$(jq '.dependencies["${{ github.event.inputs.package_name }}"]' package.json -r)
-          echo "outgoing-version=$OUTGOING_VERSION" >> "$GITHUB_OUTPUT"
-          for i in $(seq 1 $RETRY_TIMES); do
-              # Retry loop because of npm being _eventually_ consistent
-              if pnpm -r upgrade ${{ github.event.inputs.package_name }}@${{ github.event.inputs.package_version }}; then
-                  break
-              else
-                  [ $i -ne $RETRY_TIMES ] && sleep $RETRY_WAIT_SECONDS || false
-              fi
-          done
-        env:
-          RETRY_TIMES: 20
-          RETRY_WAIT_SECONDS: 5
+            - name: Set up Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: pnpm
 
-      - name: Generate branch name
-        id: generate-branch-name
-        shell: bash
-        run: |
-          PACKAGE_NAME_SANITIZED=$(echo "${{ github.event.inputs.package_name }}" | sed 's/@//g' | sed 's/\//-/g')
-          echo "branch_name=${PACKAGE_NAME_SANITIZED}-${{ github.event.inputs.package_version }}" >> "$GITHUB_OUTPUT"
+            - name: Install new package version in main repo
+              id: pnpm-upgrade
+              shell: bash
+              env:
+                  RETRY_TIMES: 20
+                  RETRY_WAIT_SECONDS: 5
+                  PACKAGE_NAME: ${{ github.event.inputs.package_name }}
+                  PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
+              run: |
+                  OUTGOING_VERSION=$(jq ".dependencies[\"$PACKAGE_NAME\"]" package.json -r)
+                  echo "outgoing-version=$OUTGOING_VERSION" >> "$GITHUB_OUTPUT"
+                  for i in $(seq 1 $RETRY_TIMES); do
+                      # Retry loop because of npm being _eventually_ consistent
+                      if pnpm -r upgrade "$PACKAGE_NAME@$PACKAGE_VERSION"; then
+                          break
+                      else
+                          [ $i -ne $RETRY_TIMES ] && sleep $RETRY_WAIT_SECONDS || false
+                      fi
+                  done
 
-      - name: Create main repo pull request
-        id: main-repo-pr
-        uses: peter-evans/create-pull-request@v3
-        with:
-          token: ${{ secrets.POSTHOG_BOT_PAT }}
-          commit-message: "chore(deps): Update ${{ github.event.inputs.package_name }} to ${{ github.event.inputs.package_version }}"
-          branch: ${{ steps.generate-branch-name.outputs.branch_name }}
-          delete-branch: true
-          labels: automerge
-          title: "chore(deps): Update ${{ github.event.inputs.package_name }} to ${{ github.event.inputs.package_version }}"
-          body: |
-            ## Changes
+            - name: Install new package version in hedgebox-dummy
+              shell: bash
+              env:
+                  RETRY_TIMES: 20
+                  RETRY_WAIT_SECONDS: 5
+                  PACKAGE_NAME: ${{ github.event.inputs.package_name }}
+                  PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
+              run: |
+                  if [ -d "hedgebox-dummy" ]; then
+                      cd hedgebox-dummy
+                      for i in $(seq 1 $RETRY_TIMES); do
+                          if pnpm upgrade "$PACKAGE_NAME@$PACKAGE_VERSION"; then
+                              break
+                          else
+                              [ $i -ne $RETRY_TIMES ] && sleep $RETRY_WAIT_SECONDS || false
+                          fi
+                      done
+                  else
+                      echo "hedgebox-dummy folder not found, skipping"
+                  fi
 
-            ${{ github.event.inputs.package_name }} version ${{ github.event.inputs.package_version }} has been released. This updates PostHog to use it.
+            - name: Generate branch name
+              id: generate-branch-name
+              shell: bash
+              env:
+                  PACKAGE_NAME: ${{ github.event.inputs.package_name }}
+                  PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
+              run: |
+                  PACKAGE_NAME_SANITIZED=$(echo "$PACKAGE_NAME" | sed 's/@//g' | sed 's/\//-/g')
+                  echo "branch_name=${PACKAGE_NAME_SANITIZED}-$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
 
-            https://github.com/PostHog/posthog-js/compare/${{ github.event.inputs.package_name }}@${{ steps.pnpm-upgrade.outputs.outgoing-version }}...${{ github.event.inputs.package_name }}@${{ github.event.inputs.package_version }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${{ github.event.inputs.package_name }}?activeTab=version)
+            - name: Create main repo pull request
+              id: main-repo-pr
+              uses: peter-evans/create-pull-request@98357b18bf14b5342f975ff684046ec3b2a07725 # v8.0.0
+              with:
+                  token: ${{ steps.upgrader.outputs.token }}
+                  commit-message: 'chore(deps): Update ${{ github.event.inputs.package_name }} to ${{ github.event.inputs.package_version }}'
+                  branch: ${{ steps.generate-branch-name.outputs.branch_name }}
+                  delete-branch: true
+                  title: 'chore(deps): Update ${{ github.event.inputs.package_name }} to ${{ github.event.inputs.package_version }}'
+                  body: |
+                      ## Changes
 
-      - name: Output pull request result
-        shell: bash
-        run: |
-          echo "PostHog pull request for ${{ github.event.inputs.package_name }} version ${{ github.event.inputs.package_version }} ready: ${{ steps.main-repo-pr.outputs.pull-request-url }}"
+                      ${{ github.event.inputs.package_name }} version ${{ github.event.inputs.package_version }} has been released. This updates PostHog to use it.
 
-      - name: Get deployer token
-        id: deployer
-        uses: getsentry/action-github-app-token@v2
-        with:
-          app_id: ${{ secrets.DEPLOYER_APP_ID }}
-          private_key: ${{ secrets.DEPLOYER_APP_PRIVATE_KEY }}
+                      https://github.com/PostHog/posthog-js/compare/${{ github.event.inputs.package_name }}@${{ steps.pnpm-upgrade.outputs.outgoing-version }}...${{ github.event.inputs.package_name }}@${{ github.event.inputs.package_version }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${{ github.event.inputs.package_name }}?activeTab=version)
 
-      - name: Stamp PR
-        shell: bash
-        run: |
-          # unbelievably github has a race condition where if you commit and
-          # approve too quickly on a PR with "auto-merge" enabled it can miss
-          # the new commit in the merge commit (but it looks like the PR has the change)
-          # Sleep 5 should work
-          sleep 5
-          pull_number=${{ steps.main-repo-pr.outputs.pull-request-number }}
-          curl -L \
-          -X POST \
-          -H "Accept: application/vnd.github+json" \
-          -H "Authorization: Bearer ${{ steps.deployer.outputs.token }}" \
-          -H "X-GitHub-Api-Version: 2022-11-28" \
-          https://api.github.com/repos/posthog/posthog/pulls/${pull_number}/reviews \
-          -d '{"body":"${{ github.event.inputs.package_name }} auto approved.","event":"APPROVE","comments":[]}'
+            - name: Output pull request result
+              shell: bash
+              env:
+                  PACKAGE_NAME: ${{ github.event.inputs.package_name }}
+                  PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
+                  PR_URL: ${{ steps.main-repo-pr.outputs.pull-request-url }}
+              run: |
+                  echo "PostHog pull request for $PACKAGE_NAME version $PACKAGE_VERSION ready: $PR_URL"
+
+            - name: Enable automerge
+              env:
+                  GH_TOKEN: ${{ steps.upgrader.outputs.token }}
+                  PR_NUMBER: ${{ steps.main-repo-pr.outputs.pull-request-number }}
+              run: |
+                  gh pr merge "$PR_NUMBER" --auto --squash
+
+            # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
+            - name: Send failure event to PostHog
+              if: ${{ failure() }}
+              uses: PostHog/posthog-github-action@v0.1
+              with:
+                  posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
+                  event: 'posthog-js-github-release-workflow-failure'
+                  properties: >-
+                      {
+                        "commitSha": "${{ github.sha }}",
+                        "jobStatus": "${{ job.status }}",
+                        "ref": "${{ github.ref }}",
+                        "repository": "Posthog/posthog",
+                        "packageName": "${{ github.event.inputs.package_name }}",
+                        "packageVersion": "${{ github.event.inputs.package_version }}"
+                      }

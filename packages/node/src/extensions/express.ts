@@ -1,15 +1,14 @@
-import type * as http from 'node:http'
-import { uuidv7 } from '@posthog/core'
 import ErrorTracking from './error-tracking'
 import { PostHogBackendClient } from '../client'
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
+import type { Request, Response } from 'express'
 
-type ExpressMiddleware = (req: http.IncomingMessage, res: http.ServerResponse, next: () => void) => void
+type ExpressMiddleware = (req: Request, res: Response, next: () => void) => void
 
 type ExpressErrorMiddleware = (
   error: MiddlewareError,
-  req: http.IncomingMessage,
-  res: http.ServerResponse,
+  req: Request,
+  res: Response,
   next: (error: MiddlewareError) => void
 ) => void
 
@@ -28,15 +27,36 @@ export function setupExpressErrorHandler(
     use: (middleware: ExpressMiddleware | ExpressErrorMiddleware) => unknown
   }
 ): void {
-  app.use((error: MiddlewareError, _, __, next: (error: MiddlewareError) => void): void => {
-    const hint: CoreErrorTracking.EventHint = { mechanism: { type: 'middleware', handled: false } }
-    // Given stateless nature of Node SDK we capture exceptions using personless processing
-    // when no user can be determined e.g. in the case of exception autocapture
-    if (!ErrorTracking.isPreviouslyCapturedError(error)) {
-      ErrorTracking.buildEventMessage(error, hint, uuidv7(), { $process_person_profile: false }).then((msg) =>
-        _posthog.capture(msg)
-      )
+  app.use(posthogErrorHandler(_posthog))
+}
+
+function posthogErrorHandler(posthog: PostHogBackendClient): ExpressErrorMiddleware {
+  return (error: MiddlewareError, req, res, next: (error: MiddlewareError) => void): void => {
+    // Skip if this error was already captured (e.g. by LLMO integration)
+    if (ErrorTracking.isPreviouslyCapturedError(error)) {
+      next(error)
+      return
     }
+
+    const sessionId: string | undefined = req.headers['x-posthog-session-id'] as string | undefined
+    const distinctId: string | undefined = req.headers['x-posthog-distinct-id'] as string | undefined
+    const syntheticException = new Error('Synthetic exception')
+    const hint: CoreErrorTracking.EventHint = { mechanism: { type: 'middleware', handled: false }, syntheticException }
+
+    posthog.addPendingPromise(
+      ErrorTracking.buildEventMessage(error, hint, distinctId, {
+        $session_id: sessionId,
+        $current_url: req.url,
+        $request_method: req.method,
+        $request_path: req.path,
+        $user_agent: req.headers['user-agent'],
+        $response_status_code: res.statusCode,
+        $ip: req.headers['x-forwarded-for'] || req?.socket?.remoteAddress,
+      }).then((msg) => {
+        posthog.capture(msg)
+      })
+    )
+
     next(error)
-  })
+  }
 }

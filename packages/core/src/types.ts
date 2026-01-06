@@ -118,6 +118,9 @@ export type PostHogFetchResponse = {
   status: number
   text: () => Promise<string>
   json: () => Promise<any>
+  headers?: {
+    get(name: string): string | null
+  }
 }
 
 export type PostHogQueueItem = {
@@ -191,6 +194,7 @@ export type PostHogFlagsResponse = Omit<PostHogRemoteConfig, 'hasFeatureFlags'> 
       }
   quotaLimited?: string[]
   requestId?: string
+  evaluatedAt?: number // Unix timestamp in milliseconds
 }
 
 export type PostHogFeatureFlagsResponse = PartialWithRequired<
@@ -290,12 +294,18 @@ export type EvaluationReason = {
 export type SurveyAppearance = {
   // keep in sync with frontend/src/types.ts -> SurveyAppearance
   backgroundColor?: string
+  // Optional override for main survey text color. If not set, auto-calculated from backgroundColor.
+  textColor?: string
   submitButtonColor?: string
   // deprecate submit button text eventually
   submitButtonText?: string
+  // Optional override for submit button text color. If not set, auto-calculated from submitButtonColor.
   submitButtonTextColor?: string
   ratingButtonColor?: string
   ratingButtonActiveColor?: string
+  inputBackground?: string
+  // Optional override for input and rating button text color. If not set, auto-calculated from inputBackground.
+  inputTextColor?: string
   autoDisappear?: boolean
   displayThankYouMessage?: boolean
   thankYouMessageHeader?: string

@@ -8,6 +8,9 @@ jobs:
     check-description:
         name: Check that PR has description
         runs-on: ubuntu-22.04
+        permissions:
+            contents: read
+            pull-requests: write
         steps:
             - name: Check if PR is shame-worthy
               id: is-shame-worthy
@@ -28,6 +31,8 @@ jobs:
 
             - name: Shame if PR has no description
               if: steps.is-shame-worthy.outputs.is-shame-worthy == 'true'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
                   SHAME_BODY="Hey @${{ github.actor }}! 👋\nThis pull request seems to contain no description. Please add useful context, rationale, and/or any other information that will help make sense of this change now and in the distant Mars-based future."
-                  curl -s -u posthog-bot:${{ secrets.POSTHOG_BOT_PAT }} -X POST -d "{ \"body\": \"$SHAME_BODY\" }" "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments"
+                  gh pr comment ${{ github.event.pull_request.number }} --body "$SHAME_BODY"

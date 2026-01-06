@@ -3036,6 +3036,8 @@ describe('Lazy SessionRecording', () => {
             })
 
             expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_ending', {
+                currentSessionId: sessionId,
+                currentWindowId: 'windowId',
                 nextSessionId: newSessionId,
                 nextWindowId: newWindowId,
                 changeReason: {
@@ -3060,6 +3062,8 @@ describe('Lazy SessionRecording', () => {
             expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_starting', {
                 previousSessionId: sessionId,
                 previousWindowId: 'windowId',
+                nextSessionId: newSessionId,
+                nextWindowId: newWindowId,
                 changeReason: {
                     noSessionId: false,
                     activityTimeout: true,
@@ -3087,6 +3091,8 @@ describe('Lazy SessionRecording', () => {
             })
 
             expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_ending', {
+                currentSessionId: sessionId,
+                currentWindowId: 'windowId',
                 nextSessionId: newSessionId,
                 nextWindowId: newWindowId,
                 changeReason: {
@@ -3101,6 +3107,8 @@ describe('Lazy SessionRecording', () => {
             expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_starting', {
                 previousSessionId: sessionId,
                 previousWindowId: 'windowId',
+                nextSessionId: newSessionId,
+                nextWindowId: newWindowId,
                 changeReason: {
                     noSessionId: false,
                     activityTimeout: false,
@@ -3143,6 +3151,8 @@ describe('Lazy SessionRecording', () => {
 
             // should capture the flushed size from the ending session
             expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_ending', {
+                currentSessionId: sessionId,
+                currentWindowId: 'windowId',
                 nextSessionId: newSessionId,
                 nextWindowId: newWindowId,
                 changeReason: {
@@ -3215,6 +3225,336 @@ describe('Lazy SessionRecording', () => {
                     })
                 )
             })
+        })
+
+        it('routes $session_starting and $session_ending events to correct session IDs', () => {
+            const currentSessionId = sessionId
+            const currentWindowId = 'windowId'
+            const newSessionId = 'new-session-id'
+            const newWindowId = 'new-window-id'
+
+            // Spy on posthog.capture to verify session IDs
+            const captureSpy = jest.spyOn(posthog, 'capture')
+            captureSpy.mockClear()
+
+            // Create a $session_ending event with payload containing session IDs
+            const sessionEndingEvent = createCustomSnapshot(
+                {},
+                {
+                    currentSessionId: currentSessionId,
+                    currentWindowId: currentWindowId,
+                    nextSessionId: newSessionId,
+                    nextWindowId: newWindowId,
+                    lastActivityTimestamp: Date.now(),
+                },
+                '$session_ending'
+            )
+
+            // Emit the $session_ending event
+            _emit(sessionEndingEvent)
+
+            // Flush to capture
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Verify $session_ending is routed to currentSessionId (old session)
+            expect(captureSpy).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({
+                    $session_id: currentSessionId,
+                    $window_id: currentWindowId,
+                    $snapshot_data: expect.arrayContaining([
+                        expect.objectContaining({
+                            type: EventType.Custom,
+                            data: expect.objectContaining({ tag: '$session_ending' }),
+                        }),
+                    ]),
+                }),
+                expect.anything()
+            )
+
+            captureSpy.mockClear()
+
+            // Now simulate session ID change on the recorder instance
+            // This would normally happen via stop/start in _onSessionIdCallback
+            sessionRecording['_lazyLoadedSessionRecording']['_sessionId'] = newSessionId
+            sessionRecording['_lazyLoadedSessionRecording']['_windowId'] = newWindowId
+            sessionRecording['_lazyLoadedSessionRecording']['_buffer'] = {
+                size: 0,
+                data: [],
+                sessionId: newSessionId,
+                windowId: newWindowId,
+            }
+
+            // Create a $session_starting event with payload containing session IDs
+            const sessionStartingEvent = createCustomSnapshot(
+                {},
+                {
+                    previousSessionId: currentSessionId,
+                    previousWindowId: currentWindowId,
+                    nextSessionId: newSessionId,
+                    nextWindowId: newWindowId,
+                    lastActivityTimestamp: Date.now(),
+                },
+                '$session_starting'
+            )
+
+            // Emit the $session_starting event
+            _emit(sessionStartingEvent)
+
+            // Flush to capture
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Verify $session_starting is routed to nextSessionId (new session)
+            expect(captureSpy).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({
+                    $session_id: newSessionId,
+                    $window_id: newWindowId,
+                    $snapshot_data: expect.arrayContaining([
+                        expect.objectContaining({
+                            type: EventType.Custom,
+                            data: expect.objectContaining({ tag: '$session_starting' }),
+                        }),
+                    ]),
+                }),
+                expect.anything()
+            )
+        })
+
+        it('uses targetSessionId from event payload to correctly route lifecycle events', () => {
+            const oldSessionId = sessionId
+            const newSessionId = 'new-session-after-change'
+
+            // Ensure recorder is not idle
+            sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = false
+
+            // Emit an event to the old session
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(1)
+
+            // Now simulate the recorder instance having transitioned to the new session
+            // (This happens in _onSessionIdCallback after stop/start)
+            sessionRecording['_lazyLoadedSessionRecording']['_sessionId'] = newSessionId
+            sessionRecording['_lazyLoadedSessionRecording']['_windowId'] = 'new-window-id'
+
+            // Emit a $session_starting event for the NEW session
+            // Even though the buffer still has the old sessionId, this event should be routed to the new session
+            const sessionStartingEvent = createCustomSnapshot(
+                {},
+                {
+                    previousSessionId: oldSessionId,
+                    previousWindowId: 'windowId',
+                    nextSessionId: newSessionId,
+                    nextWindowId: 'new-window-id',
+                    lastActivityTimestamp: Date.now(),
+                },
+                '$session_starting'
+            )
+
+            _emit(sessionStartingEvent)
+
+            // The buffer should now have been flushed because buffer.sessionId (old) !== targetSessionId (new)
+            // and a new buffer should be created with the new session ID
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].sessionId).toBe(newSessionId)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].windowId).toBe('new-window-id')
+
+            // The buffer should only have the new event, not the old one
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(1)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data[0].data.tag).toBe(
+                '$session_starting'
+            )
+        })
+    })
+
+    describe('URL masking with maskCapturedNetworkRequestFn', () => {
+        it('uses maskCapturedNetworkRequestFn to mask page URLs when configured', () => {
+            const maskFn = jest.fn((data) => {
+                // CapturedNetworkRequest uses 'name' for the URL
+                if (data.name) {
+                    return { ...data, name: data.name.replace(/token=[^&]+/, 'token=[REDACTED]') }
+                }
+                return data
+            })
+
+            posthog.config.session_recording.maskCapturedNetworkRequestFn = maskFn
+
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/' },
+                })
+            )
+            sessionRecording['_onScriptLoaded']()
+
+            // Emit a meta event with a URL containing a sensitive token
+            _emit(
+                createMetaSnapshot({
+                    data: { href: 'https://example.com/?token=secret123&other=value' },
+                })
+            )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Verify the masking function was called with 'name' property
+            expect(maskFn).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    name: 'https://example.com/?token=secret123&other=value',
+                })
+            )
+
+            // Verify the URL was masked in the captured snapshot
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'https://example.com/?token=[REDACTED]&other=value',
+                            },
+                        }),
+                    ],
+                }),
+                expect.anything()
+            )
+        })
+
+        it('falls back to deprecated maskNetworkRequestFn when maskCapturedNetworkRequestFn is not set', () => {
+            const deprecatedMaskFn = jest.fn((data) => {
+                if (data.url) {
+                    return { ...data, url: data.url.replace(/token=[^&]+/, 'token=[REDACTED]') }
+                }
+                return data
+            })
+
+            posthog.config.session_recording.maskNetworkRequestFn = deprecatedMaskFn
+
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/' },
+                })
+            )
+            sessionRecording['_onScriptLoaded']()
+
+            // Emit a meta event with a URL containing a sensitive token
+            _emit(
+                createMetaSnapshot({
+                    data: { href: 'https://example.com/?token=secret123' },
+                })
+            )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Verify the deprecated masking function was called
+            expect(deprecatedMaskFn).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    url: 'https://example.com/?token=secret123',
+                })
+            )
+
+            // Verify the URL was masked
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'https://example.com/?token=[REDACTED]',
+                            },
+                        }),
+                    ],
+                }),
+                expect.anything()
+            )
+        })
+
+        it('prefers maskCapturedNetworkRequestFn over deprecated maskNetworkRequestFn', () => {
+            const newMaskFn = jest.fn((data) => ({ ...data, name: 'masked-by-new' }))
+            const deprecatedMaskFn = jest.fn((data) => ({ ...data, url: 'masked-by-deprecated' }))
+
+            posthog.config.session_recording.maskCapturedNetworkRequestFn = newMaskFn
+            posthog.config.session_recording.maskNetworkRequestFn = deprecatedMaskFn
+
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/' },
+                })
+            )
+            sessionRecording['_onScriptLoaded']()
+
+            _emit(
+                createMetaSnapshot({
+                    data: { href: 'https://example.com/?token=secret' },
+                })
+            )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Should only call the new function, not the deprecated one
+            expect(newMaskFn).toHaveBeenCalled()
+            expect(deprecatedMaskFn).not.toHaveBeenCalled()
+
+            // Should use the result from the new function
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'masked-by-new',
+                            },
+                        }),
+                    ],
+                }),
+                expect.anything()
+            )
+        })
+
+        it('supports backward compatibility when maskCapturedNetworkRequestFn returns url instead of name', () => {
+            // Some users might mistakenly return 'url' property instead of 'name'
+            const maskFn = jest.fn((data) => {
+                if (data.name) {
+                    return { url: data.name.replace(/token=[^&]+/, 'token=[REDACTED]') }
+                }
+                return data
+            })
+
+            posthog.config.session_recording.maskCapturedNetworkRequestFn = maskFn
+
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/' },
+                })
+            )
+            sessionRecording['_onScriptLoaded']()
+
+            _emit(
+                createMetaSnapshot({
+                    data: { href: 'https://example.com/?token=secret123' },
+                })
+            )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Verify the masking function was called with 'name' property
+            expect(maskFn).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    name: 'https://example.com/?token=secret123',
+                })
+            )
+
+            // Should still work even though user returned 'url' instead of 'name'
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'https://example.com/?token=[REDACTED]',
+                            },
+                        }),
+                    ],
+                }),
+                expect.anything()
+            )
         })
     })
 })

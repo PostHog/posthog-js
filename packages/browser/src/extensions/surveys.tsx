@@ -1,4 +1,4 @@
-import * as Preact from 'preact'
+import { type JSX, type RefObject, render, Fragment } from 'preact'
 import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { PostHog } from '../posthog-core'
 import {
@@ -11,6 +11,7 @@ import {
     SurveyQuestionBranchingType,
     SurveyQuestionType,
     SurveySchedule,
+    SurveyTabPosition,
     SurveyType,
     SurveyWidgetType,
     SurveyWithTypeAndAppearance,
@@ -25,6 +26,7 @@ import {
     SURVEY_LOGGER as logger,
 } from '../utils/survey-utils'
 import { isNull, isUndefined } from '@posthog/core'
+import { SURVEYS } from '../constants'
 import { uuidv7 } from '../uuidv7'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import { Cancel } from './surveys/components/QuestionHeader'
@@ -51,6 +53,7 @@ import {
     hasWaitPeriodPassed,
     isSurveyInProgress,
     sendSurveyEvent,
+    sendSurveyAbandonedEvent,
     setInProgressSurveyState,
     SurveyContext,
     getSurveyStylesheet,
@@ -59,7 +62,7 @@ import {
 import {
     extractPrefillParamsFromUrl,
     convertPrefillToResponses,
-    allRequiredQuestionsFilled,
+    calculatePrefillStartIndex,
 } from '../utils/survey-url-prefill'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
@@ -184,7 +187,7 @@ const SURVEY_NEXT_TO_TRIGGER_PARAMS = {
     TRIGGER_SPACING: 12,
 } as const
 
-function getNextToTriggerPosition(target: HTMLElement, surveyWidth: number): React.CSSProperties | null {
+function getNextToTriggerPosition(target: HTMLElement, surveyWidth: number): JSX.CSSProperties | null {
     try {
         const buttonRect = target.getBoundingClientRect()
         const viewportHeight = window.innerHeight
@@ -211,7 +214,7 @@ function getNextToTriggerPosition(target: HTMLElement, surveyWidth: number): Rea
             right: 'auto',
             bottom: showAbove ? `${viewportHeight - buttonRect.top + spacing}px` : 'auto',
             zIndex: defaultSurveyAppearance.zIndex,
-        } satisfies React.CSSProperties
+        } satisfies JSX.CSSProperties
     } catch (error) {
         logger.warn('Failed to calculate trigger position:', error)
         return null
@@ -225,7 +228,6 @@ export class SurveyManager {
     private _posthog: PostHog
     private _surveyInFocus: string | null
     private _surveyTimeouts: Map<string, NodeJS.Timeout> = new Map()
-    private _autoSubmitTimeout?: NodeJS.Timeout
     private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener; survey: Survey }> =
         new Map()
     private _prefillHandledSurveys: Set<string> = new Set()
@@ -236,11 +238,45 @@ export class SurveyManager {
         this._surveyInFocus = null
     }
 
+    public handlePageUnload = (): void => {
+        // we don't use getSurveys to avoid adding extra API calls here.
+        // if no surveys are cached, there's nothing to do anyways
+        const surveys = this._posthog.get_property(SURVEYS) as Survey[] | undefined
+        if (!surveys) {
+            return
+        }
+        for (const survey of surveys) {
+            if (isSurveyInProgress(survey)) {
+                sendSurveyAbandonedEvent(survey, this._posthog)
+            }
+        }
+    }
+
     private _clearSurveyTimeout(surveyId: string) {
         const timeout = this._surveyTimeouts.get(surveyId)
         if (timeout) {
             clearTimeout(timeout)
             this._surveyTimeouts.delete(surveyId)
+        }
+    }
+
+    /**
+     * cancel a "pending" survey, i.e. one that is waiting to be displayed in
+     * the _surveyTimeouts queue
+     */
+    public cancelSurvey(surveyId: string): void {
+        // only works for surveys in the _surveyTimeouts queue...
+        if (!this._surveyTimeouts.has(surveyId)) {
+            return
+        }
+
+        logger.info(`Cancelled pending survey ${surveyId}`)
+        this._clearSurveyTimeout(surveyId)
+
+        // release focus - it was claimed when the delay timer started.
+        // "focus" != "survey is displayed"
+        if (this._surveyInFocus === surveyId) {
+            this._surveyInFocus = null
         }
     }
 
@@ -250,7 +286,7 @@ export class SurveyManager {
         const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
         const { shadow } = retrieveSurveyShadow(survey, this._posthog)
         if (delaySeconds <= 0) {
-            return Preact.render(
+            return render(
                 <SurveyPopup
                     posthog={this._posthog}
                     survey={survey}
@@ -260,11 +296,14 @@ export class SurveyManager {
             )
         }
         const timeoutId = setTimeout(() => {
+            // remove survey to keep `_surveyTimeouts` as a true list of "pending" surveys
+            this._surveyTimeouts.delete(survey.id)
+
             if (!doesSurveyUrlMatch(survey)) {
                 return this._removeSurveyFromFocus(survey)
             }
             // rendering with surveyPopupDelaySeconds = 0 because we're already handling the timeout here
-            Preact.render(
+            render(
                 <SurveyPopup
                     posthog={this._posthog}
                     survey={{ ...survey, appearance: { ...survey.appearance, surveyPopupDelaySeconds: 0 } }}
@@ -285,7 +324,7 @@ export class SurveyManager {
             return
         }
 
-        Preact.render(<FeedbackWidget posthog={this._posthog} survey={survey} key={survey.id} />, shadow)
+        render(<FeedbackWidget posthog={this._posthog} survey={survey} key={survey.id} />, shadow)
     }
 
     private _removeWidgetSelectorListener = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): void => {
@@ -383,7 +422,7 @@ export class SurveyManager {
 
     public renderPopover = (survey: Survey): void => {
         const { shadow } = retrieveSurveyShadow(survey, this._posthog)
-        Preact.render(
+        render(
             <SurveyPopup posthog={this._posthog} survey={survey} removeSurveyFromFocus={this._removeSurveyFromFocus} />,
             shadow
         )
@@ -394,7 +433,7 @@ export class SurveyManager {
             this._handleUrlPrefill(survey)
         }
 
-        Preact.render(
+        render(
             <SurveyPopup
                 posthog={this._posthog}
                 survey={survey}
@@ -412,7 +451,7 @@ export class SurveyManager {
         }
 
         try {
-            const { params, autoSubmit } = extractPrefillParamsFromUrl(window.location.search)
+            const { params } = extractPrefillParamsFromUrl(window.location.search)
 
             if (Object.keys(params).length === 0) {
                 return
@@ -429,21 +468,38 @@ export class SurveyManager {
 
             const submissionId = uuidv7()
 
+            // calculate which question to start at based on prefilled questions
+            const prefilledIndices = Object.keys(params).map((k) => parseInt(k, 10))
+            const { startQuestionIndex, skippedResponses } = calculatePrefillStartIndex(
+                survey.questions,
+                prefilledIndices,
+                responses
+            )
+            const isSurveyCompleted = startQuestionIndex >= survey.questions.length
+
             setInProgressSurveyState(survey, {
                 surveySubmissionId: submissionId,
                 responses: responses,
-                lastQuestionIndex: 0,
+                lastQuestionIndex: isSurveyCompleted ? survey.questions.length - 1 : startQuestionIndex,
             })
 
             logger.info('[Survey Prefill] Stored prefilled responses in localStorage')
 
-            const shouldAutoSubmit =
-                autoSubmit &&
-                this._posthog.config.surveys?.autoSubmitIfComplete &&
-                allRequiredQuestionsFilled(survey, responses)
-
-            if (shouldAutoSubmit) {
-                this._scheduleAutoSubmit(survey, responses, submissionId)
+            /**
+             * auto-submit some survey events on pageload only if:
+             * 1) survey is complete, OR
+             * 2) partial responses are enabled AND the skipped questions were set to auto-submit
+             */
+            const shouldAutoSubmitPrefilled =
+                Object.keys(skippedResponses).length > 0 && survey.enable_partial_responses
+            if (shouldAutoSubmitPrefilled || isSurveyCompleted) {
+                sendSurveyEvent({
+                    responses: isSurveyCompleted ? responses : skippedResponses,
+                    survey,
+                    surveySubmissionId: submissionId,
+                    posthog: this._posthog,
+                    isSurveyCompleted,
+                })
             }
 
             // Mark this survey as having been prefilled
@@ -451,24 +507,6 @@ export class SurveyManager {
         } catch (error) {
             logger.error('[Survey Prefill] Error handling URL prefill:', error)
         }
-    }
-
-    private _scheduleAutoSubmit(survey: Survey, responses: Record<string, any>, submissionId: string): void {
-        const delay = this._posthog.config.surveys?.autoSubmitDelay ?? 800
-
-        logger.info('[Survey Prefill] Auto-submit scheduled')
-
-        this._autoSubmitTimeout = setTimeout(() => {
-            logger.info('[Survey Prefill] Auto-submitting survey')
-
-            sendSurveyEvent({
-                responses,
-                survey,
-                surveySubmissionId: submissionId,
-                posthog: this._posthog,
-                isSurveyCompleted: true,
-            })
-        }, delay)
     }
 
     private _isSurveyFeatureFlagEnabled(flagKey: string | null, flagVariant: string | undefined = undefined) {
@@ -656,7 +694,7 @@ export class SurveyManager {
         try {
             const shadowContainer = document.querySelector(getSurveyContainerClass(survey, true))
             if (shadowContainer?.shadowRoot) {
-                Preact.render(null, shadowContainer.shadowRoot)
+                render(null, shadowContainer.shadowRoot)
             }
             shadowContainer?.remove()
         } catch (error) {
@@ -669,16 +707,8 @@ export class SurveyManager {
             logger.error(`Survey ${survey.id} is not in focus. Cannot remove survey ${survey.id}.`)
         }
         this._clearSurveyTimeout(survey.id)
-        this._clearAutoSubmitTimeout()
         this._surveyInFocus = null
         this._removeSurveyFromDom(survey)
-    }
-
-    private _clearAutoSubmitTimeout(): void {
-        if (this._autoSubmitTimeout) {
-            clearTimeout(this._autoSubmitTimeout)
-            this._autoSubmitTimeout = undefined
-        }
     }
 
     // Expose internal state and methods for testing
@@ -698,7 +728,7 @@ export class SurveyManager {
     }
 }
 
-const DEFAULT_PREVIEW_POSITION_STYLES: React.CSSProperties = {
+const DEFAULT_PREVIEW_POSITION_STYLES: JSX.CSSProperties = {
     position: 'relative',
     left: 'unset',
     right: 'unset',
@@ -721,7 +751,7 @@ export const renderSurveysPreview = ({
     forceDisableHtml?: boolean
     onPreviewSubmit?: (res: string | string[] | number | null) => void
     posthog?: PostHog
-    positionStyles?: React.CSSProperties
+    positionStyles?: JSX.CSSProperties
 }) => {
     const currentStyle = parentElement.querySelector('style[data-ph-survey-style]')
     if (currentStyle) {
@@ -732,7 +762,7 @@ export const renderSurveysPreview = ({
         parentElement.appendChild(stylesheet)
         addSurveyCSSVariablesToElement(parentElement, survey.type, survey.appearance)
     }
-    Preact.render(
+    render(
         <SurveyPopup
             survey={survey}
             forceDisableHtml={forceDisableHtml}
@@ -760,7 +790,7 @@ export const renderFeedbackWidgetPreview = ({
         addSurveyCSSVariablesToElement(root, survey.type, survey.appearance)
     }
 
-    Preact.render(<FeedbackWidget forceDisableHtml={forceDisableHtml} survey={survey} readOnly={true} />, root)
+    render(<FeedbackWidget forceDisableHtml={forceDisableHtml} survey={survey} readOnly={true} />, root)
 }
 
 // This is the main exported function
@@ -898,7 +928,8 @@ export function usePopupVisibility(
     millisecondDelay: number,
     isPreviewMode: boolean,
     removeSurveyFromFocus: (survey: SurveyWithTypeAndAppearance) => void,
-    surveyContainerRef?: React.RefObject<HTMLDivElement>
+    isPopup: boolean,
+    surveyContainerRef?: RefObject<HTMLDivElement>
 ) {
     const [isPopupVisible, setIsPopupVisible] = useState(
         isPreviewMode || millisecondDelay === 0 || survey.type === SurveyType.ExternalSurvey
@@ -907,7 +938,7 @@ export function usePopupVisibility(
 
     const hidePopupWithViewTransition = () => {
         const removeDOMAndHidePopup = () => {
-            if (survey.type === SurveyType.Popover) {
+            if (isPopup) {
                 removeSurveyFromFocus(survey)
             }
             setIsPopupVisible(false)
@@ -1013,7 +1044,7 @@ interface SurveyPopupProps {
     survey: Survey
     forceDisableHtml?: boolean
     posthog?: PostHog
-    style?: React.CSSProperties
+    style?: JSX.CSSProperties
     previewPageIndex?: number | undefined
     removeSurveyFromFocus?: (survey: SurveyWithTypeAndAppearance) => void
     isPopup?: boolean
@@ -1057,6 +1088,26 @@ function getPopoverPosition(
     }
 }
 
+function getTabPositionStyles(position: SurveyTabPosition = SurveyTabPosition.Right): JSX.CSSProperties {
+    switch (position) {
+        case SurveyTabPosition.Top:
+            return { top: '0', left: '50%', transform: 'translateX(-50%)' }
+        case SurveyTabPosition.Left:
+            return { top: '50%', left: '0', transform: 'rotate(90deg) translateY(-100%)', transformOrigin: 'left top' }
+        case SurveyTabPosition.Bottom: // bottom center
+            return { bottom: '0', left: '50%', transform: 'translateX(-50%)' }
+        default:
+        case SurveyTabPosition.Right:
+            // not perfectly centered vertically, to avoid a "breaking" change
+            return {
+                top: '50%',
+                right: '0',
+                transform: 'rotate(-90deg) translateY(-100%)',
+                transformOrigin: 'right top',
+            }
+    }
+}
+
 export function SurveyPopup({
     survey,
     forceDisableHtml,
@@ -1081,6 +1132,7 @@ export function SurveyPopup({
         surveyPopupDelayMilliseconds,
         isPreviewMode,
         removeSurveyFromFocus,
+        isPopup,
         surveyContainerRef
     )
 
@@ -1222,9 +1274,11 @@ export function Questions({
         return null
     }
 
+    const renderCancelButton = isPopup && survey.appearance?.hideCancelButton !== true
+
     return (
         <form className="survey-form" name="surveyForm">
-            {isPopup && (
+            {renderCancelButton && (
                 <Cancel
                     onClick={() => {
                         onPopupSurveyDismissed()
@@ -1266,7 +1320,7 @@ export function FeedbackWidget({
 }): JSX.Element | null {
     const [isFeedbackButtonVisible, setIsFeedbackButtonVisible] = useState(true)
     const [showSurvey, setShowSurvey] = useState(false)
-    const [styleOverrides, setStyleOverrides] = useState<React.CSSProperties>({})
+    const [styleOverrides, setStyleOverrides] = useState<JSX.CSSProperties>({})
 
     const toggleSurvey = () => {
         setShowSurvey(!showSurvey)
@@ -1333,9 +1387,14 @@ export function FeedbackWidget({
     }
 
     return (
-        <Preact.Fragment>
+        <Fragment>
             {survey.appearance?.widgetType === 'tab' && (
-                <button className="ph-survey-widget-tab" onClick={toggleSurvey} disabled={readOnly}>
+                <button
+                    className={`ph-survey-widget-tab ${survey.appearance?.tabPosition === SurveyTabPosition.Top ? 'widget-tab-top' : ''}`}
+                    onClick={toggleSurvey}
+                    disabled={readOnly}
+                    style={getTabPositionStyles(survey.appearance?.tabPosition)}
+                >
                     {survey.appearance?.widgetLabel || ''}
                 </button>
             )}
@@ -1349,7 +1408,7 @@ export function FeedbackWidget({
                     onCloseConfirmationMessage={resetShowSurvey}
                 />
             )}
-        </Preact.Fragment>
+        </Fragment>
     )
 }
 

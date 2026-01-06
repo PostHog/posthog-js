@@ -4,7 +4,7 @@ import { filterActiveFeatureFlags, parseFlagsResponse, PostHogFeatureFlags } fro
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { PostHogConfig } from '../types'
-import { createMockPostHog } from './helpers/posthog-instance'
+import { createMockPostHog, createPosthogInstance } from './helpers/posthog-instance'
 
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
@@ -1169,6 +1169,136 @@ describe('featureflags', () => {
         })
     })
 
+    describe('device_id in flags requests', () => {
+        beforeEach(() => {
+            // Clear persistence before each test in this suite
+            instance.persistence.unregister('$device_id')
+            instance.persistence.unregister('$stored_person_properties')
+            instance.persistence.unregister('$stored_group_properties')
+
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 200,
+                    json: {
+                        featureFlags: {
+                            first: 'variant-1',
+                            second: true,
+                        },
+                    },
+                })
+            )
+        })
+
+        afterEach(() => {
+            // Clean up after each test
+            instance.persistence.unregister('$device_id')
+            instance.persistence.unregister('$stored_person_properties')
+            instance.persistence.unregister('$stored_group_properties')
+        })
+
+        it('should include device_id in flags request when available', () => {
+            instance.persistence.register({
+                $device_id: 'test-device-uuid-123',
+            })
+
+            featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                $device_id: 'test-device-uuid-123',
+                person_properties: {},
+            })
+        })
+
+        it('should omit device_id when it is null (cookieless mode)', () => {
+            instance.persistence.register({
+                $device_id: null,
+            })
+
+            featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                person_properties: {},
+            })
+            expect(instance._send_request.mock.calls[0][0].data).not.toHaveProperty('$device_id')
+        })
+
+        it('should omit device_id when it is undefined', () => {
+            // Don't register device_id at all
+            featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                person_properties: {},
+            })
+            expect(instance._send_request.mock.calls[0][0].data).not.toHaveProperty('$device_id')
+        })
+
+        it('should include device_id along with $anon_distinct_id on identify', () => {
+            instance.persistence.register({
+                $device_id: 'device-uuid-456',
+            })
+
+            featureFlags.setAnonymousDistinctId('anon_id_789')
+            featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                $device_id: 'device-uuid-456',
+                $anon_distinct_id: 'anon_id_789',
+                person_properties: {},
+            })
+        })
+
+        it('should include device_id with person_properties', () => {
+            instance.persistence.register({
+                $device_id: 'device-uuid-999',
+            })
+
+            featureFlags.setPersonPropertiesForFlags({ plan: 'pro', beta_tester: true })
+            jest.runAllTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                $device_id: 'device-uuid-999',
+                person_properties: { plan: 'pro', beta_tester: true },
+            })
+        })
+
+        it('should include device_id with group_properties', () => {
+            instance.persistence.register({
+                $device_id: 'device-uuid-888',
+            })
+
+            featureFlags.setGroupPropertiesForFlags({ company: { name: 'Acme', seats: 50 } })
+            jest.runAllTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                $device_id: 'device-uuid-888',
+                person_properties: {},
+                group_properties: { company: { name: 'Acme', seats: 50 } },
+            })
+        })
+    })
+
     describe('reloadFeatureFlags', () => {
         beforeEach(() => {
             instance._send_request = jest.fn().mockImplementation(({ callback }) =>
@@ -1704,8 +1834,9 @@ describe('featureflags', () => {
         })
     })
 
-    describe('Feature Flag Request ID', () => {
+    describe('Feature Flag Request ID and Evaluated At', () => {
         const TEST_REQUEST_ID = 'test-request-id-123'
+        const TEST_EVALUATED_AT = 1234567890
 
         it('saves requestId from /flags response', () => {
             featureFlags.receivedFeatureFlags({
@@ -1715,6 +1846,16 @@ describe('featureflags', () => {
             })
 
             expect(instance.get_property('$feature_flag_request_id')).toEqual(TEST_REQUEST_ID)
+        })
+
+        it('saves evaluatedAt from /flags response', () => {
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                evaluatedAt: TEST_EVALUATED_AT,
+            })
+
+            expect(instance.get_property('$feature_flag_evaluated_at')).toEqual(TEST_EVALUATED_AT)
         })
 
         it('includes requestId in feature flag called event', () => {
@@ -1740,12 +1881,36 @@ describe('featureflags', () => {
             )
         })
 
+        it('includes evaluatedAt in feature flag called event', () => {
+            // Setup flags with evaluatedAt
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                evaluatedAt: TEST_EVALUATED_AT,
+            })
+            featureFlags._hasLoadedFlags = true
+
+            // Test flag call
+            featureFlags.getFeatureFlag('test-flag')
+
+            // Verify capture call includes evaluatedAt
+            expect(instance.capture).toHaveBeenCalledWith(
+                '$feature_flag_called',
+                expect.objectContaining({
+                    $feature_flag: 'test-flag',
+                    $feature_flag_response: true,
+                    $feature_flag_evaluated_at: TEST_EVALUATED_AT,
+                })
+            )
+        })
+
         it('includes version in feature flag called event', () => {
-            // Setup flags with requestId
+            // Setup flags with requestId and evaluatedAt
             featureFlags.receivedFeatureFlags({
                 featureFlags: { 'test-flag': true },
                 featureFlagPayloads: {},
                 requestId: TEST_REQUEST_ID,
+                evaluatedAt: TEST_EVALUATED_AT,
                 flags: {
                     'test-flag': {
                         key: 'test-flag',
@@ -1769,13 +1934,14 @@ describe('featureflags', () => {
             // Test flag call
             featureFlags.getFeatureFlag('test-flag')
 
-            // Verify capture call includes requestId
+            // Verify capture call includes requestId and evaluatedAt
             expect(instance.capture).toHaveBeenCalledWith(
                 '$feature_flag_called',
                 expect.objectContaining({
                     $feature_flag: 'test-flag',
                     $feature_flag_response: 'variant-1',
                     $feature_flag_request_id: TEST_REQUEST_ID,
+                    $feature_flag_evaluated_at: TEST_EVALUATED_AT,
                     $feature_flag_version: 42,
                     $feature_flag_reason: 'Matched condition set 1',
                     $feature_flag_id: 23,
@@ -1811,6 +1977,38 @@ describe('featureflags', () => {
                 '$feature_flag_called',
                 expect.objectContaining({
                     $feature_flag_request_id: NEW_REQUEST_ID,
+                })
+            )
+        })
+
+        it('updates evaluatedAt when new /flags response is received', () => {
+            // First /flags response
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                evaluatedAt: TEST_EVALUATED_AT,
+            })
+
+            expect(instance.get_property('$feature_flag_evaluated_at')).toEqual(TEST_EVALUATED_AT)
+
+            // Second /flags response with new timestamp
+            const NEW_EVALUATED_AT = 9876543210
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                evaluatedAt: NEW_EVALUATED_AT,
+            })
+
+            expect(instance.get_property('$feature_flag_evaluated_at')).toEqual(NEW_EVALUATED_AT)
+
+            // Verify new timestamp is used in events
+            featureFlags._hasLoadedFlags = true
+            featureFlags.getFeatureFlag('test-flag')
+
+            expect(instance.capture).toHaveBeenCalledWith(
+                '$feature_flag_called',
+                expect.objectContaining({
+                    $feature_flag_evaluated_at: NEW_EVALUATED_AT,
                 })
             )
         })
@@ -2302,5 +2500,188 @@ describe('getRemoteConfigPayload', () => {
                 })
             )
         })
+    })
+})
+
+describe('updateFlags', () => {
+    beforeEach(() => {
+        jest.spyOn(window.console, 'warn').mockImplementation()
+    })
+
+    it('should update feature flags without making a network request', async () => {
+        const posthog = await createPosthogInstance()
+
+        posthog.updateFlags({
+            'test-flag': true,
+            'variant-flag': 'control',
+        })
+
+        expect(posthog.getFeatureFlag('test-flag')).toBe(true)
+        expect(posthog.getFeatureFlag('variant-flag')).toBe('control')
+        expect(posthog.isFeatureEnabled('test-flag')).toBe(true)
+    })
+
+    it('should update feature flags with payloads', async () => {
+        const posthog = await createPosthogInstance()
+
+        posthog.updateFlags({ 'test-flag': true }, { 'test-flag': { some: 'payload' } })
+
+        expect(posthog.getFeatureFlagPayload('test-flag')).toEqual({ some: 'payload' })
+    })
+
+    // Note: Falsy payload values (null, 0, false, '') are filtered out by normalizeFlagsResponse
+    // This is consistent with existing SDK behavior for all feature flag payloads
+
+    it('should fire onFeatureFlags callbacks when flags are updated', async () => {
+        const posthog = await createPosthogInstance()
+        const callback = jest.fn()
+        posthog.onFeatureFlags(callback)
+
+        posthog.updateFlags({ 'new-flag': true })
+
+        expect(callback).toHaveBeenCalledWith(['new-flag'], { 'new-flag': true }, { errorsLoading: undefined })
+    })
+
+    it('should replace existing flags by default', async () => {
+        const posthog = await createPosthogInstance()
+
+        // Set initial flags
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': true })
+
+        expect(posthog.getFeatureFlag('flag-a')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(true)
+
+        // Update without merge - should replace
+        posthog.updateFlags({ 'flag-c': true })
+
+        expect(posthog.getFeatureFlag('flag-c')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-a')).toBe(undefined)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(undefined)
+    })
+
+    it('should merge flags when merge option is true', async () => {
+        const posthog = await createPosthogInstance()
+
+        // Set initial flags
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': true })
+
+        expect(posthog.getFeatureFlag('flag-a')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(true)
+
+        // Update with merge - should keep existing flags
+        posthog.updateFlags({ 'flag-c': true }, undefined, { merge: true })
+
+        expect(posthog.getFeatureFlag('flag-a')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-c')).toBe(true)
+    })
+
+    it('should merge payloads when merge option is true', async () => {
+        const posthog = await createPosthogInstance()
+
+        // Set initial flags with payloads
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': true }, { 'flag-a': { data: 'a' }, 'flag-b': { data: 'b' } })
+
+        expect(posthog.getFeatureFlagPayload('flag-a')).toEqual({ data: 'a' })
+        expect(posthog.getFeatureFlagPayload('flag-b')).toEqual({ data: 'b' })
+
+        // Update with merge - should keep existing payloads
+        posthog.updateFlags({ 'flag-c': true }, { 'flag-c': { data: 'c' } }, { merge: true })
+
+        expect(posthog.getFeatureFlagPayload('flag-a')).toEqual({ data: 'a' })
+        expect(posthog.getFeatureFlagPayload('flag-b')).toEqual({ data: 'b' })
+        expect(posthog.getFeatureFlagPayload('flag-c')).toEqual({ data: 'c' })
+    })
+
+    it('should override existing flag values when merging', async () => {
+        const posthog = await createPosthogInstance()
+
+        // Set initial flags
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': 'variant-1' })
+
+        // Update flag-a with merge - should override just flag-a
+        posthog.updateFlags({ 'flag-a': false }, undefined, { merge: true })
+
+        expect(posthog.getFeatureFlag('flag-a')).toBe(false)
+        expect(posthog.getFeatureFlag('flag-b')).toBe('variant-1')
+    })
+
+    it('should mark flags as loaded after update', async () => {
+        const posthog = await createPosthogInstance()
+
+        posthog.updateFlags({ 'test-flag': true })
+
+        expect(posthog.featureFlags._hasLoadedFlags).toBe(true)
+    })
+
+    it('should work with advanced_disable_flags enabled', async () => {
+        const posthog = await createPosthogInstance(undefined, {
+            advanced_disable_flags: true,
+        })
+
+        posthog.updateFlags({ 'test-flag': true })
+
+        expect(posthog.isFeatureEnabled('test-flag')).toBe(true)
+    })
+
+    it('should not make any network requests', async () => {
+        const posthog = await createPosthogInstance()
+        const sendRequestSpy = jest.spyOn(posthog, '_send_request')
+
+        posthog.updateFlags({ 'test-flag': true })
+
+        expect(sendRequestSpy).not.toHaveBeenCalled()
+    })
+
+    it('should handle empty flags object', async () => {
+        const posthog = await createPosthogInstance()
+
+        // Set initial flags
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': 'variant-1' })
+        expect(posthog.getFeatureFlag('flag-a')).toBe(true)
+
+        // Update with empty object - should clear all flags
+        posthog.updateFlags({})
+
+        expect(posthog.getFeatureFlag('flag-a')).toBe(undefined)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(undefined)
+        expect(posthog.featureFlags.getFlags()).toEqual([])
+    })
+
+    it('should persist flags to storage', async () => {
+        const posthog = await createPosthogInstance()
+
+        posthog.updateFlags(
+            { 'persisted-flag': true, 'variant-flag': 'control' },
+            { 'persisted-flag': { data: 'test' } }
+        )
+
+        // Verify persistence was updated with correct data
+        expect(posthog.persistence?.props.$feature_flag_details).toEqual({
+            'persisted-flag': {
+                key: 'persisted-flag',
+                enabled: true,
+                variant: undefined,
+                reason: undefined,
+                metadata: {
+                    id: 0,
+                    version: undefined,
+                    description: undefined,
+                    payload: { data: 'test' },
+                },
+            },
+            'variant-flag': {
+                key: 'variant-flag',
+                enabled: true,
+                variant: 'control',
+                reason: undefined,
+                metadata: undefined,
+            },
+        })
+        expect(posthog.persistence?.props.$enabled_feature_flags).toEqual({
+            'persisted-flag': true,
+            'variant-flag': 'control',
+        })
+        expect(posthog.persistence?.props.$active_feature_flags).toEqual(['persisted-flag', 'variant-flag'])
     })
 })

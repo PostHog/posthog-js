@@ -1,10 +1,10 @@
 import { PostHog } from '../../posthog-core'
-import { ActionStepStringMatching, ActionStepType, SurveyActionType, SurveyElement } from '../../posthog-surveys-types'
+import { ActionStepType, PropertyFilters, SurveyActionType, SurveyElement } from '../../posthog-surveys-types'
 import { SimpleEventEmitter } from '../../utils/simple-event-emitter'
-import { CaptureResult } from '../../types'
-import { isUndefined } from '@posthog/core'
-import { window } from '../../utils/globals'
-import { isMatchingRegex } from '../../utils/regex-utils'
+import { CaptureResult, PropertyMatchType } from '../../types'
+import { isArray, isUndefined } from '@posthog/core'
+import { matchPropertyFilters } from '../../utils/property-utils'
+import { extractTexts, extractHref, matchString, matchTexts } from '../../utils/elements-chain-utils'
 
 export class ActionMatcher {
     private readonly _actionRegistry?: Set<SurveyActionType>
@@ -94,7 +94,10 @@ export class ActionMatcher {
 
     private _checkStep = (event?: CaptureResult, step?: ActionStepType): boolean => {
         return (
-            this._checkStepEvent(event, step) && this._checkStepUrl(event, step) && this._checkStepElement(event, step)
+            this._checkStepEvent(event, step) &&
+            this._checkStepUrl(event, step) &&
+            this._checkStepElement(event, step) &&
+            this._checkStepProperties(event, step)
         )
     }
 
@@ -111,98 +114,108 @@ export class ActionMatcher {
         if (step?.url) {
             const eventUrl = event?.properties?.$current_url
             if (!eventUrl || typeof eventUrl !== 'string') {
-                return false // URL IS UNKNOWN
+                return false
             }
-            if (!ActionMatcher._matchString(eventUrl, step?.url, step?.url_matching || 'contains')) {
-                return false // URL IS A MISMATCH
+            if (!matchString(eventUrl, step.url, step.url_matching || 'contains')) {
+                return false
             }
         }
         return true
-    }
-
-    private static _matchString(url: string, pattern: string, matching: ActionStepStringMatching): boolean {
-        switch (matching) {
-            case 'regex':
-                return !!window && isMatchingRegex(url, pattern)
-            case 'exact':
-                return pattern === url
-            case 'contains':
-                // Simulating SQL LIKE behavior (_ = any single character, % = any zero or more characters)
-                // eslint-disable-next-line no-case-declarations
-                const adjustedRegExpStringPattern = ActionMatcher._escapeStringRegexp(pattern)
-                    .replace(/_/g, '.')
-                    .replace(/%/g, '.*')
-                return isMatchingRegex(url, adjustedRegExpStringPattern)
-
-            default:
-                return false
-        }
-    }
-
-    private static _escapeStringRegexp(pattern: string): string {
-        // Escape characters with special meaning either inside or outside character sets.
-        // Use a simple backslash escape when it’s always valid, and a `\xnn` escape when the simpler form would be disallowed by Unicode patterns’ stricter grammar.
-        return pattern.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&').replace(/-/g, '\\x2d')
     }
 
     private _checkStepElement(event?: CaptureResult, step?: ActionStepType): boolean {
-        // CHECK CONDITIONS, OTHERWISE SKIPPED
-        if (step?.href || step?.tag_name || step?.text) {
-            const elements = this._getElementsList(event)
-            if (
-                !elements.some((element) => {
-                    if (
-                        step?.href &&
-                        !ActionMatcher._matchString(element.href || '', step?.href, step?.href_matching || 'exact')
-                    ) {
-                        return false // ELEMENT HREF IS A MISMATCH
-                    }
-                    if (step?.tag_name && element.tag_name !== step?.tag_name) {
-                        return false // ELEMENT TAG NAME IS A MISMATCH
-                    }
-                    if (
-                        step?.text &&
-                        !(
-                            ActionMatcher._matchString(
-                                element.text || '',
-                                step?.text,
-                                step?.text_matching || 'exact'
-                            ) ||
-                            ActionMatcher._matchString(
-                                element.$el_text || '',
-                                step?.text,
-                                step?.text_matching || 'exact'
-                            )
-                        )
-                    ) {
-                        return false // ELEMENT TEXT IS A MISMATCH
-                    }
-                    return true
-                })
-            ) {
-                // AT LEAST ONE ELEMENT MUST BE A SUBMATCH
+        if (!this._checkStepHref(event, step)) return false
+        if (!this._checkStepText(event, step)) return false
+        if (!this._checkStepSelector(event, step)) return false
+        return true
+    }
+
+    private _checkStepHref(event?: CaptureResult, step?: ActionStepType): boolean {
+        if (!step?.href) return true
+
+        const elements = this._getElementsList(event)
+        if (elements.length > 0) {
+            return elements.some((el) => matchString(el.href, step.href!, step.href_matching || 'exact'))
+        }
+
+        const chain = (event?.properties?.$elements_chain as string) || ''
+        if (chain) {
+            return matchString(extractHref(chain), step.href, step.href_matching || 'exact')
+        }
+
+        return false
+    }
+
+    private _checkStepText(event?: CaptureResult, step?: ActionStepType): boolean {
+        if (!step?.text) return true
+
+        const elements = this._getElementsList(event)
+        if (elements.length > 0) {
+            return elements.some(
+                (el) =>
+                    matchString(el.text, step.text!, step.text_matching || 'exact') ||
+                    matchString(el.$el_text, step.text!, step.text_matching || 'exact')
+            )
+        }
+
+        const chain = (event?.properties?.$elements_chain as string) || ''
+        if (chain) {
+            return matchTexts(extractTexts(chain), step.text, step.text_matching || 'exact')
+        }
+
+        return false
+    }
+
+    private _checkStepSelector(event?: CaptureResult, step?: ActionStepType): boolean {
+        if (!step?.selector) return true
+
+        // check exact match on $element_selectors from autocapture
+        const elementSelectors = event?.properties?.$element_selectors as string[] | undefined
+        if (elementSelectors?.includes(step.selector)) {
+            return true
+        }
+
+        // check against compiled regex
+        const chain = (event?.properties?.$elements_chain as string) || ''
+        if (step.selector_regex && chain) {
+            try {
+                return new RegExp(step.selector_regex).test(chain)
+            } catch {
                 return false
             }
         }
 
-        if (step?.selector) {
-            const elementSelectors = event?.properties?.$element_selectors as unknown as string[]
-            if (!elementSelectors) {
-                return false // SELECTOR IS A MISMATCH
-            }
-            if (!elementSelectors.includes(step?.selector)) {
-                return false // SELECTOR IS A MISMATCH
-            }
-        }
-
-        return true
+        return false
     }
 
     private _getElementsList(event?: CaptureResult): SurveyElement[] {
-        if (event?.properties.$elements == null) {
+        if (event?.properties?.$elements == null) {
             return []
         }
 
         return event?.properties.$elements as unknown as SurveyElement[]
+    }
+
+    private _checkStepProperties(event?: CaptureResult, step?: ActionStepType): boolean {
+        if (!step?.properties || step.properties.length === 0) {
+            return true
+        }
+
+        // transform to match same property format as normal events
+        const propertyFilters: PropertyFilters = step.properties.reduce<PropertyFilters>((acc, filter) => {
+            const values = isArray(filter.value)
+                ? filter.value.map(String)
+                : filter.value != null
+                  ? [String(filter.value)]
+                  : []
+
+            acc[filter.key] = {
+                values,
+                operator: (filter.operator || 'exact') as PropertyMatchType,
+            }
+            return acc
+        }, {})
+
+        return matchPropertyFilters(propertyFilters, event?.properties)
     }
 }

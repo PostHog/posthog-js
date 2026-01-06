@@ -21,7 +21,6 @@ export class ExceptionObserver {
     constructor(instance: PostHog) {
         this._instance = instance
         this._remoteEnabled = !!this._instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]
-        this._config = this._requiredConfig()
 
         // by default captures ten exceptions before rate limiting by exception type
         // refills at a rate of one token / 10 second period
@@ -33,7 +32,8 @@ export class ExceptionObserver {
             _logger: logger,
         })
 
-        this.startIfEnabled()
+        this._config = this._requiredConfig()
+        this.startIfEnabledOrStop()
     }
 
     private _requiredConfig(): Required<ExceptionAutoCaptureConfig> {
@@ -61,10 +61,13 @@ export class ExceptionObserver {
         )
     }
 
-    startIfEnabled(): void {
+    startIfEnabledOrStop(): void {
         if (this.isEnabled) {
             logger.info('enabled')
+            this._stopCapturing()
             this._loadScript(this._startCapturing)
+        } else {
+            this._stopCapturing()
         }
     }
 
@@ -128,7 +131,6 @@ export class ExceptionObserver {
 
         // store this in-memory in case persistence is disabled
         this._remoteEnabled = !!autocaptureExceptionsResponse || false
-        this._config = this._requiredConfig()
 
         if (this._instance.persistence) {
             this._instance.persistence.register({
@@ -136,7 +138,12 @@ export class ExceptionObserver {
             })
         }
 
-        this.startIfEnabled()
+        this._config = this._requiredConfig()
+        this.startIfEnabledOrStop()
+    }
+
+    onConfigChange() {
+        this._config = this._requiredConfig()
     }
 
     captureException(errorProperties: ErrorTracking.ErrorProperties) {

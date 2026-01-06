@@ -7,6 +7,7 @@
 // This key is deprecated, but we want to check for it to see whether aliasing is allowed.
 export const PEOPLE_DISTINCT_ID_KEY = '$people_distinct_id'
 export const DISTINCT_ID = 'distinct_id'
+export const DEVICE_ID = '$device_id'
 export const ALIAS_ID_KEY = '__alias'
 export const CAMPAIGN_IDS_KEY = '__cmpns'
 export const EVENT_TIMERS_KEY = '__timers'
@@ -17,6 +18,7 @@ export const ERROR_TRACKING_SUPPRESSION_RULES = '$error_tracking_suppression_rul
 export const ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS = '$error_tracking_capture_extension_exceptions'
 export const WEB_VITALS_ENABLED_SERVER_SIDE = '$web_vitals_enabled_server_side'
 export const DEAD_CLICKS_ENABLED_SERVER_SIDE = '$dead_clicks_enabled_server_side'
+export const PRODUCT_TOURS_ENABLED_SERVER_SIDE = '$product_tours_enabled_server_side'
 export const WEB_VITALS_ALLOWED_METRICS = '$web_vitals_allowed_metrics'
 export const SESSION_RECORDING_REMOTE_CONFIG = '$session_recording_remote_config'
 // @deprecated can be removed along with eager loaded replay
@@ -51,6 +53,8 @@ export const STORED_PERSON_PROPERTIES_KEY = '$stored_person_properties'
 export const STORED_GROUP_PROPERTIES_KEY = '$stored_group_properties'
 export const SURVEYS = '$surveys'
 export const SURVEYS_ACTIVATED = '$surveys_activated'
+export const PRODUCT_TOURS_ACTIVATED = '$product_tours_activated'
+export const CONVERSATIONS = '$conversations'
 export const FLAG_CALL_REPORTED = '$flag_call_reported'
 export const USER_STATE = '$user_state'
 export const CLIENT_SESSION_PROPS = '$client_session_props'
@@ -98,6 +102,11 @@ export const PERSISTENCE_RESERVED_PROPERTIES = [
     INITIAL_REFERRER_INFO,
     ENABLE_PERSON_PROCESSING,
     INITIAL_PERSON_INFO,
+    // Conversations keys (defined in lazy-loaded extension)
+    '$conversations_widget_session_id',
+    '$conversations_ticket_id',
+    '$conversations_widget_state',
+    '$conversations_user_traits',
 ]
 
 export const SURVEYS_REQUEST_TIMEOUT_MS = 10000

@@ -5,7 +5,15 @@
         },
         "build": {
             "dependsOn": ["^build"],
-            "inputs": ["src/**", "tsconfig.json", "package.json", ".babelrc", "babel.config.js", "rollup.config.mjs"],
+            "inputs": [
+                "src/**",
+                "tsconfig.json",
+                "package.json",
+                ".babelrc",
+                "babel.config.js",
+                "rollup.config.mjs",
+                "rslib.config.mjs"
+            ],
             "outputs": ["dist/**", "lib/**", "react/**"],
             "env": ["WRITE_MANGLED_PROPERTIES"]
         },
@@ -39,22 +47,8 @@
             "cache": false,
             "persistent": true
         },
-        "posthog-js#generate-references": {
+        "generate-references": {
             "dependsOn": ["build"],
-            "inputs": ["dist/**", "package.json", "scripts/**", "docs/**"],
-            "outputs": ["references/**"],
-            "cache": false
-        },
-        "posthog-node#generate-references": {
-            "dependsOn": ["build"],
-            "inputs": ["dist/**", "package.json", "scripts/**", "docs/**"],
-            "outputs": ["references/**"],
-            "cache": false
-        },
-        "posthog-react-native#generate-references": {
-            "dependsOn": ["build"],
-            "inputs": ["dist/**", "package.json", "scripts/**", "docs/**"],
-            "outputs": ["references/**"],
             "cache": false
         }
     }

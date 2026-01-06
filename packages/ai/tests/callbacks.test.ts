@@ -154,7 +154,7 @@ describe('LangChainCallbackHandler', () => {
     setLLMMetadataSpy.mockRestore()
   })
 
-  it('should subtract cache_read_tokens from input_tokens (standard case)', async () => {
+  it('should not subtract cache_read_tokens from input_tokens for OpenAI', async () => {
     const serialized = {
       lc: 1,
       type: 'constructor' as const,
@@ -174,7 +174,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMStart(serialized, prompts, runId, undefined, extraParams, undefined, metadata)
 
     // Mock LLM response with cache read tokens
-    // input_tokens=150 includes 100 cache_read tokens, so actual input is 50
+    // For OpenAI, input_tokens is already separate from cache_read tokens
     const llmResult = {
       generations: [
         [
@@ -186,7 +186,7 @@ describe('LangChainCallbackHandler', () => {
       ],
       llmOutput: {
         tokenUsage: {
-          promptTokens: 150, // Total includes cache reads
+          promptTokens: 150,
           completionTokens: 40,
           totalTokens: 190,
           prompt_tokens_details: {
@@ -202,13 +202,13 @@ describe('LangChainCallbackHandler', () => {
     const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
-    // Input tokens should be reduced: 150 - 100 = 50
-    expect(captureCall[0].properties['$ai_input_tokens']).toBe(50)
+    // Input tokens should NOT be reduced for OpenAI: 150 (no subtraction)
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(150)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(40)
     expect(captureCall[0].properties['$ai_cache_read_tokens']).toBe(100)
   })
 
-  it('should prevent negative input_tokens when cache_read_tokens >= input_tokens', async () => {
+  it('should not subtract for OpenAI even when cache_read_tokens >= input_tokens', async () => {
     const serialized = {
       lc: 1,
       type: 'constructor' as const,
@@ -228,6 +228,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMStart(serialized, prompts, runId, undefined, extraParams, undefined, metadata)
 
     // Edge case: cache_read_tokens >= input_tokens
+    // For OpenAI, no subtraction should happen
     const llmResult = {
       generations: [
         [
@@ -255,8 +256,8 @@ describe('LangChainCallbackHandler', () => {
     const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
-    // Input tokens should be 0, not negative: max(80 - 100, 0) = 0
-    expect(captureCall[0].properties['$ai_input_tokens']).toBe(0)
+    // Input tokens should NOT be reduced for OpenAI: 80 (no subtraction)
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(80)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(20)
     expect(captureCall[0].properties['$ai_cache_read_tokens']).toBe(100)
   })
@@ -362,5 +363,165 @@ describe('LangChainCallbackHandler', () => {
     expect(captureCall[0].properties['$ai_input_tokens']).toBe(0)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(10)
     expect(captureCall[0].properties['$ai_cache_read_tokens']).toBe(50)
+  })
+
+  it('should subtract cache_read_tokens from input_tokens for Anthropic provider', async () => {
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'chat_models', 'anthropic', 'ChatAnthropic'],
+      kwargs: {},
+    }
+
+    const prompts = ['Test with Anthropic caching']
+    const runId = 'run_anthropic_cache_test'
+    const metadata = { ls_model_name: 'claude-3-sonnet-20240229', ls_provider: 'anthropic' }
+    const extraParams = {
+      invocation_params: {
+        temperature: 0.7,
+      },
+    }
+
+    handler.handleLLMStart(serialized, prompts, runId, undefined, extraParams, undefined, metadata)
+
+    // For Anthropic, LangChain reports input_tokens as sum of input + cache_read
+    // input_tokens=1200 includes 800 cache_read tokens, so actual input is 400
+    const llmResult = {
+      generations: [
+        [
+          {
+            text: 'Response from Anthropic with caching.',
+            message: new AIMessage('Response from Anthropic with caching.'),
+          },
+        ],
+      ],
+      llmOutput: {
+        tokenUsage: {
+          promptTokens: 1200, // Sum of actual input (400) + cache read (800)
+          completionTokens: 50,
+          totalTokens: 1250,
+          prompt_tokens_details: {
+            cached_tokens: 800, // 800 tokens read from cache
+          },
+        },
+      },
+    }
+
+    handler.handleLLMEnd(llmResult, runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+    expect(captureCall[0].event).toBe('$ai_generation')
+    // Input tokens should be reduced for Anthropic: 1200 - 800 = 400
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(400)
+    expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
+    expect(captureCall[0].properties['$ai_cache_read_tokens']).toBe(800)
+  })
+
+  it('should subtract cache_read_tokens when model name contains "anthropic"', async () => {
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'chat_models', 'ChatOpenAI'],
+      kwargs: {},
+    }
+
+    const prompts = ['Test with Anthropic model via different provider']
+    const runId = 'run_anthropic_model_test'
+    // Provider might not be "anthropic" but model name contains it
+    const metadata = { ls_model_name: 'anthropic/claude-3-opus', ls_provider: 'openrouter' }
+    const extraParams = {
+      invocation_params: {
+        temperature: 0.7,
+      },
+    }
+
+    handler.handleLLMStart(serialized, prompts, runId, undefined, extraParams, undefined, metadata)
+
+    const llmResult = {
+      generations: [
+        [
+          {
+            text: 'Response.',
+            message: new AIMessage('Response.'),
+          },
+        ],
+      ],
+      llmOutput: {
+        tokenUsage: {
+          promptTokens: 500,
+          completionTokens: 30,
+          totalTokens: 530,
+          prompt_tokens_details: {
+            cached_tokens: 200,
+          },
+        },
+      },
+    }
+
+    handler.handleLLMEnd(llmResult, runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+    expect(captureCall[0].event).toBe('$ai_generation')
+    // Should subtract because model name contains "anthropic": 500 - 200 = 300
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(300)
+    expect(captureCall[0].properties['$ai_output_tokens']).toBe(30)
+    expect(captureCall[0].properties['$ai_cache_read_tokens']).toBe(200)
+  })
+
+  it('should prevent negative input_tokens for Anthropic when cache_read >= input', async () => {
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'chat_models', 'anthropic', 'ChatAnthropic'],
+      kwargs: {},
+    }
+
+    const prompts = ['Edge case']
+    const runId = 'run_anthropic_negative_test'
+    const metadata = { ls_model_name: 'claude-3-sonnet', ls_provider: 'anthropic' }
+    const extraParams = {
+      invocation_params: {
+        temperature: 0.7,
+      },
+    }
+
+    handler.handleLLMStart(serialized, prompts, runId, undefined, extraParams, undefined, metadata)
+
+    // Edge case: cache_read >= input_tokens
+    const llmResult = {
+      generations: [
+        [
+          {
+            text: 'Response.',
+            message: new AIMessage('Response.'),
+          },
+        ],
+      ],
+      llmOutput: {
+        tokenUsage: {
+          promptTokens: 100,
+          completionTokens: 20,
+          totalTokens: 120,
+          prompt_tokens_details: {
+            cached_tokens: 150, // More than promptTokens
+          },
+        },
+      },
+    }
+
+    handler.handleLLMEnd(llmResult, runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+    expect(captureCall[0].event).toBe('$ai_generation')
+    // Should be max(100 - 150, 0) = 0
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(0)
+    expect(captureCall[0].properties['$ai_output_tokens']).toBe(20)
+    expect(captureCall[0].properties['$ai_cache_read_tokens']).toBe(150)
   })
 })

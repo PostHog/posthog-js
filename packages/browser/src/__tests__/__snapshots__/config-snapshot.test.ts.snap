@@ -98,6 +98,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "undefined",
     "string"
   ],
+  "cookie_persisted_properties": [
+    "undefined",
+    "readonly string[]"
+  ],
   "loaded": "(posthog_instance: PostHog) => void",
   "save_referrer": [
     "false",
@@ -159,6 +163,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true"
   ],
+  "disable_product_tours": [
+    "false",
+    "true"
+  ],
   "surveys": [
     "undefined",
     {
@@ -177,6 +185,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
         "number"
       ]
     }
+  ],
+  "disable_conversations": [
+    "false",
+    "true"
   ],
   "disable_web_experiments": [
     "false",
@@ -544,7 +556,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true",
     [
-      "{ scroll_threshold_ms?: number | undefined; selection_change_threshold_ms?: number | undefined; mutation_threshold_ms?: number | undefined; __onCapture?: ((click: DeadClickCandidate, properties: Properties) => void) | undefined; }",
+      "{ scroll_threshold_ms?: number | undefined; selection_change_threshold_ms?: number | undefined; mutation_threshold_ms?: number | undefined; capture_clicks_with_modifier_keys?: boolean | undefined; __onCapture?: ((click: DeadClickCandidate, properties: Properties) => void) | undefined; }",
       "Pick<AutocaptureConfig, \\"element_attribute_ignorelist\\">"
     ]
   ],

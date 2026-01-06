@@ -1,5 +1,170 @@
 # posthog-react-native
 
+## 4.17.2
+
+### Patch Changes
+
+- [#2833](https://github.com/PostHog/posthog-js/pull/2833) [`c7c3140`](https://github.com/PostHog/posthog-js/commit/c7c3140a20957d71072f355be4744a6cdb315360) Thanks [@ioannisj](https://github.com/ioannisj)! - fix expo web export build error
+  (2025-12-31)
+
+## 4.17.1
+
+### Patch Changes
+
+- [#2809](https://github.com/PostHog/posthog-js/pull/2809) [`8fd7c76`](https://github.com/PostHog/posthog-js/commit/8fd7c766efbc4c9445c4ce72cfb6b761520e7f1f) Thanks [@adboio](https://github.com/adboio)! - add control for keyboard avoiding behavior on android
+  (2025-12-29)
+
+## 4.17.0
+
+### Minor Changes
+
+- [#2787](https://github.com/PostHog/posthog-js/pull/2787) [`b676b4d`](https://github.com/PostHog/posthog-js/commit/b676b4d7342c8c3b64960aa55630b2810366014e) Thanks [@lucasheriques](https://github.com/lucasheriques)! - feat: allow customizing text colors on web and react native
+  (2025-12-22)
+
+### Patch Changes
+
+- [#2791](https://github.com/PostHog/posthog-js/pull/2791) [`3e533de`](https://github.com/PostHog/posthog-js/commit/3e533de1e8b52f64fa28762114f4e279d2c55406) Thanks [@adboio](https://github.com/adboio)! - surveys fix: do not dismiss keyboard on submit button tap
+  (2025-12-22)
+- Updated dependencies [[`b676b4d`](https://github.com/PostHog/posthog-js/commit/b676b4d7342c8c3b64960aa55630b2810366014e)]:
+  - @posthog/core@1.9.0
+
+## 4.16.2
+
+### Patch Changes
+
+- [#2769](https://github.com/PostHog/posthog-js/pull/2769) [`6b0aabf`](https://github.com/PostHog/posthog-js/commit/6b0aabff893e44d1710b7d122a68bf023f4e0bd5) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: React Native on web should report hardware type as Desktop or Mobile, not Web
+  (2025-12-17)
+- Updated dependencies [[`6b0aabf`](https://github.com/PostHog/posthog-js/commit/6b0aabff893e44d1710b7d122a68bf023f4e0bd5)]:
+  - @posthog/core@1.8.1
+
+## 4.16.1
+
+### Patch Changes
+
+- [#2763](https://github.com/PostHog/posthog-js/pull/2763) [`c9c0e4d`](https://github.com/PostHog/posthog-js/commit/c9c0e4d658f73a022151a273f258df0201738219) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: captureTouches errors with reanimated styles
+  (2025-12-17)
+
+## 4.16.0
+
+### Minor Changes
+
+- [#2776](https://github.com/PostHog/posthog-js/pull/2776) [`32db4b3`](https://github.com/PostHog/posthog-js/commit/32db4b378c5d40747454085de135174c2c176849) Thanks [@adboio](https://github.com/adboio)! - support event property filters on surveys
+  (2025-12-17)
+
+## 4.15.0
+
+### Minor Changes
+
+- [#2774](https://github.com/PostHog/posthog-js/pull/2774) [`2603a8d`](https://github.com/PostHog/posthog-js/commit/2603a8d6e1021cd8f84e8b61be77ce268435ebde) Thanks [@adboio](https://github.com/adboio)! - fix survey text color on react native
+  (2025-12-16)
+
+### Patch Changes
+
+- Updated dependencies [[`2603a8d`](https://github.com/PostHog/posthog-js/commit/2603a8d6e1021cd8f84e8b61be77ce268435ebde)]:
+  - @posthog/core@1.8.0
+
+## 4.14.4
+
+### Patch Changes
+
+- [#2764](https://github.com/PostHog/posthog-js/pull/2764) [`8368cbc`](https://github.com/PostHog/posthog-js/commit/8368cbcc3c29e362f2658e580f4956e0037469f7) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: posthog-cli finds the correct path on android gradle plugin
+  (2025-12-16)
+
+## 4.14.3
+
+### Patch Changes
+
+- [#2697](https://github.com/PostHog/posthog-js/pull/2697) [`0c3bd5e`](https://github.com/PostHog/posthog-js/commit/0c3bd5eb1fe7fa94bb78ed1282922d613cc37e95) Thanks [@robbie-c](https://github.com/robbie-c)! - Support getting locale and timezone from expo-localization >= 14
+  (2025-12-05)
+
+## 4.14.2
+
+### Patch Changes
+
+- [#2690](https://github.com/PostHog/posthog-js/pull/2690) [`e9c00fd`](https://github.com/PostHog/posthog-js/commit/e9c00fd451f6ee648ff40dcad538d38bfd5f3ff4) Thanks [@robbie-c](https://github.com/robbie-c)! - Related to https://www.wiz.io/blog/critical-vulnerability-in-react-cve-2025-55182
+
+  We didn't include any of the vulnerable deps in any of our packages, however we did have them as dev / test / example project dependencies.
+
+  There was no way that any of these vulnerable packages were included in any of our published packages.
+
+  We've now patched out those dependencies.
+
+  Out of an abundance of caution, let's create a new release of all of our packages. (2025-12-04)
+
+- Updated dependencies [[`e9c00fd`](https://github.com/PostHog/posthog-js/commit/e9c00fd451f6ee648ff40dcad538d38bfd5f3ff4)]:
+  - @posthog/core@1.7.1
+
+## 4.14.1
+
+### Patch Changes
+
+- Updated dependencies [[`e1617d9`](https://github.com/PostHog/posthog-js/commit/e1617d91255b23dc39b1dcb15b05ae64c735d9d0)]:
+  - @posthog/core@1.7.0
+
+## 4.14.0
+
+### Minor Changes
+
+- [#2613](https://github.com/PostHog/posthog-js/pull/2613) [`81781ba`](https://github.com/PostHog/posthog-js/commit/81781ba593be58fcd9c0f31c8fa8ef2693fd765c) Thanks [@marandaneto](https://github.com/marandaneto)! - chore: expo plugin for react native error tracking.
+  (2025-11-24)
+
+## 4.13.0
+
+### Minor Changes
+
+- [#2619](https://github.com/PostHog/posthog-js/pull/2619) [`86dab38`](https://github.com/PostHog/posthog-js/commit/86dab38e49eeac9819b1ab5f7f0c8b5df88d9f86) Thanks [@hpouillot](https://github.com/hpouillot)! - package deprecation
+  (2025-11-24)
+
+### Patch Changes
+
+- Updated dependencies [[`86dab38`](https://github.com/PostHog/posthog-js/commit/86dab38e49eeac9819b1ab5f7f0c8b5df88d9f86)]:
+  - @posthog/core@1.6.0
+
+## 4.12.5
+
+### Patch Changes
+
+- [#2618](https://github.com/PostHog/posthog-js/pull/2618) [`3eed1a4`](https://github.com/PostHog/posthog-js/commit/3eed1a42a50bff310fde3a91308a0f091b39e3fe) Thanks [@marandaneto](https://github.com/marandaneto)! - last version was compromised
+  (2025-11-24)
+- Updated dependencies [[`3eed1a4`](https://github.com/PostHog/posthog-js/commit/3eed1a42a50bff310fde3a91308a0f091b39e3fe)]:
+  - @posthog/core@1.5.6
+
+## 4.12.4
+
+### Patch Changes
+
+- [#2608](https://github.com/PostHog/posthog-js/pull/2608) [`bef494e`](https://github.com/PostHog/posthog-js/commit/bef494e55a711bc66e13cf94fe8e39a1f8bf72d1) Thanks [@ioannisj](https://github.com/ioannisj)! - fix: latest release on posthog-cli lookup when installed via npm for iOS source map uploads
+  (2025-11-20)
+
+## 4.12.3
+
+### Patch Changes
+
+- Updated dependencies [[`83f5d07`](https://github.com/PostHog/posthog-js/commit/83f5d07e4ae8c2ae5c6926858b6095ebbfaf319f)]:
+  - @posthog/core@1.5.5
+
+## 4.12.2
+
+### Patch Changes
+
+- Updated dependencies [[`c242702`](https://github.com/PostHog/posthog-js/commit/c2427029d75cba71b78e9822f18f5e73f7442288)]:
+  - @posthog/core@1.5.4
+
+## 4.12.1
+
+### Patch Changes
+
+- [#2575](https://github.com/PostHog/posthog-js/pull/2575) [`8acd88f`](https://github.com/PostHog/posthog-js/commit/8acd88f1b71d2c7e1222c43dd121abce78ef2bab) Thanks [@hpouillot](https://github.com/hpouillot)! - fix frame platform property for $exception events
+  (2025-11-19)
+- Updated dependencies [[`8acd88f`](https://github.com/PostHog/posthog-js/commit/8acd88f1b71d2c7e1222c43dd121abce78ef2bab)]:
+  - @posthog/core@1.5.3
+
+## 4.12.0
+
+### Minor Changes
+
+- [#2484](https://github.com/PostHog/posthog-js/pull/2484) [`d143cc4`](https://github.com/PostHog/posthog-js/commit/d143cc4606079ced995f41594e770addf87d0a7f) Thanks [@marandaneto](https://github.com/marandaneto)! - chore: add hermes symbolication support for react native and error tracking
+
 ## 4.11.0
 
 ### Minor Changes
@@ -43,7 +208,6 @@
 ### Patch Changes
 
 - [#2493](https://github.com/PostHog/posthog-js/pull/2493) [`7ec7be5`](https://github.com/PostHog/posthog-js/commit/7ec7be5917090ae00f988035ff1e0f6f727e6660) Thanks [@ordehi](https://github.com/ordehi)! - **Bug Fixes:**
-
   - Fixed surveys with URL or CSS selector targeting incorrectly showing in React Native
     - **Breaking behavior change**: Surveys configured with URL or CSS selector targeting will no longer appear in React Native apps (this was always the intended behavior)
     - **Action required**: If you have surveys that should show in React Native, remove URL/selector conditions and use feature flags or device type targeting instead

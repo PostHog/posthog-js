@@ -8,16 +8,16 @@ import fetch from 'node-fetch'
 // User admin for the test project: https://us.posthog.com/admin/posthog/organization/0182397e-3df4-0000-52e3-d890b5a16955/change/
 const currentEnv = process.env
 export const {
-    POSTHOG_PROJECT_KEY,
-    POSTHOG_API_KEY,
+    POSTHOG_PROJECT_API_KEY,
+    POSTHOG_PERSONAL_API_KEY,
     POSTHOG_API_HOST = 'https://us.i.posthog.com',
-    POSTHOG_API_PROJECT = '11213',
+    POSTHOG_PROJECT_ID = '11213',
     BRANCH_NAME,
     RUN_ID,
     BROWSER,
 } = currentEnv
 
-const HEADERS = { Authorization: `Bearer ${POSTHOG_API_KEY}` }
+const HEADERS = { Authorization: `Bearer ${POSTHOG_PERSONAL_API_KEY}` }
 
 export const captureLogger = RequestLogger(/ip=0/, {
     logRequestHeaders: true,
@@ -50,7 +50,7 @@ export const initPosthog = (testName, config) => {
         ...config,
         debug: true,
         api_host: POSTHOG_API_HOST,
-        api_key: POSTHOG_PROJECT_KEY,
+        api_key: POSTHOG_PROJECT_API_KEY,
         bootstrap: {
             distinctID: 'automated-tester', // We set this to get around the ingestion delay for new distinctIDs
             isIdentifiedID: true,
@@ -158,7 +158,7 @@ export async function retryUntilResults(
 
 export async function queryAPI(testSessionId) {
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-    const url = `${POSTHOG_API_HOST}/api/projects/${POSTHOG_API_PROJECT}/events?properties=[{"key":"testSessionId","value":["${testSessionId}"],"operator":"exact","type":"event"}]&after=${yesterday}`
+    const url = `${POSTHOG_API_HOST}/api/projects/${POSTHOG_PROJECT_ID}/events?properties=[{"key":"testSessionId","value":["${testSessionId}"],"operator":"exact","type":"event"}]&after=${yesterday}`
     const response = await fetch(url, {
         headers: HEADERS,
     })

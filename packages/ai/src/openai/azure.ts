@@ -7,6 +7,7 @@ import {
   sendEventToPosthog,
   sendEventWithErrorToPosthog,
   withPrivacyMode,
+  formatOpenAIResponsesInput,
 } from '../utils'
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
@@ -104,6 +105,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
             try {
               const contentBlocks: FormattedContent = []
               let accumulatedContent = ''
+              let modelFromResponse: string | undefined
               let usage: {
                 inputTokens?: number
                 outputTokens?: number
@@ -125,6 +127,11 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
               >()
 
               for await (const chunk of stream1) {
+                // Extract model from response if not in params
+                if (!modelFromResponse && chunk.model) {
+                  modelFromResponse = chunk.model
+                }
+
                 const choice = chunk?.choices?.[0]
 
                 // Handle text content
@@ -216,7 +223,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
               await sendEventToPosthog({
                 client: this.phClient,
                 ...posthogParams,
-                model: openAIParams.model,
+                model: openAIParams.model ?? modelFromResponse,
                 provider: 'azure',
                 input: sanitizeOpenAI(openAIParams.messages),
                 output: formattedOutput,
@@ -257,7 +264,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
             await sendEventToPosthog({
               client: this.phClient,
               ...posthogParams,
-              model: openAIParams.model,
+              model: openAIParams.model ?? result.model,
               provider: 'azure',
               input: openAIParams.messages,
               output: formatResponseOpenAI(result),
@@ -352,6 +359,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           ;(async () => {
             try {
               let finalContent: any[] = []
+              let modelFromResponse: string | undefined
               let usage: {
                 inputTokens?: number
                 outputTokens?: number
@@ -363,6 +371,12 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               }
 
               for await (const chunk of stream1) {
+                if ('response' in chunk && chunk.response) {
+                  // Extract model from response if not in params (for stored prompts)
+                  if (!modelFromResponse && chunk.response.model) {
+                    modelFromResponse = chunk.response.model
+                  }
+                }
                 if (
                   chunk.type === 'response.completed' &&
                   'response' in chunk &&
@@ -385,10 +399,9 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               await sendEventToPosthog({
                 client: this.phClient,
                 ...posthogParams,
-                //@ts-expect-error
-                model: openAIParams.model,
+                model: openAIParams.model ?? modelFromResponse,
                 provider: 'azure',
-                input: openAIParams.input,
+                input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
                 output: finalContent,
                 latency,
                 baseURL: this.baseURL,
@@ -400,10 +413,9 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               const enrichedError = await sendEventWithErrorToPosthog({
                 client: this.phClient,
                 ...posthogParams,
-                //@ts-expect-error
                 model: openAIParams.model,
                 provider: 'azure',
-                input: openAIParams.input,
+                input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
                 output: [],
                 latency: 0,
                 baseURL: this.baseURL,
@@ -427,10 +439,9 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             await sendEventToPosthog({
               client: this.phClient,
               ...posthogParams,
-              //@ts-expect-error
-              model: openAIParams.model,
+              model: openAIParams.model ?? result.model,
               provider: 'azure',
-              input: openAIParams.input,
+              input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
               output: result.output,
               latency,
               baseURL: this.baseURL,
@@ -455,10 +466,9 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           await sendEventToPosthog({
             client: this.phClient,
             ...posthogParams,
-            //@ts-expect-error
             model: openAIParams.model,
             provider: 'azure',
-            input: openAIParams.input,
+            input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
             output: [],
             latency: 0,
             baseURL: this.baseURL,
@@ -493,9 +503,9 @@ export class WrappedResponses extends AzureOpenAI.Responses {
         await sendEventToPosthog({
           client: this.phClient,
           ...posthogParams,
-          model: String(openAIParams.model ?? ''),
+          model: openAIParams.model ?? result.model,
           provider: 'azure',
-          input: openAIParams.input,
+          input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
           output: result.output,
           latency,
           baseURL: this.baseURL,
@@ -514,9 +524,9 @@ export class WrappedResponses extends AzureOpenAI.Responses {
         await sendEventToPosthog({
           client: this.phClient,
           ...posthogParams,
-          model: String(openAIParams.model ?? ''),
+          model: openAIParams.model,
           provider: 'azure',
-          input: openAIParams.input,
+          input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
           output: [],
           latency: 0,
           baseURL: this.baseURL,

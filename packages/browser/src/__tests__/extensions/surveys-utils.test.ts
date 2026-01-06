@@ -1,4 +1,5 @@
 import {
+    addSurveyCSSVariablesToElement,
     canActivateRepeatedly,
     doesSurveyUrlMatch,
     getFontFamily,
@@ -538,6 +539,90 @@ describe('doesSurveyUrlMatch', () => {
                 },
             }
             expect(doesSurveyUrlMatch(nonMatchingSurvey)).toBe(false)
+        })
+    })
+})
+
+describe('addSurveyCSSVariablesToElement', () => {
+    let element: HTMLElement
+
+    beforeEach(() => {
+        element = document.createElement('div')
+    })
+
+    describe('input background color', () => {
+        it('should use inputBackground, falling back to deprecated inputBackgroundColor', () => {
+            // inputBackground (core field) takes precedence
+            addSurveyCSSVariablesToElement(element, SurveyType.Popover, {
+                inputBackground: '#111111',
+                inputBackgroundColor: '#999999',
+            })
+            expect(element.style.getPropertyValue('--ph-survey-input-background')).toBe('#111111')
+
+            // Falls back to deprecated inputBackgroundColor for backwards compat
+            element = document.createElement('div')
+            addSurveyCSSVariablesToElement(element, SurveyType.Popover, {
+                inputBackgroundColor: '#ff0000',
+            })
+            expect(element.style.getPropertyValue('--ph-survey-input-background')).toBe('#ff0000')
+        })
+
+        it('should auto-adjust to #f8f8f8 when main backgroundColor is white and no explicit input background', () => {
+            addSurveyCSSVariablesToElement(element, SurveyType.Popover, { backgroundColor: 'white' })
+            expect(element.style.getPropertyValue('--ph-survey-input-background')).toBe('#f8f8f8')
+
+            // But not when explicit input background is provided
+            element = document.createElement('div')
+            addSurveyCSSVariablesToElement(element, SurveyType.Popover, {
+                backgroundColor: 'white',
+                inputBackground: '#123456',
+            })
+            expect(element.style.getPropertyValue('--ph-survey-input-background')).toBe('#123456')
+        })
+    })
+
+    describe('text colors', () => {
+        it('should use textColor override for primary text, with auto-contrast fallback', () => {
+            // Override works
+            addSurveyCSSVariablesToElement(element, SurveyType.Popover, { textColor: '#ff0000' })
+            expect(element.style.getPropertyValue('--ph-survey-text-primary-color')).toBe('#ff0000')
+
+            // Auto-contrast fallback (dark text on light bg)
+            element = document.createElement('div')
+            addSurveyCSSVariablesToElement(element, SurveyType.Popover, { backgroundColor: '#ffffff' })
+            expect(element.style.getPropertyValue('--ph-survey-text-primary-color')).toBe('#020617')
+        })
+
+        it('should use inputTextColor for both text inputs AND rating buttons', () => {
+            addSurveyCSSVariablesToElement(element, SurveyType.Popover, { inputTextColor: '#00ff00' })
+
+            expect(element.style.getPropertyValue('--ph-survey-input-text-color')).toBe('#00ff00')
+            expect(element.style.getPropertyValue('--ph-survey-rating-text-color')).toBe('#00ff00')
+        })
+
+        it('should auto-calculate input/rating text color from background when no override', () => {
+            // Light background → dark text
+            addSurveyCSSVariablesToElement(element, SurveyType.Popover, { inputBackground: '#ffffff' })
+            expect(element.style.getPropertyValue('--ph-survey-input-text-color')).toBe('#020617')
+            expect(element.style.getPropertyValue('--ph-survey-rating-text-color')).toBe('#020617')
+
+            // Dark background → light text
+            element = document.createElement('div')
+            addSurveyCSSVariablesToElement(element, SurveyType.Popover, { inputBackground: '#000000' })
+            expect(element.style.getPropertyValue('--ph-survey-input-text-color')).toBe('white')
+            expect(element.style.getPropertyValue('--ph-survey-rating-text-color')).toBe('white')
+        })
+
+        it('should always auto-calculate active rating text (ignores inputTextColor)', () => {
+            addSurveyCSSVariablesToElement(element, SurveyType.Popover, {
+                ratingButtonActiveColor: '#ffffff', // light bg → should get dark text
+                inputTextColor: '#ff0000', // should NOT affect active rating
+            })
+
+            // Active rating auto-calculates from its background
+            expect(element.style.getPropertyValue('--ph-survey-rating-active-text-color')).toBe('#020617')
+            // Inactive rating uses inputTextColor
+            expect(element.style.getPropertyValue('--ph-survey-rating-text-color')).toBe('#ff0000')
         })
     })
 })

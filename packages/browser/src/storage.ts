@@ -1,6 +1,7 @@
 import { extend } from './utils'
 import { PersistentStore, Properties } from './types'
 import {
+    DEVICE_ID,
     DISTINCT_ID,
     ENABLE_PERSON_PROCESSING,
     INITIAL_PERSON_INFO,
@@ -259,6 +260,7 @@ export const localStore: PersistentStore = {
 // This solves issues with cookies having too much data in them causing headers too large
 // Also makes sure we don't have to send a ton of data to the server
 const COOKIE_PERSISTED_PROPERTIES = [
+    DEVICE_ID,
     DISTINCT_ID,
     SESSION_ID,
     SESSION_RECORDING_IS_SAMPLED,
@@ -266,50 +268,57 @@ const COOKIE_PERSISTED_PROPERTIES = [
     INITIAL_PERSON_INFO,
 ]
 
-export const localPlusCookieStore: PersistentStore = {
-    ...localStore,
-    _parse: function (name) {
-        try {
-            let cookieProperties: Properties = {}
+/**
+ * Creates a localPlusCookieStore instance with custom cookie-persisted properties
+ */
+export const createLocalPlusCookieStore = (customCookieProperties: readonly string[] = []): PersistentStore => {
+    const cookiePropertiesToPersist = [...COOKIE_PERSISTED_PROPERTIES, ...customCookieProperties]
+
+    return {
+        ...localStore,
+        _parse: function (name) {
             try {
-                // See if there's a cookie stored with data.
-                cookieProperties = cookieStore._parse(name) || {}
-            } catch {}
-            const value = extend(cookieProperties, JSON.parse(localStore._get(name) || '{}'))
-            localStore._set(name, value)
-            return value
-        } catch {
-            // noop
-        }
-        return null
-    },
-
-    _set: function (name, value, days, cross_subdomain, is_secure, debug) {
-        try {
-            localStore._set(name, value, undefined, undefined, debug)
-            const cookiePersistedProperties: Record<string, any> = {}
-            COOKIE_PERSISTED_PROPERTIES.forEach((key) => {
-                if (value[key]) {
-                    cookiePersistedProperties[key] = value[key]
-                }
-            })
-
-            if (Object.keys(cookiePersistedProperties).length) {
-                cookieStore._set(name, cookiePersistedProperties, days, cross_subdomain, is_secure, debug)
+                let cookieProperties: Properties = {}
+                try {
+                    // See if there's a cookie stored with data.
+                    cookieProperties = cookieStore._parse(name) || {}
+                } catch {}
+                const value = extend(cookieProperties, JSON.parse(localStore._get(name) || '{}'))
+                localStore._set(name, value)
+                return value
+            } catch {
+                // noop
             }
-        } catch (err) {
-            localStore._error(err)
-        }
-    },
+            return null
+        },
 
-    _remove: function (name, cross_subdomain) {
-        try {
-            window?.localStorage.removeItem(name)
-            cookieStore._remove(name, cross_subdomain)
-        } catch (err) {
-            localStore._error(err)
-        }
-    },
+        _set: function (name, value, days, cross_subdomain, is_secure, debug) {
+            try {
+                localStore._set(name, value, undefined, undefined, debug)
+                const cookiePersistedProperties: Record<string, any> = {}
+                cookiePropertiesToPersist.forEach((key) => {
+                    if (value[key]) {
+                        cookiePersistedProperties[key] = value[key]
+                    }
+                })
+
+                if (Object.keys(cookiePersistedProperties).length) {
+                    cookieStore._set(name, cookiePersistedProperties, days, cross_subdomain, is_secure, debug)
+                }
+            } catch (err) {
+                localStore._error(err)
+            }
+        },
+
+        _remove: function (name, cross_subdomain) {
+            try {
+                window?.localStorage.removeItem(name)
+                cookieStore._remove(name, cross_subdomain)
+            } catch (err) {
+                localStore._error(err)
+            }
+        },
+    }
 }
 
 const memoryStorage: Properties = {}

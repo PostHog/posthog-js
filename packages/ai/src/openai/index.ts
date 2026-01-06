@@ -118,6 +118,7 @@ export class WrappedCompletions extends Completions {
             try {
               const contentBlocks: FormattedContent = []
               let accumulatedContent = ''
+              let modelFromResponse: string | undefined
               let usage: {
                 inputTokens?: number
                 outputTokens?: number
@@ -141,6 +142,11 @@ export class WrappedCompletions extends Completions {
               >()
 
               for await (const chunk of stream1) {
+                // Extract model from chunk (Chat Completions chunks have model field)
+                if (!modelFromResponse && chunk.model) {
+                  modelFromResponse = chunk.model
+                }
+
                 const choice = chunk?.choices?.[0]
 
                 const chunkWebSearchCount = calculateWebSearchCount(chunk)
@@ -239,7 +245,7 @@ export class WrappedCompletions extends Completions {
               await sendEventToPosthog({
                 client: this.phClient,
                 ...posthogParams,
-                model: openAIParams.model,
+                model: openAIParams.model ?? modelFromResponse,
                 provider: 'openai',
                 input: sanitizeOpenAI(openAIParams.messages),
                 output: formattedOutput,
@@ -289,7 +295,7 @@ export class WrappedCompletions extends Completions {
             await sendEventToPosthog({
               client: this.phClient,
               ...posthogParams,
-              model: openAIParams.model,
+              model: openAIParams.model ?? result.model,
               provider: 'openai',
               input: sanitizeOpenAI(openAIParams.messages),
               output: formattedOutput,
@@ -318,7 +324,7 @@ export class WrappedCompletions extends Completions {
           await sendEventToPosthog({
             client: this.phClient,
             ...posthogParams,
-            model: String(openAIParams.model ?? ''),
+            model: openAIParams.model,
             provider: 'openai',
             input: sanitizeOpenAI(openAIParams.messages),
             output: [],
@@ -386,6 +392,7 @@ export class WrappedResponses extends Responses {
           ;(async () => {
             try {
               let finalContent: unknown[] = []
+              let modelFromResponse: string | undefined
               let usage: {
                 inputTokens?: number
                 outputTokens?: number
@@ -400,6 +407,11 @@ export class WrappedResponses extends Responses {
 
               for await (const chunk of stream1) {
                 if ('response' in chunk && chunk.response) {
+                  // Extract model from response object in chunk (for stored prompts)
+                  if (!modelFromResponse && chunk.response.model) {
+                    modelFromResponse = chunk.response.model
+                  }
+
                   const chunkWebSearchCount = calculateWebSearchCount(chunk.response)
                   if (chunkWebSearchCount > 0 && chunkWebSearchCount > (usage.webSearchCount ?? 0)) {
                     usage.webSearchCount = chunkWebSearchCount
@@ -430,8 +442,7 @@ export class WrappedResponses extends Responses {
               await sendEventToPosthog({
                 client: this.phClient,
                 ...posthogParams,
-                //@ts-expect-error
-                model: openAIParams.model,
+                model: openAIParams.model ?? modelFromResponse,
                 provider: 'openai',
                 input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
                 output: finalContent,
@@ -452,7 +463,6 @@ export class WrappedResponses extends Responses {
               const enrichedError = await sendEventWithErrorToPosthog({
                 client: this.phClient,
                 ...posthogParams,
-                //@ts-expect-error
                 model: openAIParams.model,
                 provider: 'openai',
                 input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
@@ -481,8 +491,7 @@ export class WrappedResponses extends Responses {
             await sendEventToPosthog({
               client: this.phClient,
               ...posthogParams,
-              //@ts-expect-error
-              model: openAIParams.model,
+              model: openAIParams.model ?? result.model,
               provider: 'openai',
               input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
               output: formattedOutput,
@@ -511,7 +520,7 @@ export class WrappedResponses extends Responses {
           await sendEventToPosthog({
             client: this.phClient,
             ...posthogParams,
-            model: String(openAIParams.model ?? ''),
+            model: openAIParams.model,
             provider: 'openai',
             input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
             output: [],
@@ -554,7 +563,7 @@ export class WrappedResponses extends Responses {
           await sendEventToPosthog({
             client: this.phClient,
             ...posthogParams,
-            model: String(openAIParams.model ?? ''),
+            model: openAIParams.model ?? result.model,
             provider: 'openai',
             input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
             output: result.output,
@@ -575,7 +584,7 @@ export class WrappedResponses extends Responses {
           const enrichedError = await sendEventWithErrorToPosthog({
             client: this.phClient,
             ...posthogParams,
-            model: String(openAIParams.model ?? ''),
+            model: openAIParams.model,
             provider: 'openai',
             input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
             output: [],
@@ -832,7 +841,7 @@ export class WrappedTranscriptions extends Transcriptions {
             await sendEventToPosthog({
               client: this.phClient,
               ...posthogParams,
-              model: String(openAIParams.model ?? ''),
+              model: openAIParams.model,
               provider: 'openai',
               input: openAIParams.prompt,
               output: result.text,
@@ -852,7 +861,7 @@ export class WrappedTranscriptions extends Transcriptions {
           const enrichedError = await sendEventWithErrorToPosthog({
             client: this.phClient,
             ...posthogParams,
-            model: String(openAIParams.model ?? ''),
+            model: openAIParams.model,
             provider: 'openai',
             input: openAIParams.prompt,
             output: [],

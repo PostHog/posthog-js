@@ -1,12 +1,14 @@
 {
     "private": true,
-    "packageManager": "pnpm@10.12.4",
+    "packageManager": "pnpm@10.23.0",
     "scripts": {
         "build-rollup": "pnpm --filter=posthog-js build-rollup",
         "clean": "turbo clean",
         "clean:dep": "rm -rf node_modules && pnpm -r exec rm -rf node_modules",
         "lint": "turbo lint",
         "lint:fix": "turbo lint:fix",
+        "lint:playground": "prettier --check 'playground/**/*.{ts,tsx,js,jsx,mjs,json,md}' && eslint 'playground/**/*.{ts,tsx,js,jsx,mjs}'",
+        "lint:playground:fix": "prettier --write 'playground/**/*.{ts,tsx,js,jsx,mjs,json,md}' && eslint --fix 'playground/**/*.{ts,tsx,js,jsx,mjs}'",
         "test": "turbo test",
         "test:unit": "turbo test:unit",
         "test:functional": "turbo test:functional",
@@ -15,42 +17,48 @@
         "dev": "turbo dev",
         "package": "export PACKAGE_DEST=$(pwd)/target && turbo package",
         "package:watch": "export PACKAGE_DEST=$(pwd)/target && turbo watch package",
-        "generate-references": "turbo posthog-js#generate-references posthog-node#generate-references posthog-react-native#generate-references"
+        "bump": "pnpm changeset version",
+        "generate-references": "pnpm turbo --filter=posthog-js --filter=posthog-node --filter=posthog-react-native generate-references"
     },
     "pnpm": {
         "patchedDependencies": {
             "@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17": "patches/@rrweb__rrweb-plugin-console-record@2.0.0-alpha.17.patch",
             "@rrweb/record@2.0.0-alpha.17": "patches/@rrweb__record@2.0.0-alpha.17.patch"
-        }
+        },
+        "overrides": {
+            "node-forge": "1.3.2"
+        },
+        "onlyBuiltDependencies": [
+            "sharp"
+        ]
     },
     "devDependencies": {
-        "@changesets/changelog-github": "^0.5.1",
-        "@changesets/cli": "^2.29.5",
-        "@types/eslint": "^8.44.6",
-        "@types/jest": "^28.1.5",
-        "@types/node": "^22.17.0",
-        "@typescript-eslint/eslint-plugin": "^8.29.1",
-        "@typescript-eslint/parser": "^8.29.1",
+        "@changesets/changelog-github": "^0.5.2",
+        "@changesets/cli": "^2.29.8",
+        "@microsoft/api-extractor": "^7.55.1",
+        "@microsoft/api-extractor-model": "^7.32.1",
+        "@microsoft/tsdoc": "^0.15.1",
+        "@types/eslint": "^8.56.12",
+        "@types/node": "^22.19.1",
+        "@typescript-eslint/eslint-plugin": "^8.48.1",
+        "@typescript-eslint/parser": "^8.48.1",
         "eslint": "8.57.0",
-        "eslint-config-posthog-js": "workspace:./tooling/eslint-plugin-posthog-js",
-        "eslint-config-prettier": "^8.5.0",
-        "eslint-plugin-compat": "^6.0.1",
-        "eslint-plugin-jest": "^28.8.3",
-        "eslint-plugin-no-only-tests": "^3.1.0",
-        "eslint-plugin-posthog-js": "workspace:./tooling/eslint-plugin-posthog-js",
-        "eslint-plugin-prettier": "^5.2.1",
-        "eslint-plugin-react": "^7.30.1",
-        "eslint-plugin-react-hooks": "^4.6.0",
-        "lint-staged": "^10.2.11",
-        "rimraf": "^6.0.1",
-        "prettier": "^3.4.2",
+        "eslint-config-posthog-js": "link:tooling/eslint-plugin-posthog-js",
+        "eslint-config-prettier": "^8.10.2",
+        "eslint-plugin-compat": "^6.0.2",
+        "eslint-plugin-jest": "^28.14.0",
+        "eslint-plugin-no-only-tests": "^3.3.0",
+        "eslint-plugin-posthog-js": "link:tooling/eslint-plugin-posthog-js",
+        "eslint-plugin-prettier": "^5.5.4",
+        "eslint-plugin-react": "^7.37.5",
+        "eslint-plugin-react-hooks": "^4.6.2",
+        "lint-staged": "^10.5.4",
+        "prettier": "^3.7.4",
+        "rimraf": "^6.1.2",
         "rollup": "catalog:",
-        "ts-node": "^10.9.1",
-        "turbo": "^2.5.4",
-        "typescript": "catalog:",
-        "@microsoft/api-extractor": "^7.47.9",
-        "@microsoft/api-extractor-model": "^7.29.8",
-        "@microsoft/tsdoc": "^0.15.1"
+        "ts-node": "^10.9.2",
+        "turbo": "^2.6.3",
+        "typescript": "catalog:"
     },
     "lint-staged": {
         "*.{ts,tsx,js,jsx,mjs,cjs}": [

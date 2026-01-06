@@ -5,6 +5,27 @@
  */
 
 import type { PropertyMatchType } from './types'
+import type { SurveyAppearance as CoreSurveyAppearance } from '@posthog/core'
+
+export enum SurveyEventType {
+    Activation = 'events',
+    Cancellation = 'cancelEvents',
+}
+
+// Extended operator type to include numeric operators not in PropertyMatchType
+export type PropertyOperator = PropertyMatchType | 'gt' | 'lt'
+
+export type PropertyFilters = {
+    [propertyName: string]: {
+        values: string[]
+        operator: PropertyOperator
+    }
+}
+
+export interface SurveyEventWithFilters {
+    name: string
+    propertyFilters?: PropertyFilters
+}
 
 export enum SurveyWidgetType {
     Button = 'button',
@@ -25,42 +46,33 @@ export enum SurveyPosition {
     NextToTrigger = 'next_to_trigger',
 }
 
-export interface SurveyAppearance {
-    // keep in sync with frontend/src/types.ts -> SurveyAppearance
-    backgroundColor?: string
-    submitButtonColor?: string
-    // text color is deprecated, use auto contrast text color instead
-    textColor?: string
-    // deprecate submit button text eventually
-    submitButtonText?: string
-    submitButtonTextColor?: string
+export enum SurveyTabPosition {
+    Top = 'top',
+    Left = 'left',
+    Right = 'right',
+    Bottom = 'bottom',
+}
+
+// Extends core SurveyAppearance with browser-specific fields
+// Omit 'position' from core because browser's SurveyPosition has additional values (e.g., NextToTrigger)
+export interface SurveyAppearance extends Omit<CoreSurveyAppearance, 'position'> {
+    // Browser-specific fields not in core
+    /** @deprecated - not currently used */
     descriptionTextColor?: string
-    ratingButtonColor?: string
-    ratingButtonActiveColor?: string
     ratingButtonHoverColor?: string
     whiteLabel?: boolean
-    autoDisappear?: boolean
-    displayThankYouMessage?: boolean
-    thankYouMessageHeader?: string
-    thankYouMessageDescription?: string
-    thankYouMessageDescriptionContentType?: SurveyQuestionDescriptionContentType
-    thankYouMessageCloseButtonText?: string
-    borderColor?: string
-    position?: SurveyPosition
-    placeholder?: string
-    shuffleQuestions?: boolean
-    surveyPopupDelaySeconds?: number
-    // widget options
-    widgetType?: SurveyWidgetType
-    widgetSelector?: string
-    widgetLabel?: string
-    widgetColor?: string
+    tabPosition?: SurveyTabPosition
     fontFamily?: string
-    // questionable: Not in frontend/src/types.ts -> SurveyAppearance, but used in site app
     maxWidth?: string
     zIndex?: string
     disabledButtonOpacity?: string
     boxPadding?: string
+    /** @deprecated Use inputBackground instead (inherited from core) */
+    inputBackgroundColor?: string
+    // Hide the X (cancel) button - defaults to false (show the button)
+    hideCancelButton?: boolean
+    // Browser's SurveyPosition has more options than core (e.g., NextToTrigger)
+    position?: SurveyPosition
 }
 
 export enum SurveyType {
@@ -195,18 +207,14 @@ export interface Survey {
         selector?: string
         seenSurveyWaitPeriodInDays?: number
         urlMatchType?: PropertyMatchType
+        /** events that trigger surveys */
         events: {
             repeatedActivation?: boolean
-            values: {
-                name: string
-                /** Property filters for event matching */
-                propertyFilters?: {
-                    [propertyName: string]: {
-                        values: string[]
-                        operator: PropertyMatchType
-                    }
-                }
-            }[]
+            values: SurveyEventWithFilters[]
+        } | null
+        /** events that cancel "pending" (time-delayed) surveys */
+        cancelEvents: {
+            values: SurveyEventWithFilters[]
         } | null
         actions: {
             values: SurveyActionType[]
@@ -237,6 +245,8 @@ export type ActionStepStringMatching = 'contains' | 'exact' | 'regex'
 export interface ActionStepType {
     event?: string | null
     selector?: string | null
+    /** pre-compiled regex pattern for matching selector against $elements_chain */
+    selector_regex?: string | null
     /** @deprecated Only `selector` should be used now. */
     tag_name?: string
     text?: string | null
@@ -248,12 +258,20 @@ export interface ActionStepType {
     url?: string | null
     /** @default StringMatching.Contains */
     url_matching?: ActionStepStringMatching | null
+    /** Property filters for action step matching */
+    properties?: {
+        key: string
+        value?: string | number | boolean | (string | number | boolean)[] | null
+        operator?: PropertyMatchType
+        type?: string
+    }[]
 }
 
 export enum SurveyEventName {
     SHOWN = 'survey shown',
     DISMISSED = 'survey dismissed',
     SENT = 'survey sent',
+    ABANDONED = 'survey abandoned',
 }
 
 export enum SurveyEventProperties {
@@ -266,6 +284,8 @@ export enum SurveyEventProperties {
     SURVEY_SUBMISSION_ID = '$survey_submission_id',
     SURVEY_QUESTIONS = '$survey_questions',
     SURVEY_COMPLETED = '$survey_completed',
+    PRODUCT_TOUR_ID = '$product_tour_id',
+    SURVEY_LAST_SEEN_DATE = '$survey_last_seen_date',
 }
 
 export enum DisplaySurveyType {
@@ -292,6 +312,17 @@ export type DisplaySurveyOptions = DisplaySurveyPopoverOptions | DisplaySurveyIn
 
 export interface SurveyConfig {
     prefillFromUrl?: boolean
+    /**
+     * @deprecated No longer used. Surveys will automatically advance past
+     * prefilled questions with skipSubmitButton enabled. If partial response
+     * collection is enabled, partial responses for pre-filled questions will
+     * be submitted automatically on page load.
+     */
     autoSubmitIfComplete?: boolean
+    /**
+     * @deprecated No longer used. Pre-filled responses are now sent
+     * immediately when partial responses are enabled, or all required
+     * quesions have been pre-filled.
+     */
     autoSubmitDelay?: number
 }

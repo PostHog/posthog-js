@@ -85,7 +85,7 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * - $app_namespace: App bundle identifier / namespace
    * - $os_name: Operating system name
    * - $os_version: Operating system version
-   * - $device_type: Device type (Mobile, Desktop, Web)
+   * - $device_type: Device type (Mobile, Desktop)
    * - $lib: Name of the SDK library
    * - $lib_version: Version of the SDK library
    *
@@ -177,8 +177,13 @@ export class PostHog extends PostHogCore {
 
     let storagePromise: Promise<void> | undefined
 
+    let theStorage: PostHogCustomStorage | undefined
     if (this._persistence === 'file') {
-      this._storage = new PostHogRNStorage(options?.customStorage ?? buildOptimisiticAsyncStorage())
+      theStorage = options?.customStorage ?? buildOptimisiticAsyncStorage()
+    }
+
+    if (theStorage) {
+      this._storage = new PostHogRNStorage(theStorage)
       storagePromise = this._storage.preloadPromise
     } else {
       this._storage = new PostHogRNSyncMemoryStorage()

@@ -1,7 +1,7 @@
 import {
     extractPrefillParamsFromUrl,
     convertPrefillToResponses,
-    allRequiredQuestionsFilled,
+    calculatePrefillStartIndex,
     PrefillParams,
 } from '../../utils/survey-url-prefill'
 import { Survey, SurveyQuestion, SurveyQuestionType, SurveyType } from '../../posthog-surveys-types'
@@ -659,414 +659,239 @@ describe('convertPrefillToResponses', () => {
     })
 })
 
-describe('allRequiredQuestionsFilled', () => {
-    const baseSurvey: Survey = {
-        id: 'test-survey',
-        name: 'Test Survey',
-        description: 'Test Description',
-        type: SurveyType.Popover,
-        questions: [],
-        appearance: null,
-        conditions: null,
-        start_date: null,
-        end_date: null,
-        current_iteration: null,
-        current_iteration_start_date: null,
-        feature_flag_keys: null,
-        linked_flag_key: null,
-        targeting_flag_key: null,
-        internal_targeting_flag_key: null,
+describe('calculatePrefillStartIndex', () => {
+    const ratingQuestionWithSkip: SurveyQuestion = {
+        type: SurveyQuestionType.Rating,
+        id: 'q-rating',
+        question: 'Rate us',
+        scale: 10,
+        display: 'number',
+        lowerBoundLabel: 'Low',
+        upperBoundLabel: 'High',
+        skipSubmitButton: true,
     }
 
-    describe('required questions', () => {
-        it('should return true when all required questions are filled', () => {
-            const questions: SurveyQuestion[] = [
-                {
-                    type: SurveyQuestionType.SingleChoice,
-                    id: 'q1',
-                    question: 'Q1',
-                    choices: ['A', 'B'],
-                    optional: false,
-                },
-                {
-                    type: SurveyQuestionType.Rating,
-                    id: 'q2',
-                    question: 'Q2',
-                    scale: 10,
-                    display: 'number',
-                    lowerBoundLabel: 'Low',
-                    upperBoundLabel: 'High',
-                    optional: false,
-                },
-            ]
-            const survey = { ...baseSurvey, questions }
-            const responses = {
-                $survey_response_q1: 'A',
-                $survey_response_q2: 5,
-            }
+    const ratingQuestionWithoutSkip: SurveyQuestion = {
+        type: SurveyQuestionType.Rating,
+        id: 'q-rating-no-skip',
+        question: 'Rate us',
+        scale: 10,
+        display: 'number',
+        lowerBoundLabel: 'Low',
+        upperBoundLabel: 'High',
+        skipSubmitButton: false,
+    }
 
-            expect(allRequiredQuestionsFilled(survey, responses)).toBe(true)
+    const singleChoiceWithSkip: SurveyQuestion = {
+        type: SurveyQuestionType.SingleChoice,
+        id: 'q-single',
+        question: 'Choose one',
+        choices: ['A', 'B', 'C'],
+        skipSubmitButton: true,
+    }
+
+    const openQuestion: SurveyQuestion = {
+        type: SurveyQuestionType.Open,
+        id: 'q-open',
+        question: 'Tell us more',
+    }
+
+    describe('non-consecutive prefill', () => {
+        it('should return 0 when only q1 is prefilled (q0 not prefilled)', () => {
+            const questions = [ratingQuestionWithSkip, ratingQuestionWithSkip, openQuestion]
+            const prefilledIndices = [1]
+            const responses = { '$survey_response_q-rating': 5 }
+
+            const result = calculatePrefillStartIndex(questions, prefilledIndices, responses)
+            expect(result.startQuestionIndex).toBe(0)
+            expect(result.skippedResponses).toEqual({})
         })
 
-        it('should return false when a required question is missing', () => {
-            const questions: SurveyQuestion[] = [
-                {
-                    type: SurveyQuestionType.SingleChoice,
-                    id: 'q1',
-                    question: 'Q1',
-                    choices: ['A', 'B'],
-                    optional: false,
-                },
-                {
-                    type: SurveyQuestionType.Rating,
-                    id: 'q2',
-                    question: 'Q2',
-                    scale: 10,
-                    display: 'number',
-                    lowerBoundLabel: 'Low',
-                    upperBoundLabel: 'High',
-                    optional: false,
-                },
-            ]
-            const survey = { ...baseSurvey, questions }
-            const responses = {
-                $survey_response_q1: 'A',
-                // Missing q2
-            }
-
-            expect(allRequiredQuestionsFilled(survey, responses)).toBe(false)
-        })
-
-        it('should return false when required question is explicitly undefined', () => {
-            const questions: SurveyQuestion[] = [
-                {
-                    type: SurveyQuestionType.SingleChoice,
-                    id: 'q1',
-                    question: 'Q1',
-                    choices: ['A', 'B'],
-                    optional: undefined, // Should be treated as required
-                },
-            ]
-            const survey = { ...baseSurvey, questions }
+        it('should return 0 when only q2 is prefilled', () => {
+            const questions = [ratingQuestionWithSkip, ratingQuestionWithSkip, openQuestion]
+            const prefilledIndices = [2]
             const responses = {}
 
-            expect(allRequiredQuestionsFilled(survey, responses)).toBe(false)
-        })
-
-        it('should return false when required question has no ID', () => {
-            const questions: SurveyQuestion[] = [
-                {
-                    type: SurveyQuestionType.SingleChoice,
-                    question: 'Q1',
-                    choices: ['A', 'B'],
-                    optional: false,
-                },
-            ]
-            const survey = { ...baseSurvey, questions }
-            const responses = {}
-
-            expect(allRequiredQuestionsFilled(survey, responses)).toBe(false)
+            const result = calculatePrefillStartIndex(questions, prefilledIndices, responses)
+            expect(result.startQuestionIndex).toBe(0)
+            expect(result.skippedResponses).toEqual({})
         })
     })
 
-    describe('optional questions', () => {
-        it('should return true when only optional questions are unfilled', () => {
-            const questions: SurveyQuestion[] = [
-                {
-                    type: SurveyQuestionType.SingleChoice,
-                    id: 'q1',
-                    question: 'Q1',
-                    choices: ['A', 'B'],
-                    optional: false,
-                },
-                {
-                    type: SurveyQuestionType.Rating,
-                    id: 'q2',
-                    question: 'Q2',
-                    scale: 10,
-                    display: 'number',
-                    lowerBoundLabel: 'Low',
-                    upperBoundLabel: 'High',
-                    optional: true,
-                },
-            ]
-            const survey = { ...baseSurvey, questions }
-            const responses = {
-                $survey_response_q1: 'A',
-                // q2 is optional and missing
-            }
+    describe('consecutive prefill with skipSubmitButton', () => {
+        it('should return 1 when q0 is prefilled with skipSubmitButton', () => {
+            const questions = [ratingQuestionWithSkip, openQuestion]
+            const prefilledIndices = [0]
+            const responses = { '$survey_response_q-rating': 7 }
 
-            expect(allRequiredQuestionsFilled(survey, responses)).toBe(true)
+            const result = calculatePrefillStartIndex(questions, prefilledIndices, responses)
+            expect(result.startQuestionIndex).toBe(1)
+            expect(result.skippedResponses).toEqual({ '$survey_response_q-rating': 7 })
         })
 
-        it('should return true when all questions are optional', () => {
-            const questions: SurveyQuestion[] = [
-                {
-                    type: SurveyQuestionType.SingleChoice,
-                    id: 'q1',
-                    question: 'Q1',
-                    choices: ['A', 'B'],
-                    optional: true,
-                },
-                {
-                    type: SurveyQuestionType.Rating,
-                    id: 'q2',
-                    question: 'Q2',
-                    scale: 10,
-                    display: 'number',
-                    lowerBoundLabel: 'Low',
-                    upperBoundLabel: 'High',
-                    optional: true,
-                },
-            ]
-            const survey = { ...baseSurvey, questions }
-            const responses = {}
-
-            expect(allRequiredQuestionsFilled(survey, responses)).toBe(true)
-        })
-
-        it('should count filled optional questions', () => {
-            const questions: SurveyQuestion[] = [
-                {
-                    type: SurveyQuestionType.SingleChoice,
-                    id: 'q1',
-                    question: 'Q1',
-                    choices: ['A', 'B'],
-                    optional: true,
-                },
-            ]
-            const survey = { ...baseSurvey, questions }
+        it('should return 2 when q0 and q1 are prefilled with skipSubmitButton', () => {
+            const questions = [ratingQuestionWithSkip, singleChoiceWithSkip, openQuestion]
+            const prefilledIndices = [0, 1]
             const responses = {
-                $survey_response_q1: 'A',
+                '$survey_response_q-rating': 8,
+                '$survey_response_q-single': 'B',
             }
 
-            expect(allRequiredQuestionsFilled(survey, responses)).toBe(true)
+            const result = calculatePrefillStartIndex(questions, prefilledIndices, responses)
+            expect(result.startQuestionIndex).toBe(2)
+            expect(result.skippedResponses).toEqual({
+                '$survey_response_q-rating': 8,
+                '$survey_response_q-single': 'B',
+            })
+        })
+
+        it('should return 3 (questions.length) when all questions are prefilled with skipSubmitButton', () => {
+            const ratingQ2: SurveyQuestion = { ...ratingQuestionWithSkip, id: 'q-rating-2' }
+            const questions = [ratingQuestionWithSkip, singleChoiceWithSkip, ratingQ2]
+            const prefilledIndices = [0, 1, 2]
+            const responses = {
+                '$survey_response_q-rating': 5,
+                '$survey_response_q-single': 'A',
+                '$survey_response_q-rating-2': 10,
+            }
+
+            const result = calculatePrefillStartIndex(questions, prefilledIndices, responses)
+            expect(result.startQuestionIndex).toBe(3)
+            expect(result.skippedResponses).toEqual({
+                '$survey_response_q-rating': 5,
+                '$survey_response_q-single': 'A',
+                '$survey_response_q-rating-2': 10,
+            })
         })
     })
 
-    describe('unsupported question types (Link and Open)', () => {
-        it('should skip required Link questions (do not block auto-submit)', () => {
-            const questions: SurveyQuestion[] = [
-                {
-                    type: SurveyQuestionType.SingleChoice,
-                    id: 'q1',
-                    question: 'Q1',
-                    choices: ['A', 'B'],
-                    optional: false,
-                },
-                {
-                    type: SurveyQuestionType.Link,
-                    id: 'q2',
-                    question: 'Q2',
-                    link: 'https://example.com',
-                    optional: false,
-                },
-            ]
-            const survey = { ...baseSurvey, questions }
-            const responses = {
-                $survey_response_q1: 'A',
-                // Link question q2 not filled, but should not block
-            }
+    describe('consecutive prefill without skipSubmitButton', () => {
+        it('should return 0 when q0 is prefilled but has no skipSubmitButton', () => {
+            const questions = [ratingQuestionWithoutSkip, openQuestion]
+            const prefilledIndices = [0]
+            const responses = { '$survey_response_q-rating-no-skip': 3 }
 
-            expect(allRequiredQuestionsFilled(survey, responses)).toBe(true)
+            const result = calculatePrefillStartIndex(questions, prefilledIndices, responses)
+            expect(result.startQuestionIndex).toBe(0)
+            expect(result.skippedResponses).toEqual({})
         })
 
-        it('should skip required Open questions (do not block auto-submit)', () => {
-            const questions: SurveyQuestion[] = [
-                {
-                    type: SurveyQuestionType.Rating,
-                    id: 'q1',
-                    question: 'Q1',
-                    scale: 10,
-                    display: 'number',
-                    lowerBoundLabel: 'Low',
-                    upperBoundLabel: 'High',
-                    optional: false,
-                },
-                {
-                    type: SurveyQuestionType.Open,
-                    id: 'q2',
-                    question: 'Q2',
-                    optional: false,
-                },
-            ]
-            const survey = { ...baseSurvey, questions }
+        it('should return 1 when q0 has skipSubmitButton but q1 does not', () => {
+            const questions = [ratingQuestionWithSkip, ratingQuestionWithoutSkip, openQuestion]
+            const prefilledIndices = [0, 1]
             const responses = {
-                $survey_response_q1: 5,
-                // Open question q2 not filled, but should not block
+                '$survey_response_q-rating': 9,
+                '$survey_response_q-rating-no-skip': 4,
             }
 
-            expect(allRequiredQuestionsFilled(survey, responses)).toBe(true)
-        })
-
-        it('should handle survey with only Link and Open questions', () => {
-            const questions: SurveyQuestion[] = [
-                {
-                    type: SurveyQuestionType.Link,
-                    id: 'q1',
-                    question: 'Q1',
-                    link: 'https://example.com',
-                    optional: false,
-                },
-                {
-                    type: SurveyQuestionType.Open,
-                    id: 'q2',
-                    question: 'Q2',
-                    optional: false,
-                },
-            ]
-            const survey = { ...baseSurvey, questions }
-            const responses = {}
-
-            expect(allRequiredQuestionsFilled(survey, responses)).toBe(true)
+            const result = calculatePrefillStartIndex(questions, prefilledIndices, responses)
+            expect(result.startQuestionIndex).toBe(1)
+            expect(result.skippedResponses).toEqual({ '$survey_response_q-rating': 9 })
         })
     })
 
-    describe('mixed scenarios', () => {
-        it('should handle mix of required, optional, and unsupported types', () => {
-            const questions: SurveyQuestion[] = [
-                {
-                    type: SurveyQuestionType.SingleChoice,
-                    id: 'q1',
-                    question: 'Q1',
-                    choices: ['A', 'B'],
-                    optional: false,
-                },
-                {
-                    type: SurveyQuestionType.Rating,
-                    id: 'q2',
-                    question: 'Q2',
-                    scale: 10,
-                    display: 'number',
-                    lowerBoundLabel: 'Low',
-                    upperBoundLabel: 'High',
-                    optional: true,
-                },
-                {
-                    type: SurveyQuestionType.Open,
-                    id: 'q3',
-                    question: 'Q3',
-                    optional: false,
-                },
-                {
-                    type: SurveyQuestionType.MultipleChoice,
-                    id: 'q4',
-                    question: 'Q4',
-                    choices: ['X', 'Y', 'Z'],
-                    optional: false,
-                },
-            ]
-            const survey = { ...baseSurvey, questions }
+    describe('gap in prefill sequence', () => {
+        it('should return 1 when q0 and q2 are prefilled but q1 is not', () => {
+            const ratingQ2: SurveyQuestion = { ...ratingQuestionWithSkip, id: 'q-rating-2' }
+            const ratingQ3: SurveyQuestion = { ...ratingQuestionWithSkip, id: 'q-rating-3' }
+            const questions = [ratingQuestionWithSkip, ratingQ2, ratingQ3]
+            const prefilledIndices = [0, 2]
             const responses = {
-                $survey_response_q1: 'A',
-                $survey_response_q4: ['X', 'Y'],
-                // q2 is optional - ok to skip
-                // q3 is Open - doesn't block auto-submit
+                '$survey_response_q-rating': 6,
+                '$survey_response_q-rating-3': 8,
             }
 
-            expect(allRequiredQuestionsFilled(survey, responses)).toBe(true)
+            const result = calculatePrefillStartIndex(questions, prefilledIndices, responses)
+            expect(result.startQuestionIndex).toBe(1)
+            expect(result.skippedResponses).toEqual({ '$survey_response_q-rating': 6 })
         })
 
-        it('should return false if any prefill-supported required question is missing', () => {
-            const questions: SurveyQuestion[] = [
-                {
-                    type: SurveyQuestionType.SingleChoice,
-                    id: 'q1',
-                    question: 'Q1',
-                    choices: ['A', 'B'],
-                    optional: false,
-                },
-                {
-                    type: SurveyQuestionType.Open,
-                    id: 'q2',
-                    question: 'Q2',
-                    optional: false,
-                },
-                {
-                    type: SurveyQuestionType.Rating,
-                    id: 'q3',
-                    question: 'Q3',
-                    scale: 10,
-                    display: 'number',
-                    lowerBoundLabel: 'Low',
-                    upperBoundLabel: 'High',
-                    optional: false,
-                },
-            ]
-            const survey = { ...baseSurvey, questions }
+        it('should return 2 when q0, q1, q3 are prefilled but q2 is not', () => {
+            const ratingQ2: SurveyQuestion = { ...ratingQuestionWithSkip, id: 'q-rating-2' }
+            const ratingQ3: SurveyQuestion = { ...ratingQuestionWithSkip, id: 'q-rating-3' }
+            const questions = [ratingQuestionWithSkip, singleChoiceWithSkip, ratingQ2, ratingQ3]
+            const prefilledIndices = [0, 1, 3]
             const responses = {
-                $survey_response_q1: 'A',
-                // q3 is missing and it's a prefill-supported type
+                '$survey_response_q-rating': 5,
+                '$survey_response_q-single': 'C',
+                '$survey_response_q-rating-3': 7,
             }
 
-            expect(allRequiredQuestionsFilled(survey, responses)).toBe(false)
+            const result = calculatePrefillStartIndex(questions, prefilledIndices, responses)
+            expect(result.startQuestionIndex).toBe(2)
+            expect(result.skippedResponses).toEqual({
+                '$survey_response_q-rating': 5,
+                '$survey_response_q-single': 'C',
+            })
         })
     })
 
     describe('edge cases', () => {
-        it('should return true for survey with no questions', () => {
-            const survey = { ...baseSurvey, questions: [] }
-            const responses = {}
-
-            expect(allRequiredQuestionsFilled(survey, responses)).toBe(true)
+        it('should return 0 for empty questions array', () => {
+            const result = calculatePrefillStartIndex([], [0, 1], {})
+            expect(result.startQuestionIndex).toBe(0)
+            expect(result.skippedResponses).toEqual({})
         })
 
-        it('should handle responses with extra keys', () => {
-            const questions: SurveyQuestion[] = [
-                {
-                    type: SurveyQuestionType.SingleChoice,
-                    id: 'q1',
-                    question: 'Q1',
-                    choices: ['A', 'B'],
-                    optional: false,
-                },
-            ]
-            const survey = { ...baseSurvey, questions }
-            const responses = {
-                $survey_response_q1: 'A',
-                $survey_response_extra: 'ignored',
-            }
+        it('should return 0 for empty prefilled indices', () => {
+            const questions = [ratingQuestionWithSkip, openQuestion]
 
-            expect(allRequiredQuestionsFilled(survey, responses)).toBe(true)
+            const result = calculatePrefillStartIndex(questions, [], {})
+            expect(result.startQuestionIndex).toBe(0)
+            expect(result.skippedResponses).toEqual({})
         })
 
-        it('should handle falsy response values correctly', () => {
-            const questions: SurveyQuestion[] = [
-                {
-                    type: SurveyQuestionType.Rating,
-                    id: 'q1',
-                    question: 'Q1',
-                    scale: 10,
-                    display: 'number',
-                    lowerBoundLabel: 'Low',
-                    upperBoundLabel: 'High',
-                    optional: false,
-                },
-            ]
-            const survey = { ...baseSurvey, questions }
-            const responses = {
-                $survey_response_q1: 0, // 0 is a valid rating
-            }
+        it('should return 0 when prefilled indices are all beyond question count', () => {
+            const questions = [ratingQuestionWithSkip]
 
-            expect(allRequiredQuestionsFilled(survey, responses)).toBe(true)
+            const result = calculatePrefillStartIndex(questions, [5, 10], {})
+            expect(result.startQuestionIndex).toBe(0)
+            expect(result.skippedResponses).toEqual({})
         })
 
-        it('should handle empty string response values', () => {
-            const questions: SurveyQuestion[] = [
-                {
-                    type: SurveyQuestionType.SingleChoice,
-                    id: 'q1',
-                    question: 'Q1',
-                    choices: ['', 'B'], // Empty string is a valid choice
-                    optional: false,
-                },
-            ]
-            const survey = { ...baseSurvey, questions }
+        it('should handle unsorted prefilled indices', () => {
+            const questions = [ratingQuestionWithSkip, singleChoiceWithSkip, openQuestion]
+            const prefilledIndices = [1, 0]
             const responses = {
-                $survey_response_q1: '',
+                '$survey_response_q-rating': 4,
+                '$survey_response_q-single': 'A',
             }
 
-            expect(allRequiredQuestionsFilled(survey, responses)).toBe(true)
+            const result = calculatePrefillStartIndex(questions, prefilledIndices, responses)
+            expect(result.startQuestionIndex).toBe(2)
+            expect(result.skippedResponses).toEqual({
+                '$survey_response_q-rating': 4,
+                '$survey_response_q-single': 'A',
+            })
+        })
+
+        it('should skip questions without IDs', () => {
+            const questionWithoutId: SurveyQuestion = {
+                type: SurveyQuestionType.Rating,
+                question: 'No ID',
+                scale: 10,
+                display: 'number',
+                lowerBoundLabel: 'Low',
+                upperBoundLabel: 'High',
+                skipSubmitButton: true,
+            }
+            const questions = [questionWithoutId, ratingQuestionWithSkip]
+            const prefilledIndices = [0, 1]
+            const responses = { '$survey_response_q-rating': 5 }
+
+            const result = calculatePrefillStartIndex(questions, prefilledIndices, responses)
+            expect(result.startQuestionIndex).toBe(2)
+            expect(result.skippedResponses).toEqual({ '$survey_response_q-rating': 5 })
+        })
+
+        it('should handle missing responses for skipped questions', () => {
+            const questions = [ratingQuestionWithSkip, singleChoiceWithSkip, openQuestion]
+            const prefilledIndices = [0, 1]
+            const responses = { '$survey_response_q-rating': 6 }
+
+            const result = calculatePrefillStartIndex(questions, prefilledIndices, responses)
+            expect(result.startQuestionIndex).toBe(2)
+            expect(result.skippedResponses).toEqual({ '$survey_response_q-rating': 6 })
         })
     })
 })

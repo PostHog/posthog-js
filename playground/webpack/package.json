@@ -1,0 +1,19 @@
+{
+    "name": "@posthog-playground/webpack",
+    "version": "1.0.0",
+    "packageManager": "pnpm@10.23.0",
+    "description": "",
+    "license": "ISC",
+    "author": "",
+    "type": "commonjs",
+    "main": "dist/index.js",
+    "scripts": {
+        "build": "webpack --config webpack.config.ts"
+    },
+    "devDependencies": {
+        "@posthog/webpack-plugin": "*",
+        "ts-loader": "^9.5.4",
+        "webpack": "^5.102.1",
+        "webpack-cli": "^6.0.1"
+    }
+}

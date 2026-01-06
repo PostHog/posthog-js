@@ -828,4 +828,63 @@ describe('PostHogGemini - Jest test suite', () => {
       expect(properties['$ai_web_search_count']).toBe(1)
     })
   })
+
+  describe('TTS Support', () => {
+    test('should support responseModalities and speechConfig in config', async () => {
+      mockGeminiResponse = {
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: 'audio/wav',
+                    data: Buffer.from('fake audio data').toString('base64'),
+                  },
+                },
+              ],
+              role: 'model',
+            },
+            finishReason: 'STOP',
+            index: 0,
+            safetyRatings: [],
+          },
+        ],
+        usageMetadata: {
+          promptTokenCount: 10,
+          candidatesTokenCount: 0,
+          totalTokenCount: 10,
+        },
+      } as any
+      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+
+      await client.models.generateContent({
+        model: 'gemini-2.5-flash-preview-tts',
+        contents: [{ role: 'user', parts: [{ text: 'Say hello' }] }],
+        config: {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: 'Kore',
+              },
+            },
+          },
+        },
+        posthogDistinctId: 'test-tts-user',
+      })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalled()
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { distinctId, properties } = captureArgs[0]
+
+      expect(distinctId).toBe('test-tts-user')
+      expect(properties['$ai_model']).toBe('gemini-2.5-flash-preview-tts')
+      expect(properties['$ai_input']).toEqual([{ role: 'user', content: [{ type: 'text', text: 'Say hello' }] }])
+
+      const generateContentCall = ((client as any).client.models.generateContent as jest.Mock).mock.calls[0][0]
+      expect(generateContentCall.config.responseModalities).toEqual(['AUDIO'])
+      expect(generateContentCall.config.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe('Kore')
+    })
+  })
 })

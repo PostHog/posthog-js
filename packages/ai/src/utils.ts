@@ -187,6 +187,14 @@ export const formatResponseOpenAI = (response: any): FormattedMessage[] => {
             })
           }
         }
+
+        // Handle audio output (gpt-4o-audio-preview)
+        if (choice.message.audio) {
+          content.push({
+            type: 'audio',
+            ...choice.message.audio,
+          })
+        }
       }
 
       if (content.length > 0) {
@@ -264,6 +272,21 @@ export const formatResponseGemini = (response: any): FormattedMessage[] => {
                 name: part.functionCall.name,
                 arguments: part.functionCall.args,
               },
+            })
+          } else if (part.inlineData) {
+            // Handle audio/media inline data
+            const mimeType = part.inlineData.mimeType || 'audio/pcm'
+            let data = part.inlineData.data
+
+            // Handle binary data (Buffer/Uint8Array -> base64)
+            if (data instanceof Uint8Array || Buffer.isBuffer(data)) {
+              data = Buffer.from(data).toString('base64')
+            }
+
+            content.push({
+              type: 'audio',
+              mime_type: mimeType,
+              data: data,
             })
           }
         }
@@ -512,7 +535,7 @@ export type SendEventToPosthogParams = {
   eventType?: AIEvent
   distinctId?: string
   traceId: string
-  model: string
+  model?: string
   provider: string
   input: any
   output: any

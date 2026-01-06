@@ -5,21 +5,25 @@ import type {
   PostHogFetchOptions,
   PostHogFetchResponse,
 } from '@posthog/core'
+import { ContextData, ContextOptions } from './extensions/context/types'
 
-export interface IdentifyMessage {
+import type { FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
+
+export type IdentifyMessage = {
   distinctId: string
   properties?: Record<string | number, any>
   disableGeoip?: boolean
 }
 
-export interface SendFeatureFlagsOptions {
+export type SendFeatureFlagsOptions = {
   onlyEvaluateLocally?: boolean
   personProperties?: Record<string, any>
   groupProperties?: Record<string, Record<string, any>>
   flagKeys?: string[]
 }
 
-export interface EventMessage extends IdentifyMessage {
+export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
+  distinctId?: string // Optional - can be provided via context
   event: string
   groups?: Record<string, string | number> // Mapping of group type to group id
   sendFeatureFlags?: boolean | SendFeatureFlagsOptions
@@ -27,7 +31,7 @@ export interface EventMessage extends IdentifyMessage {
   uuid?: string
 }
 
-export interface GroupIdentifyMessage {
+export type GroupIdentifyMessage = {
   groupType: string
   groupKey: string // Unique identifier for the group
   properties?: Record<string | number, any>
@@ -51,6 +55,37 @@ export type FlagProperty = {
 
 export type FlagPropertyValue = string | number | (string | number)[] | boolean
 
+/**
+ * Options for overriding feature flags.
+ *
+ * Supports multiple formats:
+ * - `false` - Clear all overrides
+ * - `string[]` - Enable a list of flags (sets them to `true`)
+ * - `Record<string, FeatureFlagValue>` - Set specific flag values/variants
+ * - `FeatureFlagOverrideOptions` - Set both flag values and payloads
+ */
+export type OverrideFeatureFlagsOptions =
+  | false
+  | string[]
+  | Record<string, FeatureFlagValue>
+  | FeatureFlagOverrideOptions
+
+export type FeatureFlagOverrideOptions = {
+  /**
+   * Flag overrides. Can be:
+   * - `false` to clear flag overrides
+   * - `string[]` to enable a list of flags
+   * - `Record<string, FeatureFlagValue>` to set specific values/variants
+   */
+  flags?: false | string[] | Record<string, FeatureFlagValue>
+  /**
+   * Payload overrides for flags.
+   * - `false` to clear payload overrides
+   * - `Record<string, JsonType>` to set specific payloads
+   */
+  payloads?: false | Record<string, JsonType>
+}
+
 export type FeatureFlagCondition = {
   properties: FlagProperty[]
   rollout_percentage?: number
@@ -72,6 +107,32 @@ export type PostHogOptions = PostHogCoreOptions & {
   // Whether to enable feature flag polling for local evaluation by default. Defaults to true when personalApiKey is provided.
   // We recommend setting this to false if you are only using the personalApiKey for evaluating remote config payloads via `getRemoteConfigPayload` and not using local evaluation.
   enableLocalEvaluation?: boolean
+  /**
+   * @experimental This API is experimental and may change in minor versions.
+   *
+   * Optional cache provider for feature flag definitions.
+   *
+   * Allows custom caching strategies (Redis, database, etc.) for flag definitions
+   * in multi-worker environments. If not provided, defaults to in-memory cache.
+   *
+   * This enables distributed coordination where only one worker fetches flags while
+   * others use cached data, reducing API calls and improving performance.
+   *
+   * @example
+   * ```typescript
+   * import { FlagDefinitionCacheProvider } from 'posthog-node/experimental'
+   *
+   * class RedisCacheProvider implements FlagDefinitionCacheProvider {
+   *   // ... implementation
+   * }
+   *
+   * const client = new PostHog('api-key', {
+   *   personalApiKey: 'personal-key',
+   *   flagDefinitionCacheProvider: new RedisCacheProvider(redis)
+   * })
+   * ```
+   */
+  flagDefinitionCacheProvider?: FlagDefinitionCacheProvider
   /**
    * Allows modification or dropping of events before they're sent to PostHog.
    * If an array is provided, the functions are run in order.
@@ -137,6 +198,28 @@ export type PostHogFeatureFlag = {
   ensure_experience_continuity: boolean
   experiment_set: number[]
 }
+
+/**
+ * Error type constants for the $feature_flag_error property.
+ *
+ * These values are sent in analytics events to track flag evaluation failures.
+ * They should not be changed without considering impact on existing dashboards
+ * and queries that filter on these values.
+ *
+ * Error values:
+ *   ERRORS_WHILE_COMPUTING: Server returned errorsWhileComputingFlags=true
+ *   FLAG_MISSING: Requested flag not in API response
+ *   QUOTA_LIMITED: Rate/quota limit exceeded
+ *   UNKNOWN_ERROR: Unexpected exceptions
+ */
+export const FeatureFlagError = {
+  ERRORS_WHILE_COMPUTING: 'errors_while_computing_flags',
+  FLAG_MISSING: 'flag_missing',
+  QUOTA_LIMITED: 'quota_limited',
+  UNKNOWN_ERROR: 'unknown_error',
+} as const
+
+export type FeatureFlagErrorType = (typeof FeatureFlagError)[keyof typeof FeatureFlagError] | string
 
 export interface IPostHog {
   /**
@@ -306,6 +389,47 @@ export interface IPostHog {
    * already polled automatically at a regular interval.
    */
   reloadFeatureFlags(): Promise<void>
+
+  /**
+   * @description Override feature flags locally. Useful for testing and local development.
+   * Overridden flags take precedence over both local evaluation and remote evaluation.
+   *
+   * @example
+   * ```ts
+   * // Clear all overrides
+   * posthog.overrideFeatureFlags(false)
+   *
+   * // Enable a list of flags (sets them to true)
+   * posthog.overrideFeatureFlags(['flag-a', 'flag-b'])
+   *
+   * // Set specific flag values/variants
+   * posthog.overrideFeatureFlags({ 'my-flag': 'variant-a', 'other-flag': true })
+   *
+   * // Set both flags and payloads
+   * posthog.overrideFeatureFlags({
+   *   flags: { 'my-flag': 'variant-a' },
+   *   payloads: { 'my-flag': { discount: 20 } }
+   * })
+   * ```
+   *
+   * @param overrides - Flag overrides configuration
+   */
+  overrideFeatureFlags(overrides: OverrideFeatureFlagsOptions): void
+
+  /**
+   * @description Run a function with specific context that will be applied to all events captured within that context.
+   * @param data Context data to apply (sessionId, distinctId, properties, enableExceptionAutocapture)
+   * @param fn Function to run with the context
+   * @param options Context options (fresh)
+   * @returns The return value of the function
+   */
+  withContext<T>(data: Partial<ContextData>, fn: () => T, options?: ContextOptions): T
+
+  /**
+   * @description Get the current context data.
+   * @returns The current context data, or undefined if no context is set
+   */
+  getContext(): ContextData | undefined
 
   /**
    * @description Flushes the events still in the queue and clears the feature flags poller to allow for

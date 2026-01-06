@@ -1,5 +1,6 @@
 import { Platform } from 'react-native'
 import { OptionalAsyncStorage } from './optional/OptionalAsyncStorage'
+import { GLOBAL_OBJ, isMacOS, isWeb, isWindows } from './utils'
 import { OptionalExpoApplication } from './optional/OptionalExpoApplication'
 import { OptionalExpoDevice } from './optional/OptionalExpoDevice'
 import { OptionalExpoFileSystem } from './optional/OptionalExpoFileSystem'
@@ -8,14 +9,18 @@ import { OptionalReactNativeDeviceInfo } from './optional/OptionalReactNativeDev
 import { PostHogCustomAppProperties, PostHogCustomStorage } from './types'
 import { OptionalReactNativeLocalize } from './optional/OptionalReactNativeLocalize'
 import { OptionalExpoFileSystemLegacy } from './optional/OptionalExpoFileSystemLegacy'
+import { detectDeviceType } from '@posthog/core'
 
 const getDeviceType = (): string => {
   let deviceType = 'Mobile'
 
-  if (Platform.OS === 'macos' || Platform.OS === 'windows') {
+  if (isMacOS() || isWindows()) {
     deviceType = 'Desktop'
-  } else if (Platform.OS === 'web') {
-    deviceType = 'Web'
+  } else if (isWeb()) {
+    // Check user agent to determine if it's desktop or mobile
+    const ua = typeof navigator !== 'undefined' && navigator.userAgent ? navigator.userAgent : ''
+
+    deviceType = detectDeviceType(ua)
   }
   return deviceType
 }
@@ -63,8 +68,34 @@ export const getAppProperties = (): PostHogCustomAppProperties => {
   }
 
   if (OptionalExpoLocalization) {
-    properties.$locale = OptionalExpoLocalization.locale
-    properties.$timezone = OptionalExpoLocalization.timezone
+    // expo-localization >= 14 use functions to get these results, older versions use JS getters
+    // https://github.com/expo/expo/blob/sdk-54/packages/expo-localization/CHANGELOG.md#1400--2022-10-25
+    // this type below supports both variants, and type-checks with older and newer versions of expo-localization
+    const optionalExpoLocalization: {
+      locale?: string
+      getLocales?: () => {
+        languageTag: string
+      }[]
+      timezone?: string
+      getCalendars?: () => {
+        timeZone: string | null
+      }[]
+    } = OptionalExpoLocalization
+
+    let locale = optionalExpoLocalization.locale
+    if (!locale && optionalExpoLocalization.getLocales) {
+      locale = optionalExpoLocalization.getLocales()[0]?.languageTag
+    }
+    if (locale) {
+      properties.$locale = locale
+    }
+    let timezone: string | undefined | null = optionalExpoLocalization.timezone
+    if (!timezone && optionalExpoLocalization.getCalendars) {
+      timezone = optionalExpoLocalization.getCalendars()[0]?.timeZone
+    }
+    if (timezone) {
+      properties.$timezone = timezone
+    }
   } else if (OptionalReactNativeLocalize) {
     const localesFn = OptionalReactNativeLocalize.getLocales
     if (localesFn) {
@@ -118,10 +149,16 @@ const buildLegacyStorage = (filesystem: any): PostHogCustomStorage => {
   }
 }
 
-export const buildOptimisiticAsyncStorage = (): PostHogCustomStorage => {
+export const buildOptimisiticAsyncStorage = (): PostHogCustomStorage | undefined => {
+  // On web platform during SSR (no window), skip file storage
+  // The caller will fall back to memory storage
+  if (isWeb() && typeof (GLOBAL_OBJ as any)?.window === 'undefined') {
+    return undefined
+  }
+
   // expo-file-system is not supported on web and macos, so we need to use the react-native-async-storage package instead
   // see https://github.com/PostHog/posthog-js-lite/blob/5fb7bee96f739b243dfea5589e2027f16629e8cd/posthog-react-native/src/optional/OptionalExpoFileSystem.ts#L7-L11
-  const supportedPlatform = Platform.OS !== 'web' && Platform.OS !== 'macos'
+  const supportedPlatform = !isWeb() && !isMacOS()
 
   // expo-54 uses expo-file-system v19 which removed the async methods and added new APIs
   // here we try to use the legacy package for back compatibility
