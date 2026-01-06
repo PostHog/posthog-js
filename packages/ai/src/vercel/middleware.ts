@@ -651,6 +651,24 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
     },
   } as T
 
+  // Forward getter properties from the prototype chain (object spread only copies own enumerable properties)
+  const proto = Object.getPrototypeOf(model)
+  if (proto) {
+    const descriptors = Object.getOwnPropertyDescriptors(proto)
+    for (const [key, desc] of Object.entries(descriptors)) {
+      // Only forward getters, and skip methods we've already overridden
+      if (desc.get && !['doGenerate', 'doStream'].includes(key)) {
+        Object.defineProperty(wrappedModel, key, {
+          get() {
+            return model[key as keyof T]
+          },
+          enumerable: true,
+          configurable: true,
+        })
+      }
+    }
+  }
+
   return wrappedModel
 }
 
