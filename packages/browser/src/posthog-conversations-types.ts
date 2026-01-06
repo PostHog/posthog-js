@@ -4,8 +4,16 @@
 export interface ConversationsRemoteConfig {
     /**
      * Whether conversations are enabled for this team
+     * When true, the conversations API is available (posthog.conversations.*)
      */
     enabled: boolean
+
+    /**
+     * Whether the widget UI (button + chat panel) should be shown
+     * Only takes effect when enabled is true
+     * @default false
+     */
+    widgetEnabled?: boolean
 
     /**
      * Public token for authenticating conversations API requests

@@ -191,6 +191,7 @@ export interface LazyLoadedConversationsInterface {
     disable: () => void
     destroy: () => void
     reset: () => void
+    isWidgetVisible: () => boolean
 }
 
 interface PostHogExtensions {

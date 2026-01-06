@@ -69,7 +69,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
     private _needsIdentification(config: ConversationsRemoteConfig, traits: UserProvidedTraits | null): boolean {
         // If requireEmail is not set, no identification needed
         if (!config.requireEmail) {
-            //return false
+            return false
         }
 
         // If we already have an email, no form needed
