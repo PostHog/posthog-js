@@ -111,8 +111,18 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._initialize()
     }
 
-    /** Send a message via the API */
+    /**
+     * Send a message programmatically via the API
+     * Creates a new ticket if none exists or ticketId not provided
+     *
+     * @param message - The message text to send
+     * @param userTraits - Optional user identification data (name, email)
+     * @returns Promise with the response including ticket_id and message_id
+     */
     async sendMessage(message: string, userTraits?: UserProvidedTraits): Promise<SendMessageResponse> {
+        // Track if this is a new ticket
+        const isNewTicket = !this._currentTicketId
+
         // Use current ticket ID if available, otherwise create new ticket
         const ticketId = this._currentTicketId || undefined
         const token = this._config.token
@@ -166,6 +176,24 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     }
 
                     const data = response.json as SendMessageResponse
+
+                    // Update current ticket ID if this was a new ticket
+                    if (isNewTicket && data.ticket_id) {
+                        this._currentTicketId = data.ticket_id
+                        this._persistence.saveTicketId(data.ticket_id)
+                        logger.info('New ticket created', { ticketId: data.ticket_id })
+                    }
+
+                    // Track message sent
+                    this._posthog.capture('$conversations_message_sent', {
+                        ticketId: data.ticket_id,
+                        isNewTicket: isNewTicket,
+                        messageLength: message.length,
+                    })
+
+                    // Update last message timestamp
+                    this._lastMessageTimestamp = data.created_at
+
                     resolve(data)
                 },
             })
@@ -396,34 +424,15 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /**
-     * Handle sending a message
+     * Handle sending a message from the widget
      */
     private _handleSendMessage = async (message: string): Promise<void> => {
         // Get user traits from the widget
         const userTraits = this._widgetRef?.getUserTraits() || undefined
 
-        const isNewTicket = !this._currentTicketId
-
         try {
-            // Call the public API method
-            const response = await this.sendMessage(message, userTraits)
-
-            // Update current ticket ID
-            if (!this._currentTicketId) {
-                this._currentTicketId = response.ticket_id
-                this._persistence.saveTicketId(response.ticket_id)
-                logger.info('New ticket created', { ticketId: response.ticket_id })
-            }
-
-            // Track message sent
-            this._posthog.capture('$conversations_message_sent', {
-                ticketId: response.ticket_id,
-                isNewTicket: isNewTicket,
-                messageLength: message.length,
-            })
-
-            // Update last message timestamp
-            this._lastMessageTimestamp = response.created_at
+            // Call the public API method (which handles tracking and state updates)
+            await this.sendMessage(message, userTraits)
 
             // Poll for response immediately
             setTimeout(() => this._pollMessages(), 1000)

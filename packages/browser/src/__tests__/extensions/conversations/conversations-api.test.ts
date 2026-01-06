@@ -12,6 +12,7 @@ import { PostHog } from '../../../posthog-core'
 import { RemoteConfig } from '../../../types'
 import { assignableWindow } from '../../../utils/globals'
 import { createMockPostHog, createMockConfig, createMockPersistence } from '../../helpers/posthog-instance'
+import Config from '../../../config'
 
 describe('Conversations API Methods', () => {
     let conversations: PostHogConversations
@@ -23,6 +24,9 @@ describe('Conversations API Methods', () => {
         // Clear localStorage
         localStorage.clear()
         jest.clearAllMocks()
+
+        // Enable debug mode so logger actually logs
+        Config.DEBUG = true
 
         // Spy on console.warn
         consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation()
@@ -79,6 +83,7 @@ describe('Conversations API Methods', () => {
 
     afterEach(() => {
         consoleWarnSpy.mockRestore()
+        Config.DEBUG = false
     })
 
     describe('Lazy Loading Behavior', () => {
@@ -428,7 +433,13 @@ describe('Conversations API Methods', () => {
     })
 
     describe('Integration with enable()', () => {
-        it('should load conversations when enable() is called and allow API usage', async () => {
+        it('should return null before remote config is loaded', async () => {
+            // Before remote config, API methods return null
+            expect(await conversations.sendMessage('Test')).toBeNull()
+            expect(conversations.isLoaded()).toBe(false)
+        })
+
+        it('should load conversations when remote config is set and allow API usage', async () => {
             const remoteConfig: Partial<RemoteConfig> = {
                 conversations: {
                     enabled: true,
@@ -437,14 +448,14 @@ describe('Conversations API Methods', () => {
                 } as ConversationsRemoteConfig,
             }
 
+            // onRemoteConfig automatically calls loadIfEnabled()
             conversations.onRemoteConfig(remoteConfig as RemoteConfig)
 
-            // Before enable, API methods return null
-            expect(await conversations.sendMessage('Test')).toBeNull()
+            // Wait a tick for the loading to complete
+            await new Promise((resolve) => setTimeout(resolve, 0))
 
-            // Call enable to trigger loading
-            await conversations.loadIfEnabled()
-            conversations.enable()
+            // After loading, conversations should be loaded
+            expect(conversations.isLoaded()).toBe(true)
 
             // After loading, API methods work
             const mockResponse: SendMessageResponse = {
