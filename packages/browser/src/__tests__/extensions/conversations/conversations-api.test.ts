@@ -172,7 +172,7 @@ describe('Conversations API Methods', () => {
                 const result = await conversations.sendMessage('Hello!')
 
                 expect(result).toEqual(mockResponse)
-                expect(mockManager.sendMessage).toHaveBeenCalledWith('Hello!', undefined)
+                expect(mockManager.sendMessage).toHaveBeenCalledWith('Hello!', undefined, undefined)
             })
 
             it('should send a message with user traits', async () => {
@@ -194,7 +194,46 @@ describe('Conversations API Methods', () => {
                 const result = await conversations.sendMessage('Hello!', userTraits)
 
                 expect(result).toEqual(mockResponse)
-                expect(mockManager.sendMessage).toHaveBeenCalledWith('Hello!', userTraits)
+                expect(mockManager.sendMessage).toHaveBeenCalledWith('Hello!', userTraits, undefined)
+            })
+
+            it('should force creation of a new ticket when newTicket is true', async () => {
+                const mockResponse: SendMessageResponse = {
+                    ticket_id: 'ticket-789',
+                    message_id: 'msg-999',
+                    ticket_status: 'open',
+                    created_at: '2024-01-01T00:00:00Z',
+                    unread_count: 0,
+                }
+
+                ;(mockManager.sendMessage as jest.Mock).mockResolvedValue(mockResponse)
+
+                const result = await conversations.sendMessage('Start new conversation', undefined, true)
+
+                expect(result).toEqual(mockResponse)
+                expect(mockManager.sendMessage).toHaveBeenCalledWith('Start new conversation', undefined, true)
+            })
+
+            it('should force creation of a new ticket with user traits', async () => {
+                const mockResponse: SendMessageResponse = {
+                    ticket_id: 'ticket-new',
+                    message_id: 'msg-new',
+                    ticket_status: 'open',
+                    created_at: '2024-01-01T00:00:00Z',
+                    unread_count: 0,
+                }
+
+                const userTraits: UserProvidedTraits = {
+                    name: 'Jane Doe',
+                    email: 'jane@example.com',
+                }
+
+                ;(mockManager.sendMessage as jest.Mock).mockResolvedValue(mockResponse)
+
+                const result = await conversations.sendMessage('New ticket please', userTraits, true)
+
+                expect(result).toEqual(mockResponse)
+                expect(mockManager.sendMessage).toHaveBeenCalledWith('New ticket please', userTraits, true)
             })
         })
 

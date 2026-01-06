@@ -211,25 +211,35 @@ export class PostHogConversations {
 
     /**
      * Send a message programmatically
-     * Creates a new ticket if none exists
+     * Creates a new ticket if none exists or if newTicket is true
      *
      * @param message - The message text to send
      * @param userTraits - Optional user identification data (name, email)
+     * @param newTicket - If true, forces creation of a new ticket (starts new conversation)
      * @returns Promise with response or null if conversations not loaded yet
      * @note Conversations must be loaded first via enable() or remote config
      *
      * @example
+     * // Send to existing or create new conversation
      * const response = await posthog.conversations.sendMessage('Hello!', {
      *   name: 'John Doe',
      *   email: 'john@example.com'
      * })
+     *
+     * @example
+     * // Force creation of a new conversation/ticket
+     * const newConvo = await posthog.conversations.sendMessage('Start fresh', undefined, true)
      */
-    async sendMessage(message: string, userTraits?: UserProvidedTraits): Promise<SendMessageResponse | null> {
+    async sendMessage(
+        message: string,
+        userTraits?: UserProvidedTraits,
+        newTicket?: boolean
+    ): Promise<SendMessageResponse | null> {
         if (!this._conversationsManager) {
             logger.warn('Conversations not loaded yet. Call posthog.conversations.enable() first.')
             return null
         }
-        return this._conversationsManager.sendMessage(message, userTraits)
+        return this._conversationsManager.sendMessage(message, userTraits, newTicket)
     }
 
     /**

@@ -200,7 +200,7 @@ export interface LazyLoadedConversationsInterface {
     destroy: () => void
     reset: () => void
     isWidgetVisible: () => boolean
-    sendMessage: (message: string, userTraits?: UserProvidedTraits) => Promise<SendMessageResponse>
+    sendMessage: (message: string, userTraits?: UserProvidedTraits, newTicket?: boolean) => Promise<SendMessageResponse>
     getMessages: (ticketId?: string, after?: string) => Promise<GetMessagesResponse>
     markAsRead: (ticketId?: string) => Promise<MarkAsReadResponse>
     getTickets: (options?: GetTicketsOptions) => Promise<GetTicketsResponse>

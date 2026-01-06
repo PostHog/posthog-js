@@ -113,18 +113,26 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
     /**
      * Send a message programmatically via the API
-     * Creates a new ticket if none exists or ticketId not provided
+     * Creates a new ticket if none exists or if newTicket is true
      *
      * @param message - The message text to send
      * @param userTraits - Optional user identification data (name, email)
+     * @param newTicket - If true, forces creation of a new ticket (ignores current ticket)
      * @returns Promise with the response including ticket_id and message_id
      */
-    async sendMessage(message: string, userTraits?: UserProvidedTraits): Promise<SendMessageResponse> {
-        // Track if this is a new ticket
-        const isNewTicket = !this._currentTicketId
+    async sendMessage(
+        message: string,
+        userTraits?: UserProvidedTraits,
+        newTicket?: boolean
+    ): Promise<SendMessageResponse> {
+        // Determine which ticket to use
+        // If newTicket is true, force creation of new ticket by sending null
+        // Otherwise use current ticket ID (which may be null if no ticket exists yet)
+        const ticketId = newTicket ? null : this._currentTicketId
 
-        // Use current ticket ID if available, otherwise create new ticket
-        const ticketId = this._currentTicketId || undefined
+        // Track if this is creating a new ticket
+        const isNewTicket = !ticketId
+
         const token = this._config.token
 
         // eslint-disable-next-line compat/compat
@@ -178,10 +186,14 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     const data = response.json as SendMessageResponse
 
                     // Update current ticket ID if this was a new ticket
+                    // This happens when: 1) No ticket existed, or 2) User forced new ticket creation
                     if (isNewTicket && data.ticket_id) {
                         this._currentTicketId = data.ticket_id
                         this._persistence.saveTicketId(data.ticket_id)
-                        logger.info('New ticket created', { ticketId: data.ticket_id })
+                        logger.info('New ticket created', {
+                            ticketId: data.ticket_id,
+                            forced: newTicket === true,
+                        })
                     }
 
                     // Track message sent
