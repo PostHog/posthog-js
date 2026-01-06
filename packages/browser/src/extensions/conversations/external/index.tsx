@@ -82,11 +82,8 @@ export class ConversationsManager implements ConversationsManagerInterface {
     // SECURITY: widget_session_id is the key for access control
     // This is a random UUID that only this browser knows
     private _widgetSessionId: string
-    // Whether widget should be shown (based on widgetEnabled config)
     private _isWidgetEnabled: boolean
-    // Whether current domain is allowed for widget display
     private _isDomainAllowed: boolean
-    // Whether the widget has been rendered to the DOM
     private _isWidgetRendered: boolean = false
 
     constructor(
