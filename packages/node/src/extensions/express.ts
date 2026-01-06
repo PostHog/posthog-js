@@ -32,7 +32,6 @@ export function setupExpressErrorHandler(
 
 function posthogErrorHandler(posthog: PostHogBackendClient): ExpressErrorMiddleware {
   return (error: MiddlewareError, req, res, next: (error: MiddlewareError) => void): void => {
-    // Skip if this error was already captured (e.g. by LLMO integration)
     if (ErrorTracking.isPreviouslyCapturedError(error)) {
       next(error)
       return
