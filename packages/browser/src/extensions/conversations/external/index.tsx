@@ -8,6 +8,8 @@ import {
     SendMessageResponse,
     GetMessagesResponse,
     MarkAsReadResponse,
+    GetTicketsOptions,
+    GetTicketsResponse,
 } from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'
 import { ConversationsManager as ConversationsManagerInterface } from '../posthog-conversations'
@@ -110,11 +112,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /** Send a message via the API */
-    private _apiSendMessage(
-        message: string,
-        ticketId: string | undefined,
-        userTraits?: UserProvidedTraits
-    ): Promise<SendMessageResponse> {
+    async sendMessage(message: string, userTraits?: UserProvidedTraits): Promise<SendMessageResponse> {
+        // Use current ticket ID if available, otherwise create new ticket
+        const ticketId = this._currentTicketId || undefined
         const token = this._config.token
 
         // eslint-disable-next-line compat/compat
@@ -173,7 +173,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /** Fetch messages via the API */
-    private _apiGetMessages(ticketId: string, after?: string): Promise<GetMessagesResponse> {
+    async getMessages(ticketId?: string, after?: string): Promise<GetMessagesResponse> {
+        // Use provided ticketId or fall back to current ticket
+        const targetTicketId = ticketId || this._currentTicketId
+
+        if (!targetTicketId) {
+            throw new Error('No ticket ID provided and no active conversation')
+        }
         const token = this._config.token
 
         // eslint-disable-next-line compat/compat
@@ -192,7 +198,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             this._posthog._send_request({
                 url: this._posthog.requestRouter.endpointFor(
                     'api',
-                    `/api/conversations/v1/widget/messages/${ticketId}?${formDataToQuery(queryParams)}`
+                    `/api/conversations/v1/widget/messages/${targetTicketId}?${formDataToQuery(queryParams)}`
                 ),
                 method: 'GET',
                 headers: {
@@ -224,17 +230,23 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /** Mark messages as read via the API */
-    private _apiMarkAsRead(ticketId: string): Promise<MarkAsReadResponse> {
+    async markAsRead(ticketId?: string): Promise<MarkAsReadResponse> {
+        // Use provided ticketId or fall back to current ticket
+        const targetTicketId = ticketId || this._currentTicketId
+
+        if (!targetTicketId) {
+            throw new Error('No ticket ID provided and no active conversation')
+        }
         const token = this._config.token
+
+        logger.info('Marking messages as read', { ticketId: targetTicketId })
 
         // eslint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
-            logger.info('Marking messages as read', { ticketId })
-
             this._posthog._send_request({
                 url: this._posthog.requestRouter.endpointFor(
                     'api',
-                    `/api/conversations/v1/widget/messages/${ticketId}/read`
+                    `/api/conversations/v1/widget/messages/${targetTicketId}/read`
                 ),
                 method: 'POST',
                 data: {
@@ -393,8 +405,8 @@ export class ConversationsManager implements ConversationsManagerInterface {
         const isNewTicket = !this._currentTicketId
 
         try {
-            // Call API directly
-            const response = await this._apiSendMessage(message, this._currentTicketId || undefined, userTraits)
+            // Call the public API method
+            const response = await this.sendMessage(message, userTraits)
 
             // Update current ticket ID
             if (!this._currentTicketId) {
@@ -453,7 +465,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
 
         try {
-            const response = await this._apiMarkAsRead(this._currentTicketId)
+            const response = await this.markAsRead(this._currentTicketId || undefined)
             this._unreadCount = response.unread_count
             // Update the widget to reflect the new unread count
             this._widgetRef?.setUnreadCount(0)
@@ -472,7 +484,10 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
 
         try {
-            const response = await this._apiGetMessages(this._currentTicketId, this._lastMessageTimestamp || undefined)
+            const response = await this.getMessages(
+                this._currentTicketId || undefined,
+                this._lastMessageTimestamp || undefined
+            )
 
             // Update unread count from response
             if (isNumber(response.unread_count)) {
@@ -623,11 +638,70 @@ export class ConversationsManager implements ConversationsManagerInterface {
         return this._isWidgetRendered && !isNull(this._widgetRef)
     }
 
+    /** Get tickets list for the current widget session */
+    async getTickets(options?: GetTicketsOptions): Promise<GetTicketsResponse> {
+        const token = this._config.token
+
+        const queryParams: Record<string, string> = {
+            widget_session_id: this._widgetSessionId,
+            limit: String(options?.limit ?? 20),
+            offset: String(options?.offset ?? 0),
+        }
+
+        if (options?.status) {
+            queryParams.status = options.status
+        }
+
+        // eslint-disable-next-line compat/compat
+        return new Promise((resolve, reject) => {
+            this._posthog._send_request({
+                url: this._posthog.requestRouter.endpointFor(
+                    'api',
+                    `/api/conversations/v1/widget/tickets?${formDataToQuery(queryParams)}`
+                ),
+                method: 'GET',
+                headers: {
+                    'X-Conversations-Token': token,
+                },
+                callback: (response) => {
+                    if (response.statusCode === 429) {
+                        reject(new Error('Too many requests. Please wait before trying again.'))
+                        return
+                    }
+
+                    if (response.statusCode !== 200) {
+                        const errorMsg = response.json?.detail || response.json?.message || 'Failed to fetch tickets'
+                        logger.error('Failed to fetch tickets', { status: response.statusCode })
+                        reject(new Error(errorMsg))
+                        return
+                    }
+
+                    if (!response.json) {
+                        reject(new Error('Invalid response from server'))
+                        return
+                    }
+
+                    const data = response.json as GetTicketsResponse
+                    resolve(data)
+                },
+            })
+        })
+    }
+
     /**
-     * Send a message programmatically (internal use)
+     * Get the current active ticket ID
+     * Returns null if no conversation has been started yet
      */
-    sendMessage(message: string): void {
-        this._handleSendMessage(message)
+    getCurrentTicketId(): string | null {
+        return this._currentTicketId
+    }
+
+    /**
+     * Get the widget session ID (persistent browser identifier)
+     * This ID is used for access control and stays the same across page loads
+     */
+    getWidgetSessionId(): string {
+        return this._widgetSessionId
     }
 
     /**

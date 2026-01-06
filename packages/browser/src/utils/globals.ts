@@ -8,7 +8,15 @@ import {
     SiteAppLoader,
     SessionStartReason,
 } from '../types'
-import type { ConversationsRemoteConfig } from '../posthog-conversations-types'
+import type {
+    ConversationsRemoteConfig,
+    GetMessagesResponse,
+    GetTicketsOptions,
+    GetTicketsResponse,
+    MarkAsReadResponse,
+    SendMessageResponse,
+    UserProvidedTraits,
+} from '../posthog-conversations-types'
 // only importing types here, so won't affect the bundle
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SessionRecordingStatus, TriggerType } from '../extensions/replay/external/triggerMatching'
@@ -192,6 +200,12 @@ export interface LazyLoadedConversationsInterface {
     destroy: () => void
     reset: () => void
     isWidgetVisible: () => boolean
+    sendMessage: (message: string, userTraits?: UserProvidedTraits) => Promise<SendMessageResponse>
+    getMessages: (ticketId?: string, after?: string) => Promise<GetMessagesResponse>
+    markAsRead: (ticketId?: string) => Promise<MarkAsReadResponse>
+    getTickets: (options?: GetTicketsOptions) => Promise<GetTicketsResponse>
+    getCurrentTicketId: () => string | null
+    getWidgetSessionId: () => string
 }
 
 interface PostHogExtensions {
