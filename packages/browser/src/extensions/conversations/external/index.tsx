@@ -155,7 +155,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     name,
                     email,
                 },
-                ticket_id: ticketId || null,
+                ticket_id: ticketId,
             }
 
             this._posthog._send_request({
