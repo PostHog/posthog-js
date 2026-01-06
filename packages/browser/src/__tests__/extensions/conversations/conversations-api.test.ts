@@ -91,28 +91,40 @@ describe('Conversations API Methods', () => {
             const result = await conversations.sendMessage('Hello')
 
             expect(result).toBeNull()
-            expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Conversations not loaded yet'))
+            expect(consoleWarnSpy).toHaveBeenCalledWith(
+                '[PostHog.js] [Conversations]',
+                expect.stringContaining('Conversations not loaded yet')
+            )
         })
 
         it('should return null from getMessages when conversations not loaded', async () => {
             const result = await conversations.getMessages()
 
             expect(result).toBeNull()
-            expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Conversations not loaded yet'))
+            expect(consoleWarnSpy).toHaveBeenCalledWith(
+                '[PostHog.js] [Conversations]',
+                expect.stringContaining('Conversations not loaded yet')
+            )
         })
 
         it('should return null from markAsRead when conversations not loaded', async () => {
             const result = await conversations.markAsRead()
 
             expect(result).toBeNull()
-            expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Conversations not loaded yet'))
+            expect(consoleWarnSpy).toHaveBeenCalledWith(
+                '[PostHog.js] [Conversations]',
+                expect.stringContaining('Conversations not loaded yet')
+            )
         })
 
         it('should return null from getTickets when conversations not loaded', async () => {
             const result = await conversations.getTickets()
 
             expect(result).toBeNull()
-            expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Conversations not loaded yet'))
+            expect(consoleWarnSpy).toHaveBeenCalledWith(
+                '[PostHog.js] [Conversations]',
+                expect.stringContaining('Conversations not loaded yet')
+            )
         })
 
         it('should return null from getCurrentTicketId when conversations not loaded', () => {
