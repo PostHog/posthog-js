@@ -22,6 +22,7 @@ describe('PostHogConversations', () => {
             disable: jest.fn(),
             destroy: jest.fn(),
             reset: jest.fn(),
+            isWidgetVisible: jest.fn().mockReturnValue(true),
         } as ConversationsManager
 
         // Setup mock PostHog instance
@@ -395,7 +396,77 @@ describe('PostHogConversations', () => {
         })
     })
 
-    describe('domain filtering', () => {
+    describe('isWidgetEnabled', () => {
+        it('should return false before remote config', () => {
+            expect(conversations.isWidgetEnabled()).toBe(false)
+        })
+
+        it('should return true when widgetEnabled is true in remote config', () => {
+            const remoteConfig: Partial<RemoteConfig> = {
+                conversations: {
+                    enabled: true,
+                    widgetEnabled: true,
+                    token: 'test-token',
+                } as ConversationsRemoteConfig,
+            }
+
+            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+
+            expect(conversations.isWidgetEnabled()).toBe(true)
+        })
+
+        it('should return false when widgetEnabled is false in remote config', () => {
+            const remoteConfig: Partial<RemoteConfig> = {
+                conversations: {
+                    enabled: true,
+                    widgetEnabled: false,
+                    token: 'test-token',
+                } as ConversationsRemoteConfig,
+            }
+
+            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+
+            expect(conversations.isWidgetEnabled()).toBe(false)
+        })
+
+        it('should return false when widgetEnabled is not present', () => {
+            const remoteConfig: Partial<RemoteConfig> = {
+                conversations: {
+                    enabled: true,
+                    token: 'test-token',
+                } as ConversationsRemoteConfig,
+            }
+
+            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+
+            expect(conversations.isWidgetEnabled()).toBe(false)
+        })
+    })
+
+    describe('isWidgetVisible', () => {
+        it('should return false when manager is not loaded', () => {
+            expect(conversations.isWidgetVisible()).toBe(false)
+        })
+
+        it('should delegate to manager when loaded', () => {
+            const remoteConfig: Partial<RemoteConfig> = {
+                conversations: {
+                    enabled: true,
+                    token: 'test-token',
+                } as ConversationsRemoteConfig,
+            }
+
+            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+
+            expect(conversations.isLoaded()).toBe(true)
+            ;(mockManager.isWidgetVisible as jest.Mock).mockReturnValue(true)
+            expect(conversations.isWidgetVisible()).toBe(true)
+            ;(mockManager.isWidgetVisible as jest.Mock).mockReturnValue(false)
+            expect(conversations.isWidgetVisible()).toBe(false)
+        })
+    })
+
+    describe('domain filtering (now handled by ConversationsManager)', () => {
         const originalLocation = window.location
 
         beforeEach(() => {
@@ -413,97 +484,16 @@ describe('PostHogConversations', () => {
             })
         })
 
-        it('should load when domains is empty (allow all)', () => {
-            const remoteConfig: Partial<RemoteConfig> = {
-                conversations: {
-                    enabled: true,
-                    token: 'test-token',
-                    domains: [],
-                } as ConversationsRemoteConfig,
-            }
+        // NOTE: Domain filtering is now done in ConversationsManager, not PostHogConversations
+        // The bundle should always load when enabled=true, regardless of domain
+        // The ConversationsManager decides whether to render the widget based on domain
 
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
-
-            expect(assignableWindow.__PosthogExtensions__?.initConversations).toHaveBeenCalled()
-        })
-
-        it('should load when domains is not present (allow all)', () => {
-            const remoteConfig: Partial<RemoteConfig> = {
-                conversations: {
-                    enabled: true,
-                    token: 'test-token',
-                } as ConversationsRemoteConfig,
-            }
-
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
-
-            expect(assignableWindow.__PosthogExtensions__?.initConversations).toHaveBeenCalled()
-        })
-
-        it('should load when current domain matches exactly', () => {
-            Object.defineProperty(window, 'location', {
-                value: { hostname: 'example.com' },
-                writable: true,
-            })
-
-            const remoteConfig: Partial<RemoteConfig> = {
-                conversations: {
-                    enabled: true,
-                    token: 'test-token',
-                    domains: ['https://example.com'],
-                } as ConversationsRemoteConfig,
-            }
-
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
-
-            expect(assignableWindow.__PosthogExtensions__?.initConversations).toHaveBeenCalled()
-        })
-
-        it('should load when current domain matches wildcard pattern', () => {
-            Object.defineProperty(window, 'location', {
-                value: { hostname: 'app.example.com' },
-                writable: true,
-            })
-
-            const remoteConfig: Partial<RemoteConfig> = {
-                conversations: {
-                    enabled: true,
-                    token: 'test-token',
-                    domains: ['https://*.example.com'],
-                } as ConversationsRemoteConfig,
-            }
-
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
-
-            expect(assignableWindow.__PosthogExtensions__?.initConversations).toHaveBeenCalled()
-        })
-
-        it('should load when wildcard matches root domain too', () => {
-            Object.defineProperty(window, 'location', {
-                value: { hostname: 'example.com' },
-                writable: true,
-            })
-
-            const remoteConfig: Partial<RemoteConfig> = {
-                conversations: {
-                    enabled: true,
-                    token: 'test-token',
-                    domains: ['https://*.example.com'],
-                } as ConversationsRemoteConfig,
-            }
-
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
-
-            expect(assignableWindow.__PosthogExtensions__?.initConversations).toHaveBeenCalled()
-        })
-
-        it('should NOT load when current domain does not match any allowed domain', () => {
+        it('should load bundle regardless of domain (domain check moved to ConversationsManager)', () => {
             Object.defineProperty(window, 'location', {
                 value: { hostname: 'other-site.com' },
                 writable: true,
             })
 
-            // Track if initConversations was called
             const mockInit = jest.fn().mockReturnValue(mockManager)
             assignableWindow.__PosthogExtensions__ = {
                 initConversations: mockInit,
@@ -519,46 +509,9 @@ describe('PostHogConversations', () => {
 
             conversations.onRemoteConfig(remoteConfig as RemoteConfig)
 
-            expect(mockInit).not.toHaveBeenCalled()
-            expect(conversations.isLoaded()).toBe(false)
-        })
-
-        it('should match any domain in the list', () => {
-            Object.defineProperty(window, 'location', {
-                value: { hostname: 'app.posthog.com' },
-                writable: true,
-            })
-
-            const remoteConfig: Partial<RemoteConfig> = {
-                conversations: {
-                    enabled: true,
-                    token: 'test-token',
-                    domains: ['https://example.com', 'https://*.posthog.com'],
-                } as ConversationsRemoteConfig,
-            }
-
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
-
-            expect(assignableWindow.__PosthogExtensions__?.initConversations).toHaveBeenCalled()
-        })
-
-        it('should ignore invalid domain URLs gracefully', () => {
-            Object.defineProperty(window, 'location', {
-                value: { hostname: 'example.com' },
-                writable: true,
-            })
-
-            const remoteConfig: Partial<RemoteConfig> = {
-                conversations: {
-                    enabled: true,
-                    token: 'test-token',
-                    domains: ['not-a-valid-url', 'https://example.com'],
-                } as ConversationsRemoteConfig,
-            }
-
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
-
-            expect(assignableWindow.__PosthogExtensions__?.initConversations).toHaveBeenCalled()
+            // Bundle should still load - domain check is done in ConversationsManager
+            expect(mockInit).toHaveBeenCalled()
+            expect(conversations.isLoaded()).toBe(true)
         })
     })
 })

@@ -1,6 +1,6 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { render, h } from 'preact'
-import { isNumber } from '@posthog/core'
+import { isNumber, isNull } from '@posthog/core'
 import {
     ConversationsRemoteConfig,
     ConversationsWidgetState,
@@ -22,6 +22,52 @@ const logger = createLogger('[ConversationsManager]')
 const WIDGET_CONTAINER_ID = 'ph-conversations-widget-container'
 const POLL_INTERVAL_MS = 5000 // 5 seconds
 
+/**
+ * Extract hostname from a domain string (handles URLs and plain hostnames)
+ */
+function extractHostname(domain: string): string | null {
+    // Remove protocol if present
+    let hostname = domain.replace(/^https?:\/\//, '')
+    // Remove path, query, port if present
+    hostname = hostname.split('/')[0].split('?')[0].split(':')[0]
+    return hostname || null
+}
+
+/**
+ * Check if the current domain matches the allowed domains list.
+ * Returns true if:
+ * - domains is empty or not present (no restriction)
+ * - current hostname matches any allowed domain
+ */
+function isCurrentDomainAllowed(domains: string[] | undefined): boolean {
+    // No domain restriction - allow all
+    if (!domains || domains.length === 0) {
+        return true
+    }
+
+    const currentHostname = window?.location?.hostname
+    if (!currentHostname) {
+        // Can't determine hostname (SSR, etc.) - allow by default
+        return true
+    }
+
+    return domains.some((domain) => {
+        const allowedHostname = extractHostname(domain)
+        if (!allowedHostname) {
+            return false
+        }
+
+        if (allowedHostname.startsWith('*.')) {
+            // Wildcard match: *.example.com matches foo.example.com and example.com
+            const pattern = allowedHostname.slice(2) // Remove "*."
+            return currentHostname.endsWith(`.${pattern}`) || currentHostname === pattern
+        }
+
+        // Exact match
+        return currentHostname === allowedHostname
+    })
+}
+
 export class ConversationsManager implements ConversationsManagerInterface {
     private _config: ConversationsRemoteConfig
     private _persistence: ConversationsPersistence
@@ -36,6 +82,12 @@ export class ConversationsManager implements ConversationsManagerInterface {
     // SECURITY: widget_session_id is the key for access control
     // This is a random UUID that only this browser knows
     private _widgetSessionId: string
+    // Whether widget should be shown (based on widgetEnabled config)
+    private _isWidgetEnabled: boolean
+    // Whether current domain is allowed for widget display
+    private _isDomainAllowed: boolean
+    // Whether the widget has been rendered to the DOM
+    private _isWidgetRendered: boolean = false
 
     constructor(
         config: ConversationsRemoteConfig,
@@ -46,9 +98,15 @@ export class ConversationsManager implements ConversationsManagerInterface {
         // Get or create widget_session_id - this stays the same even when user identifies
         this._widgetSessionId = this._persistence.getOrCreateWidgetSessionId()
 
+        // Determine if widget should be shown based on config and domain
+        this._isWidgetEnabled = config.widgetEnabled === true
+        this._isDomainAllowed = isCurrentDomainAllowed(config.domains)
+
         logger.info('ConversationsManager initialized', {
             config,
             widgetSessionId: this._widgetSessionId,
+            isWidgetEnabled: this._isWidgetEnabled,
+            isDomainAllowed: this._isDomainAllowed,
         })
 
         this._initialize()
@@ -215,7 +273,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /**
-     * Initialize the widget
+     * Initialize the conversations manager.
+     * Always initializes persistence and event listeners for API usage.
+     * Only renders the widget if widgetEnabled is true AND domain is allowed.
      */
     private _initialize(): void {
         if (!document || !window) {
@@ -226,6 +286,44 @@ export class ConversationsManager implements ConversationsManagerInterface {
         // Load any existing ticket ID from localStorage
         this._currentTicketId = this._persistence.loadTicketId()
         logger.info('Loaded ticket ID from storage', { ticketId: this._currentTicketId })
+
+        // Track conversations API loaded (separate from widget loaded)
+        this._posthog.capture('$conversations_loaded', {
+            hasExistingTicket: !!this._currentTicketId,
+            widgetEnabled: this._isWidgetEnabled,
+            domainAllowed: this._isDomainAllowed,
+        })
+
+        // Only render widget if both widgetEnabled and domain is allowed
+        if (this._isWidgetEnabled && this._isDomainAllowed) {
+            this._initializeWidget()
+        } else {
+            logger.info('Widget not rendered', {
+                widgetEnabled: this._isWidgetEnabled,
+                domainAllowed: this._isDomainAllowed,
+            })
+        }
+
+        // Always set up polling and listeners for programmatic API usage
+        // If we have a ticket, load its messages
+        if (this._currentTicketId) {
+            this._loadMessages()
+        }
+
+        // Start polling for messages (always, to support programmatic usage)
+        this._startPolling()
+
+        // Listen for identify events to handle distinct_id changes
+        this._setupIdentifyListener()
+    }
+
+    /**
+     * Initialize and render the widget UI
+     */
+    private _initializeWidget(): void {
+        if (this._isWidgetRendered) {
+            return // Already rendered
+        }
 
         const savedState = this._persistence.loadWidgetState()
         let initialState: ConversationsWidgetState = 'closed'
@@ -238,6 +336,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         // Render the widget
         this._renderWidget(initialState, initialUserTraits)
+        this._isWidgetRendered = true
 
         // Track widget initialization
         this._posthog.capture('$conversations_widget_loaded', {
@@ -245,17 +344,6 @@ export class ConversationsManager implements ConversationsManagerInterface {
             initialState: initialState,
             hasUserTraits: !!initialUserTraits,
         })
-
-        // If we have a ticket, load its messages
-        if (this._currentTicketId) {
-            this._loadMessages()
-        }
-
-        // Start polling for messages (always, to show unread badge)
-        this._startPolling()
-
-        // Listen for identify events to handle distinct_id changes
-        this._setupIdentifyListener()
     }
 
     /**
@@ -506,8 +594,21 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
     /**
      * Enable/show the widget (button and chat panel)
+     * If widget wasn't initially rendered (widgetEnabled was false), this will render it.
+     * Note: Domain restrictions still apply - widget won't render on disallowed domains.
      */
     enable(): void {
+        // Check domain restrictions - don't render on disallowed domains
+        if (!this._isDomainAllowed) {
+            logger.warn('Cannot enable widget: current domain is not allowed')
+            return
+        }
+
+        // If widget isn't rendered yet, render it now
+        if (!this._isWidgetRendered) {
+            this._initializeWidget()
+        }
+
         this._widgetRef?.show()
     }
 
@@ -516,6 +617,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
      */
     disable(): void {
         this._widgetRef?.hide()
+    }
+
+    /**
+     * Check if the widget is currently visible (rendered and shown)
+     */
+    isWidgetVisible(): boolean {
+        return this._isWidgetRendered && !isNull(this._widgetRef)
     }
 
     /**
