@@ -1,6 +1,6 @@
 import { h } from 'preact'
 import { ProductTourStep, ProductTourAppearance } from '../../../posthog-product-tours-types'
-import { renderTipTapContent } from '../product-tours-utils'
+import { getStepHtml } from '../product-tours-utils'
 import { IconPosthogLogo, cancelSVG } from '../../surveys/icons'
 
 export interface ProductTourTooltipInnerProps {
@@ -36,7 +36,7 @@ export function ProductTourTooltipInner({
                 {cancelSVG}
             </button>
 
-            <div class="ph-tour-content" dangerouslySetInnerHTML={{ __html: renderTipTapContent(step.content) }} />
+            <div class="ph-tour-content" dangerouslySetInnerHTML={{ __html: getStepHtml(step) }} />
 
             <div class="ph-tour-footer">
                 <span class="ph-tour-progress">

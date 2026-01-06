@@ -33,6 +33,8 @@ export interface ProductTourStep {
     selector?: string
     progressionTrigger: 'button' | 'click'
     content: JSONContent | null
+    /** Pre-rendered HTML content from the editor. If present, SDK should use this instead of rendering from JSONContent. */
+    contentHtml?: string
     /** Inline survey question config - if present, this is a survey step */
     survey?: ProductTourSurveyQuestion
     /** ID of the auto-created survey for this step (set by backend) */
@@ -41,6 +43,8 @@ export interface ProductTourStep {
     linkedSurveyQuestionId?: string
     /** Enhanced element data for more reliable lookup at runtime */
     inferenceData?: InferredSelector
+    /** Maximum tooltip width in pixels (defaults to 320px) */
+    maxWidth?: number
 }
 
 export interface ProductTourConditions {

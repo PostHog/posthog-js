@@ -224,16 +224,22 @@ export function ProductTourTooltip({
     // For element steps, don't render until position is calculated
     const isPositionReady = isCentered || !isNull(position)
 
-    const tooltipStyle = isCentered
-        ? {
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-          }
-        : {
-              top: position ? `${position.top}px` : '0',
-              left: position ? `${position.left}px` : '0',
-          }
+    const tooltipStyle = {
+        ...(displayedStep.maxWidth && {
+            width: `${displayedStep.maxWidth}px`,
+            maxWidth: `${displayedStep.maxWidth}px`,
+        }),
+        ...(isCentered
+            ? {
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+              }
+            : {
+                  top: position ? `${position.top}px` : '0',
+                  left: position ? `${position.left}px` : '0',
+              }),
+    }
 
     return (
         <div class="ph-tour-container">
