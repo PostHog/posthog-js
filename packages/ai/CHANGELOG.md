@@ -1,5 +1,13 @@
 # posthog-ai
 
+## 7.3.1
+
+### Patch Changes
+
+- [#2850](https://github.com/PostHog/posthog-js/pull/2850) [`b5dbf56`](https://github.com/PostHog/posthog-js/commit/b5dbf56a6482025629a573c44cc8518cfde798c7) Thanks [@andrewm4894](https://github.com/andrewm4894)! - fix(gemini): expose all GoogleGenAI constructor parameters in wrapper
+
+  The `MonitoringGeminiConfig` interface now extends `GoogleGenAIOptions` from `@google/genai`, allowing users to pass all available constructor parameters like `googleAuthOptions` and `httpOptions` without TypeScript errors. (2026-01-06)
+
 ## 7.3.0
 
 ### Minor Changes
