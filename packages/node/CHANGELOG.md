@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.19.0
+
+### Minor Changes
+
+- [#2840](https://github.com/PostHog/posthog-js/pull/2840) [`84e4140`](https://github.com/PostHog/posthog-js/commit/84e4140a1cdb10a10eb4fc13ded9392d7fd8836b) Thanks [@ordehi](https://github.com/ordehi)! - Add overrideFeatureFlags() method for local testing and development
+  (2026-01-06)
+
 ## 5.18.1
 
 ### Patch Changes

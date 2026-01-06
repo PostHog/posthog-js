@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.314.0
+
+### Minor Changes
+
+- [#2835](https://github.com/PostHog/posthog-js/pull/2835) [`d50ffaa`](https://github.com/PostHog/posthog-js/commit/d50ffaa5a1b321249f280271c22d2925d9b2c562) Thanks [@adboio](https://github.com/adboio)! - adds person property for last-seen survey date, bringing more consistent behavior cross-browser/device/etc
+  (2026-01-06)
+
+### Patch Changes
+
+- [#2810](https://github.com/PostHog/posthog-js/pull/2810) [`add0648`](https://github.com/PostHog/posthog-js/commit/add0648f9059438c60999217355c774b2b491aaa) Thanks [@ksvat](https://github.com/ksvat)! - Add targetSessionID to lifecycle start events
+  (2026-01-06)
+
 ## 1.313.0
 
 ### Minor Changes
