@@ -205,7 +205,7 @@ describe('LangChainCallbackHandler', () => {
     // Input tokens should NOT be reduced for OpenAI: 150 (no subtraction)
     expect(captureCall[0].properties['$ai_input_tokens']).toBe(150)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(40)
-    expect(captureCall[0].properties['$ai_cache_read_tokens']).toBe(100)
+    expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(100)
   })
 
   it('should not subtract for OpenAI even when cache_read_tokens >= input_tokens', async () => {
@@ -259,7 +259,7 @@ describe('LangChainCallbackHandler', () => {
     // Input tokens should NOT be reduced for OpenAI: 80 (no subtraction)
     expect(captureCall[0].properties['$ai_input_tokens']).toBe(80)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(20)
-    expect(captureCall[0].properties['$ai_cache_read_tokens']).toBe(100)
+    expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(100)
   })
 
   it('should not subtract when there are no cache_read_tokens', async () => {
@@ -362,7 +362,7 @@ describe('LangChainCallbackHandler', () => {
     // Input tokens should remain 0 (no subtraction because input_tokens is falsy)
     expect(captureCall[0].properties['$ai_input_tokens']).toBe(0)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(10)
-    expect(captureCall[0].properties['$ai_cache_read_tokens']).toBe(50)
+    expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(50)
   })
 
   it('should subtract cache_read_tokens from input_tokens for Anthropic provider', async () => {
@@ -416,7 +416,7 @@ describe('LangChainCallbackHandler', () => {
     // Input tokens should be reduced for Anthropic: 1200 - 800 = 400
     expect(captureCall[0].properties['$ai_input_tokens']).toBe(400)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
-    expect(captureCall[0].properties['$ai_cache_read_tokens']).toBe(800)
+    expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(800)
   })
 
   it('should subtract cache_read_tokens when model name contains "anthropic"', async () => {
@@ -469,7 +469,7 @@ describe('LangChainCallbackHandler', () => {
     // Should subtract because model name contains "anthropic": 500 - 200 = 300
     expect(captureCall[0].properties['$ai_input_tokens']).toBe(300)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(30)
-    expect(captureCall[0].properties['$ai_cache_read_tokens']).toBe(200)
+    expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(200)
   })
 
   it('should prevent negative input_tokens for Anthropic when cache_read >= input', async () => {
@@ -522,6 +522,167 @@ describe('LangChainCallbackHandler', () => {
     // Should be max(100 - 150, 0) = 0
     expect(captureCall[0].properties['$ai_input_tokens']).toBe(0)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(20)
-    expect(captureCall[0].properties['$ai_cache_read_tokens']).toBe(150)
+    expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(150)
+  })
+
+  it('should subtract cache_creation_input_tokens from input_tokens for Anthropic provider', async () => {
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'chat_models', 'anthropic', 'ChatAnthropic'],
+      kwargs: {},
+    }
+
+    const prompts = ['Test with Anthropic cache write']
+    const runId = 'run_anthropic_cache_write_test'
+    const metadata = { ls_model_name: 'claude-3-sonnet-20240229', ls_provider: 'anthropic' }
+    const extraParams = {
+      invocation_params: {
+        temperature: 0.7,
+      },
+    }
+
+    handler.handleLLMStart(serialized, prompts, runId, undefined, extraParams, undefined, metadata)
+
+    // For Anthropic, LangChain reports input_tokens as sum of input + cache_creation
+    // input_tokens=1000 includes 800 cache_creation tokens, so actual uncached input is 200
+    const llmResult = {
+      generations: [
+        [
+          {
+            text: 'Response from Anthropic with cache creation.',
+            message: new AIMessage('Response from Anthropic with cache creation.'),
+          },
+        ],
+      ],
+      llmOutput: {
+        tokenUsage: {
+          promptTokens: 1000, // Sum of actual uncached input (200) + cache creation (800)
+          completionTokens: 50,
+          totalTokens: 1050,
+          cache_creation_input_tokens: 800, // 800 tokens written to cache
+        },
+      },
+    }
+
+    handler.handleLLMEnd(llmResult, runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+    expect(captureCall[0].event).toBe('$ai_generation')
+    // Input tokens should be reduced for Anthropic: 1000 - 800 = 200
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(200)
+    expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
+    expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(800)
+  })
+
+  it('should subtract both cache_read and cache_creation tokens for Anthropic', async () => {
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'chat_models', 'anthropic', 'ChatAnthropic'],
+      kwargs: {},
+    }
+
+    const prompts = ['Test with Anthropic cache read and write']
+    const runId = 'run_anthropic_cache_both_test'
+    const metadata = { ls_model_name: 'claude-3-sonnet-20240229', ls_provider: 'anthropic' }
+    const extraParams = {
+      invocation_params: {
+        temperature: 0.7,
+      },
+    }
+
+    handler.handleLLMStart(serialized, prompts, runId, undefined, extraParams, undefined, metadata)
+
+    // For Anthropic, LangChain reports input_tokens as sum of all tokens
+    // input_tokens=2000 includes 800 cache_read + 500 cache_creation, so uncached is 700
+    const llmResult = {
+      generations: [
+        [
+          {
+            text: 'Response from Anthropic with both cache operations.',
+            message: new AIMessage('Response from Anthropic with both cache operations.'),
+          },
+        ],
+      ],
+      llmOutput: {
+        tokenUsage: {
+          promptTokens: 2000, // Sum of uncached (700) + cache read (800) + cache creation (500)
+          completionTokens: 50,
+          totalTokens: 2050,
+          prompt_tokens_details: {
+            cached_tokens: 800, // 800 tokens read from cache
+          },
+          cache_creation_input_tokens: 500, // 500 tokens written to cache
+        },
+      },
+    }
+
+    handler.handleLLMEnd(llmResult, runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+    expect(captureCall[0].event).toBe('$ai_generation')
+    // Input tokens should be reduced for Anthropic: 2000 - 800 - 500 = 700
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(700)
+    expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
+    expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(800)
+    expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(500)
+  })
+
+  it('should not subtract cache_creation_input_tokens for non-Anthropic providers', async () => {
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'chat_models', 'openai', 'ChatOpenAI'],
+      kwargs: {},
+    }
+
+    const prompts = ['Test with OpenAI cache write']
+    const runId = 'run_openai_cache_write_test'
+    const metadata = { ls_model_name: 'gpt-4', ls_provider: 'openai' }
+    const extraParams = {
+      invocation_params: {
+        temperature: 0.7,
+      },
+    }
+
+    handler.handleLLMStart(serialized, prompts, runId, undefined, extraParams, undefined, metadata)
+
+    // For OpenAI, input_tokens is already separate from cache tokens
+    const llmResult = {
+      generations: [
+        [
+          {
+            text: 'Response from OpenAI with cache creation.',
+            message: new AIMessage('Response from OpenAI with cache creation.'),
+          },
+        ],
+      ],
+      llmOutput: {
+        tokenUsage: {
+          promptTokens: 200, // Just the uncached tokens
+          completionTokens: 50,
+          totalTokens: 250,
+          input_token_details: {
+            cache_creation: 800, // OpenAI format for cache write
+          },
+        },
+      },
+    }
+
+    handler.handleLLMEnd(llmResult, runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+    expect(captureCall[0].event).toBe('$ai_generation')
+    // Input tokens should NOT be reduced for OpenAI
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(200)
+    expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
+    expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(800)
   })
 })
