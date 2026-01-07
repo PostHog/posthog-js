@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.314.0",
+    "version": "1.315.0",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
@@ -50,6 +50,7 @@
     ],
     "dependencies": {
         "@posthog/core": "workspace:*",
+        "@posthog/types": "workspace:*",
         "core-js": "^3.38.1",
         "fflate": "^0.4.8",
         "preact": "^10.19.3",

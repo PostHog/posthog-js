@@ -446,7 +446,10 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
 
       // Add additional token data to properties
       if (additionalTokenData.cacheReadInputTokens) {
-        eventProperties['$ai_cache_read_tokens'] = additionalTokenData.cacheReadInputTokens
+        eventProperties['$ai_cache_read_input_tokens'] = additionalTokenData.cacheReadInputTokens
+      }
+      if (additionalTokenData.cacheWriteInputTokens) {
+        eventProperties['$ai_cache_creation_input_tokens'] = additionalTokenData.cacheWriteInputTokens
       }
       if (additionalTokenData.reasoningTokens) {
         eventProperties['$ai_reasoning_tokens'] = additionalTokenData.reasoningTokens
@@ -623,6 +626,15 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       additionalTokenData.cacheReadInputTokens = usage.input_token_details.cache_read
     } else if (usage.cachedPromptTokens != null) {
       additionalTokenData.cacheReadInputTokens = usage.cachedPromptTokens
+    } else if (usage.cache_read_input_tokens != null) {
+      additionalTokenData.cacheReadInputTokens = usage.cache_read_input_tokens
+    }
+
+    // Check for cache write/creation tokens in various formats
+    if (usage.cache_creation_input_tokens != null) {
+      additionalTokenData.cacheWriteInputTokens = usage.cache_creation_input_tokens
+    } else if (usage.input_token_details?.cache_creation != null) {
+      additionalTokenData.cacheWriteInputTokens = usage.input_token_details.cache_creation
     }
 
     // Check for reasoning tokens in various formats
@@ -677,8 +689,10 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       additionalTokenData.webSearchCount = webSearchCount
     }
 
-    // For Anthropic providers, LangChain reports input_tokens as the sum of input and cache read tokens.
+    // For Anthropic providers, LangChain reports input_tokens as the sum of all input tokens.
     // Our cost calculation expects them to be separate for Anthropic, so we subtract cache tokens.
+    // Both cache_read and cache_write tokens should be subtracted since Anthropic's raw API
+    // reports input_tokens as tokens NOT read from or used to create a cache.
     // For other providers (OpenAI, etc.), input_tokens already excludes cache tokens as expected.
     // Match logic consistent with plugin-server: exact match on provider OR substring match on model
     let isAnthropic = false
@@ -688,8 +702,12 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       isAnthropic = true
     }
 
-    if (isAnthropic && parsedUsage.input && additionalTokenData.cacheReadInputTokens) {
-      parsedUsage.input = Math.max(parsedUsage.input - additionalTokenData.cacheReadInputTokens, 0)
+    if (isAnthropic && parsedUsage.input) {
+      const cacheTokens =
+        (additionalTokenData.cacheReadInputTokens || 0) + (additionalTokenData.cacheWriteInputTokens || 0)
+      if (cacheTokens > 0) {
+        parsedUsage.input = Math.max(parsedUsage.input - cacheTokens, 0)
+      }
     }
 
     return [parsedUsage.input, parsedUsage.output, additionalTokenData]

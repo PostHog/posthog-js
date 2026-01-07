@@ -66,6 +66,7 @@ import {
     SessionIdChangedCallback,
     SnippetArrayItem,
     ToolbarParams,
+    PostHogInterface,
 } from './types'
 import {
     _copyAndTruncateStrings,
@@ -309,7 +310,7 @@ class DeprecatedWebPerformanceObserver {
  *
  * @constructor
  */
-export class PostHog {
+export class PostHog implements PostHogInterface {
     __loaded: boolean
     config: PostHogConfig
     _originalUserConfig?: Partial<PostHogConfig>
@@ -354,7 +355,7 @@ export class PostHog {
     __request_queue: QueuedRequestWithOptions[]
     _pendingRemoteConfig?: RemoteConfig
     analyticsDefaultEndpoint: string
-    version = Config.LIB_VERSION
+    version: string = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
     _cachedPersonProperties: string | null
 

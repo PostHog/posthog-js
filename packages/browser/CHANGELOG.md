@@ -1,5 +1,20 @@
 # posthog-js
 
+## 1.315.0
+
+### Minor Changes
+
+- [#2849](https://github.com/PostHog/posthog-js/pull/2849) [`8ddf472`](https://github.com/PostHog/posthog-js/commit/8ddf472ae952e7c1a402f10b9565a17176255d8d) Thanks [@veryayskiy](https://github.com/veryayskiy)! - separate enable conversation with enable conversations widget
+  (2026-01-06)
+
+- [#2839](https://github.com/PostHog/posthog-js/pull/2839) [`83b03fe`](https://github.com/PostHog/posthog-js/commit/83b03feb885d5d7def9afee6b1b915548bcf5278) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Release new @posthog/types library to make it easy for those using the script version of `posthog-js` to properly type `window.posthog`
+  (2026-01-06)
+
+### Patch Changes
+
+- Updated dependencies [[`83b03fe`](https://github.com/PostHog/posthog-js/commit/83b03feb885d5d7def9afee6b1b915548bcf5278)]:
+    - @posthog/types@1.315.0
+
 ## 1.314.0
 
 ### Minor Changes

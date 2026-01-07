@@ -23,45 +23,12 @@ import { USER_STATE } from '../constants'
 import { isFunction } from '@posthog/core'
 import { uuidv7 } from '../uuidv7'
 
+import type { SegmentUser, SegmentAnalytics, SegmentContext, SegmentPlugin } from '@posthog/types'
+
+// Re-export for backwards compatibility
+export type { SegmentUser, SegmentAnalytics, SegmentContext, SegmentPlugin }
+
 const logger = createLogger('[SegmentIntegration]')
-
-export type SegmentUser = {
-    anonymousId(): string | undefined
-    id(): string | undefined
-}
-
-export type SegmentAnalytics = {
-    user: () => SegmentUser | Promise<SegmentUser>
-    register: (integration: SegmentPlugin) => Promise<void>
-}
-
-// Loosely based on https://github.com/segmentio/analytics-next/blob/master/packages/core/src/plugins/index.ts
-export interface SegmentContext {
-    event: {
-        event: string
-        userId?: string
-        anonymousId?: string
-        properties: any
-    }
-}
-
-type SegmentFunction = (ctx: SegmentContext) => Promise<SegmentContext> | SegmentContext
-
-export interface SegmentPlugin {
-    name: string
-    version: string
-    type: 'enrichment'
-    isLoaded: () => boolean
-    load: (ctx: SegmentContext, instance: any, config?: any) => Promise<unknown>
-    unload?: (ctx: SegmentContext, instance: any) => Promise<unknown> | unknown
-    ready?: () => Promise<unknown>
-    track?: SegmentFunction
-    identify?: SegmentFunction
-    page?: SegmentFunction
-    group?: SegmentFunction
-    alias?: SegmentFunction
-    screen?: SegmentFunction
-}
 
 const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
     if (!Promise || !Promise.resolve) {
@@ -126,10 +93,8 @@ function setupPostHogFromSegment(posthog: PostHog, done: () => void) {
     }
 
     const segmentUser = segment.user()
-
-    // If segmentUser is a promise then we need to wait for it to resolve
     if ('then' in segmentUser && isFunction(segmentUser.then)) {
-        segmentUser.then((user) => bootstrapUser(user))
+        segmentUser.then(bootstrapUser)
     } else {
         bootstrapUser(segmentUser as SegmentUser)
     }
