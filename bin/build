@@ -12,10 +12,8 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     exit 0
 fi
 
-# Ensure dependencies are installed
-if [[ ! -d "node_modules" ]]; then
-    bin/setup || exit 1
-fi
+# Ensure dependencies are installed and up to date
+bin/setup || exit 1
 
 set -e
 
