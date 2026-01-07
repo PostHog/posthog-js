@@ -271,7 +271,13 @@ export interface HeatmapConfig {
     flush_interval_milliseconds: number
 }
 
-export type ConfigDefaults = '2025-11-30' | '2025-05-24' | 'unset'
+/** All valid config defaults values. First element is the latest/recommended value. */
+export const CONFIG_DEFAULTS_VALUES = ['2025-11-30', '2025-05-24', 'unset'] as const
+
+export type ConfigDefaults = (typeof CONFIG_DEFAULTS_VALUES)[number]
+
+/** The latest/recommended config defaults value */
+export const LATEST_CONFIG_DEFAULTS = CONFIG_DEFAULTS_VALUES[0]
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 

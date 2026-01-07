@@ -70,5 +70,8 @@ export type {
     PostHogConfig,
 } from './posthog-config'
 
+// Config defaults constants
+export { CONFIG_DEFAULTS_VALUES, LATEST_CONFIG_DEFAULTS } from './posthog-config'
+
 // Segment integration types
 export type { SegmentUser, SegmentAnalytics, SegmentPlugin, SegmentContext, SegmentFunction } from './segment'
