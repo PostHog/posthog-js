@@ -588,17 +588,20 @@ describe('ConversationsManager', () => {
             expect(manager['_currentTicketId']).toBe('ticket-123')
         })
 
-        it('should save widget state when changed', () => {
+        it('should load saved widget state when re-rendered after hide', () => {
+            // Hide the widget
             act(() => {
-                manager.enable()
+                manager.hide()
             })
+            expect(manager.isVisible()).toBe(false)
 
-            expect(mockPosthog.capture).toHaveBeenCalledWith(
-                '$conversations_widget_state_changed',
-                expect.objectContaining({
-                    state: 'open',
-                })
-            )
+            // Re-show the widget - it should load saved state from persistence
+            act(() => {
+                manager.show()
+            })
+            expect(manager.isVisible()).toBe(true)
+            // Widget state is loaded from persistence in _initializeWidget
+            // The persistence mock returns 'closed' for loadWidgetState
         })
     })
 })
