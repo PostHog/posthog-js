@@ -13,6 +13,7 @@ configs.push({
       sourcemap: true,
       exports: 'named',
       format: `cjs`,
+      interop: 'auto',
     },
     {
       file: packageJson.module,
@@ -43,6 +44,7 @@ providers.forEach((provider) => {
         sourcemap: true,
         exports: 'named',
         format: 'cjs',
+        interop: 'auto',
       },
       {
         file: `./dist/${provider}/index.mjs`,
