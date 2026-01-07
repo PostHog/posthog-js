@@ -1,6 +1,6 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { render, h } from 'preact'
-import { isNumber, isNull } from '@posthog/core'
+import { isNumber } from '@posthog/core'
 import {
     ConversationsRemoteConfig,
     ConversationsWidgetState,
@@ -626,14 +626,14 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /**
-     * Enable/show the widget (button and chat panel)
-     * If widget wasn't initially rendered (widgetEnabled was false), this will render it.
+     * Show the widget (render it to DOM).
+     * The widget respects its saved state (open/closed).
      * Note: Domain restrictions still apply - widget won't render on disallowed domains.
      */
-    enable(): void {
+    show(): void {
         // Check domain restrictions - don't render on disallowed domains
         if (!this._isDomainAllowed) {
-            logger.warn('Cannot enable widget: current domain is not allowed')
+            logger.warn('Cannot show widget: current domain is not allowed')
             return
         }
 
@@ -641,22 +641,33 @@ export class ConversationsManager implements ConversationsManagerInterface {
         if (!this._isWidgetRendered) {
             this._initializeWidget()
         }
-
-        this._widgetRef?.show()
     }
 
     /**
-     * Disable/hide the widget completely (button and chat panel)
+     * Hide and remove the widget from the DOM.
+     * Conversation data is preserved - call show() to re-render.
      */
-    disable(): void {
-        this._widgetRef?.hide()
+    hide(): void {
+        // Stop polling when widget is hidden (save resources)
+        this._stopPolling()
+
+        if (this._containerElement) {
+            render(null, this._containerElement)
+            this._containerElement.remove()
+            this._containerElement = null
+        }
+        this._widgetRef = null
+        this._isWidgetRendered = false
+
+        // Reset timestamp so show() will re-fetch all messages
+        this._lastMessageTimestamp = null
     }
 
     /**
-     * Check if the widget is currently visible (rendered and shown)
+     * Check if the widget is currently visible (rendered in DOM)
      */
-    isWidgetVisible(): boolean {
-        return this._isWidgetRendered && !isNull(this._widgetRef)
+    isVisible(): boolean {
+        return this._isWidgetRendered
     }
 
     /** Get tickets list for the current widget session */

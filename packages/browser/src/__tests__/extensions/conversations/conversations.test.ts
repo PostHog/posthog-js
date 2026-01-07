@@ -18,11 +18,10 @@ describe('PostHogConversations', () => {
 
         // Setup mock manager
         mockManager = {
-            enable: jest.fn(),
-            disable: jest.fn(),
-            destroy: jest.fn(),
+            show: jest.fn(),
+            hide: jest.fn(),
             reset: jest.fn(),
-            isWidgetVisible: jest.fn().mockReturnValue(true),
+            isVisible: jest.fn().mockReturnValue(true),
         } as ConversationsManager
 
         // Setup mock PostHog instance
@@ -79,34 +78,35 @@ describe('PostHogConversations', () => {
             expect(assignableWindow.__PosthogExtensions__?.loadExternalDependency).not.toHaveBeenCalled()
         })
 
-        it('should set isEnabled to false when conversations is null', () => {
+        it('should set isAvailable to false when conversations is null', () => {
             const remoteConfig: Partial<RemoteConfig> = {
                 conversations: null,
             }
 
             conversations.onRemoteConfig(remoteConfig as RemoteConfig)
 
-            expect(conversations.isEnabled()).toBe(false)
+            expect(conversations.isAvailable()).toBe(false)
         })
 
-        it('should set isEnabled to true when conversations is boolean true', () => {
+        it('should not load when conversations is boolean true (no token)', () => {
             const remoteConfig: Partial<RemoteConfig> = {
                 conversations: true,
             }
 
             conversations.onRemoteConfig(remoteConfig as RemoteConfig)
 
-            expect(conversations.isEnabled()).toBe(true)
+            // Boolean true without token won't load the manager
+            expect(conversations.isAvailable()).toBe(false)
         })
 
-        it('should set isEnabled to false when conversations is boolean false', () => {
+        it('should set isAvailable to false when conversations is boolean false', () => {
             const remoteConfig: Partial<RemoteConfig> = {
                 conversations: false,
             }
 
             conversations.onRemoteConfig(remoteConfig as RemoteConfig)
 
-            expect(conversations.isEnabled()).toBe(false)
+            expect(conversations.isAvailable()).toBe(false)
         })
 
         it('should handle ConversationsRemoteConfig object', () => {
@@ -120,7 +120,7 @@ describe('PostHogConversations', () => {
 
             conversations.onRemoteConfig(remoteConfig as RemoteConfig)
 
-            expect(conversations.isEnabled()).toBe(true)
+            expect(conversations.isAvailable()).toBe(true)
         })
 
         it('should load conversations if enabled and all conditions are met', () => {
@@ -178,7 +178,7 @@ describe('PostHogConversations', () => {
 
             conversations.onRemoteConfig(validRemoteConfig as RemoteConfig)
 
-            expect(conversations.isLoaded()).toBe(false)
+            expect(conversations.isAvailable()).toBe(false)
         })
 
         it('should not load if remote config is not loaded yet', () => {
@@ -235,7 +235,7 @@ describe('PostHogConversations', () => {
 
             conversations.onRemoteConfig(validRemoteConfig as RemoteConfig)
 
-            expect(conversations.isLoaded()).toBe(false)
+            expect(conversations.isAvailable()).toBe(false)
         })
     })
 
@@ -249,17 +249,17 @@ describe('PostHogConversations', () => {
             }
 
             conversations.onRemoteConfig(remoteConfig as RemoteConfig)
-            expect(conversations.isLoaded()).toBe(true)
+            expect(conversations.isAvailable()).toBe(true)
 
             conversations.reset()
 
             expect(mockManager.reset).toHaveBeenCalled()
-            expect(conversations.isLoaded()).toBe(false)
+            expect(conversations.isAvailable()).toBe(false)
         })
 
         it('should be a no-op if manager is not loaded', () => {
             // Don't load the manager
-            expect(conversations.isLoaded()).toBe(false)
+            expect(conversations.isAvailable()).toBe(false)
 
             // Should not throw
             expect(() => conversations.reset()).not.toThrow()
@@ -274,11 +274,11 @@ describe('PostHogConversations', () => {
             }
 
             conversations.onRemoteConfig(remoteConfig as RemoteConfig)
-            expect(conversations.isEnabled()).toBe(true)
+            expect(conversations.isAvailable()).toBe(true)
 
             conversations.reset()
 
-            expect(conversations.isEnabled()).toBe(false)
+            expect(conversations.isAvailable()).toBe(false)
         })
     })
 
@@ -293,31 +293,31 @@ describe('PostHogConversations', () => {
             conversations.onRemoteConfig(remoteConfig as RemoteConfig)
         })
 
-        describe('enable', () => {
-            it('should call enable on the manager', () => {
-                conversations.enable()
+        describe('show', () => {
+            it('should call show on the manager', () => {
+                conversations.show()
 
-                expect(mockManager.enable).toHaveBeenCalled()
+                expect(mockManager.show).toHaveBeenCalled()
             })
 
             it('should not throw if manager is not loaded', () => {
                 const newConversations = new PostHogConversations(mockPostHog)
 
-                expect(() => newConversations.enable()).not.toThrow()
+                expect(() => newConversations.show()).not.toThrow()
             })
         })
 
-        describe('disable', () => {
-            it('should call disable on the manager', () => {
-                conversations.disable()
+        describe('hide', () => {
+            it('should call hide on the manager', () => {
+                conversations.hide()
 
-                expect(mockManager.disable).toHaveBeenCalled()
+                expect(mockManager.hide).toHaveBeenCalled()
             })
 
             it('should not throw if manager is not loaded', () => {
                 const newConversations = new PostHogConversations(mockPostHog)
 
-                expect(() => newConversations.disable()).not.toThrow()
+                expect(() => newConversations.hide()).not.toThrow()
             })
         })
     })
@@ -348,12 +348,12 @@ describe('PostHogConversations', () => {
         })
     })
 
-    describe('isLoaded', () => {
+    describe('isAvailable', () => {
         it('should return false before loading', () => {
-            expect(conversations.isLoaded()).toBe(false)
+            expect(conversations.isAvailable()).toBe(false)
         })
 
-        it('should return true after loading', () => {
+        it('should return true after loading with valid config', () => {
             const remoteConfig: Partial<RemoteConfig> = {
                 conversations: {
                     enabled: true,
@@ -363,26 +363,7 @@ describe('PostHogConversations', () => {
 
             conversations.onRemoteConfig(remoteConfig as RemoteConfig)
 
-            expect(conversations.isLoaded()).toBe(true)
-        })
-    })
-
-    describe('isEnabled', () => {
-        it('should return false before remote config', () => {
-            expect(conversations.isEnabled()).toBe(false)
-        })
-
-        it('should return true when enabled in remote config', () => {
-            const remoteConfig: Partial<RemoteConfig> = {
-                conversations: {
-                    enabled: true,
-                    token: 'test-token',
-                } as ConversationsRemoteConfig,
-            }
-
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
-
-            expect(conversations.isEnabled()).toBe(true)
+            expect(conversations.isAvailable()).toBe(true)
         })
 
         it('should return false when disabled in remote config', () => {
@@ -392,60 +373,13 @@ describe('PostHogConversations', () => {
 
             conversations.onRemoteConfig(remoteConfig as RemoteConfig)
 
-            expect(conversations.isEnabled()).toBe(false)
+            expect(conversations.isAvailable()).toBe(false)
         })
     })
 
-    describe('isWidgetEnabled', () => {
-        it('should return false before remote config', () => {
-            expect(conversations.isWidgetEnabled()).toBe(false)
-        })
-
-        it('should return true when widgetEnabled is true in remote config', () => {
-            const remoteConfig: Partial<RemoteConfig> = {
-                conversations: {
-                    enabled: true,
-                    widgetEnabled: true,
-                    token: 'test-token',
-                } as ConversationsRemoteConfig,
-            }
-
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
-
-            expect(conversations.isWidgetEnabled()).toBe(true)
-        })
-
-        it('should return false when widgetEnabled is false in remote config', () => {
-            const remoteConfig: Partial<RemoteConfig> = {
-                conversations: {
-                    enabled: true,
-                    widgetEnabled: false,
-                    token: 'test-token',
-                } as ConversationsRemoteConfig,
-            }
-
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
-
-            expect(conversations.isWidgetEnabled()).toBe(false)
-        })
-
-        it('should return false when widgetEnabled is not present', () => {
-            const remoteConfig: Partial<RemoteConfig> = {
-                conversations: {
-                    enabled: true,
-                    token: 'test-token',
-                } as ConversationsRemoteConfig,
-            }
-
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
-
-            expect(conversations.isWidgetEnabled()).toBe(false)
-        })
-    })
-
-    describe('isWidgetVisible', () => {
+    describe('isVisible', () => {
         it('should return false when manager is not loaded', () => {
-            expect(conversations.isWidgetVisible()).toBe(false)
+            expect(conversations.isVisible()).toBe(false)
         })
 
         it('should delegate to manager when loaded', () => {
@@ -458,11 +392,11 @@ describe('PostHogConversations', () => {
 
             conversations.onRemoteConfig(remoteConfig as RemoteConfig)
 
-            expect(conversations.isLoaded()).toBe(true)
-            ;(mockManager.isWidgetVisible as jest.Mock).mockReturnValue(true)
-            expect(conversations.isWidgetVisible()).toBe(true)
-            ;(mockManager.isWidgetVisible as jest.Mock).mockReturnValue(false)
-            expect(conversations.isWidgetVisible()).toBe(false)
+            expect(conversations.isAvailable()).toBe(true)
+            ;(mockManager.isVisible as jest.Mock).mockReturnValue(true)
+            expect(conversations.isVisible()).toBe(true)
+            ;(mockManager.isVisible as jest.Mock).mockReturnValue(false)
+            expect(conversations.isVisible()).toBe(false)
         })
     })
 
@@ -511,7 +445,7 @@ describe('PostHogConversations', () => {
 
             // Bundle should still load - domain check is done in ConversationsManager
             expect(mockInit).toHaveBeenCalled()
-            expect(conversations.isLoaded()).toBe(true)
+            expect(conversations.isAvailable()).toBe(true)
         })
     })
 })

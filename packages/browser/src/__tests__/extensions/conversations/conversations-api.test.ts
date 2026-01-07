@@ -33,11 +33,10 @@ describe('Conversations API Methods', () => {
 
         // Setup mock manager with API methods
         mockManager = {
-            enable: jest.fn(),
-            disable: jest.fn(),
-            destroy: jest.fn(),
+            show: jest.fn(),
+            hide: jest.fn(),
             reset: jest.fn(),
-            isWidgetVisible: jest.fn().mockReturnValue(true),
+            isVisible: jest.fn().mockReturnValue(true),
             sendMessage: jest.fn(),
             getMessages: jest.fn(),
             markAsRead: jest.fn(),
@@ -87,54 +86,54 @@ describe('Conversations API Methods', () => {
     })
 
     describe('Lazy Loading Behavior', () => {
-        it('should return null from sendMessage when conversations not loaded', async () => {
+        it('should return null from sendMessage when conversations not available', async () => {
             const result = await conversations.sendMessage('Hello')
 
             expect(result).toBeNull()
             expect(consoleWarnSpy).toHaveBeenCalledWith(
                 '[PostHog.js] [Conversations]',
-                expect.stringContaining('Conversations not loaded yet')
+                expect.stringContaining('Conversations not available yet')
             )
         })
 
-        it('should return null from getMessages when conversations not loaded', async () => {
+        it('should return null from getMessages when conversations not available', async () => {
             const result = await conversations.getMessages()
 
             expect(result).toBeNull()
             expect(consoleWarnSpy).toHaveBeenCalledWith(
                 '[PostHog.js] [Conversations]',
-                expect.stringContaining('Conversations not loaded yet')
+                expect.stringContaining('Conversations not available yet')
             )
         })
 
-        it('should return null from markAsRead when conversations not loaded', async () => {
+        it('should return null from markAsRead when conversations not available', async () => {
             const result = await conversations.markAsRead()
 
             expect(result).toBeNull()
             expect(consoleWarnSpy).toHaveBeenCalledWith(
                 '[PostHog.js] [Conversations]',
-                expect.stringContaining('Conversations not loaded yet')
+                expect.stringContaining('Conversations not available yet')
             )
         })
 
-        it('should return null from getTickets when conversations not loaded', async () => {
+        it('should return null from getTickets when conversations not available', async () => {
             const result = await conversations.getTickets()
 
             expect(result).toBeNull()
             expect(consoleWarnSpy).toHaveBeenCalledWith(
                 '[PostHog.js] [Conversations]',
-                expect.stringContaining('Conversations not loaded yet')
+                expect.stringContaining('Conversations not available yet')
             )
         })
 
-        it('should return null from getCurrentTicketId when conversations not loaded', () => {
+        it('should return null from getCurrentTicketId when conversations not available', () => {
             const result = conversations.getCurrentTicketId()
 
             expect(result).toBeNull()
             expect(consoleWarnSpy).not.toHaveBeenCalled() // Safe method, no warning
         })
 
-        it('should return null from getWidgetSessionId when conversations not loaded', () => {
+        it('should return null from getWidgetSessionId when conversations not available', () => {
             const result = conversations.getWidgetSessionId()
 
             expect(result).toBeNull()
@@ -483,11 +482,11 @@ describe('Conversations API Methods', () => {
         })
     })
 
-    describe('Integration with enable()', () => {
+    describe('Integration with show()', () => {
         it('should return null before remote config is loaded', async () => {
             // Before remote config, API methods return null
             expect(await conversations.sendMessage('Test')).toBeNull()
-            expect(conversations.isLoaded()).toBe(false)
+            expect(conversations.isAvailable()).toBe(false)
         })
 
         it('should load conversations when remote config is set and allow API usage', async () => {
@@ -505,8 +504,8 @@ describe('Conversations API Methods', () => {
             // Wait a tick for the loading to complete
             await new Promise((resolve) => setTimeout(resolve, 0))
 
-            // After loading, conversations should be loaded
-            expect(conversations.isLoaded()).toBe(true)
+            // After loading, conversations should be available
+            expect(conversations.isAvailable()).toBe(true)
 
             // After loading, API methods work
             const mockResponse: SendMessageResponse = {
@@ -524,12 +523,12 @@ describe('Conversations API Methods', () => {
         })
     })
 
-    describe('isLoaded helper', () => {
-        it('should return false when conversations not loaded', () => {
-            expect(conversations.isLoaded()).toBe(false)
+    describe('isAvailable helper', () => {
+        it('should return false when conversations not available', () => {
+            expect(conversations.isAvailable()).toBe(false)
         })
 
-        it('should return true when conversations loaded', async () => {
+        it('should return true when conversations available', async () => {
             const remoteConfig: Partial<RemoteConfig> = {
                 conversations: {
                     enabled: true,
@@ -541,7 +540,7 @@ describe('Conversations API Methods', () => {
             conversations.onRemoteConfig(remoteConfig as RemoteConfig)
             await conversations.loadIfEnabled()
 
-            expect(conversations.isLoaded()).toBe(true)
+            expect(conversations.isAvailable()).toBe(true)
         })
     })
 })

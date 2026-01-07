@@ -195,11 +195,15 @@ export interface LazyLoadedDeadClicksAutocaptureInterface {
 }
 
 export interface LazyLoadedConversationsInterface {
-    enable: () => void
-    disable: () => void
-    destroy: () => void
+    // Widget control
+    show: () => void
+    hide: () => void
+    isVisible: () => boolean
+
+    // Lifecycle
     reset: () => void
-    isWidgetVisible: () => boolean
+
+    // API methods
     sendMessage: (message: string, userTraits?: UserProvidedTraits, newTicket?: boolean) => Promise<SendMessageResponse>
     getMessages: (ticketId?: string, after?: string) => Promise<GetMessagesResponse>
     markAsRead: (ticketId?: string) => Promise<MarkAsReadResponse>

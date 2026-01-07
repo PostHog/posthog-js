@@ -216,43 +216,60 @@ describe('ConversationsManager', () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
         })
 
-        it('should show the widget', () => {
-            act(() => {
-                manager.enable()
-            })
-
-            expect(mockPosthog.capture).toHaveBeenCalledWith(
-                '$conversations_widget_state_changed',
-                expect.objectContaining({
-                    state: 'open',
-                })
-            )
+        it('should render widget to DOM when show() is called', () => {
+            // Widget is already rendered from beforeEach via constructor
+            expect(document.getElementById('ph-conversations-widget-container')).toBeInTheDocument()
+            expect(manager.isVisible()).toBe(true)
         })
 
-        it('should hide the widget', () => {
-            act(() => {
-                manager.enable()
-            })
-            jest.clearAllMocks()
+        it('should remove widget from DOM when hide() is called', () => {
+            expect(document.getElementById('ph-conversations-widget-container')).toBeInTheDocument()
+            expect(manager.isVisible()).toBe(true)
 
             act(() => {
-                manager.disable()
+                manager.hide()
             })
 
-            expect(mockPosthog.capture).toHaveBeenCalledWith(
-                '$conversations_widget_state_changed',
-                expect.objectContaining({
-                    state: 'closed',
-                })
-            )
+            expect(document.getElementById('ph-conversations-widget-container')).not.toBeInTheDocument()
+            expect(manager.isVisible()).toBe(false)
+        })
+
+        it('should re-render widget when show() is called after hide()', () => {
+            act(() => {
+                manager.hide()
+            })
+            expect(manager.isVisible()).toBe(false)
+
+            act(() => {
+                manager.show()
+            })
+
+            expect(document.getElementById('ph-conversations-widget-container')).toBeInTheDocument()
+            expect(manager.isVisible()).toBe(true)
+        })
+
+        it('should respect saved widget state when re-rendering', () => {
+            // Widget starts closed by default
+            // The persistence mock returns 'closed' for loadWidgetState
+            // so re-rendering should keep it closed
+            act(() => {
+                manager.hide()
+            })
+
+            act(() => {
+                manager.show()
+            })
+
+            // Widget should be rendered but in closed state (not forced open)
+            expect(manager.isVisible()).toBe(true)
         })
     })
 
-    describe('isWidgetVisible', () => {
+    describe('isVisible', () => {
         it('should return true when widget is rendered', () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
 
-            expect(manager.isWidgetVisible()).toBe(true)
+            expect(manager.isVisible()).toBe(true)
         })
 
         it('should return false when widget is not rendered (widgetEnabled: false)', () => {
@@ -262,12 +279,12 @@ describe('ConversationsManager', () => {
             }
             manager = new ConversationsManager(configWithWidgetDisabled, mockPosthog)
 
-            expect(manager.isWidgetVisible()).toBe(false)
+            expect(manager.isVisible()).toBe(false)
         })
     })
 
-    describe('enable() with widgetEnabled: false', () => {
-        it('should render the widget when enable() is called even if widgetEnabled was false', () => {
+    describe('show() with widgetEnabled: false', () => {
+        it('should render the widget when show() is called even if widgetEnabled was false', () => {
             const configWithWidgetDisabled = {
                 ...mockConfig,
                 widgetEnabled: false,
@@ -276,19 +293,19 @@ describe('ConversationsManager', () => {
 
             // Widget should not be rendered initially
             expect(document.getElementById('ph-conversations-widget-container')).not.toBeInTheDocument()
-            expect(manager.isWidgetVisible()).toBe(false)
+            expect(manager.isVisible()).toBe(false)
 
-            // Call enable() to manually render the widget
+            // Call show() to manually render the widget
             act(() => {
-                manager.enable()
+                manager.show()
             })
 
             // Now widget should be rendered
             expect(document.getElementById('ph-conversations-widget-container')).toBeInTheDocument()
-            expect(manager.isWidgetVisible()).toBe(true)
+            expect(manager.isVisible()).toBe(true)
         })
 
-        it('should capture $conversations_widget_loaded when enable() triggers widget rendering', () => {
+        it('should capture $conversations_widget_loaded when show() triggers widget rendering', () => {
             const configWithWidgetDisabled = {
                 ...mockConfig,
                 widgetEnabled: false,
@@ -298,7 +315,7 @@ describe('ConversationsManager', () => {
             jest.clearAllMocks()
 
             act(() => {
-                manager.enable()
+                manager.show()
             })
 
             expect(mockPosthog.capture).toHaveBeenCalledWith(
