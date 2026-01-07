@@ -1,5 +1,6 @@
 import { PropertyMatchType } from './types'
 import { SurveyActionType, SurveyEventWithFilters } from './posthog-surveys-types'
+import type { InferredSelector } from './extensions/product-tours/element-inference'
 
 export interface JSONContent {
     type?: string
@@ -38,6 +39,8 @@ export interface ProductTourStep {
     linkedSurveyId?: string
     /** ID of the survey question (set by backend, used for event tracking) */
     linkedSurveyQuestionId?: string
+    /** Enhanced element data for more reliable lookup at runtime */
+    inferenceData?: InferredSelector
 }
 
 export interface ProductTourConditions {
