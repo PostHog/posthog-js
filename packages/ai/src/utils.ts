@@ -629,7 +629,7 @@ export const sendEventWithErrorToPosthog = async ({
   const properties = { client, traceId, httpStatus, error: JSON.stringify(error), ...args }
   const enrichedError = error as CoreErrorTracking.PreviouslyCapturedError
 
-  if (client.options.enableExceptionAutocapture) {
+  if (client.options?.enableExceptionAutocapture) {
     // assign a uuid that can be used to link the trace and exception events
     const exceptionId = uuidv7()
     client.captureException(error, undefined, { $ai_trace_id: traceId }, exceptionId)
