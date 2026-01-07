@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.315.1
+
+### Patch Changes
+
+- [#2843](https://github.com/PostHog/posthog-js/pull/2843) [`579cd53`](https://github.com/PostHog/posthog-js/commit/579cd53fc282f9a5dbd15255e08901355df4070e) Thanks [@adboio](https://github.com/adboio)! - support mutli-page product tours
+  (2026-01-07)
+- Updated dependencies []:
+    - @posthog/types@1.315.1
+
 ## 1.315.0
 
 ### Minor Changes
