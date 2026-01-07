@@ -353,15 +353,6 @@ export class ConversationsManager implements ConversationsManagerInterface {
             })
         }
 
-        // Always set up polling and listeners for programmatic API usage
-        // If we have a ticket, load its messages
-        if (this._currentTicketId) {
-            this._loadMessages()
-        }
-
-        // Start polling for messages (always, to support programmatic usage)
-        this._startPolling()
-
         // Listen for identify events to handle distinct_id changes
         this._setupIdentifyListener()
     }
@@ -393,6 +384,15 @@ export class ConversationsManager implements ConversationsManagerInterface {
             initialState: initialState,
             hasUserTraits: !!initialUserTraits,
         })
+
+        // Set up polling and load messages only when widget is rendered
+        // If we have a ticket, load its messages
+        if (this._currentTicketId) {
+            this._loadMessages()
+        }
+
+        // Start polling for messages to keep widget UI updated
+        this._startPolling()
     }
 
     /**
