@@ -67,7 +67,7 @@ const createMockV3Model = (modelId: string): LanguageModelV3 => {
         content: [{ type: 'text', text: response.text }],
         response: { modelId: modelId },
         providerMetadata: {},
-        finishReason: 'stop',
+        finishReason: { unified: 'stop' as const, raw: undefined },
         warnings: [],
       }
     }),
@@ -102,7 +102,7 @@ const createMockV2Model = (modelId: string): LanguageModelV2 => {
         content: [{ type: 'text', text: response.text }],
         response: { modelId: modelId },
         providerMetadata: {},
-        finishReason: 'stop',
+        finishReason: 'stop' as const,
         warnings: [],
       }
     }),
@@ -225,7 +225,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         {
           type: 'finish',
           usage: v3TokenUsage(20, 15),
-          finishReason: 'stop',
+          finishReason: { unified: 'stop' as const, raw: undefined },
         },
       ]
 
@@ -309,7 +309,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         {
           type: 'finish',
           usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
-          finishReason: 'stop',
+          finishReason: 'stop' as const,
         },
       ]
 
@@ -411,9 +411,9 @@ describe('Vercel AI SDK - Dual Version Support', () => {
     })
 
     it.each([
-      ['v2', createMockV2Model, { inputTokens: 15, outputTokens: 5 }],
-      ['v3', createMockV3Model, v3TokenUsage(15, 5)],
-    ])('should track tools in %s models when provided', async (_version, createModel, usageFormat) => {
+      ['v2', createMockV2Model, { inputTokens: 15, outputTokens: 5 }, 'stop' as const],
+      ['v3', createMockV3Model, v3TokenUsage(15, 5), { unified: 'stop' as const, raw: undefined }],
+    ])('should track tools in %s models when provided', async (_version, createModel, usageFormat, finishReason) => {
       const baseModel = createModel('gpt-4')
       baseModel.doGenerate = jest.fn().mockImplementation(async () => ({
         text: 'Using tool',
@@ -421,7 +421,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         content: [{ type: 'text', text: 'Using tool' }],
         response: { modelId: 'gpt-4' },
         providerMetadata: {},
-        finishReason: 'stop',
+        finishReason,
         warnings: [],
       }))
 
@@ -472,9 +472,9 @@ describe('Vercel AI SDK - Dual Version Support', () => {
 
   describe('Mixed reasoning and text content', () => {
     it.each([
-      ['v2', { inputTokens: 10, outputTokens: 8, totalTokens: 18, reasoningTokens: 5 }],
-      ['v3', v3TokenUsage(10, 8, 5)],
-    ] as const)('should handle reasoning in %s streaming', async (version, usageFormat) => {
+      ['v2', { inputTokens: 10, outputTokens: 8, totalTokens: 18, reasoningTokens: 5 }, 'stop' as const],
+      ['v3', v3TokenUsage(10, 8, 5), { unified: 'stop' as const, raw: undefined }],
+    ] as const)('should handle reasoning in %s streaming', async (version, usageFormat, finishReason) => {
       const streamParts = [
         { type: 'reasoning-delta' as const, id: 'r-1', delta: 'Thinking about ' },
         { type: 'reasoning-delta' as const, id: 'r-1', delta: 'the answer.' },
@@ -482,7 +482,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         {
           type: 'finish' as const,
           usage: usageFormat,
-          finishReason: 'stop' as const,
+          finishReason,
         },
       ]
 
