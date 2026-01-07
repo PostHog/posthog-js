@@ -1,5 +1,15 @@
 # posthog-ai
 
+## 7.3.2
+
+### Patch Changes
+
+- [#2838](https://github.com/PostHog/posthog-js/pull/2838) [`c64a15d`](https://github.com/PostHog/posthog-js/commit/c64a15da69a059a539acf8b75c3be47200028e0b) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Fixes cache creation cost for Langchain with Anthropic
+  (2026-01-07)
+
+- [#2842](https://github.com/PostHog/posthog-js/pull/2842) [`0f508e9`](https://github.com/PostHog/posthog-js/commit/0f508e91ca8a8622e69728a0c00a79aaaa387e9a) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Fixes an error with certain AI imports when using CJS (`TypeError: Class extends value undefined is not a constructor or null`)
+  (2026-01-07)
+
 ## 7.3.1
 
 ### Patch Changes
