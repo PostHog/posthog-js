@@ -14,6 +14,9 @@ fi
 
 require_commands node pnpm
 
-run_command "pnpm install" "Installing dependencies"
+set -e
+
+echo "→ Installing dependencies"
+pnpm install
 
 success "Setup complete"

@@ -17,6 +17,9 @@ if [[ ! -d "node_modules" ]]; then
     bin/setup || exit 1
 fi
 
-run_command "pnpm build" "Building packages"
+set -e
+
+echo "→ Building packages"
+pnpm build
 
 success "Build complete"

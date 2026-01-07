@@ -47,13 +47,6 @@ success() {
     print_color green "✓ $*"
 }
 
-# Run command with description
-run_command() {
-    echo "→ ${2:-Running command}"
-    [ "$VERBOSE" ] && echo "  $1"
-    $1 || fatal "Command failed: $1"
-}
-
 # Check required commands exist
 require_commands() {
     local missing=()
