@@ -220,6 +220,7 @@
         "_isInitializingSurveys",
         "_isInteractiveEvent",
         "_isItemPermanentlyIneligible",
+        "_isLoaded",
         "_isLogRecordReadonly",
         "_isLogsEnabled",
         "_isPaused",
