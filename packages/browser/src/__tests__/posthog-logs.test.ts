@@ -47,7 +47,7 @@ describe('posthog-logs', () => {
             // Mock assignableWindow
             Object.defineProperty(assignableWindow, '__PosthogExtensions__', {
                 value: {
-                    initializeLogs: mockInitializeLogs,
+                    logs: { initializeLogs: mockInitializeLogs },
                     loadExternalDependency: mockLoadExternalDependency,
                 },
                 writable: true,
@@ -243,7 +243,7 @@ describe('posthog-logs', () => {
                 Object.defineProperty(assignableWindow, '__PosthogExtensions__', {
                     value: {
                         loadExternalDependency: mockLoadExternalDependency,
-                        initializeLogs: null,
+                        logs: { initializeLogs: null },
                     },
                     writable: true,
                     configurable: true,

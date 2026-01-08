@@ -120,4 +120,4 @@ const initializeLogs = (posthog: PostHog) => {
 }
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
-assignableWindow.__PosthogExtensions__.initializeLogs = initializeLogs
+assignableWindow.__PosthogExtensions__.logs = { initializeLogs }
