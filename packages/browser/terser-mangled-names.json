@@ -194,7 +194,7 @@
         "_hasActionOrEventTriggeredSurvey",
         "_hasBootstrappedFeatureFlags",
         "_hasLoadedFlags",
-        "_hasLogs",
+        "_isLogsEnabled",
         "_hasPassedMinimumDuration",
         "_hasPersonProcessing",
         "_ignoreClick",
