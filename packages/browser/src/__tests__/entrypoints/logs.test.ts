@@ -104,8 +104,6 @@ describe('logs entrypoint', () => {
         Object.assign(console, originalConsole)
     })
 
-
-
     describe('configuration handling', () => {
         beforeEach(() => {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
