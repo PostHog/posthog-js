@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 7.4.1
+
+### Patch Changes
+
+- [#2859](https://github.com/PostHog/posthog-js/pull/2859) [`636e25f`](https://github.com/PostHog/posthog-js/commit/636e25f8a54c44094dfb7f771fa0573fb3c531c1) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Fixes cache creation cost for Vercel V3 with Anthropic
+  (2026-01-08)
+
 ## 7.4.0
 
 ### Minor Changes
