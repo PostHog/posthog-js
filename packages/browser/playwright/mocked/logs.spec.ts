@@ -1,3 +1,4 @@
+/* eslint-disable posthog-js/no-direct-function-check, no-console, @typescript-eslint/no-unused-vars */
 import { expect, test } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
 
@@ -46,26 +47,26 @@ test.describe('logs extension', () => {
         const result = await page.evaluate(() => {
             const posthog = (window as any).posthog
             let configCalled = false
-            
+
             if (posthog && posthog.logs && typeof posthog.logs.onRemoteConfig === 'function') {
                 try {
                     posthog.logs.onRemoteConfig({
                         logs: {
-                            captureConsoleLogs: true
-                        }
+                            captureConsoleLogs: true,
+                        },
                     })
                     configCalled = true
                 } catch (error) {
-                    // Handle any errors
+                    console.log('Error in onRemoteConfig:', error)
                     configCalled = false
                 }
             }
-            
+
             return {
                 hasPosthog: !!posthog,
                 hasLogs: !!(posthog && posthog.logs),
                 hasOnRemoteConfig: !!(posthog && posthog.logs && typeof posthog.logs.onRemoteConfig === 'function'),
-                configCalled: configCalled
+                configCalled: configCalled,
             }
         })
 
@@ -94,24 +95,25 @@ test.describe('logs extension', () => {
         const result = await page.evaluate(() => {
             const posthog = (window as any).posthog
             let configCalled = false
-            
+
             if (posthog && posthog.logs && typeof posthog.logs.onRemoteConfig === 'function') {
                 try {
                     posthog.logs.onRemoteConfig({
                         logs: {
-                            captureConsoleLogs: false
-                        }
+                            captureConsoleLogs: false,
+                        },
                     })
                     configCalled = true
                 } catch (error) {
+                    console.log('Error in onRemoteConfig:', error)
                     configCalled = false
                 }
             }
-            
+
             return {
                 hasPosthog: !!posthog,
                 hasLogs: !!(posthog && posthog.logs),
-                configCalled: configCalled
+                configCalled: configCalled,
             }
         })
 
@@ -144,35 +146,35 @@ test.describe('logs extension', () => {
                     const originalConsole = {
                         log: console.log,
                         warn: console.warn,
-                        error: console.error
+                        error: console.error,
                     }
-                    
+
                     ;(window as any).__intercepted_logs = []
-                    
+
                     console.log = (...args: any[]) => {
                         ;(window as any).__intercepted_logs.push({
                             level: 'log',
-                            args: args
+                            args: args,
                         })
                         originalConsole.log.apply(console, args)
                     }
-                    
+
                     console.warn = (...args: any[]) => {
                         ;(window as any).__intercepted_logs.push({
-                            level: 'warn', 
-                            args: args
+                            level: 'warn',
+                            args: args,
                         })
                         originalConsole.warn.apply(console, args)
                     }
-                    
+
                     console.error = (...args: any[]) => {
                         ;(window as any).__intercepted_logs.push({
                             level: 'error',
-                            args: args
+                            args: args,
                         })
                         originalConsole.error.apply(console, args)
                     }
-                }
+                },
             }
 
             // Initialize the logs extension
@@ -194,15 +196,15 @@ test.describe('logs extension', () => {
         expect(result).toHaveLength(3)
         expect(result[0]).toMatchObject({
             level: 'log',
-            args: ['Test message 1']
+            args: ['Test message 1'],
         })
         expect(result[1]).toMatchObject({
             level: 'warn',
-            args: ['Warning message']
+            args: ['Warning message'],
         })
         expect(result[2]).toMatchObject({
-            level: 'error', 
-            args: ['Error message']
+            level: 'error',
+            args: ['Error message'],
         })
     })
 })
