@@ -76,8 +76,8 @@ describe('logs entrypoint', () => {
                 checkAndGetSessionAndWindowId: jest.fn(() => ({
                     sessionId: 'session-123',
                     windowId: 'window-456',
-                    sessionStartTimestamp: new Date('2023-01-01T10:00:00Z'),
-                    lastActivityTimestamp: new Date('2023-01-01T10:30:00Z'),
+                    sessionStartTimestamp: new Date('2023-01-01T10:00:00Z').getTime(),
+                    lastActivityTimestamp: new Date('2023-01-01T10:30:00Z').getTime(),
                 })),
             },
             get_distinct_id: jest.fn(() => 'user-123'),
