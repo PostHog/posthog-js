@@ -6,6 +6,7 @@ import { createLogger } from './utils/logger'
 
 export class PostHogLogs {
     private _isLogsEnabled?: boolean
+    private _isLoaded?: boolean
 
     constructor(private readonly _instance: PostHog) {}
 
@@ -22,7 +23,7 @@ export class PostHogLogs {
     reset(): void {}
 
     loadIfEnabled() {
-        if (!this._isLogsEnabled) {
+        if (!this._isLogsEnabled || this._isLoaded) {
             return
         }
 
@@ -43,8 +44,8 @@ export class PostHogLogs {
             if (err || !phExtensions.logs?.initializeLogs) {
                 logger.error('Could not load logs script', err)
             } else {
-                // Need to get the function reference again inside the callback
                 phExtensions.logs.initializeLogs(this._instance)
+                this._isLoaded = true
             }
         })
     }

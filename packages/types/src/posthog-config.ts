@@ -538,6 +538,13 @@ export interface SurveyConfig {
     autoSubmitDelay?: number
 }
 
+/**
+ * Logs configuration options
+ */
+export interface LogsConfig {
+    captureConsoleLogs?: boolean
+}
+
 // See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
 type NextOptions = { revalidate: false | 0 | number; tags: string[] }
 
@@ -784,6 +791,13 @@ export interface PostHogConfig {
      * @default undefined
      */
     surveys?: SurveyConfig
+
+    /**
+     * Logs-specific configuration options.
+     *
+     * @default undefined
+     */
+    logs?: LogsConfig
 
     /**
      * Determines whether PostHog should disable all conversations functionality.
