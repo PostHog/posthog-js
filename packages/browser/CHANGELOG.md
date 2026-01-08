@@ -1,5 +1,20 @@
 # posthog-js
 
+## 1.316.0
+
+### Minor Changes
+
+- [#2851](https://github.com/PostHog/posthog-js/pull/2851) [`d4bf005`](https://github.com/PostHog/posthog-js/commit/d4bf005048473861632ca422b0a2e5e708151276) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Expose Conversations API Methods for Custom UI
+  (2026-01-08)
+
+### Patch Changes
+
+- [#2856](https://github.com/PostHog/posthog-js/pull/2856) [`c1ed63b`](https://github.com/PostHog/posthog-js/commit/c1ed63b0f03380a5e4bb2463491b3f767f64a514) Thanks [@marandaneto](https://github.com/marandaneto)! - chore: expose default stack parser creator
+  (2026-01-08)
+- Updated dependencies [[`fba9fb2`](https://github.com/PostHog/posthog-js/commit/fba9fb2ea4be2ea396730741b4718b4a2c80d026), [`c1ed63b`](https://github.com/PostHog/posthog-js/commit/c1ed63b0f03380a5e4bb2463491b3f767f64a514)]:
+    - @posthog/core@1.9.1
+    - @posthog/types@1.316.0
+
 ## 1.315.1
 
 ### Patch Changes
