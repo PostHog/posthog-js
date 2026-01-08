@@ -1,7 +1,9 @@
 import { h } from 'preact'
 import { useEffect, useState, useCallback, useRef } from 'preact/hooks'
 import { ProductTour, ProductTourStep, ProductTourDismissReason } from '../../../posthog-product-tours-types'
+import { SurveyPosition } from '@posthog/core'
 import { calculateTooltipPosition, getSpotlightStyle, TooltipPosition } from '../product-tours-utils'
+import { getPopoverPosition } from '../../surveys/surveys-extension-utils'
 import { addEventListener } from '../../../utils'
 import { window as _window } from '../../../utils/globals'
 import { ProductTourTooltipInner } from './ProductTourTooltipInner'
@@ -110,8 +112,8 @@ export function ProductTourTooltip({
     const previousStepRef = useRef(stepIndex)
     const isTransitioningRef = useRef(false)
 
-    // Modal and survey steps are both centered on screen
-    const isCentered = displayedStep.type === 'modal' || displayedStep.type === 'survey'
+    // Modal and survey steps use screen positioning (not anchored to an element)
+    const isScreenPositioned = displayedStep.type === 'modal' || displayedStep.type === 'survey'
 
     const updatePosition = useCallback(() => {
         if (!targetElement) return
@@ -172,7 +174,7 @@ export function ProductTourTooltip({
     }, [targetElement, stepIndex, step, updatePosition])
 
     useEffect(() => {
-        if (transitionState !== 'visible' || isCentered) return
+        if (transitionState !== 'visible' || isScreenPositioned) return
 
         const handleUpdate = () => {
             if (!isTransitioningRef.current) {
@@ -187,7 +189,7 @@ export function ProductTourTooltip({
             window?.removeEventListener('scroll', handleUpdate, true)
             window?.removeEventListener('resize', handleUpdate)
         }
-    }, [updatePosition, transitionState, isCentered])
+    }, [updatePosition, transitionState, isScreenPositioned])
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -222,18 +224,28 @@ export function ProductTourTooltip({
     const isSurvey = displayedStep.type === 'survey'
 
     // For element steps, don't render until position is calculated
-    const isPositionReady = isCentered || !isNull(position)
+    const isPositionReady = isScreenPositioned || !isNull(position)
+
+    const basePosition = { top: 'auto', right: 'auto', bottom: 'auto', left: 'auto', transform: 'none' }
+
+    // surveys default to bottom: 0, and PT should not, so this is a little clunky
+    const getModalPosition = () => {
+        const pos = getPopoverPosition(undefined, displayedStep.modalPosition ?? SurveyPosition.MiddleCenter)
+        if (!('top' in pos) && !('bottom' in pos)) {
+            return { ...pos, bottom: '30px' }
+        }
+        return pos
+    }
 
     const tooltipStyle = {
         ...(displayedStep.maxWidth && {
             width: `${displayedStep.maxWidth}px`,
             maxWidth: `${displayedStep.maxWidth}px`,
         }),
-        ...(isCentered
+        ...(isScreenPositioned
             ? {
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
+                  ...basePosition,
+                  ...getModalPosition(),
               }
             : {
                   top: position ? `${position.top}px` : '0',
@@ -245,13 +257,13 @@ export function ProductTourTooltip({
         <div class="ph-tour-container">
             <div class="ph-tour-click-overlay" onClick={handleOverlayClick} />
 
-            {/* Modal overlay - visible for centered steps */}
+            {/* Modal overlay - visible for non-element steps */}
             <div
                 class="ph-tour-modal-overlay"
                 style={{
-                    opacity: isCentered && isVisible ? 1 : 0,
+                    opacity: isScreenPositioned && isVisible ? 1 : 0,
                     transition: `opacity ${TRANSITION_DURATION}ms ease-out`,
-                    pointerEvents: isCentered ? 'auto' : 'none',
+                    pointerEvents: 'none',
                 }}
             />
 
@@ -262,19 +274,23 @@ export function ProductTourTooltip({
                     ...(isVisible && isPositionReady && spotlightStyle
                         ? spotlightStyle
                         : { top: '50%', left: '50%', width: '0px', height: '0px' }),
-                    opacity: !isCentered && isVisible && isPositionReady ? 1 : 0,
+                    opacity: !isScreenPositioned && isVisible && isPositionReady ? 1 : 0,
                     transition: `opacity ${TRANSITION_DURATION}ms ease-out`,
                     ...(displayedStep.progressionTrigger === 'click' &&
-                        !isCentered && {
+                        !isScreenPositioned && {
                             pointerEvents: 'auto',
                             cursor: 'pointer',
                         }),
                 }}
-                onClick={displayedStep.progressionTrigger === 'click' && !isCentered ? handleSpotlightClick : undefined}
+                onClick={
+                    displayedStep.progressionTrigger === 'click' && !isScreenPositioned
+                        ? handleSpotlightClick
+                        : undefined
+                }
             />
 
             <div
-                class={`ph-tour-tooltip ${isCentered ? 'ph-tour-tooltip--modal' : ''} ${isSurvey ? 'ph-tour-survey-step' : ''}`}
+                class={`ph-tour-tooltip ${isScreenPositioned ? 'ph-tour-tooltip--modal' : ''} ${isSurvey ? 'ph-tour-survey-step' : ''}`}
                 style={{
                     ...tooltipStyle,
                     opacity: isVisible && isPositionReady ? 1 : 0,
@@ -282,7 +298,7 @@ export function ProductTourTooltip({
                 }}
                 onClick={handleTooltipClick}
             >
-                {!isCentered && position && (
+                {!isScreenPositioned && position && (
                     <div class={`ph-tour-arrow ph-tour-arrow--${getOppositePosition(position.position)}`} />
                 )}
 

@@ -58,6 +58,7 @@ import {
     SurveyContext,
     getSurveyStylesheet,
     addSurveyCSSVariablesToElement,
+    getPopoverPosition,
 } from './surveys/surveys-extension-utils'
 import {
     extractPrefillParamsFromUrl,
@@ -946,41 +947,6 @@ interface SurveyPopupProps {
     onPreviewSubmit?: (res: string | string[] | number | null) => void
     onPopupSurveyDismissed?: () => void
     onCloseConfirmationMessage?: () => void
-}
-
-function getPopoverPosition(
-    type: SurveyType,
-    position: SurveyPosition = SurveyPosition.Right,
-    surveyWidgetType?: SurveyWidgetType
-) {
-    if (type === SurveyType.ExternalSurvey) {
-        return {}
-    }
-
-    switch (position) {
-        case SurveyPosition.TopLeft:
-            return { top: '0', left: '0', transform: 'translate(30px, 30px)' }
-        case SurveyPosition.TopRight:
-            return { top: '0', right: '0', transform: 'translate(-30px, 30px)' }
-        case SurveyPosition.TopCenter:
-            return { top: '0', left: '50%', transform: 'translate(-50%, 30px)' }
-        case SurveyPosition.MiddleLeft:
-            return { top: '50%', left: '0', transform: 'translate(30px, -50%)' }
-        case SurveyPosition.MiddleRight:
-            return { top: '50%', right: '0', transform: 'translate(-30px, -50%)' }
-        case SurveyPosition.MiddleCenter:
-            return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
-        case SurveyPosition.Left:
-            return { left: '30px' }
-        case SurveyPosition.Center:
-            return {
-                left: '50%',
-                transform: 'translateX(-50%)',
-            }
-        default:
-        case SurveyPosition.Right:
-            return { right: type === SurveyType.Widget && surveyWidgetType === SurveyWidgetType.Tab ? '60px' : '30px' }
-    }
 }
 
 function getTabPositionStyles(position: SurveyTabPosition = SurveyTabPosition.Right): JSX.CSSProperties {

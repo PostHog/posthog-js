@@ -1,6 +1,7 @@
 import { PropertyMatchType } from './types'
 import { SurveyActionType, SurveyEventWithFilters } from './posthog-surveys-types'
 import type { InferredSelector } from './extensions/product-tours/element-inference'
+import { SurveyPosition } from '@posthog/core'
 
 export interface JSONContent {
     type?: string
@@ -45,6 +46,8 @@ export interface ProductTourStep {
     inferenceData?: InferredSelector
     /** Maximum tooltip width in pixels (defaults to 320px) */
     maxWidth?: number
+    /** Position for modal/survey steps (defaults to middle_center) */
+    modalPosition?: SurveyPosition
 }
 
 export interface ProductTourConditions {
