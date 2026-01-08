@@ -1,6 +1,6 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { render, h } from 'preact'
-import { isNumber, isNull } from '@posthog/core'
+import { isNumber } from '@posthog/core'
 import {
     ConversationsRemoteConfig,
     ConversationsWidgetState,
@@ -8,6 +8,8 @@ import {
     SendMessageResponse,
     GetMessagesResponse,
     MarkAsReadResponse,
+    GetTicketsOptions,
+    GetTicketsResponse,
 } from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'
 import { ConversationsManager as ConversationsManagerInterface } from '../posthog-conversations'
@@ -109,12 +111,28 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._initialize()
     }
 
-    /** Send a message via the API */
-    private _apiSendMessage(
+    /**
+     * Send a message programmatically via the API
+     * Creates a new ticket if none exists or if newTicket is true
+     *
+     * @param message - The message text to send
+     * @param userTraits - Optional user identification data (name, email)
+     * @param newTicket - If true, forces creation of a new ticket (ignores current ticket)
+     * @returns Promise with the response including ticket_id and message_id
+     */
+    async sendMessage(
         message: string,
-        ticketId: string | undefined,
-        userTraits?: UserProvidedTraits
+        userTraits?: UserProvidedTraits,
+        newTicket?: boolean
     ): Promise<SendMessageResponse> {
+        // Determine which ticket to use
+        // If newTicket is true, force creation of new ticket by sending null
+        // Otherwise use current ticket ID (which may be null if no ticket exists yet)
+        const ticketId = newTicket ? null : this._currentTicketId
+
+        // Track if this is creating a new ticket
+        const isNewTicket = !ticketId
+
         const token = this._config.token
 
         // eslint-disable-next-line compat/compat
@@ -137,7 +155,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     name,
                     email,
                 },
-                ticket_id: ticketId || null,
+                ticket_id: ticketId,
             }
 
             this._posthog._send_request({
@@ -166,6 +184,28 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     }
 
                     const data = response.json as SendMessageResponse
+
+                    // Update current ticket ID if this was a new ticket
+                    // This happens when: 1) No ticket existed, or 2) User forced new ticket creation
+                    if (isNewTicket && data.ticket_id) {
+                        this._currentTicketId = data.ticket_id
+                        this._persistence.saveTicketId(data.ticket_id)
+                        logger.info('New ticket created', {
+                            ticketId: data.ticket_id,
+                            forced: newTicket === true,
+                        })
+                    }
+
+                    // Track message sent
+                    this._posthog.capture('$conversations_message_sent', {
+                        ticketId: data.ticket_id,
+                        isNewTicket: isNewTicket,
+                        messageLength: message.length,
+                    })
+
+                    // Update last message timestamp
+                    this._lastMessageTimestamp = data.created_at
+
                     resolve(data)
                 },
             })
@@ -173,7 +213,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /** Fetch messages via the API */
-    private _apiGetMessages(ticketId: string, after?: string): Promise<GetMessagesResponse> {
+    async getMessages(ticketId?: string, after?: string): Promise<GetMessagesResponse> {
+        // Use provided ticketId or fall back to current ticket
+        const targetTicketId = ticketId || this._currentTicketId
+
+        if (!targetTicketId) {
+            throw new Error('No ticket ID provided and no active conversation')
+        }
         const token = this._config.token
 
         // eslint-disable-next-line compat/compat
@@ -192,7 +238,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             this._posthog._send_request({
                 url: this._posthog.requestRouter.endpointFor(
                     'api',
-                    `/api/conversations/v1/widget/messages/${ticketId}?${formDataToQuery(queryParams)}`
+                    `/api/conversations/v1/widget/messages/${targetTicketId}?${formDataToQuery(queryParams)}`
                 ),
                 method: 'GET',
                 headers: {
@@ -224,17 +270,23 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /** Mark messages as read via the API */
-    private _apiMarkAsRead(ticketId: string): Promise<MarkAsReadResponse> {
+    async markAsRead(ticketId?: string): Promise<MarkAsReadResponse> {
+        // Use provided ticketId or fall back to current ticket
+        const targetTicketId = ticketId || this._currentTicketId
+
+        if (!targetTicketId) {
+            throw new Error('No ticket ID provided and no active conversation')
+        }
         const token = this._config.token
+
+        logger.info('Marking messages as read', { ticketId: targetTicketId })
 
         // eslint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
-            logger.info('Marking messages as read', { ticketId })
-
             this._posthog._send_request({
                 url: this._posthog.requestRouter.endpointFor(
                     'api',
-                    `/api/conversations/v1/widget/messages/${ticketId}/read`
+                    `/api/conversations/v1/widget/messages/${targetTicketId}/read`
                 ),
                 method: 'POST',
                 data: {
@@ -301,15 +353,6 @@ export class ConversationsManager implements ConversationsManagerInterface {
             })
         }
 
-        // Always set up polling and listeners for programmatic API usage
-        // If we have a ticket, load its messages
-        if (this._currentTicketId) {
-            this._loadMessages()
-        }
-
-        // Start polling for messages (always, to support programmatic usage)
-        this._startPolling()
-
         // Listen for identify events to handle distinct_id changes
         this._setupIdentifyListener()
     }
@@ -341,6 +384,15 @@ export class ConversationsManager implements ConversationsManagerInterface {
             initialState: initialState,
             hasUserTraits: !!initialUserTraits,
         })
+
+        // Set up polling and load messages only when widget is rendered
+        // If we have a ticket, load its messages
+        if (this._currentTicketId) {
+            this._loadMessages()
+        }
+
+        // Start polling for messages to keep widget UI updated
+        this._startPolling()
     }
 
     /**
@@ -384,34 +436,15 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /**
-     * Handle sending a message
+     * Handle sending a message from the widget
      */
     private _handleSendMessage = async (message: string): Promise<void> => {
         // Get user traits from the widget
         const userTraits = this._widgetRef?.getUserTraits() || undefined
 
-        const isNewTicket = !this._currentTicketId
-
         try {
-            // Call API directly
-            const response = await this._apiSendMessage(message, this._currentTicketId || undefined, userTraits)
-
-            // Update current ticket ID
-            if (!this._currentTicketId) {
-                this._currentTicketId = response.ticket_id
-                this._persistence.saveTicketId(response.ticket_id)
-                logger.info('New ticket created', { ticketId: response.ticket_id })
-            }
-
-            // Track message sent
-            this._posthog.capture('$conversations_message_sent', {
-                ticketId: response.ticket_id,
-                isNewTicket: isNewTicket,
-                messageLength: message.length,
-            })
-
-            // Update last message timestamp
-            this._lastMessageTimestamp = response.created_at
+            // Call the public API method (which handles tracking and state updates)
+            await this.sendMessage(message, userTraits)
 
             // Poll for response immediately
             setTimeout(() => this._pollMessages(), 1000)
@@ -453,7 +486,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
 
         try {
-            const response = await this._apiMarkAsRead(this._currentTicketId)
+            const response = await this.markAsRead(this._currentTicketId || undefined)
             this._unreadCount = response.unread_count
             // Update the widget to reflect the new unread count
             this._widgetRef?.setUnreadCount(0)
@@ -472,7 +505,10 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
 
         try {
-            const response = await this._apiGetMessages(this._currentTicketId, this._lastMessageTimestamp || undefined)
+            const response = await this.getMessages(
+                this._currentTicketId || undefined,
+                this._lastMessageTimestamp || undefined
+            )
 
             // Update unread count from response
             if (isNumber(response.unread_count)) {
@@ -590,14 +626,14 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /**
-     * Enable/show the widget (button and chat panel)
-     * If widget wasn't initially rendered (widgetEnabled was false), this will render it.
+     * Show the widget (render it to DOM).
+     * The widget respects its saved state (open/closed).
      * Note: Domain restrictions still apply - widget won't render on disallowed domains.
      */
-    enable(): void {
+    show(): void {
         // Check domain restrictions - don't render on disallowed domains
         if (!this._isDomainAllowed) {
-            logger.warn('Cannot enable widget: current domain is not allowed')
+            logger.warn('Cannot show widget: current domain is not allowed')
             return
         }
 
@@ -605,29 +641,99 @@ export class ConversationsManager implements ConversationsManagerInterface {
         if (!this._isWidgetRendered) {
             this._initializeWidget()
         }
-
-        this._widgetRef?.show()
     }
 
     /**
-     * Disable/hide the widget completely (button and chat panel)
+     * Hide and remove the widget from the DOM.
+     * Conversation data is preserved - call show() to re-render.
      */
-    disable(): void {
-        this._widgetRef?.hide()
+    hide(): void {
+        // Stop polling when widget is hidden (save resources)
+        this._stopPolling()
+
+        if (this._containerElement) {
+            render(null, this._containerElement)
+            this._containerElement.remove()
+            this._containerElement = null
+        }
+        this._widgetRef = null
+        this._isWidgetRendered = false
+
+        // Reset timestamp so show() will re-fetch all messages
+        this._lastMessageTimestamp = null
     }
 
     /**
-     * Check if the widget is currently visible (rendered and shown)
+     * Check if the widget is currently visible (rendered in DOM)
      */
-    isWidgetVisible(): boolean {
-        return this._isWidgetRendered && !isNull(this._widgetRef)
+    isVisible(): boolean {
+        return this._isWidgetRendered
+    }
+
+    /** Get tickets list for the current widget session */
+    async getTickets(options?: GetTicketsOptions): Promise<GetTicketsResponse> {
+        const token = this._config.token
+
+        const queryParams: Record<string, string> = {
+            widget_session_id: this._widgetSessionId,
+            limit: String(options?.limit ?? 20),
+            offset: String(options?.offset ?? 0),
+        }
+
+        if (options?.status) {
+            queryParams.status = options.status
+        }
+
+        // eslint-disable-next-line compat/compat
+        return new Promise((resolve, reject) => {
+            this._posthog._send_request({
+                url: this._posthog.requestRouter.endpointFor(
+                    'api',
+                    `/api/conversations/v1/widget/tickets?${formDataToQuery(queryParams)}`
+                ),
+                method: 'GET',
+                headers: {
+                    'X-Conversations-Token': token,
+                },
+                callback: (response) => {
+                    if (response.statusCode === 429) {
+                        reject(new Error('Too many requests. Please wait before trying again.'))
+                        return
+                    }
+
+                    if (response.statusCode !== 200) {
+                        const errorMsg = response.json?.detail || response.json?.message || 'Failed to fetch tickets'
+                        logger.error('Failed to fetch tickets', { status: response.statusCode })
+                        reject(new Error(errorMsg))
+                        return
+                    }
+
+                    if (!response.json) {
+                        reject(new Error('Invalid response from server'))
+                        return
+                    }
+
+                    const data = response.json as GetTicketsResponse
+                    resolve(data)
+                },
+            })
+        })
     }
 
     /**
-     * Send a message programmatically (internal use)
+     * Get the current active ticket ID
+     * Returns null if no conversation has been started yet
      */
-    sendMessage(message: string): void {
-        this._handleSendMessage(message)
+    getCurrentTicketId(): string | null {
+        return this._currentTicketId
+    }
+
+    /**
+     * Get the widget session ID (persistent browser identifier)
+     * This ID is used for access control and stays the same across page loads
+     */
+    getWidgetSessionId(): string {
+        return this._widgetSessionId
     }
 
     /**

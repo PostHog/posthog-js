@@ -240,6 +240,26 @@ export interface MarkAsReadResponse {
 }
 
 /**
+ * Options for fetching tickets list
+ */
+export interface GetTicketsOptions {
+    /**
+     * Filter by ticket status (e.g., 'open', 'closed')
+     */
+    status?: string
+
+    /**
+     * Number of tickets to return (default: 20)
+     */
+    limit?: number
+
+    /**
+     * Pagination offset (default: 0)
+     */
+    offset?: number
+}
+
+/**
  * Response from fetching tickets list
  */
 export interface GetTicketsResponse {
