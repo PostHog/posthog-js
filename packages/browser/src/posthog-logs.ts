@@ -5,7 +5,7 @@ import { assignableWindow } from './utils/globals'
 import { createLogger } from './utils/logger'
 
 export class PostHogLogs {
-    private _hasLogs?: boolean
+    private _isLogsEnabled?: boolean
 
     constructor(private readonly _instance: PostHog) {}
 
@@ -15,14 +15,14 @@ export class PostHogLogs {
         if (isNullish(logCapture) || !logCapture) {
             return
         }
-        this._hasLogs = true
+        this._isLogsEnabled = true
         this.loadIfEnabled()
     }
 
     reset(): void {}
 
     loadIfEnabled() {
-        if (!this._hasLogs) {
+        if (!this._isLogsEnabled) {
             return
         }
 

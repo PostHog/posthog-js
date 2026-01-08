@@ -112,7 +112,7 @@ describe('posthog-logs', () => {
 
                 logs.onRemoteConfig(response)
 
-                expect((logs as any)._hasLogs).toBeFalsy()
+                expect((logs as any)._isLogsEnabled).toBeFalsy()
             })
 
             it('should not enable logs if logs config is null', () => {
@@ -127,7 +127,7 @@ describe('posthog-logs', () => {
 
                 logs.onRemoteConfig(response)
 
-                expect((logs as any)._hasLogs).toBeFalsy()
+                expect((logs as any)._isLogsEnabled).toBeFalsy()
             })
 
             it('should not enable logs if logs config is undefined', () => {
@@ -141,7 +141,7 @@ describe('posthog-logs', () => {
 
                 logs.onRemoteConfig(response)
 
-                expect((logs as any)._hasLogs).toBeFalsy()
+                expect((logs as any)._isLogsEnabled).toBeFalsy()
             })
 
             it('should enable logs if captureConsoleLogs is true', () => {
@@ -156,7 +156,7 @@ describe('posthog-logs', () => {
 
                 logs.onRemoteConfig(response)
 
-                expect((logs as any)._hasLogs).toBe(true)
+                expect((logs as any)._isLogsEnabled).toBe(true)
             })
 
             it('should call loadIfEnabled when logs are enabled', () => {
@@ -191,7 +191,7 @@ describe('posthog-logs', () => {
             })
 
             it('should not initialize if PostHog Extensions are not found', () => {
-                ;(logs as any)._hasLogs = true
+                ;(logs as any)._isLogsEnabled = true
                 Object.defineProperty(assignableWindow, '__PosthogExtensions__', {
                     value: null,
                     writable: true,
@@ -205,7 +205,7 @@ describe('posthog-logs', () => {
             })
 
             it('should not initialize if loadExternalDependency is not found', () => {
-                ;(logs as any)._hasLogs = true
+                ;(logs as any)._isLogsEnabled = true
                 Object.defineProperty(assignableWindow, '__PosthogExtensions__', {
                     value: {},
                     writable: true,
@@ -218,7 +218,7 @@ describe('posthog-logs', () => {
             })
 
             it('should initialize logs when all conditions are met', () => {
-                ;(logs as any)._hasLogs = true
+                ;(logs as any)._isLogsEnabled = true
 
                 logs.loadIfEnabled()
 
@@ -227,7 +227,7 @@ describe('posthog-logs', () => {
             })
 
             it('should handle loadExternalDependency errors', () => {
-                ;(logs as any)._hasLogs = true
+                ;(logs as any)._isLogsEnabled = true
                 mockLoadExternalDependency.mockImplementation((_instance, _name, callback) => {
                     callback(new Error('Loading failed'))
                 })
@@ -239,7 +239,7 @@ describe('posthog-logs', () => {
             })
 
             it('should handle missing initializeLogs function', () => {
-                ;(logs as any)._hasLogs = true
+                ;(logs as any)._isLogsEnabled = true
                 Object.defineProperty(assignableWindow, '__PosthogExtensions__', {
                     value: {
                         loadExternalDependency: mockLoadExternalDependency,
@@ -255,7 +255,7 @@ describe('posthog-logs', () => {
             })
 
             it('should reinitialize logs if called multiple times', () => {
-                ;(logs as any)._hasLogs = true
+                ;(logs as any)._isLogsEnabled = true
 
                 logs.loadIfEnabled()
                 logs.loadIfEnabled()
@@ -278,7 +278,7 @@ describe('posthog-logs', () => {
 
                 logs.onRemoteConfig(response)
 
-                expect((logs as any)._hasLogs).toBe(true)
+                expect((logs as any)._isLogsEnabled).toBe(true)
                 expect(mockLoadExternalDependency).toHaveBeenCalledWith(mockPostHog, 'logs', expect.any(Function))
                 expect(mockInitializeLogs).toHaveBeenCalledWith(mockPostHog)
             })
@@ -320,15 +320,15 @@ describe('posthog-logs', () => {
 
                 // First enable
                 logs.onRemoteConfig(enabledResponse)
-                expect((logs as any)._hasLogs).toBe(true)
+                expect((logs as any)._isLogsEnabled).toBe(true)
 
                 // Then disable (should not change the enabled state)
                 logs.onRemoteConfig(disabledResponse)
-                expect((logs as any)._hasLogs).toBe(true) // Still enabled from first call
+                expect((logs as any)._isLogsEnabled).toBe(true) // Still enabled from first call
 
                 // Enable again
                 logs.onRemoteConfig(enabledResponse)
-                expect((logs as any)._hasLogs).toBe(true)
+                expect((logs as any)._isLogsEnabled).toBe(true)
             })
 
             it('should work with various log capture configurations', () => {
@@ -348,7 +348,7 @@ describe('posthog-logs', () => {
                 configs.forEach((config) => {
                     const testLogs = new PostHogLogs(mockPostHog)
                     testLogs.onRemoteConfig(config)
-                    expect((testLogs as any)._hasLogs).toBe(true)
+                    expect((testLogs as any)._isLogsEnabled).toBe(true)
                 })
             })
         })
@@ -371,7 +371,7 @@ describe('posthog-logs', () => {
             })
 
             it('should handle window object not being available', () => {
-                ;(logs as any)._hasLogs = true
+                ;(logs as any)._isLogsEnabled = true
                 const originalExtensions = assignableWindow.__PosthogExtensions__
                 Object.defineProperty(assignableWindow, '__PosthogExtensions__', {
                     value: undefined,
@@ -412,7 +412,7 @@ describe('posthog-logs', () => {
                 malformedResponses.forEach((response) => {
                     const testLogs = new PostHogLogs(mockPostHog)
                     expect(() => testLogs.onRemoteConfig(response as any)).not.toThrow()
-                    expect((testLogs as any)._hasLogs).toBeFalsy()
+                    expect((testLogs as any)._isLogsEnabled).toBeFalsy()
                 })
 
                 // Test null and undefined separately since they can't be spread
@@ -424,7 +424,7 @@ describe('posthog-logs', () => {
             })
 
             it('should handle async loading errors gracefully', () => {
-                ;(logs as any)._hasLogs = true
+                ;(logs as any)._isLogsEnabled = true
                 mockLoadExternalDependency.mockImplementation((_instance, _name, callback) => {
                     // Simulate async error
                     setTimeout(() => callback(new Error('Network error')), 0)
@@ -443,8 +443,8 @@ describe('posthog-logs', () => {
         })
 
         describe('state management', () => {
-            it('should maintain _hasLogs state correctly', () => {
-                expect((logs as any)._hasLogs).toBeUndefined()
+            it('should maintain _isLogsEnabled state correctly', () => {
+                expect((logs as any)._isLogsEnabled).toBeUndefined()
 
                 const baseConfig = {
                     supportedCompression: [],
@@ -454,14 +454,14 @@ describe('posthog-logs', () => {
                     siteApps: [],
                 }
                 logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: true } })
-                expect((logs as any)._hasLogs).toBe(true)
+                expect((logs as any)._isLogsEnabled).toBe(true)
 
                 logs.reset()
-                expect((logs as any)._hasLogs).toBe(true) // reset doesn't change logs state
+                expect((logs as any)._isLogsEnabled).toBe(true) // reset doesn't change logs state
 
                 // Create new instance
                 const newLogs = new PostHogLogs(mockPostHog)
-                expect((newLogs as any)._hasLogs).toBeUndefined()
+                expect((newLogs as any)._isLogsEnabled).toBeUndefined()
             })
 
             it('should handle repeated onRemoteConfig calls correctly', () => {
