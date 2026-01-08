@@ -55,6 +55,14 @@ const flattenObject = (obj: any, prefix = '', result = {} as Record<string, any>
     return result
 }
 
+const SEVERITY_MAP = {
+    log: 'INFO',
+    warn: 'WARNING',
+    error: 'ERROR',
+    debug: 'DEBUG',
+    info: 'INFO',
+}
+
 const initializeLogs = (posthog: PostHog) => {
     setupOpenTelemetry(posthog)
 
@@ -86,13 +94,7 @@ const initializeLogs = (posthog: PostHog) => {
             (...args: any[]) => {
                 if (args.length > 0) {
                     logger.emit({
-                        severityText: {
-                            log: 'INFO',
-                            warn: 'WARNING',
-                            error: 'ERROR',
-                            debug: 'DEBUG',
-                            info: 'INFO',
-                        }[level],
+                        severityText: SEVERITY_MAP[level],
                         body: args.map((a) => JSON.stringify(a, errorReplacer)).join(' '),
                         attributes: {
                             'log.source': `console.${level}`,
@@ -106,6 +108,8 @@ const initializeLogs = (posthog: PostHog) => {
                 }
             }
 
+        // If session replay is enabled it copies the original console log function to __rrweb_original__
+        // wrap this one too
         let originalConsoleLog = assignableWindow.console[level]
         if ('__rrweb_original__' in assignableWindow.console[level]) {
             originalConsoleLog = assignableWindow.console[level]['__rrweb_original__'] as {
