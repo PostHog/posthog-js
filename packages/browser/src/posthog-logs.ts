@@ -5,8 +5,8 @@ import { assignableWindow } from './utils/globals'
 import { createLogger } from './utils/logger'
 
 export class PostHogLogs {
-    private _isLogsEnabled?: boolean
-    private _isLoaded?: boolean
+    private _isLogsEnabled: boolean = false
+    private _isLoaded: boolean = false
 
     constructor(private readonly _instance: PostHog) {}
 
