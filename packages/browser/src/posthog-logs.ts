@@ -40,11 +40,11 @@ export class PostHogLogs {
         }
 
         loadExternalDependency(this._instance, 'logs', (err) => {
-            if (err || !phExtensions.initializeLogs) {
+            if (err || !phExtensions.logs?.initializeLogs) {
                 logger.error('Could not load logs script', err)
             } else {
                 // Need to get the function reference again inside the callback
-                phExtensions.initializeLogs(this._instance)
+                phExtensions.logs.initializeLogs(this._instance)
             }
         })
     }
