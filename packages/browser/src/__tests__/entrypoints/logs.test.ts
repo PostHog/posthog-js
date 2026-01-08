@@ -147,4 +147,183 @@ describe('logs entrypoint', () => {
             )
         })
     })
+
+    describe('log truncation features', () => {
+        beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            require('../../entrypoints/logs')
+        })
+
+        it('should truncate log body when it exceeds size limit', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            // Create a large string that exceeds LOG_BODY_SIZE_LIMIT (100,000 chars)
+            const largeString = 'a'.repeat(10001)
+
+            // Trigger console.log with the large string
+            assignableWindow.console.log(largeString)
+
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    body: expect.stringContaining('...'),
+                    attributes: expect.objectContaining({
+                        body_truncated: 'true',
+                    }),
+                })
+            )
+        })
+
+        it('should not truncate log body when within size limit', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const normalString = 'test message'
+
+            assignableWindow.console.log(normalString)
+
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    body: '"test message"',
+                    attributes: expect.not.objectContaining({
+                        body_truncated: 'true',
+                    }),
+                })
+            )
+        })
+
+        it('should handle large objects in body without crashing', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            // Create an object with many keys to test body handling
+            const largeObject: Record<string, string> = {}
+            for (let i = 0; i < 51; i++) {
+                largeObject[`key${i}`] = `value${i}`
+            }
+
+            assignableWindow.console.log(largeObject)
+
+            // Verify that the call was made and includes the object data in the body
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    body: expect.stringContaining('value0'),
+                    attributes: expect.objectContaining({
+                        'log.source': 'console.log',
+                    }),
+                })
+            )
+        })
+
+        it('should handle objects with large values in body without crashing', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            // Create an object with large values
+            const largeValueObject = {
+                largeKey1: 'x'.repeat(1000),
+                largeKey2: 'y'.repeat(2000),
+            }
+
+            assignableWindow.console.log(largeValueObject)
+
+            // Verify that the call was made
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    body: expect.stringContaining('largeKey1'),
+                    attributes: expect.objectContaining({
+                        'log.source': 'console.log',
+                    }),
+                })
+            )
+        })
+
+        it('should handle nested objects in flattenObject correctly', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const nestedObject = {
+                level1: {
+                    level2: {
+                        level3: 'deep value',
+                    },
+                    simple: 'value',
+                },
+                root: 'root value',
+            }
+
+            assignableWindow.console.log(nestedObject)
+
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    attributes: expect.objectContaining({
+                        'level1.level2.level3': 'deep value',
+                        'level1.simple': 'value',
+                        root: 'root value',
+                    }),
+                })
+            )
+        })
+
+        it('should not add attributes_truncated when within limits', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const smallObject = {
+                key1: 'value1',
+                key2: 'value2',
+                nested: {
+                    key3: 'value3',
+                },
+            }
+
+            assignableWindow.console.log(smallObject)
+
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    attributes: expect.not.objectContaining({
+                        attributes_truncated: true,
+                    }),
+                })
+            )
+        })
+
+        it('should handle mixed content with truncation', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            // Test with multiple arguments including a large string
+            const largeString = 'x'.repeat(10001)
+            const smallObject = { key: 'value' }
+
+            assignableWindow.console.log(largeString, smallObject)
+
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    body: expect.stringContaining('...'), // Body should be truncated
+                    attributes: expect.objectContaining({
+                        body_truncated: 'true',
+                    }),
+                })
+            )
+        })
+
+        it('should handle Error objects properly in truncation', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const error = new Error('x'.repeat(10001)) // Large error message
+
+            assignableWindow.console.error(error)
+
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    body: expect.stringContaining('...'), // Should be truncated
+                    attributes: expect.objectContaining({
+                        body_truncated: 'true',
+                    }),
+                })
+            )
+        })
+    })
 })

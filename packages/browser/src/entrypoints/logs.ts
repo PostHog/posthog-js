@@ -36,7 +36,7 @@ const setupOpenTelemetry = (posthog: PostHog) => {
     )
 }
 
-const LOG_BODY_SIZE_LIMIT = 100000
+const LOG_BODY_SIZE_LIMIT = 10000
 const LOG_ATTRIBUTES_LIMIT = 50
 
 /**
