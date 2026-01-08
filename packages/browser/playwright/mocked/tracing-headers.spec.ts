@@ -127,18 +127,18 @@ test.describe('tracing headers', () => {
             context
         )
 
-        // Trigger a fetch request
-        await page.evaluate(() => {
-            fetch('https://no-session.com/api/test')
-        })
-
-        // Wait for tracing headers to be loaded and active
+        // Wait for tracing headers to be loaded and active BEFORE triggering fetch
         await page.waitForFunction(() => {
             const win = window as any
             return win.__PosthogExtensions__?.tracingHeadersPatchFns && win.posthog
         })
 
-        // Wait for the request
+        // Now trigger a fetch request (after tracing headers are active)
+        await page.evaluate(() => {
+            fetch('https://no-session.com/api/test')
+        })
+
+        // Wait for the request to complete
         await page.waitForTimeout(500)
 
         expect(fetchRequests.length).toBeGreaterThanOrEqual(1)

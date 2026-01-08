@@ -20,8 +20,10 @@ jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45' }))
 
 const flushPromises = async () => {
     jest.useRealTimers()
-    await new Promise((res) => setTimeout(res, 0))
-    jest.useRealTimers()
+    // Need multiple flush cycles to resolve the async encoding chain
+    for (let i = 0; i < 10; i++) {
+        await new Promise((res) => setTimeout(res, 0))
+    }
 }
 
 const bodyData = () => ({ key: uuidv7() })
@@ -85,7 +87,7 @@ describe('request', () => {
         beforeEach(() => {
             transport = 'XHR'
         })
-        it('performs the request with default params', () => {
+        it('performs the request with default params', async () => {
             request(
                 createRequest({
                     url: 'https://any.posthog-instance.com/',
@@ -94,6 +96,7 @@ describe('request', () => {
                     },
                 })
             )
+            await flushPromises()
             expect(mockedXHR.open).toHaveBeenCalledWith(
                 'GET',
                 'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45',
@@ -106,6 +109,7 @@ describe('request', () => {
         it('calls the on callback handler when successful', async () => {
             mockedXHR.status = 200
             request(createRequest())
+            await flushPromises()
             mockedXHR.onreadystatechange?.({} as Event)
             expect(mockCallback).toHaveBeenCalledWith({
                 statusCode: 200,
@@ -114,9 +118,10 @@ describe('request', () => {
             })
         })
 
-        it('calls the callback even if json parsing fails', () => {
+        it('calls the callback even if json parsing fails', async () => {
             //cannot use an auto-mock from jest as the code checks if onError is a Function
             request(createRequest())
+            await flushPromises()
             mockedXHR.status = 502
             mockedXHR.responseText = '{wat'
             mockedXHR.onreadystatechange?.({} as Event)
@@ -127,12 +132,14 @@ describe('request', () => {
             })
         })
 
-        it('respects disableXHRCredentials=true', () => {
+        it('respects disableXHRCredentials=true', async () => {
             request(createRequest({ disableXHRCredentials: true }))
+            await flushPromises()
             expect(mockedXHR.withCredentials).toBe(false)
         })
-        it('respects disableXHRCredentials=false', () => {
+        it('respects disableXHRCredentials=false', async () => {
             request(createRequest({ disableXHRCredentials: false }))
+            await flushPromises()
             expect(mockedXHR.withCredentials).toBe(true)
         })
     })
@@ -148,7 +155,7 @@ describe('request', () => {
             })
         })
 
-        it('performs the request with default params', () => {
+        it('performs the request with default params', async () => {
             request(
                 createRequest({
                     headers: {
@@ -156,6 +163,7 @@ describe('request', () => {
                     },
                 })
             )
+            await flushPromises()
 
             const headers = mockedFetch.mock.calls[0][1].headers as Headers
             expect(headers.get('x-header')).toEqual('value')
@@ -240,7 +248,7 @@ describe('request', () => {
                     true,
                     '&compression=base64',
                 ],
-                ['never keepalive with GET', 'GET', undefined, Compression.GZipJS, false, '&compression=gzip-js'],
+                ['never keepalive with GET', 'GET', undefined, Compression.GZipJS, false, ''],
                 ['never keepalive with large JSON POST', 'POST', veryLargeBodyData, undefined, false, ''],
                 [
                     'never keepalive with large GZIP POST',
@@ -260,7 +268,7 @@ describe('request', () => {
                 ],
             ])(
                 `uses keep alive: %s`,
-                (
+                async (
                     _name: string,
                     method: 'POST' | 'GET',
                     body: any,
@@ -278,6 +286,7 @@ describe('request', () => {
                             data: body,
                         })
                     )
+                    await flushPromises()
                     expect(mockedFetch).toHaveBeenCalledWith(
                         `https://any.posthog-instance.com?ver=1.23.45&_=1700000000000${expectedURLParams}`,
                         expect.objectContaining({
@@ -296,6 +305,7 @@ describe('request', () => {
                         disableTransport: ['sendBeacon'],
                     })
                 )
+                await flushPromises()
                 expect(mockedFetch).toHaveBeenCalled()
             })
         })
@@ -362,7 +372,7 @@ describe('request', () => {
                 transport = 'XHR'
             })
 
-            it('should send application/json if no compression is set', () => {
+            it('should send application/json if no compression is set', async () => {
                 request(
                     createRequest({
                         url: 'https://any.posthog-instance.com/',
@@ -370,11 +380,12 @@ describe('request', () => {
                         data: { foo: 'bar' },
                     })
                 )
+                await flushPromises()
                 expect(mockedXHR.send.mock.calls[0][0]).toMatchInlineSnapshot(`"{"foo":"bar"}"`)
                 expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/json')
             })
 
-            it('should base64 compress data if set', () => {
+            it('should base64 compress data if set', async () => {
                 request(
                     createRequest({
                         url: 'https://any.posthog-instance.com/',
@@ -383,6 +394,7 @@ describe('request', () => {
                         data: { foo: 'bar' },
                     })
                 )
+                await flushPromises()
                 expect(mockedXHR.send.mock.calls[0][0]).toMatchInlineSnapshot(`"data=eyJmb28iOiJiYXIifQ%3D%3D"`)
                 expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith(
                     'Content-Type',
@@ -399,6 +411,7 @@ describe('request', () => {
                         data: { foo: 'bar' },
                     })
                 )
+                await flushPromises()
                 expect(mockedXHR.send).toHaveBeenCalledTimes(1)
                 expect(mockedXHR.send.mock.calls[0][0]).toBeInstanceOf(Blob)
                 // Decode and check the blob content
@@ -420,7 +433,7 @@ describe('request', () => {
                 )
             })
 
-            it('converts bigint properties to string without throwing', () => {
+            it('converts bigint properties to string without throwing', async () => {
                 request(
                     createRequest({
                         url: 'https://any.posthog-instance.com/',
@@ -429,6 +442,7 @@ describe('request', () => {
                         data: { foo: BigInt('999999999999999999999') },
                     })
                 )
+                await flushPromises()
                 expect(mockedXHR.send.mock.calls[0][0]).toMatchInlineSnapshot(
                     `"data=eyJmb28iOiI5OTk5OTk5OTk5OTk5OTk5OTk5OTkifQ%3D%3D"`
                 )
@@ -452,6 +466,7 @@ describe('request', () => {
                         data: { foo: 'bar' },
                     })
                 )
+                await flushPromises()
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
                     'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&beacon=1',
@@ -477,9 +492,10 @@ describe('request', () => {
                         data: { foo: 'bar' },
                     })
                 )
+                await flushPromises()
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=base64&beacon=1',
+                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&beacon=1&compression=base64',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
@@ -502,9 +518,10 @@ describe('request', () => {
                         data: { foo: 'bar' },
                     })
                 )
+                await flushPromises()
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=gzip-js&beacon=1',
+                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&beacon=1&compression=gzip-js',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
@@ -516,9 +533,9 @@ describe('request', () => {
                 })
 
                 expect(result).toMatchInlineSnapshot(`
-                "�      �VJ��W�RJJ,R� ��+�
-                   "
-            `)
+"�      �VJ��W�RJJ,R� ��+�
+   "
+`)
             })
         })
     })

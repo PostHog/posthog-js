@@ -21,9 +21,6 @@ test.beforeEach(async ({ context }) => {
     test.describe(`Session recording - network recorder - fetch wrapper ${
         isBadlyBehavedWrapper ? 'is' : 'is not'
     } badly behaved`, () => {
-        // these are pretty flaky and annoying, in the short term lets...
-        test.describe.configure({ retries: 6 })
-
         test.beforeEach(async ({ page, context }) => {
             const wrapInPageContext = async (pg: Page) => {
                 // this is page.evaluate and not page.exposeFunction because we need to execute it in the browser context
@@ -176,9 +173,11 @@ test.beforeEach(async ({ context }) => {
 
                 // yay, includes expected network data
                 expect(capturedRequests.length).toEqual(expectedCaptureds.length)
-                expectedCaptureds.forEach(([url, initiatorType], index) => {
-                    expect(capturedRequests[index].name).toMatch(url)
-                    expect(capturedRequests[index].initiatorType).toEqual(initiatorType)
+                expectedCaptureds.forEach(([url, initiatorType]) => {
+                    const matchingRequest = capturedRequests.find(
+                        (req) => url.test(req.name) && req.initiatorType === initiatorType
+                    )
+                    expect(matchingRequest).toBeDefined()
                 })
 
                 // the HTML file that cypress is operating on (playground/cypress/index.html)

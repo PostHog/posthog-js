@@ -24,6 +24,21 @@ module.exports = {
             },
         },
         {
+            files: ['./src/__tests__/setup-globals.js', './src/__tests__/setup.js'],
+            rules: {
+                'no-console': 'off',
+                'no-restricted-globals': 'off',
+                'compat/compat': 'off',
+                '@typescript-eslint/no-require-imports': 'off',
+                'no-undef': 'off',
+                'posthog-js/no-direct-array-check': 'off',
+                'posthog-js/no-direct-number-check': 'off',
+            },
+            parserOptions: {
+                project: null,
+            },
+        },
+        {
             files: './playground/cypress/**/*',
             globals: {
                 cy: true,
