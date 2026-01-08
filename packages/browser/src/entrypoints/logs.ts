@@ -36,19 +36,37 @@ const setupOpenTelemetry = (posthog: PostHog) => {
     )
 }
 
+const LOG_BODY_SIZE_LIMIT = 100000
+const LOG_ATTRIBUTES_LIMIT = 50
+
 /**
  * Flattens a nested object into a single level dot-notation object.
+ * By default limit to 200kB or 50 keys.
  */
-const flattenObject = (obj: any, prefix = '', result = {} as Record<string, any>) => {
+const flattenObject = (
+    obj: any,
+    prefix = '',
+    result = {} as Record<string, any>,
+    keys_limit = LOG_ATTRIBUTES_LIMIT,
+    size_limit = LOG_BODY_SIZE_LIMIT
+) => {
     for (const key in obj) {
         if (Object.prototype.hasOwnProperty.call(obj, key)) {
             const value = obj[key]
             const newKey = prefix ? `${prefix}.${key}` : key
 
             if (isObject(value)) {
-                flattenObject(value, newKey, result)
+                flattenObject(value, newKey, result, keys_limit, size_limit)
             } else {
-                result[newKey] = value
+                keys_limit -= 1
+                size_limit -= value.toString().length
+                size_limit -= newKey.length
+                if (keys_limit <= 0 || size_limit <= 0) {
+                    result['attributes_truncated'] = true
+                    return
+                } else {
+                    result[newKey] = value
+                }
             }
         }
     }
@@ -93,9 +111,14 @@ const initializeLogs = (posthog: PostHog) => {
             (originalConsoleLog: any) =>
             (...args: any[]) => {
                 if (args.length > 0) {
+                    let body = args.map((a) => JSON.stringify(a, errorReplacer)).join(' ')
+                    if (body.length > LOG_BODY_SIZE_LIMIT) {
+                        body = body.slice(0, LOG_BODY_SIZE_LIMIT) + '...'
+                        attributes.body_truncated = 'true'
+                    }
                     logger.emit({
                         severityText: SEVERITY_MAP[level],
-                        body: args.map((a) => JSON.stringify(a, errorReplacer)).join(' '),
+                        body: body,
                         attributes: {
                             'log.source': `console.${level}`,
                             distinct_id: posthog.get_distinct_id(),
