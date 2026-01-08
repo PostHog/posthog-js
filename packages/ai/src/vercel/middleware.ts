@@ -318,6 +318,24 @@ const extractAdditionalTokenValues = (providerMetadata: unknown): Record<string,
   return {}
 }
 
+// For Anthropic providers in V3, inputTokens.total is the sum of all tokens (uncached + cache read + cache write).
+// Our cost calculation expects inputTokens to be only the uncached portion for Anthropic.
+// This helper subtracts cache tokens from inputTokens for Anthropic V3 models.
+const adjustAnthropicV3CacheTokens = (
+  model: LanguageModel,
+  provider: string,
+  usage: { inputTokens?: number; cacheReadInputTokens?: unknown; cacheCreationInputTokens?: unknown }
+): void => {
+  if (isV3Model(model) && provider.toLowerCase().includes('anthropic')) {
+    const cacheReadTokens = (usage.cacheReadInputTokens as number) || 0
+    const cacheWriteTokens = (usage.cacheCreationInputTokens as number) || 0
+    const cacheTokens = cacheReadTokens + cacheWriteTokens
+    if (usage.inputTokens && cacheTokens > 0) {
+      usage.inputTokens = Math.max(usage.inputTokens - cacheTokens, 0)
+    }
+  }
+}
+
 // Helper to extract numeric token value from V2 (number) or V3 (object with .total) usage formats
 const extractTokenCount = (value: unknown): number | undefined => {
   if (typeof value === 'number') {
@@ -425,6 +443,8 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
           webSearchCount,
           ...additionalTokenValues,
         }
+
+        adjustAnthropicV3CacheTokens(model, provider, usage)
 
         await sendEventToPosthog({
           client: phClient,
@@ -599,6 +619,8 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
               ...usage,
               webSearchCount,
             }
+
+            adjustAnthropicV3CacheTokens(model, provider, finalUsage)
 
             await sendEventToPosthog({
               client: phClient,
