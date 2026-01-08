@@ -444,7 +444,8 @@ describe('posthog-logs', () => {
 
         describe('state management', () => {
             it('should maintain _isLogsEnabled state correctly', () => {
-                expect((logs as any)._isLogsEnabled).toBeUndefined()
+                expect((logs as any)._isLogsEnabled).toBeFalsy()
+                expect((logs as any)._isLoaded).toBeFalsy()
 
                 const baseConfig = {
                     supportedCompression: [],
@@ -455,13 +456,15 @@ describe('posthog-logs', () => {
                 }
                 logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: true } })
                 expect((logs as any)._isLogsEnabled).toBe(true)
+                expect((logs as any)._isLoaded).toBe(true)
 
                 logs.reset()
                 expect((logs as any)._isLogsEnabled).toBe(true) // reset doesn't change logs state
+                expect((logs as any)._isLoaded).toBe(true) // reset doesn't change logs state
 
                 // Create new instance
                 const newLogs = new PostHogLogs(mockPostHog)
-                expect((newLogs as any)._isLogsEnabled).toBeUndefined()
+                expect((newLogs as any)._isLogsEnabled).toBeFalsy()
             })
 
             it('should handle repeated onRemoteConfig calls correctly', () => {
@@ -473,14 +476,17 @@ describe('posthog-logs', () => {
                     siteApps: [],
                 }
 
+                logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: false } })
+                expect(mockLoadExternalDependency).toHaveBeenCalledTimes(0)
+
                 logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: true } })
                 expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
 
                 logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: true } })
-                expect(mockLoadExternalDependency).toHaveBeenCalledTimes(2)
+                expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
 
                 logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: false } })
-                expect(mockLoadExternalDependency).toHaveBeenCalledTimes(2) // No additional call
+                expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
             })
         })
     })
