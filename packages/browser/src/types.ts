@@ -232,6 +232,9 @@ export interface RemoteConfig {
         suppressionRules?: ErrorTrackingSuppressionRule[]
     }
 
+    /**
+     * Whether capturing logs to the logs product is enabled
+     */
     logs?: {
         captureConsoleLogs?: boolean
     }
@@ -255,11 +258,6 @@ export interface RemoteConfig {
      * Whether product tours are enabled
      */
     productTours?: boolean
-
-    /**
-     * Whether capturing logs is enabled
-     */
-    logCapture?: boolean
 
     /**
      * Parameters for the toolbar

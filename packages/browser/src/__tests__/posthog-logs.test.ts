@@ -254,14 +254,14 @@ describe('posthog-logs', () => {
                 expect(mockLogger.error).toHaveBeenCalledWith('Could not load logs script', null)
             })
 
-            it('should reinitialize logs if called multiple times', () => {
+            it('should not reinitialize logs if called multiple times', () => {
                 ;(logs as any)._isLogsEnabled = true
 
                 logs.loadIfEnabled()
                 logs.loadIfEnabled()
 
-                expect(mockLoadExternalDependency).toHaveBeenCalledTimes(2)
-                expect(mockInitializeLogs).toHaveBeenCalledTimes(2)
+                expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
+                expect(mockInitializeLogs).toHaveBeenCalledTimes(1)
             })
         })
 
