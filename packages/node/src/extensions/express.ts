@@ -32,6 +32,11 @@ export function setupExpressErrorHandler(
 
 function posthogErrorHandler(posthog: PostHogBackendClient): ExpressErrorMiddleware {
   return (error: MiddlewareError, req, res, next: (error: MiddlewareError) => void): void => {
+    if (ErrorTracking.isPreviouslyCapturedError(error)) {
+      next(error)
+      return
+    }
+
     const sessionId: string | undefined = req.headers['x-posthog-session-id'] as string | undefined
     const distinctId: string | undefined = req.headers['x-posthog-distinct-id'] as string | undefined
     const syntheticException = new Error('Synthetic exception')

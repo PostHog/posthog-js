@@ -20,6 +20,7 @@ import {
   extractAvailableToolCalls,
   toContentString,
   calculateWebSearchCount,
+  sendEventWithErrorToPosthog,
 } from '../utils'
 import { Buffer } from 'buffer'
 import { redactBase64DataUrl } from '../sanitization'
@@ -443,9 +444,9 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
         })
 
         return result
-      } catch (error: any) {
+      } catch (error: unknown) {
         const modelId = model.modelId
-        await sendEventToPosthog({
+        const enrichedError = await sendEventWithErrorToPosthog({
           client: phClient,
           distinctId: mergedOptions.posthogDistinctId,
           traceId: mergedOptions.posthogTraceId ?? uuidv4(),
@@ -456,17 +457,15 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
           latency: 0,
           baseURL: '',
           params: mergedParams as any,
-          httpStatus: error?.status ? error.status : 500,
           usage: {
             inputTokens: 0,
             outputTokens: 0,
           },
-          isError: true,
-          error: truncate(JSON.stringify(error)),
+          error: error,
           tools: availableTools,
           captureImmediate: mergedOptions.posthogCaptureImmediate,
         })
-        throw error
+        throw enrichedError
       }
     },
 
@@ -624,8 +623,8 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
           stream: stream.pipeThrough(transformStream),
           ...rest,
         }
-      } catch (error: any) {
-        await sendEventToPosthog({
+      } catch (error: unknown) {
+        const enrichedError = await sendEventWithErrorToPosthog({
           client: phClient,
           distinctId: mergedOptions.posthogDistinctId,
           traceId: mergedOptions.posthogTraceId ?? uuidv4(),
@@ -636,17 +635,15 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
           latency: 0,
           baseURL: '',
           params: mergedParams as any,
-          httpStatus: error?.status ? error.status : 500,
           usage: {
             inputTokens: 0,
             outputTokens: 0,
           },
-          isError: true,
-          error: truncate(JSON.stringify(error)),
+          error: error,
           tools: availableTools,
           captureImmediate: mergedOptions.posthogCaptureImmediate,
         })
-        throw error
+        throw enrichedError
       }
     },
   } as T

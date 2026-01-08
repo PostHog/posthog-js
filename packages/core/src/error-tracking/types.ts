@@ -21,6 +21,10 @@ export interface EventHint {
   syntheticException?: Error | null
 }
 
+export interface PreviouslyCapturedError {
+  __posthog_previously_captured_error?: boolean
+}
+
 export interface ErrorProperties {
   $exception_list: Exception[]
   $exception_level?: SeverityLevel
