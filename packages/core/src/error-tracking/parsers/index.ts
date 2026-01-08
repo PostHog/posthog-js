@@ -30,6 +30,8 @@
 
 import { Platform, StackFrame, StackLineParser, StackParser } from '../types'
 import { UNKNOWN_FUNCTION } from './base'
+import { chromeStackLineParser } from './chrome'
+import { geckoStackLineParser } from './gecko'
 export { chromeStackLineParser } from './chrome'
 export { winjsStackLineParser } from './winjs'
 export { geckoStackLineParser } from './gecko'
@@ -57,6 +59,10 @@ export function reverseAndStripFrames(stack: ReadonlyArray<StackFrame>): StackFr
 
 function getLastStackFrame(arr: StackFrame[]): StackFrame {
   return arr[arr.length - 1] || {}
+}
+
+export function createDefaultStackParser(): StackParser {
+  return createStackParser('web:javascript', chromeStackLineParser, geckoStackLineParser)
 }
 
 export function createStackParser(platform: Platform, ...parsers: StackLineParser[]): StackParser {

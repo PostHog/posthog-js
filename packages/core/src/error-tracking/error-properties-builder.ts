@@ -1,6 +1,5 @@
 import { isArray } from '@/utils'
 import { getFilenameToChunkIdMap } from './chunk-ids'
-import { createStackParser } from './parsers'
 import {
   ErrorProperties,
   ExceptionLike,
@@ -11,7 +10,6 @@ import {
   StackParser,
   ErrorTrackingCoercer,
   EventHint,
-  StackLineParser,
   ParsingContext,
   ChunkIdMapType,
   Mechanism,
