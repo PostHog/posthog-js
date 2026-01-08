@@ -54,6 +54,7 @@ describe('logs entrypoint', () => {
         mockEmit = jest.fn()
         mockLogger = { emit: mockEmit }
 
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { logs } = require('@opentelemetry/api-logs')
         logs.getLogger.mockReturnValue(mockLogger)
 
@@ -105,6 +106,7 @@ describe('logs entrypoint', () => {
 
     describe('module loading', () => {
         it('should initialize PostHog extensions when imported', () => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
 
             expect(assignableWindow.__PosthogExtensions__).toBeDefined()
@@ -118,6 +120,7 @@ describe('logs entrypoint', () => {
                 existingExtension,
             }
 
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
 
             expect(assignableWindow.__PosthogExtensions__.existingExtension).toBe(existingExtension)
@@ -127,6 +130,7 @@ describe('logs entrypoint', () => {
 
     describe('initializeLogs function', () => {
         beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
         })
 
@@ -137,8 +141,11 @@ describe('logs entrypoint', () => {
         })
 
         it('should set up OpenTelemetry logging when called', () => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const { logs } = require('@opentelemetry/api-logs')
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const { LoggerProvider, BatchLogRecordProcessor } = require('@opentelemetry/sdk-logs')
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const { OTLPLogExporter } = require('@opentelemetry/exporter-logs-otlp-http')
 
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
@@ -175,6 +182,7 @@ describe('logs entrypoint', () => {
 
     describe('console wrapping behavior', () => {
         beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
@@ -237,6 +245,7 @@ describe('logs entrypoint', () => {
 
     describe('object flattening', () => {
         beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
@@ -284,6 +293,7 @@ describe('logs entrypoint', () => {
 
     describe('error handling in logs', () => {
         beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
@@ -331,10 +341,12 @@ describe('logs entrypoint', () => {
 
     describe('session information', () => {
         beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
         })
 
         it('should include session information in resource attributes', () => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const { resourceFromAttributes } = require('@opentelemetry/resources')
 
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
@@ -377,6 +389,7 @@ describe('logs entrypoint', () => {
 
     describe('rrweb integration', () => {
         beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
         })
 
@@ -414,6 +427,7 @@ describe('logs entrypoint', () => {
 
     describe('configuration handling', () => {
         beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
         })
 
@@ -426,6 +440,7 @@ describe('logs entrypoint', () => {
                 },
             }
 
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const { OTLPLogExporter } = require('@opentelemetry/exporter-logs-otlp-http')
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(customPostHog)
@@ -441,6 +456,7 @@ describe('logs entrypoint', () => {
                 writable: true,
             })
 
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const { resourceFromAttributes } = require('@opentelemetry/resources')
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
