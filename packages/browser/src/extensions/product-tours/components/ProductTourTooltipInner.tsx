@@ -3,6 +3,31 @@ import { ProductTourStep, ProductTourAppearance, ProductTourStepButton } from '.
 import { getStepHtml } from '../product-tours-utils'
 import { IconPosthogLogo, cancelSVG } from '../../surveys/icons'
 
+interface TourButtonProps {
+    button: ProductTourStepButton
+    variant: 'primary' | 'secondary'
+    onClick: (button: ProductTourStepButton) => void
+    cursorStyle?: h.JSX.CSSProperties
+}
+
+function TourButton({ button, variant, onClick, cursorStyle }: TourButtonProps): h.JSX.Element {
+    const className = `ph-tour-button ph-tour-button--${variant}`
+
+    if (button.action === 'link' && button.link) {
+        return (
+            <a href={button.link} target="_blank" rel="noopener noreferrer" class={className}>
+                {button.text}
+            </a>
+        )
+    }
+
+    return (
+        <button class={className} onClick={() => onClick(button)} style={cursorStyle}>
+            {button.text}
+        </button>
+    )
+}
+
 export interface ProductTourTooltipInnerProps {
     step: ProductTourStep
     appearance?: ProductTourAppearance
@@ -77,22 +102,20 @@ export function ProductTourTooltipInner({
                     {hasCustomButtons && (
                         <>
                             {step.buttons?.secondary && (
-                                <button
-                                    class="ph-tour-button ph-tour-button--secondary"
-                                    onClick={() => handleButtonClick(step.buttons!.secondary!)}
-                                    style={cursorStyle}
-                                >
-                                    {step.buttons.secondary.text}
-                                </button>
+                                <TourButton
+                                    button={step.buttons.secondary}
+                                    variant="secondary"
+                                    onClick={handleButtonClick}
+                                    cursorStyle={cursorStyle}
+                                />
                             )}
                             {step.buttons?.primary && (
-                                <button
-                                    class="ph-tour-button ph-tour-button--primary"
-                                    onClick={() => handleButtonClick(step.buttons!.primary!)}
-                                    style={cursorStyle}
-                                >
-                                    {step.buttons.primary.text}
-                                </button>
+                                <TourButton
+                                    button={step.buttons.primary}
+                                    variant="primary"
+                                    onClick={handleButtonClick}
+                                    cursorStyle={cursorStyle}
+                                />
                             )}
                         </>
                     )}

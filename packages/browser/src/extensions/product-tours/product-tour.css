@@ -167,10 +167,10 @@
     margin-bottom: 8px;
 }
 
-/* Links */
+/* Links - inherit text color to avoid default browser blue */
 .ph-tour-content a,
 .ph-tour-content .ph-tour-link {
-    color: var(--ph-tour-button-color);
+    color: inherit;
     text-decoration: underline;
 }
 
@@ -558,3 +558,75 @@
     background: var(--ph-tour-button-color);
     color: var(--ph-tour-button-text-color);
 }
+
+/* Banner styles */
+.ph-tour-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 12px 16px;
+    background: var(--ph-tour-background-color);
+    border-bottom: 1px solid var(--ph-tour-border-color);
+    box-shadow: var(--ph-tour-box-shadow);
+    font-family: var(--ph-tour-font-family);
+}
+
+/* Remove default link underline when banner is wrapped in an anchor */
+a.ph-tour-banner {
+    text-decoration: none;
+    color: inherit;
+}
+
+:host:has(.ph-tour-banner--sticky) {
+    position: sticky;
+    top: 0;
+    z-index: var(--ph-tour-z-index);
+}
+
+.ph-tour-banner-content {
+    flex: 1;
+    min-width: 0;
+    color: var(--ph-tour-text-color);
+    font-size: 14px;
+    line-height: 1.5;
+    text-align: center;
+}
+
+.ph-tour-banner-content p {
+    margin: 0;
+}
+
+.ph-tour-banner-content strong {
+    font-weight: 600;
+}
+
+.ph-tour-banner-content em {
+    font-style: italic;
+}
+
+.ph-tour-banner-content a {
+    color: inherit;
+    text-decoration: underline;
+}
+
+.ph-tour-banner-dismiss {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--ph-tour-text-secondary-color);
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.ph-tour-banner-dismiss:hover {
+    background: rgba(0, 0, 0, 0.08);
+    color: var(--ph-tour-text-color);
+}
+
