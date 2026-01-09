@@ -3,13 +3,13 @@ import path from 'path'
 
 /**
  * Extract method names from a TypeScript interface
+ * Only includes actual method signatures, not properties with function types
  */
 function extractInterfaceMethods(filePath: string, typeName: string): string[] {
     const program = ts.createProgram([filePath], {
         noImplicitAny: true,
         strictNullChecks: true,
     })
-    const checker = program.getTypeChecker()
     const sourceFile = program.getSourceFile(filePath)
 
     if (!sourceFile) {
@@ -18,20 +18,19 @@ function extractInterfaceMethods(filePath: string, typeName: string): string[] {
 
     const methods: string[] = []
 
-    ts.forEachChild(sourceFile, (node) => {
+    function visit(node: ts.Node) {
         if (ts.isInterfaceDeclaration(node) && node.name.text === typeName) {
-            const type = checker.getTypeAtLocation(node)
-            type.getProperties().forEach((symbol) => {
-                const propType = checker.getTypeOfSymbol(symbol)
-                const typeString = checker.typeToString(propType)
-                // Check if it's a method (function type)
-                if (typeString.includes('=>') || typeString.includes('(')) {
-                    methods.push(symbol.getName())
+            node.members.forEach((member) => {
+                // Only include method signatures, not property signatures
+                if (ts.isMethodSignature(member) && member.name) {
+                    methods.push(member.name.getText(sourceFile))
                 }
             })
         }
-    })
+        ts.forEachChild(node, visit)
+    }
 
+    visit(sourceFile)
     return methods.sort()
 }
 
@@ -118,11 +117,15 @@ describe('PostHog interface', () => {
         }
 
         if (extraInInterface.length > 0) {
-            // This is a warning, not an error - interface might have deprecated methods or properties
-            // These could be intentionally in the interface but not marked @public in class
-            // (e.g., deprecated methods that should still be typeable)
+            throw new Error(
+                `The following methods are in @posthog/types PostHog interface but not marked @public in PostHog class:\n` +
+                    `  - ${extraInInterface.join('\n  - ')}\n\n` +
+                    `Either mark these methods as @public in packages/browser/src/posthog-core.ts, ` +
+                    `or remove them from packages/types/src/posthog.ts`
+            )
         }
 
         expect(missingFromInterface).toEqual([])
+        expect(extraInInterface).toEqual([])
     })
 })
