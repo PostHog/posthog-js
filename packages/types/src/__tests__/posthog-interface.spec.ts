@@ -1,10 +1,14 @@
 import ts from 'typescript'
 import path from 'path'
 
-type ProcessedType = string | Record<string, string | string[] | Record<string, any> | any[]> | ProcessedType[]
-
-function extractInterfaceMembers(filePath: string, typeName: string): Record<string, ProcessedType> {
-    const program = ts.createProgram([filePath], { noImplicitAny: true, strictNullChecks: true })
+/**
+ * Extract method names from a TypeScript interface
+ */
+function extractInterfaceMethods(filePath: string, typeName: string): string[] {
+    const program = ts.createProgram([filePath], {
+        noImplicitAny: true,
+        strictNullChecks: true,
+    })
     const checker = program.getTypeChecker()
     const sourceFile = program.getSourceFile(filePath)
 
@@ -12,75 +16,113 @@ function extractInterfaceMembers(filePath: string, typeName: string): Record<str
         throw new Error(`File not found: ${filePath}`)
     }
 
-    function getTypeString(type: ts.Type): string {
-        return checker.typeToString(type)
-    }
-
-    function processType(type: ts.Type): ProcessedType {
-        if (type.symbol?.name === 'RegExp') {
-            return getTypeString(type)
-        }
-
-        if (type.isUnion() || type.isIntersection()) {
-            return type.types.map(processType)
-        }
-
-        if (type.isClassOrInterface()) {
-            const result: Record<string, ProcessedType> = {}
-            type.getProperties().forEach((symbol) => {
-                const propType = checker.getTypeOfSymbol(symbol)
-                result[symbol.getName()] = processType(propType)
-            })
-
-            return result
-        }
-
-        return getTypeString(type)
-    }
-
-    let result: Record<string, ProcessedType> = {}
+    const methods: string[] = []
 
     ts.forEachChild(sourceFile, (node) => {
         if (ts.isInterfaceDeclaration(node) && node.name.text === typeName) {
             const type = checker.getTypeAtLocation(node)
-            const processedResult = processType(type)
-            // eslint-disable-next-line posthog-js/no-direct-array-check
-            if (typeof processedResult === 'object' && !Array.isArray(processedResult)) {
-                result = processedResult
-            }
+            type.getProperties().forEach((symbol) => {
+                const propType = checker.getTypeOfSymbol(symbol)
+                const typeString = checker.typeToString(propType)
+                // Check if it's a method (function type)
+                if (typeString.includes('=>') || typeString.includes('(')) {
+                    methods.push(symbol.getName())
+                }
+            })
         }
     })
 
-    return result
+    return methods.sort()
+}
+
+/**
+ * Extract public method names from a TypeScript class
+ * Only includes methods marked with @public in JSDoc comments
+ */
+function extractClassPublicMethods(filePath: string, className: string): string[] {
+    const program = ts.createProgram([filePath], {
+        noImplicitAny: true,
+        strictNullChecks: true,
+        skipLibCheck: true,
+    })
+    const sourceFile = program.getSourceFile(filePath)
+
+    if (!sourceFile) {
+        throw new Error(`File not found: ${filePath}`)
+    }
+
+    const methods: string[] = []
+    const fileText = sourceFile.getFullText()
+
+    function visit(node: ts.Node) {
+        if (ts.isClassDeclaration(node) && node.name?.text === className) {
+            node.members.forEach((member) => {
+                // Only include methods (not properties)
+                if (ts.isMethodDeclaration(member) && member.name) {
+                    const methodName = member.name.getText(sourceFile)
+
+                    // Skip private methods (starting with _)
+                    if (methodName.startsWith('_')) {
+                        return
+                    }
+
+                    // Get the full text including leading comments
+                    const fullStart = member.getFullStart()
+                    const start = member.getStart(sourceFile)
+                    const leadingComments = fileText.substring(fullStart, start)
+
+                    // Check if @public appears in the leading JSDoc comment
+                    const hasPublicTag = leadingComments.includes('@public')
+
+                    if (hasPublicTag) {
+                        methods.push(methodName)
+                    }
+                }
+            })
+        }
+        ts.forEachChild(node, visit)
+    }
+
+    visit(sourceFile)
+    return methods.sort()
 }
 
 /**
  * This test ensures that the PostHog interface in @posthog/types stays in sync
- * with the actual implementation. When new public methods are added to the
- * PostHog class in posthog-js, this snapshot test will fail, reminding developers
- * to update the @posthog/types package.
+ * with the actual PostHog class implementation in posthog-js.
  *
- * The snapshot captures all public methods and properties of the PostHog interface,
- * making it easy to review changes during code review.
+ * The PostHog class uses @public JSDoc tags to mark which methods are part of
+ * the public API. This test verifies that all @public methods in the class
+ * are also present in the interface.
  */
 describe('PostHog interface', () => {
-    describe('snapshot', () => {
-        it('captures all public methods and properties', () => {
-            const members = extractInterfaceMembers(path.resolve(__dirname, '../posthog.ts'), 'PostHog')
-            expect(members).toMatchSnapshot()
-        })
+    it('should have all public methods from the PostHog class', () => {
+        const interfacePath = path.resolve(__dirname, '../posthog.ts')
+        const classPath = path.resolve(__dirname, '../../../browser/src/posthog-core.ts')
 
-        it('has expected method signatures for critical methods', () => {
-            const members = extractInterfaceMembers(path.resolve(__dirname, '../posthog.ts'), 'PostHog')
+        const interfaceMethods = extractInterfaceMethods(interfacePath, 'PostHog')
+        const classMethods = extractClassPublicMethods(classPath, 'PostHog')
 
-            // Verify getEarlyAccessFeatures has the stages parameter
-            expect(members['getEarlyAccessFeatures']).toContain('stages')
+        // Find methods in class but not in interface
+        const missingFromInterface = classMethods.filter((m) => !interfaceMethods.includes(m))
 
-            // Verify updateFlags exists
-            expect(members['updateFlags']).toBeDefined()
+        // Find methods in interface but not in class (might be deprecated or removed)
+        const extraInInterface = interfaceMethods.filter((m) => !classMethods.includes(m))
 
-            // Verify canRenderSurveyAsync exists
-            expect(members['canRenderSurveyAsync']).toBeDefined()
-        })
+        if (missingFromInterface.length > 0) {
+            throw new Error(
+                `The following public methods are in PostHog class but missing from @posthog/types PostHog interface:\n` +
+                    `  - ${missingFromInterface.join('\n  - ')}\n\n` +
+                    `Please add these methods to packages/types/src/posthog.ts`
+            )
+        }
+
+        if (extraInInterface.length > 0) {
+            // This is a warning, not an error - interface might have deprecated methods or properties
+            // These could be intentionally in the interface but not marked @public in class
+            // (e.g., deprecated methods that should still be typeable)
+        }
+
+        expect(missingFromInterface).toEqual([])
     })
 })

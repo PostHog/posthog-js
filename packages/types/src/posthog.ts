@@ -12,6 +12,8 @@ import type { FeatureFlagsCallback, EarlyAccessFeatureCallback, EarlyAccessFeatu
 import type { SessionIdChangedCallback } from './session-recording'
 import type { RequestCallback } from './request'
 import type { SurveyRenderReason } from './survey'
+import type { ToolbarParams } from './toolbar'
+import type { ExceptionAutoCaptureConfig } from './posthog-config'
 
 /**
  * The PostHog instance interface.
@@ -498,6 +500,66 @@ export interface PostHog {
      * @returns A function to unsubscribe
      */
     on(event: 'eventCaptured', cb: (...args: any[]) => void): () => void
+
+    // ============================================================================
+    // Error Tracking
+    // ============================================================================
+
+    /**
+     * Start automatic exception capture.
+     *
+     * @param config - Optional configuration for exception autocapture
+     */
+    startExceptionAutocapture(config?: ExceptionAutoCaptureConfig): void
+
+    /**
+     * Stop automatic exception capture.
+     */
+    stopExceptionAutocapture(): void
+
+    // ============================================================================
+    // Toolbar
+    // ============================================================================
+
+    /**
+     * Load the PostHog toolbar.
+     *
+     * @param params - Toolbar parameters
+     * @returns Whether the toolbar was loaded
+     */
+    loadToolbar(params: ToolbarParams): boolean
+
+    // ============================================================================
+    // Page View
+    // ============================================================================
+
+    /**
+     * Get the current page view ID.
+     *
+     * @returns The current page view ID
+     */
+    getPageViewId(): string | undefined
+
+    // ============================================================================
+    // LLM Analytics
+    // ============================================================================
+
+    /**
+     * Capture written user feedback for a LLM trace.
+     *
+     * @param traceId - The trace ID to capture feedback for
+     * @param userFeedback - The feedback to capture
+     */
+    captureTraceFeedback(traceId: string | number, userFeedback: string): void
+
+    /**
+     * Capture a metric for a LLM trace.
+     *
+     * @param traceId - The trace ID to capture the metric for
+     * @param metricName - The name of the metric to capture
+     * @param metricValue - The value of the metric to capture
+     */
+    captureTraceMetric(traceId: string | number, metricName: string, metricValue: string | number | boolean): void
 
     // ============================================================================
     // Deprecated

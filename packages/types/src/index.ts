@@ -75,3 +75,6 @@ export type { SegmentUser, SegmentAnalytics, SegmentPlugin, SegmentContext, Segm
 
 // Survey types
 export type { SurveyRenderReason } from './survey'
+
+// Toolbar types
+export type { ToolbarParams, ToolbarUserIntent, ToolbarSource, ToolbarVersion } from './toolbar'
