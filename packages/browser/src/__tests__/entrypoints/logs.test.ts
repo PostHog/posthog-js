@@ -326,4 +326,103 @@ describe('logs entrypoint', () => {
             )
         })
     })
+
+    describe('performance tests', () => {
+        beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            require('../../entrypoints/logs')
+        })
+
+        it('should not take more than 20ms to log a 2MB object with big body', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+
+            // Create a 2MB object with a large body (single large string)
+            const largeString = 'x'.repeat(2 * 1024 * 1024) // 2MB string
+            const largeBodyObject = { data: largeString }
+
+            initializeLogs(mockPostHog)
+            // initial log to warm up the jit
+            assignableWindow.console.log(largeBodyObject)
+
+            const wrappedStart = performance.now()
+            const iterations = 50
+            for (let i = 0; i < iterations; i++) {
+                assignableWindow.console.log(largeBodyObject)
+            }
+            const wrappedTime = (performance.now() - wrappedStart) / iterations
+
+            expect(wrappedTime).toBeLessThanOrEqual(20)
+
+            console.log(`Performance test (big body): wrapped=${wrappedTime.toFixed(2)}ms`)
+        })
+
+        it('should not take more than 40ms to log a 2MB object with lots of keys', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+
+            // Create a 2MB object with lots of keys (each key-value pair ~40 bytes)
+            const lotsOfKeysObject: Record<string, string> = {}
+            const keyValueSize = 40 // approximate size of each key-value pair
+            const targetKeys = Math.floor((2 * 1024 * 1024) / keyValueSize) // ~52,428 keys for 2MB
+
+            for (let i = 0; i < targetKeys; i++) {
+                lotsOfKeysObject[`key${i.toString().padStart(8, '0')}`] = `value${i.toString().padStart(8, '0')}`
+            }
+
+            initializeLogs(mockPostHog)
+            // initial log to warm up the jit
+            assignableWindow.console.log(lotsOfKeysObject)
+
+            const wrappedStart = performance.now()
+            const iterations = 25
+            for (let i = 0; i < iterations; i++) {
+                assignableWindow.console.log(lotsOfKeysObject)
+            }
+
+            const wrappedTime = (performance.now() - wrappedStart) / iterations
+
+            expect(wrappedTime).toBeLessThanOrEqual(40)
+
+            console.log(`Performance test (big body): wrapped=${wrappedTime.toFixed(2)}ms`)
+        })
+
+        it('should not take more than 0.1ms to log a small object', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+
+            const smallObject = { key: 'value' }
+
+            initializeLogs(mockPostHog)
+
+            // Test wrapped console.log performance
+            const wrappedStart = performance.now()
+            const iterations = 1000
+            for (let i = 0; i < iterations; i++) {
+                assignableWindow.console.log(smallObject)
+            }
+            const wrappedTime = (performance.now() - wrappedStart) / iterations / 1000
+
+            expect(wrappedTime).toBeLessThanOrEqual(0.1)
+
+            console.log(`Performance test (small object): wrapped=${wrappedTime.toFixed(2)}ms`)
+        })
+
+        it('should not take more than 0.1ms to log a medium object', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+
+            const mediumObject = { body: 'x'.repeat(1000), key: 'value', key2: 'value2', key3: 'value3' }
+
+            initializeLogs(mockPostHog)
+
+            // Test wrapped console.log performance
+            const wrappedStart = performance.now()
+            const iterations = 1000
+            for (let i = 0; i < iterations; i++) {
+                assignableWindow.console.log(mediumObject)
+            }
+            const wrappedTime = (performance.now() - wrappedStart) / iterations / 1000
+
+            expect(wrappedTime).toBeLessThanOrEqual(0.1)
+
+            console.log(`Performance test (small object): wrapped=${wrappedTime.toFixed(2)}ms`)
+        })
+    })
 })
