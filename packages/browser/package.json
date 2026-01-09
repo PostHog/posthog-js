@@ -54,6 +54,7 @@
         "core-js": "^3.38.1",
         "fflate": "^0.4.8",
         "preact": "^10.19.3",
+        "query-selector-shadow-dom": "^1.0.1",
         "web-vitals": "^4.2.4"
     },
     "devDependencies": {
@@ -86,6 +87,7 @@
         "@types/dotenv": "^8.2.3",
         "@types/jest": "catalog:",
         "@types/node": "^22.5.0",
+        "@types/query-selector-shadow-dom": "^1.0.4",
         "@types/sinon": "^17.0.1",
         "@types/web": "^0.0.222",
         "babel-jest": "^29.7.0",

@@ -248,6 +248,9 @@ importers:
       preact:
         specifier: ^10.19.3
         version: 10.19.3
+      query-selector-shadow-dom:
+        specifier: ^1.0.1
+        version: 1.0.1
       web-vitals:
         specifier: ^4.2.4
         version: 4.2.4
@@ -339,6 +342,9 @@ importers:
       '@types/node':
         specifier: ^22.5.0
         version: 22.5.0
+      '@types/query-selector-shadow-dom':
+        specifier: ^1.0.4
+        version: 1.0.4
       '@types/sinon':
         specifier: ^17.0.1
         version: 17.0.1
@@ -4110,6 +4116,9 @@ packages:
 
   '@types/qs@6.14.0':
     resolution: {integrity: sha512-eOunJqu0K1923aExK6y8p6fsihYEn/BYuQ4g0CxAAgFc4b/ZLN4CrsRZ55srTdqoiLzU2B2evC+apEIxprEzkQ==}
+
+  '@types/query-selector-shadow-dom@1.0.4':
+    resolution: {integrity: sha512-8jfGPD0wCMCdyBvrvOrWVn8bHL1UEjkPVJKsqNZpEXp+a7mIIvvGpJMd6n6dlNl7IkG2ryxIVqFI516RPE0uhQ==}
 
   '@types/range-parser@1.2.7':
     resolution: {integrity: sha512-hKormJbkJqzQGhziax5PItDUTMAM9uE2XXQmM37dyd4hVM+5aVl7oVxMVUiVQn2oCQFN/LKCZdvSM0pFRqbSmQ==}
@@ -10549,6 +10558,9 @@ packages:
 
   quansync@0.2.11:
     resolution: {integrity: sha512-AifT7QEbW9Nri4tAwR5M/uzpBuqfZf+zwaEM/QkzEjj7NBuFD2rBuy0K3dE+8wltbezDV7JMA0WfnCPYRSYbXA==}
+
+  query-selector-shadow-dom@1.0.1:
+    resolution: {integrity: sha512-lT5yCqEBgfoMYpf3F2xQRK7zEr1rhIIZuceDK6+xRkJQ4NMbHTwXqk4NkwDwQMNqXgG9r9fyHnzwNVs6zV5KRw==}
 
   query-string@6.14.1:
     resolution: {integrity: sha512-XDxAeVmpfu1/6IjyT/gXHOl+S0vQ9owggJ30hhWKdHAsNPOcasn5o9BW0eejZqL2e4vMjhAxoW3jVHcD6mbcYw==}
@@ -17522,6 +17534,8 @@ snapshots:
   '@types/prop-types@15.7.5': {}
 
   '@types/qs@6.14.0': {}
+
+  '@types/query-selector-shadow-dom@1.0.4': {}
 
   '@types/range-parser@1.2.7': {}
 
@@ -26237,6 +26251,8 @@ snapshots:
   qs@6.7.0: {}
 
   quansync@0.2.11: {}
+
+  query-selector-shadow-dom@1.0.1: {}
 
   query-string@6.14.1:
     dependencies:

@@ -15,6 +15,7 @@ import {
     getProductTourStylesheet,
     normalizeUrl,
 } from './product-tours-utils'
+import { findElement } from './element-inference'
 import { ProductTourTooltip } from './components/ProductTourTooltip'
 import { createLogger } from '../../utils/logger'
 import { document as _document, window as _window } from '../../utils/globals'
@@ -573,6 +574,18 @@ export class ProductTourManager {
 
         const result = findElementBySelector(step.selector)
 
+        // shadow mode: try inference to compare with selector results
+        const inferenceProps = step.inferenceData
+            ? (() => {
+                  const inferenceElement = findElement(step.inferenceData)
+                  return {
+                      $inference_data_present: true,
+                      $inference_found: !!inferenceElement,
+                      $inference_matches_selector: result.element === inferenceElement,
+                  }
+              })()
+            : { $inference_data_present: false }
+
         const previousStep = this._currentStepIndex > 0 ? this._activeTour.steps[this._currentStepIndex - 1] : null
         const shouldWaitForElement = previousStep?.progressionTrigger === 'click' || this._isResuming
 
@@ -602,6 +615,7 @@ export class ProductTourManager {
                 $product_tour_failure_phase: 'runtime',
                 $product_tour_waited_for_element: shouldWaitForElement,
                 $product_tour_wait_duration_ms: waitDurationMs,
+                ...inferenceProps,
             })
 
             logger.warn(
@@ -621,6 +635,7 @@ export class ProductTourManager {
                 $product_tour_error: result.error,
                 $product_tour_matches_count: result.matchCount,
                 $product_tour_failure_phase: 'runtime',
+                ...inferenceProps,
             })
             // Continue with first match for multiple_matches case
         }
@@ -642,6 +657,7 @@ export class ProductTourManager {
             $product_tour_step_element_id: metadata.id,
             $product_tour_step_element_classes: metadata.classes,
             $product_tour_step_element_text: metadata.text,
+            ...inferenceProps,
         })
 
         this._isResuming = false
