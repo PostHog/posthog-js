@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.317.1
+
+### Patch Changes
+
+- [#2869](https://github.com/PostHog/posthog-js/pull/2869) [`a50645a`](https://github.com/PostHog/posthog-js/commit/a50645a4e8e322b08581438d88300a3db5640a23) Thanks [@ksvat](https://github.com/ksvat)! - Add first snapshot timestamp logging for monitoring/debugging purposes
+  (2026-01-09)
+- Updated dependencies []:
+    - @posthog/types@1.317.1
+
 ## 1.317.0
 
 ### Minor Changes
