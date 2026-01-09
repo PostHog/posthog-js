@@ -233,6 +233,13 @@ export interface RemoteConfig {
     }
 
     /**
+     * Whether capturing logs to the logs product is enabled
+     */
+    logs?: {
+        captureConsoleLogs?: boolean
+    }
+
+    /**
      * This is currently in development and may have breaking changes without a major version bump
      */
     autocaptureExceptions?: boolean | { endpoint?: string }

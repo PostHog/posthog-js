@@ -186,6 +186,16 @@ exports[`config snapshot for PostHogConfig 1`] = `
       ]
     }
   ],
+  "logs": [
+    "undefined",
+    {
+      "captureConsoleLogs": [
+        "undefined",
+        "false",
+        "true"
+      ]
+    }
+  ],
   "disable_conversations": [
     "false",
     "true"
