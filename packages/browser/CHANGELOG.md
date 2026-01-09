@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.318.0
+
+### Minor Changes
+
+- [#2870](https://github.com/PostHog/posthog-js/pull/2870) [`b703cbb`](https://github.com/PostHog/posthog-js/commit/b703cbbf2210d622b69492802f611877c04b2e4d) Thanks [@adboio](https://github.com/adboio)! - add missing sessionRecording types
+  (2026-01-09)
+
+### Patch Changes
+
+- Updated dependencies [[`b703cbb`](https://github.com/PostHog/posthog-js/commit/b703cbbf2210d622b69492802f611877c04b2e4d)]:
+    - @posthog/types@1.318.0
+
 ## 1.317.1
 
 ### Patch Changes
