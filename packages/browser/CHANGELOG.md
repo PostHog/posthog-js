@@ -1,5 +1,16 @@
 # posthog-js
 
+## 1.316.1
+
+### Patch Changes
+
+- [#2846](https://github.com/PostHog/posthog-js/pull/2846) [`5ce7252`](https://github.com/PostHog/posthog-js/commit/5ce7252dc97d231e9a4d4b9a1e814dc69792ab96) Thanks [@ordehi](https://github.com/ordehi)! - Fix survey URL prefill to respect branching/skip logic
+
+    When using URL parameters to prefill survey responses (e.g., `?q0=9`), the SDK now correctly respects the survey's branching configuration. Previously, prefilled answers would always advance to the next sequential question, ignoring any skip logic. (2026-01-09)
+
+- Updated dependencies []:
+    - @posthog/types@1.316.1
+
 ## 1.316.0
 
 ### Minor Changes
