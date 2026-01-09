@@ -11,6 +11,7 @@ import type { CaptureResult, CaptureOptions } from './capture'
 import type { FeatureFlagsCallback, EarlyAccessFeatureCallback, EarlyAccessFeatureStage } from './feature-flags'
 import type { SessionIdChangedCallback } from './session-recording'
 import type { RequestCallback } from './request'
+import type { SurveyRenderReason } from './survey'
 
 /**
  * The PostHog instance interface.
@@ -198,6 +199,19 @@ export interface PostHog {
     reloadFeatureFlags(): void
 
     /**
+     * Manually update feature flag values without making a network request.
+     *
+     * @param flags - An object mapping flag keys to their values (boolean or string variant)
+     * @param payloads - Optional object mapping flag keys to their JSON payloads
+     * @param options - Optional settings. Use `{ merge: true }` to merge with existing flags instead of replacing.
+     */
+    updateFlags(
+        flags: Record<string, boolean | string>,
+        payloads?: Record<string, JsonType>,
+        options?: { merge?: boolean }
+    ): void
+
+    /**
      * Register a callback to be called when feature flags are loaded.
      *
      * @param callback - The callback to call
@@ -242,8 +256,13 @@ export interface PostHog {
      *
      * @param callback - Callback to receive the features
      * @param forceReload - Whether to force a reload from the server
+     * @param stages - The stages of the early access features to load
      */
-    getEarlyAccessFeatures(callback: EarlyAccessFeatureCallback, forceReload?: boolean): void
+    getEarlyAccessFeatures(
+        callback: EarlyAccessFeatureCallback,
+        forceReload?: boolean,
+        stages?: EarlyAccessFeatureStage[]
+    ): void
 
     /**
      * Update enrollment in an early access feature.
@@ -456,7 +475,16 @@ export interface PostHog {
      * @param surveyId - The survey ID
      * @returns The render reason or null if can't render
      */
-    canRenderSurvey(surveyId: string): any | null
+    canRenderSurvey(surveyId: string): SurveyRenderReason | null
+
+    /**
+     * Check if a survey can be rendered (async version).
+     *
+     * @param surveyId - The survey ID
+     * @param forceReload - Whether to force a reload from the server
+     * @returns A promise that resolves to the render reason
+     */
+    canRenderSurveyAsync(surveyId: string, forceReload?: boolean): Promise<SurveyRenderReason>
 
     // ============================================================================
     // Events

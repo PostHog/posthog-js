@@ -72,3 +72,6 @@ export type {
 
 // Segment integration types
 export type { SegmentUser, SegmentAnalytics, SegmentPlugin, SegmentContext, SegmentFunction } from './segment'
+
+// Survey types
+export type { SurveyRenderReason } from './survey'
