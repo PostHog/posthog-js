@@ -45,7 +45,15 @@ export function renderProductTourPreview({
 
     render(
         <div class="ph-tour-container">
-            <div class={tooltipClass} style={{ position: 'relative', animation: 'none', ...style }}>
+            <div
+                class={tooltipClass}
+                style={{
+                    position: 'relative',
+                    animation: 'none',
+                    ...(step.maxWidth && { width: `${step.maxWidth}px`, maxWidth: `${step.maxWidth}px` }),
+                    ...style,
+                }}
+            >
                 {isSurveyStep ? (
                     <ProductTourSurveyStepInner
                         step={step}
