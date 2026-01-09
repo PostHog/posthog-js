@@ -1,5 +1,19 @@
 # posthog-js
 
+## 1.317.0
+
+### Minor Changes
+
+- [#2857](https://github.com/PostHog/posthog-js/pull/2857) [`a2182ee`](https://github.com/PostHog/posthog-js/commit/a2182eeb39fa4123f7009ede74be623f6114f02d) Thanks [@adboio](https://github.com/adboio)! - add product tour element inference
+  (2026-01-09)
+
+### Patch Changes
+
+- [#2853](https://github.com/PostHog/posthog-js/pull/2853) [`3390186`](https://github.com/PostHog/posthog-js/commit/339018635aa38d7792217169fee3723850263c07) Thanks [@adboio](https://github.com/adboio)! - product tours: support rich content
+  (2026-01-09)
+- Updated dependencies []:
+    - @posthog/types@1.317.0
+
 ## 1.316.1
 
 ### Patch Changes
