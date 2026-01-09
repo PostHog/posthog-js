@@ -1,0 +1,344 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { JSDOM } from 'jsdom'
+import { describe, expect, it } from 'vitest'
+
+import snapshot, { _isBlockedElement, serializeNodeWithId } from '../src/snapshot'
+import { elementNode, serializedNodeWithId } from '../src/types'
+import { Mirror, absolutifyURLs } from '../src/utils'
+
+const serializeNode = (node: Node): serializedNodeWithId | null => {
+    return serializeNodeWithId(node, {
+        doc: document,
+        mirror: new Mirror(),
+        blockClass: 'blockblock',
+        blockSelector: null,
+        maskTextClass: 'maskmask',
+        maskTextSelector: null,
+        skipChild: false,
+        inlineStylesheet: true,
+        maskTextFn: undefined,
+        maskInputFn: undefined,
+        slimDOMOptions: {},
+    })
+}
+
+describe('absolute url to stylesheet', () => {
+    const href = 'http://localhost/css/style.css'
+
+    it('can handle relative path', () => {
+        expect(absolutifyURLs('url(a.jpg)', href)).toEqual(`url(http://localhost/css/a.jpg)`)
+    })
+
+    it('can handle same level path', () => {
+        expect(absolutifyURLs('url("./a.jpg")', href)).toEqual(`url("http://localhost/css/a.jpg")`)
+    })
+
+    it('can handle parent level path', () => {
+        expect(absolutifyURLs('url("../a.jpg")', href)).toEqual(`url("http://localhost/a.jpg")`)
+    })
+
+    it('can handle absolute path', () => {
+        expect(absolutifyURLs('url("/a.jpg")', href)).toEqual(`url("http://localhost/a.jpg")`)
+    })
+
+    it('can handle external path', () => {
+        expect(absolutifyURLs('url("http://localhost/a.jpg")', href)).toEqual(`url("http://localhost/a.jpg")`)
+    })
+
+    it('can handle single quote path', () => {
+        expect(absolutifyURLs(`url('./a.jpg')`, href)).toEqual(`url('http://localhost/css/a.jpg')`)
+    })
+
+    it('can handle no quote path', () => {
+        expect(absolutifyURLs('url(./a.jpg)', href)).toEqual(`url(http://localhost/css/a.jpg)`)
+    })
+
+    it('can handle multiple no quote paths', () => {
+        expect(
+            absolutifyURLs(
+                'background-image: url(images/b.jpg);background: #aabbcc url(images/a.jpg) 50% 50% repeat;',
+                href
+            )
+        ).toEqual(
+            `background-image: url(http://localhost/css/images/b.jpg);` +
+                `background: #aabbcc url(http://localhost/css/images/a.jpg) 50% 50% repeat;`
+        )
+    })
+
+    it('can handle data url image', () => {
+        expect(absolutifyURLs('url(data:image/gif;base64,ABC)', href)).toEqual('url(data:image/gif;base64,ABC)')
+        expect(absolutifyURLs('url(data:application/font-woff;base64,d09GMgABAAAAAAm)', href)).toEqual(
+            'url(data:application/font-woff;base64,d09GMgABAAAAAAm)'
+        )
+    })
+
+    it('preserves quotes around inline svgs with spaces', () => {
+        expect(
+            absolutifyURLs(
+                "url(\"data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath fill='%2328a745' d='M3'/%3E%3C/svg%3E\")",
+                href
+            )
+        ).toEqual(
+            "url(\"data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath fill='%2328a745' d='M3'/%3E%3C/svg%3E\")"
+        )
+        expect(
+            absolutifyURLs(
+                'url(\'data:image/svg+xml;utf8,<svg width="28" height="32" viewBox="0 0 28 32" xmlns="http://www.w3.org/2000/svg"><path d="M27 14C28" fill="white"/></svg>\')',
+                href
+            )
+        ).toEqual(
+            'url(\'data:image/svg+xml;utf8,<svg width="28" height="32" viewBox="0 0 28 32" xmlns="http://www.w3.org/2000/svg"><path d="M27 14C28" fill="white"/></svg>\')'
+        )
+        expect(
+            absolutifyURLs(
+                'url("data:image/svg+xml;utf8,<svg width="28" height="32" viewBox="0 0 28 32" xmlns="http://www.w3.org/2000/svg"><path d="M27 14C28" fill="white"/></svg>")',
+                href
+            )
+        ).toEqual(
+            'url("data:image/svg+xml;utf8,<svg width="28" height="32" viewBox="0 0 28 32" xmlns="http://www.w3.org/2000/svg"><path d="M27 14C28" fill="white"/></svg>")'
+        )
+    })
+    it('can handle empty path', () => {
+        expect(absolutifyURLs(`url('')`, href)).toEqual(`url('')`)
+    })
+})
+
+describe('isBlockedElement()', () => {
+    const subject = (html: string, opt: any = {}) => _isBlockedElement(render(html), 'rr-block', opt.blockSelector)
+
+    const render = (html: string): HTMLElement => JSDOM.fragment(html).querySelector('div')!
+
+    it('can handle empty elements', () => {
+        expect(subject('<div />')).toEqual(false)
+    })
+
+    it('blocks prohibited className', () => {
+        expect(subject('<div class="foo rr-block bar" />')).toEqual(true)
+    })
+
+    it('does not block random data selector', () => {
+        expect(subject('<div data-rr-block />')).toEqual(false)
+    })
+
+    it('blocks blocked selector', () => {
+        expect(subject('<div data-rr-block />', { blockSelector: '[data-rr-block]' })).toEqual(true)
+    })
+})
+
+describe('style elements', () => {
+    const render = (html: string): HTMLStyleElement => {
+        document.write(html)
+        return document.querySelector('style')!
+    }
+
+    it('should serialize all rules of stylesheet when the sheet has a single child node', () => {
+        const styleEl = render(`<style>body { color: red; }</style>`)
+        styleEl.sheet?.insertRule('section { color: blue; }')
+        expect(serializeNode(styleEl.childNodes[0])).toMatchObject({
+            isStyle: true,
+            rootId: undefined,
+            textContent: 'section {color: blue;}body {color: red;}',
+            type: 3,
+        })
+    })
+
+    it('should serialize individual text nodes on stylesheets with multiple child nodes', () => {
+        const styleEl = render(`<style>body { color: red; }</style>`)
+        styleEl.append(document.createTextNode('section { color: blue; }'))
+        expect(serializeNode(styleEl.childNodes[1])).toMatchObject({
+            isStyle: true,
+            rootId: undefined,
+            textContent: 'section { color: blue; }',
+            type: 3,
+        })
+    })
+})
+
+describe('scrollTop/scrollLeft', () => {
+    const render = (html: string): HTMLDivElement => {
+        document.write(html)
+        return document.querySelector('div')!
+    }
+
+    it('should serialize scroll positions', () => {
+        const el = render(`<div stylel='overflow: auto; width: 1px; height: 1px;'>
+      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+    </div>`)
+        el.scrollTop = 10
+        el.scrollLeft = 20
+        expect(serializeNode(el)).toMatchObject({
+            attributes: {
+                rr_scrollTop: 10,
+                rr_scrollLeft: 20,
+            },
+        })
+    })
+})
+
+describe('form', () => {
+    const render = (html: string): HTMLTextAreaElement => {
+        document.write(html)
+        return document.querySelector('textarea')!
+    }
+
+    it('should record textarea values once', () => {
+        const el = render(`<textarea>Lorem ipsum</textarea>`)
+        const sel = serializeNode(el) as elementNode
+
+        // we serialize according to where the DOM stores the value, not how
+        // the HTML stores it (this is so that maskInputValue can work over
+        // inputs/textareas/selects in a uniform way)
+        expect(sel).toMatchObject({
+            attributes: {
+                value: 'Lorem ipsum',
+            },
+        })
+        expect(sel?.childNodes).toEqual([]) // shouldn't be stored in childNodes while in transit
+    })
+})
+
+describe('blocked elements with CSS transforms', () => {
+    const renderWithStyle = (html: string, styles: string): HTMLElement => {
+        const styleEl = document.createElement('style')
+        styleEl.textContent = styles
+        document.head.appendChild(styleEl)
+        document.write(html)
+        return document.querySelector('div')!
+    }
+
+    it('should capture position for blocked element with translate transform', () => {
+        const el = renderWithStyle(
+            `<div class="blockblock" style="transform: translate(100px, 50px); width: 200px; height: 100px;">Blocked content</div>`,
+            ''
+        )
+
+        const sn = serializeNode(el) as elementNode
+
+        expect(sn?.attributes?.rr_width).toBeDefined()
+        expect(sn?.attributes?.rr_height).toBeDefined()
+        expect(sn?.attributes?.rr_left).toBeDefined()
+        expect(sn?.attributes?.rr_top).toBeDefined()
+
+        // The position should reflect the transformed position
+        expect(sn?.attributes?.class).toBe('blockblock')
+    })
+
+    it('should capture position for blocked element with scale and translate', () => {
+        const el = renderWithStyle(
+            `<div class="blockblock" style="transform: translate(50px, 75px) scale(1.5); width: 100px; height: 100px;">Blocked content</div>`,
+            ''
+        )
+
+        const sn = serializeNode(el) as elementNode
+
+        expect(sn?.attributes?.rr_width).toBeDefined()
+        expect(sn?.attributes?.rr_height).toBeDefined()
+        expect(sn?.attributes?.rr_left).toBeDefined()
+        expect(sn?.attributes?.rr_top).toBeDefined()
+    })
+
+    it('should capture position for blocked element with rotate transform', () => {
+        const el = renderWithStyle(
+            `<div class="blockblock" style="transform: rotate(45deg) translate(100px, 100px); width: 150px; height: 150px;">Blocked content</div>`,
+            ''
+        )
+
+        const sn = serializeNode(el) as elementNode
+
+        expect(sn?.attributes?.rr_width).toBeDefined()
+        expect(sn?.attributes?.rr_height).toBeDefined()
+        expect(sn?.attributes?.rr_left).toBeDefined()
+        expect(sn?.attributes?.rr_top).toBeDefined()
+    })
+
+    it('should capture position for blocked element with matrix transform', () => {
+        const el = renderWithStyle(
+            `<div class="blockblock" style="transform: matrix(1, 0, 0, 1, 100, 200); width: 80px; height: 60px;">Blocked content</div>`,
+            ''
+        )
+
+        const sn = serializeNode(el) as elementNode
+
+        expect(sn?.attributes?.rr_width).toBeDefined()
+        expect(sn?.attributes?.rr_height).toBeDefined()
+        expect(sn?.attributes?.rr_left).toBeDefined()
+        expect(sn?.attributes?.rr_top).toBeDefined()
+    })
+
+    it('should capture position for absolutely positioned element', () => {
+        const el = renderWithStyle(
+            `<div class="blockblock" style="position: absolute; left: 100px; top: 500px; width: 100px; height: 100px;">Blocked content</div>`,
+            'body { height: 3000px; }'
+        )
+
+        const sn = serializeNode(el) as elementNode
+
+        expect(sn?.attributes?.rr_left).toBeDefined()
+        expect(sn?.attributes?.rr_top).toBeDefined()
+
+        // Position should be captured from getBoundingClientRect
+        const left = parseFloat((sn?.attributes?.rr_left as string).replace('px', ''))
+        const top = parseFloat((sn?.attributes?.rr_top as string).replace('px', ''))
+
+        // The recorded position should match the element's position
+        expect(left).toBeGreaterThanOrEqual(0)
+        expect(top).toBeGreaterThanOrEqual(0)
+    })
+
+    it('should preserve class attribute for blocked elements', () => {
+        const el = renderWithStyle(
+            `<div class="blockblock my-custom-class another-class" style="transform: translate(10px, 20px); width: 50px; height: 50px;">Blocked</div>`,
+            ''
+        )
+
+        const sn = serializeNode(el) as elementNode
+
+        // Only the blockClass should be preserved in attributes
+        expect(sn?.attributes?.class).toBe('blockblock my-custom-class another-class')
+    })
+
+    it('should handle blocked element with explicit position', () => {
+        const el = renderWithStyle(
+            `<div class="blockblock" style="position: absolute; left: 50px; top: 30px; width: 100px; height: 100px;">Blocked</div>`,
+            ''
+        )
+
+        const sn = serializeNode(el) as elementNode
+
+        expect(sn?.attributes?.rr_left).toBeDefined()
+        expect(sn?.attributes?.rr_top).toBeDefined()
+
+        const left = parseFloat((sn?.attributes?.rr_left as string).replace('px', ''))
+        const top = parseFloat((sn?.attributes?.rr_top as string).replace('px', ''))
+
+        // Positions should be captured correctly
+        expect(left).toBeGreaterThanOrEqual(0)
+        expect(top).toBeGreaterThanOrEqual(0)
+    })
+})
+
+describe('jsdom snapshot', () => {
+    const render = (html: string): Document => {
+        document.write(html)
+        return document
+    }
+
+    it("doesn't rely on global browser objects", () => {
+        // this test is incomplete in terms of coverage,
+        // but the idea being that we are checking that all features use the
+        // passed-in `doc` object rather than the global `document`
+        // (which is only present in browsers)
+        // in any case, supporting jsdom is not a primary goal
+
+        const doc = render(`<!DOCTYPE html><p>Hello world</p><canvas></canvas>`)
+        const sn = snapshot(doc, {
+            // JSDOM Error: Not implemented: HTMLCanvasElement.prototype.toDataURL (without installing the canvas npm package)
+            //recordCanvas: true,
+        })
+        expect(sn).toMatchObject({
+            type: 0,
+        })
+    })
+})

@@ -1,0 +1,78 @@
+{
+    "name": "@posthog/rrweb-packer",
+    "version": "0.0.0",
+    "scripts": {
+        "dev": "vite build --watch",
+        "build": "pnpm turbo run prepublish",
+        "test": "vitest run",
+        "test:watch": "vitest watch",
+        "check-types": "tsc -noEmit",
+        "prepublish": "tsc -noEmit && vite build",
+        "lint": "pnpm eslint src/**/*.ts"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/PostHog/posthog-rrweb.git"
+    },
+    "license": "MIT",
+    "type": "module",
+    "main": "./dist/packer.cjs",
+    "module": "./dist/packer.js",
+    "unpkg": "./dist/packer.js",
+    "typings": "dist/packer.d.ts",
+    "exports": {
+        ".": {
+            "import": {
+                "types": "./dist/packer.d.ts",
+                "default": "./dist/packer.js"
+            },
+            "require": {
+                "types": "./dist/packer.d.cts",
+                "default": "./dist/packer.cjs"
+            }
+        },
+        "./pack": {
+            "import": {
+                "types": "./dist/pack.d.ts",
+                "default": "./dist/pack.js"
+            },
+            "require": {
+                "types": "./dist/pack.d.cts",
+                "default": "./dist/pack.cjs"
+            }
+        },
+        "./unpack": {
+            "import": {
+                "types": "./dist/unpack.d.ts",
+                "default": "./dist/unpack.js"
+            },
+            "require": {
+                "types": "./dist/unpack.d.cts",
+                "default": "./dist/unpack.cjs"
+            }
+        }
+    },
+    "files": [
+        "pack",
+        "unpack",
+        "build",
+        "dist",
+        "package.json"
+    ],
+    "devDependencies": {
+        "esbuild": "^0.25.0",
+        "esbuild-plugin-umd-wrapper": "^3.0.0",
+        "rollup-plugin-visualizer": "^5.14.0",
+        "vite": "^6.2.0",
+        "vite-plugin-dts": "^4.5.4",
+        "vitest": "^1.4.0",
+        "typescript": "catalog:"
+    },
+    "dependencies": {
+        "fflate": "^0.4.4",
+        "@posthog/rrweb-types": "workspace:*"
+    },
+    "browserslist": [
+        "supports es6-class"
+    ]
+}
