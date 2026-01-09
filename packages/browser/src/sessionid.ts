@@ -7,7 +7,7 @@ import { window } from './utils/globals'
 
 import { createLogger } from './utils/logger'
 
-import { isArray, isNumber, isUndefined, clampToRange } from '@posthog/core'
+import { isArray, isNumber, isUndefined, clampToRange, isNullish } from '@posthog/core'
 import { PostHog } from './posthog-core'
 import { addEventListener } from './utils'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
@@ -18,6 +18,12 @@ export const DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS = 30 * 60 // 30 minutes
 export const MAX_SESSION_IDLE_TIMEOUT_SECONDS = 10 * 60 * 60 // 10 hours
 const MIN_SESSION_IDLE_TIMEOUT_SECONDS = 60 // 1 minute
 const SESSION_LENGTH_LIMIT_MILLISECONDS = 24 * 3600 * 1000 // 24 hours
+
+const timestampIsAbsent = (ts: unknown): boolean => {
+    if (isNullish(ts) || !isNumber(ts)) return true
+    // ts !== ts catches NaN
+    return ts <= 0 || ts !== ts
+}
 
 export class SessionIdManager {
     private readonly _sessionIdGenerator: () => string
@@ -287,9 +293,12 @@ export class SessionIdManager {
             valuesChanged = true
         }
 
-        const newActivityTimestamp =
-            lastActivityTimestamp === 0 || !readOnly || sessionPastMaximumLength ? timestamp : lastActivityTimestamp
-        const sessionStartTimestamp = startTimestamp === 0 ? new Date().getTime() : startTimestamp
+        const noActivityTimestamp = timestampIsAbsent(lastActivityTimestamp)
+        const shouldPreserveActivityTimestamp = !noActivityTimestamp && readOnly && !sessionPastMaximumLength
+        const newActivityTimestamp = shouldPreserveActivityTimestamp ? lastActivityTimestamp : timestamp
+
+        const noStartTimestamp = timestampIsAbsent(startTimestamp)
+        const sessionStartTimestamp = noStartTimestamp ? new Date().getTime() : startTimestamp
 
         this._setWindowId(windowId)
         this._setSessionId(sessionId, newActivityTimestamp, sessionStartTimestamp)

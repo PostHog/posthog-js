@@ -64,6 +64,7 @@ export const isNumber = (x: unknown): x is number => {
   // eslint-disable-next-line posthog-js/no-direct-number-check
   return toString.call(x) == '[object Number]'
 }
+
 export const isBoolean = (x: unknown): x is boolean => {
   // eslint-disable-next-line posthog-js/no-direct-boolean-check
   return toString.call(x) === '[object Boolean]'
