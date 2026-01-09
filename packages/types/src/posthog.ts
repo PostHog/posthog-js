@@ -364,6 +364,22 @@ export interface PostHog {
      */
     sessionRecordingStarted(): boolean
 
+    /**
+     * The session recording instance. May be undefined if session recording is not initialized.
+     */
+    sessionRecording?: {
+        /** Force allow network capture on localhost (for debugging) */
+        _forceAllowLocalhostNetworkCapture: boolean
+    }
+
+    /**
+     * The session manager instance. May be undefined in cookieless mode.
+     */
+    sessionManager?: {
+        /** Reset the session ID, creating a new session */
+        resetSessionId: () => void
+    }
+
     // ============================================================================
     // Consent & Opt-in/out
     // ============================================================================
