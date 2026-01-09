@@ -5,6 +5,7 @@ import {
     ProductTourCallback,
     ProductTourDismissReason,
     ProductTourRenderReason,
+    ProductTourStepButton,
     ShowTourOptions,
 } from '../../posthog-product-tours-types'
 import { SurveyEventName, SurveyEventProperties } from '../../posthog-surveys-types'
@@ -505,6 +506,31 @@ export class ProductTourManager {
         this._cleanup()
     }
 
+    private _handleButtonClick = (button: ProductTourStepButton): void => {
+        switch (button.action) {
+            case 'dismiss':
+                this.dismissTour('user_clicked_skip')
+                break
+            case 'next_step':
+                this.nextStep()
+                break
+            case 'previous_step':
+                this.previousStep()
+                break
+            case 'link':
+                if (button.link) {
+                    window.open(button.link, '_blank')
+                }
+                break
+            case 'trigger_tour':
+                if (button.tourId) {
+                    this._cleanup()
+                    this.showTourById(button.tourId)
+                }
+                break
+        }
+    }
+
     private _completeTour(): void {
         if (!this._activeTour) {
             return
@@ -687,6 +713,7 @@ export class ProductTourManager {
                 onPrevious={this.previousStep}
                 onDismiss={onDismissOverride || this.dismissTour}
                 onSurveySubmit={onSurveySubmit}
+                onButtonClick={this._handleButtonClick}
             />,
             shadow
         )

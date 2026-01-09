@@ -1,6 +1,11 @@
 import { h } from 'preact'
 import { useEffect, useState, useCallback, useRef } from 'preact/hooks'
-import { ProductTour, ProductTourStep, ProductTourDismissReason } from '../../../posthog-product-tours-types'
+import {
+    ProductTour,
+    ProductTourStep,
+    ProductTourDismissReason,
+    ProductTourStepButton,
+} from '../../../posthog-product-tours-types'
 import { SurveyPosition } from '@posthog/core'
 import { calculateTooltipPosition, getSpotlightStyle, TooltipPosition } from '../product-tours-utils'
 import { getPopoverPosition } from '../../surveys/surveys-extension-utils'
@@ -24,6 +29,7 @@ export interface ProductTourTooltipProps {
     onPrevious: () => void
     onDismiss: (reason: ProductTourDismissReason) => void
     onSurveySubmit?: (response: string | number | null) => void
+    onButtonClick?: (button: ProductTourStepButton) => void
 }
 
 function getOppositePosition(position: TooltipPosition): TooltipPosition {
@@ -101,6 +107,7 @@ export function ProductTourTooltip({
     onPrevious,
     onDismiss,
     onSurveySubmit,
+    onButtonClick,
 }: ProductTourTooltipProps): h.JSX.Element {
     const [transitionState, setTransitionState] = useState<TransitionState>('entering')
     const [position, setPosition] = useState<ReturnType<typeof calculateTooltipPosition> | null>(null)
@@ -255,7 +262,9 @@ export function ProductTourTooltip({
 
     return (
         <div class="ph-tour-container">
-            <div class="ph-tour-click-overlay" onClick={handleOverlayClick} />
+            {tour.appearance?.dismissOnClickOutside !== false && (
+                <div class="ph-tour-click-overlay" onClick={handleOverlayClick} />
+            )}
 
             {/* Modal overlay - visible for non-element steps */}
             <div
@@ -321,6 +330,7 @@ export function ProductTourTooltip({
                         onNext={onNext}
                         onPrevious={onPrevious}
                         onDismiss={() => onDismiss('user_clicked_skip')}
+                        onButtonClick={onButtonClick}
                     />
                 )}
             </div>
