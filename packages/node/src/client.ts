@@ -1671,10 +1671,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       props
 
     const contextData = this.context?.get()
+    const registeredProperties = this.getPersistedProperty(PostHogPersistedProperty.Props) || {}
 
     let mergedDistinctId = distinctId || contextData?.distinctId
 
     const mergedProperties = {
+      ...registeredProperties,
       ...(contextData?.properties || {}),
       ...(properties || {}),
     }
