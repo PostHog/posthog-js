@@ -1,6 +1,10 @@
-import { ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS, ERROR_TRACKING_SUPPRESSION_RULES } from './constants'
+import {
+    ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS,
+    ERROR_TRACKING_POLICY_CONFIG,
+    ERROR_TRACKING_SUPPRESSION_RULES,
+} from './constants'
 import { PostHog } from './posthog-core'
-import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
+import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig, SDKPolicyConfig } from './types'
 import { createLogger } from './utils/logger'
 import { propertyComparisons } from './utils/property-utils'
 import { isString, isArray, ErrorTracking, isNullish } from '@posthog/core'
@@ -25,24 +29,36 @@ export function buildErrorPropertiesBuilder() {
 export class PostHogExceptions {
     private readonly _instance: PostHog
     private _suppressionRules: ErrorTrackingSuppressionRule[] = []
+    private _policyConfig: SDKPolicyConfig | null = null
     private _errorPropertiesBuilder: ErrorTracking.ErrorPropertiesBuilder = buildErrorPropertiesBuilder()
 
     constructor(instance: PostHog) {
         this._instance = instance
         this._suppressionRules = this._instance.persistence?.get_property(ERROR_TRACKING_SUPPRESSION_RULES) ?? []
+        this._policyConfig = this._instance.persistence?.get_property(ERROR_TRACKING_POLICY_CONFIG)
     }
 
     onRemoteConfig(response: RemoteConfig) {
         const suppressionRules = response.errorTracking?.suppressionRules ?? []
         const captureExtensionExceptions = response.errorTracking?.captureExtensionExceptions
+        const policyConfig = {
+            sampleRate: response.errorTracking?.sampleRate,
+            linkedFeatureFlag: response.errorTracking?.linkedFeatureFlag,
+            urlTriggers: response.errorTracking?.urlTriggers,
+            urlBlocklist: response.errorTracking?.urlBlocklist,
+            eventTriggers: response.errorTracking?.eventTriggers,
+            triggerMatchType: response.errorTracking?.triggerMatchType,
+        }
 
         // store this in-memory in case persistence is disabled
         this._suppressionRules = suppressionRules
+        this._policyConfig = policyConfig
 
         if (this._instance.persistence) {
             this._instance.persistence.register({
                 [ERROR_TRACKING_SUPPRESSION_RULES]: this._suppressionRules,
                 [ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS]: captureExtensionExceptions,
+                [ERROR_TRACKING_POLICY_CONFIG]: policyConfig,
             })
         }
     }
@@ -86,6 +102,11 @@ export class PostHogExceptions {
                 logger.info('Skipping exception capture because it was thrown by the PostHog SDK')
                 return
             }
+
+            if (this._shouldSampleException()) {
+                logger.info('Skipping exception capture of the policy sample rate')
+                return
+            }
         }
 
         return this._instance.capture('$exception', properties, {
@@ -124,6 +145,14 @@ export class PostHogExceptions {
             })
             return rule.type === 'OR' ? results.some(Boolean) : results.every(Boolean)
         })
+    }
+
+    private _shouldSampleException(): boolean {
+        return this._policyConfig
+            ? this._policyConfig.sampleRate
+                ? Math.random() < this._policyConfig.sampleRate
+                : false
+            : false
     }
 
     private _isExtensionException(exceptionList: ErrorTracking.ExceptionList): boolean {
