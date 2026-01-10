@@ -68,6 +68,9 @@ export type {
     PostHogConfig,
 } from '@posthog/types'
 
+// Toolbar types
+export type { ToolbarUserIntent, ToolbarSource, ToolbarVersion, ToolbarParams } from '@posthog/types'
+
 // Re-export KnownUnsafeEditableEvent from @posthog/core for backwards compatibility
 export type { KnownUnsafeEditableEvent } from '@posthog/core'
 
@@ -87,6 +90,7 @@ import type {
     CapturedNetworkRequest,
     SessionRecordingOptions,
     FeatureFlagDetail,
+    ToolbarParams,
 } from '@posthog/types'
 
 export enum Compression {
@@ -365,25 +369,6 @@ export interface PersistentStore {
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export type Breaker = {}
 export type EventHandler = (event: Event) => boolean | void
-
-export type ToolbarUserIntent = 'add-action' | 'edit-action'
-export type ToolbarSource = 'url' | 'localstorage'
-export type ToolbarVersion = 'toolbar'
-
-/* sync with posthog */
-export interface ToolbarParams {
-    token?: string /** public posthog-js token */
-    temporaryToken?: string /** private temporary user token */
-    actionId?: number
-    userIntent?: ToolbarUserIntent
-    source?: ToolbarSource
-    toolbarVersion?: ToolbarVersion
-    instrument?: boolean
-    distinctId?: string
-    userEmail?: string
-    dataAttributes?: string[]
-    featureFlags?: Record<string, string | boolean>
-}
 
 export type SnippetArrayItem = [method: string, ...args: any[]]
 
