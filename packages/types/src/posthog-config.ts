@@ -179,6 +179,18 @@ export interface PerformanceCaptureConfig {
      * @default 5000
      */
     web_vitals_delayed_flush_ms?: number
+
+    /**
+     * By default, web vitals sends ~2.2 events per pageview because metrics
+     * (CLS, INP) update as users interact with the page. Set this to true
+     * to only capture the initial metric values, reducing to ~1 event per pageview.
+     *
+     * Note: This may miss the final CLS value (which accumulates) and
+     * better INP values from subsequent interactions.
+     *
+     * @default false
+     */
+    web_vitals_initial_flush_only?: boolean
 }
 
 export interface DeadClickCandidate {

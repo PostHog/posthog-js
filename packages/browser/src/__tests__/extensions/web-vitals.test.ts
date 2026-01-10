@@ -488,4 +488,155 @@ describe('web vitals', () => {
             })
         }
     )
+
+    describe('web_vitals_initial_flush_only', () => {
+        beforeEach(async () => {
+            beforeSendMock.mockClear()
+            posthog = await createPosthogInstance(uuidv7(), {
+                before_send: beforeSendMock,
+                capture_performance: { web_vitals: true, web_vitals_initial_flush_only: true },
+                capture_pageview: false,
+            })
+
+            loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                assignableWindow.__PosthogExtensions__ = {}
+                assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
+                    onLCP: (cb: any) => {
+                        onLCPCallback = cb
+                    },
+                    onCLS: (cb: any) => {
+                        onCLSCallback = cb
+                    },
+                    onFCP: (cb: any) => {
+                        onFCPCallback = cb
+                    },
+                    onINP: (cb: any) => {
+                        onINPCallback = cb
+                    },
+                }
+                callback()
+            })
+
+            assignableWindow.__PosthogExtensions__ = {}
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
+
+            posthog.webVitalsAutocapture!.onRemoteConfig({
+                capturePerformance: { web_vitals: true },
+            } as unknown as FlagsResponse)
+        })
+
+        it('should stop capturing after first complete flush', async () => {
+            // First emit all metrics - should trigger flush
+            emitAllMetrics()
+            expect(beforeSendMock).toBeCalledTimes(1)
+
+            // Emit more metrics - should be ignored
+            onCLSCallback?.({ name: 'CLS', value: 200, extra: 'updated' })
+            onINPCallback?.({ name: 'INP', value: 300, extra: 'updated' })
+
+            // Wait for any potential delayed flush
+            jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+
+            // Still only one event
+            expect(beforeSendMock).toBeCalledTimes(1)
+        })
+
+        it('should reset and capture again after URL change', async () => {
+            // First emit all metrics - should trigger flush
+            emitAllMetrics()
+            expect(beforeSendMock).toBeCalledTimes(1)
+
+            // Change URL
+            mockLocation.mockReturnValue({
+                protocol: 'http:',
+                host: 'localhost',
+                pathname: '/new-page',
+                search: '',
+                hash: '',
+                href: 'http://localhost/new-page',
+            })
+
+            // Emit metrics for new page
+            onLCPCallback?.({ name: 'LCP', value: 500, extra: 'new-page' })
+            onCLSCallback?.({ name: 'CLS', value: 501, extra: 'new-page' })
+            onFCPCallback?.({ name: 'FCP', value: 502, extra: 'new-page' })
+            onINPCallback?.({ name: 'INP', value: 503, extra: 'new-page' })
+
+            // Should have two flushes now (one for each page)
+            expect(beforeSendMock).toBeCalledTimes(2)
+        })
+
+        it('should still send partial metrics after timeout when not all metrics arrived', async () => {
+            // Only emit some metrics
+            onCLSCallback?.({ name: 'CLS', value: 100, extra: 'partial' })
+            onFCPCallback?.({ name: 'FCP', value: 101, extra: 'partial' })
+
+            expect(beforeSendMock).toBeCalledTimes(0)
+
+            // Wait for timeout
+            jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+
+            // Should have flushed partial metrics
+            expect(beforeSendMock).toBeCalledTimes(1)
+
+            // But subsequent metrics should still be ignored (even though initial was partial)
+            // because initialFlushOnly mode is about "first flush", not "complete flush"
+            onINPCallback?.({ name: 'INP', value: 200, extra: 'late' })
+            jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+
+            // Still only one event
+            expect(beforeSendMock).toBeCalledTimes(1)
+        })
+    })
+
+    describe('default behavior (web_vitals_initial_flush_only: false)', () => {
+        beforeEach(async () => {
+            beforeSendMock.mockClear()
+            posthog = await createPosthogInstance(uuidv7(), {
+                before_send: beforeSendMock,
+                capture_performance: { web_vitals: true },
+                capture_pageview: false,
+            })
+
+            loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                assignableWindow.__PosthogExtensions__ = {}
+                assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
+                    onLCP: (cb: any) => {
+                        onLCPCallback = cb
+                    },
+                    onCLS: (cb: any) => {
+                        onCLSCallback = cb
+                    },
+                    onFCP: (cb: any) => {
+                        onFCPCallback = cb
+                    },
+                    onINP: (cb: any) => {
+                        onINPCallback = cb
+                    },
+                }
+                callback()
+            })
+
+            assignableWindow.__PosthogExtensions__ = {}
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
+
+            posthog.webVitalsAutocapture!.onRemoteConfig({
+                capturePerformance: { web_vitals: true },
+            } as unknown as FlagsResponse)
+        })
+
+        it('should continue capturing metrics after first flush', async () => {
+            // First emit all metrics - should trigger flush
+            emitAllMetrics()
+            expect(beforeSendMock).toBeCalledTimes(1)
+
+            // Emit more metrics - should buffer and flush after timeout
+            onCLSCallback?.({ name: 'CLS', value: 200, extra: 'updated' })
+
+            jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+
+            // Should have two events now
+            expect(beforeSendMock).toBeCalledTimes(2)
+        })
+    })
 })

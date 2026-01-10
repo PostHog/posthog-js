@@ -24,6 +24,7 @@ export class WebVitalsAutocapture {
 
     private _buffer: WebVitalsEventBuffer = { url: undefined, metrics: [], firstMetricTimestamp: undefined }
     private _delayedFlushTimer: ReturnType<typeof setTimeout> | undefined
+    private _initialFlushComplete = false
 
     constructor(private readonly _instance: PostHog) {
         this._enabledServerSide = !!this._instance.persistence?.props[WEB_VITALS_ENABLED_SERVER_SIDE]
@@ -47,6 +48,12 @@ export class WebVitalsAutocapture {
             ? this._instance.config.capture_performance.web_vitals_delayed_flush_ms
             : undefined
         return clientConfig || DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS
+    }
+
+    public get initialFlushOnly(): boolean {
+        return isObject(this._instance.config.capture_performance)
+            ? !!this._instance.config.capture_performance.web_vitals_initial_flush_only
+            : false
     }
 
     public get _maxAllowedValue(): number {
@@ -144,6 +151,11 @@ export class WebVitalsAutocapture {
             return
         }
 
+        // Mark initial flush complete when we've captured all metrics
+        if (this._buffer.metrics.length === this.allowedMetrics.length) {
+            this._initialFlushComplete = true
+        }
+
         this._instance.capture(
             '$web_vitals',
             this._buffer.metrics.reduce(
@@ -190,10 +202,17 @@ export class WebVitalsAutocapture {
         if (urlHasChanged) {
             // we need to send what we have
             this._flushToCapture()
+            // Reset for new page
+            this._initialFlushComplete = false
             // poor performance is >4s, we wait twice that time to send
             // this is in case we haven't received all metrics
             // we'll at least gather some
             this._delayedFlushTimer = setTimeout(this._flushToCapture, this.flushToCaptureTimeoutMs)
+        }
+
+        // If initial flush only mode is enabled and we've already flushed, ignore subsequent metrics
+        if (this._initialFlushComplete && this.initialFlushOnly) {
+            return
         }
 
         if (isUndefined(this._buffer.url)) {
