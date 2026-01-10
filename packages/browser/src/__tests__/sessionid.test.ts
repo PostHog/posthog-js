@@ -320,6 +320,31 @@ describe('Session ID manager', () => {
                 sessionId: 'newUUID',
             })
         })
+
+        it.each([
+            { firstCallReadOnly: true, secondCallReadOnly: false },
+            { firstCallReadOnly: true, secondCallReadOnly: true },
+            { firstCallReadOnly: false, secondCallReadOnly: true },
+            { firstCallReadOnly: false, secondCallReadOnly: false },
+        ])(
+            'does not spuriously trigger activity timeout after reset (first=$firstCallReadOnly, second=$secondCallReadOnly)',
+            ({ firstCallReadOnly, secondCallReadOnly }) => {
+                const sessionIdManager = sessionIdMgr(persistence)
+
+                sessionIdManager.resetSessionId()
+
+                const firstResult = sessionIdManager.checkAndGetSessionAndWindowId(firstCallReadOnly, timestamp)
+                expect(firstResult.changeReason?.noSessionId).toBe(true)
+                expect(firstResult.changeReason?.activityTimeout).toBe(false)
+
+                const secondResult = sessionIdManager.checkAndGetSessionAndWindowId(
+                    secondCallReadOnly,
+                    timestamp! + 100
+                )
+                expect(secondResult.sessionId).toBe(firstResult.sessionId)
+                expect(secondResult.changeReason).toBeUndefined()
+            }
+        )
     })
 
     describe('primary_window_exists_storage_key', () => {

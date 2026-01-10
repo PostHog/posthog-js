@@ -7,7 +7,7 @@ import { window } from './utils/globals'
 
 import { createLogger } from './utils/logger'
 
-import { isArray, isNumber, isUndefined, clampToRange } from '@posthog/core'
+import { isArray, isUndefined, clampToRange, isPositiveNumber } from '@posthog/core'
 import { PostHog } from './posthog-core'
 import { addEventListener } from './utils'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
@@ -264,9 +264,7 @@ export class SessionIdManager {
         let windowId = this._getWindowId()
 
         const sessionPastMaximumLength =
-            isNumber(startTimestamp) &&
-            startTimestamp > 0 &&
-            Math.abs(timestamp - startTimestamp) > SESSION_LENGTH_LIMIT_MILLISECONDS
+            isPositiveNumber(startTimestamp) && Math.abs(timestamp - startTimestamp) > SESSION_LENGTH_LIMIT_MILLISECONDS
 
         let valuesChanged = false
         const noSessionId = !sessionId
@@ -287,9 +285,12 @@ export class SessionIdManager {
             valuesChanged = true
         }
 
-        const newActivityTimestamp =
-            lastActivityTimestamp === 0 || !readOnly || sessionPastMaximumLength ? timestamp : lastActivityTimestamp
-        const sessionStartTimestamp = startTimestamp === 0 ? new Date().getTime() : startTimestamp
+        const noActivityTimestamp = !isPositiveNumber(lastActivityTimestamp)
+        const shouldPreserveActivityTimestamp = !noActivityTimestamp && readOnly && !sessionPastMaximumLength
+        const newActivityTimestamp = shouldPreserveActivityTimestamp ? lastActivityTimestamp : timestamp
+
+        const noStartTimestamp = !isPositiveNumber(startTimestamp)
+        const sessionStartTimestamp = noStartTimestamp ? new Date().getTime() : startTimestamp
 
         this._setWindowId(windowId)
         this._setSessionId(sessionId, newActivityTimestamp, sessionStartTimestamp)
