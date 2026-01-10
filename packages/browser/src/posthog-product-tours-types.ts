@@ -11,7 +11,16 @@ export interface JSONContent {
     text?: string
 }
 
-export type ProductTourStepType = 'element' | 'modal' | 'survey'
+export type ProductTourStepType = 'element' | 'modal' | 'survey' | 'banner'
+
+export interface ProductTourBannerConfig {
+    behavior: 'sticky' | 'static'
+    action?: {
+        type: 'none' | 'link' | 'trigger_tour'
+        link?: string
+        tourId?: string
+    }
+}
 
 /** Button actions available on modal steps */
 export type ProductTourButtonAction = 'dismiss' | 'link' | 'next_step' | 'previous_step' | 'trigger_tour'
@@ -67,6 +76,8 @@ export interface ProductTourStep {
     modalPosition?: SurveyPosition
     /** Button configuration for modal steps */
     buttons?: ProductTourStepButtons
+    /** Banner configuration (only for banner steps) */
+    bannerConfig?: ProductTourBannerConfig
 }
 
 export interface ProductTourConditions {
