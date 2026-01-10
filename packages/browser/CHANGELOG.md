@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.318.1
+
+### Patch Changes
+
+- [#2862](https://github.com/PostHog/posthog-js/pull/2862) [`9337928`](https://github.com/PostHog/posthog-js/commit/9337928f8435dba9026c4281e58616bf5cb1dfad) Thanks [@adboio](https://github.com/adboio)! - add position options to modal and survey tour steps
+  (2026-01-10)
+- Updated dependencies []:
+    - @posthog/types@1.318.1
+
 ## 1.318.0
 
 ### Minor Changes
