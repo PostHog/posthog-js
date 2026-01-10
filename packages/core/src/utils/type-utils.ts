@@ -62,7 +62,12 @@ export const isNullish = (x: unknown): x is null | undefined => isUndefined(x) |
 
 export const isNumber = (x: unknown): x is number => {
   // eslint-disable-next-line posthog-js/no-direct-number-check
-  return toString.call(x) == '[object Number]'
+  // x !== x is true only for NaN (ES5-compatible NaN check)
+  return toString.call(x) == '[object Number]' && x === x
+}
+
+export const isPositiveNumber = (value: unknown): value is number => {
+  return isNumber(value) && value > 0
 }
 
 export const isBoolean = (x: unknown): x is boolean => {
