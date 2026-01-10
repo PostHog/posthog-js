@@ -22,6 +22,10 @@ import {
   LinkSurveyQuestion,
   RatingSurveyQuestion,
   MultipleSurveyQuestion,
+  getValidationError,
+  getLengthFromRules,
+  getRequirementsHint,
+  SurveyValidationType,
 } from '@posthog/core'
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
@@ -40,6 +44,24 @@ export function OpenTextQuestion({
 }): JSX.Element {
   const [text, setText] = useState('')
 
+  // Memoize validation error to avoid recalculating on every render
+  const validationError = useMemo(
+    () => getValidationError(text, question.validation, question.optional),
+    [text, question.validation, question.optional]
+  )
+
+  // Build requirements hint message
+  const minLength = getLengthFromRules(question.validation, SurveyValidationType.MinLength)
+  const maxLength = getLengthFromRules(question.validation, SurveyValidationType.MaxLength)
+  const requirementsHint = useMemo(() => getRequirementsHint(minLength, maxLength), [minLength, maxLength])
+
+  const handleSubmit = () => {
+    if (validationError) {
+      return
+    }
+    onSubmit(text.trim())
+  }
+
   return (
     <View>
       <QuestionHeader
@@ -55,6 +77,7 @@ export function OpenTextQuestion({
             {
               backgroundColor: appearance.inputBackground,
               color: appearance.inputTextColor ?? getContrastingTextColor(appearance.inputBackground),
+              borderColor: appearance.borderColor,
             },
           ]}
           multiline
@@ -70,12 +93,22 @@ export function OpenTextQuestion({
           onChangeText={setText}
           value={text}
         />
+        {requirementsHint && (
+          <Text
+            style={[
+              styles.validationHint,
+              { color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor) },
+            ]}
+          >
+            {requirementsHint}
+          </Text>
+        )}
       </View>
       <BottomSection
         text={question.buttonText ?? appearance.submitButtonText}
-        submitDisabled={!text && !question.optional}
+        submitDisabled={!!validationError}
         appearance={appearance}
-        onSubmit={() => onSubmit(text)}
+        onSubmit={handleSubmit}
       />
     </View>
   )
@@ -396,5 +429,10 @@ const styles = StyleSheet.create({
   },
   openEndedInput: {
     padding: 5,
+  },
+  validationHint: {
+    fontSize: 12,
+    opacity: 0.7,
+    marginTop: 4,
   },
 })
