@@ -329,6 +329,7 @@
 .ph-tour-buttons {
     display: flex;
     gap: 8px;
+    margin-left: auto;
 }
 
 .ph-tour-button {

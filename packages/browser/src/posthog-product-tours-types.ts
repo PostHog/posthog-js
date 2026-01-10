@@ -13,6 +13,23 @@ export interface JSONContent {
 
 export type ProductTourStepType = 'element' | 'modal' | 'survey'
 
+/** Button actions available on modal steps */
+export type ProductTourButtonAction = 'dismiss' | 'link' | 'next_step' | 'previous_step' | 'trigger_tour'
+
+export interface ProductTourStepButton {
+    text: string
+    action: ProductTourButtonAction
+    /** URL to open when action is 'link' */
+    link?: string
+    /** Tour ID to trigger when action is 'trigger_tour' */
+    tourId?: string
+}
+
+export interface ProductTourStepButtons {
+    primary?: ProductTourStepButton
+    secondary?: ProductTourStepButton
+}
+
 export type ProductTourSurveyQuestionType = 'open' | 'rating'
 
 export interface ProductTourSurveyQuestion {
@@ -48,6 +65,8 @@ export interface ProductTourStep {
     maxWidth?: number
     /** Position for modal/survey steps (defaults to middle_center) */
     modalPosition?: SurveyPosition
+    /** Button configuration for modal steps */
+    buttons?: ProductTourStepButtons
 }
 
 export interface ProductTourConditions {
@@ -77,6 +96,8 @@ export interface ProductTourAppearance {
     boxShadow?: string
     showOverlay?: boolean
     whiteLabel?: boolean
+    /** defaults to true, auto-set to false for announcements/banners */
+    dismissOnClickOutside?: boolean
 }
 
 export interface ProductTour {
@@ -118,6 +139,7 @@ export const DEFAULT_PRODUCT_TOUR_APPEARANCE: Required<ProductTourAppearance> = 
     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
     showOverlay: true,
     whiteLabel: false,
+    dismissOnClickOutside: true,
 }
 
 export interface ShowTourOptions {
