@@ -72,6 +72,15 @@ const appearanceWithThanks = {
     thankYouMessageBody: 'We appreciate your feedback.',
 }
 
+const thumbsQuestion = {
+    type: 'rating' as const,
+    display: 'emoji' as const,
+    scale: 2,
+    question: 'Was this helpful?',
+    id: 'thumb_rating_skip_1',
+    skipSubmitButton: true,
+}
+
 test.describe('surveys - core display logic', () => {
     test('shows the same to user if they do not dismiss or respond to it', async ({ page, context }) => {
         const surveysAPICall = page.route('**/surveys/**', async (route) => {
@@ -320,6 +329,62 @@ test.describe('surveys - core display logic', () => {
             },
         ])
     })
+
+    test('thumb surveys', async ({ page, context }) => {
+        const surveyId = 'test_thumb_survey_123'
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: surveyId,
+                            name: 'Test Skip Submit Button Survey',
+                            type: 'popover',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [thumbsQuestion],
+                            appearance: appearanceWithThanks,
+                        },
+                    ],
+                },
+            })
+        })
+
+        await start(startOptions, page, context)
+        await surveysAPICall
+
+        const surveyLocator = page.locator(`.PostHogSurvey-${surveyId}`)
+        await expect(surveyLocator.locator('div.rating-options .rating-options-emoji-2')).toBeVisible()
+
+        await expect(surveyLocator.locator('.survey-question')).toHaveText(thumbsQuestion.question)
+        await expect(surveyLocator.locator('.form-submit')).not.toBeVisible()
+        await surveyLocator.locator('button[aria-label="Rate 1"]').click()
+
+        // Thank you message
+        await expect(surveyLocator.locator('.thank-you-message')).toBeVisible()
+        await expect(surveyLocator.locator('.thank-you-message h3')).toHaveText(
+            appearanceWithThanks.thankYouMessageHeader
+        )
+        await surveyLocator.locator('.form-submit').click() // Click to dismiss thank you
+        await expect(surveyLocator.locator('.thank-you-message')).not.toBeVisible()
+
+        // Event validation
+        await pollUntilEventCaptured(page, 'survey sent')
+        const captures = await page.capturedEvents()
+        const surveySentEvent = captures.find(
+            (c) => c.event === 'survey sent' && c.properties['$survey_id'] === surveyId
+        )
+        expect(surveySentEvent).toBeDefined()
+        expect(surveySentEvent!.properties[getSurveyResponseKey(thumbsQuestion.id)]).toBe(1)
+        expect(surveySentEvent!.properties['$survey_questions']).toEqual(
+            expect.arrayContaining([
+                {
+                    id: thumbsQuestion.id,
+                    question: thumbsQuestion.question,
+                    response: 1,
+                },
+            ])
+        )
+    })
 })
 
 test.describe('surveys - skipSubmitButton functionality', () => {
@@ -338,6 +403,7 @@ test.describe('surveys - skipSubmitButton functionality', () => {
                                 emojiRatingSkipButtonQuestion,
                                 numberRatingSkipButtonQuestion,
                                 singleChoiceSkipButtonQuestion,
+                                thumbsQuestion,
                             ],
                             appearance: appearanceWithThanks,
                         },
@@ -366,6 +432,11 @@ test.describe('surveys - skipSubmitButton functionality', () => {
         await expect(surveyLocator.locator('.form-submit')).not.toBeVisible()
         await surveyLocator.locator('label:has-text("Summer")').click() // Click "Summer"
 
+        // Question 4: Thumbs up/down (should appear automatically)
+        await expect(surveyLocator.locator('.survey-question')).toHaveText(thumbsQuestion.question)
+        await expect(surveyLocator.locator('.form-submit')).not.toBeVisible()
+        await surveyLocator.locator('button[aria-label="Rate 1"]').click() // Click thumbs up (1=up, 2=down)
+
         // Thank you message
         await expect(surveyLocator.locator('.thank-you-message')).toBeVisible()
         await expect(surveyLocator.locator('.thank-you-message h3')).toHaveText(
@@ -385,6 +456,7 @@ test.describe('surveys - skipSubmitButton functionality', () => {
         expect(surveySentEvent!.properties[getSurveyResponseKey(emojiRatingSkipButtonQuestion.id)]).toBe(2)
         expect(surveySentEvent!.properties[getSurveyResponseKey(numberRatingSkipButtonQuestion.id)]).toBe(4)
         expect(surveySentEvent!.properties[getSurveyResponseKey(singleChoiceSkipButtonQuestion.id)]).toBe('Summer')
+        expect(surveySentEvent!.properties[getSurveyResponseKey(thumbsQuestion.id)]).toBe(1)
 
         expect(surveySentEvent!.properties['$survey_questions']).toEqual(
             expect.arrayContaining([
@@ -402,6 +474,11 @@ test.describe('surveys - skipSubmitButton functionality', () => {
                     id: singleChoiceSkipButtonQuestion.id,
                     question: singleChoiceSkipButtonQuestion.question,
                     response: 'Summer',
+                },
+                {
+                    id: thumbsQuestion.id,
+                    question: thumbsQuestion.question,
+                    response: 1,
                 },
             ])
         )
