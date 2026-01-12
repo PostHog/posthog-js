@@ -735,4 +735,57 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       expect(captureCall[0].properties.$ai_reasoning_tokens).toBe(5)
     })
   })
+
+  describe('Prototype getter preservation', () => {
+    it('should preserve getter properties from the prototype chain', async () => {
+      class ModelWithGetters {
+        specificationVersion = 'v3' as const
+        modelId = 'test-model'
+        provider = 'test-provider'
+
+        get supportedUrls() {
+          return {
+            'image/*': ['http', 'https', 'data'],
+            'application/pdf': ['http', 'https', 'data'],
+          }
+        }
+
+        get customGetter() {
+          return 'custom-value'
+        }
+
+        doGenerate = jest.fn().mockResolvedValue({
+          text: 'test',
+          usage: { inputTokens: { total: 5 }, outputTokens: { total: 2 } },
+          content: [{ type: 'text', text: 'test' }],
+          response: { modelId: 'test-model' },
+          providerMetadata: {},
+          finishReason: 'stop',
+          warnings: [],
+        })
+
+        doStream = jest.fn()
+      }
+
+      const baseModel = new ModelWithGetters() as any
+      const wrappedModel = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-getters',
+      })
+
+      // Verify the wrapped model preserves prototype getters
+      expect(wrappedModel.supportedUrls).toEqual({
+        'image/*': ['http', 'https', 'data'],
+        'application/pdf': ['http', 'https', 'data'],
+      })
+      expect(wrappedModel.customGetter).toBe('custom-value')
+
+      // Verify the model still works
+      await wrappedModel.doGenerate({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Test' }] }],
+      })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    })
+  })
 })

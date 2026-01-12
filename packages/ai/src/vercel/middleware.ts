@@ -409,266 +409,275 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
     },
   }
 
-  // Create wrapped model that preserves the original type
-  const wrappedModel = {
-    ...model,
-    doGenerate: async (params: LanguageModelCallOptions) => {
-      const startTime = Date.now()
-      const mergedParams = {
-        ...mergedOptions,
-        ...mapVercelParams(params),
-      }
-      const availableTools = extractAvailableToolCalls('vercel', params)
-
-      try {
-        const result = await model.doGenerate(params as any)
-        const modelId =
-          mergedOptions.posthogModelOverride ?? (result.response?.modelId ? result.response.modelId : model.modelId)
-        const provider = mergedOptions.posthogProviderOverride ?? extractProvider(model)
-        const baseURL = '' // cannot currently get baseURL from vercel
-        const content = mapVercelOutput(result.content as LanguageModelContent[])
-        const latency = (Date.now() - startTime) / 1000
-        const providerMetadata = result.providerMetadata
-        const additionalTokenValues = extractAdditionalTokenValues(providerMetadata)
-
-        const webSearchCount = extractWebSearchCount(providerMetadata, result.usage)
-
-        // V2 usage has simple numbers, V3 has objects with .total - normalize both
-        const usageObj = result.usage as Record<string, unknown>
-        const usage = {
-          inputTokens: extractTokenCount(result.usage.inputTokens),
-          outputTokens: extractTokenCount(result.usage.outputTokens),
-          reasoningTokens: extractReasoningTokens(usageObj),
-          cacheReadInputTokens: extractCacheReadTokens(usageObj),
-          webSearchCount,
-          ...additionalTokenValues,
+  // Create wrapped model using Object.create to preserve the prototype chain
+  // This automatically inherits all properties (including getters) from the model
+  const wrappedModel = Object.create(model, {
+    doGenerate: {
+      value: async (params: LanguageModelCallOptions) => {
+        const startTime = Date.now()
+        const mergedParams = {
+          ...mergedOptions,
+          ...mapVercelParams(params),
         }
+        const availableTools = extractAvailableToolCalls('vercel', params)
 
-        adjustAnthropicV3CacheTokens(model, provider, usage)
+        try {
+          const result = await model.doGenerate(params as any)
+          const modelId =
+            mergedOptions.posthogModelOverride ?? (result.response?.modelId ? result.response.modelId : model.modelId)
+          const provider = mergedOptions.posthogProviderOverride ?? extractProvider(model)
+          const baseURL = '' // cannot currently get baseURL from vercel
+          const content = mapVercelOutput(result.content as LanguageModelContent[])
+          const latency = (Date.now() - startTime) / 1000
+          const providerMetadata = result.providerMetadata
+          const additionalTokenValues = extractAdditionalTokenValues(providerMetadata)
 
-        await sendEventToPosthog({
-          client: phClient,
-          distinctId: mergedOptions.posthogDistinctId,
-          traceId: mergedOptions.posthogTraceId ?? uuidv4(),
-          model: modelId,
-          provider: provider,
-          input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
-          output: content,
-          latency,
-          baseURL,
-          params: mergedParams as any,
-          httpStatus: 200,
-          usage,
-          tools: availableTools,
-          captureImmediate: mergedOptions.posthogCaptureImmediate,
-        })
+          const webSearchCount = extractWebSearchCount(providerMetadata, result.usage)
 
-        return result
-      } catch (error: unknown) {
-        const modelId = model.modelId
-        const enrichedError = await sendEventWithErrorToPosthog({
-          client: phClient,
-          distinctId: mergedOptions.posthogDistinctId,
-          traceId: mergedOptions.posthogTraceId ?? uuidv4(),
-          model: modelId,
-          provider: model.provider,
-          input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
-          output: [],
-          latency: 0,
-          baseURL: '',
-          params: mergedParams as any,
-          usage: {
-            inputTokens: 0,
-            outputTokens: 0,
-          },
-          error: error,
-          tools: availableTools,
-          captureImmediate: mergedOptions.posthogCaptureImmediate,
-        })
-        throw enrichedError
-      }
+          // V2 usage has simple numbers, V3 has objects with .total - normalize both
+          const usageObj = result.usage as Record<string, unknown>
+          const usage = {
+            inputTokens: extractTokenCount(result.usage.inputTokens),
+            outputTokens: extractTokenCount(result.usage.outputTokens),
+            reasoningTokens: extractReasoningTokens(usageObj),
+            cacheReadInputTokens: extractCacheReadTokens(usageObj),
+            webSearchCount,
+            ...additionalTokenValues,
+          }
+
+          adjustAnthropicV3CacheTokens(model, provider, usage)
+
+          await sendEventToPosthog({
+            client: phClient,
+            distinctId: mergedOptions.posthogDistinctId,
+            traceId: mergedOptions.posthogTraceId ?? uuidv4(),
+            model: modelId,
+            provider: provider,
+            input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
+            output: content,
+            latency,
+            baseURL,
+            params: mergedParams as any,
+            httpStatus: 200,
+            usage,
+            tools: availableTools,
+            captureImmediate: mergedOptions.posthogCaptureImmediate,
+          })
+
+          return result
+        } catch (error: unknown) {
+          const modelId = model.modelId
+          const enrichedError = await sendEventWithErrorToPosthog({
+            client: phClient,
+            distinctId: mergedOptions.posthogDistinctId,
+            traceId: mergedOptions.posthogTraceId ?? uuidv4(),
+            model: modelId,
+            provider: model.provider,
+            input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
+            output: [],
+            latency: 0,
+            baseURL: '',
+            params: mergedParams as any,
+            usage: {
+              inputTokens: 0,
+              outputTokens: 0,
+            },
+            error: error,
+            tools: availableTools,
+            captureImmediate: mergedOptions.posthogCaptureImmediate,
+          })
+          throw enrichedError
+        }
+      },
+      writable: true,
+      configurable: true,
+      enumerable: false,
     },
-
-    doStream: async (params: LanguageModelCallOptions) => {
-      const startTime = Date.now()
-      let generatedText = ''
-      let reasoningText = ''
-      let usage: {
-        inputTokens?: number
-        outputTokens?: number
-        reasoningTokens?: any
-        cacheReadInputTokens?: any
-        cacheCreationInputTokens?: any
-      } = {}
-      let providerMetadata: unknown = undefined
-      const mergedParams = {
-        ...mergedOptions,
-        ...mapVercelParams(params),
-      }
-
-      const modelId = mergedOptions.posthogModelOverride ?? model.modelId
-      const provider = mergedOptions.posthogProviderOverride ?? extractProvider(model)
-      const availableTools = extractAvailableToolCalls('vercel', params)
-      const baseURL = '' // cannot currently get baseURL from vercel
-
-      // Map to track in-progress tool calls
-      const toolCallsInProgress = new Map<
-        string,
-        {
-          toolCallId: string
-          toolName: string
-          input: string
+    doStream: {
+      value: async (params: LanguageModelCallOptions) => {
+        const startTime = Date.now()
+        let generatedText = ''
+        let reasoningText = ''
+        let usage: {
+          inputTokens?: number
+          outputTokens?: number
+          reasoningTokens?: any
+          cacheReadInputTokens?: any
+          cacheCreationInputTokens?: any
+        } = {}
+        let providerMetadata: unknown = undefined
+        const mergedParams = {
+          ...mergedOptions,
+          ...mapVercelParams(params),
         }
-      >()
 
-      try {
-        const { stream, ...rest } = await model.doStream(params as any)
-        const transformStream = new TransformStream<LanguageModelStreamPart, LanguageModelStreamPart>({
-          transform(chunk, controller) {
-            // Handle streaming patterns - compatible with both V2 and V3
-            if (chunk.type === 'text-delta') {
-              generatedText += chunk.delta
-            }
-            if (chunk.type === 'reasoning-delta') {
-              reasoningText += chunk.delta
-            }
+        const modelId = mergedOptions.posthogModelOverride ?? model.modelId
+        const provider = mergedOptions.posthogProviderOverride ?? extractProvider(model)
+        const availableTools = extractAvailableToolCalls('vercel', params)
+        const baseURL = '' // cannot currently get baseURL from vercel
 
-            // Handle tool call chunks
-            if (chunk.type === 'tool-input-start') {
-              // Initialize a new tool call
-              toolCallsInProgress.set(chunk.id, {
-                toolCallId: chunk.id,
-                toolName: chunk.toolName,
-                input: '',
-              })
-            }
-            if (chunk.type === 'tool-input-delta') {
-              // Accumulate tool call arguments
-              const toolCall = toolCallsInProgress.get(chunk.id)
-              if (toolCall) {
-                toolCall.input += chunk.delta
+        // Map to track in-progress tool calls
+        const toolCallsInProgress = new Map<
+          string,
+          {
+            toolCallId: string
+            toolName: string
+            input: string
+          }
+        >()
+
+        try {
+          const { stream, ...rest } = await model.doStream(params as any)
+          const transformStream = new TransformStream<LanguageModelStreamPart, LanguageModelStreamPart>({
+            transform(chunk, controller) {
+              // Handle streaming patterns - compatible with both V2 and V3
+              if (chunk.type === 'text-delta') {
+                generatedText += chunk.delta
               }
-            }
-            if (chunk.type === 'tool-input-end') {
-              // Tool call is complete, keep it in the map for final processing
-            }
-            if (chunk.type === 'tool-call') {
-              // Direct tool call chunk (complete tool call)
-              toolCallsInProgress.set(chunk.toolCallId, {
-                toolCallId: chunk.toolCallId,
-                toolName: chunk.toolName,
-                input: chunk.input,
-              })
-            }
-
-            if (chunk.type === 'finish') {
-              providerMetadata = chunk.providerMetadata
-              const additionalTokenValues = extractAdditionalTokenValues(providerMetadata)
-              const chunkUsage = (chunk.usage as Record<string, unknown>) || {}
-              usage = {
-                inputTokens: extractTokenCount(chunk.usage?.inputTokens),
-                outputTokens: extractTokenCount(chunk.usage?.outputTokens),
-                reasoningTokens: extractReasoningTokens(chunkUsage),
-                cacheReadInputTokens: extractCacheReadTokens(chunkUsage),
-                ...additionalTokenValues,
+              if (chunk.type === 'reasoning-delta') {
+                reasoningText += chunk.delta
               }
-            }
-            controller.enqueue(chunk)
-          },
 
-          flush: async () => {
-            const latency = (Date.now() - startTime) / 1000
-            // Build content array similar to mapVercelOutput structure
-            const content: OutputContentItem[] = []
-            if (reasoningText) {
-              content.push({ type: 'reasoning', text: truncate(reasoningText) })
-            }
-            if (generatedText) {
-              content.push({ type: 'text', text: truncate(generatedText) })
-            }
-
-            // Add completed tool calls to content
-            for (const toolCall of toolCallsInProgress.values()) {
-              if (toolCall.toolName) {
-                content.push({
-                  type: 'tool-call',
-                  id: toolCall.toolCallId,
-                  function: {
-                    name: toolCall.toolName,
-                    arguments: toolCall.input,
-                  },
+              // Handle tool call chunks
+              if (chunk.type === 'tool-input-start') {
+                // Initialize a new tool call
+                toolCallsInProgress.set(chunk.id, {
+                  toolCallId: chunk.id,
+                  toolName: chunk.toolName,
+                  input: '',
                 })
               }
-            }
+              if (chunk.type === 'tool-input-delta') {
+                // Accumulate tool call arguments
+                const toolCall = toolCallsInProgress.get(chunk.id)
+                if (toolCall) {
+                  toolCall.input += chunk.delta
+                }
+              }
+              if (chunk.type === 'tool-input-end') {
+                // Tool call is complete, keep it in the map for final processing
+              }
+              if (chunk.type === 'tool-call') {
+                // Direct tool call chunk (complete tool call)
+                toolCallsInProgress.set(chunk.toolCallId, {
+                  toolCallId: chunk.toolCallId,
+                  toolName: chunk.toolName,
+                  input: chunk.input,
+                })
+              }
 
-            // Structure output like mapVercelOutput does
-            const output =
-              content.length > 0
-                ? [
-                    {
-                      role: 'assistant',
-                      content: content.length === 1 && content[0].type === 'text' ? content[0].text : content,
+              if (chunk.type === 'finish') {
+                providerMetadata = chunk.providerMetadata
+                const additionalTokenValues = extractAdditionalTokenValues(providerMetadata)
+                const chunkUsage = (chunk.usage as Record<string, unknown>) || {}
+                usage = {
+                  inputTokens: extractTokenCount(chunk.usage?.inputTokens),
+                  outputTokens: extractTokenCount(chunk.usage?.outputTokens),
+                  reasoningTokens: extractReasoningTokens(chunkUsage),
+                  cacheReadInputTokens: extractCacheReadTokens(chunkUsage),
+                  ...additionalTokenValues,
+                }
+              }
+              controller.enqueue(chunk)
+            },
+
+            flush: async () => {
+              const latency = (Date.now() - startTime) / 1000
+              // Build content array similar to mapVercelOutput structure
+              const content: OutputContentItem[] = []
+              if (reasoningText) {
+                content.push({ type: 'reasoning', text: truncate(reasoningText) })
+              }
+              if (generatedText) {
+                content.push({ type: 'text', text: truncate(generatedText) })
+              }
+
+              // Add completed tool calls to content
+              for (const toolCall of toolCallsInProgress.values()) {
+                if (toolCall.toolName) {
+                  content.push({
+                    type: 'tool-call',
+                    id: toolCall.toolCallId,
+                    function: {
+                      name: toolCall.toolName,
+                      arguments: toolCall.input,
                     },
-                  ]
-                : []
+                  })
+                }
+              }
 
-            const webSearchCount = extractWebSearchCount(providerMetadata, usage)
+              // Structure output like mapVercelOutput does
+              const output =
+                content.length > 0
+                  ? [
+                      {
+                        role: 'assistant',
+                        content: content.length === 1 && content[0].type === 'text' ? content[0].text : content,
+                      },
+                    ]
+                  : []
 
-            // Update usage with web search count
-            const finalUsage = {
-              ...usage,
-              webSearchCount,
-            }
+              const webSearchCount = extractWebSearchCount(providerMetadata, usage)
 
-            adjustAnthropicV3CacheTokens(model, provider, finalUsage)
+              // Update usage with web search count
+              const finalUsage = {
+                ...usage,
+                webSearchCount,
+              }
 
-            await sendEventToPosthog({
-              client: phClient,
-              distinctId: mergedOptions.posthogDistinctId,
-              traceId: mergedOptions.posthogTraceId ?? uuidv4(),
-              model: modelId,
-              provider: provider,
-              input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
-              output: output,
-              latency,
-              baseURL,
-              params: mergedParams as any,
-              httpStatus: 200,
-              usage: finalUsage,
-              tools: availableTools,
-              captureImmediate: mergedOptions.posthogCaptureImmediate,
-            })
-          },
-        })
+              adjustAnthropicV3CacheTokens(model, provider, finalUsage)
 
-        return {
-          stream: stream.pipeThrough(transformStream),
-          ...rest,
+              await sendEventToPosthog({
+                client: phClient,
+                distinctId: mergedOptions.posthogDistinctId,
+                traceId: mergedOptions.posthogTraceId ?? uuidv4(),
+                model: modelId,
+                provider: provider,
+                input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
+                output: output,
+                latency,
+                baseURL,
+                params: mergedParams as any,
+                httpStatus: 200,
+                usage: finalUsage,
+                tools: availableTools,
+                captureImmediate: mergedOptions.posthogCaptureImmediate,
+              })
+            },
+          })
+
+          return {
+            stream: stream.pipeThrough(transformStream),
+            ...rest,
+          }
+        } catch (error: unknown) {
+          const enrichedError = await sendEventWithErrorToPosthog({
+            client: phClient,
+            distinctId: mergedOptions.posthogDistinctId,
+            traceId: mergedOptions.posthogTraceId ?? uuidv4(),
+            model: modelId,
+            provider: provider,
+            input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
+            output: [],
+            latency: 0,
+            baseURL: '',
+            params: mergedParams as any,
+            usage: {
+              inputTokens: 0,
+              outputTokens: 0,
+            },
+            error: error,
+            tools: availableTools,
+            captureImmediate: mergedOptions.posthogCaptureImmediate,
+          })
+          throw enrichedError
         }
-      } catch (error: unknown) {
-        const enrichedError = await sendEventWithErrorToPosthog({
-          client: phClient,
-          distinctId: mergedOptions.posthogDistinctId,
-          traceId: mergedOptions.posthogTraceId ?? uuidv4(),
-          model: modelId,
-          provider: provider,
-          input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
-          output: [],
-          latency: 0,
-          baseURL: '',
-          params: mergedParams as any,
-          usage: {
-            inputTokens: 0,
-            outputTokens: 0,
-          },
-          error: error,
-          tools: availableTools,
-          captureImmediate: mergedOptions.posthogCaptureImmediate,
-        })
-        throw enrichedError
-      }
+      },
+      writable: true,
+      configurable: true,
+      enumerable: false,
     },
-  } as T
+  }) as T
 
   return wrappedModel
 }
