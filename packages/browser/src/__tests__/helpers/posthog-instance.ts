@@ -46,7 +46,7 @@ export const createPosthogInstance = async (
                 loaded: (p) => {
                     config.loaded?.(p)
 
-                    resolve(p)
+                    resolve(p as PostHog)
                 },
             },
             'test-' + token

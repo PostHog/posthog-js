@@ -56,7 +56,12 @@
         "fflate": "^0.4.8",
         "preact": "^10.19.3",
         "query-selector-shadow-dom": "^1.0.1",
-        "web-vitals": "^4.2.4"
+        "web-vitals": "^4.2.4",
+        "@opentelemetry/api": "^1.9.0",
+        "@opentelemetry/api-logs": "^0.208.0",
+        "@opentelemetry/exporter-logs-otlp-http": "^0.208.0",
+        "@opentelemetry/resources": "^2.2.0",
+        "@opentelemetry/sdk-logs": "^0.208.0"
     },
     "devDependencies": {
         "@babel/core": "catalog:",
