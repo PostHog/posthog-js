@@ -124,6 +124,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           },
           customHeaders: this.getCustomHeaders(),
           cacheProvider: options.flagDefinitionCacheProvider,
+          strictLocalEvaluation: options.strictLocalEvaluation,
         })
       }
     }
@@ -671,7 +672,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     // set defaults
     if (onlyEvaluateLocally == undefined) {
-      onlyEvaluateLocally = false
+      onlyEvaluateLocally = this.options.strictLocalEvaluation ?? false
     }
     if (sendFeatureFlagEvents == undefined) {
       sendFeatureFlagEvents = this.options.sendFeatureFlagEvent ?? true
@@ -879,7 +880,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     // set defaults
     if (onlyEvaluateLocally == undefined) {
-      onlyEvaluateLocally = false
+      onlyEvaluateLocally = this.options.strictLocalEvaluation ?? false
     }
 
     const payloadWasLocallyEvaluated = response !== undefined
@@ -1100,7 +1101,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     // set defaults
     if (onlyEvaluateLocally == undefined) {
-      onlyEvaluateLocally = false
+      onlyEvaluateLocally = this.options.strictLocalEvaluation ?? false
     }
 
     const localEvaluationResult = await this.featureFlagsPoller?.getAllFlagsAndPayloads(
@@ -1487,7 +1488,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const flagKeys = sendFeatureFlagsOptions?.flagKeys
 
     // Check if we should only evaluate locally
-    const onlyEvaluateLocally = sendFeatureFlagsOptions?.onlyEvaluateLocally ?? false
+    const onlyEvaluateLocally = sendFeatureFlagsOptions?.onlyEvaluateLocally ?? this.options.strictLocalEvaluation ?? false
 
     // If onlyEvaluateLocally is true, only use local evaluation
     if (onlyEvaluateLocally) {

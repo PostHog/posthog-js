@@ -5603,3 +5603,258 @@ describe('error handling and backoff', () => {
     expect(fetchCallCount).toBe(2) // Still blocked
   })
 })
+
+describe('experience continuity warning', () => {
+  let posthog: PostHog
+  let warnSpy: jest.SpyInstance
+
+  jest.useFakeTimers()
+
+  beforeEach(() => {
+    mockedFetch.mockClear()
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+  })
+
+  afterEach(async () => {
+    warnSpy.mockRestore()
+    await posthog.shutdown()
+  })
+
+  it('emits warning when experience continuity flags are detected', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Normal Flag',
+          key: 'normal-flag',
+          active: true,
+          ensure_experience_continuity: false,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+        {
+          id: 2,
+          name: 'Exp Cont Flag',
+          key: 'exp-cont-flag',
+          active: true,
+          ensure_experience_continuity: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    await jest.runOnlyPendingTimersAsync()
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exp-cont-flag'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('experience continuity'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('incompatible with local evaluation'))
+  })
+
+  it('does not emit warning when no experience continuity flags exist', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Normal Flag',
+          key: 'normal-flag',
+          active: true,
+          ensure_experience_continuity: false,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    await jest.runOnlyPendingTimersAsync()
+
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  it('includes all experience continuity flag keys in warning', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Exp Cont Flag 1',
+          key: 'exp-cont-flag-1',
+          active: true,
+          ensure_experience_continuity: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+        {
+          id: 2,
+          name: 'Exp Cont Flag 2',
+          key: 'exp-cont-flag-2',
+          active: true,
+          ensure_experience_continuity: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    await jest.runOnlyPendingTimersAsync()
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exp-cont-flag-1'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exp-cont-flag-2'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('2 flag(s)'))
+  })
+
+  it('does not emit warning when strictLocalEvaluation is enabled', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Exp Cont Flag',
+          key: 'exp-cont-flag',
+          active: true,
+          ensure_experience_continuity: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      strictLocalEvaluation: true,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await jest.runOnlyPendingTimersAsync()
+
+    // Warning should NOT be emitted because strictLocalEvaluation prevents server fallback
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('strictLocalEvaluation option', () => {
+  let posthog: PostHog
+  let warnSpy: jest.SpyInstance
+
+  jest.useFakeTimers()
+
+  beforeEach(() => {
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+  })
+
+  afterEach(async () => {
+    warnSpy.mockRestore()
+    await posthog.shutdown()
+  })
+
+  it('prevents server fallback for flags that cannot be evaluated locally', async () => {
+    // Set up local flags that include an experience continuity flag
+    const localFlags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Exp Cont Flag',
+          key: 'exp-cont-flag',
+          active: true,
+          ensure_experience_continuity: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      strictLocalEvaluation: true,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await jest.runOnlyPendingTimersAsync()
+
+    // Reset mock to track decide calls
+    mockedFetch.mockClear()
+
+    // This flag has experience continuity enabled, so local evaluation will throw InconclusiveMatchError
+    // With strictLocalEvaluation: true, it should return undefined without calling the server
+    const result = await posthog.getFeatureFlag('exp-cont-flag', 'user-123')
+
+    expect(result).toBeUndefined()
+
+    // Should NOT have made a /flags call (server fallback prevented)
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
+  it('allows per-call override of strictLocalEvaluation', async () => {
+    const localFlags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Exp Cont Flag',
+          key: 'exp-cont-flag',
+          active: true,
+          ensure_experience_continuity: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+    }
+
+    // Mock for both local flags and decide endpoint
+    mockedFetch.mockImplementation(
+      apiImplementation({
+        localFlags,
+        decideFlags: { 'exp-cont-flag': true },
+      })
+    )
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      strictLocalEvaluation: true,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await jest.runOnlyPendingTimersAsync()
+    mockedFetch.mockClear()
+
+    // Override per-call to allow server fallback
+    const result = await posthog.getFeatureFlag('exp-cont-flag', 'user-123', {
+      onlyEvaluateLocally: false,
+    })
+
+    // Should have made a /flags call since we explicitly set onlyEvaluateLocally: false
+    expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
+    expect(result).toBe(true)
+  })
+})
