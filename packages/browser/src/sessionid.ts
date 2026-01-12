@@ -233,7 +233,10 @@ export class SessionIdManager {
         addEventListener(window, 'beforeunload', this._beforeUnloadListener, { capture: false })
     }
 
-    private _sessionHasBeenIdleTooLong = (timestamp: number, lastActivityTimestamp: number) => {
+    private _sessionHasBeenIdleTooLong = (timestamp: unknown, lastActivityTimestamp: unknown): boolean => {
+        if (!isPositiveNumber(timestamp) || !isPositiveNumber(lastActivityTimestamp)) {
+            return false
+        }
         return Math.abs(timestamp - lastActivityTimestamp) > this.sessionTimeoutMs
     }
 
