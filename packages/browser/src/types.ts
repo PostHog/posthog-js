@@ -10,9 +10,6 @@ import type { SAMPLED } from './extensions/replay/external/triggerMatching'
 // Re-export public types from @posthog/types
 // ============================================================================
 
-// PostHog instance type
-export type { PostHog as PostHogInterface } from '@posthog/types'
-
 // Common types
 export type { Property, Properties, JsonType, JsonRecord } from '@posthog/types'
 
@@ -65,7 +62,6 @@ export type {
     SlimDOMOptions,
     SessionRecordingOptions,
     RequestQueueConfig,
-    PostHogConfig,
 } from '@posthog/types'
 
 // Toolbar types
@@ -91,11 +87,22 @@ import type {
     SessionRecordingOptions,
     FeatureFlagDetail,
     ToolbarParams,
+    PostHogConfig as BasePostHogConfig,
+    PostHog as BasePostHogInterface,
 } from '@posthog/types'
 
-export enum Compression {
-    GZipJS = 'gzip-js',
-    Base64 = 'base64',
+/* Small override from the base class to make it more specific to the browser/src/posthog-core.ts file
+ * This guarantees we'll be able to use `PostHogConfig` as implemented in the browser/src/posthog-core.ts file
+ * using the proper `loaded` function signature.
+ */
+export type PostHogInterface = Omit<BasePostHogInterface, 'config' | 'init' | 'set_config'>
+
+/*
+ * Specify that `loaded` should be using the PostHog instance type
+ * as implemented by the browser/src/posthog-core.ts file rather than the @posthog/types type
+ */
+export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
+    loaded: (posthog: PostHogInterface) => void
 }
 
 // See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
@@ -448,4 +455,9 @@ export type OverrideConfig = {
     linked_flag: boolean
     url_trigger: boolean
     event_trigger: boolean
+}
+
+export enum Compression {
+    GZipJS = 'gzip-js',
+    Base64 = 'base64',
 }
