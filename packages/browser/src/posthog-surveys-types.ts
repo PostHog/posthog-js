@@ -4,7 +4,7 @@
  * See https://github.com/PostHog/posthog-js/issues/698
  */
 
-import type { PropertyMatchType } from './types'
+import type { Properties, PropertyMatchType } from './types'
 import type { SurveyAppearance as CoreSurveyAppearance } from '@posthog/core'
 
 export enum SurveyEventType {
@@ -297,6 +297,8 @@ interface DisplaySurveyOptionsBase {
     ignoreConditions: boolean
     ignoreDelay: boolean
     displayType: DisplaySurveyType
+    /** Additional properties to include in all survey events (shown, sent, dismissed) */
+    properties?: Properties
 }
 
 interface DisplaySurveyPopoverOptions extends DisplaySurveyOptionsBase {

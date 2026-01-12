@@ -26,6 +26,7 @@ import {
     SURVEY_LOGGER as logger,
 } from '../utils/survey-utils'
 import { isNull, isUndefined } from '@posthog/core'
+import { Properties } from '../types'
 import { SURVEYS } from '../constants'
 import { uuidv7 } from '../uuidv7'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
@@ -176,7 +177,7 @@ export class SurveyManager {
         }
     }
 
-    public handlePopoverSurvey = (survey: Survey): void => {
+    public handlePopoverSurvey = (survey: Survey, properties?: Properties): void => {
         this._clearSurveyTimeout(survey.id)
         this._addSurveyToFocus(survey)
         const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
@@ -187,6 +188,7 @@ export class SurveyManager {
                     posthog={this._posthog}
                     survey={survey}
                     removeSurveyFromFocus={this._removeSurveyFromFocus}
+                    properties={properties}
                 />,
                 shadow
             )
@@ -204,6 +206,7 @@ export class SurveyManager {
                     posthog={this._posthog}
                     survey={{ ...survey, appearance: { ...survey.appearance, surveyPopupDelaySeconds: 0 } }}
                     removeSurveyFromFocus={this._removeSurveyFromFocus}
+                    properties={properties}
                 />,
                 shadow
             )
@@ -324,7 +327,7 @@ export class SurveyManager {
         )
     }
 
-    public renderSurvey = (survey: Survey, selector: Element): void => {
+    public renderSurvey = (survey: Survey, selector: Element, properties?: Properties): void => {
         if (this._posthog.config?.surveys?.prefillFromUrl) {
             this._handleUrlPrefill(survey)
         }
@@ -335,6 +338,7 @@ export class SurveyManager {
                 survey={survey}
                 removeSurveyFromFocus={this._removeSurveyFromFocus}
                 isPopup={false}
+                properties={properties}
             />,
             selector
         )
@@ -947,6 +951,8 @@ interface SurveyPopupProps {
     onPreviewSubmit?: (res: string | string[] | number | null) => void
     onPopupSurveyDismissed?: () => void
     onCloseConfirmationMessage?: () => void
+    /** Additional properties to include in all survey events */
+    properties?: Properties
 }
 
 function getTabPositionStyles(position: SurveyTabPosition = SurveyTabPosition.Right): JSX.CSSProperties {
@@ -980,6 +986,7 @@ export function SurveyPopup({
     onPreviewSubmit = () => {},
     onPopupSurveyDismissed = () => {},
     onCloseConfirmationMessage = () => {},
+    properties,
 }: SurveyPopupProps) {
     const surveyContainerRef = useRef<HTMLDivElement>(null)
     const isPreviewMode = Number.isInteger(previewPageIndex)
@@ -1011,8 +1018,9 @@ export function SurveyPopup({
             surveySubmissionId: getInProgressSurvey?.surveySubmissionId || uuidv7(),
             onPreviewSubmit,
             posthog,
+            properties,
         }
-    }, [isPreviewMode, previewPageIndex, isPopup, posthog, survey, onPopupSurveyDismissed, onPreviewSubmit])
+    }, [isPreviewMode, previewPageIndex, isPopup, posthog, survey, onPopupSurveyDismissed, onPreviewSubmit, properties])
 
     if (!isPopupVisible) {
         return null
@@ -1065,8 +1073,15 @@ export function Questions({
         }
         return inProgressSurveyData?.responses || {}
     })
-    const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit, surveySubmissionId, isPreviewMode } =
-        useContext(SurveyContext)
+    const {
+        previewPageIndex,
+        onPopupSurveyDismissed,
+        isPopup,
+        onPreviewSubmit,
+        surveySubmissionId,
+        isPreviewMode,
+        properties,
+    } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(() => {
         const inProgressSurveyData = getInProgressSurveyState(survey)
         return previewPageIndex || inProgressSurveyData?.lastQuestionIndex || 0
@@ -1125,6 +1140,7 @@ export function Questions({
                 surveySubmissionId,
                 isSurveyCompleted,
                 posthog,
+                properties,
             })
         }
     }

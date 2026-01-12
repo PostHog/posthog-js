@@ -840,7 +840,11 @@ describe('surveys', () => {
 
             surveys.renderSurvey('in-app-survey', '#test-survey-container')
 
-            expect(mockRenderSurvey).toHaveBeenCalledWith(inAppSurvey, document.querySelector('#test-survey-container'))
+            expect(mockRenderSurvey).toHaveBeenCalledWith(
+                inAppSurvey,
+                document.querySelector('#test-survey-container'),
+                undefined
+            )
             expect(loggerWarnSpy).not.toHaveBeenCalledWith(expect.stringContaining('cannot be rendered in the app'))
         })
 

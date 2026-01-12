@@ -6,7 +6,9 @@ import {
     getSurveySeen,
     hasEvents,
     hasWaitPeriodPassed,
+    sendSurveyEvent,
 } from '../../extensions/surveys/surveys-extension-utils'
+import { PostHog } from '../../posthog-core'
 import { Survey, SurveySchedule, SurveyType } from '../../posthog-surveys-types'
 import { SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
 
@@ -624,5 +626,74 @@ describe('addSurveyCSSVariablesToElement', () => {
             // Inactive rating uses inputTextColor
             expect(element.style.getPropertyValue('--ph-survey-rating-text-color')).toBe('#ff0000')
         })
+    })
+})
+
+describe('sendSurveyEvent', () => {
+    const baseSurvey: Survey = {
+        id: 'test-survey-id',
+        name: 'Test Survey',
+        description: 'Test Description',
+        type: SurveyType.Popover,
+        questions: [{ type: 'open', question: 'What do you think?', id: 'q1' }],
+        appearance: null,
+        conditions: null,
+        start_date: null,
+        end_date: null,
+        current_iteration: null,
+        current_iteration_start_date: null,
+        feature_flag_keys: null,
+        linked_flag_key: null,
+        targeting_flag_key: null,
+        internal_targeting_flag_key: null,
+    }
+
+    beforeEach(() => {
+        localStorage.clear()
+    })
+
+    it('includes custom properties in captured event', () => {
+        const mockCapture = jest.fn()
+        const mockPostHog = { capture: mockCapture } as unknown as PostHog
+
+        sendSurveyEvent({
+            responses: { $survey_response_q1: 'Great!' },
+            survey: baseSurvey,
+            surveySubmissionId: 'submission-123',
+            isSurveyCompleted: true,
+            posthog: mockPostHog,
+            properties: {
+                $ai_generation_id: 'gen-456',
+                $ai_trace_id: 'trace-789',
+                custom_field: 'custom_value',
+            },
+        })
+
+        expect(mockCapture).toHaveBeenCalledTimes(1)
+        const capturedEvent = mockCapture.mock.calls[0]
+        expect(capturedEvent[0]).toBe('survey sent')
+
+        const eventProperties = capturedEvent[1]
+        expect(eventProperties.$ai_generation_id).toBe('gen-456')
+        expect(eventProperties.$ai_trace_id).toBe('trace-789')
+        expect(eventProperties.custom_field).toBe('custom_value')
+    })
+
+    it('works without custom properties', () => {
+        const mockCapture = jest.fn()
+        const mockPostHog = { capture: mockCapture } as unknown as PostHog
+
+        sendSurveyEvent({
+            responses: { $survey_response_q1: 'Great!' },
+            survey: baseSurvey,
+            surveySubmissionId: 'submission-123',
+            isSurveyCompleted: true,
+            posthog: mockPostHog,
+        })
+
+        expect(mockCapture).toHaveBeenCalledTimes(1)
+        const eventProperties = mockCapture.mock.calls[0][1]
+        expect(eventProperties.$survey_id).toBe('test-survey-id')
+        expect(eventProperties.$ai_generation_id).toBeUndefined()
     })
 })
