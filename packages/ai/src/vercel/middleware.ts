@@ -391,6 +391,11 @@ const extractCacheReadTokens = (usage: Record<string, unknown>): unknown => {
 /**
  * Wraps a Vercel AI SDK language model (V2 or V3) with PostHog tracing.
  * Automatically detects the model version and applies appropriate instrumentation.
+ *
+ * Uses a Proxy to ensure all model properties (including getters, prototype methods,
+ * and non-enumerable properties) are properly delegated to the underlying model.
+ * This is critical for providers like Anthropic that define properties like
+ * `supportsObjectGeneration` as getters, which are required for streamObject to work.
  */
 export const wrapVercelLanguageModel = <T extends LanguageModel>(
   model: T,
@@ -409,10 +414,8 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
     },
   }
 
-  // Create wrapped model that preserves the original type
-  const wrappedModel = {
-    ...model,
-    doGenerate: async (params: LanguageModelCallOptions) => {
+  // Wrapped doGenerate function with PostHog tracing
+  const wrappedDoGenerate = async (params: LanguageModelCallOptions) => {
       const startTime = Date.now()
       const mergedParams = {
         ...mergedOptions,
@@ -487,9 +490,10 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
         })
         throw enrichedError
       }
-    },
+    }
 
-    doStream: async (params: LanguageModelCallOptions) => {
+  // Wrapped doStream function with PostHog tracing
+  const wrappedDoStream = async (params: LanguageModelCallOptions) => {
       const startTime = Date.now()
       let generatedText = ''
       let reasoningText = ''
@@ -667,10 +671,28 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
         })
         throw enrichedError
       }
-    },
-  } as T
+    }
 
-  return wrappedModel
+  // Use Proxy to properly delegate all property access to the original model
+  // while intercepting doGenerate and doStream. This ensures that getters,
+  // prototype methods, and non-enumerable properties are properly accessed.
+  return new Proxy(model, {
+    get(target, prop, receiver) {
+      if (prop === 'doGenerate') {
+        return wrappedDoGenerate
+      }
+      if (prop === 'doStream') {
+        return wrappedDoStream
+      }
+      // Delegate all other property access to the original model
+      const value = Reflect.get(target, prop, receiver)
+      // Bind methods to the original model to preserve 'this' context
+      if (typeof value === 'function') {
+        return value.bind(target)
+      }
+      return value
+    },
+  }) as T
 }
 
 // Export type guards for external use
