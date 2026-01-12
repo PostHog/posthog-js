@@ -271,7 +271,7 @@ export interface HeatmapConfig {
     flush_interval_milliseconds: number
 }
 
-export type ConfigDefaults = '2025-11-30' | '2025-05-24' | 'unset'
+export type ConfigDefaults = '2025-12-11' | '2025-11-30' | '2025-05-24' | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 

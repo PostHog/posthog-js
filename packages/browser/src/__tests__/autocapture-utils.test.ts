@@ -453,6 +453,7 @@ describe(`Autocapture utility functions`, () => {
 
         it(`should return false when the value is undefined`, () => {
             expect(shouldCaptureValue(undefined as unknown as string)).toBe(false)
+        })
 
         it(`should return false for sensitive values`, () => {
             expect(shouldCaptureValue(`123-45-6789`)).toBe(false)
@@ -708,7 +709,7 @@ describe(`Autocapture utility functions`, () => {
             ]
 
             // Get the elements chain string
-            const elementsChain = getElementsChainString(testElements, config)
+            const elementsChain = getElementsChainString(testElements, true)
 
             // For each test element, verify the element text is properly escaped in the chain
             testElements.forEach((element) => {

@@ -225,7 +225,7 @@ export function shouldCaptureRageclick(el: Element | null, config: PostHogConfig
     // Traverse DOM once and cache element data to avoid redundant calls to getSafeText
     const { targetElementList } = getElementAndParentsForElement(el, false)
     const elementsWithText: ElementWithText[] = targetElementList.map((element) => ({
-        safeText: getSafeText(element, config['sensitive_data_detection']).toLowerCase(),
+        safeText: getSafeText(element, config).toLowerCase(),
         ariaLabel: element.getAttribute('aria-label')?.toLowerCase().trim() || '',
     }))
 
@@ -393,7 +393,7 @@ export function shouldCaptureElement(el: Element, config: PostHogConfig): boolea
         // the logic from doesCaptureElementHaveSensitiveData moved into isSensitiveElement
         return !isSensitiveElement(el, config)
     } else {
-        return !doesCaptureElementHaveSensitiveData(el, config['sensitive_data_detection'])
+        return !doesCaptureElementHaveSensitiveData(el)
     }
 }
 
