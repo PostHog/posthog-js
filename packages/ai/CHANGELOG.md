@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 7.4.2
+
+### Patch Changes
+
+- [#2852](https://github.com/PostHog/posthog-js/pull/2852) [`308daf0`](https://github.com/PostHog/posthog-js/commit/308daf00035a7e38b2bc5969bf0cbe3ccacae5f6) Thanks [@andrewm4894](https://github.com/andrewm4894)! - fix(vercel): preserve prototype getter properties when wrapping models
+  (2026-01-12)
+
 ## 7.4.1
 
 ### Patch Changes

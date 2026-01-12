@@ -1,5 +1,19 @@
 # posthog-js
 
+## 1.319.0
+
+### Minor Changes
+
+- [#2784](https://github.com/PostHog/posthog-js/pull/2784) [`8195c0c`](https://github.com/PostHog/posthog-js/commit/8195c0c5d74d0c4994289cdb7ebe73b4f74b20b4) Thanks [@frankh](https://github.com/frankh)! - feat: add extension for PostHog Logs
+  (2026-01-12)
+
+### Patch Changes
+
+- [#2873](https://github.com/PostHog/posthog-js/pull/2873) [`ec5b64b`](https://github.com/PostHog/posthog-js/commit/ec5b64b2f837742c448cc9d8eb80763d3dc91655) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: use property based testing to expose another edge case bug in checkAndGetSessionAndWindowId
+  (2026-01-12)
+- Updated dependencies []:
+    - @posthog/types@1.319.0
+
 ## 1.318.2
 
 ### Patch Changes
