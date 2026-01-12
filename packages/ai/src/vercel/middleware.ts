@@ -525,6 +525,16 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
         const { stream, ...rest } = await model.doStream(params as any)
         const transformStream = new TransformStream<LanguageModelStreamPart, LanguageModelStreamPart>({
           transform(chunk, controller) {
+            // Defensive fix: Convert messageMetadata from null to undefined
+            // The AI SDK's mergeObjects function guards against undefined but not null,
+            // causing "Cannot convert undefined or null to object" errors when spreading null.
+            // This can occur with certain model providers when file attachments are present.
+            // See: https://github.com/PostHog/posthog-js/issues/2877
+            const chunkAny = chunk as any
+            if ('messageMetadata' in chunkAny && chunkAny.messageMetadata === null) {
+              chunk = { ...chunk, messageMetadata: undefined } as LanguageModelStreamPart
+            }
+
             // Handle streaming patterns - compatible with both V2 and V3
             if (chunk.type === 'text-delta') {
               generatedText += chunk.delta

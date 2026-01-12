@@ -689,6 +689,125 @@ describe('Vercel AI SDK - Dual Version Support', () => {
     })
   })
 
+  describe('messageMetadata null handling', () => {
+    it('should convert messageMetadata null to undefined in V3 streaming', async () => {
+      // This test verifies the defensive fix for:
+      // "Cannot convert undefined or null to object" error when AI SDK's
+      // mergeObjects function receives null messageMetadata
+      const streamParts: LanguageModelV3StreamPart[] = [
+        { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+        // Simulate a chunk with messageMetadata: null (edge case from some providers)
+        {
+          type: 'finish',
+          usage: v3TokenUsage(10, 5),
+          finishReason: { unified: 'stop' as const, raw: undefined },
+          messageMetadata: null,
+        } as any,
+      ]
+
+      const baseModel = createMockStreamingModel('v3', streamParts)
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-metadata-null',
+      })
+
+      const result = await model.doStream({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Hi' }] }],
+      })
+
+      // Collect all chunks to verify messageMetadata is converted
+      const chunks: any[] = []
+      const reader = result.stream.getReader()
+      let done = false
+      while (!done) {
+        const { value, done: isDone } = await reader.read()
+        if (value) chunks.push(value)
+        done = isDone
+      }
+
+      await flushPromises()
+
+      // Verify the finish chunk's messageMetadata was converted from null to undefined
+      const finishChunk = chunks.find((c) => c.type === 'finish')
+      expect(finishChunk).toBeDefined()
+      // The chunk should have messageMetadata as undefined, not null
+      expect(finishChunk.messageMetadata).toBeUndefined()
+
+      // Verify PostHog event was captured successfully
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    })
+
+    it('should preserve valid messageMetadata objects in V3 streaming', async () => {
+      const metadata = { customField: 'test-value' }
+      const streamParts: LanguageModelV3StreamPart[] = [
+        { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+        {
+          type: 'finish',
+          usage: v3TokenUsage(10, 5),
+          finishReason: { unified: 'stop' as const, raw: undefined },
+          messageMetadata: metadata,
+        } as any,
+      ]
+
+      const baseModel = createMockStreamingModel('v3', streamParts)
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-metadata-valid',
+      })
+
+      const result = await model.doStream({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Hi' }] }],
+      })
+
+      const chunks: any[] = []
+      const reader = result.stream.getReader()
+      let done = false
+      while (!done) {
+        const { value, done: isDone } = await reader.read()
+        if (value) chunks.push(value)
+        done = isDone
+      }
+
+      await flushPromises()
+
+      // Verify valid messageMetadata is preserved
+      const finishChunk = chunks.find((c) => c.type === 'finish')
+      expect(finishChunk.messageMetadata).toEqual(metadata)
+    })
+
+    it('should handle missing messageMetadata in V3 streaming', async () => {
+      const streamParts: LanguageModelV3StreamPart[] = [
+        { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+        {
+          type: 'finish',
+          usage: v3TokenUsage(10, 5),
+          finishReason: { unified: 'stop' as const, raw: undefined },
+          // No messageMetadata property at all
+        },
+      ]
+
+      const baseModel = createMockStreamingModel('v3', streamParts)
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-metadata-missing',
+      })
+
+      const result = await model.doStream({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Hi' }] }],
+      })
+
+      const reader = result.stream.getReader()
+      while (!(await reader.read()).done) {
+        // Consume stream
+      }
+
+      await flushPromises()
+
+      // Should complete without error
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    })
+  })
+
   describe('Mixed reasoning and text content', () => {
     it.each([
       ['v2', { inputTokens: 10, outputTokens: 8, totalTokens: 18, reasoningTokens: 5 }, 'stop' as const],
