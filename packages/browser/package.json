@@ -45,8 +45,9 @@
     "files": [
         "lib/*",
         "dist/*",
-        "react/dist/*",
-        "react/package.json"
+        "react/dist/**",
+        "react/package.json",
+        "react/surveys/package.json"
     ],
     "dependencies": {
         "@posthog/core": "workspace:*",

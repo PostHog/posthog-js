@@ -26,7 +26,8 @@
     "types": "dist/types/index.d.ts",
     "files": [
         "dist",
-        "src"
+        "src",
+        "surveys"
     ],
     "peerDependencies": {
         "@types/react": ">=16.8.0",
