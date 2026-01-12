@@ -1,6 +1,7 @@
 :host {
-    --ph-tour-font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', Helvetica, Arial,
-        sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+    --ph-tour-font-family:
+        -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', Helvetica, Arial, sans-serif,
+        'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
 
     --ph-tour-background-color: #ffffff;
     --ph-tour-text-color: #1d1f27;
@@ -76,7 +77,9 @@
 }
 
 .ph-tour-tooltip--modal {
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.2),
+        0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .ph-tour-arrow {
@@ -554,4 +557,3 @@
     background: var(--ph-tour-button-color);
     color: var(--ph-tour-button-text-color);
 }
-
