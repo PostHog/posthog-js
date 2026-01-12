@@ -9,7 +9,7 @@ export class PostHogLogs {
     private _isLoaded: boolean = false
 
     constructor(private readonly _instance: PostHog) {
-        if (this._instance.config.logs?.captureConsoleLogs) {
+        if (this._instance && this._instance.config.logs?.captureConsoleLogs) {
             this._isLogsEnabled = true
         }
     }
