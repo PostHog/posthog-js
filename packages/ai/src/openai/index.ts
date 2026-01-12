@@ -9,6 +9,7 @@ import {
   AIEvent,
   formatOpenAIResponsesInput,
   calculateWebSearchCount,
+  sendEventWithErrorToPosthog,
 } from '../utils'
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
@@ -262,12 +263,7 @@ export class WrappedCompletions extends Completions {
                 tools: availableTools,
               })
             } catch (error: unknown) {
-              const httpStatus =
-                error && typeof error === 'object' && 'status' in error
-                  ? ((error as { status?: number }).status ?? 500)
-                  : 500
-
-              await sendEventToPosthog({
+              const enrichedError = await sendEventWithErrorToPosthog({
                 client: this.phClient,
                 ...posthogParams,
                 model: openAIParams.model,
@@ -277,11 +273,10 @@ export class WrappedCompletions extends Completions {
                 latency: 0,
                 baseURL: this.baseURL,
                 params: body,
-                httpStatus,
                 usage: { inputTokens: 0, outputTokens: 0 },
-                isError: true,
-                error: JSON.stringify(error),
+                error,
               })
+              throw enrichedError
             }
           })()
 
@@ -341,7 +336,6 @@ export class WrappedCompletions extends Completions {
               inputTokens: 0,
               outputTokens: 0,
             },
-            isError: true,
             error: JSON.stringify(error),
           })
           throw error
@@ -466,12 +460,7 @@ export class WrappedResponses extends Responses {
                 tools: availableTools,
               })
             } catch (error: unknown) {
-              const httpStatus =
-                error && typeof error === 'object' && 'status' in error
-                  ? ((error as { status?: number }).status ?? 500)
-                  : 500
-
-              await sendEventToPosthog({
+              const enrichedError = await sendEventWithErrorToPosthog({
                 client: this.phClient,
                 ...posthogParams,
                 model: openAIParams.model,
@@ -481,11 +470,10 @@ export class WrappedResponses extends Responses {
                 latency: 0,
                 baseURL: this.baseURL,
                 params: body,
-                httpStatus,
                 usage: { inputTokens: 0, outputTokens: 0 },
-                isError: true,
-                error: JSON.stringify(error),
+                error: error,
               })
+              throw enrichedError
             }
           })()
 
@@ -544,7 +532,6 @@ export class WrappedResponses extends Responses {
               inputTokens: 0,
               outputTokens: 0,
             },
-            isError: true,
             error: JSON.stringify(error),
           })
           throw error
@@ -593,13 +580,8 @@ export class WrappedResponses extends Responses {
           })
           return result
         },
-        async (error: unknown) => {
-          const httpStatus =
-            error && typeof error === 'object' && 'status' in error
-              ? ((error as { status?: number }).status ?? 500)
-              : 500
-
-          await sendEventToPosthog({
+        async (error: Error) => {
+          const enrichedError = await sendEventWithErrorToPosthog({
             client: this.phClient,
             ...posthogParams,
             model: openAIParams.model,
@@ -609,15 +591,13 @@ export class WrappedResponses extends Responses {
             latency: 0,
             baseURL: this.baseURL,
             params: body,
-            httpStatus,
             usage: {
               inputTokens: 0,
               outputTokens: 0,
             },
-            isError: true,
             error: JSON.stringify(error),
           })
-          throw error
+          throw enrichedError
         }
       )
 
@@ -688,7 +668,6 @@ export class WrappedEmbeddings extends Embeddings {
           usage: {
             inputTokens: 0,
           },
-          isError: true,
           error: JSON.stringify(error),
         })
         throw error
@@ -833,12 +812,7 @@ export class WrappedTranscriptions extends Transcriptions {
                 tools: availableTools,
               })
             } catch (error: unknown) {
-              const httpStatus =
-                error && typeof error === 'object' && 'status' in error
-                  ? ((error as { status?: number }).status ?? 500)
-                  : 500
-
-              await sendEventToPosthog({
+              const enrichedError = await sendEventWithErrorToPosthog({
                 client: this.phClient,
                 ...posthogParams,
                 model: openAIParams.model,
@@ -848,11 +822,10 @@ export class WrappedTranscriptions extends Transcriptions {
                 latency: 0,
                 baseURL: this.baseURL,
                 params: body,
-                httpStatus,
                 usage: { inputTokens: 0, outputTokens: 0 },
-                isError: true,
-                error: JSON.stringify(error),
+                error: error,
               })
+              throw enrichedError
             }
           })()
 
@@ -885,12 +858,7 @@ export class WrappedTranscriptions extends Transcriptions {
           }
         },
         async (error: unknown) => {
-          const httpStatus =
-            error && typeof error === 'object' && 'status' in error
-              ? ((error as { status?: number }).status ?? 500)
-              : 500
-
-          await sendEventToPosthog({
+          const enrichedError = await sendEventWithErrorToPosthog({
             client: this.phClient,
             ...posthogParams,
             model: openAIParams.model,
@@ -900,15 +868,13 @@ export class WrappedTranscriptions extends Transcriptions {
             latency: 0,
             baseURL: this.baseURL,
             params: body,
-            httpStatus,
             usage: {
               inputTokens: 0,
               outputTokens: 0,
             },
-            isError: true,
-            error: JSON.stringify(error),
+            error: error,
           })
-          throw error
+          throw enrichedError
         }
       ) as APIPromise<OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateResponse>
 

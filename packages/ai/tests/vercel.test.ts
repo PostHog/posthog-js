@@ -67,7 +67,7 @@ const createMockV3Model = (modelId: string): LanguageModelV3 => {
         content: [{ type: 'text', text: response.text }],
         response: { modelId: modelId },
         providerMetadata: {},
-        finishReason: 'stop',
+        finishReason: { unified: 'stop' as const, raw: undefined },
         warnings: [],
       }
     }),
@@ -102,7 +102,7 @@ const createMockV2Model = (modelId: string): LanguageModelV2 => {
         content: [{ type: 'text', text: response.text }],
         response: { modelId: modelId },
         providerMetadata: {},
-        finishReason: 'stop',
+        finishReason: 'stop' as const,
         warnings: [],
       }
     }),
@@ -225,7 +225,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         {
           type: 'finish',
           usage: v3TokenUsage(20, 15),
-          finishReason: 'stop',
+          finishReason: { unified: 'stop' as const, raw: undefined },
         },
       ]
 
@@ -309,7 +309,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         {
           type: 'finish',
           usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
-          finishReason: 'stop',
+          finishReason: 'stop' as const,
         },
       ]
 
@@ -411,9 +411,9 @@ describe('Vercel AI SDK - Dual Version Support', () => {
     })
 
     it.each([
-      ['v2', createMockV2Model, { inputTokens: 15, outputTokens: 5 }],
-      ['v3', createMockV3Model, v3TokenUsage(15, 5)],
-    ])('should track tools in %s models when provided', async (_version, createModel, usageFormat) => {
+      ['v2', createMockV2Model, { inputTokens: 15, outputTokens: 5 }, 'stop' as const],
+      ['v3', createMockV3Model, v3TokenUsage(15, 5), { unified: 'stop' as const, raw: undefined }],
+    ])('should track tools in %s models when provided', async (_version, createModel, usageFormat, finishReason) => {
       const baseModel = createModel('gpt-4')
       baseModel.doGenerate = jest.fn().mockImplementation(async () => ({
         text: 'Using tool',
@@ -421,7 +421,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         content: [{ type: 'text', text: 'Using tool' }],
         response: { modelId: 'gpt-4' },
         providerMetadata: {},
-        finishReason: 'stop',
+        finishReason,
         warnings: [],
       }))
 
@@ -467,6 +467,272 @@ describe('Vercel AI SDK - Dual Version Support', () => {
 
       // Input should be null in privacy mode (withPrivacyMode returns null)
       expect(captureCall[0].properties.$ai_input).toBeNull()
+    })
+  })
+
+  describe('Anthropic V3 cache token handling', () => {
+    // Helper to create V3 token usage with cache tokens
+    const v3TokenUsageWithCache = (total: number, output: number, cacheRead?: number, cacheWrite?: number) => ({
+      inputTokens: {
+        total,
+        noCache: total - (cacheRead ?? 0) - (cacheWrite ?? 0),
+        cacheRead: cacheRead,
+        cacheWrite: cacheWrite,
+      },
+      outputTokens: { total: output, text: output, reasoning: undefined },
+    })
+
+    // Create a mock Anthropic V3 model with cache tokens
+    const createMockAnthropicV3Model = (modelId: string, cacheRead: number, cacheWrite: number): LanguageModelV3 => {
+      // Total = uncached(100) + cacheRead + cacheWrite
+      const total = 100 + cacheRead + cacheWrite
+
+      return {
+        specificationVersion: 'v3' as const,
+        provider: 'anthropic',
+        modelId: modelId,
+        supportedUrls: {},
+        doGenerate: jest.fn().mockImplementation(async () => {
+          return {
+            text: 'Cached response',
+            usage: v3TokenUsageWithCache(total, 50, cacheRead, cacheWrite),
+            content: [{ type: 'text', text: 'Cached response' }],
+            response: { modelId: modelId },
+            providerMetadata: {
+              anthropic: {
+                cacheCreationInputTokens: cacheWrite,
+              },
+            },
+            finishReason: { unified: 'stop' as const, raw: undefined },
+            warnings: [],
+          }
+        }),
+        doStream: jest.fn(),
+      } as LanguageModelV3
+    }
+
+    // Create a mock Anthropic V2 model with cache tokens
+    const createMockAnthropicV2Model = (modelId: string, inputTokens: number, cacheRead: number): LanguageModelV2 => {
+      return {
+        specificationVersion: 'v2' as const,
+        provider: 'anthropic',
+        modelId: modelId,
+        supportedUrls: {},
+        doGenerate: jest.fn().mockImplementation(async () => {
+          return {
+            text: 'Cached response',
+            // V2 style: inputTokens is already separate from cache (for Anthropic native)
+            usage: { inputTokens, outputTokens: 50, cachedInputTokens: cacheRead },
+            content: [{ type: 'text', text: 'Cached response' }],
+            response: { modelId: modelId },
+            providerMetadata: {},
+            finishReason: 'stop' as const,
+            warnings: [],
+          }
+        }),
+        doStream: jest.fn(),
+      } as LanguageModelV2
+    }
+
+    it('should subtract cache tokens from input tokens for Anthropic V3', async () => {
+      // V3 Anthropic model with cache: total=1120, cacheRead=1000, cacheWrite=20
+      // This means uncached tokens should be 1120 - 1000 - 20 = 100
+      const baseModel = createMockAnthropicV3Model('claude-3-sonnet', 1000, 20)
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-anthropic-cache',
+      })
+
+      await simulateGenerateText({
+        model: model,
+        prompt: 'Test with cache',
+      })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+      // inputTokens should be adjusted: 1120 - 1000 - 20 = 100
+      expect(captureCall[0].properties['$ai_input_tokens']).toBe(100)
+      expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(1000)
+      expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(20)
+      expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
+    })
+
+    it('should not subtract cache tokens for non-Anthropic V3 providers', async () => {
+      // Create an OpenAI V3 model with cache tokens
+      const baseModel: LanguageModelV3 = {
+        specificationVersion: 'v3' as const,
+        provider: 'openai',
+        modelId: 'gpt-4',
+        supportedUrls: {},
+        doGenerate: jest.fn().mockImplementation(async () => {
+          return {
+            text: 'Cached response',
+            // For OpenAI, inputTokens already excludes cache in the SDK
+            usage: {
+              inputTokens: { total: 100, noCache: 60, cacheRead: 40 },
+              outputTokens: { total: 50, text: 50 },
+            },
+            content: [{ type: 'text', text: 'Cached response' }],
+            response: { modelId: 'gpt-4' },
+            providerMetadata: {},
+            finishReason: { unified: 'stop' as const, raw: undefined },
+            warnings: [],
+          }
+        }),
+        doStream: jest.fn(),
+      }
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-openai-cache',
+      })
+
+      await simulateGenerateText({
+        model: model,
+        prompt: 'Test with cache',
+      })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+      // inputTokens should NOT be adjusted for OpenAI - stays at 100 (the total)
+      expect(captureCall[0].properties['$ai_input_tokens']).toBe(100)
+      expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(40)
+    })
+
+    it('should not subtract cache tokens for Anthropic V2', async () => {
+      // V2 Anthropic model: inputTokens is already the uncached value
+      const baseModel = createMockAnthropicV2Model('claude-3-sonnet', 100, 1000)
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-anthropic-v2-cache',
+      })
+
+      await simulateGenerateText({
+        model: model,
+        prompt: 'Test with cache',
+      })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+      // V2 inputTokens should NOT be adjusted - stays at 100
+      expect(captureCall[0].properties['$ai_input_tokens']).toBe(100)
+      expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(1000)
+    })
+
+    it('should handle Anthropic V3 streaming with cache tokens', async () => {
+      // Total = uncached(100) + cacheRead(1000) + cacheWrite(20) = 1120
+      const streamParts: LanguageModelV3StreamPart[] = [
+        { type: 'text-delta', id: 'text-1', delta: 'Cached streaming response' },
+        {
+          type: 'finish',
+          usage: {
+            inputTokens: { total: 1120, noCache: 100, cacheRead: 1000, cacheWrite: 20 },
+            outputTokens: { total: 50, text: 50, reasoning: undefined },
+          },
+          finishReason: { unified: 'stop' as const, raw: undefined },
+          providerMetadata: {
+            anthropic: {
+              cacheCreationInputTokens: 20,
+            },
+          },
+        },
+      ]
+
+      const baseModel: LanguageModelV3 = {
+        specificationVersion: 'v3' as const,
+        provider: 'anthropic',
+        modelId: 'claude-3-sonnet',
+        supportedUrls: {},
+        doGenerate: jest.fn(),
+        doStream: jest.fn().mockImplementation(async () => {
+          const stream = new ReadableStream({
+            async start(controller) {
+              for (const part of streamParts) {
+                controller.enqueue(part)
+              }
+              controller.close()
+            },
+          })
+          return {
+            stream,
+            response: { modelId: 'claude-3-sonnet' },
+          }
+        }),
+      }
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-anthropic-v3-stream-cache',
+      })
+
+      const result = await model.doStream({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Cached?' }] }],
+      })
+
+      const reader = result.stream.getReader()
+      while (!(await reader.read()).done) {
+        // Consume stream
+      }
+
+      await flushPromises()
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+      // inputTokens should be adjusted: 1120 - 1000 - 20 = 100
+      expect(captureCall[0].properties['$ai_input_tokens']).toBe(100)
+      expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(1000)
+      expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(20)
+    })
+  })
+
+  describe('Mixed reasoning and text content', () => {
+    it.each([
+      ['v2', { inputTokens: 10, outputTokens: 8, totalTokens: 18, reasoningTokens: 5 }, 'stop' as const],
+      ['v3', v3TokenUsage(10, 8, 5), { unified: 'stop' as const, raw: undefined }],
+    ] as const)('should handle reasoning in %s streaming', async (version, usageFormat, finishReason) => {
+      const streamParts = [
+        { type: 'reasoning-delta' as const, id: 'r-1', delta: 'Thinking about ' },
+        { type: 'reasoning-delta' as const, id: 'r-1', delta: 'the answer.' },
+        { type: 'text-delta' as const, id: 't-1', delta: 'The answer is 19.' },
+        {
+          type: 'finish' as const,
+          usage: usageFormat,
+          finishReason,
+        },
+      ]
+
+      const baseModel = createMockStreamingModel(version, streamParts as any)
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-reasoning',
+      })
+
+      const result = await model.doStream({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Think' }] }],
+      })
+
+      const reader = result.stream.getReader()
+      while (!(await reader.read()).done) {
+        // Consume
+      }
+
+      await flushPromises()
+
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      expect(captureCall[0].properties.$ai_output_choices).toEqual([
+        {
+          role: 'assistant',
+          content: [
+            { type: 'reasoning', text: 'Thinking about the answer.' },
+            { type: 'text', text: 'The answer is 19.' },
+          ],
+        },
+      ])
+      expect(captureCall[0].properties.$ai_reasoning_tokens).toBe(5)
     })
   })
 
@@ -520,53 +786,6 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    })
-  })
-
-  describe('Mixed reasoning and text content', () => {
-    it.each([
-      ['v2', { inputTokens: 10, outputTokens: 8, totalTokens: 18, reasoningTokens: 5 }],
-      ['v3', v3TokenUsage(10, 8, 5)],
-    ] as const)('should handle reasoning in %s streaming', async (version, usageFormat) => {
-      const streamParts = [
-        { type: 'reasoning-delta' as const, id: 'r-1', delta: 'Thinking about ' },
-        { type: 'reasoning-delta' as const, id: 'r-1', delta: 'the answer.' },
-        { type: 'text-delta' as const, id: 't-1', delta: 'The answer is 19.' },
-        {
-          type: 'finish' as const,
-          usage: usageFormat,
-          finishReason: 'stop' as const,
-        },
-      ]
-
-      const baseModel = createMockStreamingModel(version, streamParts as any)
-      const model = withTracing(baseModel, mockPostHogClient, {
-        posthogDistinctId: 'test-user',
-        posthogTraceId: 'test-reasoning',
-      })
-
-      const result = await model.doStream({
-        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Think' }] }],
-      })
-
-      const reader = result.stream.getReader()
-      while (!(await reader.read()).done) {
-        // Consume
-      }
-
-      await flushPromises()
-
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
-      expect(captureCall[0].properties.$ai_output_choices).toEqual([
-        {
-          role: 'assistant',
-          content: [
-            { type: 'reasoning', text: 'Thinking about the answer.' },
-            { type: 'text', text: 'The answer is 19.' },
-          ],
-        },
-      ])
-      expect(captureCall[0].properties.$ai_reasoning_tokens).toBe(5)
     })
   })
 })

@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#/ Usage: bin/build
+#/ Description: Builds all packages in the monorepo
+#/
+#/ This script runs bin/setup first to ensure dependencies are installed.
+
+source bin/helpers/_utils.sh
+set_source_and_root_dir
+
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    show_help
+    exit 0
+fi
+
+# Ensure dependencies are installed and up to date
+bin/setup || exit 1
+
+set -e
+
+echo "→ Building packages"
+pnpm build
+
+success "Build complete"

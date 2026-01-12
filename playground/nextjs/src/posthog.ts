@@ -11,6 +11,9 @@ import { User } from './auth'
 export const PERSON_PROCESSING_MODE: 'always' | 'identified_only' | 'never' =
     (process.env.NEXT_PUBLIC_POSTHOG_PERSON_PROCESSING_MODE as any) || 'identified_only'
 
+// optionally skip consent handling, for testing
+export const SKIP_CONSENT_HANDLING = false
+
 export const POSTHOG_USE_SNIPPET: boolean = (process.env.NEXT_PUBLIC_POSTHOG_USE_SNIPPET as any) || false
 
 export const posthog: PostHog = POSTHOG_USE_SNIPPET
@@ -35,6 +38,15 @@ export function cookieConsentGiven(): ConsentState {
 }
 
 export const configForConsent = (): Partial<PostHogConfig> => {
+    if (SKIP_CONSENT_HANDLING) {
+        return {
+            disable_surveys: false,
+            autocapture: true,
+            disable_session_recording: false,
+            cookieless_mode: undefined,
+        }
+    }
+
     const consentGiven = cookieConsentGiven()
 
     return {
@@ -45,6 +57,10 @@ export const configForConsent = (): Partial<PostHogConfig> => {
 }
 
 export const updatePostHogConsent = (consentGiven: ConsentState) => {
+    if (SKIP_CONSENT_HANDLING) {
+        return
+    }
+
     if (consentGiven !== undefined) {
         if (consentGiven === 'granted') {
             posthog.opt_in_capturing()

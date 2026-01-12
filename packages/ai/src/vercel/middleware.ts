@@ -20,6 +20,7 @@ import {
   extractAvailableToolCalls,
   toContentString,
   calculateWebSearchCount,
+  sendEventWithErrorToPosthog,
 } from '../utils'
 import { Buffer } from 'buffer'
 import { redactBase64DataUrl } from '../sanitization'
@@ -317,6 +318,24 @@ const extractAdditionalTokenValues = (providerMetadata: unknown): Record<string,
   return {}
 }
 
+// For Anthropic providers in V3, inputTokens.total is the sum of all tokens (uncached + cache read + cache write).
+// Our cost calculation expects inputTokens to be only the uncached portion for Anthropic.
+// This helper subtracts cache tokens from inputTokens for Anthropic V3 models.
+const adjustAnthropicV3CacheTokens = (
+  model: LanguageModel,
+  provider: string,
+  usage: { inputTokens?: number; cacheReadInputTokens?: unknown; cacheCreationInputTokens?: unknown }
+): void => {
+  if (isV3Model(model) && provider.toLowerCase().includes('anthropic')) {
+    const cacheReadTokens = (usage.cacheReadInputTokens as number) || 0
+    const cacheWriteTokens = (usage.cacheCreationInputTokens as number) || 0
+    const cacheTokens = cacheReadTokens + cacheWriteTokens
+    if (usage.inputTokens && cacheTokens > 0) {
+      usage.inputTokens = Math.max(usage.inputTokens - cacheTokens, 0)
+    }
+  }
+}
+
 // Helper to extract numeric token value from V2 (number) or V3 (object with .total) usage formats
 const extractTokenCount = (value: unknown): number | undefined => {
   if (typeof value === 'number') {
@@ -426,6 +445,8 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             ...additionalTokenValues,
           }
 
+          adjustAnthropicV3CacheTokens(model, provider, usage)
+
           await sendEventToPosthog({
             client: phClient,
             distinctId: mergedOptions.posthogDistinctId,
@@ -444,9 +465,9 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
           })
 
           return result
-        } catch (error: any) {
+        } catch (error: unknown) {
           const modelId = model.modelId
-          await sendEventToPosthog({
+          const enrichedError = await sendEventWithErrorToPosthog({
             client: phClient,
             distinctId: mergedOptions.posthogDistinctId,
             traceId: mergedOptions.posthogTraceId ?? uuidv4(),
@@ -457,17 +478,15 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             latency: 0,
             baseURL: '',
             params: mergedParams as any,
-            httpStatus: error?.status ? error.status : 500,
             usage: {
               inputTokens: 0,
               outputTokens: 0,
             },
-            isError: true,
-            error: truncate(JSON.stringify(error)),
+            error: error,
             tools: availableTools,
             captureImmediate: mergedOptions.posthogCaptureImmediate,
           })
-          throw error
+          throw enrichedError
         }
       },
       writable: true,
@@ -606,6 +625,8 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 webSearchCount,
               }
 
+              adjustAnthropicV3CacheTokens(model, provider, finalUsage)
+
               await sendEventToPosthog({
                 client: phClient,
                 distinctId: mergedOptions.posthogDistinctId,
@@ -629,8 +650,8 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             stream: stream.pipeThrough(transformStream),
             ...rest,
           }
-        } catch (error: any) {
-          await sendEventToPosthog({
+        } catch (error: unknown) {
+          const enrichedError = await sendEventWithErrorToPosthog({
             client: phClient,
             distinctId: mergedOptions.posthogDistinctId,
             traceId: mergedOptions.posthogTraceId ?? uuidv4(),
@@ -641,17 +662,15 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             latency: 0,
             baseURL: '',
             params: mergedParams as any,
-            httpStatus: error?.status ? error.status : 500,
             usage: {
               inputTokens: 0,
               outputTokens: 0,
             },
-            isError: true,
-            error: truncate(JSON.stringify(error)),
+            error: error,
             tools: availableTools,
             captureImmediate: mergedOptions.posthogCaptureImmediate,
           })
-          throw error
+          throw enrichedError
         }
       },
       writable: true,

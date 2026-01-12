@@ -5,6 +5,7 @@ import {
   formatResponseOpenAI,
   MonitoringParams,
   sendEventToPosthog,
+  sendEventWithErrorToPosthog,
   withPrivacyMode,
   formatOpenAIResponsesInput,
 } from '../utils'
@@ -233,12 +234,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 usage,
               })
             } catch (error: unknown) {
-              const httpStatus =
-                error && typeof error === 'object' && 'status' in error
-                  ? ((error as { status?: number }).status ?? 500)
-                  : 500
-
-              await sendEventToPosthog({
+              const enrichedError = await sendEventWithErrorToPosthog({
                 client: this.phClient,
                 ...posthogParams,
                 model: openAIParams.model,
@@ -248,11 +244,10 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 latency: 0,
                 baseURL: this.baseURL,
                 params: body,
-                httpStatus,
                 usage: { inputTokens: 0, outputTokens: 0 },
-                isError: true,
-                error: JSON.stringify(error),
+                error: error,
               })
+              throw enrichedError
             }
           })()
 
@@ -308,7 +303,6 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
               inputTokens: 0,
               outputTokens: 0,
             },
-            isError: true,
             error: JSON.stringify(error),
           })
           throw error
@@ -416,12 +410,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 usage,
               })
             } catch (error: unknown) {
-              const httpStatus =
-                error && typeof error === 'object' && 'status' in error
-                  ? ((error as { status?: number }).status ?? 500)
-                  : 500
-
-              await sendEventToPosthog({
+              const enrichedError = await sendEventWithErrorToPosthog({
                 client: this.phClient,
                 ...posthogParams,
                 model: openAIParams.model,
@@ -431,11 +420,10 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 latency: 0,
                 baseURL: this.baseURL,
                 params: body,
-                httpStatus,
                 usage: { inputTokens: 0, outputTokens: 0 },
-                isError: true,
-                error: JSON.stringify(error),
+                error: error,
               })
+              throw enrichedError
             }
           })()
 
@@ -490,7 +478,6 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               inputTokens: 0,
               outputTokens: 0,
             },
-            isError: true,
             error: JSON.stringify(error),
           })
           throw error
@@ -549,7 +536,6 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             inputTokens: 0,
             outputTokens: 0,
           },
-          isError: true,
           error: JSON.stringify(error),
         })
         throw error
@@ -618,7 +604,6 @@ export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
           usage: {
             inputTokens: 0,
           },
-          isError: true,
           error: JSON.stringify(error),
         })
         throw error

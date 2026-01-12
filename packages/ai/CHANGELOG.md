@@ -1,5 +1,43 @@
 # posthog-ai
 
+## 7.4.1
+
+### Patch Changes
+
+- [#2859](https://github.com/PostHog/posthog-js/pull/2859) [`636e25f`](https://github.com/PostHog/posthog-js/commit/636e25f8a54c44094dfb7f771fa0573fb3c531c1) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Fixes cache creation cost for Vercel V3 with Anthropic
+  (2026-01-08)
+
+## 7.4.0
+
+### Minor Changes
+
+- [#2593](https://github.com/PostHog/posthog-js/pull/2593) [`fba9fb2`](https://github.com/PostHog/posthog-js/commit/fba9fb2ea4be2ea396730741b4718b4a2c80d026) Thanks [@daibhin](https://github.com/daibhin)! - track LLMA trace_id on exceptions and exception_id on traces
+  (2026-01-08)
+
+### Patch Changes
+
+- Updated dependencies [[`fba9fb2`](https://github.com/PostHog/posthog-js/commit/fba9fb2ea4be2ea396730741b4718b4a2c80d026), [`c1ed63b`](https://github.com/PostHog/posthog-js/commit/c1ed63b0f03380a5e4bb2463491b3f767f64a514)]:
+  - posthog-node@5.20.0
+  - @posthog/core@1.9.1
+
+## 7.3.2
+
+### Patch Changes
+
+- [#2838](https://github.com/PostHog/posthog-js/pull/2838) [`c64a15d`](https://github.com/PostHog/posthog-js/commit/c64a15da69a059a539acf8b75c3be47200028e0b) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Fixes cache creation cost for Langchain with Anthropic
+  (2026-01-07)
+
+- [#2842](https://github.com/PostHog/posthog-js/pull/2842) [`0f508e9`](https://github.com/PostHog/posthog-js/commit/0f508e91ca8a8622e69728a0c00a79aaaa387e9a) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Fixes an error with certain AI imports when using CJS (`TypeError: Class extends value undefined is not a constructor or null`)
+  (2026-01-07)
+
+## 7.3.1
+
+### Patch Changes
+
+- [#2850](https://github.com/PostHog/posthog-js/pull/2850) [`b5dbf56`](https://github.com/PostHog/posthog-js/commit/b5dbf56a6482025629a573c44cc8518cfde798c7) Thanks [@andrewm4894](https://github.com/andrewm4894)! - fix(gemini): expose all GoogleGenAI constructor parameters in wrapper
+
+  The `MonitoringGeminiConfig` interface now extends `GoogleGenAIOptions` from `@google/genai`, allowing users to pass all available constructor parameters like `googleAuthOptions` and `httpOptions` without TypeScript errors. (2026-01-06)
+
 ## 7.3.0
 
 ### Minor Changes

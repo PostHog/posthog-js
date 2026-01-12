@@ -1595,13 +1595,20 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param distinctId - Optional user distinct ID
    * @param additionalProperties - Optional additional properties to include
    */
-  captureException(error: unknown, distinctId?: string, additionalProperties?: Record<string | number, any>): void {
-    const syntheticException = new Error('PostHog syntheticException')
-    this.addPendingPromise(
-      ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
-        this.capture(msg)
+  captureException(
+    error: unknown,
+    distinctId?: string,
+    additionalProperties?: Record<string | number, any>,
+    uuid?: EventMessage['uuid']
+  ): void {
+    if (!ErrorTracking.isPreviouslyCapturedError(error)) {
+      const syntheticException = new Error('PostHog syntheticException')
+      this.addPendingPromise(
+        ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
+          this.capture({ ...msg, uuid })
+        )
       )
-    )
+    }
   }
 
   /**
@@ -1644,12 +1651,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     distinctId?: string,
     additionalProperties?: Record<string | number, any>
   ): Promise<void> {
-    const syntheticException = new Error('PostHog syntheticException')
-    this.addPendingPromise(
-      ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
-        this.captureImmediate(msg)
+    if (!ErrorTracking.isPreviouslyCapturedError(error)) {
+      const syntheticException = new Error('PostHog syntheticException')
+      this.addPendingPromise(
+        ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
+          this.captureImmediate(msg)
+        )
       )
-    )
+    }
   }
 
   public async prepareEventMessage(props: EventMessage): Promise<{

@@ -76,9 +76,6 @@
 }
 
 .ph-tour-tooltip--modal {
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
@@ -159,6 +156,162 @@
 .ph-tour-content ol {
     margin-left: 20px;
     margin-bottom: 8px;
+}
+
+.ph-tour-content h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+/* Links */
+.ph-tour-content a,
+.ph-tour-content .ph-tour-link {
+    color: var(--ph-tour-button-color);
+    text-decoration: underline;
+}
+
+.ph-tour-content a:hover {
+    opacity: 0.8;
+}
+
+/* Inline code */
+.ph-tour-content code {
+    padding: 2px 6px;
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+    font-size: 0.875em;
+    background: rgba(0, 0, 0, 0.06);
+    border-radius: 4px;
+}
+
+/* Code blocks */
+.ph-tour-content pre {
+    padding: 12px;
+    margin-bottom: 8px;
+    overflow-x: auto;
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    background: rgba(0, 0, 0, 0.04);
+    border-radius: 6px;
+}
+
+.ph-tour-content pre code {
+    padding: 0;
+    font-size: inherit;
+    background: transparent;
+    border-radius: 0;
+}
+
+/* Ensure syntax highlighting spans inherit monospace font */
+.ph-tour-content pre *,
+.ph-tour-content code * {
+    font-family: inherit;
+}
+
+/* GitHub light syntax highlighting theme */
+.ph-tour-content .hljs-comment,
+.ph-tour-content .hljs-quote {
+    color: #6a737d;
+    font-style: italic;
+}
+
+.ph-tour-content .hljs-keyword,
+.ph-tour-content .hljs-selector-tag {
+    color: #d73a49;
+}
+
+.ph-tour-content .hljs-string,
+.ph-tour-content .hljs-doctag,
+.ph-tour-content .hljs-regexp {
+    color: #032f62;
+}
+
+.ph-tour-content .hljs-number,
+.ph-tour-content .hljs-literal,
+.ph-tour-content .hljs-variable,
+.ph-tour-content .hljs-template-variable {
+    color: #005cc5;
+}
+
+.ph-tour-content .hljs-title,
+.ph-tour-content .hljs-section,
+.ph-tour-content .hljs-selector-id,
+.ph-tour-content .hljs-selector-class,
+.ph-tour-content .hljs-title.function_ {
+    color: #6f42c1;
+}
+
+.ph-tour-content .hljs-name,
+.ph-tour-content .hljs-attribute,
+.ph-tour-content .hljs-attr {
+    color: #22863a;
+}
+
+.ph-tour-content .hljs-symbol,
+.ph-tour-content .hljs-bullet,
+.ph-tour-content .hljs-built_in,
+.ph-tour-content .hljs-addition {
+    color: #22863a;
+}
+
+.ph-tour-content .hljs-subst,
+.ph-tour-content .hljs-deletion {
+    color: #b31d28;
+}
+
+.ph-tour-content .hljs-meta {
+    color: #032f62;
+}
+
+.ph-tour-content .hljs-emphasis {
+    font-style: italic;
+}
+
+.ph-tour-content .hljs-strong {
+    font-weight: bold;
+}
+
+/* Images */
+.ph-tour-content img,
+.ph-tour-content .ph-tour-image {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 8px 0;
+    border-radius: 6px;
+}
+
+/* Video embeds */
+.ph-tour-content .ph-tour-embed {
+    margin: 8px 0;
+}
+
+.ph-tour-content .ph-tour-embed-container {
+    position: relative;
+    width: 100%;
+    padding-bottom: 56.25%; /* 16:9 aspect ratio */
+    background: #000;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.ph-tour-content .ph-tour-embed-container iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+/* Blockquote */
+.ph-tour-content blockquote {
+    padding-left: 12px;
+    margin: 8px 0;
+    border-left: 3px solid var(--ph-tour-border-color);
+    font-style: italic;
+    color: var(--ph-tour-text-secondary-color);
 }
 
 .ph-tour-footer {

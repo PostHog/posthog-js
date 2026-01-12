@@ -49,6 +49,7 @@ import {
 } from '@posthog/core'
 import {
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
+    SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_OVERRIDE_SAMPLING,
     SESSION_RECORDING_OVERRIDE_LINKED_FLAG,
@@ -714,6 +715,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._sessionId = sessionId
         this._windowId = windowId
 
+        // Reset first full snapshot tracking for the new session
+        this._instance.persistence?.unregister(SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP)
+
         if (config?.endpoint) {
             this._endpoint = config?.endpoint
         }
@@ -849,6 +853,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._flushedSizeTracker.reset()
         }
 
+        // Reset first full snapshot timestamp for the new session
+        this._instance.persistence?.unregister(SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP)
+
         this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
 
         this._clearConditionalRecordingPersistence()
@@ -951,6 +958,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._scheduleFullSnapshot()
             // Full snapshots reset rrweb's node IDs, so clear any logged node tracking
             this._mutationThrottler?.reset()
+
+            // Track the timestamp of the first full snapshot for this session
+            // This helps us detect session rotation issues where incremental snapshots
+            // are sent before the full snapshot
+            this._instance.persistence?.register_once(
+                {
+                    [SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP]: rawEvent.timestamp,
+                },
+                undefined
+            )
         }
 
         // Clear the buffer if waiting for a trigger and only keep data from after the current full snapshot

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+#/ Usage: bin/setup
+#/ Description: Installs all project dependencies
+#/
+#/ This script is idempotent and can be run multiple times.
+
+source bin/helpers/_utils.sh
+set_source_and_root_dir
+
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    show_help
+    exit 0
+fi
+
+require_commands node pnpm
+
+set -e
+
+echo "→ Installing dependencies"
+pnpm install
+
+success "Setup complete"

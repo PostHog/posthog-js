@@ -15,14 +15,15 @@ import {
     getProductTourStylesheet,
     normalizeUrl,
 } from './product-tours-utils'
+import { findElement } from './element-inference'
 import { ProductTourTooltip } from './components/ProductTourTooltip'
 import { createLogger } from '../../utils/logger'
 import { document as _document, window as _window } from '../../utils/globals'
-import { localStore } from '../../storage'
+import { localStore, sessionStore } from '../../storage'
 import { addEventListener } from '../../utils'
 import { isNull, SurveyMatchType } from '@posthog/core'
 import { propertyComparisons } from '../../utils/property-utils'
-import { TOUR_COMPLETED_KEY_PREFIX, TOUR_DISMISSED_KEY_PREFIX } from './constants'
+import { TOUR_COMPLETED_KEY_PREFIX, TOUR_DISMISSED_KEY_PREFIX, ACTIVE_TOUR_SESSION_KEY } from './constants'
 import { doesTourActivateByAction, doesTourActivateByEvent } from '../../utils/product-tour-utils'
 import { TOOLBAR_ID } from '../../constants'
 import { ProductTourEventReceiver } from '../../utils/product-tour-event-receiver'
@@ -133,6 +134,7 @@ export class ProductTourManager {
     private _activeTour: ProductTour | null = null
     private _currentStepIndex: number = 0
     private _isPreviewMode: boolean = false
+    private _isResuming: boolean = false
     private _checkInterval: ReturnType<typeof setInterval> | null = null
     private _triggerSelectorListeners: Map<string, TriggerListenerData> = new Map()
     private _pendingTourTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map()
@@ -144,17 +146,79 @@ export class ProductTourManager {
         this._eventReceiver = new ProductTourEventReceiver(instance)
     }
 
+    private _setStepIndex(index: number): void {
+        this._currentStepIndex = index
+        this._saveSessionState()
+    }
+
+    private _saveSessionState(): void {
+        if (!this._activeTour || this._isPreviewMode) {
+            return
+        }
+        sessionStore._set(ACTIVE_TOUR_SESSION_KEY, {
+            tourId: this._activeTour.id,
+            stepIndex: this._currentStepIndex,
+        })
+    }
+
+    private _clearSessionState(): void {
+        sessionStore._remove(ACTIVE_TOUR_SESSION_KEY)
+    }
+
+    private _getSessionState(): { tourId: string; stepIndex: number } | null {
+        const stored = sessionStore._get(ACTIVE_TOUR_SESSION_KEY)
+        if (!stored) {
+            return null
+        }
+        try {
+            return JSON.parse(stored)
+        } catch {
+            return null
+        }
+    }
+
     start(): void {
         if (this._checkInterval) {
             return
         }
 
+        // Check for saved session state before starting the evaluation loop
+        const savedState = this._getSessionState()
+        if (savedState) {
+            this._resumeSavedTour(savedState.tourId, savedState.stepIndex, () => {
+                this._startEvaluationLoop()
+            })
+        } else {
+            this._startEvaluationLoop()
+        }
+    }
+
+    private _startEvaluationLoop(): void {
         this._checkInterval = setInterval(() => {
             this._evaluateAndDisplayTours()
         }, CHECK_INTERVAL_MS)
 
         this._evaluateAndDisplayTours()
         addEventListener(document, 'visibilitychange', this._handleVisibilityChange)
+    }
+
+    private _resumeSavedTour(tourId: string, stepIndex: number, onComplete: () => void): void {
+        this._instance.productTours?.getProductTours((tours) => {
+            const tour = tours.find((t) => t.id === tourId)
+
+            if (!tour) {
+                if (tours.length > 0) {
+                    this._clearSessionState()
+                }
+            } else {
+                this._activeTour = tour
+                this._currentStepIndex = stepIndex
+                this._isResuming = true
+                this._renderCurrentStep()
+            }
+
+            onComplete()
+        })
     }
 
     stop(): void {
@@ -350,7 +414,7 @@ export class ProductTourManager {
         }
 
         this._activeTour = tour
-        this._currentStepIndex = 0
+        this._setStepIndex(0)
 
         this._captureEvent('product tour shown', {
             $product_tour_id: tour.id,
@@ -400,7 +464,7 @@ export class ProductTourManager {
         })
 
         if (this._currentStepIndex < this._activeTour.steps.length - 1) {
-            this._currentStepIndex++
+            this._setStepIndex(this._currentStepIndex + 1)
             this._renderCurrentStep()
         } else {
             this._completeTour()
@@ -412,7 +476,7 @@ export class ProductTourManager {
             return
         }
 
-        this._currentStepIndex--
+        this._setStepIndex(this._currentStepIndex - 1)
         this._renderCurrentStep()
     }
 
@@ -472,6 +536,11 @@ export class ProductTourManager {
         }
 
         const step = this._activeTour.steps[this._currentStepIndex]
+        if (!step) {
+            logger.warn(`Step ${this._currentStepIndex} not found in tour ${this._activeTour.id}`)
+            this._cleanup()
+            return
+        }
 
         // Survey step - render native survey step component
         if (step.type === 'survey') {
@@ -493,6 +562,7 @@ export class ProductTourManager {
                 $product_tour_step_type: 'modal',
             })
 
+            this._isResuming = false
             this._renderTooltipWithPreact(null)
             return
         }
@@ -504,15 +574,28 @@ export class ProductTourManager {
 
         const result = findElementBySelector(step.selector)
 
+        // shadow mode: try inference to compare with selector results
+        const inferenceProps = step.inferenceData
+            ? (() => {
+                  const inferenceElement = findElement(step.inferenceData)
+                  return {
+                      $inference_data_present: true,
+                      $inference_found: !!inferenceElement,
+                      $inference_matches_selector: result.element === inferenceElement,
+                  }
+              })()
+            : { $inference_data_present: false }
+
         const previousStep = this._currentStepIndex > 0 ? this._activeTour.steps[this._currentStepIndex - 1] : null
-        const shouldWaitForElement = previousStep?.progressionTrigger === 'click'
+        const shouldWaitForElement = previousStep?.progressionTrigger === 'click' || this._isResuming
 
         // 2s total timeout
         const maxRetries = 20
         const retryTimeout = 100
 
         if (result.error === 'not_found' || result.error === 'not_visible') {
-            // if previous step was click-to-progress, give some time for the next element
+            // if previous step was click-to-progress, or we are resuming a tour,
+            // give some time for the next element
             if (shouldWaitForElement && retryCount < maxRetries) {
                 setTimeout(() => {
                     this._renderCurrentStep(retryCount + 1)
@@ -532,6 +615,7 @@ export class ProductTourManager {
                 $product_tour_failure_phase: 'runtime',
                 $product_tour_waited_for_element: shouldWaitForElement,
                 $product_tour_wait_duration_ms: waitDurationMs,
+                ...inferenceProps,
             })
 
             logger.warn(
@@ -551,6 +635,7 @@ export class ProductTourManager {
                 $product_tour_error: result.error,
                 $product_tour_matches_count: result.matchCount,
                 $product_tour_failure_phase: 'runtime',
+                ...inferenceProps,
             })
             // Continue with first match for multiple_matches case
         }
@@ -572,8 +657,10 @@ export class ProductTourManager {
             $product_tour_step_element_id: metadata.id,
             $product_tour_step_element_classes: metadata.classes,
             $product_tour_step_element_text: metadata.text,
+            ...inferenceProps,
         })
 
+        this._isResuming = false
         this._renderTooltipWithPreact(element)
     }
 
@@ -683,6 +770,8 @@ export class ProductTourManager {
         this._activeTour = null
         this._currentStepIndex = 0
         this._isPreviewMode = false
+        this._isResuming = false
+        this._clearSessionState()
     }
 
     private _manageTriggerSelectorListener(tour: ProductTour, selector: string): void {
@@ -714,9 +803,9 @@ export class ProductTourManager {
                     return
                 }
 
-                // manual triggers only check launch status + URL, no other conditions
-                if (!checkTourConditions(tour)) {
-                    logger.warn(`Tour ${tour.id} trigger clicked but failed conditions check`)
+                // manual triggers only check launch status, no other conditions
+                if (!isTourInDateRange(tour)) {
+                    logger.warn(`Tour ${tour.id} trigger clicked, but tour is not launched - not showing tour.`)
                     return
                 }
 

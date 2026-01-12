@@ -1,6 +1,9 @@
+import DOMPurify from 'dompurify'
+
 import {
     ProductTourAppearance,
     ProductTourSelectorError,
+    ProductTourStep,
     DEFAULT_PRODUCT_TOUR_APPEARANCE,
 } from '../../posthog-product-tours-types'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
@@ -224,4 +227,16 @@ function escapeHtml(text: string): string {
     const div = document.createElement('div')
     div.textContent = text
     return div.innerHTML
+}
+
+export function getStepHtml(step: ProductTourStep): string {
+    if (step.contentHtml) {
+        return DOMPurify.sanitize(step.contentHtml, {
+            ADD_TAGS: ['iframe'],
+            ADD_ATTR: ['allowfullscreen', 'frameborder', 'referrerpolicy'],
+        })
+    }
+
+    // backwards compat, will be deprecated
+    return renderTipTapContent(step.content)
 }

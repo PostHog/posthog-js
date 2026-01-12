@@ -1,5 +1,108 @@
 # posthog-js
 
+## 1.318.2
+
+### Patch Changes
+
+- [#2871](https://github.com/PostHog/posthog-js/pull/2871) [`4f73495`](https://github.com/PostHog/posthog-js/commit/4f7349535a39b0bb1c46b5a319a28f3f691cf511) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: detecting activity timestamp should not compare null to numbers
+  (2026-01-12)
+- Updated dependencies []:
+    - @posthog/types@1.318.2
+
+## 1.318.1
+
+### Patch Changes
+
+- [#2862](https://github.com/PostHog/posthog-js/pull/2862) [`9337928`](https://github.com/PostHog/posthog-js/commit/9337928f8435dba9026c4281e58616bf5cb1dfad) Thanks [@adboio](https://github.com/adboio)! - add position options to modal and survey tour steps
+  (2026-01-10)
+- Updated dependencies []:
+    - @posthog/types@1.318.1
+
+## 1.318.0
+
+### Minor Changes
+
+- [#2870](https://github.com/PostHog/posthog-js/pull/2870) [`b703cbb`](https://github.com/PostHog/posthog-js/commit/b703cbbf2210d622b69492802f611877c04b2e4d) Thanks [@adboio](https://github.com/adboio)! - add missing sessionRecording types
+  (2026-01-09)
+
+### Patch Changes
+
+- Updated dependencies [[`b703cbb`](https://github.com/PostHog/posthog-js/commit/b703cbbf2210d622b69492802f611877c04b2e4d)]:
+    - @posthog/types@1.318.0
+
+## 1.317.1
+
+### Patch Changes
+
+- [#2869](https://github.com/PostHog/posthog-js/pull/2869) [`a50645a`](https://github.com/PostHog/posthog-js/commit/a50645a4e8e322b08581438d88300a3db5640a23) Thanks [@ksvat](https://github.com/ksvat)! - Add first snapshot timestamp logging for monitoring/debugging purposes
+  (2026-01-09)
+- Updated dependencies []:
+    - @posthog/types@1.317.1
+
+## 1.317.0
+
+### Minor Changes
+
+- [#2857](https://github.com/PostHog/posthog-js/pull/2857) [`a2182ee`](https://github.com/PostHog/posthog-js/commit/a2182eeb39fa4123f7009ede74be623f6114f02d) Thanks [@adboio](https://github.com/adboio)! - add product tour element inference
+  (2026-01-09)
+
+### Patch Changes
+
+- [#2853](https://github.com/PostHog/posthog-js/pull/2853) [`3390186`](https://github.com/PostHog/posthog-js/commit/339018635aa38d7792217169fee3723850263c07) Thanks [@adboio](https://github.com/adboio)! - product tours: support rich content
+  (2026-01-09)
+- Updated dependencies []:
+    - @posthog/types@1.317.0
+
+## 1.316.1
+
+### Patch Changes
+
+- [#2846](https://github.com/PostHog/posthog-js/pull/2846) [`5ce7252`](https://github.com/PostHog/posthog-js/commit/5ce7252dc97d231e9a4d4b9a1e814dc69792ab96) Thanks [@ordehi](https://github.com/ordehi)! - Fix survey URL prefill to respect branching/skip logic
+
+    When using URL parameters to prefill survey responses (e.g., `?q0=9`), the SDK now correctly respects the survey's branching configuration. Previously, prefilled answers would always advance to the next sequential question, ignoring any skip logic. (2026-01-09)
+
+- Updated dependencies []:
+    - @posthog/types@1.316.1
+
+## 1.316.0
+
+### Minor Changes
+
+- [#2851](https://github.com/PostHog/posthog-js/pull/2851) [`d4bf005`](https://github.com/PostHog/posthog-js/commit/d4bf005048473861632ca422b0a2e5e708151276) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Expose Conversations API Methods for Custom UI
+  (2026-01-08)
+
+### Patch Changes
+
+- [#2856](https://github.com/PostHog/posthog-js/pull/2856) [`c1ed63b`](https://github.com/PostHog/posthog-js/commit/c1ed63b0f03380a5e4bb2463491b3f767f64a514) Thanks [@marandaneto](https://github.com/marandaneto)! - chore: expose default stack parser creator
+  (2026-01-08)
+- Updated dependencies [[`fba9fb2`](https://github.com/PostHog/posthog-js/commit/fba9fb2ea4be2ea396730741b4718b4a2c80d026), [`c1ed63b`](https://github.com/PostHog/posthog-js/commit/c1ed63b0f03380a5e4bb2463491b3f767f64a514)]:
+    - @posthog/core@1.9.1
+    - @posthog/types@1.316.0
+
+## 1.315.1
+
+### Patch Changes
+
+- [#2843](https://github.com/PostHog/posthog-js/pull/2843) [`579cd53`](https://github.com/PostHog/posthog-js/commit/579cd53fc282f9a5dbd15255e08901355df4070e) Thanks [@adboio](https://github.com/adboio)! - support mutli-page product tours
+  (2026-01-07)
+- Updated dependencies []:
+    - @posthog/types@1.315.1
+
+## 1.315.0
+
+### Minor Changes
+
+- [#2849](https://github.com/PostHog/posthog-js/pull/2849) [`8ddf472`](https://github.com/PostHog/posthog-js/commit/8ddf472ae952e7c1a402f10b9565a17176255d8d) Thanks [@veryayskiy](https://github.com/veryayskiy)! - separate enable conversation with enable conversations widget
+  (2026-01-06)
+
+- [#2839](https://github.com/PostHog/posthog-js/pull/2839) [`83b03fe`](https://github.com/PostHog/posthog-js/commit/83b03feb885d5d7def9afee6b1b915548bcf5278) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Release new @posthog/types library to make it easy for those using the script version of `posthog-js` to properly type `window.posthog`
+  (2026-01-06)
+
+### Patch Changes
+
+- Updated dependencies [[`83b03fe`](https://github.com/PostHog/posthog-js/commit/83b03feb885d5d7def9afee6b1b915548bcf5278)]:
+    - @posthog/types@1.315.0
+
 ## 1.314.0
 
 ### Minor Changes

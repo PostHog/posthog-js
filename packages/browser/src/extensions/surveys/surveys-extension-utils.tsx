@@ -756,3 +756,39 @@ export function getSurveyContainerClass(survey: Pick<Survey, 'id'>, asSelector =
     const className = `PostHogSurvey-${survey.id}`
     return asSelector ? `.${className}` : className
 }
+
+/**
+ * Get CSS position styles for a popover/modal based on SurveyPosition
+ * Used by both surveys and product tours for consistent positioning
+ */
+export function getPopoverPosition(
+    type?: SurveyType,
+    position: SurveyPosition = SurveyPosition.Right,
+    surveyWidgetType?: SurveyWidgetType
+): Record<string, string> {
+    if (type === SurveyType.ExternalSurvey) {
+        return {}
+    }
+
+    switch (position) {
+        case SurveyPosition.TopLeft:
+            return { top: '0', left: '0', transform: 'translate(30px, 30px)' }
+        case SurveyPosition.TopRight:
+            return { top: '0', right: '0', transform: 'translate(-30px, 30px)' }
+        case SurveyPosition.TopCenter:
+            return { top: '0', left: '50%', transform: 'translate(-50%, 30px)' }
+        case SurveyPosition.MiddleLeft:
+            return { top: '50%', left: '0', transform: 'translate(30px, -50%)' }
+        case SurveyPosition.MiddleRight:
+            return { top: '50%', right: '0', transform: 'translate(-30px, -50%)' }
+        case SurveyPosition.MiddleCenter:
+            return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
+        case SurveyPosition.Left:
+            return { left: '30px' }
+        case SurveyPosition.Center:
+            return { left: '50%', transform: 'translateX(-50%)' }
+        default:
+        case SurveyPosition.Right:
+            return { right: type === SurveyType.Widget && surveyWidgetType === SurveyWidgetType.Tab ? '60px' : '30px' }
+    }
+}
