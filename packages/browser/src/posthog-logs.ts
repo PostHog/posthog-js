@@ -8,7 +8,11 @@ export class PostHogLogs {
     private _isLogsEnabled: boolean = false
     private _isLoaded: boolean = false
 
-    constructor(private readonly _instance: PostHog) {}
+    constructor(private readonly _instance: PostHog) {
+        if (this._instance.config.logs?.captureConsoleLogs) {
+            this._isLogsEnabled = true
+        }
+    }
 
     onRemoteConfig(response: RemoteConfig) {
         // only load logs if they are enabled
