@@ -1488,7 +1488,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const flagKeys = sendFeatureFlagsOptions?.flagKeys
 
     // Check if we should only evaluate locally
-    const onlyEvaluateLocally = sendFeatureFlagsOptions?.onlyEvaluateLocally ?? this.options.strictLocalEvaluation ?? false
+    const onlyEvaluateLocally =
+      sendFeatureFlagsOptions?.onlyEvaluateLocally ?? this.options.strictLocalEvaluation ?? false
 
     // If onlyEvaluateLocally is true, only use local evaluation
     if (onlyEvaluateLocally) {

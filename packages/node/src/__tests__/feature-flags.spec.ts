@@ -5766,6 +5766,7 @@ describe('strictLocalEvaluation option', () => {
   jest.useFakeTimers()
 
   beforeEach(() => {
+    mockedFetch.mockClear()
     warnSpy = jest.spyOn(console, 'warn').mockImplementation()
   })
 
