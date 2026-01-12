@@ -735,4 +735,106 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       expect(captureCall[0].properties.$ai_reasoning_tokens).toBe(5)
     })
   })
+
+  describe('Proxy property delegation (issue #2848)', () => {
+    it('should properly delegate getter properties to the underlying model', async () => {
+      // This test verifies the fix for issue #2848 where properties defined as
+      // getters (like supportsObjectGeneration in Anthropic models) were not
+      // properly accessible through the wrapped model.
+      const baseModel = createMockV3Model('gpt-4')
+
+      // Add a getter property to simulate how Anthropic models define supportsObjectGeneration
+      Object.defineProperty(baseModel, 'supportsObjectGeneration', {
+        get: () => true,
+        enumerable: true,
+        configurable: true,
+      })
+
+      // Add a non-enumerable property
+      Object.defineProperty(baseModel, 'internalConfig', {
+        value: { mode: 'json' },
+        enumerable: false,
+        configurable: true,
+      })
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-proxy',
+      })
+
+      // Verify getter property is accessible through the proxy
+      expect((model as any).supportsObjectGeneration).toBe(true)
+
+      // Verify non-enumerable property is accessible through the proxy
+      expect((model as any).internalConfig).toEqual({ mode: 'json' })
+
+      // Verify standard properties still work
+      expect(model.specificationVersion).toBe('v3')
+      expect(model.provider).toBe('openai')
+      expect(model.modelId).toBe('gpt-4')
+    })
+
+    it('should properly delegate prototype methods to the underlying model', async () => {
+      // Create a model with prototype methods (simulating real SDK behavior)
+      class CustomModel {
+        specificationVersion = 'v3' as const
+        provider = 'custom'
+        modelId = 'custom-model'
+        supportedUrls = {}
+
+        doGenerate = jest.fn().mockResolvedValue({
+          text: 'test',
+          usage: { inputTokens: { total: 5 }, outputTokens: { total: 2 } },
+          content: [{ type: 'text', text: 'test' }],
+          response: { modelId: 'custom-model' },
+          providerMetadata: {},
+          finishReason: { unified: 'stop' as const, raw: undefined },
+          warnings: [],
+        })
+
+        doStream = jest.fn()
+
+        // Prototype method that should be accessible through the proxy
+        getModelInfo() {
+          return { name: this.modelId, version: '1.0' }
+        }
+      }
+
+      const baseModel = new CustomModel() as unknown as LanguageModelV3
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-proto',
+      })
+
+      // Verify prototype method is accessible and 'this' context is preserved
+      expect((model as any).getModelInfo()).toEqual({ name: 'custom-model', version: '1.0' })
+    })
+
+    it('should not break when model has null or undefined properties', async () => {
+      const baseModel = createMockV3Model('gpt-4')
+
+      // Add properties that could cause Object.entries to fail if not handled properly
+      ;(baseModel as any).nullProperty = null
+      ;(baseModel as any).undefinedProperty = undefined
+      ;(baseModel as any).objectProperty = { nested: { value: 'test' } }
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-null-props',
+      })
+
+      // Verify these properties are accessible without throwing
+      expect((model as any).nullProperty).toBe(null)
+      expect((model as any).undefinedProperty).toBe(undefined)
+      expect((model as any).objectProperty).toEqual({ nested: { value: 'test' } })
+
+      // Verify the model still works
+      const result = await simulateGenerateText({
+        model: model,
+        prompt: 'What is 9 + 10?',
+      })
+
+      expect(result.text).toBe('19')
+    })
+  })
 })
