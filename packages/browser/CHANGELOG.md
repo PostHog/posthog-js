@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.318.2
+
+### Patch Changes
+
+- [#2871](https://github.com/PostHog/posthog-js/pull/2871) [`4f73495`](https://github.com/PostHog/posthog-js/commit/4f7349535a39b0bb1c46b5a319a28f3f691cf511) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: detecting activity timestamp should not compare null to numbers
+  (2026-01-12)
+- Updated dependencies []:
+    - @posthog/types@1.318.2
+
 ## 1.318.1
 
 ### Patch Changes
