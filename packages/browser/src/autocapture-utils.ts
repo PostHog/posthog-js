@@ -75,10 +75,16 @@ export function makeSafeText(s: string | null | undefined): string | null {
  * @param {Element} el - element to get the text of
  * @returns {string} the element's direct text content
  */
-export function getSafeText(el: Element, config: PostHogConfig['sensitive_data_detection']): string {
+export function getSafeText(el: Element, config: PostHogConfig): string {
     let elText = ''
 
-    if (shouldCaptureElement(el, config) && !isSensitiveElement(el, config) && el.childNodes && el.childNodes.length) {
+    if (
+        shouldCaptureElement(el, config) &&
+        // from '2025-12-11' onwards, we call isSensitiveElement directly inside shouldCaptureElement
+        (config.defaults >= '2025-12-11' || !isSensitiveElement(el, config)) &&
+        el.childNodes &&
+        el.childNodes.length
+    ) {
         each(el.childNodes, function (child) {
             if (isTextNode(child) && child.textContent) {
                 elText += makeSafeText(child.textContent) ?? ''
@@ -348,7 +354,7 @@ export function shouldAutocaptureEvent(
  * @param {Element} el - element to check
  * @returns {boolean} whether the element is marked as no-capture
  */
-function isExplicitNoCapture(el: Element): boolean {
+export function isExplicitNoCapture(el: Element): boolean {
     for (let curEl = el; curEl.parentNode && !isTag(curEl, 'body'); curEl = curEl.parentNode as Element) {
         const classes = getClassNames(curEl)
         if (includes(classes, 'ph-sensitive') || includes(classes, 'ph-no-capture')) {
@@ -364,7 +370,7 @@ function isExplicitNoCapture(el: Element): boolean {
  * @param {Element} el - element to check
  * @returns {boolean} whether the element is opted-in for capture
  */
-function isExplicitCapture(el: Element): boolean {
+export function isExplicitCapture(el: Element): boolean {
     return includes(getClassNames(el), 'ph-include')
 }
 
@@ -374,7 +380,7 @@ function isExplicitCapture(el: Element): boolean {
  * @param {Element} el - element to check
  * @returns {boolean} whether the element should be captured
  */
-export function shouldCaptureElement(el: Element, config: PostHogConfig['sensitive_data_detection']): boolean {
+export function shouldCaptureElement(el: Element, config: PostHogConfig): boolean {
     if (isExplicitNoCapture(el)) {
         return false
     }
@@ -383,7 +389,12 @@ export function shouldCaptureElement(el: Element, config: PostHogConfig['sensiti
         return true
     }
 
-    return !doesCaptureElementHaveSensitiveData(el, config)
+    if (config.defaults >= '2025-12-11') {
+        // the logic from doesCaptureElementHaveSensitiveData moved into isSensitiveElement
+        return !isSensitiveElement(el, config)
+    } else {
+        return !doesCaptureElementHaveSensitiveData(el, config['sensitive_data_detection'])
+    }
 }
 
 /*
@@ -422,7 +433,7 @@ export function isAngularStyleAttr(attributeName: string): boolean {
  * @param {Element} target - element to check
  * @returns {string} text content of the target element and its child span tags
  */
-export function getDirectAndNestedSpanText(target: Element, config: PostHogConfig['sensitive_data_detection']): string {
+export function getDirectAndNestedSpanText(target: Element, config: PostHogConfig): string {
     let text = getSafeText(target, config)
     text = `${text} ${getNestedSpanText(target, config)}`.trim()
     return shouldCaptureValue(text) ? text : ''
@@ -434,7 +445,7 @@ export function getDirectAndNestedSpanText(target: Element, config: PostHogConfi
  * @param {Element} target - element to check
  * @returns {string} text content of span tags
  */
-export function getNestedSpanText(target: Element, config: PostHogConfig['sensitive_data_detection']): string {
+export function getNestedSpanText(target: Element, config: PostHogConfig): string {
     let text = ''
     if (target && target.childNodes && target.childNodes.length) {
         each(target.childNodes, function (child) {
@@ -461,8 +472,8 @@ Now we're using elements_chain. We used to do this parsing/processing during ing
 This code is just copied over from ingestion, but we should optimize it
 to create elements_chain string directly.
 */
-export function getElementsChainString(elements: Properties[]): string {
-    return elementsToString(extractElements(elements))
+export function getElementsChainString(elements: Properties[], captureText: boolean): string {
+    return elementsToString(extractElements(elements, captureText))
 }
 
 // This interface is called 'Element' in plugin-scaffold https://github.com/PostHog/plugin-scaffold/blob/b07d3b879796ecc7e22deb71bf627694ba05386b/src/types.ts#L200
@@ -520,10 +531,10 @@ function elementsToString(elements: PHElement[]): string {
     return ret.join(';')
 }
 
-function extractElements(elements: Properties[]): PHElement[] {
+function extractElements(elements: Properties[], captureText: boolean): PHElement[] {
     return elements.map((el) => {
         const response = {
-            text: el['$el_text']?.slice(0, 400),
+            text: captureText ? el['$el_text']?.slice(0, 400) : undefined,
             tag_name: el['tag_name'],
             href: el['attr__href']?.slice(0, 2048),
             attr_class: extractAttrClass(el),

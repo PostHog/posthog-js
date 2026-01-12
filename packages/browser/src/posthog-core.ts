@@ -91,6 +91,7 @@ import {
     getSurveyInteractionProperty,
     setSurveySeenOnLocalStorage,
 } from './utils/survey-utils'
+import { DEFAULT_SENSITIVE_DATA_DETECTION_CONFIG } from './utils/sensitive-data-detection'
 import {
     isEmptyString,
     isFunction,
@@ -157,15 +158,7 @@ const defaultsThatVaryByConfig = (
     rageclick: defaults && defaults >= '2025-11-30' ? { content_ignorelist: true } : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
-    sensitive_data_detection:
-        defaults && defaults >= '2025-12-11'
-            ? {
-                  allowedInputTypes: ['button', 'checkbox', 'submit', 'reset'],
-                  sensitiveNameRegex: new RegExp(
-                      /^(cc|cardnum|ccnum|creditcard|csc|cvc|cvv|exp|pass|pwd|routing|seccode|securitycode|securitynum|socialsec|socsec|ssn)/i
-                  ),
-              }
-            : {},
+    sensitive_data_detection: defaults && defaults >= '2025-12-11' ? DEFAULT_SENSITIVE_DATA_DETECTION_CONFIG : {},
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value

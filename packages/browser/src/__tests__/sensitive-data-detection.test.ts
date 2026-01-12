@@ -1,21 +1,34 @@
+import { PostHogConfig } from '../types'
 import {
     doesCaptureElementHaveSensitiveData,
     isSensitiveElement,
     isSensitiveValue,
 } from '../utils/sensitive-data-detection'
+import { createMockConfig } from './helpers/posthog-instance'
 
 describe('sensitive data detection', () => {
+    let config: PostHogConfig
+
+    beforeEach(() => {
+        config = createMockConfig({
+            defaults: '2025-12-11',
+            sensitive_data_detection: {
+                allowedInputTypes: ['button', 'checkbox', 'submit', 'reset'],
+            },
+        }) // tests also pass when defaults is pre 2025-12-11
+    })
+
     describe(`isSensitiveElement`, () => {
         it(`should not include input elements`, () => {
-            expect(isSensitiveElement(document!.createElement(`input`), {})).toBe(true)
+            expect(isSensitiveElement(document!.createElement(`input`), config)).toBe(true)
         })
 
         it(`should not include select elements`, () => {
-            expect(isSensitiveElement(document!.createElement(`select`), {})).toBe(true)
+            expect(isSensitiveElement(document!.createElement(`select`), config)).toBe(true)
         })
 
         it(`should not include textarea elements`, () => {
-            expect(isSensitiveElement(document!.createElement(`textarea`), {})).toBe(true)
+            expect(isSensitiveElement(document!.createElement(`textarea`), config)).toBe(true)
         })
 
         it(`should not include elements where contenteditable="true"`, () => {
@@ -25,8 +38,53 @@ describe('sensitive data detection', () => {
             editable.setAttribute(`contenteditable`, `true`)
             noneditable.setAttribute(`contenteditable`, `false`)
 
-            expect(isSensitiveElement(editable, {})).toBe(true)
-            expect(isSensitiveElement(noneditable, {})).toBe(false)
+            expect(isSensitiveElement(editable, config)).toBe(true)
+            expect(isSensitiveElement(noneditable, config)).toBe(false)
+        })
+
+        describe('behavior as of 2025-12-11 defaults', () => {
+            let input: HTMLInputElement
+
+            beforeEach(() => {
+                input = document!.createElement(`input`)
+            })
+
+            it(`matches 'cc' only at the start of the string`, () => {
+                input.name = `my_cc`
+                input.type = 'submit' // to avoid being excluded as an input
+                expect(isSensitiveElement(input, config)).toBe(false)
+
+                input.name = `cc_number`
+                expect(isSensitiveElement(input, config)).toBe(true)
+            })
+
+            it(`matches other sensitive substrings only when they appear at the start`, () => {
+                input.name = `expiration_date_cc`
+                input.type = 'submit' // to avoid being excluded as an input
+                expect(isSensitiveElement(input, config)).toBe(true)
+
+                // this is the new behavior
+                input.name = `my_expert_view`
+                expect(isSensitiveElement(input, config)).toBe(false)
+            })
+
+            it(`allows custom sensitiveNameRegex to be provided`, () => {
+                const customConfig = createMockConfig({
+                    defaults: '2025-12-11',
+                    sensitive_data_detection: {
+                        sensitiveNameRegex: /^somethingreallysensitive/i,
+                    },
+                })
+
+                input.type = 'submit'
+
+                input.name = `somethingreallysensitive`
+                expect(isSensitiveElement(input, customConfig)).toBe(true)
+
+                // Should not match default patterns (they were replaced)
+                input.name = `password`
+                expect(isSensitiveElement(input, customConfig)).toBe(false)
+            })
         })
     })
 
@@ -76,12 +134,12 @@ describe('sensitive data detection', () => {
 
         it(`should not include hidden fields`, () => {
             input.type = `hidden`
-            expect(doesCaptureElementHaveSensitiveData(input, {})).toBe(true)
+            expect(doesCaptureElementHaveSensitiveData(input)).toBe(true)
         })
 
         it(`should not include password fields`, () => {
             input.type = `password`
-            expect(doesCaptureElementHaveSensitiveData(input, {})).toBe(true)
+            expect(doesCaptureElementHaveSensitiveData(input)).toBe(true)
         })
 
         it(`should not include fields with sensitive names`, () => {
@@ -106,30 +164,31 @@ describe('sensitive data detection', () => {
             ]
             sensitiveNames.forEach((name) => {
                 input.name = ''
-                expect(doesCaptureElementHaveSensitiveData(input, {})).toBe(false)
+                expect(doesCaptureElementHaveSensitiveData(input)).toBe(false)
 
                 input.name = name
-                expect(doesCaptureElementHaveSensitiveData(input, {})).toBe(true)
+                expect(doesCaptureElementHaveSensitiveData(input)).toBe(true)
             })
         })
 
-        // #TODO@luke-belton: fix this going forwards
-        describe('a bug with substring matching', () => {
-            it(`matches 'cc' only at the start of the string`, () => {
-                input.name = `my_cc`
-                expect(doesCaptureElementHaveSensitiveData(input, {})).toBe(false)
+        describe('Sensitive name matching', () => {
+            describe('behavior prior to 2025-12-11 defaults', () => {
+                it(`matches 'cc' only at the start of the string`, () => {
+                    input.name = `my_cc`
+                    expect(doesCaptureElementHaveSensitiveData(input)).toBe(false)
 
-                input.name = `cc_number`
-                expect(doesCaptureElementHaveSensitiveData(input, {})).toBe(true)
-            })
+                    input.name = `cc_number`
+                    expect(doesCaptureElementHaveSensitiveData(input)).toBe(true)
+                })
 
-            it(`matches other sensitive substrings wherever they appear`, () => {
-                input.name = `expiration_date_cc`
-                expect(doesCaptureElementHaveSensitiveData(input, {})).toBe(true)
+                it(`matches other sensitive substrings wherever they appear`, () => {
+                    input.name = `expiration_date_cc`
+                    expect(doesCaptureElementHaveSensitiveData(input)).toBe(true)
 
-                // this is the bug!
-                input.name = `my_expert_view`
-                expect(doesCaptureElementHaveSensitiveData(input, {})).toBe(true)
+                    // this is the bug!
+                    input.name = `my_expert_view`
+                    expect(doesCaptureElementHaveSensitiveData(input)).toBe(true)
+                })
             })
         })
     })

@@ -13,12 +13,22 @@ import {
     getClassNames,
     makeSafeText,
     shouldCaptureValue,
+    isExplicitCapture,
 } from '../autocapture-utils'
 import { document } from '../utils/globals'
 import { makeMouseEvent } from './autocapture.test'
-import { AutocaptureConfig } from '../types'
+import { AutocaptureConfig, PostHogConfig } from '../types'
+import { createMockConfig } from './helpers/posthog-instance'
 
 describe(`Autocapture utility functions`, () => {
+    let config: PostHogConfig
+
+    beforeEach(() => {
+        config = createMockConfig({
+            defaults: '2025-12-11', // all tests also pass with pre 2025-12-11 defaults
+        })
+    })
+
     afterEach(() => {
         document!.getElementsByTagName('html')[0].innerHTML = ''
     })
@@ -28,14 +38,14 @@ describe(`Autocapture utility functions`, () => {
             const el = document!.createElement(`div`)
 
             el.innerHTML = `  Why  hello  there  `
-            expect(getSafeText(el, {})).toBe(`Why hello there`)
+            expect(getSafeText(el, config)).toBe(`Why hello there`)
 
             el.innerHTML = `
           Why
           hello
           there
       `
-            expect(getSafeText(el, {})).toBe(`Why hello there`)
+            expect(getSafeText(el, config)).toBe(`Why hello there`)
 
             el.innerHTML = `
           Why
@@ -44,7 +54,7 @@ describe(`Autocapture utility functions`, () => {
           <p>not</p>
           there
       `
-            expect(getSafeText(el, {})).toBe(`Whyhellothere`)
+            expect(getSafeText(el, config)).toBe(`Whyhellothere`)
         })
 
         it(`shouldn't collect text from element children`, () => {
@@ -52,7 +62,7 @@ describe(`Autocapture utility functions`, () => {
             let safeText
 
             el.innerHTML = `<div>sensitive</div>`
-            safeText = getSafeText(el, {})
+            safeText = getSafeText(el, config)
             expect(safeText).toEqual(expect.not.arrayContaining([`sensitive`]))
             expect(safeText).toBe(``)
 
@@ -63,7 +73,7 @@ describe(`Autocapture utility functions`, () => {
           <p>sensitive</p>
           there
       `
-            safeText = getSafeText(el, {})
+            safeText = getSafeText(el, config)
             expect(safeText).toEqual(expect.not.arrayContaining([`sensitive`]))
             expect(safeText).toBe(`Whyhellothere`)
         })
@@ -73,61 +83,72 @@ describe(`Autocapture utility functions`, () => {
 
             el = document!.createElement(`input`)
             el.innerHTML = `Why hello there`
-            expect(getSafeText(el, {})).toBe(``)
+            expect(getSafeText(el, config)).toBe(``)
 
             el = document!.createElement(`textarea`)
             el.innerHTML = `Why hello there`
-            expect(getSafeText(el, {})).toBe(``)
+            expect(getSafeText(el, config)).toBe(``)
 
             el = document!.createElement(`select`)
             el.innerHTML = `Why hello there`
-            expect(getSafeText(el, {})).toBe(``)
+            expect(getSafeText(el, config)).toBe(``)
 
             el = document!.createElement(`div`)
             el.setAttribute(`contenteditable`, `true`)
             el.innerHTML = `Why hello there`
-            expect(getSafeText(el, {})).toBe(``)
+            expect(getSafeText(el, config)).toBe(``)
         })
 
         it(`shouldn't collect sensitive values`, () => {
             const el = document!.createElement(`div`)
 
             el.innerHTML = `Why 123-58-1321 hello there`
-            expect(getSafeText(el, {})).toBe(`Why hello there`)
+            expect(getSafeText(el, config)).toBe(`Why hello there`)
 
             el.innerHTML = `
         4111111111111111
         Why hello there
       `
-            expect(getSafeText(el, {})).toBe(`Why hello there`)
+            expect(getSafeText(el, config)).toBe(`Why hello there`)
 
             el.innerHTML = `
         Why hello there
         5105-1051-0510-5100
       `
-            expect(getSafeText(el, {})).toBe(`Why hello there`)
+            expect(getSafeText(el, config)).toBe(`Why hello there`)
         })
 
         it(`should handle text with quotation marks properly`, () => {
             const el = document!.createElement(`div`)
 
             el.innerHTML = `Text with "double quotes" in it`
-            expect(getSafeText(el, {})).toBe(`Text with "double quotes" in it`)
+            expect(getSafeText(el, config)).toBe(`Text with "double quotes" in it`)
 
             el.innerHTML = `Text with 'single quotes' in it`
-            expect(getSafeText(el, {})).toBe(`Text with 'single quotes' in it`)
+            expect(getSafeText(el, config)).toBe(`Text with 'single quotes' in it`)
 
             el.innerHTML = `Mixed "double" and 'single' quotes`
-            expect(getSafeText(el, {})).toBe(`Mixed "double" and 'single' quotes`)
+            expect(getSafeText(el, config)).toBe(`Mixed "double" and 'single' quotes`)
         })
 
-        // TODO:@luke-belton make this test pass in future
-        it(`should collect text from sensitive elements with ph-include class`, () => {
-            const input = document!.createElement(`input`)
-            input.className = `ph-include`
-            input.appendChild(document.createTextNode(`Hello world`))
-            document!.body.appendChild(input)
-            // expect(getSafeText(input)).toBe(`Hello world`)
+        describe(`collecting text from elements with ph-include class`, () => {
+            it(`when defaults are pre 2025-12-11 it not should collect text from sensitive elements with ph-include class`, () => {
+                config.defaults = '2025-11-30'
+                const input = document!.createElement(`input`)
+                input.className = `ph-include`
+                input.appendChild(document.createTextNode(`Hello world`))
+                document!.body.appendChild(input)
+                expect(getSafeText(input, config)).toBe(``)
+            })
+
+            it(`when defaults is 2025-12-11 it should collect text from sensitive elements with ph-include class`, () => {
+                config.defaults = '2025-12-11'
+                const input = document!.createElement(`input`)
+                input.className = `ph-include`
+                input.appendChild(document.createTextNode(`Hello world`))
+                document!.body.appendChild(input)
+                expect(getSafeText(input, config)).toBe(`Hello world`)
+            })
         })
 
         it(`shouldn't collect text from elements with ph-no-capture class`, () => {
@@ -135,7 +156,7 @@ describe(`Autocapture utility functions`, () => {
             el.className = `ph-no-capture`
             el.innerHTML = `Hello world`
             document!.body.appendChild(el)
-            expect(getSafeText(el)).toBe(``)
+            expect(getSafeText(el, config)).toBe(``)
         })
 
         it(`shouldn't collect text from elements with ph-sensitive class`, () => {
@@ -143,7 +164,7 @@ describe(`Autocapture utility functions`, () => {
             el.className = `ph-sensitive`
             el.innerHTML = `Hello world`
             document!.body.appendChild(el)
-            expect(getSafeText(el)).toBe(``)
+            expect(getSafeText(el, config)).toBe(``)
         })
     })
 
@@ -348,6 +369,20 @@ describe(`Autocapture utility functions`, () => {
         })
     })
 
+    describe(`isExplicitCapture`, () => {
+        it(`should return true for elements with class "ph-include"`, () => {
+            const el = document!.createElement(`div`)
+            el.className = `test1 ph-include test2`
+            expect(isExplicitCapture(el)).toBe(true)
+        })
+
+        it(`should return false for elements without class "ph-include"`, () => {
+            const el = document!.createElement(`div`)
+            el.className = `test1 test2`
+            expect(isExplicitCapture(el)).toBe(false)
+        })
+    })
+
     describe(`shouldCaptureElement`, () => {
         let el: HTMLDivElement
         let input: HTMLInputElement
@@ -365,27 +400,22 @@ describe(`Autocapture utility functions`, () => {
             document!.body.appendChild(parent2)
         })
 
-        it(`should include sensitive elements with class "ph-include"`, () => {
-            el.className = `test1 ph-include test2`
-            expect(shouldCaptureElement(el, {})).toBe(true)
-        })
-
         it(`should never include inputs with class "ph-sensitive"`, () => {
             el.className = `test1 ph-include ph-sensitive test2`
-            expect(shouldCaptureElement(el, {})).toBe(false)
+            expect(shouldCaptureElement(el, config)).toBe(false)
         })
 
         it(`should not include elements with class "ph-no-capture" as properties`, () => {
             el.className = `test1 ph-no-capture test2`
-            expect(shouldCaptureElement(el, {})).toBe(false)
+            expect(shouldCaptureElement(el, config)).toBe(false)
         })
 
         it(`should not include elements with a parent that have class "ph-no-capture" as properties`, () => {
-            expect(shouldCaptureElement(el, {})).toBe(true)
+            expect(shouldCaptureElement(el, config)).toBe(true)
 
             parent2.className = `ph-no-capture`
 
-            expect(shouldCaptureElement(el, {})).toBe(false)
+            expect(shouldCaptureElement(el, config)).toBe(false)
         })
 
         // See https://github.com/posthog/posthog-js/issues/165
@@ -397,17 +427,17 @@ describe(`Autocapture utility functions`, () => {
 
             // test
             input.name = el as any
-            shouldCaptureElement(parent1, {}) // previously this would cause el.replace to be called
+            shouldCaptureElement(parent1, config) // previously this would cause el.replace to be called
             expect((el as any).replace.called).toBe(false)
             input.name = ''
 
             parent1.id = el as any
-            shouldCaptureElement(parent2, {}) // previously this would cause el.replace to be called
+            shouldCaptureElement(parent2, config) // previously this would cause el.replace to be called
             expect((el as any).replace.called).toBe(false)
             parent1.id = ''
 
             input.type = el as any
-            shouldCaptureElement(parent2, {}) // previously this would cause el.replace to be called
+            shouldCaptureElement(parent2, config) // previously this would cause el.replace to be called
             expect((el as any).replace.called).toBe(false)
             input.type = ''
 
@@ -459,7 +489,7 @@ describe(`Autocapture utility functions`, () => {
         it(`should return direct text on the element with no children`, () => {
             const el = document!.createElement(`button`)
             el.innerHTML = `test`
-            expect(getDirectAndNestedSpanText(el, {})).toBe('test')
+            expect(getDirectAndNestedSpanText(el, config)).toBe('test')
         })
         it(`should return the direct text on the el and text from child spans`, () => {
             const parent = document!.createElement(`button`)
@@ -467,20 +497,22 @@ describe(`Autocapture utility functions`, () => {
             const child = document!.createElement(`span`)
             child.innerHTML = `test 1`
             parent.appendChild(child)
-            expect(getDirectAndNestedSpanText(parent, {})).toBe('test test 1')
+            expect(getDirectAndNestedSpanText(parent, config)).toBe('test test 1')
         })
 
         it(`should properly handle quotation marks in link text`, () => {
             const link = document!.createElement('a')
             link.innerHTML = `Click here to "get started" today!`
 
-            expect(getDirectAndNestedSpanText(link, {})).toBe(`Click here to "get started" today!`)
+            expect(getDirectAndNestedSpanText(link, config)).toBe(`Click here to "get started" today!`)
 
             link.innerHTML = `Click here to 'get started' today!`
-            expect(getDirectAndNestedSpanText(link, {})).toBe(`Click here to 'get started' today!`)
+            expect(getDirectAndNestedSpanText(link, config)).toBe(`Click here to 'get started' today!`)
 
             link.innerHTML = `Click here to "get started" with our 'special offer'!`
-            expect(getDirectAndNestedSpanText(link, {})).toBe(`Click here to "get started" with our 'special offer'!`)
+            expect(getDirectAndNestedSpanText(link, config)).toBe(
+                `Click here to "get started" with our 'special offer'!`
+            )
         })
 
         it(`should properly handle complex titles with multiple quotes`, () => {
@@ -488,7 +520,7 @@ describe(`Autocapture utility functions`, () => {
             link.innerHTML = `Course Title: "Understanding the 'Creative Process' in Modern Design"`
 
             // Check that quotes are preserved in the extracted text
-            expect(getDirectAndNestedSpanText(link, {})).toBe(
+            expect(getDirectAndNestedSpanText(link, config)).toBe(
                 `Course Title: "Understanding the 'Creative Process' in Modern Design"`
             )
 
@@ -513,7 +545,7 @@ describe(`Autocapture utility functions`, () => {
             // Since we're creating direct text nodes, we need to check the actual output format
             // This matches how makeSafeText joins text segments without spaces between text nodes
             const expected = 'Course Title:"Understanding the \'Creative Process\' in Modern Design"'
-            expect(getDirectAndNestedSpanText(link, {})).toBe(expected)
+            expect(getDirectAndNestedSpanText(link, config)).toBe(expected)
         })
 
         it(`should handle link text with spans containing parts of quoted text`, () => {
@@ -529,7 +561,7 @@ describe(`Autocapture utility functions`, () => {
             link.appendChild(span)
 
             // Verify the text is properly collected and joined
-            expect(getDirectAndNestedSpanText(link, {})).toBe(
+            expect(getDirectAndNestedSpanText(link, config)).toBe(
                 `Course Title: "Understanding the 'Creative Process' in Modern Design"`
             )
         })
@@ -538,18 +570,18 @@ describe(`Autocapture utility functions`, () => {
     describe(`getNestedSpanText`, () => {
         it(`should return an empty string if there are no children or text`, () => {
             const el = document!.createElement(`button`)
-            expect(getNestedSpanText(el, {})).toBe('')
+            expect(getNestedSpanText(el, config)).toBe('')
         })
         it(`should return the text from sibling child spans`, () => {
             const parent = document!.createElement(`button`)
             const child1 = document!.createElement(`span`)
             child1.innerHTML = `test`
             parent.appendChild(child1)
-            expect(getNestedSpanText(parent, {})).toBe('test')
+            expect(getNestedSpanText(parent, config)).toBe('test')
             const child2 = document!.createElement(`span`)
             child2.innerHTML = `test2`
             parent.appendChild(child2)
-            expect(getNestedSpanText(parent, {})).toBe('test test2')
+            expect(getNestedSpanText(parent, config)).toBe('test test2')
         })
         it(`should return the text from nested child spans`, () => {
             const parent = document!.createElement(`button`)
@@ -559,65 +591,92 @@ describe(`Autocapture utility functions`, () => {
             const child2 = document!.createElement(`span`)
             child2.innerHTML = `test2`
             child1.appendChild(child2)
-            expect(getNestedSpanText(parent, {})).toBe('test test2')
+            expect(getNestedSpanText(parent, config)).toBe('test test2')
         })
     })
 
     describe('getElementsChainString', () => {
         it('should return an empty string with no elements', () => {
-            const elementChain = getElementsChainString([])
+            const elementChain = getElementsChainString([], true)
 
             expect(elementChain).toEqual('')
         })
         it('should process elements correctly', () => {
-            const elementChain = getElementsChainString([
-                {
-                    tag_name: 'div',
-                    $el_text: 'text',
-                    nth_child: 1,
-                    nth_of_type: 2,
-                },
-            ])
+            const elementChain = getElementsChainString(
+                [
+                    {
+                        tag_name: 'div',
+                        $el_text: 'text',
+                        nth_child: 1,
+                        nth_of_type: 2,
+                    },
+                ],
+                true
+            )
 
             expect(elementChain).toEqual('div:nth-child="1"nth-of-type="2"text="text"')
+        })
+        it('should not capture text when captureText is false', () => {
+            const elementChain = getElementsChainString(
+                [
+                    {
+                        tag_name: 'div',
+                        $el_text: 'text',
+                        nth_child: 1,
+                        nth_of_type: 2,
+                    },
+                ],
+                false
+            )
+
+            expect(elementChain).toEqual('div:nth-child="1"nth-of-type="2"')
         })
 
         it('should properly escape quotation marks in elements', () => {
             // Test with double quotes
-            let elementChain = getElementsChainString([
-                {
-                    tag_name: 'a',
-                    $el_text: 'Click here to "get started" today!',
-                    nth_child: 1,
-                    nth_of_type: 1,
-                },
-            ])
+            let elementChain = getElementsChainString(
+                [
+                    {
+                        tag_name: 'a',
+                        $el_text: 'Click here to "get started" today!',
+                        nth_child: 1,
+                        nth_of_type: 1,
+                    },
+                ],
+                true
+            )
 
             // Should properly escape double quotes
             expect(elementChain).toContain('text="Click here to \\"get started\\" today!"')
 
             // Test with single quotes
-            elementChain = getElementsChainString([
-                {
-                    tag_name: 'a',
-                    $el_text: "Click here to 'get started' today!",
-                    nth_child: 1,
-                    nth_of_type: 1,
-                },
-            ])
+            elementChain = getElementsChainString(
+                [
+                    {
+                        tag_name: 'a',
+                        $el_text: "Click here to 'get started' today!",
+                        nth_child: 1,
+                        nth_of_type: 1,
+                    },
+                ],
+                true
+            )
 
             // Single quotes don't need to be escaped
             expect(elementChain).toContain('text="Click here to \'get started\' today!"')
 
             // Test with mixed quotes
-            elementChain = getElementsChainString([
-                {
-                    tag_name: 'a',
-                    $el_text: 'Course Title: "Understanding the \'Creative Process\' in Modern Design"',
-                    nth_child: 1,
-                    nth_of_type: 1,
-                },
-            ])
+            elementChain = getElementsChainString(
+                [
+                    {
+                        tag_name: 'a',
+                        $el_text: 'Course Title: "Understanding the \'Creative Process\' in Modern Design"',
+                        nth_child: 1,
+                        nth_of_type: 1,
+                    },
+                ],
+                true
+            )
 
             // Should properly escape double quotes, single quotes remain unescaped
             expect(elementChain).toContain(
@@ -649,7 +708,7 @@ describe(`Autocapture utility functions`, () => {
             ]
 
             // Get the elements chain string
-            const elementsChain = getElementsChainString(testElements)
+            const elementsChain = getElementsChainString(testElements, config)
 
             // For each test element, verify the element text is properly escaped in the chain
             testElements.forEach((element) => {

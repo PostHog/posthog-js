@@ -7,6 +7,7 @@ import {
     getEventTarget,
     getSafeText,
     isAngularStyleAttr,
+    isExplicitNoCapture,
     makeSafeText,
     shouldAutocaptureEvent,
     shouldCaptureElement,
@@ -26,7 +27,6 @@ import { createLogger } from './utils/logger'
 import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
 import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
-import { includes } from '@posthog/core'
 
 const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
 
@@ -39,11 +39,14 @@ function limitText(length: number, text: string): string {
     return text
 }
 
-export function getAugmentPropertiesFromElement(
-    elem: Element,
-    config: PostHogConfig['sensitive_data_detection']
-): Properties {
-    const shouldCaptureEl = shouldCaptureElement(elem, config)
+export function getAugmentPropertiesFromElement(elem: Element, config: PostHogConfig): Properties {
+    let shouldCaptureEl = false
+    if (config.defaults >= '2025-12-11') {
+        // new opt-in model for augment properties - ph-no-capture still takes precedence
+        shouldCaptureEl = !isExplicitNoCapture(elem)
+    } else {
+        shouldCaptureEl = shouldCaptureElement(elem, config)
+    }
     if (!shouldCaptureEl) {
         return {}
     }
@@ -86,17 +89,21 @@ export function getPropertiesFromElement(
     maskAllAttributes: boolean,
     maskText: boolean,
     elementAttributeIgnorelist: string[] | undefined,
-    sensitiveDataDetectionConfig?: PostHogConfig['sensitive_data_detection']
+    config: PostHogConfig
 ): Properties {
     const tag_name = elem.tagName.toLowerCase()
     const props: Properties = {
         tag_name: tag_name,
     }
-    if (autocaptureCompatibleElements.indexOf(tag_name) > -1 && !maskText) {
+    let sensitiveElement: boolean = false
+    if (config.defaults >= '2025-12-11') {
+        sensitiveElement = isSensitiveElement(elem, config)
+    }
+    if (!sensitiveElement && autocaptureCompatibleElements.indexOf(tag_name) > -1 && !maskText) {
         if (tag_name.toLowerCase() === 'a' || tag_name.toLowerCase() === 'button') {
-            props['$el_text'] = limitText(1024, getDirectAndNestedSpanText(elem, sensitiveDataDetectionConfig))
+            props['$el_text'] = limitText(1024, getDirectAndNestedSpanText(elem, config))
         } else {
-            props['$el_text'] = limitText(1024, getSafeText(elem, sensitiveDataDetectionConfig))
+            props['$el_text'] = limitText(1024, getSafeText(elem, config))
         }
     }
 
@@ -109,11 +116,7 @@ export function getPropertiesFromElement(
     // capture the deny list here because this not-a-class class makes it tricky to use this.config in the function below
     each(elem.attributes, function (attr: Attr) {
         // Only capture attributes we know are safe
-        if (
-            isSensitiveElement(elem, sensitiveDataDetectionConfig) &&
-            ['name', 'id', 'class', 'aria-label'].indexOf(attr.name) === -1
-        )
-            return
+        if (isSensitiveElement(elem, config) && ['name', 'id', 'class', 'aria-label'].indexOf(attr.name) === -1) return
 
         if (elementAttributeIgnorelist?.includes(attr.name)) return
 
@@ -149,18 +152,14 @@ export function autocapturePropertiesForElement(
     target: Element,
     {
         e,
-        maskAllElementAttributes,
-        maskAllText,
+        instanceConfig,
         elementAttributeIgnoreList,
         elementsChainAsString,
-        sensitiveDataDetectionConfig,
     }: {
         e: Event
-        maskAllElementAttributes: boolean
-        maskAllText: boolean
+        instanceConfig: PostHogConfig
         elementAttributeIgnoreList?: string[] | undefined
         elementsChainAsString: boolean
-        sensitiveDataDetectionConfig: PostHogConfig['sensitive_data_detection']
     }
 ): { props: Properties; explicitNoCapture?: boolean } {
     const targetElementList = [target]
@@ -180,28 +179,34 @@ export function autocapturePropertiesForElement(
     let href: string | false = false
     let explicitNoCapture = false
 
+    let isTargetElementSensitive = false
+    if (instanceConfig.defaults >= '2025-12-11') {
+        isTargetElementSensitive = isSensitiveElement(target, instanceConfig)
+    }
+
     each(targetElementList, (el) => {
-        const shouldCaptureEl = shouldCaptureElement(el, sensitiveDataDetectionConfig)
+        // allow users to programmatically prevent capturing of elements by adding class 'ph-no-capture'
+        // we search up the tree to see if any parent elements have this class
+        explicitNoCapture ||= isExplicitNoCapture(el)
 
         // if the element or a parent element is an anchor tag
         // include the href as a property
         if (el.tagName.toLowerCase() === 'a') {
             href = el.getAttribute('href')
-            href = shouldCaptureEl && href && shouldCaptureValue(href) && href
-        }
-
-        // allow users to programmatically prevent capturing of elements by adding class 'ph-no-capture'
-        const classes = getClassNames(el)
-
-        if (includes(classes, 'ph-no-capture')) {
-            explicitNoCapture = true
+            href = !explicitNoCapture && href && shouldCaptureValue(href) && href
         }
 
         elementsJson.push(
-            getPropertiesFromElement(el, maskAllElementAttributes, maskAllText, elementAttributeIgnoreList)
+            getPropertiesFromElement(
+                el,
+                instanceConfig.mask_all_element_attributes,
+                instanceConfig.mask_all_text,
+                elementAttributeIgnoreList,
+                instanceConfig
+            )
         )
 
-        const augmentProperties = getAugmentPropertiesFromElement(el, sensitiveDataDetectionConfig)
+        const augmentProperties = getAugmentPropertiesFromElement(el, instanceConfig)
         extend(autocaptureAugmentProperties, augmentProperties)
     })
 
@@ -209,13 +214,13 @@ export function autocapturePropertiesForElement(
         return { props: {}, explicitNoCapture }
     }
 
-    if (!maskAllText) {
+    if (!instanceConfig.mask_all_text && !isTargetElementSensitive) {
         // if the element is a button or anchor tag get the span text from any
         // children and include it as/with the text property on the parent element
         if (target.tagName.toLowerCase() === 'a' || target.tagName.toLowerCase() === 'button') {
-            elementsJson[0]['$el_text'] = getDirectAndNestedSpanText(target, sensitiveDataDetectionConfig)
+            elementsJson[0]['$el_text'] = getDirectAndNestedSpanText(target, instanceConfig)
         } else {
-            elementsJson[0]['$el_text'] = getSafeText(target, sensitiveDataDetectionConfig)
+            elementsJson[0]['$el_text'] = getSafeText(target, instanceConfig)
         }
     }
 
@@ -234,7 +239,12 @@ export function autocapturePropertiesForElement(
         // Sending "$elements" is deprecated. Only one client on US cloud uses this.
         !elementsChainAsString ? { $elements: elementsJson } : {},
         // Always send $elements_chain, as it's needed downstream in site app filtering
-        { $elements_chain: getElementsChainString(elementsJson) },
+        {
+            $elements_chain: getElementsChainString(
+                elementsJson,
+                instanceConfig.defaults < '2025-12-11' || !isTargetElementSensitive
+            ),
+        },
         elementsJson[0]?.['$el_text'] ? { $el_text: elementsJson[0]?.['$el_text'] } : {},
         externalHref && e.type === 'click' ? { $external_click_url: externalHref } : {},
         autocaptureAugmentProperties
@@ -394,11 +404,9 @@ export class Autocapture {
         ) {
             const { props, explicitNoCapture } = autocapturePropertiesForElement(target, {
                 e,
-                maskAllElementAttributes: this.instance.config.mask_all_element_attributes,
-                maskAllText: this.instance.config.mask_all_text,
+                instanceConfig: this.instance.config,
                 elementAttributeIgnoreList: this._config.element_attribute_ignorelist,
                 elementsChainAsString: this._elementsChainAsString,
-                sensitiveDataDetectionConfig: this.instance.config.sensitive_data_detection,
             })
 
             if (explicitNoCapture) {
