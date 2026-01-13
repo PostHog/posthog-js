@@ -10,9 +10,6 @@ import type { SAMPLED } from './extensions/replay/external/triggerMatching'
 // Re-export public types from @posthog/types
 // ============================================================================
 
-// PostHog instance type
-export type { PostHog as PostHogInterface } from '@posthog/types'
-
 // Common types
 export type { Property, Properties, JsonType, JsonRecord } from '@posthog/types'
 
@@ -65,8 +62,10 @@ export type {
     SlimDOMOptions,
     SessionRecordingOptions,
     RequestQueueConfig,
-    PostHogConfig,
 } from '@posthog/types'
+
+// Toolbar types
+export type { ToolbarUserIntent, ToolbarSource, ToolbarVersion, ToolbarParams } from '@posthog/types'
 
 // Re-export KnownUnsafeEditableEvent from @posthog/core for backwards compatibility
 export type { KnownUnsafeEditableEvent } from '@posthog/core'
@@ -87,11 +86,23 @@ import type {
     CapturedNetworkRequest,
     SessionRecordingOptions,
     FeatureFlagDetail,
+    ToolbarParams,
+    PostHogConfig as BasePostHogConfig,
+    PostHog as BasePostHogInterface,
 } from '@posthog/types'
 
-export enum Compression {
-    GZipJS = 'gzip-js',
-    Base64 = 'base64',
+/* Small override from the base class to make it more specific to the browser/src/posthog-core.ts file
+ * This guarantees we'll be able to use `PostHogConfig` as implemented in the browser/src/posthog-core.ts file
+ * using the proper `loaded` function signature.
+ */
+export type PostHogInterface = Omit<BasePostHogInterface, 'config' | 'init' | 'set_config'>
+
+/*
+ * Specify that `loaded` should be using the PostHog instance type
+ * as implemented by the browser/src/posthog-core.ts file rather than the @posthog/types type
+ */
+export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
+    loaded: (posthog: PostHogInterface) => void
 }
 
 // See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
@@ -373,25 +384,6 @@ export interface PersistentStore {
 export type Breaker = {}
 export type EventHandler = (event: Event) => boolean | void
 
-export type ToolbarUserIntent = 'add-action' | 'edit-action'
-export type ToolbarSource = 'url' | 'localstorage'
-export type ToolbarVersion = 'toolbar'
-
-/* sync with posthog */
-export interface ToolbarParams {
-    token?: string /** public posthog-js token */
-    temporaryToken?: string /** private temporary user token */
-    actionId?: number
-    userIntent?: ToolbarUserIntent
-    source?: ToolbarSource
-    toolbarVersion?: ToolbarVersion
-    instrument?: boolean
-    distinctId?: string
-    userEmail?: string
-    dataAttributes?: string[]
-    featureFlags?: Record<string, string | boolean>
-}
-
 export type SnippetArrayItem = [method: string, ...args: any[]]
 
 export type NetworkRecordOptions = {
@@ -470,4 +462,9 @@ export type OverrideConfig = {
     linked_flag: boolean
     url_trigger: boolean
     event_trigger: boolean
+}
+
+export enum Compression {
+    GZipJS = 'gzip-js',
+    Base64 = 'base64',
 }

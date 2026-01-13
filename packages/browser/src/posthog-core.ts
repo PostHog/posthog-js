@@ -1912,6 +1912,8 @@ export class PostHog implements PostHogInterface {
      *
      * {@label Feature flags}
      *
+     * @public
+     *
      * @example
      * ```js
      * posthog.onFeatureFlags(function(featureFlags, featureFlagsVariants, { errorsLoading }) {
@@ -1957,6 +1959,8 @@ export class PostHog implements PostHogInterface {
      * Can be used, for example, to sync the PostHog session id with a backend session.
      *
      * {@label Identification}
+     *
+     * @public
      *
      * @example
      * ```js
@@ -2093,7 +2097,7 @@ export class PostHog implements PostHogInterface {
      *
      * {@label Surveys}
      *
-     *
+     * @public
      * @deprecated
      *
      * @param surveyId The ID of the survey to check.
@@ -3038,6 +3042,8 @@ export class PostHog implements PostHogInterface {
      * property is set, getSessionProperty() will return the undefined value.
      *
      * {@label Identification}
+     *
+     * @public
      *
      * @remarks
      * This is based on browser-level `sessionStorage`, NOT the PostHog session.

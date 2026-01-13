@@ -171,10 +171,9 @@ export interface SurveyElement {
     order?: number
     group_id?: number
 }
-export interface SurveyRenderReason {
-    visible: boolean
-    disabledReason?: string
-}
+
+// Re-export from @posthog/types to avoid duplication
+export type { SurveyRenderReason } from '@posthog/types'
 
 export enum SurveySchedule {
     Once = 'once',
