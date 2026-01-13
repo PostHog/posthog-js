@@ -13,7 +13,7 @@ import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import { AutocaptureConfig, FlagsResponse, PostHogConfig, RageclickConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
-import { createPosthogInstance } from './helpers/posthog-instance'
+import { createMockConfig, createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { isUndefined } from '@posthog/core'
 
@@ -64,6 +64,7 @@ describe('Autocapture system', () => {
     let autocapture: Autocapture
     let posthog: PostHog
     let beforeSendMock: jest.Mock
+    let config: PostHogConfig
 
     beforeEach(async () => {
         jest.spyOn(window!.console, 'log').mockImplementation()
@@ -77,13 +78,13 @@ describe('Autocapture system', () => {
         })
 
         beforeSendMock = jest.fn().mockImplementation((...args) => args)
-
-        posthog = await createPosthogInstance(uuidv7(), {
-            api_host: 'https://test.com',
-            token: 'testtoken',
+        config = createMockConfig({
             autocapture: true,
             before_send: beforeSendMock,
+            defaults: '2025-12-11', // all tests also pass with pre 2025-12-11 defaults
         })
+
+        posthog = await createPosthogInstance(uuidv7(), config)
 
         if (isUndefined(posthog.autocapture)) {
             throw new Error('helping TS by confirming this is created by now')
@@ -144,49 +145,49 @@ describe('Autocapture system', () => {
         })
 
         it('should contain the proper tag name', () => {
-            const props = getPropertiesFromElement(div, false, false, undefined)
+            const props = getPropertiesFromElement(div, false, false, undefined, config)
 
             expect(props['tag_name']).toBe('div')
         })
 
         it('should contain class list', () => {
-            const props = getPropertiesFromElement(div, false, false, undefined)
+            const props = getPropertiesFromElement(div, false, false, undefined, config)
 
             expect(props['classes']).toEqual(['class1', 'class2', 'class3'])
         })
 
         it('should not collect input value', () => {
-            const props = getPropertiesFromElement(input, false, false, undefined)
+            const props = getPropertiesFromElement(input, false, false, undefined, config)
 
             expect(props['value']).toBeUndefined()
         })
 
         it('should strip element value with class "ph-sensitive"', () => {
-            const props = getPropertiesFromElement(sensitiveInput, false, false, undefined)
+            const props = getPropertiesFromElement(sensitiveInput, false, false, undefined, config)
 
             expect(props['value']).toBeUndefined()
         })
 
         it('should strip hidden element value', () => {
-            const props = getPropertiesFromElement(hidden, false, false, undefined)
+            const props = getPropertiesFromElement(hidden, false, false, undefined, config)
 
             expect(props['value']).toBeUndefined()
         })
 
         it('should strip password element value', () => {
-            const props = getPropertiesFromElement(password, false, false, undefined)
+            const props = getPropertiesFromElement(password, false, false, undefined, config)
 
             expect(props['value']).toBeUndefined()
         })
 
         it('should contain nth-of-type', () => {
-            const props = getPropertiesFromElement(div, false, false, undefined)
+            const props = getPropertiesFromElement(div, false, false, undefined, config)
 
             expect(props['nth_of_type']).toBe(2)
         })
 
         it('should contain nth-child', () => {
-            const props = getPropertiesFromElement(password, false, false, undefined)
+            const props = getPropertiesFromElement(password, false, false, undefined, config)
 
             expect(props['nth_child']).toBe(7)
         })
@@ -196,7 +197,7 @@ describe('Autocapture system', () => {
             angularDiv.setAttribute('_ngcontent-dpm-c448', '')
             angularDiv.setAttribute('_nghost-dpm-c448', '')
 
-            const props = getPropertiesFromElement(angularDiv, false, false, undefined)
+            const props = getPropertiesFromElement(angularDiv, false, false, undefined, config)
 
             expect(props['_ngcontent-dpm-c448']).toBeUndefined()
             expect(props['_nghost-dpm-c448']).toBeUndefined()
@@ -207,7 +208,7 @@ describe('Autocapture system', () => {
             div.setAttribute('data-attr-2', 'value')
             div.setAttribute('data-attr-3', 'value')
 
-            const props = getPropertiesFromElement(div, false, false, ['data-attr', 'data-attr-2'])
+            const props = getPropertiesFromElement(div, false, false, ['data-attr', 'data-attr-2'], config)
 
             expect(props['attr__data-attr']).toBeUndefined()
             expect(props['attr__data-attr-2']).toBeUndefined()
@@ -219,7 +220,7 @@ describe('Autocapture system', () => {
             div.setAttribute('data-attr-2', 'value')
             div.setAttribute('data-attr-3', 'value')
 
-            const props = getPropertiesFromElement(div, false, false, [])
+            const props = getPropertiesFromElement(div, false, false, [], config)
 
             expect(props['attr__data-attr']).toBe('value')
             expect(props['attr__data-attr-2']).toBe('value')
@@ -288,7 +289,7 @@ describe('Autocapture system', () => {
         })
 
         it('should collect multiple augments from elements', () => {
-            const props = getAugmentPropertiesFromElement(div, {})
+            const props = getAugmentPropertiesFromElement(div, config)
 
             expect(props['one-on-the-div']).toBe('one')
             expect(props['two-on-the-div']).toBe('two')
@@ -297,44 +298,81 @@ describe('Autocapture system', () => {
         })
 
         it('should collect augment from input value', () => {
-            const props = getAugmentPropertiesFromElement(input, {})
+            const props = getAugmentPropertiesFromElement(input, config)
 
             expect(props['on-the-input']).toBe('is on the input')
         })
 
         it('should not collect augment from input with class "ph-sensitive"', () => {
-            const props = getAugmentPropertiesFromElement(sensitiveInput)
+            const props = getAugmentPropertiesFromElement(sensitiveInput, config)
 
             expect(props).toStrictEqual({})
         })
 
         it('should not collect augment from input with class "ph-no-capture"', () => {
-            const props = getAugmentPropertiesFromElement(noCaptureInput)
+            const props = getAugmentPropertiesFromElement(noCaptureInput, config)
 
             expect(props).toStrictEqual({})
         })
 
-        it('should not collect augment from the hidden element value', () => {
-            const props = getAugmentPropertiesFromElement(hidden, {})
+        describe('collect augment properties from hidden element value', () => {
+            it('should not collect when defaults is pre 2025-12-11', () => {
+                config.defaults = '2025-11-30'
+                const props = getAugmentPropertiesFromElement(hidden, config)
 
-            expect(props).toStrictEqual({})
+                expect(props).toStrictEqual({})
+            })
+
+            it('should collect when defaults is 2025-12-11 or later', () => {
+                config.defaults = '2025-12-11'
+                const props = getAugmentPropertiesFromElement(hidden, config)
+
+                expect(props).toStrictEqual({
+                    'on-the-hidden': 'is on the hidden',
+                })
+            })
         })
 
-        it('should collect augment from the password element value', () => {
-            const props = getAugmentPropertiesFromElement(password, {})
+        describe('collect augment properties from password element value', () => {
+            it('should not collect when defaults is pre 2025-12-11', () => {
+                config.defaults = '2025-11-30'
+                const props = getAugmentPropertiesFromElement(password, config)
 
-            expect(props).toStrictEqual({})
+                expect(props).toStrictEqual({})
+            })
+
+            it('should collect when defaults is 2025-12-11 or later', () => {
+                config.defaults = '2025-12-11'
+                const props = getAugmentPropertiesFromElement(password, config)
+
+                expect(props).toStrictEqual({
+                    'on-the-password': 'is on the password',
+                })
+            })
         })
 
-        // #TODO@luke-belton: correct this in new implementation
         describe('inconsistencies in the original implementation', () => {
-            it('fails to collect attribute if sensitive data is detected in the element', () => {
+            it('with pre 2025-12-11 defaults, it fails to collect user provided attribute if sensitive data is detected in the element', () => {
+                config.defaults = '2025-11-30'
                 password.setAttribute('data-ph-capture-attribute-on-the-div', 'my data to collect')
-                const props = getAugmentPropertiesFromElement(password, {})
+                const props = getAugmentPropertiesFromElement(password, config)
 
                 // we'd expect to capture the attribute, because the user has explicitly asked for it
                 // yet we don't in the original implementation
                 expect(props).toStrictEqual({})
+            })
+
+            it('with 2025-12-11 as defaults, it collects user provided attribute even if sensitive data is detected in the element', () => {
+                config.defaults = '2025-12-11'
+                password.setAttribute('data-ph-capture-attribute-on-the-div', 'my data to collect')
+                const props = getAugmentPropertiesFromElement(password, config)
+
+                // we'd expect to capture the attribute, because the user has explicitly asked for it
+                // yet we don't in the original implementation
+                expect(props).toStrictEqual({
+                    'on-the-div': 'my data to collect',
+                    'on-the-password': 'is on the password',
+                })
             })
         })
     })
@@ -1052,6 +1090,8 @@ describe('Autocapture system', () => {
             const a = document.createElement('a')
             const span = document.createElement('span')
             a.appendChild(span)
+            document.body.appendChild(a)
+
             autocapture['_captureEvent'](makeMouseEvent({ target: a }))
             expect(beforeSendMock).toHaveBeenCalledTimes(1)
 
@@ -1185,9 +1225,10 @@ describe('Autocapture system', () => {
             expect(capturedButton['$el_text']).toBe('the button text with more <!-- --> info')
         })
 
-        // #TODO@luke-belton: correct this in new implementation
-        describe('inconsistencies in the original implementation', () => {
-            it('still captures data when doesCaptureElementHaveSensitiveData finds a sensitive element', () => {
+        describe('capturing data when a sensitive element is found', () => {
+            it('captures potentially sensitive data as identified by doesCaptureElementHaveSensitiveData with pre 2025-12-11 defaults', () => {
+                autocapture.instance.config.defaults = '2025-11-30'
+
                 const sensitiveButton = document.createElement('button')
                 const text = document.createElement('span')
 
@@ -1208,6 +1249,31 @@ describe('Autocapture system', () => {
                 const props = beforeSendMock.mock.calls[0][0].properties
                 expect(props['$elements_chain']).toContain('securitycode')
                 expect(props['$el_text']).toEqual('oops you can still see this code!')
+            })
+
+            it('does not capture text data when isSensitiveElement finds a sensitive element', () => {
+                autocapture.instance.config.defaults = '2025-12-11'
+
+                const sensitiveButton = document.createElement('button')
+                const text = document.createElement('span')
+
+                sensitiveButton.appendChild(text)
+
+                sensitiveButton.id = 'securitycode'
+                text.textContent = 'you should not see this code autocaptured!'
+
+                const e = {
+                    target: sensitiveButton,
+                    type: 'click',
+                } as unknown as MouseEvent
+
+                autocapture['_captureEvent'](e)
+                expect(beforeSendMock).toHaveBeenCalledTimes(1)
+                const props = beforeSendMock.mock.calls[0][0].properties
+                expect(props['$elements_chain']).toEqual(
+                    'button:attr__id="securitycode"attr_id="securitycode"nth-child="1"nth-of-type="1"'
+                ) // missing the `text` property
+                expect(props['$el_text']).toBeUndefined()
             })
         })
     })
