@@ -131,17 +131,7 @@ const initializeLogs = (posthog: PostHog) => {
                 }
             }
 
-        // If session replay is enabled it copies the original console log function to __rrweb_original__
-        // wrap this one too
-        let originalConsoleLog = assignableWindow.console[level]
-        if ('__rrweb_original__' in assignableWindow.console[level]) {
-            originalConsoleLog = assignableWindow.console[level]['__rrweb_original__'] as {
-                (...data: any[]): void
-                (...data: any[]): void
-                (message?: any, ...optionalParams: any[]): void
-            }
-            assignableWindow.console[level]['__rrweb_original__'] = logWrapper(originalConsoleLog)
-        }
+        const originalConsoleLog = assignableWindow.console[level]
         assignableWindow.console[level] = logWrapper(originalConsoleLog)
     }
 }
