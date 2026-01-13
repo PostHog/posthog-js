@@ -1,7 +1,8 @@
 :host {
     /* Define CSS Variables with defaults */
-    --ph-survey-font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', Helvetica, Arial,
-        sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+    --ph-survey-font-family:
+        -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', Helvetica, Arial, sans-serif,
+        'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
     --ph-survey-box-padding: 20px 24px;
     --ph-survey-max-width: 300px;
     --ph-survey-z-index: 2147483647;

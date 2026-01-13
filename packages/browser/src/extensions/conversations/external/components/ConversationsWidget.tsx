@@ -463,7 +463,11 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
                                         </div>
                                     </div>
                                 )}
-                                <div ref={(el) => (this._messagesEndRef = el)} />
+                                <div
+                                    ref={(el) => {
+                                        this._messagesEndRef = el
+                                    }}
+                                />
                             </div>
 
                             {/* Error message */}
@@ -472,7 +476,9 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
                             {/* Input */}
                             <div style={styles.inputContainer}>
                                 <textarea
-                                    ref={(el) => (this._inputRef = el)}
+                                    ref={(el) => {
+                                        this._inputRef = el
+                                    }}
                                     style={styles.input}
                                     placeholder={placeholderText}
                                     value={inputValue}

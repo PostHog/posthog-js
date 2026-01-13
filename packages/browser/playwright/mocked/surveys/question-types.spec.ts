@@ -139,7 +139,8 @@ test.describe('surveys - core display logic', () => {
         await page.locator('.PostHogSurvey-123').locator('.ratings-number').first().click()
         await page.locator('.PostHogSurvey-123').locator('.form-submit').click()
 
-        await expect(page.locator('.PostHogSurvey-123').locator('.ratings-number').first()).toHaveText('0')
+        // After submitting, we're on question 2 (scale 5), which starts at 1
+        await expect(page.locator('.PostHogSurvey-123').locator('.ratings-number').first()).toHaveText('1')
     })
 
     test('multiple question surveys', async ({ page, context }) => {
