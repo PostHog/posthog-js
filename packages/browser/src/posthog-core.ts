@@ -153,10 +153,19 @@ let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 &&
 
 const defaultsThatVaryByConfig = (
     defaults?: ConfigDefaults
-): Pick<PostHogConfig, 'rageclick' | 'capture_pageview' | 'session_recording'> => ({
+): Pick<PostHogConfig, 'rageclick' | 'capture_pageview' | 'session_recording' | 'sensitive_data_detection'> => ({
     rageclick: defaults && defaults >= '2025-11-30' ? { content_ignorelist: true } : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
+    sensitive_data_detection:
+        defaults && defaults >= '2025-12-11'
+            ? {
+                  allowedInputTypes: ['button', 'checkbox', 'submit', 'reset'],
+                  sensitiveNameRegex: new RegExp(
+                      /^(cc|cardnum|ccnum|creditcard|csc|cvc|cvv|exp|pass|pwd|routing|seccode|securitycode|securitynum|socialsec|socsec|ssn)/i
+                  ),
+              }
+            : {},
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value

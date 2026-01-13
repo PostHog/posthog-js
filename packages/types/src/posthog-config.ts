@@ -549,6 +549,24 @@ export interface LogsConfig {
 type NextOptions = { revalidate: false | 0 | number; tags: string[] }
 
 /**
+ * Configuration options for automatic sensitive data detection.
+
+ */
+export interface SensitiveDataDetectionOptions {
+    /**
+     * List of input types which will not be scanned for sensitive data.
+     *
+     * @default ['button', 'checkbox', 'submit', 'reset']
+     */
+    allowedInputTypes?: string[]
+
+    /**
+     * Regular expression to match sensitive field names (e.g., cc, ssn, password, etc.)
+     */
+    sensitiveNameRegex?: RegExp
+}
+
+/**
  * Configuration options for the PostHog JavaScript SDK.
  * @see https://posthog.com/docs/libraries/js#config
  */
@@ -971,6 +989,7 @@ export interface PostHogConfig {
      * - `'unset'`: Use legacy default behaviors
      * - `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')
      * - `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)
+     * - `'2025-12-11'`: Defaults from '2025-11-30' plus additional changes (improvements + configurability of sensitive data detection)
      *
      * @default 'unset'
      */
@@ -990,6 +1009,13 @@ export interface PostHogConfig {
      * @experimental
      */
     __preview_deferred_init_extensions: boolean
+
+    /**
+     * Determines the sensitive data detection options.
+     * @see `SensitiveDataDetectionOptions`
+     * @default {}
+     */
+    sensitive_data_detection?: SensitiveDataDetectionOptions
 
     /**
      * Determines the session recording options.
