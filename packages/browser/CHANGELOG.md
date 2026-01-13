@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.320.0
+
+### Minor Changes
+
+- [#2875](https://github.com/PostHog/posthog-js/pull/2875) [`7662025`](https://github.com/PostHog/posthog-js/commit/76620251e0bb92eb362c4739c67b5b176c417d5e) Thanks [@lucasheriques](https://github.com/lucasheriques)! - chore(deps): bump preact from 10.19.3 to 10.28.0 to fix security vulnerability
+  (2026-01-13)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.320.0
+
 ## 1.319.2
 
 ### Patch Changes
