@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.319.1
+
+### Patch Changes
+
+- [#2863](https://github.com/PostHog/posthog-js/pull/2863) [`c17b44a`](https://github.com/PostHog/posthog-js/commit/c17b44ac1129d6f5581174a1d95b8be113f81e93) Thanks [@adboio](https://github.com/adboio)! - add button actions to product tour steps
+  (2026-01-13)
+- Updated dependencies []:
+    - @posthog/types@1.319.1
+
 ## 1.319.0
 
 ### Minor Changes
