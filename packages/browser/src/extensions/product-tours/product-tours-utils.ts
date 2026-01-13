@@ -83,46 +83,43 @@ export function getElementMetadata(element: HTMLElement): {
 export type TooltipPosition = 'top' | 'bottom' | 'left' | 'right'
 
 export interface PositionResult {
-    top: number
-    left: number
     position: TooltipPosition
+    top?: number
+    bottom?: number
+    left?: number
+    right?: number
 }
 
 const TOOLTIP_MARGIN = 12
-const TOOLTIP_WIDTH = 320
-const TOOLTIP_HEIGHT_ESTIMATE = 180
 
-export function calculateTooltipPosition(targetRect: DOMRect): PositionResult {
+export interface TooltipDimensions {
+    width: number
+    height: number
+}
+
+export function calculateTooltipPosition(targetRect: DOMRect, tooltipDimensions: TooltipDimensions): PositionResult {
     const viewportWidth = window.innerWidth
     const viewportHeight = window.innerHeight
 
+    const { width, height } = tooltipDimensions
+    const spaceAbove = targetRect.top
     const spaceBelow = viewportHeight - targetRect.bottom
     const spaceLeft = targetRect.left
     const spaceRight = viewportWidth - targetRect.right
 
-    let position: TooltipPosition
-    let top: number
-    let left: number
+    const targetCenterY = targetRect.top + targetRect.height / 2
+    const targetCenterX = targetRect.left + targetRect.width / 2
 
-    if (spaceRight >= TOOLTIP_WIDTH + TOOLTIP_MARGIN) {
-        position = 'right'
-        top = targetRect.top + targetRect.height / 2 - TOOLTIP_HEIGHT_ESTIMATE / 2
-        left = targetRect.right + TOOLTIP_MARGIN
-    } else if (spaceLeft >= TOOLTIP_WIDTH + TOOLTIP_MARGIN) {
-        position = 'left'
-        top = targetRect.top + targetRect.height / 2 - TOOLTIP_HEIGHT_ESTIMATE / 2
-        left = targetRect.left - TOOLTIP_WIDTH - TOOLTIP_MARGIN
-    } else if (spaceBelow >= TOOLTIP_HEIGHT_ESTIMATE + TOOLTIP_MARGIN) {
-        position = 'bottom'
-        top = targetRect.bottom + TOOLTIP_MARGIN
-        left = targetRect.left + targetRect.width / 2 - TOOLTIP_WIDTH / 2
-    } else {
-        position = 'top'
-        top = targetRect.top - TOOLTIP_HEIGHT_ESTIMATE - TOOLTIP_MARGIN
-        left = targetRect.left + targetRect.width / 2 - TOOLTIP_WIDTH / 2
+    if (spaceRight >= width + TOOLTIP_MARGIN) {
+        return { position: 'right', top: targetCenterY, left: targetRect.right + TOOLTIP_MARGIN }
     }
-
-    return { top, left, position }
+    if (spaceLeft >= width + TOOLTIP_MARGIN) {
+        return { position: 'left', top: targetCenterY, right: viewportWidth - targetRect.left + TOOLTIP_MARGIN }
+    }
+    if (spaceAbove >= height + TOOLTIP_MARGIN && spaceBelow < height + TOOLTIP_MARGIN) {
+        return { position: 'top', bottom: viewportHeight - targetRect.top + TOOLTIP_MARGIN, left: targetCenterX }
+    }
+    return { position: 'bottom', top: targetRect.bottom + TOOLTIP_MARGIN, left: targetCenterX }
 }
 
 export function getSpotlightStyle(targetRect: DOMRect, padding: number = 8): Record<string, string> {
