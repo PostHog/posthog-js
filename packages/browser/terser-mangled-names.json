@@ -175,6 +175,7 @@
         "_getTracer",
         "_getValidEvaluationEnvironments",
         "_getWindowId",
+        "_handleButtonClick",
         "_handleClose",
         "_handleDistinctIdChange",
         "_handleFormEmailChange",
