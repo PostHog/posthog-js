@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.319.2
+
+### Patch Changes
+
+- [#2864](https://github.com/PostHog/posthog-js/pull/2864) [`f64ebef`](https://github.com/PostHog/posthog-js/commit/f64ebefe51b39d3c883f536624cc4b680fd2ba87) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - We were missing some public definitions inside `@posthog/types` so let's fix them here. We've also fixed the typing inside the `loaded` callback
+  (2026-01-13)
+- Updated dependencies [[`f64ebef`](https://github.com/PostHog/posthog-js/commit/f64ebefe51b39d3c883f536624cc4b680fd2ba87)]:
+    - @posthog/types@1.319.2
+
 ## 1.319.1
 
 ### Patch Changes
