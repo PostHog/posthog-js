@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.18.0
+
+### Minor Changes
+
+- [#2884](https://github.com/PostHog/posthog-js/pull/2884) [`66670ad`](https://github.com/PostHog/posthog-js/commit/66670adf56f5d909befd0aafb19419c650973eb5) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - disable injection for react native web platform
+  (2026-01-13)
+
 ## 4.17.3
 
 ### Patch Changes
