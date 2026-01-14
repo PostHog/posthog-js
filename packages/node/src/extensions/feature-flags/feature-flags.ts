@@ -55,6 +55,7 @@ type FeatureFlagsPollerOptions = {
   onLoad?: (count: number) => void
   customHeaders?: { [key: string]: string }
   cacheProvider?: FlagDefinitionCacheProvider
+  strictLocalEvaluation?: boolean
 }
 
 class FeatureFlagsPoller {
@@ -80,6 +81,7 @@ class FeatureFlagsPoller {
   private loadingPromise?: Promise<void>
   private flagsEtag?: string
   private nextFetchAllowedAt?: number
+  private strictLocalEvaluation: boolean
 
   constructor({
     pollingInterval,
@@ -106,6 +108,7 @@ class FeatureFlagsPoller {
     this.customHeaders = customHeaders
     this.onLoad = options.onLoad
     this.cacheProvider = options.cacheProvider
+    this.strictLocalEvaluation = options.strictLocalEvaluation ?? false
     void this.loadFeatureFlags()
   }
 
@@ -559,6 +562,31 @@ class FeatureFlagsPoller {
   }
 
   /**
+   * Warn about flags that cannot be evaluated locally.
+   * Called after loading flag definitions when local evaluation is enabled.
+   * Only warns if strictLocalEvaluation is NOT enabled (when it's enabled, server fallback is already prevented).
+   */
+  private warnAboutExperienceContinuityFlags(flags: PostHogFeatureFlag[]): void {
+    // Don't warn if strictLocalEvaluation is enabled - server fallback is already prevented
+    if (this.strictLocalEvaluation) {
+      return
+    }
+
+    const experienceContinuityFlags = flags.filter((f) => f.ensure_experience_continuity)
+    if (experienceContinuityFlags.length > 0) {
+      console.warn(
+        `[PostHog] You are using local evaluation but ${experienceContinuityFlags.length} flag(s) have experience ` +
+          `continuity enabled: ${experienceContinuityFlags.map((f) => f.key).join(', ')}. ` +
+          `Experience continuity is incompatible with local evaluation and will cause a server request on every ` +
+          `flag evaluation, negating local evaluation cost savings. ` +
+          `To avoid server requests and unexpected costs, either disable experience continuity on these flags ` +
+          `in PostHog, use strictLocalEvaluation: true in client init, or pass onlyEvaluateLocally: true ` +
+          `per flag call (flags that cannot be evaluated locally will return undefined).`
+      )
+    }
+  }
+
+  /**
    * Attempts to load flags from cache and update internal state.
    * Returns true if flags were successfully loaded from cache, false otherwise.
    */
@@ -573,6 +601,7 @@ class FeatureFlagsPoller {
         this.updateFlagState(cached)
         this.logMsgIfDebug(() => console.debug(`[FEATURE FLAGS] ${debugMessage} (${cached.flags.length} flags)`))
         this.onLoad?.(this.featureFlags.length)
+        this.warnAboutExperienceContinuityFlags(cached.flags)
         return true
       }
       return false
@@ -789,6 +818,7 @@ class FeatureFlagsPoller {
           }
 
           this.onLoad?.(this.featureFlags.length)
+          this.warnAboutExperienceContinuityFlags(flagData.flags)
           break
         }
 
