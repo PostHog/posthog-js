@@ -25,7 +25,7 @@ import { isArray, isNullish } from '@posthog/core'
 
 import { detectDeviceType } from '@posthog/core'
 import { propertyComparisons } from '../../utils/property-utils'
-import { PropertyMatchType } from '../../types'
+import { Properties, PropertyMatchType } from '../../types'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -399,6 +399,8 @@ interface SendSurveyEventArgs {
     surveySubmissionId: string
     isSurveyCompleted: boolean
     posthog?: PostHog
+    /** Additional properties to include in the survey event */
+    properties?: Properties
 }
 
 const getSurveyResponseValue = (responses: Record<string, string | number | string[] | null>, questionId?: string) => {
@@ -418,6 +420,7 @@ export const sendSurveyEvent = ({
     surveySubmissionId,
     posthog,
     isSurveyCompleted,
+    properties,
 }: SendSurveyEventArgs) => {
     if (!posthog) {
         logger.error('[survey sent] event not captured, PostHog instance not found.')
@@ -438,6 +441,7 @@ export const sendSurveyEvent = ({
         [SurveyEventProperties.SURVEY_COMPLETED]: isSurveyCompleted,
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         ...responses,
+        ...properties,
         $set: {
             [getSurveyInteractionProperty(survey, 'responded')]: true,
         },
@@ -624,6 +628,8 @@ interface SurveyContextProps {
     isPopup: boolean
     onPreviewSubmit: (res: string | string[] | number | null) => void
     surveySubmissionId: string
+    /** Additional properties to include in all survey events */
+    properties?: Properties
 }
 
 export const SurveyContext = createContext<SurveyContextProps>({
@@ -633,6 +639,7 @@ export const SurveyContext = createContext<SurveyContextProps>({
     isPopup: true,
     onPreviewSubmit: () => {},
     surveySubmissionId: '',
+    properties: undefined,
 })
 
 export const useSurveyContext = () => {
