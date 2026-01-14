@@ -150,6 +150,7 @@ export function addProductTourCSSVariablesToElement(element: HTMLElement, appear
     style.setProperty('--ph-tour-button-text-color', getContrastingTextColor(merged.buttonColor))
     style.setProperty('--ph-tour-box-shadow', merged.boxShadow)
     style.setProperty('--ph-tour-overlay-color', merged.showOverlay ? 'rgba(0, 0, 0, 0.5)' : 'transparent')
+    style.setProperty('--ph-tour-z-index', String(merged.zIndex))
 
     // Internal styling variables (not customizable)
     style.setProperty('--ph-tour-button-secondary-color', 'transparent')

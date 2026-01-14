@@ -109,6 +109,7 @@ export interface ProductTourAppearance {
     whiteLabel?: boolean
     /** defaults to true, auto-set to false for announcements/banners */
     dismissOnClickOutside?: boolean
+    zIndex?: number
 }
 
 export interface ProductTour {
@@ -151,6 +152,7 @@ export const DEFAULT_PRODUCT_TOUR_APPEARANCE: Required<ProductTourAppearance> = 
     showOverlay: true,
     whiteLabel: false,
     dismissOnClickOutside: true,
+    zIndex: 2147483646,
 }
 
 export interface ShowTourOptions {
