@@ -255,7 +255,11 @@ export type PostHogV2FlagsResponse = Omit<PostHogFlagsResponse, 'featureFlags' |
  * When we pull flags from persistence, we can normalize them to PostHogFeatureFlagDetails
  * so that we can support v1 and v2 of the API.
  */
-export type PostHogFlagsStorageFormat = Pick<PostHogFeatureFlagDetails, 'flags'>
+export type PostHogFlagsStorageFormat = Pick<PostHogFeatureFlagDetails, 'flags'> & {
+  errorsWhileComputingFlags?: boolean
+  quotaLimited?: string[]
+  requestFailed?: boolean
+}
 
 /**
  * Models legacy flags and payloads return type for many public methods.

@@ -15,6 +15,7 @@ import type {
   Survey,
   SurveyResponse,
   PostHogGroupProperties,
+  FeatureFlagErrorType,
 } from './types'
 import {
   createFlagsResponseFromFlagsAndPayloads,
@@ -24,7 +25,7 @@ import {
   normalizeFlagsResponse,
   updateFlagValue,
 } from './featureFlagUtils'
-import { Compression, PostHogPersistedProperty } from './types'
+import { Compression, FeatureFlagError, PostHogPersistedProperty } from './types'
 import { maybeAdd, PostHogCoreStateless, QuotaLimitedFeature } from './posthog-core-stateless'
 import { uuidv7 } from './vendor/uuidv7'
 import { isPlainError } from './utils'
@@ -574,10 +575,22 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           extraProperties,
           fetchConfig
         )
+
+        if (res === undefined) {
+          this.setKnownFeatureFlagDetails({
+            flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
+            requestFailed: true
+          })
+          return undefined
+        }
+
         // Add check for quota limitation on feature flags
         if (res?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
           // Unset all feature flags by setting to null
-          this.setKnownFeatureFlagDetails(null)
+          this.setKnownFeatureFlagDetails({
+            flags: {},
+            quotaLimited: res.quotaLimited,
+          })
           console.warn(
             '[FEATURE FLAGS] Feature flags quota limit exceeded - unsetting all flags. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
           )
@@ -600,7 +613,12 @@ export abstract class PostHogCore extends PostHogCoreStateless {
               flags: { ...currentFlagDetails?.flags, ...res.flags },
             }
           }
-          this.setKnownFeatureFlagDetails(newFeatureFlagDetails)
+          this.setKnownFeatureFlagDetails({
+            flags: newFeatureFlagDetails.flags,
+            errorsWhileComputingFlags: res.errorsWhileComputingFlags,
+            quotaLimited: res.quotaLimited,
+            requestFailed: false
+          })
           // Mark that we hit the /flags endpoint so we can capture this in the $feature_flag_called event
           this.setPersistedProperty(PostHogPersistedProperty.FlagsEndpointWasHit, true)
           this.cacheSessionReplay('flags', res)
