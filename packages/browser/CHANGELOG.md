@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.321.1
+
+### Patch Changes
+
+- [#2865](https://github.com/PostHog/posthog-js/pull/2865) [`54b064e`](https://github.com/PostHog/posthog-js/commit/54b064e1f92d1d12cca7ab997fe4b11a9d52a081) Thanks [@adboio](https://github.com/adboio)! - support banner rendering for product tours
+  (2026-01-14)
+- Updated dependencies []:
+    - @posthog/types@1.321.1
+
 ## 1.321.0
 
 ### Minor Changes
