@@ -667,13 +667,16 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     ) as PostHogFeatureFlagDetails
   }
 
-  protected getKnownFeatureFlags(): PostHogFlagsResponse['featureFlags'] | undefined {
-    const storedDetails = this.getPersistedProperty<PostHogFlagsStorageFormat>(
-      PostHogPersistedProperty.FeatureFlagDetails
-    )
+  private getStoredFlagDetails(): PostHogFlagsStorageFormat | undefined {
+    return this.getPersistedProperty<PostHogFlagsStorageFormat>(PostHogPersistedProperty.FeatureFlagDetails)
+  }
 
-    // If quota limited, return undefined (flags unavailable)
-    if (storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
+  private isFeatureFlagsQuotaLimited(): boolean {
+    return this.getStoredFlagDetails()?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags) ?? false
+  }
+
+  protected getKnownFeatureFlags(): PostHogFlagsResponse['featureFlags'] | undefined {
+    if (this.isFeatureFlagsQuotaLimited()) {
       return undefined
     }
 
@@ -685,12 +688,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   private getKnownFeatureFlagPayloads(): PostHogFlagsResponse['featureFlagPayloads'] | undefined {
-    const storedDetails = this.getPersistedProperty<PostHogFlagsStorageFormat>(
-      PostHogPersistedProperty.FeatureFlagDetails
-    )
-
-    // If quota limited, return undefined (flags unavailable)
-    if (storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
+    if (this.isFeatureFlagsQuotaLimited()) {
       return undefined
     }
 
@@ -732,10 +730,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   getFeatureFlag(key: string): FeatureFlagValue | undefined {
-    const storedDetails = this.getPersistedProperty<PostHogFlagsStorageFormat>(
-      PostHogPersistedProperty.FeatureFlagDetails
-    )
-
+    const storedDetails = this.getStoredFlagDetails()
     const details = this.getFeatureFlagDetails()
     const errors: string[] = []
     const isQuotaLimited = storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)
@@ -825,16 +820,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   getFeatureFlagPayloads(): PostHogFlagsResponse['featureFlagPayloads'] | undefined {
-    const storedDetails = this.getPersistedProperty<PostHogFlagsStorageFormat>(
-      PostHogPersistedProperty.FeatureFlagDetails
-    )
-
-    // If quota limited, return undefined (flags unavailable)
-    if (storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
+    if (this.isFeatureFlagsQuotaLimited()) {
       return undefined
     }
 
-    // If request failed and no cached flags exist, return undefined
+    const storedDetails = this.getStoredFlagDetails()
     const hasCachedFlags = storedDetails?.flags && Object.keys(storedDetails.flags).length > 0
     if (storedDetails?.requestFailed && !hasCachedFlags) {
       return undefined
@@ -846,16 +836,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   getFeatureFlags(): PostHogFlagsResponse['featureFlags'] | undefined {
     // NOTE: We don't check for _initPromise here as the function is designed to be
     // callable before the state being loaded anyways
-    const storedDetails = this.getPersistedProperty<PostHogFlagsStorageFormat>(
-      PostHogPersistedProperty.FeatureFlagDetails
-    )
-
-    // If quota limited, return undefined (flags unavailable)
-    if (storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
+    if (this.isFeatureFlagsQuotaLimited()) {
       return undefined
     }
 
-    // If request failed and no cached flags exist, return undefined
+    const storedDetails = this.getStoredFlagDetails()
     const hasCachedFlags = storedDetails?.flags && Object.keys(storedDetails.flags).length > 0
     if (storedDetails?.requestFailed && !hasCachedFlags) {
       return undefined
