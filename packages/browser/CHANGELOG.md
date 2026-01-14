@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.321.0
+
+### Minor Changes
+
+- [#2880](https://github.com/PostHog/posthog-js/pull/2880) [`9ba650d`](https://github.com/PostHog/posthog-js/commit/9ba650d8fc632c64c4f88813a1b82b21ef5c1556) Thanks [@adboio](https://github.com/adboio)! - allow custom properties in API survey events
+  (2026-01-14)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.321.0
+
 ## 1.320.0
 
 ### Minor Changes
