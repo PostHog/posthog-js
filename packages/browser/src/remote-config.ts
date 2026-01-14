@@ -83,7 +83,7 @@ export class RemoteConfigLoader {
         this._refreshInterval = setInterval(() => {
             this.refresh()
         }, REFRESH_INTERVAL)
-        
+
         // Consider adding a stop() method:
         // stop(): void {
         //     if (this._refreshInterval) {

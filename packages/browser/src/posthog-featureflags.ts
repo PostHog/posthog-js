@@ -190,7 +190,6 @@ export class PostHogFeatureFlags {
         return this._getValidEvaluationEnvironments().length > 0
     }
 
-
     get hasLoadedFlags(): boolean {
         return this._hasLoadedFlags
     }
