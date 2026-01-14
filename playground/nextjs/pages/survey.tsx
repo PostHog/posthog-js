@@ -1,4 +1,4 @@
-import type { Survey } from 'posthog-js'
+import { DisplaySurveyType, type Survey } from 'posthog-js'
 import { usePostHog } from 'posthog-js/react'
 import { useEffect, useState } from 'react'
 
@@ -36,14 +36,24 @@ export default function SurveyForm() {
                     {arraySurveyItems}
                 </select>
                 <button
-                    onClick={() => posthog.renderSurvey(selectedSurvey, '#survey-container')}
+                    onClick={() =>
+                        posthog.displaySurvey(selectedSurvey, {
+                            displayType: DisplaySurveyType.Inline,
+                            selector: '#survey-container',
+                            ignoreConditions: true,
+                            ignoreDelay: true,
+                            properties: {
+                                custom_foo: 'bar',
+                            },
+                        })
+                    }
                     disabled={!selectedSurvey}
                 >
                     Render Survey below
                 </button>
                 <button
-                    onClick={() => {
-                        const renderReason = posthog.canRenderSurvey(selectedSurvey)
+                    onClick={async () => {
+                        const renderReason = await posthog.canRenderSurveyAsync(selectedSurvey)
                         const message = renderReason?.visible
                             ? `Survey can be rendered: Yes`
                             : `Survey cannot be rendered: ${renderReason?.disabledReason || 'No reason provided'}`
