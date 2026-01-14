@@ -368,7 +368,6 @@ describe('feature flags v2', () => {
     it('should call flags endpoint when eligible', async () => {
         const posthog = await createPosthogInstance(token, {
             __preview_flags_v2: true,
-            __preview_remote_config: true,
             advanced_disable_flags: false,
             before_send: (cr) => cr,
         })
@@ -386,26 +385,6 @@ describe('feature flags v2', () => {
     it('should call flags endpoint when not eligible', async () => {
         const posthog = await createPosthogInstance(token, {
             __preview_flags_v2: false,
-            __preview_remote_config: true,
-            advanced_disable_flags: false,
-            before_send: (cr) => cr,
-        })
-
-        await waitFor(() => {
-            expect(getRequests(token)['/flags/']).toEqual([
-                expect.objectContaining({
-                    token,
-                    distinct_id: posthog.get_distinct_id(),
-                }),
-            ])
-        })
-    })
-
-    // TODO: eventually I want to deprecate these behavior, but for now I want to make sure we don't break people
-    it('should call flags endpoint when preview flags is enabled but remote config is disabled', async () => {
-        const posthog = await createPosthogInstance(token, {
-            __preview_flags_v2: true,
-            __preview_remote_config: false,
             advanced_disable_flags: false,
             before_send: (cr) => cr,
         })

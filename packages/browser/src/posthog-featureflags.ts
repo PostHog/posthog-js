@@ -165,7 +165,6 @@ export class PostHogFeatureFlags {
     private _reloadingDisabled: boolean = false
     private _additionalReloadRequested: boolean = false
     private _reloadDebouncer?: any
-    private _flagsCalled: boolean = false
     private _flagsLoadedFromRemote: boolean = false
 
     constructor(private _instance: PostHog) {
@@ -192,21 +191,8 @@ export class PostHogFeatureFlags {
     }
 
     flags(): void {
-        if (this._instance.config.__preview_remote_config) {
-            // If remote config is enabled we don't call /flags and we mark it as called so that we don't simulate it
-            this._flagsCalled = true
-            return
-        }
-
-        // TRICKY: We want to disable flags if we don't have a queued reload, and one of the settings exist for disabling on first load
-        const disableFlags =
-            !this._reloadDebouncer &&
-            (this._instance.config.advanced_disable_feature_flags ||
-                this._instance.config.advanced_disable_feature_flags_on_first_load)
-
-        this._callFlagsEndpoint({
-            disableFlags,
-        })
+        // Remote config handles initial config loading separately, so this is now a no-op.
+        // Feature flags are loaded via ensureFlagsLoaded() called from RemoteConfigLoader.
     }
 
     get hasLoadedFlags(): boolean {
@@ -383,8 +369,7 @@ export class PostHogFeatureFlags {
     }
 
     /**
-     * NOTE: This is used both for flags and remote config. Once the RemoteConfig is fully released this will essentially only
-     * be for flags and can eventually be replaced with the new flags endpoint
+     * Calls the /flags endpoint to fetch feature flags only (config is loaded separately via RemoteConfig)
      */
     _callFlagsEndpoint(options?: { disableFlags?: boolean }): void {
         // Ensure we don't have double queued /flags requests
@@ -410,6 +395,7 @@ export class PostHogFeatureFlags {
                 ...(this._instance.get_property(STORED_PERSON_PROPERTIES_KEY) || {}),
             },
             group_properties: this._instance.get_property(STORED_GROUP_PROPERTIES_KEY),
+            timezone: getTimezone(),
         }
 
         // Add device_id if available (handle cookieless mode where it's null)
@@ -426,21 +412,11 @@ export class PostHogFeatureFlags {
             data.evaluation_environments = this._getValidEvaluationEnvironments()
         }
 
-        // flags supports loading config data with the `config` query param, but if you're using remote config, you
-        // don't need to add that parameter because all the config data is loaded from the remote config endpoint.
-        const useRemoteConfigWithFlags = this._instance.config.__preview_remote_config
-
-        const flagsRoute = useRemoteConfigWithFlags ? '/flags/?v=2' : '/flags/?v=2&config=true'
-
         const queryParams = this._instance.config.advanced_only_evaluate_survey_feature_flags
             ? '&only_evaluate_survey_feature_flags=true'
             : ''
 
-        const url = this._instance.requestRouter.endpointFor('flags', flagsRoute + queryParams)
-
-        if (useRemoteConfigWithFlags) {
-            data.timezone = getTimezone()
-        }
+        const url = this._instance.requestRouter.endpointFor('flags', '/flags/?v=2' + queryParams)
 
         this._requestInFlight = true
         this._instance._send_request({
@@ -463,12 +439,6 @@ export class PostHogFeatureFlags {
                 }
 
                 this._requestInFlight = false
-
-                // NB: this block is only reached if this._instance.config.__preview_remote_config is false
-                if (!this._flagsCalled) {
-                    this._flagsCalled = true
-                    this._instance._onRemoteConfig(response.json ?? {})
-                }
 
                 if (data.disable_flags && !this._additionalReloadRequested) {
                     // If flags are disabled then there is no need to call /flags again (flags are the only thing that may change)
@@ -955,7 +925,6 @@ export class PostHogFeatureFlags {
         this._requestInFlight = false
         this._reloadingDisabled = false
         this._additionalReloadRequested = false
-        this._flagsCalled = false
         this._flagsLoadedFromRemote = false
         this.$anon_distinct_id = undefined
         this._clearDebouncer()

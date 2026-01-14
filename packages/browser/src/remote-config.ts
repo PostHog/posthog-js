@@ -6,7 +6,12 @@ import { assignableWindow } from './utils/globals'
 
 const logger = createLogger('[RemoteConfig]')
 
+// 5 minutes in milliseconds
+const REFRESH_INTERVAL = 5 * 60 * 1000
+
 export class RemoteConfigLoader {
+    private _refreshInterval: ReturnType<typeof setInterval> | undefined
+
     constructor(private readonly _instance: PostHog) {}
 
     get remoteConfig(): RemoteConfig | undefined {
@@ -40,6 +45,7 @@ export class RemoteConfigLoader {
             if (this.remoteConfig) {
                 logger.info('Using preloaded remote config', this.remoteConfig)
                 this._onRemoteConfig(this.remoteConfig)
+                this._startRefreshInterval()
                 return
             }
 
@@ -56,26 +62,48 @@ export class RemoteConfigLoader {
                     // Attempt 3 Load the config json instead of the script - we won't get site apps etc. but we will get the config
                     this._loadRemoteConfigJSON((config) => {
                         this._onRemoteConfig(config)
+                        this._startRefreshInterval()
                     })
                     return
                 }
 
                 this._onRemoteConfig(config)
+                this._startRefreshInterval()
             })
         } catch (error) {
             logger.error('Error loading remote config', error)
         }
     }
 
-    private _onRemoteConfig(config?: RemoteConfig): void {
-        // NOTE: Once this is rolled out we will remove the /flags related code above. Until then the code duplication is fine.
-        if (!config) {
-            logger.error('Failed to fetch remote config from PostHog.')
+    private _startRefreshInterval(): void {
+        if (this._refreshInterval) {
             return
         }
 
-        if (!this._instance.config.__preview_remote_config) {
-            logger.info('__preview_remote_config is disabled. Logging config instead', config)
+        this._refreshInterval = setInterval(() => {
+            this.refresh()
+        }, REFRESH_INTERVAL)
+    }
+
+    /**
+     * Refresh the remote config by fetching it from the server.
+     * This only fetches the JSON config, not the JS version with site apps.
+     */
+    refresh(): void {
+        if (this._instance._shouldDisableFlags()) {
+            return
+        }
+
+        this._loadRemoteConfigJSON((config) => {
+            if (config) {
+                this._instance._onRemoteConfig(config)
+            }
+        })
+    }
+
+    private _onRemoteConfig(config?: RemoteConfig): void {
+        if (!config) {
+            logger.error('Failed to fetch remote config from PostHog.')
             return
         }
 
