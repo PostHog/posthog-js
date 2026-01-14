@@ -513,9 +513,15 @@ describe('PostHog Feature Flags v1', () => {
           featureFlagPayloads: createMockFeatureFlagPayloads(),
         }
         const normalizedFeatureFlags = normalizeFlagsResponse(expectedFeatureFlags as PostHogV1FlagsResponse)
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.FeatureFlagDetails)).toEqual(
-          normalizedFeatureFlags
-        )
+        // The persisted storage includes additional error tracking fields
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.FeatureFlagDetails)).toEqual({
+          flags: normalizedFeatureFlags.flags,
+          requestId: undefined,
+          evaluatedAt: undefined,
+          errorsWhileComputingFlags: undefined,
+          quotaLimited: undefined,
+          requestFailed: false,
+        })
       })
 
       it('should include feature flags in subsequent captures', async () => {
