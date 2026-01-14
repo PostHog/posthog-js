@@ -199,28 +199,6 @@ export type PostHogFeatureFlag = {
   experiment_set: number[]
 }
 
-/**
- * Error type constants for the $feature_flag_error property.
- *
- * These values are sent in analytics events to track flag evaluation failures.
- * They should not be changed without considering impact on existing dashboards
- * and queries that filter on these values.
- *
- * Error values:
- *   ERRORS_WHILE_COMPUTING: Server returned errorsWhileComputingFlags=true
- *   FLAG_MISSING: Requested flag not in API response
- *   QUOTA_LIMITED: Rate/quota limit exceeded
- *   UNKNOWN_ERROR: Unexpected exceptions
- */
-export const FeatureFlagError = {
-  ERRORS_WHILE_COMPUTING: 'errors_while_computing_flags',
-  FLAG_MISSING: 'flag_missing',
-  QUOTA_LIMITED: 'quota_limited',
-  UNKNOWN_ERROR: 'unknown_error',
-} as const
-
-export type FeatureFlagErrorType = (typeof FeatureFlagError)[keyof typeof FeatureFlagError] | string
-
 export interface IPostHog {
   /**
    * @description Capture allows you to capture anything a user does within your system,
