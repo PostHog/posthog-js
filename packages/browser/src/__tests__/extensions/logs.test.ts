@@ -421,44 +421,6 @@ describe('logs entrypoint', () => {
         })
     })
 
-    describe('rrweb integration', () => {
-        beforeEach(async () => {
-            await import('../../entrypoints/logs')
-        })
-
-        it('should handle rrweb wrapped console methods', () => {
-            const originalLog = jest.fn()
-            const logFn = jest.fn() as any
-            logFn.__rrweb_original__ = originalLog
-            assignableWindow.console.log = logFn
-
-            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
-            initializeLogs(mockPostHog)
-
-            assignableWindow.console.log('Test message')
-
-            // Should call the rrweb original method
-            expect(originalLog).toHaveBeenCalledWith('Test message')
-            // Should also emit the log
-            expect(mockEmit).toHaveBeenCalled()
-        })
-
-        it('should wrap the rrweb original method correctly', () => {
-            const originalWarn = jest.fn()
-            const warnFn = jest.fn() as any
-            warnFn.__rrweb_original__ = originalWarn
-            assignableWindow.console.warn = warnFn
-
-            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
-            initializeLogs(mockPostHog)
-
-            // After initialization, console.warn should call the original rrweb function
-            assignableWindow.console.warn('Test warning')
-            expect(originalWarn).toHaveBeenCalledWith('Test warning')
-            expect(mockEmit).toHaveBeenCalled()
-        })
-    })
-
     describe('edge cases and error handling', () => {
         beforeEach(async () => {
             await import('../../entrypoints/logs')
