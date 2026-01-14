@@ -579,14 +579,12 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         if (res === undefined) {
           this.setKnownFeatureFlagDetails({
             flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
-            requestFailed: true
+            requestFailed: true,
           })
           return undefined
         }
 
-        // Add check for quota limitation on feature flags
         if (res?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
-          // Unset all feature flags by setting to null
           this.setKnownFeatureFlagDetails({
             flags: {},
             quotaLimited: res.quotaLimited,
@@ -619,7 +617,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             evaluatedAt: res.evaluatedAt,
             errorsWhileComputingFlags: res.errorsWhileComputingFlags,
             quotaLimited: res.quotaLimited,
-            requestFailed: false
+            requestFailed: false,
           })
           // Mark that we hit the /flags endpoint so we can capture this in the $feature_flag_called event
           this.setPersistedProperty(PostHogPersistedProperty.FlagsEndpointWasHit, true)
@@ -633,7 +631,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return this._flagsResponsePromise
   }
 
-  // We only store the flags and request id in the feature flag details storage key
   private setKnownFeatureFlagDetails(flagsResponse: PostHogFlagsStorageFormat | null): void {
     this.wrap(() => {
       this.setPersistedProperty<PostHogFlagsStorageFormat>(PostHogPersistedProperty.FeatureFlagDetails, flagsResponse)
@@ -751,18 +748,15 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     let response: FeatureFlagValue | undefined = getFeatureFlagValue(featureFlag)
 
     if (response === undefined) {
-      // When quota limited, return undefined (flags unavailable)
-      // When flags haven't been loaded yet (details is undefined), return undefined
-      // When request failed and no cached flags exist, return undefined
-      // Otherwise, if flags are loaded but this specific flag is missing, return false
+      // Return false for missing flags only when we have successfully loaded flags.
+      // Quota limited, failed requests, or unloaded state should return undefined.
       const hasCachedFlags = details && Object.keys(details.flags).length > 0
       if (!isQuotaLimited && hasCachedFlags) {
         response = false
       }
 
-      // Add FLAG_MISSING when flag is not in response (regardless of quota status)
-      // Following Kotlin/Node SDK semantics: FLAG_MISSING indicates the flag wasn't in the response
-      // Don't add FLAG_MISSING when request failed (we don't know if it's missing)
+      // Track missing flags unless the request failed, since we cannot determine
+      // whether a flag is truly missing without a successful response.
       if (details && !featureFlag && !storedDetails?.requestFailed) {
         errors.push(FeatureFlagError.FLAG_MISSING)
       }
@@ -776,12 +770,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
       this.flagCallReported[key] = true
 
-      // Build properties object with Record<string, any> to allow undefined values
-      // Following Node SDK pattern for type compatibility
       const properties: Record<string, any> = {
         $feature_flag: key,
-        // Always include $feature_flag_response for consistency with other SDKs (Go, Kotlin, Node)
-        // Value can be true/string (enabled), false (disabled/missing), or undefined (quota limited/error)
         $feature_flag_response: response,
         ...maybeAdd('$feature_flag_id', featureFlag?.metadata?.id),
         ...maybeAdd('$feature_flag_version', featureFlag?.metadata?.version),
@@ -798,7 +788,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       this.capture('$feature_flag_called', properties)
     }
 
-    // If we have flags we either return the value (true or string) or false/undefined
     return response
   }
 

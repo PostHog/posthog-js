@@ -22,7 +22,13 @@ import {
   PostHogOptions,
   SendFeatureFlagsOptions,
 } from './types'
-import { FeatureFlagDetail, FeatureFlagValue, getFeatureFlagValue, FeatureFlagErrorType, FeatureFlagError } from '@posthog/core'
+import {
+  FeatureFlagDetail,
+  FeatureFlagValue,
+  getFeatureFlagValue,
+  FeatureFlagErrorType,
+  FeatureFlagError,
+} from '@posthog/core'
 import {
   FeatureFlagsPoller,
   RequiresServerEvaluation,
