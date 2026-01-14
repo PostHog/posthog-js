@@ -5,7 +5,7 @@
  */
 
 import type { PropertyMatchType } from './types'
-import type { SurveyAppearance as CoreSurveyAppearance } from '@posthog/core'
+import type { SurveyAppearance as CoreSurveyAppearance, SurveyValidationRule } from '@posthog/core'
 
 export enum SurveyEventType {
     Activation = 'events',
@@ -94,6 +94,7 @@ interface SurveyQuestionBase {
     optional?: boolean
     buttonText?: string
     branching?: NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching
+    validation?: SurveyValidationRule[]
 }
 
 export interface BasicSurveyQuestion extends SurveyQuestionBase {
