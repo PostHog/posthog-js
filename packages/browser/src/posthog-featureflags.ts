@@ -190,10 +190,6 @@ export class PostHogFeatureFlags {
         return this._getValidEvaluationEnvironments().length > 0
     }
 
-    flags(): void {
-        // Remote config handles initial config loading separately, so this is now a no-op.
-        // Feature flags are loaded via ensureFlagsLoaded() called from RemoteConfigLoader.
-    }
 
     get hasLoadedFlags(): boolean {
         return this._hasLoadedFlags
