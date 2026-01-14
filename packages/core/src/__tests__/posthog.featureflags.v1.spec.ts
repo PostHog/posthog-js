@@ -513,7 +513,7 @@ describe('PostHog Feature Flags v1', () => {
           featureFlagPayloads: createMockFeatureFlagPayloads(),
         }
         const normalizedFeatureFlags = normalizeFlagsResponse(expectedFeatureFlags as PostHogV1FlagsResponse)
-        // The persisted storage includes additional error tracking fields
+
         expect(posthog.getPersistedProperty(PostHogPersistedProperty.FeatureFlagDetails)).toEqual({
           flags: normalizedFeatureFlags.flags,
           requestId: undefined,
