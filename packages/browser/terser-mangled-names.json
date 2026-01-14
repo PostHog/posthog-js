@@ -376,6 +376,7 @@
         "_removeSurveyFromFocus",
         "_removeTriggerSelectorListener",
         "_removeWidgetSelectorListener",
+        "_renderBanner",
         "_renderCurrentStep",
         "_renderIdentificationForm",
         "_renderMessage",
