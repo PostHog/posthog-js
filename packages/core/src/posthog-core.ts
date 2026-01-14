@@ -673,7 +673,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     )
 
     // If quota limited, return undefined (flags unavailable)
-    if (storedDetails?.quotaLimited?.includes('feature_flags')) {
+    if (storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
       return undefined
     }
 
@@ -690,7 +690,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     )
 
     // If quota limited, return undefined (flags unavailable)
-    if (storedDetails?.quotaLimited?.includes('feature_flags')) {
+    if (storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
       return undefined
     }
 
@@ -738,7 +738,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
     const details = this.getFeatureFlagDetails()
     const errors: string[] = []
-    const isQuotaLimited = storedDetails?.quotaLimited?.includes('feature_flags')
+    const isQuotaLimited = storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)
 
     if (storedDetails?.requestFailed) {
       errors.push(FeatureFlagError.UNKNOWN_ERROR)
@@ -765,8 +765,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         response = false
       }
 
-      // Add FLAG_MISSING if we have flag details (from server) but this specific flag wasn't found
-      // Don't add FLAG_MISSING if the request failed (we don't know if it's missing)
+      // Add FLAG_MISSING when flag is not in response (regardless of quota status)
+      // Following Kotlin/Node SDK semantics: FLAG_MISSING indicates the flag wasn't in the response
+      // Don't add FLAG_MISSING when request failed (we don't know if it's missing)
       if (details && !featureFlag && !storedDetails?.requestFailed) {
         errors.push(FeatureFlagError.FLAG_MISSING)
       }
@@ -779,10 +780,14 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       const featureFlagError = errors.length > 0 ? errors.join(',') : undefined
 
       this.flagCallReported[key] = true
-      this.capture('$feature_flag_called', {
+
+      // Build properties object with Record<string, any> to allow undefined values
+      // Following Node SDK pattern for type compatibility
+      const properties: Record<string, any> = {
         $feature_flag: key,
-        // response can be undefined when quota limited - use maybeAdd to conditionally include
-        ...maybeAdd('$feature_flag_response', response),
+        // Always include $feature_flag_response for consistency with other SDKs (Go, Kotlin, Node)
+        // Value can be true/string (enabled), false (disabled/missing), or undefined (quota limited/error)
+        $feature_flag_response: response,
         ...maybeAdd('$feature_flag_id', featureFlag?.metadata?.id),
         ...maybeAdd('$feature_flag_version', featureFlag?.metadata?.version),
         ...maybeAdd('$feature_flag_reason', featureFlag?.reason?.description ?? featureFlag?.reason?.code),
@@ -792,8 +797,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         $used_bootstrap_value: !this.getPersistedProperty(PostHogPersistedProperty.FlagsEndpointWasHit),
         ...maybeAdd('$feature_flag_request_id', details?.requestId),
         ...maybeAdd('$feature_flag_evaluated_at', details?.evaluatedAt),
-        ...maybeAdd('$feature_flag_error', featureFlagError)
-      })
+        ...maybeAdd('$feature_flag_error', featureFlagError),
+      }
+
+      this.capture('$feature_flag_called', properties)
     }
 
     // If we have flags we either return the value (true or string) or false/undefined
@@ -823,7 +830,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     )
 
     // If quota limited, return undefined (flags unavailable)
-    if (storedDetails?.quotaLimited?.includes('feature_flags')) {
+    if (storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
       return undefined
     }
 
@@ -844,7 +851,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     )
 
     // If quota limited, return undefined (flags unavailable)
-    if (storedDetails?.quotaLimited?.includes('feature_flags')) {
+    if (storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
       return undefined
     }
 
