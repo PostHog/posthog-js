@@ -682,7 +682,7 @@ describe('PostHog Feature Flags v4', () => {
           evaluatedAt: 1640995200000,
         }
         const normalizedFeatureFlags = normalizeFlagsResponse(expectedFeatureFlags as PostHogV2FlagsResponse)
-        // The persisted storage includes additional error tracking fields
+
         expect(posthog.getPersistedProperty(PostHogPersistedProperty.FeatureFlagDetails)).toEqual({
           flags: normalizedFeatureFlags.flags,
           requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
