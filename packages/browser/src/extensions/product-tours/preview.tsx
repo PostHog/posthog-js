@@ -2,6 +2,7 @@ import { render, JSX } from 'preact'
 
 import { ProductTourStep, ProductTourAppearance } from '../../posthog-product-tours-types'
 import { document as _document } from '../../utils/globals'
+import { ProductTourBanner } from './components/ProductTourBanner'
 import { ProductTourSurveyStepInner } from './components/ProductTourSurveyStepInner'
 import { ProductTourTooltipInner } from './components/ProductTourTooltipInner'
 import { getProductTourStylesheet, addProductTourCSSVariablesToElement } from './product-tours-utils'
@@ -41,7 +42,18 @@ export function renderProductTourPreview({
     shadow.appendChild(renderTarget)
 
     const isSurveyStep = step.type === 'survey'
+    const isBannerStep = step.type === 'banner'
     const tooltipClass = isSurveyStep ? 'ph-tour-tooltip ph-tour-survey-step' : 'ph-tour-tooltip'
+
+    if (isBannerStep) {
+        render(
+            <div class="ph-tour-container">
+                <ProductTourBanner step={step} onDismiss={() => {}} />
+            </div>,
+            renderTarget
+        )
+        return
+    }
 
     render(
         <div class="ph-tour-container">

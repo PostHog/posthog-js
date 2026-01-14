@@ -18,6 +18,7 @@ import {
 } from './product-tours-utils'
 import { findElement } from './element-inference'
 import { ProductTourTooltip } from './components/ProductTourTooltip'
+import { ProductTourBanner } from './components/ProductTourBanner'
 import { createLogger } from '../../utils/logger'
 import { document as _document, window as _window } from '../../utils/globals'
 import { localStore, sessionStore } from '../../storage'
@@ -114,6 +115,37 @@ function retrieveTourShadow(tour: ProductTour): { shadow: ShadowRoot; isNewlyCre
     }
 
     document.body.appendChild(div)
+
+    return {
+        shadow,
+        isNewlyCreated: true,
+    }
+}
+
+function retrieveBannerShadow(tour: ProductTour): { shadow: ShadowRoot; isNewlyCreated: boolean } {
+    const containerClass = `${CONTAINER_CLASS}-${tour.id}`
+    const existingDiv = document.querySelector(`.${containerClass}`)
+
+    if (existingDiv && existingDiv.shadowRoot) {
+        return {
+            shadow: existingDiv.shadowRoot,
+            isNewlyCreated: false,
+        }
+    }
+
+    const div = document.createElement('div')
+    div.className = containerClass
+
+    addProductTourCSSVariablesToElement(div, tour.appearance)
+
+    const shadow = div.attachShadow({ mode: 'open' })
+
+    const stylesheet = getProductTourStylesheet()
+    if (stylesheet) {
+        shadow.appendChild(stylesheet)
+    }
+
+    document.body.insertBefore(div, document.body.firstChild)
 
     return {
         shadow,
@@ -517,11 +549,6 @@ export class ProductTourManager {
             case 'previous_step':
                 this.previousStep()
                 break
-            case 'link':
-                if (button.link) {
-                    window.open(button.link, '_blank')
-                }
-                break
             case 'trigger_tour':
                 if (button.tourId) {
                     this._cleanup()
@@ -565,6 +592,20 @@ export class ProductTourManager {
         if (!step) {
             logger.warn(`Step ${this._currentStepIndex} not found in tour ${this._activeTour.id}`)
             this._cleanup()
+            return
+        }
+
+        // Banner step - render full-width banner
+        if (step.type === 'banner') {
+            this._captureEvent('product tour step shown', {
+                $product_tour_id: this._activeTour.id,
+                $product_tour_step_id: step.id,
+                $product_tour_step_order: this._currentStepIndex,
+                $product_tour_step_type: 'banner',
+            })
+
+            this._isResuming = false
+            this._renderBanner()
             return
         }
 
@@ -714,6 +755,32 @@ export class ProductTourManager {
                 onDismiss={onDismissOverride || this.dismissTour}
                 onSurveySubmit={onSurveySubmit}
                 onButtonClick={this._handleButtonClick}
+            />,
+            shadow
+        )
+    }
+
+    private _renderBanner(): void {
+        if (!this._activeTour) {
+            return
+        }
+
+        const step = this._activeTour.steps[this._currentStepIndex]
+        const { shadow } = retrieveBannerShadow(this._activeTour)
+
+        const handleTriggerTour = () => {
+            const tourId = step.bannerConfig?.action?.tourId
+            if (tourId) {
+                this._cleanup()
+                this.showTourById(tourId)
+            }
+        }
+
+        render(
+            <ProductTourBanner
+                step={step}
+                onDismiss={() => this.dismissTour('user_clicked_skip')}
+                onTriggerTour={handleTriggerTour}
             />,
             shadow
         )

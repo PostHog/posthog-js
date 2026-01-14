@@ -175,6 +175,17 @@ export type PostHogOptions = PostHogCoreOptions & {
    * ```
    */
   __preview_capture_bot_pageviews?: boolean
+  /**
+   * When enabled, all feature flag evaluations will use local evaluation only,
+   * never falling back to server-side evaluation. This prevents unexpected server
+   * requests and associated costs when using local evaluation.
+   *
+   * Flags that cannot be evaluated locally (e.g., those with experience continuity)
+   * will return `undefined` instead of making a server request.
+   *
+   * @default false
+   */
+  strictLocalEvaluation?: boolean
 }
 
 export type PostHogFeatureFlag = {
