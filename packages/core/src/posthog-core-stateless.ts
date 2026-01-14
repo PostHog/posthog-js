@@ -167,6 +167,10 @@ export abstract class PostHogCoreStateless {
     this.disableGeoip = options.disableGeoip ?? true
     this.disabled = options.disabled ?? false
     this.historicalMigration = options?.historicalMigration ?? false
+    // Init promise allows the derived class to block calls until it is ready
+    this._initPromise = Promise.resolve()
+    this._isInitialized = true
+    this._logger = createLogger('[PostHog]', this.logMsgIfDebug.bind(this))
     // Support both evaluationContexts (new) and evaluationEnvironments (deprecated)
     this.evaluationContexts = options?.evaluationContexts ?? options?.evaluationEnvironments
     if (options?.evaluationEnvironments && !options?.evaluationContexts) {
@@ -174,10 +178,6 @@ export abstract class PostHogCoreStateless {
         'evaluationEnvironments is deprecated. Use evaluationContexts instead. This property will be removed in a future version.'
       )
     }
-    // Init promise allows the derived class to block calls until it is ready
-    this._initPromise = Promise.resolve()
-    this._isInitialized = true
-    this._logger = createLogger('[PostHog]', this.logMsgIfDebug.bind(this))
     this.disableCompression = !isGzipSupported() || (options?.disableCompression ?? false)
   }
 
