@@ -631,6 +631,22 @@ describe('ConversationsManager', () => {
             it.skip('should call markAsRead API with correct format when unread messages exist', () => {
                 // Test skipped due to complexity with fake timers and state transitions
             })
+
+            it('should update _currentTicketId when markAsRead is called with explicit ticketId', async () => {
+                // Send a message to create initial ticket
+                await act(async () => {
+                    await manager.sendMessage('Hello!')
+                })
+                expect(manager['_currentTicketId']).toBe('ticket-123')
+
+                // Mark a different ticket as read
+                await act(async () => {
+                    await manager.markAsRead('marked-ticket-999')
+                })
+
+                // Should have switched to the new ticket
+                expect(manager['_currentTicketId']).toBe('marked-ticket-999')
+            })
         })
     })
 
