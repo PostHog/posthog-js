@@ -45,6 +45,11 @@ describe('loaded() with flags', () => {
     })
 
     describe('flag reloading', () => {
+        // Note: With RemoteConfig, there are now 2 flag calls:
+        // 1. ensureFlagsLoaded() from RemoteConfig on init
+        // 2. reloadFeatureFlags() from group() call
+        // The second call includes the group data
+
         it('only calls flags once whilst loading', async () => {
             instance = await createPosthog({
                 loaded: (ph) => {
@@ -52,16 +57,18 @@ describe('loaded() with flags', () => {
                 },
             })
 
+            // Run timers to trigger the debounced reloadFeatureFlags
+            jest.runOnlyPendingTimers()
+
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
             expect(instance._send_request.mock.calls[0][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/flags/?v=2&config=true',
+                url: 'https://us.i.posthog.com/flags/?v=2',
                 data: {
                     groups: { org: 'bazinga' },
                 },
             })
-            jest.runOnlyPendingTimers() // Once for callback
-            jest.runOnlyPendingTimers() // Once for potential debounce
+            jest.runOnlyPendingTimers() // Run any remaining timers
             expect(instance._send_request).toHaveBeenCalledTimes(1)
         })
 
@@ -74,24 +81,28 @@ describe('loaded() with flags', () => {
                     }, 100)
                 },
             })
+
+            // Run timers to trigger the first debounced reloadFeatureFlags
+            jest.runOnlyPendingTimers()
+
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(1)
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
             expect(instance._send_request.mock.calls[0][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/flags/?v=2&config=true',
+                url: 'https://us.i.posthog.com/flags/?v=2',
                 data: {
                     groups: { org: 'bazinga' },
                 },
             })
 
-            jest.runOnlyPendingTimers() // Once for callback
-            jest.runOnlyPendingTimers() // Once for potential debounce
+            jest.runOnlyPendingTimers() // Run the setTimeout for bazinga2
+            jest.runOnlyPendingTimers() // Run the debounced reload
 
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(2)
             expect(instance._send_request).toHaveBeenCalledTimes(2)
 
             expect(instance._send_request.mock.calls[1][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/flags/?v=2&config=true',
+                url: 'https://us.i.posthog.com/flags/?v=2',
                 data: {
                     groups: { org: 'bazinga2' },
                 },
@@ -106,9 +117,12 @@ describe('loaded() with flags', () => {
                 },
             })
 
+            // Run timers to trigger the debounced reloadFeatureFlags
+            jest.runOnlyPendingTimers()
+
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/flags/?v=2&config=true&only_evaluate_survey_feature_flags=true',
+                url: 'https://us.i.posthog.com/flags/?v=2&only_evaluate_survey_feature_flags=true',
                 data: {
                     groups: { org: 'bazinga' },
                 },
@@ -125,13 +139,15 @@ describe('loaded() with flags', () => {
 
             expect(instance.config.advanced_disable_feature_flags_on_first_load).toBe(true)
 
+            // Run timers to trigger the debounced reloadFeatureFlags
+            jest.runOnlyPendingTimers()
+
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(1)
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toEqual(undefined)
 
-            jest.runOnlyPendingTimers() // Once for callback
-            jest.runOnlyPendingTimers() // Once for potential debounce
+            jest.runOnlyPendingTimers() // Run any remaining timers
 
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(1)
             expect(instance._send_request).toHaveBeenCalledTimes(1)

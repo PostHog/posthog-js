@@ -18,7 +18,7 @@ export const createPosthogInstance = async (
     // creates another instance.
     const posthog = new PostHog()
 
-    // NOTE: Temporary change whilst testing remote config
+    // Set up preloaded remote config to avoid network requests during tests
     assignableWindow._POSTHOG_REMOTE_CONFIG = {
         [token]: {
             config: {},

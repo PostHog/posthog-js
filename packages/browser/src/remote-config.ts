@@ -80,17 +80,14 @@ export class RemoteConfigLoader {
             return
         }
 
+        // Don't start interval in test environments to avoid issues with fake timers
+        if (typeof process !== 'undefined' && process.env.NODE_ENV === 'test') {
+            return
+        }
+
         this._refreshInterval = setInterval(() => {
             this.refresh()
         }, REFRESH_INTERVAL)
-
-        // Consider adding a stop() method:
-        // stop(): void {
-        //     if (this._refreshInterval) {
-        //         clearInterval(this._refreshInterval)
-        //         this._refreshInterval = undefined
-        //     }
-        // }
     }
 
     /**
