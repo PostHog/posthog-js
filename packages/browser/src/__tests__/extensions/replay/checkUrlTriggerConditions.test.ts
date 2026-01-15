@@ -81,6 +81,8 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
         })
 
         urlTriggerMatching = new URLTriggerMatching(mockPostHog)
+        // Reset URL tracking state for each test
+        ;(urlTriggerMatching as any)._lastCheckedUrl = ''
     })
 
     describe('property-based tests for activation loop', () => {
@@ -102,6 +104,8 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
                         onResumeCalls = 0
                         onActivateCalls = 0
                         persistedSession = null
+                        // Reset URL tracking state for each property test run
+                        ;(urlTriggerMatching as any)._lastCheckedUrl = ''
 
                         const url = `https://example.com/${urlPath}`
                         configureTriggers([{ url, matching: 'regex' }])
@@ -186,6 +190,8 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
                         onActivateCalls = 0
                         persistedSession = null
                         urlTriggerMatching.urlBlocked = false
+                        // Reset URL tracking state for each property test run
+                        ;(urlTriggerMatching as any)._lastCheckedUrl = ''
 
                         configureTriggers(triggerUrls, blocklistUrls)
                         setWindowLocation(currentUrl)
@@ -243,6 +249,9 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
                         for (const shouldBlock of transitions) {
                             const url = shouldBlock ? blockedUrl : unblockedUrl
                             setWindowLocation(url)
+
+                            // Reset lastCheckedUrl to force the check (simulating actual URL changes)
+                            ;(urlTriggerMatching as any)._lastCheckedUrl = ''
 
                             urlTriggerMatching.checkUrlTriggerConditions(
                                 () => {
@@ -322,6 +331,235 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
 
             expect(onPauseCalls).toBe(1)
             expect(onResumeCalls).toBe(0)
+        })
+    })
+
+    describe('regex cache', () => {
+        it('compiles regex patterns when config is set', () => {
+            const triggers: SessionRecordingUrlTrigger[] = [
+                { url: 'https://example\\.com/.*', matching: 'regex' },
+                { url: 'https://test\\.com/page', matching: 'regex' },
+            ]
+
+            configureTriggers(triggers)
+
+            const cache = (urlTriggerMatching as any)._compiledTriggerRegexes as Map<string, RegExp>
+            expect(cache.size).toBe(2)
+            expect(cache.has('https://example\\.com/.*')).toBe(true)
+            expect(cache.has('https://test\\.com/page')).toBe(true)
+        })
+
+        it('compiles blocklist regex patterns', () => {
+            const blocklist: SessionRecordingUrlTrigger[] = [{ url: 'https://blocked\\.com/.*', matching: 'regex' }]
+
+            configureTriggers([], blocklist)
+
+            const cache = (urlTriggerMatching as any)._compiledBlocklistRegexes as Map<string, RegExp>
+            expect(cache.size).toBe(1)
+            expect(cache.has('https://blocked\\.com/.*')).toBe(true)
+        })
+
+        it('clears and rebuilds cache when config changes', () => {
+            configureTriggers([{ url: 'pattern1', matching: 'regex' }])
+
+            let cache = (urlTriggerMatching as any)._compiledTriggerRegexes as Map<string, RegExp>
+            expect(cache.size).toBe(1)
+            expect(cache.has('pattern1')).toBe(true)
+
+            configureTriggers([
+                { url: 'pattern2', matching: 'regex' },
+                { url: 'pattern3', matching: 'regex' },
+            ])
+
+            cache = (urlTriggerMatching as any)._compiledTriggerRegexes as Map<string, RegExp>
+            expect(cache.size).toBe(2)
+            expect(cache.has('pattern1')).toBe(false)
+            expect(cache.has('pattern2')).toBe(true)
+            expect(cache.has('pattern3')).toBe(true)
+        })
+
+        it('uses cached regex for matching instead of creating new ones', () => {
+            const pattern = 'https://example\\.com/page'
+            configureTriggers([{ url: pattern, matching: 'regex' }])
+
+            const cache = (urlTriggerMatching as any)._compiledTriggerRegexes as Map<string, RegExp>
+            const cachedRegex = cache.get(pattern)
+            expect(cachedRegex).toBeDefined()
+
+            const regexConstructorSpy = jest.spyOn(global, 'RegExp')
+
+            setWindowLocation('https://example.com/page')
+            checkTriggers('test-session')
+
+            expect(regexConstructorSpy).not.toHaveBeenCalled()
+
+            regexConstructorSpy.mockRestore()
+        })
+
+        it('does not cache duplicate patterns', () => {
+            const triggers: SessionRecordingUrlTrigger[] = [
+                { url: 'pattern', matching: 'regex' },
+                { url: 'pattern', matching: 'regex' },
+                { url: 'pattern', matching: 'regex' },
+            ]
+
+            configureTriggers(triggers)
+
+            const cache = (urlTriggerMatching as any)._compiledTriggerRegexes as Map<string, RegExp>
+            expect(cache.size).toBe(1)
+        })
+
+        it('handles invalid regex patterns gracefully', () => {
+            const triggers: SessionRecordingUrlTrigger[] = [
+                { url: '[invalid(regex', matching: 'regex' },
+                { url: 'valid\\.pattern', matching: 'regex' },
+            ]
+
+            configureTriggers(triggers)
+
+            const cache = (urlTriggerMatching as any)._compiledTriggerRegexes as Map<string, RegExp>
+            expect(cache.has('valid\\.pattern')).toBe(true)
+            expect(cache.has('[invalid(regex')).toBe(false)
+        })
+
+        it('handles invalid blocklist regex patterns gracefully', () => {
+            const blocklist: SessionRecordingUrlTrigger[] = [{ url: '*invalid*', matching: 'regex' }]
+
+            configureTriggers([], blocklist)
+
+            const cache = (urlTriggerMatching as any)._compiledBlocklistRegexes as Map<string, RegExp>
+            expect(cache.has('*invalid*')).toBe(false)
+        })
+    })
+
+    describe('URL change detection optimization', () => {
+        beforeEach(() => {
+            configureTriggers([{ url: '.*', matching: 'regex' }])
+        })
+
+        it('checks trigger conditions on first call for a URL', () => {
+            const onActivate = jest.fn()
+            setWindowLocation('https://example.com/page1')
+
+            urlTriggerMatching.checkUrlTriggerConditions(jest.fn(), jest.fn(), onActivate, 'test-session')
+
+            expect(onActivate).toHaveBeenCalledTimes(1)
+        })
+
+        it('skips checking when URL has not changed', () => {
+            const onActivate = jest.fn()
+            const url = 'https://example.com/page1'
+            setWindowLocation(url)
+
+            urlTriggerMatching.checkUrlTriggerConditions(jest.fn(), jest.fn(), onActivate, 'test-session')
+            expect(onActivate).toHaveBeenCalledTimes(1)
+
+            urlTriggerMatching.checkUrlTriggerConditions(jest.fn(), jest.fn(), onActivate, 'test-session')
+            expect(onActivate).toHaveBeenCalledTimes(1)
+        })
+
+        it('checks again when URL changes', () => {
+            const sessionId = 'test-session'
+
+            // First URL
+            setWindowLocation('https://example.com/page1')
+            urlTriggerMatching.checkUrlTriggerConditions(
+                jest.fn(),
+                jest.fn(),
+                createActivateCallback(sessionId),
+                sessionId
+            )
+            expect(onActivateCalls).toBe(1)
+
+            // Same URL - should skip, so onActivate not called again
+            urlTriggerMatching.checkUrlTriggerConditions(
+                jest.fn(),
+                jest.fn(),
+                createActivateCallback(sessionId),
+                sessionId
+            )
+            expect(onActivateCalls).toBe(1)
+
+            // Verify that _lastCheckedUrl was set to page1
+            expect((urlTriggerMatching as any)._lastCheckedUrl).toBe('https://example.com/page1')
+
+            // Different URL - should check again and update _lastCheckedUrl
+            setWindowLocation('https://example.com/page2')
+            urlTriggerMatching.checkUrlTriggerConditions(
+                jest.fn(),
+                jest.fn(),
+                createActivateCallback(sessionId),
+                sessionId
+            )
+
+            // Verify that _lastCheckedUrl was updated to page2
+            expect((urlTriggerMatching as any)._lastCheckedUrl).toBe('https://example.com/page2')
+
+            // onActivate still called only once because same session
+            expect(onActivateCalls).toBe(1)
+        })
+
+        it('handles rapid same-URL checks efficiently', () => {
+            const url = 'https://example.com/page'
+            setWindowLocation(url)
+
+            const onPause = jest.fn()
+            const onResume = jest.fn()
+            const onActivate = jest.fn()
+
+            for (let i = 0; i < 1000; i++) {
+                urlTriggerMatching.checkUrlTriggerConditions(onPause, onResume, onActivate, 'test-session')
+            }
+
+            expect(onActivate).toHaveBeenCalledTimes(1)
+            expect(onPause).toHaveBeenCalledTimes(0)
+            expect(onResume).toHaveBeenCalledTimes(0)
+        })
+
+        it('resets URL tracking on stop()', () => {
+            const onActivate = jest.fn()
+            const url = 'https://example.com/page'
+            setWindowLocation(url)
+
+            urlTriggerMatching.checkUrlTriggerConditions(jest.fn(), jest.fn(), onActivate, 'test-session-1')
+            expect(onActivate).toHaveBeenCalledTimes(1)
+
+            urlTriggerMatching.stop()
+
+            urlTriggerMatching.checkUrlTriggerConditions(jest.fn(), jest.fn(), onActivate, 'test-session-2')
+            expect(onActivate).toHaveBeenCalledTimes(2)
+        })
+
+        it('verifies lastCheckedUrl is reset on stop()', () => {
+            const url = 'https://example.com/page'
+            setWindowLocation(url)
+
+            urlTriggerMatching.checkUrlTriggerConditions(jest.fn(), jest.fn(), jest.fn(), 'test-session')
+
+            const lastCheckedUrl = (urlTriggerMatching as any)._lastCheckedUrl
+            expect(lastCheckedUrl).toBe(url)
+
+            urlTriggerMatching.stop()
+
+            const resetUrl = (urlTriggerMatching as any)._lastCheckedUrl
+            expect(resetUrl).toBe('')
+        })
+
+        it('skips blocklist checks when URL has not changed', () => {
+            configureTriggers([], [{ url: 'blocked\\.com', matching: 'regex' }])
+
+            const onPause = jest.fn(() => {
+                urlTriggerMatching.urlBlocked = true
+            })
+
+            setWindowLocation('https://blocked.com/page')
+            urlTriggerMatching.urlBlocked = false
+
+            urlTriggerMatching.checkUrlTriggerConditions(onPause, jest.fn(), jest.fn(), 'test-session')
+            expect(onPause).toHaveBeenCalledTimes(1)
+
+            urlTriggerMatching.checkUrlTriggerConditions(onPause, jest.fn(), jest.fn(), 'test-session')
+            expect(onPause).toHaveBeenCalledTimes(1)
         })
     })
 })
