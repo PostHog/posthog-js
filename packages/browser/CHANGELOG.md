@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.322.0
+
+### Minor Changes
+
+- [#2904](https://github.com/PostHog/posthog-js/pull/2904) [`b9fb2e2`](https://github.com/PostHog/posthog-js/commit/b9fb2e2364b1f8c04689d6fb6635bd81a3caa8eb) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Fix the issue with \_currentTicketId
+  (2026-01-15)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.322.0
+
 ## 1.321.3
 
 ### Patch Changes
