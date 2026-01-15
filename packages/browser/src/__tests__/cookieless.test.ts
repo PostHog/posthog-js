@@ -322,7 +322,7 @@ describe('cookieless', () => {
                 cookieless_mode: 'on_reject',
                 request_batching: true,
             })
-            expect(mockedFetch).toBeCalledTimes(1) 
+            expect(mockedFetch).toBeCalledTimes(1)
             expect(mockedFetch.mock.calls[0][0]).toContain('/array/')
 
             posthog.opt_in_capturing()

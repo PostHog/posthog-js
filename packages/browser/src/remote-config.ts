@@ -24,7 +24,6 @@ export class RemoteConfigLoader {
                 return cb(this.remoteConfig)
             })
         } else {
-            logger.error('PostHog Extensions not found. Cannot load remote config.')
             cb()
         }
     }
