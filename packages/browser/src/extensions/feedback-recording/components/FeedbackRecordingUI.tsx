@@ -58,7 +58,10 @@ export function FeedbackRecordingUI({
             const audioElement = document.createElement('audio')
             audioElement.id = `posthog-feedback-audio-${feedbackId}`
             audioElement.style.display = 'none'
-            audioElement.src = `/api/feedback/audio/${encodeURIComponent(feedbackId)}/download?token=${encodeURIComponent(posthogInstance.config?.token || '')}`
+            audioElement.src = posthogInstance.requestRouter.endpointFor(
+                'api',
+                `/api/feedback/audio/${encodeURIComponent(feedbackId)}/download?token=${encodeURIComponent(posthogInstance.config?.token || '')}`
+            )
             audioElement.autoplay = true
             audioElement.setAttribute('data-feedback-id', feedbackId)
             audioElement.setAttribute('data-posthog-recording', 'true')
