@@ -2462,7 +2462,10 @@ describe('getRemoteConfigPayload', () => {
         const callback = jest.fn()
         featureFlags.getRemoteConfigPayload('test-flag', callback)
 
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('evaluation_environments is deprecated'))
+        expect(warnSpy).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.stringContaining('evaluation_environments is deprecated')
+        )
 
         expect(instance._send_request).toHaveBeenCalledWith(
             expect.objectContaining({
