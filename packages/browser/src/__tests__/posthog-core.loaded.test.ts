@@ -60,16 +60,16 @@ describe('loaded() with flags', () => {
             // Run timers to trigger the debounced reloadFeatureFlags
             jest.runOnlyPendingTimers()
 
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request).toHaveBeenCalledTimes(2) // config + flags
 
-            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
+            expect(instance._send_request.mock.calls[1][0]).toMatchObject({
                 url: 'https://us.i.posthog.com/flags/?v=2',
                 data: {
                     groups: { org: 'bazinga' },
                 },
             })
             jest.runOnlyPendingTimers() // Run any remaining timers
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request).toHaveBeenCalledTimes(2)
         })
 
         it('does add follow up call due to group change', async () => {
