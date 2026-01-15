@@ -1,5 +1,5 @@
 import { h, ComponentChildren } from 'preact'
-import { ProductTourStep } from '../../../posthog-product-tours-types'
+import { ProductTourDisplayFrequency, ProductTourStep } from '../../../posthog-product-tours-types'
 import { getStepHtml } from '../product-tours-utils'
 import { cancelSVG } from '../../surveys/icons'
 
@@ -7,6 +7,7 @@ export interface ProductTourBannerProps {
     step: ProductTourStep
     onDismiss: () => void
     onTriggerTour?: () => void
+    displayFrequency?: ProductTourDisplayFrequency
 }
 
 interface BannerWrapperProps {
@@ -54,9 +55,17 @@ function StaticWrapper({ class: className, children }: BannerWrapperProps): h.JS
     return <div class={className}>{children}</div>
 }
 
-export function ProductTourBanner({ step, onDismiss, onTriggerTour }: ProductTourBannerProps): h.JSX.Element {
+export function ProductTourBanner({
+    step,
+    onDismiss,
+    onTriggerTour,
+    displayFrequency,
+}: ProductTourBannerProps): h.JSX.Element {
     const config = step.bannerConfig ?? { behavior: 'sticky' }
     const action = config.action
+
+    // "always" display frequency means no dismiss button
+    const showDismissButton = displayFrequency !== 'always'
 
     const classNames = ['ph-tour-banner', config.behavior === 'sticky' && 'ph-tour-banner--sticky']
         .filter(Boolean)
@@ -66,17 +75,19 @@ export function ProductTourBanner({ step, onDismiss, onTriggerTour }: ProductTou
         <>
             <div class="ph-tour-banner-content" dangerouslySetInnerHTML={{ __html: getStepHtml(step) }} />
 
-            <button
-                class="ph-tour-banner-dismiss"
-                onClick={(e) => {
-                    e.stopPropagation()
-                    e.preventDefault()
-                    onDismiss()
-                }}
-                aria-label="Close banner"
-            >
-                {cancelSVG}
-            </button>
+            {showDismissButton && (
+                <button
+                    class="ph-tour-banner-dismiss"
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                        onDismiss()
+                    }}
+                    aria-label="Close banner"
+                >
+                    {cancelSVG}
+                </button>
+            )}
         </>
     )
 
