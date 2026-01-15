@@ -179,7 +179,7 @@ export class PostHogFeatureFlags {
         // Log deprecation warning if using old field
         if (this._instance.config.evaluation_environments && !this._instance.config.evaluation_contexts) {
             logger.warn(
-                'evaluation_environments is deprecated. Use evaluation_contexts instead. This property will be removed in a future version.'
+                'evaluation_environments is deprecated. Use evaluation_contexts instead. evaluation_environments will be removed in a future version.'
             )
         }
 

@@ -2455,10 +2455,14 @@ describe('getRemoteConfigPayload', () => {
     })
 
     it('should support deprecated evaluation_environments field', () => {
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+
         instance.config.evaluation_environments = ['staging', 'backend']
 
         const callback = jest.fn()
         featureFlags.getRemoteConfigPayload('test-flag', callback)
+
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('evaluation_environments is deprecated'))
 
         expect(instance._send_request).toHaveBeenCalledWith(
             expect.objectContaining({
@@ -2471,6 +2475,8 @@ describe('getRemoteConfigPayload', () => {
                 }),
             })
         )
+
+        warnSpy.mockRestore()
     })
 
     describe('flags_api_host configuration', () => {
