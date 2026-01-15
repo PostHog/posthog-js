@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.323.0
+
+### Minor Changes
+
+- [#2902](https://github.com/PostHog/posthog-js/pull/2902) [`584657a`](https://github.com/PostHog/posthog-js/commit/584657a0686c80c439261a1a90bb69fe45e873d0) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Ensure wrapped fetch() passes duplex option when required
+  (2026-01-15)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.323.0
+
 ## 1.322.0
 
 ### Minor Changes
