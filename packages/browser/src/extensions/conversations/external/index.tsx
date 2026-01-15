@@ -220,6 +220,14 @@ export class ConversationsManager implements ConversationsManagerInterface {
         if (!targetTicketId) {
             throw new Error('No ticket ID provided and no active conversation')
         }
+
+        if (ticketId && ticketId !== this._currentTicketId) {
+            this._currentTicketId = ticketId
+            this._persistence.saveTicketId(ticketId)
+            // Reset last message timestamp when switching tickets
+            this._lastMessageTimestamp = null
+        }
+
         const token = this._config.token
 
         // eslint-disable-next-line compat/compat

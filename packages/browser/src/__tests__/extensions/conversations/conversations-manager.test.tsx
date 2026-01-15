@@ -560,6 +560,65 @@ describe('ConversationsManager', () => {
                 const callArgs = (mockPosthog._send_request as jest.Mock).mock.calls[0][0]
                 expect(callArgs.url).toContain('widget_session_id=')
             })
+
+            it('should update _currentTicketId when getMessages is called with explicit ticketId', async () => {
+                // Start with no ticket
+                expect(manager['_currentTicketId']).toBeNull()
+
+                // Call getMessages with a specific ticket ID
+                await act(async () => {
+                    await manager.getMessages('different-ticket-456')
+                })
+
+                // _currentTicketId should now be updated to the new ticket
+                expect(manager['_currentTicketId']).toBe('different-ticket-456')
+            })
+
+            it('should switch ticket when getMessages is called with different ticketId', async () => {
+                // Send a message to create initial ticket
+                await act(async () => {
+                    await manager.sendMessage('Hello!')
+                })
+                expect(manager['_currentTicketId']).toBe('ticket-123')
+
+                // Switch to a different ticket by calling getMessages with explicit ticketId
+                await act(async () => {
+                    await manager.getMessages('another-ticket-789')
+                })
+
+                // Should have updated to the new ticket ID
+                expect(manager['_currentTicketId']).toBe('another-ticket-789')
+            })
+
+            it('should send messages to the correct ticket after switching via getMessages', async () => {
+                // Send initial message to create ticket-123
+                await act(async () => {
+                    await manager.sendMessage('Hello!')
+                })
+                expect(manager['_currentTicketId']).toBe('ticket-123')
+
+                // Switch to a different ticket
+                await act(async () => {
+                    await manager.getMessages('switched-ticket-999')
+                })
+                expect(manager['_currentTicketId']).toBe('switched-ticket-999')
+
+                jest.clearAllMocks()
+
+                // Send another message - should go to the switched ticket
+                await act(async () => {
+                    await manager.sendMessage('Message after switch')
+                })
+
+                expect(mockPosthog._send_request).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        data: expect.objectContaining({
+                            ticket_id: 'switched-ticket-999',
+                            message: 'Message after switch',
+                        }),
+                    })
+                )
+            })
         })
 
         describe('markAsRead API', () => {
