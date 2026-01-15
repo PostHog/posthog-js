@@ -562,7 +562,19 @@ function initFetchObserver(
         return async function (url: URL | RequestInfo, init?: RequestInit | undefined) {
             // check IE earlier than this, we only initialize if Request is present
             // eslint-disable-next-line compat/compat
-            const req = new Request(url, init)
+            const requestInit: RequestInit = init ? { ...init } : {}
+            // When the request body is a ReadableStream, browsers require duplex to be
+            // specified. We only set it to 'half' if not already provided, preserving
+            // any existing value (e.g., 'full' for servers that support it).
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore - duplex is not yet in the TypeScript RequestInit type
+            const hasDuplex = init?.duplex !== undefined
+            if (!hasDuplex && (init?.body instanceof ReadableStream || (url instanceof Request && url.body instanceof ReadableStream))) {
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore - duplex is not yet in the TypeScript RequestInit type
+                requestInit.duplex = 'half'
+            }
+            const req = new Request(url, requestInit)
             let res: Response | undefined
             const networkRequest: Partial<CapturedNetworkRequest> = {}
             let start: number | undefined
