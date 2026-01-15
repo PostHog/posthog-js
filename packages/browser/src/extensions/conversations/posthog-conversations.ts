@@ -300,7 +300,7 @@ export class PostHogConversations {
      * @example
      * const ticketId = posthog.conversations.getCurrentTicketId()
      * if (ticketId) {
-     *   console.log('Active conversation:', ticketId)
+     *   console.log('Current ticket ID:', ticketId)
      * }
      */
     getCurrentTicketId(): string | null {
