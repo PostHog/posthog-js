@@ -1136,7 +1136,7 @@ describe('Feature flag error tracking', () => {
     })
   })
 
-  it('should set $feature_flag_error to unknown_error when request fails', async () => {
+  it('should set $feature_flag_error to api_error_500 when request fails with 500', async () => {
     // First, let the initial setup succeed
     ;(globalThis as any).window.fetch = jest.fn().mockImplementation((url: string) => {
       if (url.includes('/flags/')) {
@@ -1160,7 +1160,7 @@ describe('Feature flag error tracking', () => {
       const body = JSON.parse(captureCall[1].body)
       const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
       expect(featureFlagEvent).toBeDefined()
-      expect(featureFlagEvent.properties.$feature_flag_error).toBe(FeatureFlagError.UNKNOWN_ERROR)
+      expect(featureFlagEvent.properties.$feature_flag_error).toBe(FeatureFlagError.apiError(500))
     })
   })
 

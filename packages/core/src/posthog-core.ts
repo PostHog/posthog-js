@@ -1,6 +1,7 @@
 import type {
   PostHogAutocaptureElement,
   PostHogFlagsResponse,
+  PostHogFeatureFlagsResponse,
   PostHogCoreOptions,
   PostHogEventProperties,
   PostHogCaptureOptions,
@@ -35,7 +36,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   private flagCallReported: { [key: string]: boolean } = {}
 
   // internal
-  protected _flagsResponsePromise?: Promise<PostHogFlagsResponse | undefined> // TODO: come back to this, fix typing
+  protected _flagsResponsePromise?: Promise<PostHogFeatureFlagsResponse | undefined>
   protected _sessionExpirationTimeSeconds: number
   private _sessionMaxLengthSeconds: number = 24 * 60 * 60 // 24 hours
   protected sessionProps: PostHogEventProperties = {}
@@ -453,7 +454,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   protected async flagsAsync(
     sendAnonDistinctId: boolean = true,
     fetchConfig: boolean = true
-  ): Promise<PostHogFlagsResponse | undefined> {
+  ): Promise<PostHogFeatureFlagsResponse | undefined> {
     await this._initPromise
     if (this._flagsResponsePromise) {
       return this._flagsResponsePromise
@@ -551,7 +552,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   private async _flagsAsync(
     sendAnonDistinctId: boolean = true,
     fetchConfig: boolean = true
-  ): Promise<PostHogFlagsResponse | undefined> {
+  ): Promise<PostHogFeatureFlagsResponse | undefined> {
     this._flagsResponsePromise = this._initPromise
       .then(async () => {
         const distinctId = this.getDistinctId()
@@ -566,7 +567,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           $anon_distinct_id: sendAnonDistinctId ? this.getAnonymousId() : undefined,
         }
 
-        const res = await super.getFlags(
+        const result = await super.getFlags(
           distinctId,
           groups as PostHogGroupProperties,
           personProperties,
@@ -575,13 +576,15 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           fetchConfig
         )
 
-        if (res === undefined) {
+        if (!result.success) {
           this.setKnownFeatureFlagDetails({
             flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
-            requestFailed: true,
+            requestError: result.error,
           })
           return undefined
         }
+
+        const res = result.response
 
         if (res?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
           this.setKnownFeatureFlagDetails({
@@ -616,7 +619,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             evaluatedAt: res.evaluatedAt,
             errorsWhileComputingFlags: res.errorsWhileComputingFlags,
             quotaLimited: res.quotaLimited,
-            requestFailed: false,
           })
           // Mark that we hit the /flags endpoint so we can capture this in the $feature_flag_called event
           this.setPersistedProperty(PostHogPersistedProperty.FlagsEndpointWasHit, true)
@@ -711,8 +713,15 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     const errors: string[] = []
     const isQuotaLimited = storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)
 
-    if (storedDetails?.requestFailed) {
-      errors.push(FeatureFlagError.UNKNOWN_ERROR)
+    if (storedDetails?.requestError) {
+      const { type, statusCode } = storedDetails.requestError
+      if (type === 'timeout') {
+        errors.push(FeatureFlagError.TIMEOUT)
+      } else if (type === 'api_error' && statusCode !== undefined) {
+        errors.push(FeatureFlagError.apiError(statusCode))
+      } else {
+        errors.push(FeatureFlagError.CONNECTION_ERROR)
+      }
     } else if (storedDetails) {
       if (storedDetails.errorsWhileComputingFlags) {
         errors.push(FeatureFlagError.ERRORS_WHILE_COMPUTING)
@@ -735,7 +744,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
       // Track missing flags only when we had a successful, non-limited request.
       // When quota limited or request failed, we cannot determine if the flag is truly missing.
-      if (details && !featureFlag && !storedDetails?.requestFailed && !isQuotaLimited) {
+      if (details && !featureFlag && !storedDetails?.requestError && !isQuotaLimited) {
         errors.push(FeatureFlagError.FLAG_MISSING)
       }
     }

@@ -19,6 +19,8 @@ import {
   PostHogPersistedProperty,
   PostHogQueueItem,
   Logger,
+  GetFlagsResult,
+  FeatureFlagRequestError,
 } from './types'
 import {
   allSettled,
@@ -452,7 +454,7 @@ export abstract class PostHogCoreStateless {
     groupProperties: Record<string, Record<string, string>> = {},
     extraPayload: Record<string, any> = {},
     fetchConfig: boolean = true
-  ): Promise<PostHogFlagsResponse | undefined> {
+  ): Promise<GetFlagsResult> {
     await this._initPromise
 
     const configParam = fetchConfig ? '&config=true' : ''
@@ -482,11 +484,29 @@ export abstract class PostHogCoreStateless {
     // Don't retry /flags API calls
     return this.fetchWithRetry(url, fetchOptions, { retryCount: 0 }, this.featureFlagsRequestTimeoutMs)
       .then((response) => response.json() as Promise<PostHogV1FlagsResponse | PostHogV2FlagsResponse>)
-      .then((response) => normalizeFlagsResponse(response))
-      .catch((error) => {
+      .then((response) => ({ success: true as const, response: normalizeFlagsResponse(response) }))
+      .catch((error): GetFlagsResult => {
         this._events.emit('error', error)
-        return undefined
-      }) as Promise<PostHogFlagsResponse | undefined>
+        return { success: false, error: this.categorizeRequestError(error) }
+      })
+  }
+
+  private categorizeRequestError(error: unknown): FeatureFlagRequestError {
+    if (error instanceof PostHogFetchHttpError) {
+      return { type: 'api_error', statusCode: error.status }
+    }
+
+    if (error instanceof PostHogFetchNetworkError) {
+      const cause = error.error
+      // AbortError is thrown when the request times out via AbortSignal.timeout()
+      if (cause instanceof Error && cause.name === 'AbortError') {
+        return { type: 'timeout' }
+      }
+      return { type: 'connection_error' }
+    }
+
+    // Unknown error type, default to connection_error
+    return { type: 'connection_error' }
   }
 
   protected async getFeatureFlagStateless(
@@ -710,12 +730,14 @@ export abstract class PostHogCoreStateless {
     if (flagKeysToEvaluate) {
       extraPayload['flag_keys_to_evaluate'] = flagKeysToEvaluate
     }
-    const flagsResponse = await this.getFlags(distinctId, groups, personProperties, groupProperties, extraPayload)
+    const result = await this.getFlags(distinctId, groups, personProperties, groupProperties, extraPayload)
 
-    if (flagsResponse === undefined) {
-      // We probably errored out, so return undefined
+    if (!result.success) {
+      // Request failed, return undefined
       return undefined
     }
+
+    const flagsResponse = result.response
 
     // if there's an error on the flagsResponse, log a console error, but don't throw an error
     if (flagsResponse.errorsWhileComputingFlags) {

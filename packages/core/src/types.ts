@@ -259,7 +259,7 @@ export type PostHogFlagsStorageFormat = Pick<PostHogFeatureFlagDetails, 'flags'>
   Partial<Pick<PostHogFlagsResponse, 'requestId' | 'evaluatedAt'>> & {
     errorsWhileComputingFlags?: boolean
     quotaLimited?: string[]
-    requestFailed?: boolean
+    requestError?: FeatureFlagRequestError
   }
 
 /**
@@ -284,16 +284,40 @@ export type FetchLike = (url: string, options: PostHogFetchOptions) => Promise<P
  *   ERRORS_WHILE_COMPUTING: Server returned errorsWhileComputingFlags=true
  *   FLAG_MISSING: Requested flag not in API response
  *   QUOTA_LIMITED: Rate/quota limit exceeded
- *   UNKNOWN_ERROR: Unexpected exceptions
+ *   TIMEOUT: Request timed out
+ *   CONNECTION_ERROR: Network connection failed
+ *   apiError: HTTP error with status code (e.g., api_error_500)
  */
 export const FeatureFlagError = {
   ERRORS_WHILE_COMPUTING: 'errors_while_computing_flags',
   FLAG_MISSING: 'flag_missing',
   QUOTA_LIMITED: 'quota_limited',
+  TIMEOUT: 'timeout',
+  CONNECTION_ERROR: 'connection_error',
+  /** @deprecated Use TIMEOUT, CONNECTION_ERROR, or apiError() for granular error types */
   UNKNOWN_ERROR: 'unknown_error',
+  apiError: (status: number): string => `api_error_${status}`,
 } as const
 
-export type FeatureFlagErrorType = (typeof FeatureFlagError)[keyof typeof FeatureFlagError] | string
+export type FeatureFlagErrorType =
+  | (typeof FeatureFlagError)[Exclude<keyof typeof FeatureFlagError, 'apiError'>]
+  | ReturnType<typeof FeatureFlagError.apiError>
+  | string
+
+/**
+ * Represents an error that occurred during a feature flag request.
+ */
+export type FeatureFlagRequestError = {
+  type: 'timeout' | 'connection_error' | 'api_error'
+  statusCode?: number
+}
+
+/**
+ * Result type for getFlags that includes either a successful response or error information.
+ */
+export type GetFlagsResult =
+  | { success: true; response: PostHogFeatureFlagsResponse }
+  | { success: false; error: FeatureFlagRequestError }
 
 export type FeatureFlagDetail = {
   key: string

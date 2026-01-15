@@ -690,7 +690,6 @@ describe('PostHog Feature Flags v4', () => {
           evaluatedAt: 1640995200000,
           errorsWhileComputingFlags: undefined,
           quotaLimited: undefined,
-          requestFailed: false,
         })
       })
 
