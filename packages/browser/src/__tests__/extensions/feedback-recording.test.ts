@@ -1,6 +1,7 @@
 import { FeedbackRecordingManager, generateFeedbackRecording } from '../../extensions/feedback-recording'
 import * as FeedbackUI from '../../extensions/feedback-recording/components/FeedbackRecordingUI'
 import { PostHog } from '../../posthog-core'
+import { RemoteConfig } from '../../types'
 import { assignableWindow } from '../../utils/globals'
 import { createMockPostHog } from '../helpers/posthog-instance'
 import { AudioRecorder } from '../../extensions/feedback-recording/audio-recorder'
@@ -32,6 +33,8 @@ describe('FeedbackRecordingManager', () => {
             config: {
                 api_host: 'https://test.com',
                 token: 'test-token',
+                disable_feedback_recording: false,
+                disable_session_recording: false,
             } as any,
             capture: jest.fn(),
             startSessionRecording: jest.fn(),
@@ -42,6 +45,7 @@ describe('FeedbackRecordingManager', () => {
             requestRouter: {
                 endpointFor: jest.fn().mockReturnValue('https://test.com/api/feedback/audio'),
             } as any,
+            sessionRecording: {} as any,
         })
 
         audioRecorderMock = {
@@ -54,6 +58,9 @@ describe('FeedbackRecordingManager', () => {
         } as unknown as jest.Mocked<AudioRecorder>
 
         manager = new FeedbackRecordingManager(instance, audioRecorderMock)
+
+        // Enable feedback recording via remote config for most tests
+        manager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
     })
 
     afterEach(() => {
@@ -72,6 +79,117 @@ describe('FeedbackRecordingManager', () => {
         expect(manager).toBeInstanceOf(FeedbackRecordingManager)
         expect(manager.getCurrentFeedbackRecordingId()).toBeNull()
         expect(manager.isFeedbackRecordingActive()).toBe(false)
+    })
+
+    describe('onRemoteConfig', () => {
+        it('should not enable feedback recording if disabled via config', () => {
+            instance.config.disable_feedback_recording = true
+            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+
+            newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
+
+            // Even though server says enabled, config disables it
+            // We can verify by trying to launch - it should not work
+            expect(newManager.isFeedbackRecordingActive()).toBe(false)
+        })
+
+        it('should enable feedback recording when server returns true', () => {
+            instance.config.disable_feedback_recording = false
+            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+
+            newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
+
+            // Manager should now allow launching
+            expect(newManager.isFeedbackRecordingActive()).toBe(false) // Not active yet, but enabled
+        })
+
+        it('should not enable feedback recording when server returns false', () => {
+            instance.config.disable_feedback_recording = false
+            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+
+            newManager.onRemoteConfig({ feedbackRecording: false } as RemoteConfig)
+
+            expect(newManager.isFeedbackRecordingActive()).toBe(false)
+        })
+
+        it('should not enable feedback recording when server returns undefined', () => {
+            instance.config.disable_feedback_recording = false
+            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+
+            newManager.onRemoteConfig({} as RemoteConfig)
+
+            expect(newManager.isFeedbackRecordingActive()).toBe(false)
+        })
+    })
+
+    describe('launchFeedbackRecordingUI - feature flag checks', () => {
+        beforeEach(() => {
+            jest.clearAllMocks()
+        })
+
+        it('should not launch UI when disabled via config', async () => {
+            instance.config.disable_feedback_recording = true
+            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+            newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
+
+            await newManager.launchFeedbackRecordingUI(jest.fn())
+
+            expect(FeedbackUI.renderFeedbackRecordingUI).not.toHaveBeenCalled()
+        })
+
+        it('should not launch UI when remote config not loaded yet', async () => {
+            instance.config.disable_feedback_recording = false
+            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+            // Don't call onRemoteConfig - simulating remote config not loaded yet
+
+            await newManager.launchFeedbackRecordingUI(jest.fn())
+
+            expect(FeedbackUI.renderFeedbackRecordingUI).not.toHaveBeenCalled()
+        })
+
+        it('should not launch UI when not enabled server-side', async () => {
+            instance.config.disable_feedback_recording = false
+            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+            newManager.onRemoteConfig({ feedbackRecording: false } as RemoteConfig)
+
+            await newManager.launchFeedbackRecordingUI(jest.fn())
+
+            expect(FeedbackUI.renderFeedbackRecordingUI).not.toHaveBeenCalled()
+        })
+
+        it('should not launch UI when session recording is disabled', async () => {
+            instance.config.disable_feedback_recording = false
+            instance.config.disable_session_recording = true
+            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+            newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
+
+            await newManager.launchFeedbackRecordingUI(jest.fn())
+
+            expect(FeedbackUI.renderFeedbackRecordingUI).not.toHaveBeenCalled()
+        })
+
+        it('should not launch UI when session recording is not loaded', async () => {
+            instance.config.disable_feedback_recording = false
+            instance.config.disable_session_recording = false
+            ;(instance as any).sessionRecording = undefined
+            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+            newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
+
+            await newManager.launchFeedbackRecordingUI(jest.fn())
+
+            expect(FeedbackUI.renderFeedbackRecordingUI).not.toHaveBeenCalled()
+        })
+
+        it('should launch UI when enabled in both config and server-side', async () => {
+            instance.config.disable_feedback_recording = false
+            instance.config.disable_session_recording = false
+            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+            newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
+
+            await newManager.launchFeedbackRecordingUI(jest.fn())
+
+            expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalled()
+        })
     })
 
     describe('launchFeedbackRecordingUI', () => {

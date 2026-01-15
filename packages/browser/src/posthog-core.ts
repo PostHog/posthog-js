@@ -202,6 +202,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_surveys_automatic_display: false,
     disable_conversations: false,
     disable_product_tours: false,
+    disable_feedback_recording: true,
     disable_external_dependency_loading: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
@@ -339,7 +340,6 @@ export class PostHog implements PostHogInterface {
     toolbar: Toolbar
     exceptions: PostHogExceptions
     consent: ConsentManager
-    feedbackManager: FeedbackRecordingManager
 
     // These are instance-specific state created after initialisation
     persistence?: PostHogPersistence
@@ -355,6 +355,7 @@ export class PostHog implements PostHogInterface {
     deadClicksAutocapture?: DeadClicksAutocapture
     historyAutocapture?: HistoryAutocapture
     productTours?: PostHogProductTours
+    feedbackManager?: FeedbackRecordingManager
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -420,7 +421,6 @@ export class PostHog implements PostHogInterface {
         this.requestRouter = new RequestRouter(this)
         this.consent = new ConsentManager(this)
         this.externalIntegrations = new ExternalIntegrations(this)
-        this.feedbackManager = new FeedbackRecordingManager(this)
         // NOTE: See the property definition for deprecation notice
         this.people = {
             set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
@@ -744,6 +744,10 @@ export class PostHog implements PostHogInterface {
         })
 
         initTasks.push(() => {
+            this.feedbackManager = new FeedbackRecordingManager(this)
+        })
+
+        initTasks.push(() => {
             this.heatmaps = new Heatmaps(this)
             this.heatmaps.startIfEnabled()
         })
@@ -860,6 +864,7 @@ export class PostHog implements PostHogInterface {
         this.logs.onRemoteConfig(config)
         this.conversations.onRemoteConfig(config)
         this.productTours?.onRemoteConfig(config)
+        this.feedbackManager?.onRemoteConfig(config)
         this.webVitalsAutocapture?.onRemoteConfig(config)
         this.exceptionObserver?.onRemoteConfig(config)
         this.exceptions.onRemoteConfig(config)
@@ -2983,6 +2988,11 @@ export class PostHog implements PostHogInterface {
      * @param handleRecordingEnded - Callback function invoked when the recording ends with the recording result.
      */
     startUserFeedbackRecording(handleRecordingEnded: (result: UserFeedbackRecordingResult) => void): void {
+        if (!this.feedbackManager) {
+            logger.warn('Feedback recording is not available.')
+            return
+        }
+
         if (this.feedbackManager.isFeedbackRecordingActive()) {
             logger.warn('A user feedback recording session is already active.')
             return
