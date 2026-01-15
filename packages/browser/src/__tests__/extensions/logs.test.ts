@@ -150,6 +150,9 @@ describe('logs entrypoint', () => {
 
             expect(mockOTLPLogExporter).toHaveBeenCalledWith({
                 url: 'https://app.posthog.com/i/v1/logs?token=test-token',
+                headers: {
+                    'Content-Type': 'text/plain',
+                },
             })
             expect(mockBatchLogRecordProcessor).toHaveBeenCalled()
             expect(mockLoggerProvider).toHaveBeenCalled()
@@ -197,6 +200,9 @@ describe('logs entrypoint', () => {
 
             expect(mockOTLPLogExporter).toHaveBeenCalledWith({
                 url: 'https://app.posthog.com/i/v1/logs?token=test-token',
+                headers: {
+                    'Content-Type': 'text/plain',
+                },
             })
 
             expect(mockBatchLogRecordProcessor).toHaveBeenCalledWith(expect.any(Object))
@@ -555,6 +561,9 @@ describe('logs entrypoint', () => {
 
             expect(mockOTLPLogExporter).toHaveBeenCalledWith({
                 url: 'https://custom.example.com/i/v1/logs?token=custom-token-123',
+                headers: {
+                    'Content-Type': 'text/plain',
+                },
             })
         })
     })

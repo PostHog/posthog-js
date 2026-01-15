@@ -126,6 +126,9 @@ describe('logs entrypoint', () => {
 
             expect(OTLPLogExporter).toHaveBeenCalledWith({
                 url: 'https://custom.example.com/i/v1/logs?token=custom-token-123',
+                headers: {
+                    'Content-Type': 'text/plain',
+                },
             })
         })
 

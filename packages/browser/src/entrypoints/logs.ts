@@ -29,6 +29,10 @@ const setupOpenTelemetry = (posthog: PostHog) => {
                 new BatchLogRecordProcessor(
                     new OTLPLogExporter({
                         url: `${posthog.config.api_host}/i/v1/logs?token=${posthog.config.token}`,
+                        // 1. Force the content type to text/plain to avoid OPTIONS preflight
+                        headers: {
+                            'Content-Type': 'text/plain',
+                        },
                     })
                 ),
             ],
