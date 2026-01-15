@@ -389,15 +389,15 @@ describe('network plugin', () => {
 
             // Mock Headers class
             class MockHeaders {
-                private headers: Map<string, string> = new Map()
+                private _headers: Map<string, string> = new Map()
                 forEach(callback: (value: string, key: string) => void) {
-                    this.headers.forEach((value, key) => callback(value, key))
+                    this._headers.forEach((value, key) => callback(value, key))
                 }
                 get(key: string) {
-                    return this.headers.get(key.toLowerCase())
+                    return this._headers.get(key.toLowerCase())
                 }
                 set(key: string, value: string) {
-                    this.headers.set(key.toLowerCase(), value)
+                    this._headers.set(key.toLowerCase(), value)
                 }
             }
 
