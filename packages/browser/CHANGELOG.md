@@ -1,5 +1,19 @@
 # posthog-js
 
+## 1.324.0
+
+### Minor Changes
+
+- [#2908](https://github.com/PostHog/posthog-js/pull/2908) [`b9efc01`](https://github.com/PostHog/posthog-js/commit/b9efc019df59329f7a146a8e61974fb444ef774f) Thanks [@adboio](https://github.com/adboio)! - add display frequency options for product tour announcements
+  (2026-01-15)
+
+### Patch Changes
+
+- [#2906](https://github.com/PostHog/posthog-js/pull/2906) [`665d84f`](https://github.com/PostHog/posthog-js/commit/665d84f15bde57d1e255103c740b421a73c16468) Thanks [@frankh](https://github.com/frankh)! - do not require preflight requests for logs extension
+  (2026-01-15)
+- Updated dependencies []:
+    - @posthog/types@1.324.0
+
 ## 1.323.0
 
 ### Minor Changes
