@@ -112,6 +112,8 @@ export interface ProductTourAppearance {
     zIndex?: number
 }
 
+export type ProductTourDisplayFrequency = 'show_once' | 'until_interacted' | 'always'
+
 export interface ProductTour {
     id: string
     name: string
@@ -126,6 +128,7 @@ export interface ProductTour {
     steps: ProductTourStep[]
     internal_targeting_flag_key?: string
     linked_flag_key?: string
+    display_frequency?: ProductTourDisplayFrequency
 }
 
 export type ProductTourCallback = (tours: ProductTour[], context?: { isLoaded: boolean; error?: string }) => void

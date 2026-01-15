@@ -15,7 +15,13 @@ function TourButton({ button, variant, onClick, cursorStyle }: TourButtonProps):
 
     if (button.action === 'link' && button.link) {
         return (
-            <a href={button.link} target="_blank" rel="noopener noreferrer" class={className}>
+            <a
+                href={button.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                class={className}
+                onClick={() => onClick(button)} // track interaction & dismiss tour
+            >
                 {button.text}
             </a>
         )
