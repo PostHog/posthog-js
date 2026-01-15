@@ -184,8 +184,9 @@ describe('PostHog Feature Flags v1', () => {
           expect(posthog.isFeatureEnabled('feature-variant')).toEqual(undefined)
           expect(posthog.isFeatureEnabled('feature-missing')).toEqual(undefined)
 
-          expect(posthog.getFeatureFlagPayloads()).toEqual(undefined)
-          expect(posthog.getFeatureFlagPayload('feature-1')).toEqual(undefined)
+          // When errored out, we return cached values (which are empty in this case)
+          expect(posthog.getFeatureFlagPayloads()).toEqual({})
+          expect(posthog.getFeatureFlagPayload('feature-1')).toEqual(null)
         })
       })
 
@@ -602,11 +603,11 @@ describe('PostHog Feature Flags v1', () => {
           signal: expect.anything(),
         })
 
-        // Verify all flag methods return undefined when quota limited
-        expect(posthog.getFeatureFlags()).toEqual(undefined)
+        // When quota limited with no prior cached flags, return empty results
+        expect(posthog.getFeatureFlags()).toEqual({})
         expect(posthog.getFeatureFlag('feature-1')).toEqual(undefined)
-        expect(posthog.getFeatureFlagPayloads()).toEqual(undefined)
-        expect(posthog.getFeatureFlagPayload('feature-1')).toEqual(undefined)
+        expect(posthog.getFeatureFlagPayloads()).toEqual({})
+        expect(posthog.getFeatureFlagPayload('feature-1')).toEqual(null)
       })
 
       it('should emit debug message when quota limited', async () => {
@@ -615,7 +616,7 @@ describe('PostHog Feature Flags v1', () => {
         await posthog.reloadFeatureFlagsAsync()
 
         expect(warnSpy).toHaveBeenCalledWith(
-          '[FEATURE FLAGS] Feature flags quota limit exceeded - unsetting all flags. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
+          '[FEATURE FLAGS] Feature flags quota limit exceeded. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
         )
       })
     })

@@ -1100,7 +1100,7 @@ describe('Feature flag error tracking', () => {
     })
   })
 
-  it('should set $feature_flag_error to quota_limited,flag_missing when quota limited', async () => {
+  it('should set $feature_flag_error to quota_limited when quota limited', async () => {
     ;(globalThis as any).window.fetch = jest.fn().mockImplementation((url: string) => {
       if (url.includes('/flags/')) {
         return Promise.resolve({
@@ -1120,7 +1120,7 @@ describe('Feature flag error tracking', () => {
 
     await posthog.reloadFeatureFlagsAsync()
 
-    // Access any flag when quota limited
+    // Access any flag when quota limited (no cached flags exist)
     const result = posthog.getFeatureFlag('any-flag')
     expect(result).toBeUndefined()
 
@@ -1131,9 +1131,8 @@ describe('Feature flag error tracking', () => {
       const body = JSON.parse(captureCall[1].body)
       const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
       expect(featureFlagEvent).toBeDefined()
-      expect(featureFlagEvent.properties.$feature_flag_error).toBe(
-        `${FeatureFlagError.QUOTA_LIMITED},${FeatureFlagError.FLAG_MISSING}`
-      )
+      // FLAG_MISSING is not tracked when quota limited since we cannot determine if the flag is truly missing
+      expect(featureFlagEvent.properties.$feature_flag_error).toBe(FeatureFlagError.QUOTA_LIMITED)
     })
   })
 

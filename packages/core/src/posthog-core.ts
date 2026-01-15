@@ -15,7 +15,6 @@ import type {
   Survey,
   SurveyResponse,
   PostHogGroupProperties,
-  FeatureFlagErrorType,
 } from './types'
 import {
   createFlagsResponseFromFlagsAndPayloads,
@@ -586,11 +585,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
         if (res?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
           this.setKnownFeatureFlagDetails({
-            flags: {},
+            flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
             quotaLimited: res.quotaLimited,
           })
           console.warn(
-            '[FEATURE FLAGS] Feature flags quota limit exceeded - unsetting all flags. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
+            '[FEATURE FLAGS] Feature flags quota limit exceeded. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
           )
           return res
         }
@@ -668,32 +667,12 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return this.getPersistedProperty<PostHogFlagsStorageFormat>(PostHogPersistedProperty.FeatureFlagDetails)
   }
 
-  private isFeatureFlagsQuotaLimited(): boolean {
-    return this.getStoredFlagDetails()?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags) ?? false
-  }
-
   protected getKnownFeatureFlags(): PostHogFlagsResponse['featureFlags'] | undefined {
-    if (this.isFeatureFlagsQuotaLimited()) {
-      return undefined
-    }
-
     const featureFlagDetails = this.getKnownFeatureFlagDetails()
     if (!featureFlagDetails) {
       return undefined
     }
     return getFlagValuesFromFlags(featureFlagDetails.flags)
-  }
-
-  private getKnownFeatureFlagPayloads(): PostHogFlagsResponse['featureFlagPayloads'] | undefined {
-    if (this.isFeatureFlagsQuotaLimited()) {
-      return undefined
-    }
-
-    const featureFlagDetails = this.getKnownFeatureFlagDetails()
-    if (!featureFlagDetails) {
-      return undefined
-    }
-    return getPayloadsFromFlags(featureFlagDetails.flags)
   }
 
   private getBootstrappedFeatureFlagDetails(): PostHogFeatureFlagDetails | undefined {
@@ -748,16 +727,15 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     let response: FeatureFlagValue | undefined = getFeatureFlagValue(featureFlag)
 
     if (response === undefined) {
-      // Return false for missing flags only when we have successfully loaded flags.
-      // Quota limited, failed requests, or unloaded state should return undefined.
+      // Return false for missing flags when we have successfully loaded flags.
       const hasCachedFlags = details && Object.keys(details.flags).length > 0
-      if (!isQuotaLimited && hasCachedFlags) {
+      if (hasCachedFlags) {
         response = false
       }
 
-      // Track missing flags unless the request failed, since we cannot determine
-      // whether a flag is truly missing without a successful response.
-      if (details && !featureFlag && !storedDetails?.requestFailed) {
+      // Track missing flags only when we had a successful, non-limited request.
+      // When quota limited or request failed, we cannot determine if the flag is truly missing.
+      if (details && !featureFlag && !storedDetails?.requestFailed && !isQuotaLimited) {
         errors.push(FeatureFlagError.FLAG_MISSING)
       }
     }
@@ -809,32 +787,12 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   getFeatureFlagPayloads(): PostHogFlagsResponse['featureFlagPayloads'] | undefined {
-    if (this.isFeatureFlagsQuotaLimited()) {
-      return undefined
-    }
-
-    const storedDetails = this.getStoredFlagDetails()
-    const hasCachedFlags = storedDetails?.flags && Object.keys(storedDetails.flags).length > 0
-    if (storedDetails?.requestFailed && !hasCachedFlags) {
-      return undefined
-    }
-
     return this.getFeatureFlagDetails()?.featureFlagPayloads
   }
 
   getFeatureFlags(): PostHogFlagsResponse['featureFlags'] | undefined {
     // NOTE: We don't check for _initPromise here as the function is designed to be
     // callable before the state being loaded anyways
-    if (this.isFeatureFlagsQuotaLimited()) {
-      return undefined
-    }
-
-    const storedDetails = this.getStoredFlagDetails()
-    const hasCachedFlags = storedDetails?.flags && Object.keys(storedDetails.flags).length > 0
-    if (storedDetails?.requestFailed && !hasCachedFlags) {
-      return undefined
-    }
-
     return this.getFeatureFlagDetails()?.featureFlags
   }
 
