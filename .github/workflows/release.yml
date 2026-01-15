@@ -240,6 +240,9 @@ jobs:
             ############## posthog-js auto-update ##################
             - name: Dispatch posthog upgrade for posthog-js
               if: matrix.package.name == 'posthog-js' && steps.check-package-version.outputs.is-new-version == 'true'
+              env:
+                  PACKAGE_NAME: ${{ matrix.package.name }}
+                  PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
               run: |
                   curl -f -X POST \
                        -H "Accept: application/vnd.github+json" \
@@ -248,13 +251,16 @@ jobs:
                        -d '{
                          "ref": "main",
                          "inputs": {
-                           "package_name": "${{ matrix.package.name }}",
-                           "package_version": "${{ steps.check-package-version.outputs.committed-version }}"
+                           "package_name": "$PACKAGE_NAME",
+                           "package_version": "$PACKAGE_VERSION"
                          }
                        }'
 
             - name: Dispatch posthog.com upgrade for ${{ matrix.package.name }}
               if: matrix.package.name == '@posthog/types' && steps.check-package-version.outputs.is-new-version == 'true'
+              env:
+                  PACKAGE_NAME: ${{ matrix.package.name }}
+                  PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
               run: |
                   curl -f -X POST \
                        -H "Accept: application/vnd.github+json" \
@@ -263,8 +269,8 @@ jobs:
                        -d '{
                          "ref": "main",
                          "inputs": {
-                           "package_name": "${{ matrix.package.name }}",
-                           "package_version": "${{ steps.check-package-version.outputs.committed-version }}"
+                           "package_name": "$PACKAGE_NAME",
+                           "package_version": "$PACKAGE_VERSION"
                          }
                        }'
 
