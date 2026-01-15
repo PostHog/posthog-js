@@ -173,7 +173,16 @@ export class PostHogFeatureFlags {
     }
 
     private _getValidEvaluationEnvironments(): string[] {
-        const envs = this._instance.config.evaluation_environments
+        // Support both evaluation_contexts (new) and evaluation_environments (deprecated)
+        const envs = this._instance.config.evaluation_contexts ?? this._instance.config.evaluation_environments
+
+        // Log deprecation warning if using old field
+        if (this._instance.config.evaluation_environments && !this._instance.config.evaluation_contexts) {
+            logger.warn(
+                'evaluation_environments is deprecated. Use evaluation_contexts instead. This property will be removed in a future version.'
+            )
+        }
+
         if (!envs?.length) {
             return []
         }
@@ -181,7 +190,7 @@ export class PostHogFeatureFlags {
         return envs.filter((env) => {
             const isValid = env && typeof env === 'string' && env.trim().length > 0
             if (!isValid) {
-                logger.error('Invalid evaluation environment found:', env, 'Expected non-empty string')
+                logger.error('Invalid evaluation context found:', env, 'Expected non-empty string')
             }
             return isValid
         })
@@ -421,9 +430,9 @@ export class PostHogFeatureFlags {
             data.disable_flags = true
         }
 
-        // Add evaluation environments if configured
+        // Add evaluation contexts if configured
         if (this._shouldIncludeEvaluationEnvironments()) {
-            data.evaluation_environments = this._getValidEvaluationEnvironments()
+            data.evaluation_contexts = this._getValidEvaluationEnvironments()
         }
 
         // flags supports loading config data with the `config` query param, but if you're using remote config, you
@@ -617,9 +626,9 @@ export class PostHogFeatureFlags {
             token,
         }
 
-        // Add evaluation environments if configured
+        // Add evaluation contexts if configured
         if (this._shouldIncludeEvaluationEnvironments()) {
-            data.evaluation_environments = this._getValidEvaluationEnvironments()
+            data.evaluation_contexts = this._getValidEvaluationEnvironments()
         }
 
         this._instance._send_request({
