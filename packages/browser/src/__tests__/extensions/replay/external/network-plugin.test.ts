@@ -380,5 +380,275 @@ describe('network plugin', () => {
                 })
             })
         })
+
+        describe('fetch observer streaming body handling', () => {
+            // Mock ReadableStream for testing
+            class MockReadableStream {
+                locked = false
+            }
+
+            // Mock Headers class
+            class MockHeaders {
+                private _headers: Map<string, string> = new Map()
+                forEach(callback: (value: string, key: string) => void) {
+                    this._headers.forEach((value, key) => callback(value, key))
+                }
+                get(key: string) {
+                    return this._headers.get(key.toLowerCase())
+                }
+                set(key: string, value: string) {
+                    this._headers.set(key.toLowerCase(), value)
+                }
+            }
+
+            it('should add duplex: half when init.body is a ReadableStream', async () => {
+                await jest.isolateModulesAsync(async () => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
+                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                    const mock = createMockWindow()
+                    const mockWindow = mock.mockWindow
+
+                    // Track what Request was constructed with
+                    let capturedRequestInit: RequestInit | undefined
+                    global.Request = class {
+                        url: string
+                        method: string
+                        headers: MockHeaders
+                        body: any
+                        constructor(input: RequestInfo | URL, init?: RequestInit) {
+                            this.url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+                            this.method = init?.method || 'GET'
+                            this.headers = new MockHeaders()
+                            this.body = init?.body
+                            capturedRequestInit = init
+                        }
+                        clone() {
+                            return this
+                        }
+                        text() {
+                            return Promise.resolve('')
+                        }
+                    } as any
+
+                    // Mock fetch to resolve immediately
+                    const mockResponse = {
+                        headers: new MockHeaders(),
+                        status: 200,
+                        clone: function () {
+                            return this
+                        },
+                        text: () => Promise.resolve(''),
+                    }
+                    mockWindow.fetch = jest.fn().mockResolvedValue(mockResponse)
+
+                    global.PerformanceObserver = mockWindow.PerformanceObserver
+                    global.ReadableStream = MockReadableStream as any
+
+                    const plugin = getRecordNetworkPlugin({ recordBody: true })
+                    plugin.observer(() => {}, mockWindow, { recordBody: true })
+
+                    // Call fetch with a streaming body
+                    const streamBody = new MockReadableStream()
+                    await mockWindow.fetch('https://example.com/api', {
+                        method: 'POST',
+                        body: streamBody as any,
+                    })
+
+                    // Verify duplex: 'half' was added
+                    expect(capturedRequestInit).toBeDefined()
+                    expect((capturedRequestInit as any).duplex).toBe('half')
+                })
+            })
+
+            it('should add duplex: half when url is a Request with streaming body', async () => {
+                await jest.isolateModulesAsync(async () => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
+                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                    const mock = createMockWindow()
+                    const mockWindow = mock.mockWindow
+
+                    // Track what Request was constructed with
+                    let capturedRequestInit: RequestInit | undefined
+                    global.Request = class {
+                        url: string
+                        method: string
+                        headers: MockHeaders
+                        body: any
+                        constructor(input: RequestInfo | URL, init?: RequestInit) {
+                            if (input instanceof global.Request) {
+                                this.url = input.url
+                                this.method = input.method
+                                this.body = input.body
+                            } else {
+                                this.url = typeof input === 'string' ? input : input.href
+                                this.method = init?.method || 'GET'
+                                this.body = init?.body
+                            }
+                            this.headers = new MockHeaders()
+                            capturedRequestInit = init
+                        }
+                        clone() {
+                            return this
+                        }
+                        text() {
+                            return Promise.resolve('')
+                        }
+                    } as any
+
+                    // Mock fetch to resolve immediately
+                    const mockResponse = {
+                        headers: new MockHeaders(),
+                        status: 200,
+                        clone: function () {
+                            return this
+                        },
+                        text: () => Promise.resolve(''),
+                    }
+                    mockWindow.fetch = jest.fn().mockResolvedValue(mockResponse)
+
+                    global.PerformanceObserver = mockWindow.PerformanceObserver
+                    global.ReadableStream = MockReadableStream as any
+
+                    const plugin = getRecordNetworkPlugin({ recordBody: true })
+                    plugin.observer(() => {}, mockWindow, { recordBody: true })
+
+                    // Create a Request with a streaming body
+                    const streamBody = new MockReadableStream()
+                    const requestWithStream = new global.Request('https://example.com/api', {
+                        method: 'POST',
+                        body: streamBody as any,
+                    })
+                    requestWithStream.body = streamBody
+
+                    // Reset captured init for the actual test
+                    capturedRequestInit = undefined
+
+                    // Call fetch with the Request object
+                    await mockWindow.fetch(requestWithStream)
+
+                    // Verify duplex: 'half' was added
+                    expect(capturedRequestInit).toBeDefined()
+                    expect((capturedRequestInit as any).duplex).toBe('half')
+                })
+            })
+
+            it('should preserve existing duplex value when already set', async () => {
+                await jest.isolateModulesAsync(async () => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
+                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                    const mock = createMockWindow()
+                    const mockWindow = mock.mockWindow
+
+                    // Track what Request was constructed with
+                    let capturedRequestInit: RequestInit | undefined
+                    global.Request = class {
+                        url: string
+                        method: string
+                        headers: MockHeaders
+                        body: any
+                        constructor(input: RequestInfo | URL, init?: RequestInit) {
+                            this.url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+                            this.method = init?.method || 'GET'
+                            this.headers = new MockHeaders()
+                            this.body = init?.body
+                            capturedRequestInit = init
+                        }
+                        clone() {
+                            return this
+                        }
+                        text() {
+                            return Promise.resolve('')
+                        }
+                    } as any
+
+                    // Mock fetch to resolve immediately
+                    const mockResponse = {
+                        headers: new MockHeaders(),
+                        status: 200,
+                        clone: function () {
+                            return this
+                        },
+                        text: () => Promise.resolve(''),
+                    }
+                    mockWindow.fetch = jest.fn().mockResolvedValue(mockResponse)
+
+                    global.PerformanceObserver = mockWindow.PerformanceObserver
+                    global.ReadableStream = MockReadableStream as any
+
+                    const plugin = getRecordNetworkPlugin({ recordBody: true })
+                    plugin.observer(() => {}, mockWindow, { recordBody: true })
+
+                    // Call fetch with a streaming body and explicit duplex: 'full'
+                    const streamBody = new MockReadableStream()
+                    await mockWindow.fetch('https://example.com/api', {
+                        method: 'POST',
+                        body: streamBody as any,
+                        duplex: 'full',
+                    } as any)
+
+                    // Verify the original duplex: 'full' was preserved
+                    expect(capturedRequestInit).toBeDefined()
+                    expect((capturedRequestInit as any).duplex).toBe('full')
+                })
+            })
+
+            it('should not add duplex when body is not a ReadableStream', async () => {
+                await jest.isolateModulesAsync(async () => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
+                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                    const mock = createMockWindow()
+                    const mockWindow = mock.mockWindow
+
+                    // Track what Request was constructed with
+                    let capturedRequestInit: RequestInit | undefined
+                    global.Request = class {
+                        url: string
+                        method: string
+                        headers: MockHeaders
+                        body: any
+                        constructor(input: RequestInfo | URL, init?: RequestInit) {
+                            this.url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+                            this.method = init?.method || 'GET'
+                            this.headers = new MockHeaders()
+                            this.body = init?.body
+                            capturedRequestInit = init
+                        }
+                        clone() {
+                            return this
+                        }
+                        text() {
+                            return Promise.resolve('')
+                        }
+                    } as any
+
+                    // Mock fetch to resolve immediately
+                    const mockResponse = {
+                        headers: new MockHeaders(),
+                        status: 200,
+                        clone: function () {
+                            return this
+                        },
+                        text: () => Promise.resolve(''),
+                    }
+                    mockWindow.fetch = jest.fn().mockResolvedValue(mockResponse)
+
+                    global.PerformanceObserver = mockWindow.PerformanceObserver
+                    global.ReadableStream = MockReadableStream as any
+
+                    const plugin = getRecordNetworkPlugin({ recordBody: true })
+                    plugin.observer(() => {}, mockWindow, { recordBody: true })
+
+                    // Call fetch with a regular string body
+                    await mockWindow.fetch('https://example.com/api', {
+                        method: 'POST',
+                        body: JSON.stringify({ data: 'test' }),
+                    })
+
+                    // Verify duplex was NOT added
+                    expect(capturedRequestInit).toBeDefined()
+                    expect((capturedRequestInit as any).duplex).toBeUndefined()
+                })
+            })
+        })
     })
 })
