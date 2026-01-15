@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.321.3
+
+### Patch Changes
+
+- [#2899](https://github.com/PostHog/posthog-js/pull/2899) [`f56a875`](https://github.com/PostHog/posthog-js/commit/f56a875fd11dab296ad3c35f292192137579f22a) Thanks [@adboio](https://github.com/adboio)! - support configurable z-index
+  (2026-01-15)
+
+- [#2898](https://github.com/PostHog/posthog-js/pull/2898) [`037ccb5`](https://github.com/PostHog/posthog-js/commit/037ccb509fbf922171623888e9b9594bc01d69e9) Thanks [@adboio](https://github.com/adboio)! - more robust element-based tooltip positioning for product tours
+  (2026-01-15)
+- Updated dependencies []:
+    - @posthog/types@1.321.3
+
 ## 1.321.2
 
 ### Patch Changes
