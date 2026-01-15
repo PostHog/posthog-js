@@ -69,7 +69,6 @@ import {
     SnippetArrayItem,
     ToolbarParams,
     PostHogInterface,
-    UserFeedbackRecordingResult,
 } from './types'
 import {
     _copyAndTruncateStrings,
@@ -2978,27 +2977,6 @@ export class PostHog implements PostHogInterface {
      */
     sessionRecordingStarted(): boolean {
         return !!this.sessionRecording?.started
-    }
-
-    /**
-     * Starts a user feedback recording session with screen recording and audio capture.
-     * Calling this method will prompt the user for permission to record their audio
-     * and display a UI. A user may still opt to cancel the recording.
-     *
-     * @param handleRecordingEnded - Callback function invoked when the recording ends with the recording result.
-     */
-    startUserFeedbackRecording(handleRecordingEnded: (result: UserFeedbackRecordingResult) => void): void {
-        if (!this.feedbackManager) {
-            logger.warn('Feedback recording is not available.')
-            return
-        }
-
-        if (this.feedbackManager.isFeedbackRecordingActive()) {
-            logger.warn('A user feedback recording session is already active.')
-            return
-        }
-
-        this.feedbackManager.launchFeedbackRecordingUI(handleRecordingEnded)
     }
 
     /**
