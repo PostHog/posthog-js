@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.324.1
+
+### Patch Changes
+
+- [#2891](https://github.com/PostHog/posthog-js/pull/2891) [`4785cc4`](https://github.com/PostHog/posthog-js/commit/4785cc40fd8de6a49d31143abee826b786964ce4) Thanks [@ksvat](https://github.com/ksvat)! - introduce cache and url change tracking for regex
+  (2026-01-15)
+- Updated dependencies []:
+    - @posthog/types@1.324.1
+
 ## 1.324.0
 
 ### Minor Changes
