@@ -1,8 +1,8 @@
-import { isNull } from '@posthog/core'
+import { isNull, isUndefined } from '@posthog/core'
 import { createLogger } from '../utils/logger'
 import { uuidv7 } from '../uuidv7'
 import { assignableWindow } from '../utils/globals'
-import { RequestResponse, UserFeedbackRecordingResult } from '../types'
+import { RemoteConfig, RequestResponse, UserFeedbackRecordingResult } from '../types'
 import { PostHog } from '../posthog-core'
 import { renderFeedbackRecordingUI } from './feedback-recording/components/FeedbackRecordingUI'
 import { removeFeedbackRecordingUIFromDOM } from './feedback-recording/feedback-recording-utils'
@@ -18,6 +18,10 @@ export class FeedbackRecordingManager {
     private _isLoading: boolean = false
     private _isUIActive: boolean = false
     private _didStartSessionRecording: boolean = false
+    // This is set to undefined until the remote config is loaded
+    // then it's set to true if feedback recording is enabled
+    // or false if feedback recording is disabled in the project settings
+    private _isFeedbackRecordingEnabled?: boolean = undefined
 
     constructor(
         private _instance: PostHog,
@@ -25,6 +29,15 @@ export class FeedbackRecordingManager {
     ) {
         // Check if we're in the extension context (loaded from bundle)
         this._isLoaded = !!assignableWindow?.__PosthogExtensions__?.generateFeedbackRecording
+    }
+
+    onRemoteConfig(response: RemoteConfig): void {
+        // Don't enable feedback recording if disabled via config
+        if (this._instance.config.disable_feedback_recording) {
+            return
+        }
+
+        this._isFeedbackRecordingEnabled = !!response.feedbackRecording
     }
 
     getCurrentFeedbackRecordingId(): string | null {
@@ -52,6 +65,30 @@ export class FeedbackRecordingManager {
     }
 
     async launchFeedbackRecordingUI(onRecordingEnded?: (result: UserFeedbackRecordingResult) => void): Promise<void> {
+        // Check if feedback recording is disabled via config
+        if (this._instance.config.disable_feedback_recording) {
+            logger.info('Feedback recording is disabled via config.')
+            return
+        }
+
+        // Wait for remote config to load
+        if (isUndefined(this._isFeedbackRecordingEnabled)) {
+            logger.info('Feedback recording remote config not loaded yet.')
+            return
+        }
+
+        // Check if feedback recording is enabled server-side
+        if (!this._isFeedbackRecordingEnabled) {
+            logger.info('Feedback recording is not enabled for this project.')
+            return
+        }
+
+        // Check if session recording is available since feedback recording depends on it
+        if (this._instance.config.disable_session_recording || !this._instance.sessionRecording) {
+            logger.info('Feedback recording requires session recording to be enabled and loaded.')
+            return
+        }
+
         if (this._isUIActive) {
             logger.warn('Feedback recording UI is already active. Request to launch a new UI will be ignored.')
             return
@@ -73,6 +110,7 @@ export class FeedbackRecordingManager {
 
             await this._loadFeedbackRecording()
 
+            // eslint-disable-next-line compat/compat
             if (!this._isLoaded) {
                 logger.error('Failed to load feedback recording')
                 return
