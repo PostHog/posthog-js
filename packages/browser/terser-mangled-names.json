@@ -471,6 +471,7 @@
         "_surveyCallbacks",
         "_surveyInFocus",
         "_surveyTimeouts",
+        "_switchToTicketIfNeeded",
         "_sync_opt_out_with_persistence",
         "_that",
         "_timeout",
