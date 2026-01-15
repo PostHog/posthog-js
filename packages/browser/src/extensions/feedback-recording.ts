@@ -247,7 +247,7 @@ export class FeedbackRecordingManager {
 
         if (recordingResult?.blob) {
             logger.info(`Audio recording completed, blob size: ${recordingResult.blob.size} bytes`)
-            this._uploadAudioBlob(feedbackId, recordingResult?.blob)
+            this._uploadAudioBlob(feedbackId, recordingResult.blob)
         }
 
         removeFeedbackRecordingUIFromDOM()
