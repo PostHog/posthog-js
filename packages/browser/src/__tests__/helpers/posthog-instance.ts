@@ -3,7 +3,6 @@
 import { PostHog, init_as_module } from '../../posthog-core'
 import { PostHogConfig } from '../../types'
 import { PostHogPersistence } from '../../posthog-persistence'
-import { assignableWindow } from '../../utils/globals'
 import { uuidv7 } from '../../uuidv7'
 
 export const createPosthogInstance = async (
@@ -17,14 +16,6 @@ export const createPosthogInstance = async (
     // written, we first create an instance, then call init on it which then
     // creates another instance.
     const posthog = new PostHog()
-
-    // Set up preloaded remote config to avoid network requests during tests
-    assignableWindow._POSTHOG_REMOTE_CONFIG = {
-        [token]: {
-            config: {},
-            siteApps: [],
-        },
-    } as any
 
     // eslint-disable-next-line compat/compat
     return await new Promise<PostHog>((resolve) =>
