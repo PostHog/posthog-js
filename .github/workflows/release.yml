@@ -245,17 +245,16 @@ jobs:
                   PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
-                  curl -f -X POST \
+                  curl -f -sS -X POST \
                        -H "Accept: application/vnd.github+json" \
                        -H "Authorization: Bearer $GITHUB_TOKEN" \
                        https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-upgrade.yml/dispatches \
-                       -d '{
-                         "ref": "main",
-                         "inputs": {
-                           "package_name": "$PACKAGE_NAME",
-                           "package_version": "$PACKAGE_VERSION"
-                         }
-                       }'
+                       -d "$(jq -n \
+                         --arg ref "main" \
+                         --arg package_name "$PACKAGE_NAME" \
+                         --arg package_version "$PACKAGE_VERSION" \
+                         '{ref: $ref, inputs: {package_name: $package_name, package_version: $package_version}}' \
+                       )"
 
             - name: Dispatch posthog.com upgrade for ${{ matrix.package.name }}
               if: matrix.package.name == '@posthog/types' && steps.check-package-version.outputs.is-new-version == 'true'
@@ -264,17 +263,16 @@ jobs:
                   PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
-                  curl -f -X POST \
+                  curl -f -sS -X POST \
                        -H "Accept: application/vnd.github+json" \
                        -H "Authorization: Bearer $GITHUB_TOKEN" \
                        https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-com-upgrade.yml/dispatches \
-                       -d '{
-                         "ref": "main",
-                         "inputs": {
-                           "package_name": "$PACKAGE_NAME",
-                           "package_version": "$PACKAGE_VERSION"
-                         }
-                       }'
+                       -d "$(jq -n \
+                         --arg ref "main" \
+                         --arg package_name "$PACKAGE_NAME" \
+                         --arg package_version "$PACKAGE_VERSION" \
+                         '{ref: $ref, inputs: {package_name: $package_name, package_version: $package_version}}' \
+                       )"
 
             ####################################################
             # Notify ourselves in case of a failure here
