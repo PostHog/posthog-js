@@ -167,6 +167,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true"
   ],
+  "disable_feedback_recording": [
+    "false",
+    "true"
+  ],
   "surveys": [
     "undefined",
     {
