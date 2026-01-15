@@ -28,11 +28,7 @@ export class AudioRecorder {
         // eslint-disable-next-line compat/compat
         private _mediaDevices: MediaDevices = navigator.mediaDevices,
         private _MediaRecorderClass = window.MediaRecorder
-    ) {
-        if (!this._mediaDevices) {
-            logger.warn('MediaDevices API not available in this browser')
-        }
-    }
+    ) {}
 
     /**
      * Check if audio recording is supported in this browser
@@ -70,7 +66,8 @@ export class AudioRecorder {
      */
     async startRecording(): Promise<void> {
         if (!this.isSupported()) {
-            throw new Error('Audio recording not supported in this browser')
+            logger.warn('Audio recording not supported in this browser')
+            return
         }
 
         if (this._mediaRecorder && this._mediaRecorder.state === 'recording') {

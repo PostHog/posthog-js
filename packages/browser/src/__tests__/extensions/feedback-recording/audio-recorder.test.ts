@@ -110,10 +110,12 @@ describe('AudioRecorder', () => {
             expect(mockMediaRecorder.start).toHaveBeenCalledWith(500)
         })
 
-        it('should throw error when not supported', async () => {
+        it('should return early when not supported', async () => {
             const recorder = new AudioRecorder({}, undefined as any, MockMediaRecorderClass)
 
-            await expect(recorder.startRecording()).rejects.toThrow('Audio recording not supported')
+            await recorder.startRecording()
+
+            expect(recorder.isRecording()).toBe(false)
         })
 
         it('should handle getUserMedia failure', async () => {
