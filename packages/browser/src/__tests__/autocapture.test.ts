@@ -1182,6 +1182,11 @@ describe('Autocapture system', () => {
         beforeEach(() => {
             document.title = 'test page'
 
+            // Reset autocapture state to simulate state before remote config response
+            // This is needed because createPosthogInstance preloads remote config
+            autocapture['_isDisabledServerSide'] = null
+            autocapture['_initialized'] = false
+
             jest.spyOn(autocapture, '_addDomEventHandlers')
         })
 

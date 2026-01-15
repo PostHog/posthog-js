@@ -37,12 +37,6 @@ describe('posthog core', () => {
     const posthogWith = (config: Partial<PostHogConfig>, overrides?: Partial<PostHog>): PostHog => {
         // NOTE: Temporary change whilst testing remote config
         const token = config.token || 'testtoken'
-        globals.assignableWindow._POSTHOG_REMOTE_CONFIG = {
-            [token]: {
-                config: {},
-                siteApps: [],
-            },
-        } as any
         const posthog = defaultPostHog().init(token, config, uuidv7())
         return Object.assign(posthog, overrides || {})
     }
@@ -1241,15 +1235,30 @@ describe('posthog core', () => {
 
         describe('/flags', () => {
             it('is called by default', async () => {
-                const sendRequestMock = jest.fn()
-                await createPosthogInstance(uuidv7(), {
+                const sendRequestMock = jest.fn().mockImplementation(({ callback }) =>
+                    callback({
+                        statusCode: 200,
+                        json: {
+                            hasFeatureFlags: true,
+                        },
+                    })
+                )
+                const token = uuidv7()
+                await createPosthogInstance(token, {
                     loaded: (ph) => {
                         ph._send_request = sendRequestMock
                     },
                 })
 
                 expect(sendRequestMock.mock.calls[0][0]).toMatchObject({
-                    url: 'http://localhost/flags/?v=2&config=true',
+                    url: `http://localhost/array/${token}/config`,
+                })
+
+                jest.runOnlyPendingTimers()
+                expect(sendRequestMock).toHaveBeenCalledTimes(2)
+
+                expect(sendRequestMock.mock.calls[1][0]).toMatchObject({
+                    url: `http://localhost/flags/?v=2`,
                 })
             })
 
