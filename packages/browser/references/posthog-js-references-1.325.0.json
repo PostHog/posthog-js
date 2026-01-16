@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "1.326.0",
+    "version": "1.325.0",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -3009,7 +3009,7 @@
           "name": "lowerBoundLabel"
         },
         {
-          "type": "2 | 3 | 5 | 7 | 10",
+          "type": "3 | 5 | 7 | 10",
           "name": "scale"
         },
         {

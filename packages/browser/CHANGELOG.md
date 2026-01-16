@@ -1,5 +1,30 @@
 # posthog-js
 
+## 1.326.0
+
+### Minor Changes
+
+- [#2881](https://github.com/PostHog/posthog-js/pull/2881) [`d37e570`](https://github.com/PostHog/posthog-js/commit/d37e5709863e869825df57d0854588140c4294b2) Thanks [@adboio](https://github.com/adboio)! - add support for thumbs up/down survey rating scale
+  (2026-01-16)
+
+### Patch Changes
+
+- Updated dependencies [[`d37e570`](https://github.com/PostHog/posthog-js/commit/d37e5709863e869825df57d0854588140c4294b2)]:
+    - @posthog/core@1.10.0
+    - @posthog/types@1.326.0
+
+## 1.325.0
+
+### Minor Changes
+
+- [#2913](https://github.com/PostHog/posthog-js/pull/2913) [`262cb4b`](https://github.com/PostHog/posthog-js/commit/262cb4b6ef5c62aad4e2ef047f5349b6220fd2f9) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Ensure we always pass RequestInit object to wrapped fetch
+  (2026-01-16)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.325.0
+
 ## 1.324.1
 
 ### Patch Changes
