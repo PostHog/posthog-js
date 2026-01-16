@@ -628,6 +628,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // Check for overrides first - they take precedence over all evaluation
     if (this._flagOverrides !== undefined && key in this._flagOverrides) {
       const overrideValue = this._flagOverrides[key]
+      // undefined override simulates "flag doesn't exist"
+      if (overrideValue === undefined) {
+        return undefined
+      }
       const overridePayload = this._payloadOverrides?.[key]
       return {
         key,

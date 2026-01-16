@@ -129,6 +129,23 @@ describe('overrideFeatureFlags', () => {
 
       expect(await posthog.getFeatureFlag('disabled-flag', 'user-123')).toBe(false)
     })
+
+    it('should return undefined when flag is overridden to undefined (simulates missing flag)', async () => {
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: { flags: [] } }))
+
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+
+      await waitForPromises()
+
+      // Override with undefined should return undefined (simulates flag doesn't exist)
+      posthog.overrideFeatureFlags({ 'undefined-flag': undefined as any })
+
+      expect(await posthog.getFeatureFlag('undefined-flag', 'user-123')).toBeUndefined()
+    })
   })
 
   describe('payload overrides', () => {

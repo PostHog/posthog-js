@@ -873,6 +873,23 @@ describe('getFeatureFlagResult', () => {
     })
   })
 
+  it('returns undefined when flag is overridden to undefined (simulates missing flag)', async () => {
+    mockedFetch.mockImplementation(apiImplementationV4({ flags: {}, errorsWhileComputingFlags: false }))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+
+    posthog.overrideFeatureFlags({
+      flags: { 'undefined-override-flag': undefined as any },
+    })
+
+    const result = await posthog.getFeatureFlagResult('undefined-override-flag', 'some-distinct-id')
+
+    expect(result).toBeUndefined()
+  })
+
   describe('local evaluation', () => {
     it('returns flag result with parsed payload when evaluated locally', async () => {
       const localFlags = {
