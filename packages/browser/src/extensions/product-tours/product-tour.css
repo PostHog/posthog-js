@@ -68,8 +68,8 @@
     border: 1px solid var(--ph-tour-border-color);
     border-radius: var(--ph-tour-border-radius);
     box-shadow: var(--ph-tour-box-shadow);
-    min-width: 280px;
-    max-width: var(--ph-tour-max-width);
+    min-width: min(280px, calc(100vw - 16px));
+    max-width: min(var(--ph-tour-max-width), calc(100vw - 16px));
     padding: var(--ph-tour-padding);
     padding-top: calc(var(--ph-tour-padding) + 8px);
     pointer-events: auto;
@@ -87,32 +87,33 @@
     width: 0;
     height: 0;
     border: var(--ph-tour-arrow-size) solid transparent;
+    --ph-tour-arrow-offset: 0px;
 }
 
 .ph-tour-arrow--top {
     bottom: 100%;
-    left: 50%;
+    left: calc(50% + var(--ph-tour-arrow-offset));
     transform: translateX(-50%);
     border-bottom-color: var(--ph-tour-background-color);
 }
 
 .ph-tour-arrow--bottom {
     top: 100%;
-    left: 50%;
+    left: calc(50% + var(--ph-tour-arrow-offset));
     transform: translateX(-50%);
     border-top-color: var(--ph-tour-background-color);
 }
 
 .ph-tour-arrow--left {
     right: 100%;
-    top: 50%;
+    top: calc(50% + var(--ph-tour-arrow-offset));
     transform: translateY(-50%);
     border-right-color: var(--ph-tour-background-color);
 }
 
 .ph-tour-arrow--right {
     left: 100%;
-    top: 50%;
+    top: calc(50% + var(--ph-tour-arrow-offset));
     transform: translateY(-50%);
     border-left-color: var(--ph-tour-background-color);
 }
@@ -266,7 +267,7 @@
 
 /* Survey step styles */
 .ph-tour-survey-step {
-    min-width: 300px;
+    min-width: min(300px, calc(100vw - 16px));
 }
 
 .ph-tour-survey-question {

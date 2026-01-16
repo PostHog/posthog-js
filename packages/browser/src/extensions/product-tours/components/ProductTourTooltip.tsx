@@ -1,7 +1,7 @@
 import { h } from 'preact'
-import { useEffect, useState, useCallback, useRef } from 'preact/hooks'
+import { useEffect, useState, useCallback, useRef, useLayoutEffect } from 'preact/hooks'
 import { ProductTour, ProductTourStep, ProductTourDismissReason } from '../../../posthog-product-tours-types'
-import { calculateTooltipPosition, getSpotlightStyle, TooltipPosition } from '../product-tours-utils'
+import { calculateTooltipPosition, getSpotlightStyle, TooltipPosition, TooltipDimensions } from '../product-tours-utils'
 import { addEventListener } from '../../../utils'
 import { window as _window } from '../../../utils/globals'
 import { ProductTourTooltipInner } from './ProductTourTooltipInner'
@@ -103,12 +103,14 @@ export function ProductTourTooltip({
     const [transitionState, setTransitionState] = useState<TransitionState>('entering')
     const [position, setPosition] = useState<ReturnType<typeof calculateTooltipPosition> | null>(null)
     const [spotlightStyle, setSpotlightStyle] = useState<ReturnType<typeof getSpotlightStyle> | null>(null)
+    const [tooltipDimensions, setTooltipDimensions] = useState<TooltipDimensions | null>(null)
 
     const [displayedStep, setDisplayedStep] = useState(step)
     const [displayedStepIndex, setDisplayedStepIndex] = useState(stepIndex)
 
     const previousStepRef = useRef(stepIndex)
     const isTransitioningRef = useRef(false)
+    const tooltipRef = useRef<HTMLDivElement>(null)
 
     // Modal and survey steps are both centered on screen
     const isCentered = displayedStep.type === 'modal' || displayedStep.type === 'survey'
@@ -116,9 +118,9 @@ export function ProductTourTooltip({
     const updatePosition = useCallback(() => {
         if (!targetElement) return
         const rect = targetElement.getBoundingClientRect()
-        setPosition(calculateTooltipPosition(rect))
+        setPosition(calculateTooltipPosition(rect, tooltipDimensions ?? undefined))
         setSpotlightStyle(getSpotlightStyle(rect))
-    }, [targetElement])
+    }, [targetElement, tooltipDimensions])
 
     useEffect(() => {
         const currentStepIndex = stepIndex
@@ -201,6 +203,31 @@ export function ProductTourTooltip({
         }
     }, [onDismiss])
 
+    // Measure tooltip dimensions for accurate positioning
+    useLayoutEffect(() => {
+        if (!tooltipRef.current || isCentered) return
+
+        const measureDimensions = () => {
+            if (tooltipRef.current) {
+                const rect = tooltipRef.current.getBoundingClientRect()
+                setTooltipDimensions({ width: rect.width, height: rect.height })
+            }
+        }
+
+        // Measure immediately and after a short delay to catch content rendering
+        measureDimensions()
+        const timeoutId = setTimeout(measureDimensions, 50)
+
+        return () => clearTimeout(timeoutId)
+    }, [displayedStep, isCentered])
+
+    // Recalculate position when dimensions change
+    useEffect(() => {
+        if (tooltipDimensions && targetElement && !isCentered) {
+            updatePosition()
+        }
+    }, [tooltipDimensions, targetElement, isCentered, updatePosition])
+
     const handleOverlayClick = (e: MouseEvent) => {
         e.stopPropagation()
         onDismiss('user_clicked_outside')
@@ -268,6 +295,7 @@ export function ProductTourTooltip({
             />
 
             <div
+                ref={tooltipRef}
                 class={`ph-tour-tooltip ${isCentered ? 'ph-tour-tooltip--modal' : ''} ${isSurvey ? 'ph-tour-survey-step' : ''}`}
                 style={{
                     ...tooltipStyle,
@@ -277,7 +305,16 @@ export function ProductTourTooltip({
                 onClick={handleTooltipClick}
             >
                 {!isCentered && position && (
-                    <div class={`ph-tour-arrow ph-tour-arrow--${getOppositePosition(position.position)}`} />
+                    <div
+                        class={`ph-tour-arrow ph-tour-arrow--${getOppositePosition(position.position)}`}
+                        style={
+                            position.arrowOffset !== 0
+                                ? {
+                                      '--ph-tour-arrow-offset': `${position.arrowOffset}px`,
+                                  }
+                                : undefined
+                        }
+                    />
                 )}
 
                 {isSurvey ? (
