@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.10.0
+
+### Minor Changes
+
+- [#2881](https://github.com/PostHog/posthog-js/pull/2881) [`d37e570`](https://github.com/PostHog/posthog-js/commit/d37e5709863e869825df57d0854588140c4294b2) Thanks [@adboio](https://github.com/adboio)! - add support for thumbs up/down survey rating scale
+  (2026-01-16)
+
 ## 1.9.1
 
 ### Patch Changes
