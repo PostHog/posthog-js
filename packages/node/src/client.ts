@@ -768,7 +768,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // Send feature flag event if configured
     if (sendFeatureFlagEvents) {
       // Compute the response value for event tracking
-      const response = result === undefined ? undefined : result.enabled === false ? false : result.variant ?? true
+      const response = result === undefined ? undefined : result.enabled === false ? false : (result.variant ?? true)
       const featureFlagReportedKey = `${key}_${response}`
 
       if (
