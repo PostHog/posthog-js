@@ -51,13 +51,11 @@ export const formDataToQuery = function (formdata: Record<string, any> | FormDat
 function deepDecode(str: string): string {
   if (!str || typeof str !== "string") return "";
 
-  let prev = "";
   let current = str;
 
   // Decode up to 5 times in case of multiple levels of encoding
   for (let i = 0; i < 5; i++) {
     try {
-      prev = current;
       const decoded = decodeURIComponent(current);
       // If decoding didn't change the string, we're done
       if (decoded === current) break;
@@ -172,10 +170,10 @@ export function getAllParams(rawUrl: string): Record<string, string> {
   try {
     // Remove hash fragment from URL
     const cleanedUrl = (rawUrl || "").split("#")[0];
-    const parsed = new URL(cleanedUrl);
-
-    // Get the raw query string (without '?')
-    const queryString = parsed.search.substring(1);
+    // Extract query string without using URL API (IE11 compatible)
+    // Find the query string (after '?')
+    const qIndex = cleanedUrl.indexOf("?");
+    const queryString = qIndex === -1 ? "" : cleanedUrl.substring(qIndex + 1);
     
     // Manually parse query string to keep values encoded
     // (URLSearchParams would auto-decode, breaking nested param detection)
@@ -207,7 +205,8 @@ export function getAllParams(rawUrl: string): Record<string, string> {
 export const getQueryParam = function (url: string, param: string): string {
     // now this can handle nested encoded urls like "http://example.com/?utm_source=google%26utm_medium%3Dcpc%26utm_term%3Dexample%20store"
     // get all params and return the needed one
-    return getAllParams(url)?.[param];
+    if(!param) return "";
+    return getAllParams(url)?.[param] || "";
 }
 
 // replace any query params in the url with the provided mask value. Tries to keep the URL as instant as possible,
