@@ -1073,24 +1073,4 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     // We don't set any properties here, but the server will create the profile
     this.capture('$set', { $set: {}, $set_once: {} })
   }
-
-  /**
-   * Sets person properties on the current user's profile.
-   *
-   * If personProfiles is 'never', this will log an error and do nothing.
-   *
-   * @param properties - Properties to set on the person
-   * @param propertiesSetOnce - Properties to set only if they haven't been set before
-   * @public
-   */
-  setPersonProperties(properties?: PostHogEventProperties, propertiesSetOnce?: PostHogEventProperties): void {
-    if (!this._requirePersonProcessing('posthog.setPersonProperties')) {
-      return
-    }
-
-    this.capture('$set', {
-      $set: properties || {},
-      $set_once: propertiesSetOnce || {},
-    })
-  }
 }

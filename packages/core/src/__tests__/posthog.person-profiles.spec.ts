@@ -86,17 +86,6 @@ describe('PostHog Core - Person Profiles', () => {
       expect(body.batch[0].properties.$process_person_profile).toBe(true)
     })
 
-    it('should allow setPersonProperties() to work', async () => {
-      posthog.setPersonProperties({ name: 'Test' }, { initial_source: 'web' })
-      await waitForPromises()
-
-      expect(mocks.fetch).toHaveBeenCalledTimes(1)
-      const body = parseBody(mocks.fetch.mock.calls[0])
-      expect(body.batch[0].event).toBe('$set')
-      expect(body.batch[0].properties.$set).toEqual({ name: 'Test' })
-      expect(body.batch[0].properties.$set_once).toEqual({ initial_source: 'web' })
-    })
-
     it('should persist person mode as identified after identify()', async () => {
       posthog.identify('user-123')
       await waitForPromises()
@@ -165,14 +154,6 @@ describe('PostHog Core - Person Profiles', () => {
 
     it('should not send alias events', async () => {
       posthog.alias('alias-id')
-      await waitForPromises()
-
-      const batchCalls = mocks.fetch.mock.calls.filter((call) => call[0].includes('/batch/'))
-      expect(batchCalls.length).toBe(0)
-    })
-
-    it('should not send setPersonProperties events', async () => {
-      posthog.setPersonProperties({ name: 'Test' })
       await waitForPromises()
 
       const batchCalls = mocks.fetch.mock.calls.filter((call) => call[0].includes('/batch/'))

@@ -1072,42 +1072,6 @@ export class PostHog extends PostHogCore {
     super.createPersonProfile()
   }
 
-  /**
-   * Sets person properties on the current user's profile.
-   *
-   * This sends a `$set` event to PostHog that updates the user's person profile.
-   * If `personProfiles` is 'never', this will log an error and do nothing.
-   *
-   * {@label Identification}
-   *
-   * @example
-   * ```js
-   * // Set person properties
-   * posthog.setPersonProperties({
-   *   email: 'user@example.com',
-   *   name: 'John Doe',
-   *   plan: 'premium'
-   * })
-   * ```
-   *
-   * @example
-   * ```js
-   * // Set properties that should only be set once (won't overwrite existing values)
-   * posthog.setPersonProperties(
-   *   { last_login: new Date().toISOString() },  // $set - always updates
-   *   { first_seen: new Date().toISOString() }   // $set_once - only sets if not already set
-   * )
-   * ```
-   *
-   * @public
-   *
-   * @param properties - Properties to set on the person (will overwrite existing values)
-   * @param propertiesSetOnce - Properties to set only if they haven't been set before
-   */
-  setPersonProperties(properties?: PostHogEventProperties, propertiesSetOnce?: PostHogEventProperties): void {
-    super.setPersonProperties(properties, propertiesSetOnce)
-  }
-
   public async getSurveys(): Promise<SurveyResponse['surveys']> {
     if (this._disableSurveys === true) {
       this._logger.info('Loading surveys is disabled.')
