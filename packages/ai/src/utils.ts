@@ -540,6 +540,7 @@ export type SendEventToPosthogParams = {
   input: any
   output: any
   latency: number
+  timeToFirstToken?: number
   baseURL: string
   httpStatus: number
   usage?: TokenUsage
@@ -652,6 +653,7 @@ export const sendEventToPosthog = async ({
   input,
   output,
   latency,
+  timeToFirstToken,
   baseURL,
   params,
   httpStatus = 200,
@@ -708,6 +710,7 @@ export const sendEventToPosthog = async ({
     ...(usage.outputTokens !== undefined ? { $ai_output_tokens: usage.outputTokens } : {}),
     ...additionalTokenValues,
     $ai_latency: latency,
+    ...(timeToFirstToken !== undefined ? { $ai_time_to_first_token: timeToFirstToken } : {}),
     $ai_trace_id: traceId,
     $ai_base_url: baseURL,
     ...params.posthogProperties,
