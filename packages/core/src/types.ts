@@ -71,9 +71,37 @@ export type PostHogCoreOptions = {
    *
    * - 'always': Always create a person profile for every user (anonymous and identified).
    * - 'identified_only': Only create a person profile when the user is identified via identify(), alias(), or group().
-   * - 'never': Never create person profiles. identify(), alias(), setPersonProperties(), and group() will be no-ops.
+   *   Events captured before identification will NOT have person profiles and will be anonymous events.
+   * - 'never': Never create person profiles. identify(), alias(), and group() will be no-ops.
    *
    * @default 'identified_only'
+   *
+   * @example
+   * ```ts
+   * // Only create profiles when users are identified (recommended for most apps)
+   * const posthog = new PostHog('<api_key>', {
+   *   personProfiles: 'identified_only',
+   * })
+   *
+   * // Later when user logs in:
+   * posthog.identify('user-123', { email: 'user@example.com' })
+   * ```
+   *
+   * @example
+   * ```ts
+   * // Always create profiles (for apps where you want to track all users)
+   * const posthog = new PostHog('<api_key>', {
+   *   personProfiles: 'always',
+   * })
+   * ```
+   *
+   * @example
+   * ```ts
+   * // Never create profiles (anonymous analytics only)
+   * const posthog = new PostHog('<api_key>', {
+   *   personProfiles: 'never',
+   * })
+   * ```
    */
   personProfiles?: 'always' | 'identified_only' | 'never'
 }
