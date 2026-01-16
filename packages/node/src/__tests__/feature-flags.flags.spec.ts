@@ -599,3 +599,444 @@ describe('feature flag error tracking', () => {
     expect(capturedMessage).toBeUndefined()
   })
 })
+
+describe('getFeatureFlagResult', () => {
+  it('returns flag result including parsed payload', async () => {
+    const flagsResponse: PostHogV2FlagsResponse = {
+      flags: {
+        'test-flag': {
+          key: 'test-flag',
+          enabled: true,
+          variant: 'variant-a',
+          reason: {
+            code: 'variant',
+            condition_index: 2,
+            description: 'Matched condition set 3',
+          },
+          metadata: {
+            id: 42,
+            version: 5,
+            payload: '{"discount": 20}',
+            description: 'Test flag description',
+          },
+        },
+      },
+      errorsWhileComputingFlags: false,
+      requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+      evaluatedAt: 1640995200000,
+    }
+    mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+
+    const result = await posthog.getFeatureFlagResult('test-flag', 'some-distinct-id')
+
+    expect(result).toEqual({
+      key: 'test-flag',
+      enabled: true,
+      variant: 'variant-a',
+      payload: { discount: 20 },
+    })
+  })
+
+  it('returns undefined when flag is not found', async () => {
+    const flagsResponse: PostHogV2FlagsResponse = {
+      flags: {},
+      errorsWhileComputingFlags: false,
+      requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+      evaluatedAt: 1640995200000,
+    }
+    mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+
+    const result = await posthog.getFeatureFlagResult('non-existent-flag', 'some-distinct-id')
+
+    expect(result).toBeUndefined()
+  })
+
+  it('returns result for simple boolean flag without variant or payload', async () => {
+    const flagsResponse: PostHogV2FlagsResponse = {
+      flags: {
+        'boolean-flag': {
+          key: 'boolean-flag',
+          enabled: true,
+          variant: undefined,
+          reason: {
+            code: 'boolean',
+            condition_index: 0,
+            description: 'Matched condition set 1',
+          },
+          metadata: {
+            id: 1,
+            version: 1,
+            payload: undefined,
+            description: undefined,
+          },
+        },
+      },
+      errorsWhileComputingFlags: false,
+      requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+      evaluatedAt: 1640995200000,
+    }
+    mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+
+    const result = await posthog.getFeatureFlagResult('boolean-flag', 'some-distinct-id')
+
+    expect(result?.enabled).toBe(true)
+    expect(result?.variant).toBeUndefined()
+    expect(result?.payload).toBeUndefined()
+  })
+
+  it('returns disabled result when conditions do not match', async () => {
+    const flagsResponse: PostHogV2FlagsResponse = {
+      flags: {
+        'disabled-flag': {
+          key: 'disabled-flag',
+          enabled: false,
+          variant: undefined,
+          reason: {
+            code: 'no_condition_match',
+            condition_index: undefined,
+            description: 'No conditions matched',
+          },
+          metadata: {
+            id: 5,
+            version: 2,
+            payload: undefined,
+            description: 'A flag that did not match',
+          },
+        },
+      },
+      errorsWhileComputingFlags: false,
+      requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+      evaluatedAt: 1640995200000,
+    }
+    mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+
+    const result = await posthog.getFeatureFlagResult('disabled-flag', 'some-distinct-id')
+
+    expect(result).toEqual({
+      key: 'disabled-flag',
+      enabled: false,
+      variant: undefined,
+      payload: undefined,
+    })
+  })
+
+  it('captures $feature_flag_called event with result', async () => {
+    const flagsResponse: PostHogV2FlagsResponse = {
+      flags: {
+        'test-flag': {
+          key: 'test-flag',
+          enabled: true,
+          variant: 'control',
+          reason: {
+            code: 'variant',
+            condition_index: 1,
+            description: 'Matched condition set 2',
+          },
+          metadata: {
+            id: 10,
+            version: 3,
+            payload: '{"value": 100}',
+            description: 'description',
+          },
+        },
+      },
+      errorsWhileComputingFlags: false,
+      requestId: 'test-request-id',
+      evaluatedAt: 1640995200000,
+    }
+    mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+    let capturedMessage: any
+    posthog.on('capture', (message) => {
+      capturedMessage = message
+    })
+
+    await posthog.getFeatureFlagResult('test-flag', 'some-distinct-id')
+
+    await waitForPromises()
+    expect(capturedMessage).toMatchObject({
+      distinct_id: 'some-distinct-id',
+      event: '$feature_flag_called',
+      properties: {
+        '$feature/test-flag': 'control',
+        $feature_flag: 'test-flag',
+        $feature_flag_response: 'control',
+        $feature_flag_id: 10,
+        $feature_flag_version: 3,
+        $feature_flag_reason: 'Matched condition set 2',
+        $feature_flag_request_id: 'test-request-id',
+        locally_evaluated: false,
+      },
+    })
+  })
+
+  it('does not capture event when sendFeatureFlagEvents is false', async () => {
+    const flagsResponse: PostHogV2FlagsResponse = {
+      flags: {
+        'test-flag': {
+          key: 'test-flag',
+          enabled: true,
+          variant: undefined,
+          reason: { code: 'boolean', condition_index: 0, description: 'Matched' },
+          metadata: { id: 1, version: 1, payload: undefined, description: undefined },
+        },
+      },
+      errorsWhileComputingFlags: false,
+      requestId: 'test-request-id',
+      evaluatedAt: 1640995200000,
+    }
+    mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+    let capturedMessage: any
+    posthog.on('capture', (message) => {
+      capturedMessage = message
+    })
+
+    await posthog.getFeatureFlagResult('test-flag', 'some-distinct-id', {
+      sendFeatureFlagEvents: false,
+    })
+
+    await waitForPromises()
+    expect(capturedMessage).toBeUndefined()
+  })
+
+  it('returns override result when flag is overridden', async () => {
+    mockedFetch.mockImplementation(apiImplementationV4({ flags: {}, errorsWhileComputingFlags: false }))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+
+    posthog.overrideFeatureFlags({
+      flags: { 'overridden-flag': 'override-variant' },
+      payloads: { 'overridden-flag': { custom: 'payload' } },
+    })
+
+    const result = await posthog.getFeatureFlagResult('overridden-flag', 'some-distinct-id')
+
+    expect(result).toEqual({
+      key: 'overridden-flag',
+      enabled: true,
+      variant: 'override-variant',
+      payload: { custom: 'payload' },
+    })
+  })
+
+  it('returns disabled result when flag is overridden to false', async () => {
+    mockedFetch.mockImplementation(apiImplementationV4({ flags: {}, errorsWhileComputingFlags: false }))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+
+    posthog.overrideFeatureFlags({
+      flags: { 'disabled-override-flag': false },
+    })
+
+    const result = await posthog.getFeatureFlagResult('disabled-override-flag', 'some-distinct-id')
+
+    expect(result).toEqual({
+      key: 'disabled-override-flag',
+      enabled: false,
+      variant: undefined,
+      payload: undefined,
+    })
+  })
+
+  describe('local evaluation', () => {
+    it('returns flag result with parsed payload when evaluated locally', async () => {
+      const localFlags = {
+        flags: [
+          {
+            id: 42,
+            name: 'Local Feature',
+            key: 'local-flag',
+            active: true,
+            filters: {
+              groups: [
+                {
+                  properties: [{ key: 'region', value: ['USA'], type: 'person' }],
+                  rollout_percentage: 100,
+                },
+              ],
+              payloads: { true: '{"discount": 15}' },
+            },
+          },
+        ],
+      }
+      mockedFetch.mockImplementation(apiImplementation({ localFlags }))
+
+      const posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+
+      const result = await posthog.getFeatureFlagResult('local-flag', 'some-distinct-id', {
+        personProperties: { region: 'USA' },
+      })
+
+      expect(result).toMatchObject({
+        key: 'local-flag',
+        enabled: true,
+        payload: { discount: 15 },
+      })
+
+      await posthog.shutdown()
+    })
+
+    it('returns variant result when evaluated locally with multivariate flag', async () => {
+      const localFlags = {
+        flags: [
+          {
+            id: 99,
+            name: 'Multivariate Flag',
+            key: 'multivariate-flag',
+            active: true,
+            filters: {
+              groups: [{ rollout_percentage: 100 }],
+              multivariate: {
+                variants: [
+                  { key: 'control', rollout_percentage: 50 },
+                  { key: 'test', rollout_percentage: 50 },
+                ],
+              },
+              payloads: {
+                control: '{"version": "control"}',
+                test: '{"version": "test"}',
+              },
+            },
+          },
+        ],
+      }
+      mockedFetch.mockImplementation(apiImplementation({ localFlags }))
+
+      const posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+
+      const result = await posthog.getFeatureFlagResult('multivariate-flag', 'test-user-id')
+
+      expect(result).toMatchObject({
+        key: 'multivariate-flag',
+        enabled: true,
+      })
+      expect(result?.variant).toBeDefined()
+      expect(['control', 'test']).toContain(result?.variant)
+      expect(result?.payload).toBeDefined()
+
+      await posthog.shutdown()
+    })
+
+    it('returns undefined when onlyEvaluateLocally is true and flag cannot be evaluated locally', async () => {
+      const localFlags = {
+        flags: [
+          {
+            id: 1,
+            name: 'Cohort Flag',
+            key: 'cohort-flag',
+            active: true,
+            filters: {
+              groups: [
+                {
+                  properties: [{ key: 'id', value: 123, operator: undefined, type: 'cohort' }],
+                  rollout_percentage: 100,
+                },
+              ],
+            },
+          },
+        ],
+      }
+      mockedFetch.mockImplementation(apiImplementation({ localFlags }))
+
+      const posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+
+      const result = await posthog.getFeatureFlagResult('cohort-flag', 'some-distinct-id', {
+        onlyEvaluateLocally: true,
+      })
+
+      expect(result).toBeUndefined()
+
+      await posthog.shutdown()
+    })
+
+    it('captures $feature_flag_called event with locally_evaluated: true', async () => {
+      const localFlags = {
+        flags: [
+          {
+            id: 55,
+            name: 'Simple Flag',
+            key: 'simple-flag',
+            active: true,
+            filters: {
+              groups: [{ rollout_percentage: 100 }],
+            },
+          },
+        ],
+      }
+      mockedFetch.mockImplementation(apiImplementation({ localFlags }))
+
+      const posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+
+      let capturedMessage: any
+      posthog.on('capture', (message) => {
+        capturedMessage = message
+      })
+
+      await posthog.getFeatureFlagResult('simple-flag', 'some-distinct-id')
+
+      await waitForPromises()
+      expect(capturedMessage).toMatchObject({
+        event: '$feature_flag_called',
+        properties: {
+          $feature_flag: 'simple-flag',
+          $feature_flag_response: true,
+          $feature_flag_id: 55,
+          locally_evaluated: true,
+        },
+      })
+
+      await posthog.shutdown()
+    })
+  })
+})
