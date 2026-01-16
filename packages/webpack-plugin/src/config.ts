@@ -10,6 +10,7 @@ export interface PluginConfig {
     cliBinaryPath?: string
     sourcemaps?: {
         enabled?: boolean
+        upload?: boolean
         project?: string
         version?: string
         deleteAfterUpload?: boolean
@@ -23,11 +24,21 @@ export interface ResolvedPluginConfig extends PluginConfig {
     cliBinaryPath: string
     sourcemaps: {
         enabled: boolean
+        upload: boolean
         project?: string
         version?: string
         deleteAfterUpload: boolean
         batchSize?: number
-    }
+    } & ({
+        upload: true
+        // these options are only for uploading
+        deleteAfterUpload: boolean
+        batchSize?: number
+    } | {
+        upload: false
+        deleteAfterUpload: false
+        batchSize?: never
+    })
 }
 
 export function resolveConfig(options: PluginConfig): ResolvedPluginConfig {
@@ -42,18 +53,23 @@ export function resolveConfig(options: PluginConfig): ResolvedPluginConfig {
 
     const sourcemaps = options.sourcemaps ?? {}
 
+    const resolvedSourcemaps = {
+        enabled: sourcemaps.enabled ?? process.env.NODE_ENV === 'production',
+        upload: sourcemaps.upload ?? true,
+        project: sourcemaps.project,
+        version: sourcemaps.version,
+    }
+    if (resolvedSourcemaps.upload) {
+        resolvedSourcemaps.deleteAfterUpload = sourcemaps.deleteAfterUpload ?? true
+        resolvedSourcemaps.batchSize = sourcemaps.batchSize
+    }
+
     return {
         personalApiKey: options.personalApiKey,
         envId: options.envId,
         host,
         logLevel,
         cliBinaryPath,
-        sourcemaps: {
-            enabled: sourcemaps.enabled ?? process.env.NODE_ENV === 'production',
-            project: sourcemaps.project,
-            version: sourcemaps.version,
-            deleteAfterUpload: sourcemaps.deleteAfterUpload ?? true,
-            batchSize: sourcemaps.batchSize,
-        },
+        sourcemaps: resolvedSourcemaps,
     }
 }
