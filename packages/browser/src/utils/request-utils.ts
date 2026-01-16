@@ -186,7 +186,9 @@ export function getAllParams(rawUrl: string): Record<string, string> {
         if (eqIndex > -1) {
           const key = pair.substring(0, eqIndex);
           const value = pair.substring(eqIndex + 1);
-          top[key] = value; // Keep value encoded for nested param detection
+          if (!(key in top)) {
+            top[key] = value; // Keep value encoded for nested param detection
+          }
         }
       }
     }
@@ -205,7 +207,7 @@ export function getAllParams(rawUrl: string): Record<string, string> {
 export const getQueryParam = function (url: string, param: string): string {
     // now this can handle nested encoded urls like "http://example.com/?utm_source=google%26utm_medium%3Dcpc%26utm_term%3Dexample%20store"
     // get all params and return the needed one
-    if(!param) return "";
+    if (!param) return "";
     return getAllParams(url)?.[param] || "";
 }
 
