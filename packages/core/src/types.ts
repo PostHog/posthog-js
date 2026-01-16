@@ -379,7 +379,7 @@ export type LinkSurveyQuestion = SurveyQuestionBase & {
 export type RatingSurveyQuestion = SurveyQuestionBase & {
   type: SurveyQuestionType.Rating
   display: SurveyRatingDisplay
-  scale: 3 | 5 | 7 | 10
+  scale: 2 | 3 | 5 | 7 | 10
   lowerBoundLabel: string
   upperBoundLabel: string
 }

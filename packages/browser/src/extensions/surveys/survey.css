@@ -450,6 +450,10 @@
     justify-content: space-between;
 }
 
+.rating-options-emoji-2 {
+    justify-content: space-around;
+}
+
 .ratings-emoji {
     font-size: 16px;
     background-color: transparent;

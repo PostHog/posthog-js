@@ -6,6 +6,8 @@ import {
   DissatisfiedEmoji,
   NeutralEmoji,
   SatisfiedEmoji,
+  ThumbsDownEmoji,
+  ThumbsUpEmoji,
   VeryDissatisfiedEmoji,
   VerySatisfiedEmoji,
 } from '../icons'
@@ -132,7 +134,7 @@ export function RatingQuestion({
         <View style={styles.ratingOptions}>
           {question.display === SurveyRatingDisplay.Emoji && (
             <View style={styles.ratingOptionsEmoji}>
-              {(question.scale === 3 ? threeScaleEmojis : fiveScaleEmojis).map((Emoji, idx) => {
+              {emojiScaleLists[question.scale]?.map((Emoji, idx) => {
                 const active = idx + 1 === rating
                 return (
                   <TouchableOpacity key={idx} style={styles.ratingsEmoji} onPress={() => setRating(idx + 1)}>
@@ -311,8 +313,11 @@ export function MultipleChoiceQuestion({
   )
 }
 
-const threeScaleEmojis = [DissatisfiedEmoji, NeutralEmoji, SatisfiedEmoji]
-const fiveScaleEmojis = [VeryDissatisfiedEmoji, DissatisfiedEmoji, NeutralEmoji, SatisfiedEmoji, VerySatisfiedEmoji]
+const emojiScaleLists: Record<number, (typeof ThumbsUpEmoji)[]> = {
+  2: [ThumbsUpEmoji, ThumbsDownEmoji],
+  3: [DissatisfiedEmoji, NeutralEmoji, SatisfiedEmoji],
+  5: [VeryDissatisfiedEmoji, DissatisfiedEmoji, NeutralEmoji, SatisfiedEmoji, VerySatisfiedEmoji],
+}
 const fiveScaleNumbers = [1, 2, 3, 4, 5]
 const sevenScaleNumbers = [1, 2, 3, 4, 5, 6, 7]
 const tenScaleNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
