@@ -1,5 +1,73 @@
 # posthog-js
 
+## 1.324.1
+
+### Patch Changes
+
+- [#2891](https://github.com/PostHog/posthog-js/pull/2891) [`4785cc4`](https://github.com/PostHog/posthog-js/commit/4785cc40fd8de6a49d31143abee826b786964ce4) Thanks [@ksvat](https://github.com/ksvat)! - introduce cache and url change tracking for regex
+  (2026-01-15)
+- Updated dependencies []:
+    - @posthog/types@1.324.1
+
+## 1.324.0
+
+### Minor Changes
+
+- [#2908](https://github.com/PostHog/posthog-js/pull/2908) [`b9efc01`](https://github.com/PostHog/posthog-js/commit/b9efc019df59329f7a146a8e61974fb444ef774f) Thanks [@adboio](https://github.com/adboio)! - add display frequency options for product tour announcements
+  (2026-01-15)
+
+### Patch Changes
+
+- [#2906](https://github.com/PostHog/posthog-js/pull/2906) [`665d84f`](https://github.com/PostHog/posthog-js/commit/665d84f15bde57d1e255103c740b421a73c16468) Thanks [@frankh](https://github.com/frankh)! - do not require preflight requests for logs extension
+  (2026-01-15)
+- Updated dependencies []:
+    - @posthog/types@1.324.0
+
+## 1.323.0
+
+### Minor Changes
+
+- [#2902](https://github.com/PostHog/posthog-js/pull/2902) [`584657a`](https://github.com/PostHog/posthog-js/commit/584657a0686c80c439261a1a90bb69fe45e873d0) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Ensure wrapped fetch() passes duplex option when required
+  (2026-01-15)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.323.0
+
+## 1.322.0
+
+### Minor Changes
+
+- [#2904](https://github.com/PostHog/posthog-js/pull/2904) [`b9fb2e2`](https://github.com/PostHog/posthog-js/commit/b9fb2e2364b1f8c04689d6fb6635bd81a3caa8eb) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Fix the issue with \_currentTicketId
+  (2026-01-15)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.322.0
+
+## 1.321.3
+
+### Patch Changes
+
+- [#2899](https://github.com/PostHog/posthog-js/pull/2899) [`f56a875`](https://github.com/PostHog/posthog-js/commit/f56a875fd11dab296ad3c35f292192137579f22a) Thanks [@adboio](https://github.com/adboio)! - support configurable z-index
+  (2026-01-15)
+
+- [#2898](https://github.com/PostHog/posthog-js/pull/2898) [`037ccb5`](https://github.com/PostHog/posthog-js/commit/037ccb509fbf922171623888e9b9594bc01d69e9) Thanks [@adboio](https://github.com/adboio)! - more robust element-based tooltip positioning for product tours
+  (2026-01-15)
+- Updated dependencies []:
+    - @posthog/types@1.321.3
+
+## 1.321.2
+
+### Patch Changes
+
+- [#2893](https://github.com/PostHog/posthog-js/pull/2893) [`8eff3c0`](https://github.com/PostHog/posthog-js/commit/8eff3c0cf9b89f1bce37768dbd26665eab7235f3) Thanks [@ksvat](https://github.com/ksvat)! - bump rrweb version to 0.0.35
+  (2026-01-14)
+- Updated dependencies []:
+    - @posthog/types@1.321.2
+
 ## 1.321.1
 
 ### Patch Changes

@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "1.324.1",
+    "version": "1.322.0",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -2616,10 +2616,6 @@
           "name": "description"
         },
         {
-          "type": "ProductTourDisplayFrequency",
-          "name": "display_frequency"
-        },
-        {
           "type": "string | null",
           "name": "end_date"
         },
@@ -2780,13 +2776,6 @@
       "properties": [],
       "path": "lib/src/posthog-product-tours-types.d.ts",
       "example": "\"user_clicked_skip\" | \"user_clicked_outside\" | \"escape_key\" | \"element_unavailable\""
-    },
-    {
-      "id": "ProductTourDisplayFrequency",
-      "name": "ProductTourDisplayFrequency",
-      "properties": [],
-      "path": "lib/src/posthog-product-tours-types.d.ts",
-      "example": "\"show_once\" | \"until_interacted\" | \"always\""
     },
     {
       "id": "ProductTourRenderReason",

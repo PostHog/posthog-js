@@ -25,7 +25,12 @@ import { localStore, sessionStore } from '../../storage'
 import { addEventListener } from '../../utils'
 import { isNull, SurveyMatchType } from '@posthog/core'
 import { propertyComparisons } from '../../utils/property-utils'
-import { TOUR_COMPLETED_KEY_PREFIX, TOUR_DISMISSED_KEY_PREFIX, ACTIVE_TOUR_SESSION_KEY } from './constants'
+import {
+    TOUR_SHOWN_KEY_PREFIX,
+    TOUR_COMPLETED_KEY_PREFIX,
+    TOUR_DISMISSED_KEY_PREFIX,
+    ACTIVE_TOUR_SESSION_KEY,
+} from './constants'
 import { doesTourActivateByAction, doesTourActivateByEvent } from '../../utils/product-tour-utils'
 import { TOOLBAR_ID } from '../../constants'
 import { ProductTourEventReceiver } from '../../utils/product-tour-event-receiver'
@@ -370,12 +375,29 @@ export class ProductTourManager {
             return false
         }
 
+        const displayFrequency = tour.display_frequency ?? 'until_interacted'
+        const shownKey = `${TOUR_SHOWN_KEY_PREFIX}${tour.id}`
         const completedKey = `${TOUR_COMPLETED_KEY_PREFIX}${tour.id}`
         const dismissedKey = `${TOUR_DISMISSED_KEY_PREFIX}${tour.id}`
 
-        if (localStore._get(completedKey) || localStore._get(dismissedKey)) {
-            logger.info(`Tour ${tour.id} already completed or dismissed`)
-            return false
+        switch (displayFrequency) {
+            case 'show_once':
+                if (localStore._get(shownKey)) {
+                    logger.info(`Tour ${tour.id} already shown (show_once frequency)`)
+                    return false
+                }
+                break
+
+            case 'until_interacted':
+                if (localStore._get(completedKey) || localStore._get(dismissedKey)) {
+                    logger.info(`Tour ${tour.id} already completed or dismissed`)
+                    return false
+                }
+                break
+
+            case 'always':
+            default:
+                break
         }
 
         if (tour.internal_targeting_flag_key) {
@@ -456,6 +478,14 @@ export class ProductTourManager {
             $product_tour_render_reason: renderReason,
         })
 
+        if (!this._isPreviewMode) {
+            localStore._set(`${TOUR_SHOWN_KEY_PREFIX}${tour.id}`, true)
+
+            this._instance.capture('$set', {
+                $set: { [`$product_tour_shown/${tour.id}`]: true },
+            })
+        }
+
         this._renderCurrentStep()
     }
 
@@ -529,6 +559,10 @@ export class ProductTourManager {
 
         if (!this._isPreviewMode) {
             localStore._set(`${TOUR_DISMISSED_KEY_PREFIX}${this._activeTour.id}`, true)
+
+            this._instance.capture('$set', {
+                $set: { [`$product_tour_dismissed/${this._activeTour.id}`]: true },
+            })
         }
 
         window.dispatchEvent(
@@ -549,9 +583,12 @@ export class ProductTourManager {
             case 'previous_step':
                 this.previousStep()
                 break
+            case 'link':
+                this._completeTour()
+                break
             case 'trigger_tour':
                 if (button.tourId) {
-                    this._cleanup()
+                    this._completeTour()
                     this.showTourById(button.tourId)
                 }
                 break
@@ -781,6 +818,7 @@ export class ProductTourManager {
                 step={step}
                 onDismiss={() => this.dismissTour('user_clicked_skip')}
                 onTriggerTour={handleTriggerTour}
+                displayFrequency={this._activeTour.display_frequency}
             />,
             shadow
         )
@@ -951,6 +989,7 @@ export class ProductTourManager {
     }
 
     resetTour(tourId: string): void {
+        localStore._remove(`${TOUR_SHOWN_KEY_PREFIX}${tourId}`)
         localStore._remove(`${TOUR_COMPLETED_KEY_PREFIX}${tourId}`)
         localStore._remove(`${TOUR_DISMISSED_KEY_PREFIX}${tourId}`)
     }
@@ -963,7 +1002,11 @@ export class ProductTourManager {
         const keysToRemove: string[] = []
         for (let i = 0; i < storage.length; i++) {
             const key = storage.key(i)
-            if (key?.startsWith(TOUR_COMPLETED_KEY_PREFIX) || key?.startsWith(TOUR_DISMISSED_KEY_PREFIX)) {
+            if (
+                key?.startsWith(TOUR_SHOWN_KEY_PREFIX) ||
+                key?.startsWith(TOUR_COMPLETED_KEY_PREFIX) ||
+                key?.startsWith(TOUR_DISMISSED_KEY_PREFIX)
+            ) {
                 keysToRemove.push(key)
             }
         }

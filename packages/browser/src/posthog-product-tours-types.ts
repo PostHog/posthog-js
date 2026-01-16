@@ -109,7 +109,10 @@ export interface ProductTourAppearance {
     whiteLabel?: boolean
     /** defaults to true, auto-set to false for announcements/banners */
     dismissOnClickOutside?: boolean
+    zIndex?: number
 }
+
+export type ProductTourDisplayFrequency = 'show_once' | 'until_interacted' | 'always'
 
 export interface ProductTour {
     id: string
@@ -125,6 +128,7 @@ export interface ProductTour {
     steps: ProductTourStep[]
     internal_targeting_flag_key?: string
     linked_flag_key?: string
+    display_frequency?: ProductTourDisplayFrequency
 }
 
 export type ProductTourCallback = (tours: ProductTour[], context?: { isLoaded: boolean; error?: string }) => void
@@ -151,6 +155,7 @@ export const DEFAULT_PRODUCT_TOUR_APPEARANCE: Required<ProductTourAppearance> = 
     showOverlay: true,
     whiteLabel: false,
     dismissOnClickOutside: true,
+    zIndex: 2147483646,
 }
 
 export interface ShowTourOptions {

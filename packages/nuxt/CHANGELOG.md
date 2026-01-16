@@ -1,5 +1,47 @@
 # @posthog/nuxt
 
+## 1.4.29
+
+### Patch Changes
+
+- Updated dependencies [[`4785cc4`](https://github.com/PostHog/posthog-js/commit/4785cc40fd8de6a49d31143abee826b786964ce4)]:
+  - posthog-js@1.324.1
+
+## 1.4.28
+
+### Patch Changes
+
+- Updated dependencies [[`665d84f`](https://github.com/PostHog/posthog-js/commit/665d84f15bde57d1e255103c740b421a73c16468), [`b9efc01`](https://github.com/PostHog/posthog-js/commit/b9efc019df59329f7a146a8e61974fb444ef774f)]:
+  - posthog-js@1.324.0
+
+## 1.4.27
+
+### Patch Changes
+
+- Updated dependencies [[`584657a`](https://github.com/PostHog/posthog-js/commit/584657a0686c80c439261a1a90bb69fe45e873d0)]:
+  - posthog-js@1.323.0
+
+## 1.4.26
+
+### Patch Changes
+
+- Updated dependencies [[`b9fb2e2`](https://github.com/PostHog/posthog-js/commit/b9fb2e2364b1f8c04689d6fb6635bd81a3caa8eb)]:
+  - posthog-js@1.322.0
+
+## 1.4.25
+
+### Patch Changes
+
+- Updated dependencies [[`f56a875`](https://github.com/PostHog/posthog-js/commit/f56a875fd11dab296ad3c35f292192137579f22a), [`037ccb5`](https://github.com/PostHog/posthog-js/commit/037ccb509fbf922171623888e9b9594bc01d69e9)]:
+  - posthog-js@1.321.3
+
+## 1.4.24
+
+### Patch Changes
+
+- Updated dependencies [[`8eff3c0`](https://github.com/PostHog/posthog-js/commit/8eff3c0cf9b89f1bce37768dbd26665eab7235f3)]:
+  - posthog-js@1.321.2
+
 ## 1.4.23
 
 ### Patch Changes

@@ -212,6 +212,19 @@ export class ConversationsManager implements ConversationsManagerInterface {
         })
     }
 
+    /**
+     * Switch to a different ticket if an explicit ticketId is provided
+     * This ensures subsequent operations (sendMessage, etc.) use the correct ticket
+     */
+    private _switchToTicketIfNeeded(ticketId: string | undefined): void {
+        if (ticketId && ticketId !== this._currentTicketId) {
+            this._currentTicketId = ticketId
+            this._persistence.saveTicketId(ticketId)
+            // Reset last message timestamp when switching tickets
+            this._lastMessageTimestamp = null
+        }
+    }
+
     /** Fetch messages via the API */
     async getMessages(ticketId?: string, after?: string): Promise<GetMessagesResponse> {
         // Use provided ticketId or fall back to current ticket
@@ -220,6 +233,10 @@ export class ConversationsManager implements ConversationsManagerInterface {
         if (!targetTicketId) {
             throw new Error('No ticket ID provided and no active conversation')
         }
+
+        // Switch to this ticket if explicitly provided
+        this._switchToTicketIfNeeded(ticketId)
+
         const token = this._config.token
 
         // eslint-disable-next-line compat/compat
@@ -277,6 +294,10 @@ export class ConversationsManager implements ConversationsManagerInterface {
         if (!targetTicketId) {
             throw new Error('No ticket ID provided and no active conversation')
         }
+
+        // Switch to this ticket if explicitly provided
+        this._switchToTicketIfNeeded(ticketId)
+
         const token = this._config.token
 
         logger.info('Marking messages as read', { ticketId: targetTicketId })

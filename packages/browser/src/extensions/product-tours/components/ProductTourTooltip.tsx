@@ -1,19 +1,18 @@
 import { h } from 'preact'
-import { useEffect, useState, useCallback, useRef } from 'preact/hooks'
+import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'preact/hooks'
 import {
     ProductTour,
     ProductTourStep,
     ProductTourDismissReason,
     ProductTourStepButton,
 } from '../../../posthog-product-tours-types'
-import { SurveyPosition } from '@posthog/core'
-import { calculateTooltipPosition, getSpotlightStyle, TooltipPosition } from '../product-tours-utils'
+import { isUndefined, SurveyPosition } from '@posthog/core'
+import { calculateTooltipPosition, getSpotlightStyle, TooltipPosition, TooltipDimensions } from '../product-tours-utils'
 import { getPopoverPosition } from '../../surveys/surveys-extension-utils'
 import { addEventListener } from '../../../utils'
 import { window as _window } from '../../../utils/globals'
 import { ProductTourTooltipInner } from './ProductTourTooltipInner'
 import { ProductTourSurveyStepInner } from './ProductTourSurveyStepInner'
-import { isNull } from '@posthog/core'
 
 const window = _window as Window & typeof globalThis
 
@@ -112,10 +111,12 @@ export function ProductTourTooltip({
     const [transitionState, setTransitionState] = useState<TransitionState>('entering')
     const [position, setPosition] = useState<ReturnType<typeof calculateTooltipPosition> | null>(null)
     const [spotlightStyle, setSpotlightStyle] = useState<ReturnType<typeof getSpotlightStyle> | null>(null)
+    const [isMeasured, setIsMeasured] = useState(false)
 
     const [displayedStep, setDisplayedStep] = useState(step)
     const [displayedStepIndex, setDisplayedStepIndex] = useState(stepIndex)
 
+    const tooltipRef = useRef<HTMLDivElement>(null)
     const previousStepRef = useRef(stepIndex)
     const isTransitioningRef = useRef(false)
 
@@ -123,11 +124,25 @@ export function ProductTourTooltip({
     const isScreenPositioned = displayedStep.type === 'modal' || displayedStep.type === 'survey'
 
     const updatePosition = useCallback(() => {
-        if (!targetElement) return
-        const rect = targetElement.getBoundingClientRect()
-        setPosition(calculateTooltipPosition(rect))
-        setSpotlightStyle(getSpotlightStyle(rect))
+        if (!targetElement || !tooltipRef.current) return
+
+        const tooltipRect = tooltipRef.current.getBoundingClientRect()
+        const tooltipDimensions: TooltipDimensions = {
+            width: tooltipRect.width,
+            height: tooltipRect.height,
+        }
+
+        const targetRect = targetElement.getBoundingClientRect()
+        setPosition(calculateTooltipPosition(targetRect, tooltipDimensions))
+        setSpotlightStyle(getSpotlightStyle(targetRect))
+        setIsMeasured(true)
     }, [targetElement])
+
+    useLayoutEffect(() => {
+        if (!isScreenPositioned && !isMeasured && tooltipRef.current && targetElement) {
+            updatePosition()
+        }
+    }, [isScreenPositioned, isMeasured, targetElement, updatePosition])
 
     useEffect(() => {
         const currentStepIndex = stepIndex
@@ -170,6 +185,7 @@ export function ProductTourTooltip({
             if (step.type === 'element') {
                 setPosition(null)
                 setSpotlightStyle(null)
+                setIsMeasured(false)
             }
 
             setDisplayedStep(step)
@@ -230,8 +246,8 @@ export function ProductTourTooltip({
     const isVisible = transitionState === 'visible'
     const isSurvey = displayedStep.type === 'survey'
 
-    // For element steps, don't render until position is calculated
-    const isPositionReady = isScreenPositioned || !isNull(position)
+    // For element steps, position is ready once we've measured and calculated
+    const isPositionReady = isScreenPositioned || isMeasured
 
     const basePosition = { top: 'auto', right: 'auto', bottom: 'auto', left: 'auto', transform: 'none' }
 
@@ -244,6 +260,22 @@ export function ProductTourTooltip({
         return pos
     }
 
+    const getElementPositionStyle = (): Record<string, string> => {
+        if (!position) {
+            return {}
+        }
+
+        const isHorizontal = position.position === 'left' || position.position === 'right'
+
+        return {
+            top: !isUndefined(position.top) ? `${position.top}px` : 'auto',
+            bottom: !isUndefined(position.bottom) ? `${position.bottom}px` : 'auto',
+            left: !isUndefined(position.left) ? `${position.left}px` : 'auto',
+            right: !isUndefined(position.right) ? `${position.right}px` : 'auto',
+            transform: isHorizontal ? 'translateY(-50%)' : 'translateX(-50%)',
+        }
+    }
+
     const tooltipStyle = {
         ...(displayedStep.maxWidth && {
             width: `${displayedStep.maxWidth}px`,
@@ -254,10 +286,7 @@ export function ProductTourTooltip({
                   ...basePosition,
                   ...getModalPosition(),
               }
-            : {
-                  top: position ? `${position.top}px` : '0',
-                  left: position ? `${position.left}px` : '0',
-              }),
+            : getElementPositionStyle()),
     }
 
     return (
@@ -299,6 +328,7 @@ export function ProductTourTooltip({
             />
 
             <div
+                ref={tooltipRef}
                 class={`ph-tour-tooltip ${isScreenPositioned ? 'ph-tour-tooltip--modal' : ''} ${isSurvey ? 'ph-tour-survey-step' : ''}`}
                 style={{
                     ...tooltipStyle,
