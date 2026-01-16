@@ -985,10 +985,35 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   /**
    * Returns whether the current user is identified (has a person profile).
+   *
+   * This checks:
+   * 1. If PersonMode is explicitly set to 'identified'
+   * 2. For backwards compatibility: if DistinctId differs from AnonymousId
+   *    (meaning the user was identified before the SDK was upgraded)
+   *
    * @internal
    */
   protected _isIdentified(): boolean {
-    return this.getPersistedProperty<string>(PostHogPersistedProperty.PersonMode) === 'identified'
+    const personMode = this.getPersistedProperty<string>(PostHogPersistedProperty.PersonMode)
+
+    // If PersonMode is explicitly set, use that
+    if (personMode === 'identified') {
+      return true
+    }
+
+    // For backwards compatibility: if PersonMode is not set but DistinctId differs from AnonymousId,
+    // the user was identified before this SDK version was installed
+    if (personMode === undefined) {
+      const distinctId = this.getPersistedProperty<string>(PostHogPersistedProperty.DistinctId)
+      const anonymousId = this.getPersistedProperty<string>(PostHogPersistedProperty.AnonymousId)
+
+      // If both exist and are different, the user was previously identified
+      if (distinctId && anonymousId && distinctId !== anonymousId) {
+        return true
+      }
+    }
+
+    return false
   }
 
   /**

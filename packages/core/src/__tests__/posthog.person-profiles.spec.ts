@@ -174,6 +174,66 @@ describe('PostHog Core - Person Profiles', () => {
     })
   })
 
+  describe('backwards compatibility - existing identified users', () => {
+    it('should detect identified user when DistinctId differs from AnonymousId (no PersonMode set)', async () => {
+      const [posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        personProfiles: 'identified_only',
+      })
+
+      // Simulate an existing user who was identified before SDK upgrade
+      // They have different DistinctId and AnonymousId, but no PersonMode set
+      mocks.storage.setItem(PostHogPersistedProperty.DistinctId, 'user-123')
+      mocks.storage.setItem(PostHogPersistedProperty.AnonymousId, 'anon-456')
+      // PersonMode is NOT set (simulating upgrade from old SDK)
+
+      posthog.capture('test-event')
+      await waitForPromises()
+
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0].properties.$process_person_profile).toBe(true)
+    })
+
+    it('should detect anonymous user when DistinctId equals AnonymousId (no PersonMode set)', async () => {
+      const [posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        personProfiles: 'identified_only',
+      })
+
+      // Simulate an anonymous user - DistinctId and AnonymousId are the same
+      const anonId = 'anon-123'
+      mocks.storage.setItem(PostHogPersistedProperty.DistinctId, anonId)
+      mocks.storage.setItem(PostHogPersistedProperty.AnonymousId, anonId)
+      // PersonMode is NOT set
+
+      posthog.capture('test-event')
+      await waitForPromises()
+
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0].properties.$process_person_profile).toBe(false)
+    })
+
+    it('should use PersonMode when explicitly set, even if IDs differ', async () => {
+      const [posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        personProfiles: 'identified_only',
+      })
+
+      // PersonMode is explicitly set to undefined/not 'identified'
+      // but IDs are different - PersonMode should take precedence when set
+      mocks.storage.setItem(PostHogPersistedProperty.DistinctId, 'user-123')
+      mocks.storage.setItem(PostHogPersistedProperty.AnonymousId, 'anon-456')
+      mocks.storage.setItem(PostHogPersistedProperty.PersonMode, 'anonymous')
+
+      posthog.capture('test-event')
+      await waitForPromises()
+
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      // PersonMode is 'anonymous', so should be false even though IDs differ
+      expect(body.batch[0].properties.$process_person_profile).toBe(false)
+    })
+  })
+
   describe('bootstrap with isIdentifiedId', () => {
     it('should mark user as identified when bootstrapping with isIdentifiedId: true', async () => {
       const [posthog, mocks] = createTestClient('TEST_API_KEY', {
