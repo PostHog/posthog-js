@@ -719,8 +719,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         errors.push(FeatureFlagError.TIMEOUT)
       } else if (type === 'api_error' && statusCode !== undefined) {
         errors.push(FeatureFlagError.apiError(statusCode))
-      } else {
+      } else if (type === 'connection_error') {
         errors.push(FeatureFlagError.CONNECTION_ERROR)
+      } else {
+        errors.push(FeatureFlagError.UNKNOWN_ERROR)
       }
     } else if (storedDetails) {
       if (storedDetails.errorsWhileComputingFlags) {

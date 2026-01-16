@@ -498,15 +498,14 @@ export abstract class PostHogCoreStateless {
 
     if (error instanceof PostHogFetchNetworkError) {
       const cause = error.error
-      // AbortError is thrown when the request times out via AbortSignal.timeout()
-      if (cause instanceof Error && cause.name === 'AbortError') {
+      // AbortError/TimeoutError is thrown when the request times out via AbortSignal.timeout()
+      if (cause instanceof Error && (cause.name === 'AbortError' || cause.name === 'TimeoutError')) {
         return { type: 'timeout' }
       }
       return { type: 'connection_error' }
     }
 
-    // Unknown error type, default to connection_error
-    return { type: 'connection_error' }
+    return { type: 'unknown_error' }
   }
 
   protected async getFeatureFlagStateless(

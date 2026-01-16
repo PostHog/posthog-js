@@ -294,7 +294,6 @@ export const FeatureFlagError = {
   QUOTA_LIMITED: 'quota_limited',
   TIMEOUT: 'timeout',
   CONNECTION_ERROR: 'connection_error',
-  /** @deprecated Use TIMEOUT, CONNECTION_ERROR, or apiError() for granular error types */
   UNKNOWN_ERROR: 'unknown_error',
   apiError: (status: number): string => `api_error_${status}`,
 } as const
@@ -308,7 +307,7 @@ export type FeatureFlagErrorType =
  * Represents an error that occurred during a feature flag request.
  */
 export type FeatureFlagRequestError = {
-  type: 'timeout' | 'connection_error' | 'api_error'
+  type: 'timeout' | 'connection_error' | 'api_error' | 'unknown_error'
   statusCode?: number
 }
 
