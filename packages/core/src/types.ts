@@ -66,12 +66,24 @@ export type PostHogCoreOptions = {
    * @default undefined
    */
   evaluationEnvironments?: readonly string[]
+  /**
+   * Determines when to create Person Profiles for users.
+   *
+   * - 'always': Always create a person profile for every user (anonymous and identified).
+   * - 'identified_only': Only create a person profile when the user is identified via identify(), alias(), or group().
+   * - 'never': Never create person profiles. identify(), alias(), setPersonProperties(), and group() will be no-ops.
+   *
+   * @default 'identified_only'
+   */
+  personProfiles?: 'always' | 'identified_only' | 'never'
 }
 
 export enum PostHogPersistedProperty {
   AnonymousId = 'anonymous_id',
   DistinctId = 'distinct_id',
   Props = 'props',
+  EnablePersonProcessing = 'enable_person_processing',
+  PersonMode = 'person_mode', // 'identified' | 'anonymous'
   FeatureFlagDetails = 'feature_flag_details',
   FeatureFlags = 'feature_flags',
   FeatureFlagPayloads = 'feature_flag_payloads',

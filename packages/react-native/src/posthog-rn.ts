@@ -95,6 +95,45 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * @default true
    */
   setDefaultPersonProperties?: boolean
+
+  /**
+   * Determines when to create Person Profiles for users.
+   *
+   * - 'always': Always create a person profile for every user (anonymous and identified).
+   * - 'identified_only': Only create a person profile when the user is identified via identify(), alias(), or group().
+   *   Events captured before identification will NOT have person profiles and will be anonymous events.
+   * - 'never': Never create person profiles. identify(), alias(), setPersonProperties(), and group() will be no-ops.
+   *
+   * @default 'identified_only'
+   *
+   * @example
+   * ```ts
+   * // Only create profiles when users are identified (recommended for most apps)
+   * const posthog = new PostHog('<api_key>', {
+   *   personProfiles: 'identified_only',
+   * })
+   *
+   * // Later when user logs in:
+   * posthog.identify('user-123', { email: 'user@example.com' })
+   * ```
+   *
+   * @example
+   * ```ts
+   * // Always create profiles (for apps where you want to track all users)
+   * const posthog = new PostHog('<api_key>', {
+   *   personProfiles: 'always',
+   * })
+   * ```
+   *
+   * @example
+   * ```ts
+   * // Never create profiles (anonymous analytics only)
+   * const posthog = new PostHog('<api_key>', {
+   *   personProfiles: 'never',
+   * })
+   * ```
+   */
+  personProfiles?: 'always' | 'identified_only' | 'never'
 }
 
 export class PostHog extends PostHogCore {
@@ -1007,6 +1046,66 @@ export class PostHog extends PostHogCore {
 
   initReactNativeNavigation(options: PostHogAutocaptureOptions): boolean {
     return withReactNativeNavigation(this, options)
+  }
+
+  /**
+   * Creates a person profile for the current user, if they don't already have one.
+   *
+   * This is useful when using `personProfiles: 'identified_only'` mode and you want to
+   * explicitly create a profile for an anonymous user before they identify.
+   *
+   * If `personProfiles` is 'identified_only' and no profile exists, this will create one.
+   * If `personProfiles` is 'never', this will log an error and do nothing.
+   * If `personProfiles` is 'always' or a profile already exists, this is a no-op.
+   *
+   * {@label Identification}
+   *
+   * @example
+   * ```js
+   * // Create a person profile for an anonymous user
+   * posthog.createPersonProfile()
+   * ```
+   *
+   * @public
+   */
+  createPersonProfile(): void {
+    super.createPersonProfile()
+  }
+
+  /**
+   * Sets person properties on the current user's profile.
+   *
+   * This sends a `$set` event to PostHog that updates the user's person profile.
+   * If `personProfiles` is 'never', this will log an error and do nothing.
+   *
+   * {@label Identification}
+   *
+   * @example
+   * ```js
+   * // Set person properties
+   * posthog.setPersonProperties({
+   *   email: 'user@example.com',
+   *   name: 'John Doe',
+   *   plan: 'premium'
+   * })
+   * ```
+   *
+   * @example
+   * ```js
+   * // Set properties that should only be set once (won't overwrite existing values)
+   * posthog.setPersonProperties(
+   *   { last_login: new Date().toISOString() },  // $set - always updates
+   *   { first_seen: new Date().toISOString() }   // $set_once - only sets if not already set
+   * )
+   * ```
+   *
+   * @public
+   *
+   * @param properties - Properties to set on the person (will overwrite existing values)
+   * @param propertiesSetOnce - Properties to set only if they haven't been set before
+   */
+  setPersonProperties(properties?: PostHogEventProperties, propertiesSetOnce?: PostHogEventProperties): void {
+    super.setPersonProperties(properties, propertiesSetOnce)
   }
 
   public async getSurveys(): Promise<SurveyResponse['surveys']> {
