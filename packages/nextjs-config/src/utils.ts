@@ -24,7 +24,6 @@ export async function processSourceMaps(posthogOptions: ResolvedPluginConfig, di
     cliOptions.push('sourcemap', 'inject')
   }
 
-  cliOptions.push('sourcemap', 'process')
   cliOptions.push('--directory', directory)
 
   if (posthogOptions.sourcemaps.project) {

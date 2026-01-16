@@ -27,18 +27,16 @@ export interface ResolvedPluginConfig extends PluginConfig {
         upload: boolean
         project?: string
         version?: string
-        deleteAfterUpload: boolean
-        batchSize?: number
-    } & ({
-        upload: true
-        // these options are only for uploading
-        deleteAfterUpload: boolean
-        batchSize?: number
-    } | {
-        upload: false
-        deleteAfterUpload: false
-        batchSize?: never
-    })
+    } & (
+        | {
+              upload: true
+              deleteAfterUpload: boolean
+              batchSize?: number
+          }
+        | {
+              upload: false
+          }
+    )
 }
 
 export function resolveConfig(options: PluginConfig): ResolvedPluginConfig {
@@ -58,7 +56,7 @@ export function resolveConfig(options: PluginConfig): ResolvedPluginConfig {
         upload: sourcemaps.upload ?? true,
         project: sourcemaps.project,
         version: sourcemaps.version,
-    }
+    } as ResolvedPluginConfig['sourcemaps']
     if (resolvedSourcemaps.upload) {
         resolvedSourcemaps.deleteAfterUpload = sourcemaps.deleteAfterUpload ?? true
         resolvedSourcemaps.batchSize = sourcemaps.batchSize

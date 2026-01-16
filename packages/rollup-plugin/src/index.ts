@@ -1,6 +1,6 @@
-import type { Plugin, OutputOptions, OutputAsset, OutputChunk } from 'rollup'
-import { spawnLocal, resolveBinaryPath, LogLevel } from '@posthog/core/process'
+import { LogLevel, resolveBinaryPath, spawnLocal } from '@posthog/core/process'
 import path from 'node:path'
+import type { OutputAsset, OutputChunk, OutputOptions, Plugin } from 'rollup'
 
 export interface PostHogRollupPluginOptions {
     personalApiKey: string
@@ -29,18 +29,16 @@ interface ResolvedPostHogRollupPluginOptions {
         upload: boolean
         project?: string
         version?: string
-        deleteAfterUpload: boolean
-        batchSize?: number
-    } & ({
-        upload: true
-        // these options are only for uploading
-        deleteAfterUpload: boolean
-        batchSize?: number
-    } | {
-        upload: false
-        deleteAfterUpload: false
-        batchSize?: never
-    })
+    } & (
+        | {
+              upload: true
+              deleteAfterUpload: boolean
+              batchSize?: number
+          }
+        | {
+              upload: false
+          }
+    )
 }
 
 export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOptions) {
@@ -66,7 +64,7 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                 // only injects the sourcemaps
                 args.push('sourcemap', 'inject')
             }
-            
+
             const cliPath = posthogOptions.cliBinaryPath
             if (options.dir) {
                 for (const fileName in bundle) {
@@ -86,11 +84,13 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
             if (posthogOptions.sourcemaps.version) {
                 args.push('--version', posthogOptions.sourcemaps.version)
             }
-            if (posthogOptions.sourcemaps.deleteAfterUpload) {
-                args.push('--delete-after')
-            }
-            if (posthogOptions.sourcemaps.batchSize) {
-                args.push('--batch-size', posthogOptions.sourcemaps.batchSize.toString())
+            if (posthogOptions.sourcemaps.upload) {
+                if (posthogOptions.sourcemaps.deleteAfterUpload) {
+                    args.push('--delete-after')
+                }
+                if (posthogOptions.sourcemaps.batchSize) {
+                    args.push('--batch-size', posthogOptions.sourcemaps.batchSize.toString())
+                }
             }
             await spawnLocal(cliPath, args, {
                 env: {
