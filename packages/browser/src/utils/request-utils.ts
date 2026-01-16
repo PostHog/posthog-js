@@ -96,7 +96,9 @@ function parsePossibleQueryString(str: string): Record<string, string> | null {
       if (eqIndex > -1) {
         const key = pair.substring(0, eqIndex);
         const value = pair.substring(eqIndex + 1);
-        obj[key] = value;
+        if (!(key in obj)) {
+          obj[key] = value;
+        }
       }
     }
     return Object.keys(obj).length > 0 ? obj : null;
@@ -141,7 +143,7 @@ function extractParams(
       const firstPart = decoded.split("&")[0];
       
       // Only assign if there's a meaningful value (not another key=value pair)
-      if (firstPart && !firstPart.includes("=")) {
+      if (firstPart && !firstPart.includes("=") && !(key in finalParams)) {
         finalParams[key] = deepDecode(firstPart);
       }
 
@@ -151,7 +153,9 @@ function extractParams(
     }
 
     // No nested params - just decode and assign the value
-    finalParams[key] = deepDecode(rawValue);
+    if (!(key in finalParams)) {
+      finalParams[key] = deepDecode(rawValue);
+    }
   }
 }
 
