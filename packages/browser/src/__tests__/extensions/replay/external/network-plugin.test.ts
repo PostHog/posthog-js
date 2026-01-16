@@ -649,6 +649,205 @@ describe('network plugin', () => {
                     expect((capturedRequestInit as any).duplex).toBeUndefined()
                 })
             })
+
+            it('should pass requestInit with duplex to originalFetch for wrapper chain compatibility', async () => {
+                await jest.isolateModulesAsync(async () => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
+                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                    const mock = createMockWindow()
+                    const mockWindow = mock.mockWindow
+
+                    // Track what originalFetch was called with
+                    let capturedFetchArgs: [RequestInfo | URL, RequestInit | undefined] | undefined
+
+                    global.Request = class {
+                        url: string
+                        method: string
+                        headers: MockHeaders
+                        body: any
+                        constructor(input: RequestInfo | URL, init?: RequestInit) {
+                            this.url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+                            this.method = init?.method || 'GET'
+                            this.headers = new MockHeaders()
+                            this.body = init?.body
+                        }
+                        clone() {
+                            return this
+                        }
+                        text() {
+                            return Promise.resolve('')
+                        }
+                    } as any
+
+                    // Mock fetch to capture arguments and resolve immediately
+                    const mockResponse = {
+                        headers: new MockHeaders(),
+                        status: 200,
+                        clone: function () {
+                            return this
+                        },
+                        text: () => Promise.resolve(''),
+                    }
+                    mockWindow.fetch = jest.fn().mockImplementation((input: any, init: any) => {
+                        capturedFetchArgs = [input, init]
+                        return Promise.resolve(mockResponse)
+                    })
+
+                    global.PerformanceObserver = mockWindow.PerformanceObserver
+                    global.ReadableStream = MockReadableStream as any
+
+                    const plugin = getRecordNetworkPlugin({ recordBody: true })
+                    plugin.observer(() => {}, mockWindow, { recordBody: true })
+
+                    // Call fetch with a streaming body
+                    const streamBody = new MockReadableStream()
+                    await mockWindow.fetch('https://example.com/api', {
+                        method: 'POST',
+                        body: streamBody as any,
+                    })
+
+                    // Verify originalFetch was called with requestInit as second argument
+                    expect(capturedFetchArgs).toBeDefined()
+                    expect(capturedFetchArgs![1]).toBeDefined()
+                    expect((capturedFetchArgs![1] as any).duplex).toBe('half')
+                })
+            })
+
+            it('should pass requestInit to originalFetch even when body is not a stream', async () => {
+                await jest.isolateModulesAsync(async () => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
+                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                    const mock = createMockWindow()
+                    const mockWindow = mock.mockWindow
+
+                    // Track what originalFetch was called with
+                    let capturedFetchArgs: [RequestInfo | URL, RequestInit | undefined] | undefined
+
+                    global.Request = class {
+                        url: string
+                        method: string
+                        headers: MockHeaders
+                        body: any
+                        constructor(input: RequestInfo | URL, init?: RequestInit) {
+                            this.url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+                            this.method = init?.method || 'GET'
+                            this.headers = new MockHeaders()
+                            this.body = init?.body
+                        }
+                        clone() {
+                            return this
+                        }
+                        text() {
+                            return Promise.resolve('')
+                        }
+                    } as any
+
+                    // Mock fetch to capture arguments and resolve immediately
+                    const mockResponse = {
+                        headers: new MockHeaders(),
+                        status: 200,
+                        clone: function () {
+                            return this
+                        },
+                        text: () => Promise.resolve(''),
+                    }
+                    mockWindow.fetch = jest.fn().mockImplementation((input: any, init: any) => {
+                        capturedFetchArgs = [input, init]
+                        return Promise.resolve(mockResponse)
+                    })
+
+                    global.PerformanceObserver = mockWindow.PerformanceObserver
+                    global.ReadableStream = MockReadableStream as any
+
+                    const plugin = getRecordNetworkPlugin({ recordBody: true })
+                    plugin.observer(() => {}, mockWindow, { recordBody: true })
+
+                    // Call fetch with a regular JSON body
+                    await mockWindow.fetch('https://example.com/api', {
+                        method: 'POST',
+                        body: JSON.stringify({ data: 'test' }),
+                        headers: { 'Content-Type': 'application/json' },
+                    })
+
+                    // Verify originalFetch was called with requestInit as second argument
+                    expect(capturedFetchArgs).toBeDefined()
+                    expect(capturedFetchArgs![1]).toBeDefined()
+                    // The init should be passed through (without duplex since body is not a stream)
+                    expect((capturedFetchArgs![1] as any).method).toBe('POST')
+                    expect((capturedFetchArgs![1] as any).duplex).toBeUndefined()
+                })
+            })
+
+            it('should allow downstream wrappers to recreate Request with duplex preserved', async () => {
+                await jest.isolateModulesAsync(async () => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
+                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                    const mock = createMockWindow()
+                    const mockWindow = mock.mockWindow
+
+                    // Track what the downstream wrapper receives
+                    let downstreamReceivedInit: RequestInit | undefined
+
+                    global.Request = class {
+                        url: string
+                        method: string
+                        headers: MockHeaders
+                        body: any
+                        constructor(input: RequestInfo | URL, init?: RequestInit) {
+                            this.url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+                            this.method = init?.method || 'GET'
+                            this.headers = new MockHeaders()
+                            this.body = init?.body
+                        }
+                        clone() {
+                            return this
+                        }
+                        text() {
+                            return Promise.resolve('')
+                        }
+                    } as any
+
+                    const mockResponse = {
+                        headers: new MockHeaders(),
+                        status: 200,
+                        clone: function () {
+                            return this
+                        },
+                        text: () => Promise.resolve(''),
+                    }
+
+                    // Simulate a downstream wrapper that recreates the Request
+                    // This is what was failing before: the wrapper would do new Request(input, init)
+                    // and lose the duplex option if init was undefined
+                    mockWindow.fetch = jest.fn().mockImplementation((input: any, init: any) => {
+                        downstreamReceivedInit = init
+                        // Simulate what a wrapper might do - create new Request from input + init
+                        // If init has duplex, it will be preserved
+                        if (init) {
+                            new global.Request(input, init)
+                        }
+                        return Promise.resolve(mockResponse)
+                    })
+
+                    global.PerformanceObserver = mockWindow.PerformanceObserver
+                    global.ReadableStream = MockReadableStream as any
+
+                    const plugin = getRecordNetworkPlugin({ recordBody: true })
+                    plugin.observer(() => {}, mockWindow, { recordBody: true })
+
+                    // Call fetch with a streaming body
+                    const streamBody = new MockReadableStream()
+                    await mockWindow.fetch('https://example.com/api', {
+                        method: 'POST',
+                        body: streamBody as any,
+                    })
+
+                    // Verify the downstream wrapper received the init with duplex
+                    // This ensures the wrapper can recreate the Request with duplex preserved
+                    expect(downstreamReceivedInit).toBeDefined()
+                    expect((downstreamReceivedInit as any).duplex).toBe('half')
+                })
+            })
         })
     })
 })
