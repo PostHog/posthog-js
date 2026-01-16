@@ -62,7 +62,6 @@ export function FeedbackRecordingUI({
                 'api',
                 `/api/feedback/audio/${encodeURIComponent(feedbackId)}/download?token=${encodeURIComponent(posthogInstance.config?.token || '')}`
             )
-            audioElement.autoplay = true
             audioElement.setAttribute('data-feedback-id', feedbackId)
             audioElement.setAttribute('data-posthog-recording', 'true')
 
