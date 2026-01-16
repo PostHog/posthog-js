@@ -90,6 +90,7 @@ import type {
     ToolbarParams,
     PostHogConfig as BasePostHogConfig,
     PostHog as BasePostHogInterface,
+    RequestResponse,
 } from '@posthog/types'
 
 /* Small override from the base class to make it more specific to the browser/src/posthog-core.ts file
@@ -117,7 +118,7 @@ export interface RequestWithOptions {
     transport?: 'XHR' | 'fetch' | 'sendBeacon'
     method?: 'POST' | 'GET'
     urlQueryArgs?: { compression: Compression }
-    callback?: (response: import('@posthog/types').RequestResponse) => void
+    callback?: (response: RequestResponse) => void
     timeout?: number
     noRetries?: boolean
     disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]

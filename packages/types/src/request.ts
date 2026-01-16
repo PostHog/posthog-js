@@ -9,6 +9,7 @@ export interface RequestResponse {
     statusCode: number
     text?: string
     json?: any
+    error?: unknown
 }
 
 export type RequestCallback = (response: RequestResponse) => void
