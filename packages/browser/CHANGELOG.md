@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.325.0
+
+### Minor Changes
+
+- [#2913](https://github.com/PostHog/posthog-js/pull/2913) [`262cb4b`](https://github.com/PostHog/posthog-js/commit/262cb4b6ef5c62aad4e2ef047f5349b6220fd2f9) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Ensure we always pass RequestInit object to wrapped fetch
+  (2026-01-16)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.325.0
+
 ## 1.324.1
 
 ### Patch Changes
