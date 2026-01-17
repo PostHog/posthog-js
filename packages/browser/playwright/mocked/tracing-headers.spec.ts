@@ -88,4 +88,53 @@ test.describe('tracing headers', () => {
             expect(headers['x-posthog-window-id']).toBeUndefined()
         })
     }
+
+    test('preserves FormData request body when passing through fetch wrapper', async ({ page, context }) => {
+        let requestBody: string | null = null
+        let contentType: string | null = null
+
+        await context.route('**/example.com/**', async (route) => {
+            const request = route.request()
+            requestBody = request.postData()
+            contentType = request.headers()['content-type']
+            await route.fulfill({ status: 200, contentType: 'text/plain', body: 'ok' })
+        })
+
+        await start(baseOptions, page, context)
+
+        await page.waitForFunction(() => {
+            const win = window as any
+            return win.__PosthogExtensions__?.tracingHeadersPatchFns && win.posthog
+        })
+
+        await page.evaluate(() => {
+            const formData = new FormData()
+            formData.append('key', 'value')
+            formData.append('file', new Blob(['test content'], { type: 'text/plain' }), 'test.txt')
+            return fetch('https://example.com/api/upload', {
+                method: 'POST',
+                body: formData,
+            })
+        })
+
+        await page.waitForTimeout(500)
+
+        // Verify Content-Type includes multipart/form-data with boundary
+        expect(contentType).toContain('multipart/form-data')
+        expect(contentType).toContain('boundary=')
+
+        // Verify the request body contains the FormData content
+        expect(requestBody).toContain('key')
+        expect(requestBody).toContain('value')
+        expect(requestBody).toContain('test.txt')
+        expect(requestBody).toContain('test content')
+
+        // Verify the boundary in Content-Type matches the boundary in the body
+        const boundaryMatch = contentType?.match(/boundary=([^\s;]+)/)
+        expect(boundaryMatch).toBeTruthy()
+        if (boundaryMatch) {
+            const boundary = boundaryMatch[1]
+            expect(requestBody).toContain(boundary)
+        }
+    })
 })
