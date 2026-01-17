@@ -1009,6 +1009,30 @@ export class PostHog extends PostHogCore {
     return withReactNativeNavigation(this, options)
   }
 
+  /**
+   * Creates a person profile for the current user, if they don't already have one.
+   *
+   * This is useful when using `personProfiles: 'identified_only'` mode and you want to
+   * explicitly create a profile for an anonymous user before they identify.
+   *
+   * If `personProfiles` is 'identified_only' and no profile exists, this will create one.
+   * If `personProfiles` is 'never', this will log an error and do nothing.
+   * If `personProfiles` is 'always' or a profile already exists, this is a no-op.
+   *
+   * {@label Identification}
+   *
+   * @example
+   * ```js
+   * // Create a person profile for an anonymous user
+   * posthog.createPersonProfile()
+   * ```
+   *
+   * @public
+   */
+  createPersonProfile(): void {
+    super.createPersonProfile()
+  }
+
   public async getSurveys(): Promise<SurveyResponse['surveys']> {
     if (this._disableSurveys === true) {
       this._logger.info('Loading surveys is disabled.')
