@@ -46,15 +46,7 @@ const patchFetch = (hostnames: string[], distinctId: string, sessionManager?: Se
 
             addTracingHeaders(hostnames, distinctId, sessionManager, req)
 
-            // Pass init without body to preserve options like duplex, credentials, etc.
-            // but avoid re-consuming FormData which would generate a new boundary.
-            // The body is already in the Request object.
-            if (init?.body) {
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { body: _body, ...initWithoutBody } = init
-                return originalFetch(req, initWithoutBody)
-            }
-            return originalFetch(req, init)
+            return originalFetch(req)
         }
     })
 }
