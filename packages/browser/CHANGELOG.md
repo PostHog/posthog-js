@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.328.0
+
+### Minor Changes
+
+- [#2925](https://github.com/PostHog/posthog-js/pull/2925) [`ce4566d`](https://github.com/PostHog/posthog-js/commit/ce4566d9107c7fd7d802274c1b8ccf477b8ccd0d) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Restore fetch wrappers to most recent working version
+  (2026-01-17)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.328.0
+
 ## 1.327.0
 
 ### Minor Changes
