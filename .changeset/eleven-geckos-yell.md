@@ -2,4 +2,4 @@
 'posthog-react-native': minor
 ---
 
-allow disabling the plugin programatically
+allow disabling the plugin programmatically
