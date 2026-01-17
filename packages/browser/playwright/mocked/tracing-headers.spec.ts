@@ -89,7 +89,11 @@ test.describe('tracing headers', () => {
         })
     }
 
-    test('preserves FormData request body when passing through fetch wrapper', async ({ page, context, browserName }) => {
+    test('preserves FormData request body when passing through fetch wrapper', async ({
+        page,
+        context,
+        browserName,
+    }) => {
         let requestBody: string | null = null
         let contentType: string | null = null
 
