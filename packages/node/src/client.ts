@@ -607,9 +607,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param key - The feature flag key
    * @param distinctId - The user's distinct ID
-   * @param options - Evaluation options
+   * @param options - Evaluation options (includes sendFeatureFlagEvents, defaults to true)
    * @param matchValue - Optional match value for payload lookup (used by getFeatureFlagPayload)
-   * @param sendFeatureFlagEvents - Whether to send $feature_flag_called event
    * @returns Promise that resolves to the flag result or undefined
    */
   private async _getFeatureFlagResult(
@@ -621,10 +620,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       groupProperties?: Record<string, Record<string, string>>
       onlyEvaluateLocally?: boolean
       disableGeoip?: boolean
+      sendFeatureFlagEvents?: boolean
     } = {},
-    matchValue?: FeatureFlagValue,
-    sendFeatureFlagEvents: boolean = true
+    matchValue?: FeatureFlagValue
   ): Promise<FeatureFlagResult | undefined> {
+    const sendFeatureFlagEvents = options.sendFeatureFlagEvents ?? true
     // Check for overrides first - they take precedence over all evaluation
     if (this._flagOverrides !== undefined && key in this._flagOverrides) {
       const overrideValue = this._flagOverrides[key]
@@ -879,8 +879,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       disableGeoip?: boolean
     }
   ): Promise<FeatureFlagValue | undefined> {
-    const { sendFeatureFlagEvents = this.options.sendFeatureFlagEvent ?? true, ...restOptions } = options || {}
-    const result = await this._getFeatureFlagResult(key, distinctId, restOptions, undefined, sendFeatureFlagEvents)
+    const result = await this._getFeatureFlagResult(key, distinctId, {
+      ...options,
+      sendFeatureFlagEvents: options?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
+    })
     if (result === undefined) {
       return undefined
     }
@@ -948,9 +950,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // sendFeatureFlagEvents is intentionally ignored for payload-only calls.
     // getFeatureFlagPayload never sends $feature_flag_called events, matching pre-refactoring behavior.
     // The option is kept in the signature for backwards compatibility (marked @deprecated above).
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { sendFeatureFlagEvents: _ignored, ...restOptions } = options || {}
-    const result = await this._getFeatureFlagResult(key, distinctId, restOptions, matchValue, false)
+    const result = await this._getFeatureFlagResult(
+      key,
+      distinctId,
+      { ...options, sendFeatureFlagEvents: false },
+      matchValue
+    )
 
     // Return undefined when API fails or flag not found
     if (result === undefined) {
@@ -1004,8 +1009,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       disableGeoip?: boolean
     }
   ): Promise<FeatureFlagResult | undefined> {
-    const { sendFeatureFlagEvents = this.options.sendFeatureFlagEvent ?? true, ...restOptions } = options || {}
-    return this._getFeatureFlagResult(key, distinctId, restOptions, undefined, sendFeatureFlagEvents)
+    return this._getFeatureFlagResult(key, distinctId, {
+      ...options,
+      sendFeatureFlagEvents: options?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
+    })
   }
 
   /**
