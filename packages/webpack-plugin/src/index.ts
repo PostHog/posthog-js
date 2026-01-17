@@ -1,8 +1,8 @@
-import { Logger, createLogger } from '@posthog/core'
-import { PluginConfig, resolveConfig, ResolvedPluginConfig } from './config'
-import webpack from 'webpack'
+import { createLogger, Logger } from '@posthog/core'
 import { spawnLocal } from '@posthog/core/process'
 import path from 'path'
+import webpack from 'webpack'
+import { PluginConfig, resolveConfig, ResolvedPluginConfig } from './config'
 
 export * from './config'
 
@@ -54,7 +54,13 @@ export class PosthogWebpackPlugin {
         const args = []
 
         // chunks are output outside of the output directory for server chunks
-        args.push('sourcemap', 'process')
+        if (config.sourcemaps.upload) {
+            // process injects and uploads in one command
+            args.push('sourcemap', 'process')
+        } else {
+            // only injects the sourcemaps
+            args.push('sourcemap', 'inject')
+        }
 
         const chunkArray = Array.from(compilation.chunks)
 

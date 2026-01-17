@@ -15,7 +15,15 @@ export function hasCompilerHook(): boolean {
 
 export async function processSourceMaps(posthogOptions: ResolvedPluginConfig, directory: string) {
   const cliOptions = []
-  cliOptions.push('sourcemap', 'process')
+
+  if (posthogOptions.sourcemaps.upload) {
+    // process injects and uploads in one command
+    cliOptions.push('sourcemap', 'process')
+  } else {
+    // only injects the sourcemaps
+    cliOptions.push('sourcemap', 'inject')
+  }
+
   cliOptions.push('--directory', directory)
 
   if (posthogOptions.sourcemaps.project) {
