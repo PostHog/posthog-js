@@ -64,6 +64,8 @@ export function ProductTourTooltipInner({
     const isInteractive = !!(onNext || onPrevious || onDismiss || onButtonClick)
     const cursorStyle = isInteractive ? undefined : { cursor: 'default' }
 
+    const showPostHogBranding = !whiteLabel && isFirstStep
+
     const handleButtonClick = (button: ProductTourStepButton) => {
         if (onButtonClick) {
             onButtonClick(button)
@@ -128,7 +130,7 @@ export function ProductTourTooltipInner({
                 </div>
             </div>
 
-            {!whiteLabel && (
+            {showPostHogBranding && (
                 <a
                     href={isInteractive ? 'https://posthog.com/product-tours' : undefined}
                     target={isInteractive ? '_blank' : undefined}

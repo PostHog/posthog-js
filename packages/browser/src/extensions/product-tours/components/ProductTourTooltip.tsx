@@ -7,7 +7,13 @@ import {
     ProductTourStepButton,
 } from '../../../posthog-product-tours-types'
 import { isUndefined, SurveyPosition } from '@posthog/core'
-import { calculateTooltipPosition, getSpotlightStyle, TooltipPosition, TooltipDimensions } from '../product-tours-utils'
+import {
+    calculateTooltipPosition,
+    getSpotlightStyle,
+    TooltipPosition,
+    TooltipDimensions,
+    PositionResult,
+} from '../product-tours-utils'
 import { getPopoverPosition } from '../../surveys/surveys-extension-utils'
 import { addEventListener } from '../../../utils'
 import { window as _window } from '../../../utils/globals'
@@ -109,7 +115,7 @@ export function ProductTourTooltip({
     onButtonClick,
 }: ProductTourTooltipProps): h.JSX.Element {
     const [transitionState, setTransitionState] = useState<TransitionState>('entering')
-    const [position, setPosition] = useState<ReturnType<typeof calculateTooltipPosition> | null>(null)
+    const [position, setPosition] = useState<PositionResult | null>(null)
     const [spotlightStyle, setSpotlightStyle] = useState<ReturnType<typeof getSpotlightStyle> | null>(null)
     const [isMeasured, setIsMeasured] = useState(false)
 
@@ -278,8 +284,8 @@ export function ProductTourTooltip({
 
     const tooltipStyle = {
         ...(displayedStep.maxWidth && {
-            width: `${displayedStep.maxWidth}px`,
-            maxWidth: `${displayedStep.maxWidth}px`,
+            width: `min(${displayedStep.maxWidth}px, calc(100vw - 16px))`,
+            maxWidth: `min(${displayedStep.maxWidth}px, calc(100vw - 16px))`,
         }),
         ...(isScreenPositioned
             ? {
@@ -338,7 +344,14 @@ export function ProductTourTooltip({
                 onClick={handleTooltipClick}
             >
                 {!isScreenPositioned && position && (
-                    <div class={`ph-tour-arrow ph-tour-arrow--${getOppositePosition(position.position)}`} />
+                    <div
+                        class={`ph-tour-arrow ph-tour-arrow--${getOppositePosition(position.position)}`}
+                        style={
+                            position.arrowOffset !== 0
+                                ? { '--ph-tour-arrow-offset': `${position.arrowOffset}px` }
+                                : undefined
+                        }
+                    />
                 )}
 
                 {isSurvey ? (
