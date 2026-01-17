@@ -814,6 +814,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       }
     }
 
+    // Apply payload override if present (even when there's no flag override)
+    // This ensures consistency with getFeatureFlagPayload behavior
+    if (result !== undefined && this._payloadOverrides !== undefined && key in this._payloadOverrides) {
+      result = {
+        ...result,
+        payload: this._payloadOverrides[key],
+      }
+    }
+
     return result
   }
 
