@@ -8,7 +8,7 @@ export * from './posthogMetroSerializer'
 
 export interface PostHogMetroConfigOptions {
   /**
-   * Whether the PostHog Metro config is enabled.
+   * Whether the plugin is enabled.
    * Set to `false` to disable PostHog's Metro plugins (useful for local development).
    * @default true
    */
