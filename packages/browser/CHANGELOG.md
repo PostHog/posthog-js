@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.327.0
+
+### Minor Changes
+
+- [#2923](https://github.com/PostHog/posthog-js/pull/2923) [`b8b7f90`](https://github.com/PostHog/posthog-js/commit/b8b7f9058cba58b2ff2eb76ab49776304dabef1c) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Fixed issue with fetch wrappers reconsuming request bodies and generating mismatched FormData boundaries
+  (2026-01-17)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.327.0
+
 ## 1.326.0
 
 ### Minor Changes
