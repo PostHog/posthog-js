@@ -89,7 +89,7 @@ test.describe('tracing headers', () => {
         })
     }
 
-    test('preserves FormData request body when passing through fetch wrapper', async ({ page, context }) => {
+    test('preserves FormData request body when passing through fetch wrapper', async ({ page, context, browserName }) => {
         let requestBody: string | null = null
         let contentType: string | null = null
 
@@ -127,9 +127,13 @@ test.describe('tracing headers', () => {
         expect(requestBody).toContain('key')
         expect(requestBody).toContain('value')
         expect(requestBody).toContain('test.txt')
-        expect(requestBody).toContain('test content')
+        // WebKit doesn't serialize Blob content in Playwright's postData()
+        if (browserName !== 'webkit') {
+            expect(requestBody).toContain('test content')
+        }
 
         // Verify the boundary in Content-Type matches the boundary in the body
+        // This is the critical assertion - if boundaries mismatch, FormData is corrupted
         const boundaryMatch = contentType?.match(/boundary=([^\s;]+)/)
         expect(boundaryMatch).toBeTruthy()
         if (boundaryMatch) {
