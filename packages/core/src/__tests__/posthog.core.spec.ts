@@ -56,8 +56,11 @@ describe('PostHog Core', () => {
         return errorAPIResponse
       })
 
-      const response = await posthog.getFlags('test-distinct-id')
-      expect(response).toEqual(expectedResponse)
+      const result = await posthog.getFlags('test-distinct-id')
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.response).toEqual(expectedResponse)
+      }
     })
 
     it('should handle successful v4 response and return normalized response', async () => {
@@ -98,8 +101,11 @@ describe('PostHog Core', () => {
         return errorAPIResponse
       })
 
-      const response = await posthog.getFlags('test-distinct-id')
-      expect(response).toEqual(expectedResponse)
+      const result = await posthog.getFlags('test-distinct-id')
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.response).toEqual(expectedResponse)
+      }
     })
 
     it('should handle error response', async () => {
@@ -114,8 +120,12 @@ describe('PostHog Core', () => {
         return errorAPIResponse
       })
 
-      const response = await posthog.getFlags('test-distinct-id')
-      expect(response).toBeUndefined()
+      const result = await posthog.getFlags('test-distinct-id')
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        expect(result.error.type).toBe('api_error')
+        expect(result.error.statusCode).toBe(400)
+      }
     })
 
     it('should handle network errors', async () => {
@@ -127,8 +137,11 @@ describe('PostHog Core', () => {
         return errorAPIResponse
       })
 
-      const response = await posthog.getFlags('test-distinct-id')
-      expect(response).toBeUndefined()
+      const result = await posthog.getFlags('test-distinct-id')
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        expect(result.error.type).toBe('connection_error')
+      }
       expect(emitSpy).toHaveBeenCalledWith('error', expect.any(Error))
     })
   })

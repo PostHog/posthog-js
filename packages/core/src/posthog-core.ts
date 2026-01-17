@@ -1,6 +1,7 @@
 import type {
   PostHogAutocaptureElement,
   PostHogFlagsResponse,
+  PostHogFeatureFlagsResponse,
   PostHogCoreOptions,
   PostHogEventProperties,
   PostHogCaptureOptions,
@@ -24,7 +25,7 @@ import {
   normalizeFlagsResponse,
   updateFlagValue,
 } from './featureFlagUtils'
-import { Compression, PostHogPersistedProperty } from './types'
+import { Compression, FeatureFlagError, PostHogPersistedProperty } from './types'
 import { maybeAdd, PostHogCoreStateless, QuotaLimitedFeature } from './posthog-core-stateless'
 import { uuidv7 } from './vendor/uuidv7'
 import { isPlainError } from './utils'
@@ -35,7 +36,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   private flagCallReported: { [key: string]: boolean } = {}
 
   // internal
-  protected _flagsResponsePromise?: Promise<PostHogFlagsResponse | undefined> // TODO: come back to this, fix typing
+  protected _flagsResponsePromise?: Promise<PostHogFeatureFlagsResponse | undefined>
   protected _sessionExpirationTimeSeconds: number
   private _sessionMaxLengthSeconds: number = 24 * 60 * 60 // 24 hours
   protected sessionProps: PostHogEventProperties = {}
@@ -453,7 +454,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   protected async flagsAsync(
     sendAnonDistinctId: boolean = true,
     fetchConfig: boolean = true
-  ): Promise<PostHogFlagsResponse | undefined> {
+  ): Promise<PostHogFeatureFlagsResponse | undefined> {
     await this._initPromise
     if (this._flagsResponsePromise) {
       return this._flagsResponsePromise
@@ -551,7 +552,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   private async _flagsAsync(
     sendAnonDistinctId: boolean = true,
     fetchConfig: boolean = true
-  ): Promise<PostHogFlagsResponse | undefined> {
+  ): Promise<PostHogFeatureFlagsResponse | undefined> {
     this._flagsResponsePromise = this._initPromise
       .then(async () => {
         const distinctId = this.getDistinctId()
@@ -566,7 +567,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           $anon_distinct_id: sendAnonDistinctId ? this.getAnonymousId() : undefined,
         }
 
-        const res = await super.getFlags(
+        const result = await super.getFlags(
           distinctId,
           groups as PostHogGroupProperties,
           personProperties,
@@ -574,12 +575,24 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           extraProperties,
           fetchConfig
         )
-        // Add check for quota limitation on feature flags
+
+        if (!result.success) {
+          this.setKnownFeatureFlagDetails({
+            flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
+            requestError: result.error,
+          })
+          return undefined
+        }
+
+        const res = result.response
+
         if (res?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
-          // Unset all feature flags by setting to null
-          this.setKnownFeatureFlagDetails(null)
+          this.setKnownFeatureFlagDetails({
+            flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
+            quotaLimited: res.quotaLimited,
+          })
           console.warn(
-            '[FEATURE FLAGS] Feature flags quota limit exceeded - unsetting all flags. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
+            '[FEATURE FLAGS] Feature flags quota limit exceeded. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
           )
           return res
         }
@@ -600,7 +613,13 @@ export abstract class PostHogCore extends PostHogCoreStateless {
               flags: { ...currentFlagDetails?.flags, ...res.flags },
             }
           }
-          this.setKnownFeatureFlagDetails(newFeatureFlagDetails)
+          this.setKnownFeatureFlagDetails({
+            flags: newFeatureFlagDetails.flags,
+            requestId: res.requestId,
+            evaluatedAt: res.evaluatedAt,
+            errorsWhileComputingFlags: res.errorsWhileComputingFlags,
+            quotaLimited: res.quotaLimited,
+          })
           // Mark that we hit the /flags endpoint so we can capture this in the $feature_flag_called event
           this.setPersistedProperty(PostHogPersistedProperty.FlagsEndpointWasHit, true)
           this.cacheSessionReplay('flags', res)
@@ -613,7 +632,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return this._flagsResponsePromise
   }
 
-  // We only store the flags and request id in the feature flag details storage key
   private setKnownFeatureFlagDetails(flagsResponse: PostHogFlagsStorageFormat | null): void {
     this.wrap(() => {
       this.setPersistedProperty<PostHogFlagsStorageFormat>(PostHogPersistedProperty.FeatureFlagDetails, flagsResponse)
@@ -647,20 +665,16 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     ) as PostHogFeatureFlagDetails
   }
 
+  private getStoredFlagDetails(): PostHogFlagsStorageFormat | undefined {
+    return this.getPersistedProperty<PostHogFlagsStorageFormat>(PostHogPersistedProperty.FeatureFlagDetails)
+  }
+
   protected getKnownFeatureFlags(): PostHogFlagsResponse['featureFlags'] | undefined {
     const featureFlagDetails = this.getKnownFeatureFlagDetails()
     if (!featureFlagDetails) {
       return undefined
     }
     return getFlagValuesFromFlags(featureFlagDetails.flags)
-  }
-
-  private getKnownFeatureFlagPayloads(): PostHogFlagsResponse['featureFlagPayloads'] | undefined {
-    const featureFlagDetails = this.getKnownFeatureFlagDetails()
-    if (!featureFlagDetails) {
-      return undefined
-    }
-    return getPayloadsFromFlags(featureFlagDetails.flags)
   }
 
   private getBootstrappedFeatureFlagDetails(): PostHogFeatureFlagDetails | undefined {
@@ -694,28 +708,58 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   getFeatureFlag(key: string): FeatureFlagValue | undefined {
+    const storedDetails = this.getStoredFlagDetails()
     const details = this.getFeatureFlagDetails()
+    const errors: string[] = []
+    const isQuotaLimited = storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)
 
-    if (!details) {
-      // If we haven't loaded flags yet, or errored out, we respond with undefined
-      return undefined
+    if (storedDetails?.requestError) {
+      const { type, statusCode } = storedDetails.requestError
+      if (type === 'timeout') {
+        errors.push(FeatureFlagError.TIMEOUT)
+      } else if (type === 'api_error' && statusCode !== undefined) {
+        errors.push(FeatureFlagError.apiError(statusCode))
+      } else if (type === 'connection_error') {
+        errors.push(FeatureFlagError.CONNECTION_ERROR)
+      } else {
+        errors.push(FeatureFlagError.UNKNOWN_ERROR)
+      }
+    } else if (storedDetails) {
+      if (storedDetails.errorsWhileComputingFlags) {
+        errors.push(FeatureFlagError.ERRORS_WHILE_COMPUTING)
+      }
+      if (isQuotaLimited) {
+        errors.push(FeatureFlagError.QUOTA_LIMITED)
+      }
     }
 
-    const featureFlag = details.flags[key]
+    const featureFlag = details?.flags[key]
 
-    let response = getFeatureFlagValue(featureFlag)
+    let response: FeatureFlagValue | undefined = getFeatureFlagValue(featureFlag)
 
     if (response === undefined) {
-      // For cases where the flag is unknown, return false
-      response = false
+      // Return false for missing flags when we have successfully loaded flags.
+      const hasCachedFlags = details && Object.keys(details.flags).length > 0
+      if (hasCachedFlags) {
+        response = false
+      }
+
+      // Track missing flags only when we had a successful, non-limited request.
+      // When quota limited or request failed, we cannot determine if the flag is truly missing.
+      if (details && !featureFlag && !storedDetails?.requestError && !isQuotaLimited) {
+        errors.push(FeatureFlagError.FLAG_MISSING)
+      }
     }
 
     if (this.sendFeatureFlagEvent && !this.flagCallReported[key]) {
       const bootstrappedResponse = this.getBootstrappedFeatureFlags()?.[key]
       const bootstrappedPayload = this.getBootstrappedFeatureFlagPayloads()?.[key]
 
+      const featureFlagError = errors.length > 0 ? errors.join(',') : undefined
+
       this.flagCallReported[key] = true
-      this.capture('$feature_flag_called', {
+
+      const properties: Record<string, any> = {
         $feature_flag: key,
         $feature_flag_response: response,
         ...maybeAdd('$feature_flag_id', featureFlag?.metadata?.id),
@@ -725,12 +769,14 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         ...maybeAdd('$feature_flag_bootstrapped_payload', bootstrappedPayload),
         // If we haven't yet received a response from the /flags endpoint, we must have used the bootstrapped value
         $used_bootstrap_value: !this.getPersistedProperty(PostHogPersistedProperty.FlagsEndpointWasHit),
-        ...maybeAdd('$feature_flag_request_id', details.requestId),
-        ...maybeAdd('$feature_flag_evaluated_at', details.evaluatedAt),
-      })
+        ...maybeAdd('$feature_flag_request_id', details?.requestId),
+        ...maybeAdd('$feature_flag_evaluated_at', details?.evaluatedAt),
+        ...maybeAdd('$feature_flag_error', featureFlagError),
+      }
+
+      this.capture('$feature_flag_called', properties)
     }
 
-    // If we have flags we either return the value (true or string) or false
     return response
   }
 

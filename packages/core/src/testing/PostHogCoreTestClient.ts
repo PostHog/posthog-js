@@ -1,11 +1,5 @@
 import { PostHogCore } from '@/posthog-core'
-import type {
-  JsonType,
-  PostHogCoreOptions,
-  PostHogFetchOptions,
-  PostHogFetchResponse,
-  PostHogFlagsResponse,
-} from '@/types'
+import type { GetFlagsResult, JsonType, PostHogCoreOptions, PostHogFetchOptions, PostHogFetchResponse } from '@/types'
 
 const version = '2.0.0-alpha'
 
@@ -37,7 +31,7 @@ export class PostHogCoreTestClient extends PostHogCore {
     personProperties: Record<string, string> = {},
     groupProperties: Record<string, Record<string, string>> = {},
     extraPayload: Record<string, any> = {}
-  ): Promise<PostHogFlagsResponse | undefined> {
+  ): Promise<GetFlagsResult> {
     return super.getFlags(distinctId, groups, personProperties, groupProperties, extraPayload)
   }
 
