@@ -604,7 +604,16 @@ function initFetchObserver(
                 }
 
                 start = win.performance.now()
-                res = await originalFetch(req, requestInit)
+                // Pass requestInit without body to preserve options like duplex, credentials, etc.
+                // but avoid re-consuming FormData which would generate a new boundary.
+                // The body is already in the Request object.
+                if (requestInit.body) {
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                    const { body: _body, ...initWithoutBody } = requestInit
+                    res = await originalFetch(req, initWithoutBody)
+                } else {
+                    res = await originalFetch(req, requestInit)
+                }
                 end = win.performance.now()
 
                 const responseHeaders: Headers = {}
