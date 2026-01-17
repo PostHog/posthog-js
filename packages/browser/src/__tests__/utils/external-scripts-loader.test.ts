@@ -19,17 +19,26 @@ describe('external-scripts-loader', () => {
             document!.getElementsByTagName('html')![0].innerHTML = ''
         })
 
-        it('should insert the given script before the one already on the page', () => {
-            document!.body.appendChild(document!.createElement('script'))
-            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
-            const scripts = document!.getElementsByTagName('script')
-            const new_script = scripts[0]
+        it('appends scripts to head to avoid SSR body hydration issues', () => {
+            const existingBodyScript = document!.createElement('script')
+            existingBodyScript.id = 'framework-bundle'
+            document!.body.appendChild(existingBodyScript)
 
-            expect(scripts.length).toBe(2)
-            expect(new_script.type).toBe('text/javascript')
-            expect(new_script.src).toMatchInlineSnapshot(`"https://us-assets.i.posthog.com/static/recorder.js?v=1.0.0"`)
+            const initialBodyFirstChild = document!.body.firstChild
+
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
+
+            const bodyScripts = document!.querySelectorAll('body > script')
+            expect(bodyScripts.length).toBe(1)
+            expect(bodyScripts[0].id).toBe('framework-bundle')
+            expect(document!.body.firstChild).toBe(initialBodyFirstChild)
+
+            const headScripts = document!.querySelectorAll('head > script')
+            expect(headScripts.length).toBe(1)
+            expect(headScripts[0].src).toContain('recorder.js')
+
             const event = new Event('test')
-            new_script.onload!(event)
+            headScripts[0].onload!(event)
             expect(callback).toHaveBeenCalledWith(undefined, event)
         })
 
