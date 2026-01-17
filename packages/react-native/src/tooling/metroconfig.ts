@@ -6,7 +6,14 @@ import type { DefaultConfigOptions } from './vendor/expo/expoconfig'
 
 export * from './posthogMetroSerializer'
 
-export interface PostHogMetroConfigOptions {}
+export interface PostHogMetroConfigOptions {
+  /**
+   * Whether the PostHog Metro config is enabled.
+   * Set to `false` to disable PostHog's Metro plugins (useful for local development).
+   * @default true
+   */
+  enabled?: boolean
+}
 
 export interface PostHogExpoConfigOptions {
   /**
@@ -22,7 +29,13 @@ export function getPostHogExpoConfig(
   projectRoot: string,
   options: DefaultConfigOptions & PostHogExpoConfigOptions & PostHogMetroConfigOptions = {}
 ): MetroConfig {
+  const enabled = options.enabled ?? true
   const getDefaultConfig = options.getDefaultConfig || loadExpoMetroConfigModule().getDefaultConfig
+
+  if (!enabled) {
+    return getDefaultConfig(projectRoot, options)
+  }
+
   const config = getDefaultConfig(projectRoot, {
     ...options,
     unstable_beforeAssetSerializationPlugins: [
