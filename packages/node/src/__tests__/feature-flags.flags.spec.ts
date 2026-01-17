@@ -642,6 +642,45 @@ describe('getFeatureFlagResult', () => {
     })
   })
 
+  it('returns raw string payload when JSON parsing fails', async () => {
+    const flagsResponse: PostHogV2FlagsResponse = {
+      flags: {
+        'test-flag': {
+          key: 'test-flag',
+          enabled: true,
+          variant: undefined,
+          reason: undefined,
+          metadata: {
+            id: 42,
+            version: 1,
+            payload: 'not valid json {{{',
+            description: undefined,
+          },
+        },
+      },
+      errorsWhileComputingFlags: false,
+      requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+      evaluatedAt: 1640995200000,
+    }
+    mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+
+    const result = await posthog.getFeatureFlagResult('test-flag', 'some-distinct-id')
+
+    expect(result).toEqual({
+      key: 'test-flag',
+      enabled: true,
+      variant: undefined,
+      payload: 'not valid json {{{',
+    })
+
+    await posthog.shutdown()
+  })
+
   it('returns undefined when flag is not found', async () => {
     const flagsResponse: PostHogV2FlagsResponse = {
       flags: {},

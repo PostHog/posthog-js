@@ -751,7 +751,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             try {
               parsedPayload = JSON.parse(flagDetail.metadata.payload)
             } catch {
-              // If parsing fails, leave as undefined
+              // If parsing fails, return the raw string (matches parsePayload behavior)
+              parsedPayload = flagDetail.metadata.payload
             }
           }
 
