@@ -48,7 +48,7 @@
     "@langchain/core": "^1.1.8",
     "@posthog/core": "workspace:*",
     "langchain": "^1.2.3",
-    "openai": "^6.15.0",
+    "openai": "^6.16.0",
     "uuid": "^11.1.0",
     "zod": "^4.1.13"
   },
