@@ -873,7 +873,6 @@ export class PostHog implements PostHogInterface {
         }
 
         new RemoteConfigLoader(this).load()
-        this.featureFlags.flags()
     }
 
     _start_queue_if_opted_in(): void {

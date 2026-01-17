@@ -53,13 +53,6 @@ describe(`Segment integration`, () => {
         // Clear localStorage to avoid state leakage between tests
         localStorage.clear()
 
-        assignableWindow._POSTHOG_REMOTE_CONFIG = {
-            'test-token': {
-                config: {},
-                siteApps: [],
-            },
-        } as any
-
         // Create something that looks like the Segment Analytics 2.0 API. We
         // could use the actual client, but it's a little more tricky and we'd
         // want to mock out the network requests, for which we don't have a good

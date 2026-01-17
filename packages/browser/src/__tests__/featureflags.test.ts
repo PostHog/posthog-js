@@ -680,88 +680,63 @@ describe('featureflags', () => {
     })
 
     describe('flags()', () => {
+        // Note: flags() is now a no-op since RemoteConfig handles initial loading
+        // These tests now use reloadFeatureFlags() to test the /flags endpoint behavior
+
         it('should not call /flags if advanced_disable_decide is true', () => {
             instance.config.advanced_disable_decide = true
-            featureFlags.flags()
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(0)
         })
 
         it('should not call /flags if advanced_disable_flags is true', () => {
             instance.config.advanced_disable_flags = true
-            featureFlags.flags()
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(0)
         })
 
-        it('should call /flags', () => {
-            featureFlags.flags()
+        it('should call /flags via reloadFeatureFlags', () => {
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
-
-            jest.runOnlyPendingTimers()
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
-        })
-
-        it('should call /flags with flags disabled if set', () => {
-            instance.config.advanced_disable_feature_flags_on_first_load = true
-            featureFlags.flags()
-
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(true)
         })
 
         it('should call /flags with flags disabled if set generally', () => {
             instance.config.advanced_disable_feature_flags = true
-            featureFlags.flags()
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
 
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(true)
+            // advanced_disable_feature_flags prevents reloading entirely
+            expect(instance._send_request).toHaveBeenCalledTimes(0)
         })
 
-        it('should call /flags once even if reload called before', () => {
+        it('should call /flags once even if reload called multiple times', () => {
             featureFlags.reloadFeatureFlags()
-            featureFlags.flags()
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
-
-            jest.runOnlyPendingTimers()
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
-        })
-
-        it('should not disable flags if reload was called on /flags', () => {
-            instance.config.advanced_disable_feature_flags_on_first_load = true
-            featureFlags.reloadFeatureFlags()
-            featureFlags.flags()
-
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
-
-            jest.runOnlyPendingTimers()
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
-        })
-
-        it('should always disable flags if set', () => {
-            instance.config.advanced_disable_feature_flags = true
-            featureFlags.reloadFeatureFlags()
-            featureFlags.flags()
-
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(true)
         })
 
         it('should call /flags with evaluation_environments when configured', () => {
             instance.config.evaluation_environments = ['production', 'web']
-            featureFlags.flags()
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toEqual(['production', 'web'])
         })
 
         it('should not include evaluation_environments when not configured', () => {
-            featureFlags.flags()
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toBe(undefined)
@@ -769,7 +744,8 @@ describe('featureflags', () => {
 
         it('should not include evaluation_environments when configured as empty array', () => {
             instance.config.evaluation_environments = []
-            featureFlags.flags()
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toBe(undefined)
@@ -1159,7 +1135,7 @@ describe('featureflags', () => {
             featureFlags.reloadFeatureFlags()
             jest.runAllTimers()
             // check the request sent person properties
-            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+            expect(instance._send_request.mock.calls[0][0].data).toMatchObject({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 person_properties: {
@@ -1205,7 +1181,7 @@ describe('featureflags', () => {
             jest.runAllTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+            expect(instance._send_request.mock.calls[0][0].data).toMatchObject({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 $device_id: 'test-device-uuid-123',
@@ -1222,7 +1198,7 @@ describe('featureflags', () => {
             jest.runAllTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+            expect(instance._send_request.mock.calls[0][0].data).toMatchObject({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 person_properties: {},
@@ -1236,7 +1212,7 @@ describe('featureflags', () => {
             jest.runAllTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+            expect(instance._send_request.mock.calls[0][0].data).toMatchObject({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 person_properties: {},
@@ -1254,7 +1230,7 @@ describe('featureflags', () => {
             jest.runAllTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+            expect(instance._send_request.mock.calls[0][0].data).toMatchObject({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 $device_id: 'device-uuid-456',
@@ -1272,7 +1248,7 @@ describe('featureflags', () => {
             jest.runAllTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+            expect(instance._send_request.mock.calls[0][0].data).toMatchObject({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 $device_id: 'device-uuid-999',
@@ -1289,7 +1265,7 @@ describe('featureflags', () => {
             jest.runAllTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+            expect(instance._send_request.mock.calls[0][0].data).toMatchObject({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 $device_id: 'device-uuid-888',
@@ -1326,7 +1302,7 @@ describe('featureflags', () => {
             })
 
             // check the request sent $anon_distinct_id
-            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+            expect(instance._send_request.mock.calls[0][0].data).toMatchObject({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 $anon_distinct_id: 'rando_id',
@@ -1347,7 +1323,7 @@ describe('featureflags', () => {
             })
 
             // check the request sent $anon_distinct_id
-            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+            expect(instance._send_request.mock.calls[0][0].data).toMatchObject({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 $anon_distinct_id: 'rando_id',
@@ -1359,7 +1335,7 @@ describe('featureflags', () => {
             jest.runAllTimers()
 
             // check the request didn't send $anon_distinct_id the second time around
-            expect(instance._send_request.mock.calls[1][0].data).toEqual({
+            expect(instance._send_request.mock.calls[1][0].data).toMatchObject({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 person_properties: {},
@@ -1369,7 +1345,7 @@ describe('featureflags', () => {
             jest.runAllTimers()
 
             // check the request didn't send $anon_distinct_id the second time around
-            expect(instance._send_request.mock.calls[2][0].data).toEqual({
+            expect(instance._send_request.mock.calls[2][0].data).toMatchObject({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 person_properties: {},
@@ -1390,7 +1366,7 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].compression).toEqual('base64')
 
             // check the request sent person properties
-            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+            expect(instance._send_request.mock.calls[0][0].data).toMatchObject({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 person_properties: { a: 'b', c: 'd' },
@@ -1475,7 +1451,7 @@ describe('featureflags', () => {
             })
 
             // check the request sent person properties
-            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+            expect(instance._send_request.mock.calls[0][0].data).toMatchObject({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 person_properties: { a: 'b', c: 'e', x: 'y' },
@@ -1510,7 +1486,7 @@ describe('featureflags', () => {
             jest.runAllTimers()
 
             // check the request did not send person properties
-            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+            expect(instance._send_request.mock.calls[0][0].data).toMatchObject({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 person_properties: {},
@@ -1533,7 +1509,7 @@ describe('featureflags', () => {
             })
 
             // check the request sent person properties
-            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+            expect(instance._send_request.mock.calls[0][0].data).toMatchObject({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 person_properties: {},

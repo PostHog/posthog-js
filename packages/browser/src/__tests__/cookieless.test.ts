@@ -322,18 +322,18 @@ describe('cookieless', () => {
                 cookieless_mode: 'on_reject',
                 request_batching: true,
             })
-            expect(mockedFetch).toBeCalledTimes(1) // flags
-            expect(mockedFetch.mock.calls[0][0]).toContain('/flags/')
+            expect(mockedFetch).toBeCalledTimes(1)
+            expect(mockedFetch.mock.calls[0][0]).toContain('/array/')
 
             posthog.opt_in_capturing()
-            expect(mockedFetch).toBeCalledTimes(3) // flags + opt in + pageview
+            expect(mockedFetch).toBeCalledTimes(3) // config + opt in + pageview
             expect(JSON.parse(mockedFetch.mock.calls[1][1].body).event).toEqual('$opt_in')
             expect(JSON.parse(mockedFetch.mock.calls[2][1].body).event).toEqual('$pageview')
 
             posthog.capture('custom event')
             jest.runOnlyPendingTimers() // allows the batch queue to flush
-            expect(mockedFetch).toBeCalledTimes(4) // flags + opt in + pageview + custom event
-            expect(JSON.parse(mockedFetch.mock.calls[3][1].body)[0].event).toEqual('custom event')
+            expect(mockedFetch).toBeCalledTimes(5) // config + flags + opt in + pageview + custom event
+            expect(JSON.parse(mockedFetch.mock.calls[4][1].body)[0].event).toEqual('custom event')
         })
     })
 })
