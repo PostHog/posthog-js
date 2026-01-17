@@ -608,6 +608,7 @@ function initFetchObserver(
                 // but avoid re-consuming FormData which would generate a new boundary.
                 // The body is already in the Request object.
                 if (requestInit.body) {
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
                     const { body: _body, ...initWithoutBody } = requestInit
                     res = await originalFetch(req, initWithoutBody)
                 } else {

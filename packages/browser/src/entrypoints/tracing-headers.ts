@@ -50,6 +50,7 @@ const patchFetch = (hostnames: string[], distinctId: string, sessionManager?: Se
             // but avoid re-consuming FormData which would generate a new boundary.
             // The body is already in the Request object.
             if (init?.body) {
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const { body: _body, ...initWithoutBody } = init
                 return originalFetch(req, initWithoutBody)
             }
