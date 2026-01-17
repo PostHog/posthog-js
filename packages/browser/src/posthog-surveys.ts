@@ -391,6 +391,9 @@ export class PostHogSurveys {
                 },
             }
         }
+        if (options.displayType !== DisplaySurveyType.Popover && options.initialResponses) {
+            logger.warn('initialResponses is only supported for popover surveys. prefill will not be applied.')
+        }
         if (options.ignoreConditions === false) {
             const canRender = this.canRenderSurvey(survey)
             if (!canRender.visible) {
@@ -402,7 +405,7 @@ export class PostHogSurveys {
             this.renderSurvey(surveyToDisplay, options.selector, options.properties)
             return
         }
-        this._surveyManager.handlePopoverSurvey(surveyToDisplay, options.properties)
+        this._surveyManager.handlePopoverSurvey(surveyToDisplay, options)
     }
 
     cancelPendingSurvey(surveyId: string): void {

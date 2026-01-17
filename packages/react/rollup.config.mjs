@@ -61,6 +61,44 @@ const buildTypes = {
         file: 'dist/types/index.d.ts',
         format: 'es',
     },
+    plugins: [resolve(), dts()],
+}
+
+const buildSurveysEsm = {
+    external: ['posthog-js', 'react'],
+    input: 'src/surveys/index.ts',
+    output: {
+        file: 'dist/esm/surveys/index.js',
+        format: 'esm',
+        sourcemap: true,
+    },
+    plugins,
+}
+
+const buildSurveysUmd = {
+    external: ['posthog-js', 'react'],
+    input: 'src/surveys/index.ts',
+    output: {
+        file: 'dist/umd/surveys/index.js',
+        name: 'PosthogReactSurveys',
+        format: 'umd',
+        sourcemap: true,
+        esModule: false,
+        globals: {
+            react: 'React',
+            'posthog-js': 'posthog',
+        },
+    },
+    plugins,
+}
+
+const buildSurveysTypes = {
+    external: ['posthog-js', 'react'],
+    input: 'src/surveys/index.ts',
+    output: {
+        file: 'dist/types/surveys/index.d.ts',
+        format: 'es',
+    },
     plugins: [
         resolve(),
         dts(),
@@ -69,9 +107,10 @@ const buildTypes = {
             targets: [
                 { src: 'dist/*', dest: '../browser/react/dist' },
                 { src: 'src/*', dest: '../browser/react/src' },
+                { src: 'surveys', dest: '../browser/react' },
             ],
         }),
     ],
 }
 
-export default [buildEsm, buildUmd, buildTypes]
+export default [buildEsm, buildUmd, buildTypes, buildSurveysEsm, buildSurveysUmd, buildSurveysTypes]
