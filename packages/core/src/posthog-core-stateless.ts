@@ -116,7 +116,7 @@ export abstract class PostHogCoreStateless {
   private removeDebugCallback?: () => void
   private disableGeoip: boolean
   private historicalMigration: boolean
-  private evaluationEnvironments?: readonly string[]
+  private evaluationContexts?: readonly string[]
   protected disabled
   protected disableCompression: boolean
 
@@ -167,11 +167,17 @@ export abstract class PostHogCoreStateless {
     this.disableGeoip = options.disableGeoip ?? true
     this.disabled = options.disabled ?? false
     this.historicalMigration = options?.historicalMigration ?? false
-    this.evaluationEnvironments = options?.evaluationEnvironments
     // Init promise allows the derived class to block calls until it is ready
     this._initPromise = Promise.resolve()
     this._isInitialized = true
     this._logger = createLogger('[PostHog]', this.logMsgIfDebug.bind(this))
+    // Support both evaluationContexts (new) and evaluationEnvironments (deprecated)
+    this.evaluationContexts = options?.evaluationContexts ?? options?.evaluationEnvironments
+    if (options?.evaluationEnvironments && !options?.evaluationContexts) {
+      this._logger.warn(
+        'evaluationEnvironments is deprecated. Use evaluationContexts instead. This property will be removed in a future version.'
+      )
+    }
     this.disableCompression = !isGzipSupported() || (options?.disableCompression ?? false)
   }
 
@@ -466,9 +472,9 @@ export abstract class PostHogCoreStateless {
       ...extraPayload,
     }
 
-    // Add evaluation environments if configured
-    if (this.evaluationEnvironments && this.evaluationEnvironments.length > 0) {
-      requestData.evaluation_environments = this.evaluationEnvironments
+    // Add evaluation contexts if configured
+    if (this.evaluationContexts && this.evaluationContexts.length > 0) {
+      requestData.evaluation_contexts = this.evaluationContexts
     }
 
     const fetchOptions: PostHogFetchOptions = {

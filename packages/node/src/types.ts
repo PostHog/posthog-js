@@ -140,7 +140,7 @@ export type PostHogOptions = PostHogCoreOptions & {
    */
   before_send?: BeforeSendFn | BeforeSendFn[]
   /**
-   * Evaluation environments for feature flags.
+   * Evaluation contexts for feature flags.
    * When set, only feature flags that have at least one matching evaluation tag
    * will be evaluated for this SDK instance. Feature flags with no evaluation tags
    * will always be evaluated.
@@ -148,6 +148,11 @@ export type PostHogOptions = PostHogCoreOptions & {
    * Examples: ['production', 'backend', 'api']
    *
    * @default undefined
+   */
+  evaluationContexts?: readonly string[]
+  /**
+   * Evaluation environments for feature flags.
+   * @deprecated Use evaluationContexts instead. This property will be removed in a future version.
    */
   evaluationEnvironments?: readonly string[]
   /**
