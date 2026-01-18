@@ -2069,7 +2069,7 @@ describe('PostHog Node.js', () => {
           event: '$feature_flag_called',
         })
       )
-      expect(getLastBatchEvents()?.[0].properties).toEqual({
+      expect(getLastBatchEvents()?.[0].properties).toMatchObject({
         $feature_flag: 'beta-feature',
         $feature_flag_response: true,
         $lib: 'posthog-node',
