@@ -619,8 +619,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       personProperties?: Record<string, string>
       groupProperties?: Record<string, Record<string, string>>
       onlyEvaluateLocally?: boolean
-      disableGeoip?: boolean
       sendFeatureFlagEvents?: boolean
+      disableGeoip?: boolean
     } = {},
     matchValue?: FeatureFlagValue
   ): Promise<FeatureFlagResult | undefined> {
