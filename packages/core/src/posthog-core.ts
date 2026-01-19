@@ -958,15 +958,17 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   /**
    * Override processBeforeEnqueue to run before_send hooks.
    * This runs after prepareMessage, giving users full control over the final event.
+   *
+   * The internal message contains many fields (event, distinct_id, properties, $set, $set_once,
+   * type, library, library_version, timestamp, uuid), but CaptureEvent only exposes a subset
+   * that matches the web SDK's CaptureResult interface: uuid, event, properties, $set, $set_once, timestamp.
    */
   protected processBeforeEnqueue(message: PostHogEventProperties): PostHogEventProperties | null {
     if (!this._beforeSend) {
       return message
     }
 
-    // Convert internal message format to CaptureEvent (user-facing interface)
-    // The internal message has: event, distinct_id, properties, $set, $set_once, type, library, library_version, timestamp, uuid
-    // CaptureEvent exposes: uuid, event, properties, $set, $set_once, timestamp
+    // Convert internal message format to CaptureEvent (user-facing interface matching web SDK's CaptureResult)
     const timestamp = message.timestamp
     const captureEvent: CaptureEvent = {
       uuid: message.uuid as string,
