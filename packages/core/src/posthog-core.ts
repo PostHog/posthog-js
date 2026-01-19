@@ -2,6 +2,7 @@ import type {
   PostHogAutocaptureElement,
   PostHogFlagsResponse,
   PostHogCoreOptions,
+  PostHogCoreStatefulOptions,
   PostHogEventProperties,
   PostHogCaptureOptions,
   JsonType,
@@ -43,7 +44,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   private _sessionMaxLengthSeconds: number = 24 * 60 * 60 // 24 hours
   protected sessionProps: PostHogEventProperties = {}
 
-  constructor(apiKey: string, options?: PostHogCoreOptions) {
+  constructor(apiKey: string, options?: PostHogCoreStatefulOptions) {
     // Default for stateful mode is to not disable geoip. Only override if explicitly set
     const disableGeoipOption = options?.disableGeoip ?? false
 

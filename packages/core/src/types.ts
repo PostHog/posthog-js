@@ -66,12 +66,6 @@ export type PostHogCoreOptions = {
    * @default undefined
    */
   evaluationEnvironments?: readonly string[]
-  /**
-   * Allows modification or dropping of events before they're sent to PostHog.
-   * If an array is provided, the functions are run in order.
-   * If a function returns null, the event will be dropped.
-   */
-  before_send?: BeforeSendFn | BeforeSendFn[]
 }
 
 export enum PostHogPersistedProperty {
@@ -596,3 +590,16 @@ export type CaptureEvent = {
  * Receives an event and can return a modified event or null to drop the event.
  */
 export type BeforeSendFn = (event: CaptureEvent | null) => CaptureEvent | null
+
+/**
+ * Options for PostHogCore (stateful client).
+ * Extends PostHogCoreOptions with additional options specific to stateful clients.
+ */
+export type PostHogCoreStatefulOptions = PostHogCoreOptions & {
+  /**
+   * Allows modification or dropping of events before they're sent to PostHog.
+   * If an array is provided, the functions are run in order.
+   * If a function returns null, the event will be dropped.
+   */
+  before_send?: BeforeSendFn | BeforeSendFn[]
+}
