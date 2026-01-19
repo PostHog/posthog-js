@@ -67,9 +67,24 @@ describe('Evaluation Tags/Contexts', () => {
         })
 
         it('should support deprecated evaluation_environments field', () => {
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
             posthog.config.evaluation_environments = ['production', 'staging']
+
+            // Call multiple times
+            ;(featureFlags as any)._getValidEvaluationEnvironments()
+            ;(featureFlags as any)._getValidEvaluationEnvironments()
+
             const result = (featureFlags as any)._getValidEvaluationEnvironments()
             expect(result).toEqual(['production', 'staging'])
+
+            // Warning should be logged only once
+            expect(warnSpy).toHaveBeenCalledTimes(1)
+            expect(warnSpy).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.stringContaining('evaluation_environments is deprecated')
+            )
+
+            warnSpy.mockRestore()
         })
 
         it('should prioritize evaluation_contexts over evaluation_environments', () => {
