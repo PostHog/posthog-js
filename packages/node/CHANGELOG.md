@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.21.2
+
+### Patch Changes
+
+- [#2920](https://github.com/PostHog/posthog-js/pull/2920) [`099ee0c`](https://github.com/PostHog/posthog-js/commit/099ee0c3e4babc632abf52ecdc1df700c6087566) Thanks [@haacked](https://github.com/haacked)! - Add getFeatureFlagResult method to retrieve flag value and payload in a single API call.
+  (2026-01-19)
+
 ## 5.21.1
 
 ### Patch Changes

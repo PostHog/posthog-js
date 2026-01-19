@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.20.0
+
+### Minor Changes
+
+- [#2924](https://github.com/PostHog/posthog-js/pull/2924) [`298ac60`](https://github.com/PostHog/posthog-js/commit/298ac609d233e04a7a7423445b780ec8b7450245) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - allow disabling the plugin programmatically
+  (2026-01-19)
+
 ## 4.19.0
 
 ### Minor Changes

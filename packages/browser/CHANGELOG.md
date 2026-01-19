@@ -1,5 +1,19 @@
 # posthog-js
 
+## 1.329.0
+
+### Minor Changes
+
+- [#2927](https://github.com/PostHog/posthog-js/pull/2927) [`da78b8c`](https://github.com/PostHog/posthog-js/commit/da78b8c7e2fd7ecb9f16703a0e19582572b7ffbd) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Remove loading state in support product
+  (2026-01-19)
+
+### Patch Changes
+
+- [#2926](https://github.com/PostHog/posthog-js/pull/2926) [`3676972`](https://github.com/PostHog/posthog-js/commit/3676972e7ddd75496ac17d9528508d97269c4e8a) Thanks [@pawel-cebula](https://github.com/pawel-cebula)! - Fix TypeError when logging objects with null/undefined property values in flattenObject
+  (2026-01-19)
+- Updated dependencies []:
+    - @posthog/types@1.329.0
+
 ## 1.328.0
 
 ### Minor Changes
