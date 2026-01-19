@@ -7,8 +7,61 @@ Linking.getInitialURL = jest.fn(() => Promise.resolve(null))
 AppState.addEventListener = jest.fn()
 
 describe('PostHog React Native', () => {
-  describe('evaluation environments', () => {
-    it('should send evaluation environments when configured', async () => {
+  describe('evaluation contexts', () => {
+    it('should send evaluation contexts when configured', async () => {
+      posthog = new PostHog('test-token', {
+        evaluationContexts: ['production', 'mobile'],
+        flushInterval: 0,
+      })
+      await posthog.ready()
+
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/flags/?v=2&config=true'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"evaluation_contexts":["production","mobile"]'),
+        })
+      )
+    })
+
+    it('should not send evaluation contexts when not configured', async () => {
+      posthog = new PostHog('test-token', {
+        flushInterval: 0,
+      })
+      await posthog.ready()
+
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/flags/?v=2&config=true'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.not.stringContaining('evaluation_contexts'),
+        })
+      )
+    })
+
+    it('should not send evaluation contexts when configured as empty array', async () => {
+      posthog = new PostHog('test-token', {
+        evaluationContexts: [],
+        flushInterval: 0,
+      })
+      await posthog.ready()
+
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/flags/?v=2&config=true'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.not.stringContaining('evaluation_contexts'),
+        })
+      )
+    })
+
+    it('should support deprecated evaluationEnvironments field', async () => {
       posthog = new PostHog('test-token', {
         evaluationEnvironments: ['production', 'mobile'],
         flushInterval: 0,
@@ -21,42 +74,7 @@ describe('PostHog React Native', () => {
         expect.stringContaining('/flags/?v=2&config=true'),
         expect.objectContaining({
           method: 'POST',
-          body: expect.stringContaining('"evaluation_environments":["production","mobile"]'),
-        })
-      )
-    })
-
-    it('should not send evaluation environments when not configured', async () => {
-      posthog = new PostHog('test-token', {
-        flushInterval: 0,
-      })
-      await posthog.ready()
-
-      await posthog.reloadFeatureFlagsAsync()
-
-      expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/flags/?v=2&config=true'),
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.not.stringContaining('evaluation_environments'),
-        })
-      )
-    })
-
-    it('should not send evaluation environments when configured as empty array', async () => {
-      posthog = new PostHog('test-token', {
-        evaluationEnvironments: [],
-        flushInterval: 0,
-      })
-      await posthog.ready()
-
-      await posthog.reloadFeatureFlagsAsync()
-
-      expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/flags/?v=2&config=true'),
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.not.stringContaining('evaluation_environments'),
+          body: expect.stringContaining('"evaluation_contexts":["production","mobile"]'),
         })
       )
     })

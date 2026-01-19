@@ -752,27 +752,35 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(true)
         })
 
-        it('should call /flags with evaluation_environments when configured', () => {
+        it('should call /flags with evaluation_contexts when configured', () => {
+            instance.config.evaluation_contexts = ['production', 'web']
+            featureFlags.flags()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toEqual(['production', 'web'])
+        })
+
+        it('should not include evaluation_contexts when not configured', () => {
+            featureFlags.flags()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toBe(undefined)
+        })
+
+        it('should not include evaluation_contexts when configured as empty array', () => {
+            instance.config.evaluation_contexts = []
+            featureFlags.flags()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toBe(undefined)
+        })
+
+        it('should support deprecated evaluation_environments field', () => {
             instance.config.evaluation_environments = ['production', 'web']
             featureFlags.flags()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toEqual(['production', 'web'])
-        })
-
-        it('should not include evaluation_environments when not configured', () => {
-            featureFlags.flags()
-
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toBe(undefined)
-        })
-
-        it('should not include evaluation_environments when configured as empty array', () => {
-            instance.config.evaluation_environments = []
-            featureFlags.flags()
-
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toBe(undefined)
+            expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toEqual(['production', 'web'])
         })
     })
 
@@ -2387,28 +2395,77 @@ describe('getRemoteConfigPayload', () => {
         featureFlags = new PostHogFeatureFlags(instance)
     })
 
-    it('should include evaluation_environments when configured', () => {
+    it('should include evaluation_contexts when configured', () => {
+        instance.config.evaluation_contexts = ['staging', 'backend']
+
+        const callback = jest.fn()
+        featureFlags.getRemoteConfigPayload('test-flag', callback)
+
+        expect(instance._send_request).toHaveBeenCalledWith(
+            expect.objectContaining({
+                method: 'POST',
+                url: 'flags/flags/?v=2&config=true',
+                data: expect.objectContaining({
+                    distinct_id: 'test-distinct-id',
+                    token: 'test-token',
+                    evaluation_contexts: ['staging', 'backend'],
+                }),
+            })
+        )
+    })
+
+    it('should not include evaluation_contexts when not configured', () => {
+        const callback = jest.fn()
+        featureFlags.getRemoteConfigPayload('test-flag', callback)
+
+        expect(instance._send_request).toHaveBeenCalledWith(
+            expect.objectContaining({
+                method: 'POST',
+                url: 'flags/flags/?v=2&config=true',
+                data: expect.objectContaining({
+                    distinct_id: 'test-distinct-id',
+                    token: 'test-token',
+                }),
+            })
+        )
+
+        // Verify evaluation_contexts is not in the data
+        expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toBeUndefined()
+    })
+
+    it('should not include evaluation_contexts when configured as empty array', () => {
+        instance.config.evaluation_contexts = []
+
+        const callback = jest.fn()
+        featureFlags.getRemoteConfigPayload('test-flag', callback)
+
+        expect(instance._send_request).toHaveBeenCalledWith(
+            expect.objectContaining({
+                method: 'POST',
+                url: 'flags/flags/?v=2&config=true',
+                data: expect.objectContaining({
+                    distinct_id: 'test-distinct-id',
+                    token: 'test-token',
+                }),
+            })
+        )
+
+        // Verify evaluation_contexts is not in the data
+        expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toBeUndefined()
+    })
+
+    it('should support deprecated evaluation_environments field', () => {
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+
         instance.config.evaluation_environments = ['staging', 'backend']
 
         const callback = jest.fn()
         featureFlags.getRemoteConfigPayload('test-flag', callback)
 
-        expect(instance._send_request).toHaveBeenCalledWith(
-            expect.objectContaining({
-                method: 'POST',
-                url: 'flags/flags/?v=2&config=true',
-                data: expect.objectContaining({
-                    distinct_id: 'test-distinct-id',
-                    token: 'test-token',
-                    evaluation_environments: ['staging', 'backend'],
-                }),
-            })
+        expect(warnSpy).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.stringContaining('evaluation_environments is deprecated')
         )
-    })
-
-    it('should not include evaluation_environments when not configured', () => {
-        const callback = jest.fn()
-        featureFlags.getRemoteConfigPayload('test-flag', callback)
 
         expect(instance._send_request).toHaveBeenCalledWith(
             expect.objectContaining({
@@ -2417,33 +2474,12 @@ describe('getRemoteConfigPayload', () => {
                 data: expect.objectContaining({
                     distinct_id: 'test-distinct-id',
                     token: 'test-token',
+                    evaluation_contexts: ['staging', 'backend'],
                 }),
             })
         )
 
-        // Verify evaluation_environments is not in the data
-        expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toBeUndefined()
-    })
-
-    it('should not include evaluation_environments when configured as empty array', () => {
-        instance.config.evaluation_environments = []
-
-        const callback = jest.fn()
-        featureFlags.getRemoteConfigPayload('test-flag', callback)
-
-        expect(instance._send_request).toHaveBeenCalledWith(
-            expect.objectContaining({
-                method: 'POST',
-                url: 'flags/flags/?v=2&config=true',
-                data: expect.objectContaining({
-                    distinct_id: 'test-distinct-id',
-                    token: 'test-token',
-                }),
-            })
-        )
-
-        // Verify evaluation_environments is not in the data
-        expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toBeUndefined()
+        warnSpy.mockRestore()
     })
 
     describe('flags_api_host configuration', () => {
