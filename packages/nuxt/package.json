@@ -8,6 +8,9 @@
     "directory": "packages/nuxt"
   },
   "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
   "type": "module",
   "exports": {
     ".": {
