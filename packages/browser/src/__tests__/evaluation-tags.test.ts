@@ -1,6 +1,7 @@
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 import { PostHog } from '../posthog-core'
 import { PostHogConfig } from '../types'
+import { assignableWindow } from '../utils/globals'
 
 describe('Evaluation Tags/Contexts', () => {
     let posthog: PostHog
@@ -67,6 +68,7 @@ describe('Evaluation Tags/Contexts', () => {
         })
 
         it('should support deprecated evaluation_environments field', () => {
+            assignableWindow.POSTHOG_DEBUG = true
             const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
             posthog.config.evaluation_environments = ['production', 'staging']
 
@@ -80,11 +82,12 @@ describe('Evaluation Tags/Contexts', () => {
             // Warning should be logged only once
             expect(warnSpy).toHaveBeenCalledTimes(1)
             expect(warnSpy).toHaveBeenCalledWith(
-                expect.any(String),
-                expect.stringContaining('evaluation_environments is deprecated')
+                '[PostHog.js] [FeatureFlags]',
+                'evaluation_environments is deprecated. Use evaluation_contexts instead. evaluation_environments will be removed in a future version.'
             )
 
             warnSpy.mockRestore()
+            assignableWindow.POSTHOG_DEBUG = false
         })
 
         it('should prioritize evaluation_contexts over evaluation_environments', () => {
