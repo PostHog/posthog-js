@@ -10,26 +10,28 @@ jobs:
   unit:
     name: Unit tests
     runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
+
+      - run: pnpm test:unit
+
+  # Run tests on Node 22 for packages that support it to catch accidental use of Node 24-only APIs
+  unit-node22:
+    name: Unit tests (Node 22 compat)
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup environment
         uses: ./.github/actions/setup
         with:
-          node_version: ${{ matrix.node-version }}
+          node_version: 22
 
-      # On Node 22, only test packages that support it (exclude node, ai, nuxt which require Node 24)
-      - name: Run unit tests (Node 22 - compatible packages only)
-        if: matrix.node-version == 22
-        run: pnpm turbo run test:unit --filter='!posthog-node' --filter='!@posthog/ai' --filter='!@posthog/nuxt'
-
-      # On Node 24, test all packages
-      - name: Run unit tests (Node 24 - all packages)
-        if: matrix.node-version == 24
-        run: pnpm test:unit
+      # Exclude packages that require Node 24 (posthog-node, @posthog/ai, @posthog/nuxt)
+      - run: pnpm turbo run test:unit --filter='!posthog-node' --filter='!@posthog/ai' --filter='!@posthog/nuxt'
 
   integration:
     name: Playwright E2E tests
