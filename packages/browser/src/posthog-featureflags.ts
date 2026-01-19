@@ -176,11 +176,16 @@ export class PostHogFeatureFlags {
         // Support both evaluation_contexts (new) and evaluation_environments (deprecated)
         const envs = this._instance.config.evaluation_contexts ?? this._instance.config.evaluation_environments
 
-        // Log deprecation warning if using old field
-        if (this._instance.config.evaluation_environments && !this._instance.config.evaluation_contexts) {
+    private _getValidEvaluationEnvironments(): string[] {
+        // Support both evaluation_contexts (new) and evaluation_environments (deprecated)
+        const envs = this._instance.config.evaluation_contexts ?? this._instance.config.evaluation_environments
+
+        // Log deprecation warning if using old field (only once)
+        if (this._instance.config.evaluation_environments && !this._instance.config.evaluation_contexts && !this._hasLoggedDeprecationWarning) {
             logger.warn(
                 'evaluation_environments is deprecated. Use evaluation_contexts instead. evaluation_environments will be removed in a future version.'
             )
+            this._hasLoggedDeprecationWarning = true
         }
 
         if (!envs?.length) {
