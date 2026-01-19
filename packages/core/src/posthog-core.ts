@@ -964,11 +964,45 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       return message
     }
 
-    // Cast to CaptureEvent for the before_send hooks
-    const captureEvent = message as CaptureEvent
+    // Convert internal message format to CaptureEvent (user-facing interface)
+    // The internal message has: event, distinct_id, properties, $set, $set_once, type, library, library_version, timestamp, uuid
+    // CaptureEvent exposes: uuid, event, properties, $set, $set_once, timestamp
+    const timestamp = message.timestamp
+    const captureEvent: CaptureEvent = {
+      uuid: message.uuid as string,
+      event: message.event as string,
+      properties: (message.properties || {}) as PostHogEventProperties,
+      $set: message.$set as unknown as PostHogEventProperties | undefined,
+      $set_once: message.$set_once as unknown as PostHogEventProperties | undefined,
+      // Convert timestamp to Date if it's a string (from currentISOTime())
+      timestamp: typeof timestamp === 'string' ? new Date(timestamp) : (timestamp as unknown as Date | undefined),
+    }
+
     const result = this._runBeforeSend(captureEvent)
 
-    return result as PostHogEventProperties | null
+    if (!result) {
+      return null
+    }
+
+    // Apply modifications from CaptureEvent back to internal message
+    const resultMessage: PostHogEventProperties = {
+      ...message,
+      uuid: result.uuid,
+      event: result.event,
+      properties: result.properties,
+      // Keep timestamp as-is (Date or string) - it will be serialized properly when sent
+      timestamp: result.timestamp as unknown as JsonType,
+    }
+
+    // Only set $set and $set_once if they exist (they're optional)
+    if (result.$set !== undefined) {
+      resultMessage.$set = result.$set as unknown as JsonType
+    }
+    if (result.$set_once !== undefined) {
+      resultMessage.$set_once = result.$set_once as unknown as JsonType
+    }
+
+    return resultMessage
   }
 
   /**

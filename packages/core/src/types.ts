@@ -572,25 +572,23 @@ export type KnownUnsafeEditableEvent = (typeof knownUnsafeEditableEvent)[number]
  * Represents a prepared event message that can be modified or filtered by the `before_send` hook.
  * This is the shape of the event after all internal processing, right before it's queued for sending.
  */
+/**
+ * Represents an event before it's sent to PostHog.
+ * This is the interface exposed to the `before_send` hook, matching the web SDK's `CaptureResult`.
+ */
 export type CaptureEvent = {
+  /** UUID for the event */
+  uuid: string
   /** The name of the event */
   event: string
-  /** The distinct ID of the user (note: uses distinct_id after prepareMessage) */
-  distinct_id: string
   /** Properties associated with the event */
-  properties?: PostHogEventProperties
-  /** The type of capture (e.g., 'capture', 'identify', 'alias') */
-  type?: string
-  /** The library identifier */
-  library?: string
-  /** The library version */
-  library_version?: string
-  /** Timestamp in ISO string format */
-  timestamp?: string
-  /** UUID for the event */
-  uuid?: string
-  /** Allow additional properties */
-  [key: string]: JsonType | undefined
+  properties: PostHogEventProperties
+  /** Properties to set on the person (overrides existing values) */
+  $set?: PostHogEventProperties
+  /** Properties to set on the person only once (does not override existing values) */
+  $set_once?: PostHogEventProperties
+  /** Timestamp for the event */
+  timestamp?: Date
 }
 
 /**
