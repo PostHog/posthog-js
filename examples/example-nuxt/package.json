@@ -1,6 +1,9 @@
 {
   "name": "example-nuxt",
   "private": true,
+  "engines": {
+    "node": ">=22.22"
+  },
   "type": "module",
   "packageManager": "pnpm@10.12.4",
   "scripts": {

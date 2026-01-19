@@ -20,7 +20,7 @@
     "generate-references": "pnpm build && pnpm exec api-extractor run --config ./api-extractor.jsonc --local && node scripts/generate-docs.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.22"
   },
   "files": [
     "src",
