@@ -2,7 +2,6 @@ import type {
   PostHogAutocaptureElement,
   PostHogFlagsResponse,
   PostHogCoreOptions,
-  PostHogCoreStatefulOptions,
   PostHogEventProperties,
   PostHogCaptureOptions,
   JsonType,
@@ -44,7 +43,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   private _sessionMaxLengthSeconds: number = 24 * 60 * 60 // 24 hours
   protected sessionProps: PostHogEventProperties = {}
 
-  constructor(apiKey: string, options?: PostHogCoreStatefulOptions) {
+  constructor(apiKey: string, options?: PostHogCoreOptions) {
     // Default for stateful mode is to not disable geoip. Only override if explicitly set
     const disableGeoipOption = options?.disableGeoip ?? false
 
@@ -990,9 +989,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     // Apply modifications from CaptureEvent back to internal message
     const resultMessage: PostHogEventProperties = {
       ...message,
-      uuid: result.uuid,
+      uuid: result.uuid ?? message.uuid, // Keep original uuid if not provided
       event: result.event,
-      properties: result.properties,
+      properties: result.properties ?? message.properties, // Keep original properties if not provided
       // Keep timestamp as-is (Date or string) - it will be serialized properly when sent
       timestamp: result.timestamp as unknown as JsonType,
     }
