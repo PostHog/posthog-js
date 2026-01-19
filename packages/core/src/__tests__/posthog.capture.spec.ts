@@ -6,6 +6,7 @@ import {
   PostHogCoreTestClientMocks,
 } from '@/testing'
 import { uuidv7 } from '@/vendor/uuidv7'
+import { CaptureEvent } from '@/types'
 
 describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient
@@ -83,6 +84,183 @@ describe('PostHog Core', () => {
           {
             event: 'custom-event',
             uuid: expect.any(String),
+          },
+        ],
+      })
+    })
+  })
+
+  describe('before_send', () => {
+    it('should allow dropping events by returning null', async () => {
+      const beforeSend = jest.fn().mockReturnValue(null)
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        before_send: beforeSend,
+      })
+
+      posthog.capture('custom-event', { foo: 'bar' })
+      await waitForPromises()
+
+      expect(beforeSend).toHaveBeenCalledTimes(1)
+      expect(beforeSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'custom-event',
+          distinctId: expect.any(String),
+          properties: expect.objectContaining({ foo: 'bar' }),
+        })
+      )
+      expect(mocks.fetch).not.toHaveBeenCalled()
+    })
+
+    it('should allow modifying events', async () => {
+      const beforeSend = jest.fn((event: CaptureEvent | null) => {
+        if (event) {
+          return {
+            ...event,
+            event: 'modified-event',
+            properties: { ...event.properties, added: 'property' },
+          }
+        }
+        return event
+      })
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        before_send: beforeSend,
+      })
+
+      posthog.capture('original-event', { original: 'value' })
+      await waitForPromises()
+
+      expect(beforeSend).toHaveBeenCalledTimes(1)
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      const body = parseBody(mocks.fetch.mock.calls[0])
+
+      expect(body).toMatchObject({
+        batch: [
+          {
+            event: 'modified-event',
+            properties: expect.objectContaining({
+              original: 'value',
+              added: 'property',
+            }),
+          },
+        ],
+      })
+    })
+
+    it('should support an array of before_send functions', async () => {
+      const beforeSend1 = jest.fn((event: CaptureEvent | null) => {
+        if (event) {
+          return { ...event, properties: { ...event.properties, from_first: true } }
+        }
+        return event
+      })
+      const beforeSend2 = jest.fn((event: CaptureEvent | null) => {
+        if (event) {
+          return { ...event, properties: { ...event.properties, from_second: true } }
+        }
+        return event
+      })
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        before_send: [beforeSend1, beforeSend2],
+      })
+
+      posthog.capture('custom-event')
+      await waitForPromises()
+
+      expect(beforeSend1).toHaveBeenCalledTimes(1)
+      expect(beforeSend2).toHaveBeenCalledTimes(1)
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      const body = parseBody(mocks.fetch.mock.calls[0])
+
+      expect(body).toMatchObject({
+        batch: [
+          {
+            event: 'custom-event',
+            properties: expect.objectContaining({
+              from_first: true,
+              from_second: true,
+            }),
+          },
+        ],
+      })
+    })
+
+    it('should stop processing if any function in the array returns null', async () => {
+      const beforeSend1 = jest.fn((event: CaptureEvent | null) => {
+        if (event) {
+          return { ...event, properties: { ...event.properties, from_first: true } }
+        }
+        return event
+      })
+      const beforeSend2 = jest.fn().mockReturnValue(null)
+      const beforeSend3 = jest.fn((event: CaptureEvent | null) => event)
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        before_send: [beforeSend1, beforeSend2, beforeSend3],
+      })
+
+      posthog.capture('custom-event')
+      await waitForPromises()
+
+      expect(beforeSend1).toHaveBeenCalledTimes(1)
+      expect(beforeSend2).toHaveBeenCalledTimes(1)
+      expect(beforeSend3).not.toHaveBeenCalled() // Should not be called because beforeSend2 returned null
+      expect(mocks.fetch).not.toHaveBeenCalled()
+    })
+
+    it('should pass timestamp and uuid through before_send', async () => {
+      const customDate = new Date('2023-06-15')
+      const customUuid = uuidv7()
+      const beforeSend = jest.fn((event: CaptureEvent | null) => event)
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        before_send: beforeSend,
+      })
+
+      posthog.capture('custom-event', {}, { timestamp: customDate, uuid: customUuid })
+      await waitForPromises()
+
+      expect(beforeSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'custom-event',
+          timestamp: customDate,
+          uuid: customUuid,
+        })
+      )
+    })
+
+    it('should allow modifying timestamp and uuid in before_send', async () => {
+      const modifiedDate = new Date('2020-01-01')
+      const modifiedUuid = 'modified-uuid-123'
+      const beforeSend = jest.fn((event: CaptureEvent | null) => {
+        if (event) {
+          return {
+            ...event,
+            timestamp: modifiedDate,
+            uuid: modifiedUuid,
+          }
+        }
+        return event
+      })
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        before_send: beforeSend,
+      })
+
+      posthog.capture('custom-event')
+      await waitForPromises()
+
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      const body = parseBody(mocks.fetch.mock.calls[0])
+
+      expect(body).toMatchObject({
+        batch: [
+          {
+            event: 'custom-event',
+            timestamp: '2020-01-01T00:00:00.000Z',
+            uuid: modifiedUuid,
           },
         ],
       })

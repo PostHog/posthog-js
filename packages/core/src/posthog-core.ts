@@ -15,6 +15,8 @@ import type {
   Survey,
   SurveyResponse,
   PostHogGroupProperties,
+  BeforeSendFn,
+  CaptureEvent,
 } from './types'
 import {
   createFlagsResponseFromFlagsAndPayloads,
@@ -33,6 +35,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   // options
   private sendFeatureFlagEvent: boolean
   private flagCallReported: { [key: string]: boolean } = {}
+  private _beforeSend?: BeforeSendFn | BeforeSendFn[]
 
   // internal
   protected _flagsResponsePromise?: Promise<PostHogFlagsResponse | undefined> // TODO: come back to this, fix typing
@@ -51,6 +54,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
     this.sendFeatureFlagEvent = options?.sendFeatureFlagEvent ?? true
     this._sessionExpirationTimeSeconds = options?.sessionExpirationTimeSeconds ?? 1800 // 30 minutes
+    this._beforeSend = options?.before_send
   }
 
   protected setupBootstrap(options?: Partial<PostHogCoreOptions>): void {
@@ -300,7 +304,25 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
       const allProperties = this.enrichProperties(properties)
 
-      super.captureStateless(distinctId, event, allProperties, options)
+      // Run before_send hook if configured
+      const captureEvent = this._runBeforeSend({
+        event,
+        distinctId,
+        properties: allProperties,
+        timestamp: options?.timestamp,
+        uuid: options?.uuid,
+      })
+
+      // If before_send returns null, drop the event
+      if (!captureEvent) {
+        return
+      }
+
+      super.captureStateless(captureEvent.distinctId, captureEvent.event, captureEvent.properties, {
+        ...options,
+        timestamp: captureEvent.timestamp,
+        uuid: captureEvent.uuid,
+      })
     })
   }
 
@@ -949,5 +971,31 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       $ai_metric_value: String(metricValue),
       $ai_trace_id: String(traceId),
     })
+  }
+
+  /**
+   * Runs the before_send hook(s) on the given capture event.
+   * If any hook returns null, the event is dropped.
+   *
+   * @param captureEvent The event to process
+   * @returns The processed event, or null if the event should be dropped
+   */
+  private _runBeforeSend(captureEvent: CaptureEvent): CaptureEvent | null {
+    if (!this._beforeSend) {
+      return captureEvent
+    }
+
+    const fns = Array.isArray(this._beforeSend) ? this._beforeSend : [this._beforeSend]
+    let result: CaptureEvent | null = captureEvent
+
+    for (const fn of fns) {
+      result = fn(result)
+      if (!result) {
+        this._logger.info(`Event '${captureEvent.event}' was rejected in before_send function`)
+        return null
+      }
+    }
+
+    return result
   }
 }
