@@ -448,21 +448,6 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
                         <>
                             <div style={styles.messages}>
                                 {messages.map((message) => this._renderMessage(message, styles))}
-                                {isLoading && (
-                                    <div style={{ ...styles.message, ...styles.messageAgent }}>
-                                        <div
-                                            style={{
-                                                ...styles.messageContent,
-                                                ...styles.messageContentAgent,
-                                                ...styles.typing,
-                                            }}
-                                        >
-                                            <span style={styles.typingDot}></span>
-                                            <span style={{ ...styles.typingDot, animationDelay: '0.2s' }}></span>
-                                            <span style={{ ...styles.typingDot, animationDelay: '0.4s' }}></span>
-                                        </div>
-                                    </div>
-                                )}
                                 <div
                                     ref={(el) => {
                                         this._messagesEndRef = el
