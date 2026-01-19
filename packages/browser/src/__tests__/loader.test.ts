@@ -15,16 +15,16 @@ describe(`Module-based loader in Node env`, () => {
     const posthog = defaultPostHog()
 
     beforeEach(() => {
-        // NOTE: Temporary change whilst testing remote config
+        // NOTE: Mocked as we dont want to test auto config loading in this test
         assignableWindow._POSTHOG_REMOTE_CONFIG = {
             'test-token': {
                 config: {},
                 siteApps: [],
             },
         } as any
-        // assignableWindow.__PosthogExtensions__ = {}
 
         jest.useFakeTimers()
+
         jest.spyOn(posthog, '_send_request').mockReturnValue()
         jest.spyOn(window!.console, 'log').mockImplementation()
     })

@@ -37,7 +37,6 @@ describe('RemoteConfigLoader', () => {
         const config = { surveys: true } as RemoteConfig
 
         beforeEach(() => {
-            posthog.config.__preview_remote_config = true
             assignableWindow._POSTHOG_REMOTE_CONFIG = undefined
             assignableWindow.POSTHOG_DEBUG = true
 
