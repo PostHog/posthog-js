@@ -265,5 +265,131 @@ describe('PostHog Core', () => {
         ],
       })
     })
+
+    it('should include $geoip_disable in before_send when disableGeoip is true', async () => {
+      const beforeSend = jest.fn((event: CaptureEvent | null) => event)
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        disableGeoip: true,
+        before_send: beforeSend,
+      })
+
+      posthog.capture('custom-event')
+      await waitForPromises()
+
+      expect(beforeSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          properties: expect.objectContaining({
+            $geoip_disable: true,
+          }),
+        })
+      )
+    })
+
+    it('should allow removing $geoip_disable in before_send', async () => {
+      const beforeSend = jest.fn((event: CaptureEvent | null) => {
+        if (event && event.properties) {
+          const { $geoip_disable, ...rest } = event.properties
+          return { ...event, properties: rest }
+        }
+        return event
+      })
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        disableGeoip: true,
+        before_send: beforeSend,
+      })
+
+      posthog.capture('custom-event')
+      await waitForPromises()
+
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      const body = parseBody(mocks.fetch.mock.calls[0])
+
+      // $geoip_disable should not be in the final properties
+      expect(body.batch[0].properties.$geoip_disable).toBeUndefined()
+    })
+
+    it('should allow adding $geoip_disable in before_send when disableGeoip is false', async () => {
+      const beforeSend = jest.fn((event: CaptureEvent | null) => {
+        if (event) {
+          return {
+            ...event,
+            properties: { ...event.properties, $geoip_disable: true },
+          }
+        }
+        return event
+      })
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        disableGeoip: false,
+        before_send: beforeSend,
+      })
+
+      posthog.capture('custom-event')
+      await waitForPromises()
+
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      const body = parseBody(mocks.fetch.mock.calls[0])
+
+      expect(body.batch[0].properties.$geoip_disable).toBe(true)
+    })
+
+    it('should include $geoip_disable in before_send when passed via capture options', async () => {
+      const beforeSend = jest.fn((event: CaptureEvent | null) => event)
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        disableGeoip: false, // Default is false
+        before_send: beforeSend,
+      })
+
+      // Pass disableGeoip: true via capture options
+      posthog.capture('custom-event', {}, { disableGeoip: true })
+      await waitForPromises()
+
+      expect(beforeSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          properties: expect.objectContaining({
+            $geoip_disable: true,
+          }),
+        })
+      )
+
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0].properties.$geoip_disable).toBe(true)
+    })
+
+    it('should allow capture options disableGeoip to override default setting', async () => {
+      const beforeSend = jest.fn((event: CaptureEvent | null) => event)
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        disableGeoip: true, // Default is true
+        before_send: beforeSend,
+      })
+
+      // First capture with default (should have $geoip_disable: true)
+      posthog.capture('event-with-default')
+      await waitForPromises()
+
+      expect(beforeSend).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          properties: expect.objectContaining({
+            $geoip_disable: true,
+          }),
+        })
+      )
+
+      // Second capture with explicit disableGeoip: false
+      // Note: This tests that per-call options override the default
+      // However, since disableGeoip: false means "don't disable", $geoip_disable should not be set
+      beforeSend.mockClear()
+      posthog.capture('event-with-override', {}, { disableGeoip: false })
+      await waitForPromises()
+
+      // $geoip_disable should NOT be in the properties when disableGeoip is false
+      const lastCall = beforeSend.mock.calls[0][0]
+      expect(lastCall.properties.$geoip_disable).toBeUndefined()
+    })
   })
 })
