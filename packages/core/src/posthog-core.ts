@@ -987,24 +987,16 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     }
 
     // Apply modifications from CaptureEvent back to internal message
-    const resultMessage: PostHogEventProperties = {
+    // Use result values directly - if user omits fields, they become undefined (removing original values)
+    return {
       ...message,
-      uuid: result.uuid ?? message.uuid, // Keep original uuid if not provided
+      uuid: result.uuid ?? message.uuid,
       event: result.event,
-      properties: result.properties ?? message.properties, // Keep original properties if not provided
-      // Keep timestamp as-is (Date or string) - it will be serialized properly when sent
+      properties: result.properties ?? message.properties,
       timestamp: result.timestamp as unknown as JsonType,
+      $set: result.$set as unknown as JsonType,
+      $set_once: result.$set_once as unknown as JsonType,
     }
-
-    // Only set $set and $set_once if they exist (they're optional)
-    if (result.$set !== undefined) {
-      resultMessage.$set = result.$set as unknown as JsonType
-    }
-    if (result.$set_once !== undefined) {
-      resultMessage.$set_once = result.$set_once as unknown as JsonType
-    }
-
-    return resultMessage
   }
 
   /**
