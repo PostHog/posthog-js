@@ -970,12 +970,13 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
     // Convert internal message format to CaptureEvent (user-facing interface matching web SDK's CaptureResult)
     const timestamp = message.timestamp
+    const props = (message.properties || {}) as PostHogEventProperties
     const captureEvent: CaptureEvent = {
       uuid: message.uuid as string,
       event: message.event as string,
-      properties: (message.properties || {}) as PostHogEventProperties,
-      $set: message.$set as unknown as PostHogEventProperties | undefined,
-      $set_once: message.$set_once as unknown as PostHogEventProperties | undefined,
+      properties: props,
+      $set: props.$set as PostHogEventProperties | undefined,
+      $set_once: props.$set_once as PostHogEventProperties | undefined,
       // Convert timestamp to Date if it's a string (from currentISOTime())
       timestamp: typeof timestamp === 'string' ? new Date(timestamp) : (timestamp as unknown as Date | undefined),
     }
@@ -987,15 +988,25 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     }
 
     // Apply modifications from CaptureEvent back to internal message
-    // Use result values directly - if user omits fields, they become undefined (removing original values)
+    // Put $set/$set_once back into properties where they belong
+    const resultProps = { ...(result.properties ?? props) } as PostHogEventProperties
+    if (result.$set !== undefined) {
+      resultProps.$set = result.$set as JsonType
+    } else {
+      delete resultProps.$set
+    }
+    if (result.$set_once !== undefined) {
+      resultProps.$set_once = result.$set_once as JsonType
+    } else {
+      delete resultProps.$set_once
+    }
+
     return {
       ...message,
       uuid: result.uuid ?? message.uuid,
       event: result.event,
-      properties: result.properties ?? message.properties,
+      properties: resultProps,
       timestamp: result.timestamp as unknown as JsonType,
-      $set: result.$set as unknown as JsonType,
-      $set_once: result.$set_once as unknown as JsonType,
     }
   }
 
