@@ -167,6 +167,7 @@ export class PostHogFeatureFlags {
     private _reloadDebouncer?: any
     private _flagsCalled: boolean = false
     private _flagsLoadedFromRemote: boolean = false
+    private _hasLoggedDeprecationWarning: boolean = false
 
     constructor(private _instance: PostHog) {
         this.featureFlagEventHandlers = []
@@ -176,12 +177,12 @@ export class PostHogFeatureFlags {
         // Support both evaluation_contexts (new) and evaluation_environments (deprecated)
         const envs = this._instance.config.evaluation_contexts ?? this._instance.config.evaluation_environments
 
-    private _getValidEvaluationEnvironments(): string[] {
-        // Support both evaluation_contexts (new) and evaluation_environments (deprecated)
-        const envs = this._instance.config.evaluation_contexts ?? this._instance.config.evaluation_environments
-
         // Log deprecation warning if using old field (only once)
-        if (this._instance.config.evaluation_environments && !this._instance.config.evaluation_contexts && !this._hasLoggedDeprecationWarning) {
+        if (
+            this._instance.config.evaluation_environments &&
+            !this._instance.config.evaluation_contexts &&
+            !this._hasLoggedDeprecationWarning
+        ) {
             logger.warn(
                 'evaluation_environments is deprecated. Use evaluation_contexts instead. evaluation_environments will be removed in a future version.'
             )
@@ -192,7 +193,7 @@ export class PostHogFeatureFlags {
             return []
         }
 
-        return envs.filter((env) => {
+        return envs.filter((env: string) => {
             const isValid = env && typeof env === 'string' && env.trim().length > 0
             if (!isValid) {
                 logger.error('Invalid evaluation context found:', env, 'Expected non-empty string')
