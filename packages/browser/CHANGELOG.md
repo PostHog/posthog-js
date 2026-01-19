@@ -1,5 +1,55 @@
 # posthog-js
 
+## 1.330.0
+
+### Minor Changes
+
+- [#2929](https://github.com/PostHog/posthog-js/pull/2929) [`6695383`](https://github.com/PostHog/posthog-js/commit/669538338970f4de22fe8c694db4cc880ba92ba9) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Add more context to a ticket when created
+  (2026-01-19)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.330.0
+
+## 1.329.0
+
+### Minor Changes
+
+- [#2927](https://github.com/PostHog/posthog-js/pull/2927) [`da78b8c`](https://github.com/PostHog/posthog-js/commit/da78b8c7e2fd7ecb9f16703a0e19582572b7ffbd) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Remove loading state in support product
+  (2026-01-19)
+
+### Patch Changes
+
+- [#2926](https://github.com/PostHog/posthog-js/pull/2926) [`3676972`](https://github.com/PostHog/posthog-js/commit/3676972e7ddd75496ac17d9528508d97269c4e8a) Thanks [@pawel-cebula](https://github.com/pawel-cebula)! - Fix TypeError when logging objects with null/undefined property values in flattenObject
+  (2026-01-19)
+- Updated dependencies []:
+    - @posthog/types@1.329.0
+
+## 1.328.0
+
+### Minor Changes
+
+- [#2925](https://github.com/PostHog/posthog-js/pull/2925) [`ce4566d`](https://github.com/PostHog/posthog-js/commit/ce4566d9107c7fd7d802274c1b8ccf477b8ccd0d) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Restore fetch wrappers to most recent working version
+  (2026-01-17)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.328.0
+
+## 1.327.0
+
+### Minor Changes
+
+- [#2923](https://github.com/PostHog/posthog-js/pull/2923) [`b8b7f90`](https://github.com/PostHog/posthog-js/commit/b8b7f9058cba58b2ff2eb76ab49776304dabef1c) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Fixed issue with fetch wrappers reconsuming request bodies and generating mismatched FormData boundaries
+  (2026-01-17)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.327.0
+
 ## 1.326.0
 
 ### Minor Changes

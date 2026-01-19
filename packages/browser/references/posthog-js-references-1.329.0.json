@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "1.330.0",
+    "version": "1.329.0",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -3210,48 +3210,6 @@
       "path": "lib/src/types.d.ts"
     },
     {
-      "id": "SendMessagePayload",
-      "name": "SendMessagePayload",
-      "properties": [
-        {
-          "description": "Distinct ID for linking to PostHog Person",
-          "type": "string",
-          "name": "distinct_id"
-        },
-        {
-          "description": "The message content to send",
-          "type": "string",
-          "name": "message"
-        },
-        {
-          "description": "Session context captured when creating a new ticket Stored in a JSONField for flexibility",
-          "type": "SessionContext",
-          "name": "session_context"
-        },
-        {
-          "description": "Session ID captured when creating a new ticket Stored as a separate queryable DB field",
-          "type": "string",
-          "name": "session_id"
-        },
-        {
-          "description": "Ticket ID to send the message to (null to create a new ticket)",
-          "type": "string | null",
-          "name": "ticket_id"
-        },
-        {
-          "description": "User identification traits",
-          "type": "{\n        name: string | null;\n        email: string | null;\n    }",
-          "name": "traits"
-        },
-        {
-          "description": "Widget session ID for access control",
-          "type": "string",
-          "name": "widget_session_id"
-        }
-      ],
-      "path": "lib/src/posthog-conversations-types.d.ts"
-    },
-    {
       "id": "SendMessageResponse",
       "name": "SendMessageResponse",
       "properties": [
@@ -3279,23 +3237,6 @@
           "description": "Number of unread messages from the team After customer sends a message, this is always 0",
           "type": "number",
           "name": "unread_count"
-        }
-      ],
-      "path": "lib/src/posthog-conversations-types.d.ts"
-    },
-    {
-      "id": "SessionContext",
-      "name": "SessionContext",
-      "properties": [
-        {
-          "description": "Page URL where the ticket was created",
-          "type": "string",
-          "name": "current_url"
-        },
-        {
-          "description": "URL to the session replay at the time the ticket was created Includes timestamp to jump to the exact moment",
-          "type": "string",
-          "name": "session_replay_url"
         }
       ],
       "path": "lib/src/posthog-conversations-types.d.ts"

@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.21.1",
+  "version": "5.21.2",
   "description": "PostHog Node.js integration",
   "repository": {
     "type": "git",
@@ -20,7 +20,7 @@
     "generate-references": "pnpm build && pnpm exec api-extractor run --config ./api-extractor.jsonc --local && node scripts/generate-docs.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.22"
   },
   "files": [
     "src",
