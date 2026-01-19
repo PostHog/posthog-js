@@ -569,10 +569,6 @@ export const knownUnsafeEditableEvent = [
 export type KnownUnsafeEditableEvent = (typeof knownUnsafeEditableEvent)[number]
 
 /**
- * Represents a prepared event message that can be modified or filtered by the `before_send` hook.
- * This is the shape of the event after all internal processing, right before it's queued for sending.
- */
-/**
  * Represents an event before it's sent to PostHog.
  * This is the interface exposed to the `before_send` hook, matching the web SDK's `CaptureResult`.
  */
