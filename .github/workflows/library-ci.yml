@@ -8,7 +8,7 @@ on:
 
 jobs:
   unit:
-    name: Unit tests (Node ${{ matrix.node-version }})
+    name: Unit tests
     runs-on: ubuntu-22.04
     strategy:
       matrix:
