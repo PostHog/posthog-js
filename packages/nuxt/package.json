@@ -9,7 +9,7 @@
   },
   "license": "MIT",
   "engines": {
-    "node": ">=22.22"
+    "node": "^20.20.0 || >=22.22.0"
   },
   "type": "module",
   "exports": {
