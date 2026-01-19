@@ -824,6 +824,17 @@ export abstract class PostHogCoreStateless {
   /***
    *** QUEUEING AND FLUSHING
    ***/
+
+  /**
+   * Hook that allows subclasses to transform or filter a message before it's queued.
+   * Return null to drop the message.
+   * @param message The prepared message
+   * @returns The transformed message, or null to drop it
+   */
+  protected processBeforeEnqueue(message: PostHogEventProperties): PostHogEventProperties | null {
+    return message
+  }
+
   protected enqueue(type: string, _message: any, options?: PostHogCaptureOptions): void {
     this.wrap(() => {
       if (this.optedOut) {
@@ -831,7 +842,13 @@ export abstract class PostHogCoreStateless {
         return
       }
 
-      const message = this.prepareMessage(type, _message, options)
+      let message: PostHogEventProperties | null = this.prepareMessage(type, _message, options)
+
+      // Allow subclasses to transform or filter the message
+      message = this.processBeforeEnqueue(message)
+      if (message === null) {
+        return
+      }
 
       const queue = this.getPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue) || []
 
@@ -903,7 +920,7 @@ export abstract class PostHogCoreStateless {
     }
   }
 
-  private prepareMessage(type: string, _message: any, options?: PostHogCaptureOptions): PostHogEventProperties {
+  protected prepareMessage(type: string, _message: any, options?: PostHogCaptureOptions): PostHogEventProperties {
     const message = {
       ..._message,
       type: type,

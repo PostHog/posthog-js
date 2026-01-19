@@ -26,17 +26,16 @@ import {
   normalizeFlagsResponse,
   updateFlagValue,
 } from './featureFlagUtils'
-import { Compression, PostHogPersistedProperty } from './types'
+import { Compression, PostHogPersistedProperty, PostHogQueueItem } from './types'
 import { maybeAdd, PostHogCoreStateless, QuotaLimitedFeature } from './posthog-core-stateless'
 import { uuidv7 } from './vendor/uuidv7'
-import { isPlainError } from './utils'
+import { isPlainError, safeSetTimeout } from './utils'
 
 export abstract class PostHogCore extends PostHogCoreStateless {
   // options
   private sendFeatureFlagEvent: boolean
   private flagCallReported: { [key: string]: boolean } = {}
   private _beforeSend?: BeforeSendFn | BeforeSendFn[]
-  private _disableGeoip: boolean
 
   // internal
   protected _flagsResponsePromise?: Promise<PostHogFlagsResponse | undefined> // TODO: come back to this, fix typing
@@ -56,7 +55,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     this.sendFeatureFlagEvent = options?.sendFeatureFlagEvent ?? true
     this._sessionExpirationTimeSeconds = options?.sessionExpirationTimeSeconds ?? 1800 // 30 minutes
     this._beforeSend = options?.before_send
-    this._disableGeoip = disableGeoipOption
   }
 
   protected setupBootstrap(options?: Partial<PostHogCoreOptions>): void {
@@ -306,36 +304,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
       const allProperties = this.enrichProperties(properties)
 
-      // Set $geoip_disable before before_send so users can modify it if needed
-      const shouldDisableGeoip = options?.disableGeoip ?? this._disableGeoip
-      if (shouldDisableGeoip) {
-        allProperties.$geoip_disable = true
-      }
-
-      // Run before_send hook if configured
-      const captureEvent = this._runBeforeSend({
-        event,
-        distinctId,
-        properties: allProperties,
-        timestamp: options?.timestamp,
-        uuid: options?.uuid,
-      })
-
-      // If before_send returns null, drop the event
-      if (!captureEvent) {
-        return
-      }
-
-      // Respect the $geoip_disable value from before_send (user may have modified or removed it)
-      // We explicitly pass disableGeoip to prevent prepareMessage from re-adding it based on default settings
-      const finalDisableGeoip = captureEvent.properties?.$geoip_disable === true
-
-      super.captureStateless(captureEvent.distinctId, captureEvent.event, captureEvent.properties, {
-        ...options,
-        timestamp: captureEvent.timestamp,
-        uuid: captureEvent.uuid,
-        disableGeoip: finalDisableGeoip,
-      })
+      super.captureStateless(distinctId, event, allProperties, options)
     })
   }
 
@@ -987,6 +956,22 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   /**
+   * Override processBeforeEnqueue to run before_send hooks.
+   * This runs after prepareMessage, giving users full control over the final event.
+   */
+  protected processBeforeEnqueue(message: PostHogEventProperties): PostHogEventProperties | null {
+    if (!this._beforeSend) {
+      return message
+    }
+
+    // Cast to CaptureEvent for the before_send hooks
+    const captureEvent = message as CaptureEvent
+    const result = this._runBeforeSend(captureEvent)
+
+    return result as PostHogEventProperties | null
+  }
+
+  /**
    * Runs the before_send hook(s) on the given capture event.
    * If any hook returns null, the event is dropped.
    *
@@ -994,11 +979,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    * @returns The processed event, or null if the event should be dropped
    */
   private _runBeforeSend(captureEvent: CaptureEvent): CaptureEvent | null {
-    if (!this._beforeSend) {
-      return captureEvent
-    }
-
-    const fns = Array.isArray(this._beforeSend) ? this._beforeSend : [this._beforeSend]
+    const fns = Array.isArray(this._beforeSend) ? this._beforeSend : [this._beforeSend!]
     let result: CaptureEvent | null = captureEvent
 
     for (const fn of fns) {

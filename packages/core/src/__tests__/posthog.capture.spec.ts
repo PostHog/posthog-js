@@ -105,7 +105,7 @@ describe('PostHog Core', () => {
       expect(beforeSend).toHaveBeenCalledWith(
         expect.objectContaining({
           event: 'custom-event',
-          distinctId: expect.any(String),
+          distinct_id: expect.any(String),
           properties: expect.objectContaining({ foo: 'bar' }),
         })
       )
@@ -222,6 +222,7 @@ describe('PostHog Core', () => {
       posthog.capture('custom-event', {}, { timestamp: customDate, uuid: customUuid })
       await waitForPromises()
 
+      // timestamp is a Date object when provided via options
       expect(beforeSend).toHaveBeenCalledWith(
         expect.objectContaining({
           event: 'custom-event',
@@ -232,13 +233,12 @@ describe('PostHog Core', () => {
     })
 
     it('should allow modifying timestamp and uuid in before_send', async () => {
-      const modifiedDate = new Date('2020-01-01')
       const modifiedUuid = 'modified-uuid-123'
       const beforeSend = jest.fn((event: CaptureEvent | null) => {
         if (event) {
           return {
             ...event,
-            timestamp: modifiedDate,
+            timestamp: '2020-01-01T00:00:00.000Z',
             uuid: modifiedUuid,
           }
         }

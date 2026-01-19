@@ -569,20 +569,28 @@ export const knownUnsafeEditableEvent = [
 export type KnownUnsafeEditableEvent = (typeof knownUnsafeEditableEvent)[number]
 
 /**
- * Represents an event that can be modified or filtered by the `before_send` hook.
- * This is the shape of the event passed to `before_send` functions.
+ * Represents a prepared event message that can be modified or filtered by the `before_send` hook.
+ * This is the shape of the event after all internal processing, right before it's queued for sending.
  */
 export type CaptureEvent = {
   /** The name of the event */
   event: string
-  /** The distinct ID of the user */
-  distinctId: string
+  /** The distinct ID of the user (note: uses distinct_id after prepareMessage) */
+  distinct_id: string
   /** Properties associated with the event */
   properties?: PostHogEventProperties
-  /** Optional timestamp override */
-  timestamp?: Date
-  /** Optional UUID override */
+  /** The type of capture (e.g., 'capture', 'identify', 'alias') */
+  type?: string
+  /** The library identifier */
+  library?: string
+  /** The library version */
+  library_version?: string
+  /** Timestamp in ISO string format */
+  timestamp?: string
+  /** UUID for the event */
   uuid?: string
+  /** Allow additional properties */
+  [key: string]: JsonType | undefined
 }
 
 /**
