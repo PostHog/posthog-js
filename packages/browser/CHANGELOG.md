@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.330.0
+
+### Minor Changes
+
+- [#2929](https://github.com/PostHog/posthog-js/pull/2929) [`6695383`](https://github.com/PostHog/posthog-js/commit/669538338970f4de22fe8c694db4cc880ba92ba9) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Add more context to a ticket when created
+  (2026-01-19)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.330.0
+
 ## 1.329.0
 
 ### Minor Changes
