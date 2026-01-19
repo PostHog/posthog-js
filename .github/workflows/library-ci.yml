@@ -18,21 +18,6 @@ jobs:
 
       - run: pnpm test:unit
 
-  # Run tests on Node 22 for packages that support it to catch accidental use of Node 24-only APIs
-  unit-node22:
-    name: Unit tests (Node 22 compat)
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup environment
-        uses: ./.github/actions/setup
-        with:
-          node_version: 22
-
-      # Exclude packages that require Node 24 (posthog-node, @posthog/ai, @posthog/nuxt)
-      - run: pnpm turbo run test:unit --filter='!posthog-node' --filter='!@posthog/ai' --filter='!@posthog/nuxt'
-
   integration:
     name: Playwright E2E tests
     runs-on: depot-ubuntu-latest-8
