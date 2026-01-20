@@ -1,5 +1,17 @@
 # posthog-react-native
 
+## 4.23.0
+
+### Minor Changes
+
+- [#2882](https://github.com/PostHog/posthog-js/pull/2882) [`8a5a3d5`](https://github.com/PostHog/posthog-js/commit/8a5a3d5693facda62b90b66dead338f7dca19705) Thanks [@adboio](https://github.com/adboio)! - add support for question prefill in popover surveys, add useThumbSurvey hook
+  (2026-01-20)
+
+### Patch Changes
+
+- Updated dependencies [[`8a5a3d5`](https://github.com/PostHog/posthog-js/commit/8a5a3d5693facda62b90b66dead338f7dca19705)]:
+  - @posthog/core@1.13.0
+
 ## 4.22.0
 
 ### Minor Changes
