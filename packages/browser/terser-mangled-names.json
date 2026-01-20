@@ -150,6 +150,7 @@
         "_formatTime",
         "_fullSnapshotIntervalMillis",
         "_fullSnapshotTimer",
+        "_fullSnapshotTimestamps",
         "_gatherRRWebPlugins",
         "_get",
         "_getActionMatcher",
