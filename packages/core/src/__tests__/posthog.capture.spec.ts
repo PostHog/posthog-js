@@ -266,5 +266,80 @@ describe('PostHog Core', () => {
         ],
       })
     })
+
+    it('should expose $set and $set_once from identify events', async () => {
+      const beforeSend = jest.fn((event: CaptureEvent | null) => event)
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        before_send: beforeSend,
+      })
+
+      posthog.identify('user-123', { $set: { name: 'John' }, $set_once: { created_at: '2023-01-01' } })
+      await waitForPromises()
+
+      expect(beforeSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: '$identify',
+          $set: expect.objectContaining({ name: 'John' }),
+          $set_once: expect.objectContaining({ created_at: '2023-01-01' }),
+        })
+      )
+    })
+
+    it('should allow modifying $set in before_send for identify events', async () => {
+      const beforeSend = jest.fn((event: CaptureEvent | null) => {
+        if (event) {
+          return {
+            ...event,
+            $set: { ...event.$set, modified: true },
+          }
+        }
+        return event
+      })
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        before_send: beforeSend,
+      })
+
+      posthog.identify('user-123', { $set: { name: 'John' } })
+      await waitForPromises()
+
+      // Find the batch call (identify may trigger feature flag reload)
+      const batchCall = mocks.fetch.mock.calls.find((call) => call[0].includes('/batch'))
+      expect(batchCall).toBeDefined()
+      const body = parseBody(batchCall!)
+
+      expect(body.batch[0].properties.$set).toMatchObject({
+        name: 'John',
+        modified: true,
+      })
+    })
+
+    it('should allow removing $set_once in before_send', async () => {
+      const beforeSend = jest.fn((event: CaptureEvent | null) => {
+        if (event) {
+          return {
+            ...event,
+            $set_once: undefined,
+          }
+        }
+        return event
+      })
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        before_send: beforeSend,
+      })
+
+      posthog.identify('user-123', { $set: { name: 'John' }, $set_once: { created_at: '2023-01-01' } })
+      await waitForPromises()
+
+      // Find the batch call (identify may trigger feature flag reload)
+      const batchCall = mocks.fetch.mock.calls.find((call) => call[0].includes('/batch'))
+      expect(batchCall).toBeDefined()
+      const body = parseBody(batchCall!)
+
+      expect(body.batch[0].properties.$set).toBeDefined()
+      expect(body.batch[0].properties.$set_once).toBeUndefined()
+    })
   })
 })
