@@ -888,9 +888,17 @@ export abstract class PostHogCoreStateless {
       return
     }
 
+    let message: PostHogEventProperties | null = this.prepareMessage(type, _message, options)
+
+    // Allow subclasses to transform or filter the message (e.g., before_send hook)
+    message = this.processBeforeEnqueue(message)
+    if (message === null) {
+      return
+    }
+
     const data: Record<string, any> = {
       api_key: this.apiKey,
-      batch: [this.prepareMessage(type, _message, options)],
+      batch: [message],
       sent_at: currentISOTime(),
     }
 
