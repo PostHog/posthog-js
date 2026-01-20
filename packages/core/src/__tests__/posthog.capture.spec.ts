@@ -44,6 +44,7 @@ describe('PostHog Core', () => {
               $lib_version: '2.0.0-alpha',
               $session_id: expect.any(String),
               $process_person_profile: false, // Default is 'identified_only' and user is not identified
+              $is_identified: false,
             },
             timestamp: '2022-01-01T00:00:00.000Z',
             uuid: expect.any(String),

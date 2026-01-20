@@ -320,6 +320,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       // Add $process_person_profile flag to event properties
       const hasPersonProcessing = this._hasPersonProcessing()
       allProperties['$process_person_profile'] = hasPersonProcessing
+      allProperties['$is_identified'] = this._isIdentified()
 
       // If the event has person processing, ensure that all future events will too
       if (hasPersonProcessing) {
