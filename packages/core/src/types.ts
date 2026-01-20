@@ -71,6 +71,12 @@ export type PostHogCoreOptions = {
    * @deprecated Use evaluationContexts instead. This property will be removed in a future version.
    */
   evaluationEnvironments?: readonly string[]
+  /**
+   * Allows modification or dropping of events before they're sent to PostHog.
+   * If an array is provided, the functions are run in order.
+   * If a function returns null, the event will be dropped.
+   */
+  before_send?: BeforeSendFn | BeforeSendFn[]
 }
 
 export enum PostHogPersistedProperty {
@@ -616,3 +622,28 @@ export const knownUnsafeEditableEvent = [
  * Some features of PostHog rely on receiving 100% of these events
  */
 export type KnownUnsafeEditableEvent = (typeof knownUnsafeEditableEvent)[number]
+
+/**
+ * Represents an event before it's sent to PostHog.
+ * This is the interface exposed to the `before_send` hook, matching the web SDK's `CaptureResult`.
+ */
+export type CaptureEvent = {
+  /** UUID for the event (optional to allow compatibility with Node SDK's EventMessage) */
+  uuid?: string
+  /** The name of the event */
+  event: string
+  /** Properties associated with the event (optional to allow compatibility with Node SDK's EventMessage) */
+  properties?: PostHogEventProperties
+  /** Properties to set on the person (overrides existing values) */
+  $set?: PostHogEventProperties
+  /** Properties to set on the person only once (does not override existing values) */
+  $set_once?: PostHogEventProperties
+  /** Timestamp for the event */
+  timestamp?: Date
+}
+
+/**
+ * Function type for the `before_send` hook.
+ * Receives an event and can return a modified event or null to drop the event.
+ */
+export type BeforeSendFn = (event: CaptureEvent | null) => CaptureEvent | null

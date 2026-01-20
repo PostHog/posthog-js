@@ -16,6 +16,8 @@ import type {
   Survey,
   SurveyResponse,
   PostHogGroupProperties,
+  BeforeSendFn,
+  CaptureEvent,
 } from './types'
 import {
   createFlagsResponseFromFlagsAndPayloads,
@@ -34,6 +36,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   // options
   private sendFeatureFlagEvent: boolean
   private flagCallReported: { [key: string]: boolean } = {}
+  private _beforeSend?: BeforeSendFn | BeforeSendFn[]
 
   // internal
   protected _flagsResponsePromise?: Promise<PostHogFeatureFlagsResponse | undefined>
@@ -52,6 +55,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
     this.sendFeatureFlagEvent = options?.sendFeatureFlagEvent ?? true
     this._sessionExpirationTimeSeconds = options?.sessionExpirationTimeSeconds ?? 1800 // 30 minutes
+    this._beforeSend = options?.before_send
   }
 
   protected setupBootstrap(options?: Partial<PostHogCoreOptions>): void {
@@ -995,5 +999,91 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       $ai_metric_value: String(metricValue),
       $ai_trace_id: String(traceId),
     })
+  }
+
+  /**
+   * Override processBeforeEnqueue to run before_send hooks.
+   * This runs after prepareMessage, giving users full control over the final event.
+   *
+   * The internal message contains many fields (event, distinct_id, properties, type, library,
+   * library_version, timestamp, uuid). CaptureEvent exposes a subset matching the web SDK's
+   * CaptureResult: uuid, event, properties, $set, $set_once, timestamp.
+   * Note: $set/$set_once are extracted from properties.$set and properties.$set_once.
+   */
+  protected processBeforeEnqueue(message: PostHogEventProperties): PostHogEventProperties | null {
+    if (!this._beforeSend) {
+      return message
+    }
+
+    // Convert internal message format to CaptureEvent (user-facing interface matching web SDK's CaptureResult)
+    const timestamp = message.timestamp
+    const props = (message.properties || {}) as PostHogEventProperties
+    const captureEvent: CaptureEvent = {
+      uuid: message.uuid as string,
+      event: message.event as string,
+      properties: props,
+      $set: props.$set as PostHogEventProperties | undefined,
+      $set_once: props.$set_once as PostHogEventProperties | undefined,
+      // Convert timestamp to Date if it's a string (from currentISOTime())
+      timestamp: typeof timestamp === 'string' ? new Date(timestamp) : (timestamp as unknown as Date | undefined),
+    }
+
+    const result = this._runBeforeSend(captureEvent)
+
+    if (!result) {
+      return null
+    }
+
+    // Apply modifications from CaptureEvent back to internal message
+    // Put $set/$set_once back into properties where they belong
+    const resultProps = { ...(result.properties ?? props) } as PostHogEventProperties
+    if (result.$set !== undefined) {
+      resultProps.$set = result.$set as JsonType
+    } else {
+      delete resultProps.$set
+    }
+    if (result.$set_once !== undefined) {
+      resultProps.$set_once = result.$set_once as JsonType
+    } else {
+      delete resultProps.$set_once
+    }
+
+    return {
+      ...message,
+      uuid: result.uuid ?? message.uuid,
+      event: result.event,
+      properties: resultProps,
+      timestamp: result.timestamp as unknown as JsonType,
+    }
+  }
+
+  /**
+   * Runs the before_send hook(s) on the given capture event.
+   * If any hook returns null, the event is dropped.
+   *
+   * @param captureEvent The event to process
+   * @returns The processed event, or null if the event should be dropped
+   */
+  private _runBeforeSend(captureEvent: CaptureEvent): CaptureEvent | null {
+    const beforeSend = this._beforeSend
+    if (!beforeSend) {
+      return captureEvent
+    }
+    const fns = Array.isArray(beforeSend) ? beforeSend : [beforeSend]
+    let result: CaptureEvent | null = captureEvent
+
+    for (const fn of fns) {
+      try {
+        result = fn(result)
+        if (!result) {
+          this._logger.info(`Event '${captureEvent.event}' was rejected in before_send function`)
+          return null
+        }
+      } catch (e) {
+        this._logger.error(`Error in before_send function for event '${captureEvent.event}':`, e)
+      }
+    }
+
+    return result
   }
 }
