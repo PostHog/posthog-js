@@ -83,8 +83,27 @@ describe('fetch wrapper', () => {
                     return fd
                 },
             ],
+            ['Uint8Array', () => new Uint8Array([1, 2, 3])],
+            ['File', () => new File(['content'], 'test.txt', { type: 'text/plain' })],
+            ['empty FormData', () => new FormData()],
+            [
+                'FormData with multiple files',
+                () => {
+                    const fd = new FormData()
+                    fd.append('file1', new Blob(['content1']), 'file1.txt')
+                    fd.append('file2', new Blob(['content2']), 'file2.txt')
+                    return fd
+                },
+            ],
         ])('handles %s body', async (_name, createBody) => {
             await expectNotToThrow(wrappedFetch('https://example.com/api', { method: 'POST', body: createBody() }))
+        })
+
+        it.each([
+            ['null', null],
+            ['undefined', undefined],
+        ])('handles %s body', async (_name, body) => {
+            await expectNotToThrow(wrappedFetch('https://example.com/api', { method: 'POST', body }))
         })
 
         it('handles custom headers', async () => {
@@ -119,6 +138,82 @@ describe('fetch wrapper', () => {
             ['redirect', { redirect: 'manual' as const }],
         ])('handles %s option', async (_name, options) => {
             await expectNotToThrow(wrappedFetch('https://example.com/api', options))
+        })
+    })
+
+    describe('response availability', () => {
+        it('caller can read response body after wrapper processes it', async () => {
+            const { wrappedFetch, cleanup } = setupWrappedFetch(async () => {
+                return new Response(JSON.stringify({ data: 'test' }), {
+                    headers: { 'Content-Type': 'application/json' },
+                })
+            })
+
+            const response = await wrappedFetch('https://example.com/api')
+            const body = await response.json()
+            cleanup()
+
+            expect(body).toEqual({ data: 'test' })
+        })
+
+        it('caller can clone response after wrapper processes it', async () => {
+            const { wrappedFetch, cleanup } = setupWrappedFetch(async () => {
+                return new Response('test body')
+            })
+
+            const response = await wrappedFetch('https://example.com/api')
+            const clone = response.clone()
+            cleanup()
+
+            expect(await response.text()).toBe('test body')
+            expect(await clone.text()).toBe('test body')
+        })
+    })
+
+    describe('downstream wrapper compatibility', () => {
+        it('downstream receives Request object as first argument', async () => {
+            let receivedInput: RequestInfo | URL | undefined
+            const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
+                receivedInput = input
+                return new Response('ok')
+            })
+
+            await wrappedFetch('https://example.com/api', { method: 'POST' })
+            cleanup()
+
+            expect(receivedInput).toBeInstanceOf(Request)
+        })
+
+        it('downstream receives undefined as second argument (init not passed)', async () => {
+            let receivedInit: RequestInit | undefined
+            const { wrappedFetch, cleanup } = setupWrappedFetch(
+                async (_input: RequestInfo | URL, init?: RequestInit) => {
+                    receivedInit = init
+                    return new Response('ok')
+                }
+            )
+
+            await wrappedFetch('https://example.com/api', { method: 'POST', body: 'test' })
+            cleanup()
+
+            expect(receivedInit).toBeUndefined()
+        })
+
+        it.each([
+            ['method', { method: 'PUT' } as RequestInit, (req: Request) => req.method, 'PUT'],
+            ['headers', { headers: { 'X-Custom': 'value' } }, (req: Request) => req.headers.get('X-Custom'), 'value'],
+            ['url', {}, (req: Request) => req.url, 'https://example.com/api'],
+        ])('downstream can read %s from Request object', async (_name, init, getter, expected) => {
+            let captured: string | null | undefined
+            const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
+                captured = getter(input as Request)
+                return new Response('ok')
+            })
+
+            await wrappedFetch('https://example.com/api', init)
+            cleanup()
+
+            expect(captured).toBe(expected)
         })
     })
 
