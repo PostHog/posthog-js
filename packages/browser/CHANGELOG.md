@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.331.2
+
+### Patch Changes
+
+- [#2939](https://github.com/PostHog/posthog-js/pull/2939) [`6442f5d`](https://github.com/PostHog/posthog-js/commit/6442f5d6cd8ae097c07584f102bc6001948dce59) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: Rate limiting configuration changes are respected
+  (2026-01-20)
+- Updated dependencies []:
+    - @posthog/types@1.331.2
+
 ## 1.331.1
 
 ### Patch Changes
