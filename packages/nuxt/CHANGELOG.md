@@ -1,5 +1,12 @@
 # @posthog/nuxt
 
+## 1.5.4
+
+### Patch Changes
+
+- Updated dependencies [[`cbab5d2`](https://github.com/PostHog/posthog-js/commit/cbab5d2585b284b1adace8307a8acdb080501227), [`d9eaf41`](https://github.com/PostHog/posthog-js/commit/d9eaf413bea479af86d6418f45a58ee1df2a8fe0)]:
+  - posthog-js@1.331.3
+
 ## 1.5.3
 
 ### Patch Changes

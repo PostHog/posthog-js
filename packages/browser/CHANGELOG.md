@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.331.3
+
+### Patch Changes
+
+- [#2916](https://github.com/PostHog/posthog-js/pull/2916) [`cbab5d2`](https://github.com/PostHog/posthog-js/commit/cbab5d2585b284b1adace8307a8acdb080501227) Thanks [@adboio](https://github.com/adboio)! - fix product tour tooltips on mobile
+  (2026-01-20)
+
+- [#2933](https://github.com/PostHog/posthog-js/pull/2933) [`d9eaf41`](https://github.com/PostHog/posthog-js/commit/d9eaf413bea479af86d6418f45a58ee1df2a8fe0) Thanks [@adboio](https://github.com/adboio)! - add url params to posthog logo in surveys footer
+  (2026-01-20)
+- Updated dependencies []:
+    - @posthog/types@1.331.3
+
 ## 1.331.2
 
 ### Patch Changes
