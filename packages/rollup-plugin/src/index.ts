@@ -110,6 +110,8 @@ function resolveOptions(userOptions: PostHogRollupPluginOptions): ResolvedPostHo
             enabled: userSourcemaps.enabled ?? true,
             deleteAfterUpload: userSourcemaps.deleteAfterUpload ?? true,
             batchSize: userSourcemaps.batchSize,
+            project: userSourcemaps.project,
+            version: userSourcemaps.version,
         },
     }
     return posthogOptions
