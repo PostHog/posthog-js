@@ -95,15 +95,10 @@ describe('fetch wrapper', () => {
                     return fd
                 },
             ],
+            ['null', () => null],
+            ['undefined', () => undefined],
         ])('handles %s body', async (_name, createBody) => {
             await expectNotToThrow(wrappedFetch('https://example.com/api', { method: 'POST', body: createBody() }))
-        })
-
-        it.each([
-            ['null', null],
-            ['undefined', undefined],
-        ])('handles %s body', async (_name, body) => {
-            await expectNotToThrow(wrappedFetch('https://example.com/api', { method: 'POST', body }))
         })
 
         it('handles custom headers', async () => {
