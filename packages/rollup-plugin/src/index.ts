@@ -1,6 +1,6 @@
-import type { Plugin, OutputOptions, OutputAsset, OutputChunk } from 'rollup'
-import { spawnLocal, resolveBinaryPath, LogLevel } from '@posthog/core/process'
+import { LogLevel, resolveBinaryPath, spawnLocal } from '@posthog/core/process'
 import path from 'node:path'
+import type { OutputAsset, OutputChunk, OutputOptions, Plugin } from 'rollup'
 
 export interface PostHogRollupPluginOptions {
     personalApiKey: string
@@ -10,6 +10,7 @@ export interface PostHogRollupPluginOptions {
     logLevel?: LogLevel
     sourcemaps?: {
         enabled?: boolean
+        upload?: boolean
         project?: string
         version?: string
         deleteAfterUpload?: boolean
@@ -25,11 +26,19 @@ interface ResolvedPostHogRollupPluginOptions {
     logLevel: LogLevel
     sourcemaps: {
         enabled: boolean
+        upload: boolean
         project?: string
         version?: string
-        deleteAfterUpload: boolean
-        batchSize?: number
-    }
+    } & (
+        | {
+              upload: true
+              deleteAfterUpload: boolean
+              batchSize?: number
+          }
+        | {
+              upload: false
+          }
+    )
 }
 
 export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOptions) {
@@ -47,7 +56,15 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
         },
         async writeBundle(options: OutputOptions, bundle: { [fileName: string]: OutputAsset | OutputChunk }) {
             if (!posthogOptions.sourcemaps.enabled) return
-            const args = ['sourcemap', 'process']
+            const args = []
+            if (posthogOptions.sourcemaps.upload) {
+                // process injects and uploads in one command
+                args.push('sourcemap', 'process')
+            } else {
+                // only injects the sourcemaps
+                args.push('sourcemap', 'inject')
+            }
+
             const cliPath = posthogOptions.cliBinaryPath
             if (options.dir) {
                 for (const fileName in bundle) {
@@ -67,11 +84,13 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
             if (posthogOptions.sourcemaps.version) {
                 args.push('--version', posthogOptions.sourcemaps.version)
             }
-            if (posthogOptions.sourcemaps.deleteAfterUpload) {
-                args.push('--delete-after')
-            }
-            if (posthogOptions.sourcemaps.batchSize) {
-                args.push('--batch-size', posthogOptions.sourcemaps.batchSize.toString())
+            if (posthogOptions.sourcemaps.upload) {
+                if (posthogOptions.sourcemaps.deleteAfterUpload) {
+                    args.push('--delete-after')
+                }
+                if (posthogOptions.sourcemaps.batchSize) {
+                    args.push('--batch-size', posthogOptions.sourcemaps.batchSize.toString())
+                }
             }
             await spawnLocal(cliPath, args, {
                 env: {
@@ -95,6 +114,18 @@ function resolveOptions(userOptions: PostHogRollupPluginOptions): ResolvedPostHo
         throw new Error('personalApiKey is required')
     }
     const userSourcemaps = userOptions.sourcemaps ?? {}
+
+    const resolvedSourcemaps = {
+        enabled: userSourcemaps.enabled ?? true,
+        upload: userSourcemaps.upload ?? true,
+        project: userSourcemaps.project,
+        version: userSourcemaps.version,
+    } as ResolvedPostHogRollupPluginOptions['sourcemaps']
+    if (resolvedSourcemaps.upload) {
+        resolvedSourcemaps.deleteAfterUpload = userSourcemaps.deleteAfterUpload ?? true
+        resolvedSourcemaps.batchSize = userSourcemaps.batchSize
+    }
+
     const posthogOptions: ResolvedPostHogRollupPluginOptions = {
         host: userOptions.host || 'https://us.i.posthog.com',
         personalApiKey: userOptions.personalApiKey,
@@ -106,11 +137,7 @@ function resolveOptions(userOptions: PostHogRollupPluginOptions): ResolvedPostHo
                 cwd: process.cwd(),
             }),
         logLevel: userOptions.logLevel ?? 'info',
-        sourcemaps: {
-            enabled: userSourcemaps.enabled ?? true,
-            deleteAfterUpload: userSourcemaps.deleteAfterUpload ?? true,
-            batchSize: userSourcemaps.batchSize,
-        },
+        sourcemaps: resolvedSourcemaps,
     }
     return posthogOptions
 }
