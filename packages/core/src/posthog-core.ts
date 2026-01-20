@@ -26,10 +26,10 @@ import {
   normalizeFlagsResponse,
   updateFlagValue,
 } from './featureFlagUtils'
-import { Compression, PostHogPersistedProperty, PostHogQueueItem } from './types'
+import { Compression, PostHogPersistedProperty } from './types'
 import { maybeAdd, PostHogCoreStateless, QuotaLimitedFeature } from './posthog-core-stateless'
 import { uuidv7 } from './vendor/uuidv7'
-import { isPlainError, safeSetTimeout } from './utils'
+import { isPlainError } from './utils'
 
 export abstract class PostHogCore extends PostHogCoreStateless {
   // options
@@ -1022,10 +1022,14 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     let result: CaptureEvent | null = captureEvent
 
     for (const fn of fns) {
-      result = fn(result)
-      if (!result) {
-        this._logger.info(`Event '${captureEvent.event}' was rejected in before_send function`)
-        return null
+      try {
+        result = fn(result)
+        if (!result) {
+          this._logger.info(`Event '${captureEvent.event}' was rejected in before_send function`)
+          return null
+        }
+      } catch (e) {
+        this._logger.error(`Error in before_send function for event '${captureEvent.event}':`, e)
       }
     }
 
