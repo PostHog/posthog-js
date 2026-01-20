@@ -41,7 +41,7 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
             handler(options) {
                 return {
                     ...options,
-                    sourcemap: true,
+                    sourcemap: posthogOptions.sourcemaps.deleteAfterUpload ? 'hidden' : true,
                 }
             },
         },
