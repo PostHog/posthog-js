@@ -1019,7 +1019,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    * @returns The processed event, or null if the event should be dropped
    */
   private _runBeforeSend(captureEvent: CaptureEvent): CaptureEvent | null {
-    const fns = Array.isArray(this._beforeSend) ? this._beforeSend : [this._beforeSend!]
+    const beforeSend = this._beforeSend
+    if (!beforeSend) {
+      return captureEvent
+    }
+    const fns = Array.isArray(beforeSend) ? beforeSend : [beforeSend]
     let result: CaptureEvent | null = captureEvent
 
     for (const fn of fns) {
