@@ -145,18 +145,6 @@ export const getStyles = (primaryColor: string) => ({
         marginTop: '4px',
         opacity: 0.8,
     },
-    typing: {
-        display: 'flex',
-        gap: '4px',
-        padding: '10px 14px',
-        alignItems: 'center',
-    },
-    typingDot: {
-        width: '6px',
-        height: '6px',
-        borderRadius: '50%',
-        background: '#939393',
-    },
     error: {
         padding: '10px 16px',
         background: '#fee2e2',

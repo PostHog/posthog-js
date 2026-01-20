@@ -6,6 +6,8 @@ import {
     ConversationsWidgetState,
     UserProvidedTraits,
     SendMessageResponse,
+    SendMessagePayload,
+    SessionContext,
     GetMessagesResponse,
     MarkAsReadResponse,
     GetTicketsOptions,
@@ -146,7 +148,44 @@ export class ConversationsManager implements ConversationsManagerInterface {
             const name = userTraits?.name || personProperties.$name || personProperties.name || null
             const email = userTraits?.email || personProperties.$email || personProperties.email || null
 
-            const payload = {
+            // Capture session context when creating a new ticket
+            let sessionId: string | undefined
+            let sessionContext: SessionContext | undefined
+
+            if (isNewTicket) {
+                try {
+                    // Capture session ID
+                    const capturedSessionId = this._posthog.get_session_id()
+                    if (capturedSessionId) {
+                        sessionId = capturedSessionId
+                    }
+
+                    // Capture session replay URL with timestamp
+                    const replayUrl = this._posthog.get_session_replay_url({
+                        withTimestamp: true,
+                        timestampLookBack: 30,
+                    })
+
+                    // Capture current URL
+                    const currentUrl = window?.location?.href
+
+                    // Only include session_context if we have at least one value
+                    if (replayUrl || currentUrl) {
+                        sessionContext = {}
+                        if (replayUrl) {
+                            sessionContext.session_replay_url = replayUrl
+                        }
+                        if (currentUrl) {
+                            sessionContext.current_url = currentUrl
+                        }
+                    }
+                } catch (error) {
+                    // Log error but don't fail message sending
+                    logger.warn('Failed to capture session context', error)
+                }
+            }
+
+            const payload: Partial<SendMessagePayload> = {
                 widget_session_id: this._widgetSessionId,
                 // distinct_id is only used for Person linking, not access control
                 distinct_id: distinctId,
@@ -156,6 +195,16 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     email,
                 },
                 ticket_id: ticketId,
+            }
+
+            // Add session fields only when creating a new ticket
+            if (isNewTicket) {
+                if (sessionId) {
+                    payload.session_id = sessionId
+                }
+                if (sessionContext) {
+                    payload.session_context = sessionContext
+                }
             }
 
             this._posthog._send_request({

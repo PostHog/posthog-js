@@ -1,5 +1,53 @@
 # posthog-react-native
 
+## 4.21.0
+
+### Minor Changes
+
+- [#2900](https://github.com/PostHog/posthog-js/pull/2900) [`23770e9`](https://github.com/PostHog/posthog-js/commit/23770e9e2eed1aca5c2bc7a34a6d64dc115b0d11) Thanks [@dmarticus](https://github.com/dmarticus)! - Renamed `evaluationEnvironments` to `evaluationContexts` for clearer semantics. The term "contexts" better reflects that this feature is for specifying evaluation contexts (e.g., "web", "mobile", "checkout") rather than deployment environments (e.g., "staging", "production").
+
+  ### Deprecated
+  - `posthog.init` option `evaluationEnvironments` is now deprecated in favor of `evaluationContexts`. The old property will continue to work and will log a deprecation warning. It will be removed in a future major version.
+
+  ### Migration Guide
+
+  ````javascript
+  // Before
+  posthog.init('<ph_project_api_key>', {
+      evaluationEnvironments: ['production', 'web', 'checkout'],
+  })
+
+  // After
+  posthog.init('<ph_project_api_key>', {
+      evaluationContexts: ['production', 'web', 'checkout'],
+  })
+  ``` (2026-01-19)
+  ````
+
+### Patch Changes
+
+- Updated dependencies [[`23770e9`](https://github.com/PostHog/posthog-js/commit/23770e9e2eed1aca5c2bc7a34a6d64dc115b0d11)]:
+  - @posthog/core@1.11.0
+
+## 4.20.0
+
+### Minor Changes
+
+- [#2924](https://github.com/PostHog/posthog-js/pull/2924) [`298ac60`](https://github.com/PostHog/posthog-js/commit/298ac609d233e04a7a7423445b780ec8b7450245) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - allow disabling the plugin programmatically
+  (2026-01-19)
+
+## 4.19.0
+
+### Minor Changes
+
+- [#2881](https://github.com/PostHog/posthog-js/pull/2881) [`d37e570`](https://github.com/PostHog/posthog-js/commit/d37e5709863e869825df57d0854588140c4294b2) Thanks [@adboio](https://github.com/adboio)! - add support for thumbs up/down survey rating scale
+  (2026-01-16)
+
+### Patch Changes
+
+- Updated dependencies [[`d37e570`](https://github.com/PostHog/posthog-js/commit/d37e5709863e869825df57d0854588140c4294b2)]:
+  - @posthog/core@1.10.0
+
 ## 4.18.0
 
 ### Minor Changes

@@ -1,5 +1,64 @@
 # @posthog/nuxt
 
+## 1.5.1
+
+### Patch Changes
+
+- Updated dependencies [[`23770e9`](https://github.com/PostHog/posthog-js/commit/23770e9e2eed1aca5c2bc7a34a6d64dc115b0d11)]:
+  - @posthog/core@1.11.0
+  - posthog-node@5.23.0
+  - posthog-js@1.331.0
+
+## 1.5.0
+
+### Minor Changes
+
+- [#2930](https://github.com/PostHog/posthog-js/pull/2930) [`c9b773a`](https://github.com/PostHog/posthog-js/commit/c9b773aefd25fcc81a60dff02348e8e724b87565) Thanks [@marandaneto](https://github.com/marandaneto)! - chore: Bump node min. ^20.20.0 || >=22.22.0 due to https://nodejs.org/en/blog/vulnerability/january-2026-dos-mitigation-async-hooks
+  (2026-01-19)
+
+### Patch Changes
+
+- Updated dependencies [[`c9b773a`](https://github.com/PostHog/posthog-js/commit/c9b773aefd25fcc81a60dff02348e8e724b87565)]:
+  - posthog-node@5.22.0
+
+## 1.4.35
+
+### Patch Changes
+
+- Updated dependencies [[`6695383`](https://github.com/PostHog/posthog-js/commit/669538338970f4de22fe8c694db4cc880ba92ba9)]:
+  - posthog-js@1.330.0
+
+## 1.4.34
+
+### Patch Changes
+
+- Updated dependencies [[`3676972`](https://github.com/PostHog/posthog-js/commit/3676972e7ddd75496ac17d9528508d97269c4e8a), [`da78b8c`](https://github.com/PostHog/posthog-js/commit/da78b8c7e2fd7ecb9f16703a0e19582572b7ffbd), [`099ee0c`](https://github.com/PostHog/posthog-js/commit/099ee0c3e4babc632abf52ecdc1df700c6087566)]:
+  - posthog-js@1.329.0
+  - posthog-node@5.21.2
+
+## 1.4.33
+
+### Patch Changes
+
+- Updated dependencies [[`ce4566d`](https://github.com/PostHog/posthog-js/commit/ce4566d9107c7fd7d802274c1b8ccf477b8ccd0d)]:
+  - posthog-js@1.328.0
+
+## 1.4.32
+
+### Patch Changes
+
+- Updated dependencies [[`b8b7f90`](https://github.com/PostHog/posthog-js/commit/b8b7f9058cba58b2ff2eb76ab49776304dabef1c)]:
+  - posthog-js@1.327.0
+
+## 1.4.31
+
+### Patch Changes
+
+- Updated dependencies [[`d37e570`](https://github.com/PostHog/posthog-js/commit/d37e5709863e869825df57d0854588140c4294b2)]:
+  - posthog-js@1.326.0
+  - @posthog/core@1.10.0
+  - posthog-node@5.21.1
+
 ## 1.4.30
 
 ### Patch Changes

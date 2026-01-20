@@ -63,7 +63,7 @@ const flattenObject = (
                 flattenObject(value, newKey, result, keys_limit, size_limit)
             } else {
                 keys_limit -= 1
-                size_limit -= value.toString().length
+                size_limit -= String(value).length
                 size_limit -= newKey.length
                 if (keys_limit <= 0 || size_limit <= 0) {
                     result['attributes_truncated'] = true

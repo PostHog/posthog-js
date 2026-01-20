@@ -268,6 +268,33 @@ describe('logs entrypoint', () => {
             )
         })
 
+        it('should handle objects with null and undefined values without crashing', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const objectWithNullish = {
+                message: 'Something went wrong',
+                detail: null,
+                code: undefined,
+                status: 500,
+            }
+
+            expect(() => {
+                assignableWindow.console.error(objectWithNullish)
+            }).not.toThrow()
+
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    attributes: expect.objectContaining({
+                        message: 'Something went wrong',
+                        detail: null,
+                        code: undefined,
+                        status: 500,
+                    }),
+                })
+            )
+        })
+
         it('should not add attributes_truncated when within limits', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)

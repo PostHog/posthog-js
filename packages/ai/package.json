@@ -1,6 +1,6 @@
 {
   "name": "@posthog/ai",
-  "version": "7.4.2",
+  "version": "7.5.1",
   "description": "PostHog Node.js AI integrations",
   "repository": {
     "type": "git",
@@ -40,7 +40,7 @@
     "observability"
   ],
   "engines": {
-    "node": ">=20"
+    "node": "^20.20.0 || >=22.22.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",

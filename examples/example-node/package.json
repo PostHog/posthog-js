@@ -1,6 +1,9 @@
 {
     "name": "example-node",
     "version": "1.0.0",
+    "engines": {
+        "node": ">=22.22"
+    },
     "main": "server.ts",
     "license": "MIT",
     "packageManager": "pnpm@10.15.0",

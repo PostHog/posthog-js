@@ -1,6 +1,9 @@
 {
     "name": "example-hono",
     "type": "module",
+    "engines": {
+        "node": ">=22.22"
+    },
     "scripts": {
         "dev": "tsx watch src/index.ts",
         "build": "tsc",

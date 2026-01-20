@@ -167,21 +167,36 @@ export class PostHogFeatureFlags {
     private _reloadDebouncer?: any
     private _flagsCalled: boolean = false
     private _flagsLoadedFromRemote: boolean = false
+    private _hasLoggedDeprecationWarning: boolean = false
 
     constructor(private _instance: PostHog) {
         this.featureFlagEventHandlers = []
     }
 
     private _getValidEvaluationEnvironments(): string[] {
-        const envs = this._instance.config.evaluation_environments
+        // Support both evaluation_contexts (new) and evaluation_environments (deprecated)
+        const envs = this._instance.config.evaluation_contexts ?? this._instance.config.evaluation_environments
+
+        // Log deprecation warning if using old field (only once)
+        if (
+            this._instance.config.evaluation_environments &&
+            !this._instance.config.evaluation_contexts &&
+            !this._hasLoggedDeprecationWarning
+        ) {
+            logger.warn(
+                'evaluation_environments is deprecated. Use evaluation_contexts instead. evaluation_environments will be removed in a future version.'
+            )
+            this._hasLoggedDeprecationWarning = true
+        }
+
         if (!envs?.length) {
             return []
         }
 
-        return envs.filter((env) => {
+        return envs.filter((env: string) => {
             const isValid = env && typeof env === 'string' && env.trim().length > 0
             if (!isValid) {
-                logger.error('Invalid evaluation environment found:', env, 'Expected non-empty string')
+                logger.error('Invalid evaluation context found:', env, 'Expected non-empty string')
             }
             return isValid
         })
@@ -421,9 +436,9 @@ export class PostHogFeatureFlags {
             data.disable_flags = true
         }
 
-        // Add evaluation environments if configured
+        // Add evaluation contexts if configured
         if (this._shouldIncludeEvaluationEnvironments()) {
-            data.evaluation_environments = this._getValidEvaluationEnvironments()
+            data.evaluation_contexts = this._getValidEvaluationEnvironments()
         }
 
         // flags supports loading config data with the `config` query param, but if you're using remote config, you
@@ -617,9 +632,9 @@ export class PostHogFeatureFlags {
             token,
         }
 
-        // Add evaluation environments if configured
+        // Add evaluation contexts if configured
         if (this._shouldIncludeEvaluationEnvironments()) {
-            data.evaluation_environments = this._getValidEvaluationEnvironments()
+            data.evaluation_contexts = this._getValidEvaluationEnvironments()
         }
 
         this._instance._send_request({

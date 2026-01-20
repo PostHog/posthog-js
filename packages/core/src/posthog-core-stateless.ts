@@ -19,6 +19,8 @@ import {
   PostHogPersistedProperty,
   PostHogQueueItem,
   Logger,
+  GetFlagsResult,
+  FeatureFlagRequestError,
 } from './types'
 import {
   allSettled,
@@ -116,7 +118,7 @@ export abstract class PostHogCoreStateless {
   private removeDebugCallback?: () => void
   private disableGeoip: boolean
   private historicalMigration: boolean
-  private evaluationEnvironments?: readonly string[]
+  private evaluationContexts?: readonly string[]
   protected disabled
   protected disableCompression: boolean
 
@@ -167,11 +169,17 @@ export abstract class PostHogCoreStateless {
     this.disableGeoip = options.disableGeoip ?? true
     this.disabled = options.disabled ?? false
     this.historicalMigration = options?.historicalMigration ?? false
-    this.evaluationEnvironments = options?.evaluationEnvironments
     // Init promise allows the derived class to block calls until it is ready
     this._initPromise = Promise.resolve()
     this._isInitialized = true
     this._logger = createLogger('[PostHog]', this.logMsgIfDebug.bind(this))
+    // Support both evaluationContexts (new) and evaluationEnvironments (deprecated)
+    this.evaluationContexts = options?.evaluationContexts ?? options?.evaluationEnvironments
+    if (options?.evaluationEnvironments && !options?.evaluationContexts) {
+      this._logger.warn(
+        'evaluationEnvironments is deprecated. Use evaluationContexts instead. This property will be removed in a future version.'
+      )
+    }
     this.disableCompression = !isGzipSupported() || (options?.disableCompression ?? false)
   }
 
@@ -452,7 +460,7 @@ export abstract class PostHogCoreStateless {
     groupProperties: Record<string, Record<string, string>> = {},
     extraPayload: Record<string, any> = {},
     fetchConfig: boolean = true
-  ): Promise<PostHogFlagsResponse | undefined> {
+  ): Promise<GetFlagsResult> {
     await this._initPromise
 
     const configParam = fetchConfig ? '&config=true' : ''
@@ -466,9 +474,9 @@ export abstract class PostHogCoreStateless {
       ...extraPayload,
     }
 
-    // Add evaluation environments if configured
-    if (this.evaluationEnvironments && this.evaluationEnvironments.length > 0) {
-      requestData.evaluation_environments = this.evaluationEnvironments
+    // Add evaluation contexts if configured
+    if (this.evaluationContexts && this.evaluationContexts.length > 0) {
+      requestData.evaluation_contexts = this.evaluationContexts
     }
 
     const fetchOptions: PostHogFetchOptions = {
@@ -482,11 +490,28 @@ export abstract class PostHogCoreStateless {
     // Don't retry /flags API calls
     return this.fetchWithRetry(url, fetchOptions, { retryCount: 0 }, this.featureFlagsRequestTimeoutMs)
       .then((response) => response.json() as Promise<PostHogV1FlagsResponse | PostHogV2FlagsResponse>)
-      .then((response) => normalizeFlagsResponse(response))
-      .catch((error) => {
+      .then((response) => ({ success: true as const, response: normalizeFlagsResponse(response) }))
+      .catch((error): GetFlagsResult => {
         this._events.emit('error', error)
-        return undefined
-      }) as Promise<PostHogFlagsResponse | undefined>
+        return { success: false, error: this.categorizeRequestError(error) }
+      })
+  }
+
+  private categorizeRequestError(error: unknown): FeatureFlagRequestError {
+    if (error instanceof PostHogFetchHttpError) {
+      return { type: 'api_error', statusCode: error.status }
+    }
+
+    if (error instanceof PostHogFetchNetworkError) {
+      const cause = error.error
+      // AbortError/TimeoutError is thrown when the request times out via AbortSignal.timeout()
+      if (cause instanceof Error && (cause.name === 'AbortError' || cause.name === 'TimeoutError')) {
+        return { type: 'timeout' }
+      }
+      return { type: 'connection_error' }
+    }
+
+    return { type: 'unknown_error' }
   }
 
   protected async getFeatureFlagStateless(
@@ -710,12 +735,14 @@ export abstract class PostHogCoreStateless {
     if (flagKeysToEvaluate) {
       extraPayload['flag_keys_to_evaluate'] = flagKeysToEvaluate
     }
-    const flagsResponse = await this.getFlags(distinctId, groups, personProperties, groupProperties, extraPayload)
+    const result = await this.getFlags(distinctId, groups, personProperties, groupProperties, extraPayload)
 
-    if (flagsResponse === undefined) {
-      // We probably errored out, so return undefined
+    if (!result.success) {
+      // Request failed, return undefined
       return undefined
     }
+
+    const flagsResponse = result.response
 
     // if there's an error on the flagsResponse, log a console error, but don't throw an error
     if (flagsResponse.errorsWhileComputingFlags) {
@@ -824,6 +851,17 @@ export abstract class PostHogCoreStateless {
   /***
    *** QUEUEING AND FLUSHING
    ***/
+
+  /**
+   * Hook that allows subclasses to transform or filter a message before it's queued.
+   * Return null to drop the message.
+   * @param message The prepared message
+   * @returns The transformed message, or null to drop it
+   */
+  protected processBeforeEnqueue(message: PostHogEventProperties): PostHogEventProperties | null {
+    return message
+  }
+
   protected enqueue(type: string, _message: any, options?: PostHogCaptureOptions): void {
     this.wrap(() => {
       if (this.optedOut) {
@@ -831,7 +869,13 @@ export abstract class PostHogCoreStateless {
         return
       }
 
-      const message = this.prepareMessage(type, _message, options)
+      let message: PostHogEventProperties | null = this.prepareMessage(type, _message, options)
+
+      // Allow subclasses to transform or filter the message
+      message = this.processBeforeEnqueue(message)
+      if (message === null) {
+        return
+      }
 
       const queue = this.getPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue) || []
 
@@ -871,9 +915,17 @@ export abstract class PostHogCoreStateless {
       return
     }
 
+    let message: PostHogEventProperties | null = this.prepareMessage(type, _message, options)
+
+    // Allow subclasses to transform or filter the message (e.g., before_send hook)
+    message = this.processBeforeEnqueue(message)
+    if (message === null) {
+      return
+    }
+
     const data: Record<string, any> = {
       api_key: this.apiKey,
-      batch: [this.prepareMessage(type, _message, options)],
+      batch: [message],
       sent_at: currentISOTime(),
     }
 
@@ -903,7 +955,7 @@ export abstract class PostHogCoreStateless {
     }
   }
 
-  private prepareMessage(type: string, _message: any, options?: PostHogCaptureOptions): PostHogEventProperties {
+  protected prepareMessage(type: string, _message: any, options?: PostHogCaptureOptions): PostHogEventProperties {
     const message = {
       ..._message,
       type: type,

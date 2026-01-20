@@ -290,3 +290,64 @@ export interface UserProvidedTraits {
     name?: string
     email?: string
 }
+
+/**
+ * Session context captured when creating a new ticket
+ */
+export interface SessionContext {
+    /**
+     * URL to the session replay at the time the ticket was created
+     * Includes timestamp to jump to the exact moment
+     */
+    session_replay_url?: string
+
+    /**
+     * Page URL where the ticket was created
+     */
+    current_url?: string
+}
+
+/**
+ * Payload for sending a message via the conversations API
+ */
+export interface SendMessagePayload {
+    /**
+     * Widget session ID for access control
+     */
+    widget_session_id: string
+
+    /**
+     * Distinct ID for linking to PostHog Person
+     */
+    distinct_id: string
+
+    /**
+     * The message content to send
+     */
+    message: string
+
+    /**
+     * User identification traits
+     */
+    traits: {
+        name: string | null
+        email: string | null
+    }
+
+    /**
+     * Ticket ID to send the message to (null to create a new ticket)
+     */
+    ticket_id: string | null
+
+    /**
+     * Session ID captured when creating a new ticket
+     * Stored as a separate queryable DB field
+     */
+    session_id?: string
+
+    /**
+     * Session context captured when creating a new ticket
+     * Stored in a JSONField for flexibility
+     */
+    session_context?: SessionContext
+}

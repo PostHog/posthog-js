@@ -2233,6 +2233,48 @@ describe('getFeatureFlag', () => {
     expect(capturedMessage.properties).not.toHaveProperty('$active_feature_flags')
     expect(capturedMessage.properties).not.toHaveProperty('$feature/simple-flag')
   })
+
+  it('should include $feature_flag_id and $feature_flag_reason for locally evaluated flags', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 42,
+          name: 'Test Feature',
+          key: 'test-flag',
+          active: true,
+          filters: {
+            groups: [{ rollout_percentage: 100 }],
+          },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+    let capturedMessage: any
+    posthog.on('capture', (message) => {
+      capturedMessage = message
+    })
+
+    await posthog.getFeatureFlag('test-flag', 'some-distinct-id')
+    await waitForPromises()
+
+    expect(capturedMessage).toMatchObject({
+      event: '$feature_flag_called',
+      properties: {
+        $feature_flag: 'test-flag',
+        $feature_flag_response: true,
+        $feature_flag_id: 42,
+        $feature_flag_reason: 'Evaluated locally',
+        locally_evaluated: true,
+      },
+    })
+
+    await posthog.shutdown()
+  })
 })
 
 describe('match properties', () => {
