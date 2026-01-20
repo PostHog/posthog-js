@@ -46,7 +46,7 @@ export function BottomSection({
                     {text}
                 </button>
             )}
-            {!appearance.whiteLabel && <PostHogLogo />}
+            {!appearance.whiteLabel && <PostHogLogo urlParams={{ utm_source: 'survey-footer' }} />}
         </div>
     )
 }
