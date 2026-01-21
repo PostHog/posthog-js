@@ -175,9 +175,11 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 // Capture current URL - only for new tickets to record where user started
                 const currentUrl = isNewTicket ? window?.location?.href : undefined
 
-                payload.session_context = {
-                    session_replay_url: replayUrl || undefined,
-                    current_url: currentUrl || undefined,
+                if (replayUrl || currentUrl) {
+                    payload.session_context = {
+                        session_replay_url: replayUrl || undefined,
+                        current_url: currentUrl || undefined,
+                    }
                 }
             } catch (error) {
                 // Log error but don't fail message sending
