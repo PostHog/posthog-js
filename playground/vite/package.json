@@ -9,8 +9,9 @@
         "preview": "vite preview"
     },
     "devDependencies": {
+        "@posthog/rollup-plugin": "*",
         "typescript": "~5.9.3",
         "vite": "^7.2.4",
-        "@posthog/rollup-plugin": "*"
+        "vite-plugin-sri": "^0.0.2"
     }
 }
