@@ -414,7 +414,7 @@ describe('ConversationsManager', () => {
             )
         })
 
-        it('should NOT include session context in follow-up messages', async () => {
+        it('should include session_id and replay_url but no current_url in follow-up messages', async () => {
             // Send first message to create ticket
             await act(async () => {
                 await manager.sendMessage('First message')
@@ -427,8 +427,12 @@ describe('ConversationsManager', () => {
             })
 
             const sendRequestCall = (mockPosthog._send_request as jest.Mock).mock.calls[0][0]
-            expect(sendRequestCall.data.session_id).toBeUndefined()
-            expect(sendRequestCall.data.session_context).toBeUndefined()
+            // session_id and replay_url should be included for debugging context
+            expect(sendRequestCall.data.session_id).toBe('test-session-id-123')
+            expect(sendRequestCall.data.session_context).toEqual({
+                session_replay_url: 'https://app.posthog.com/replay/test-session?t=100',
+                current_url: undefined, // only sent with new tickets
+            })
         })
 
         it('should capture session context when forcing a new ticket', async () => {
@@ -482,8 +486,9 @@ describe('ConversationsManager', () => {
             const sendRequestCall = (mockPosthog._send_request as jest.Mock).mock.calls[0][0]
             // session_id should still be present
             expect(sendRequestCall.data.session_id).toBe('test-session-id-123')
-            // session_context should only have current_url
+            // session_context should have current_url, replay_url is undefined when empty
             expect(sendRequestCall.data.session_context).toEqual({
+                session_replay_url: undefined,
                 current_url: expect.any(String),
             })
         })
