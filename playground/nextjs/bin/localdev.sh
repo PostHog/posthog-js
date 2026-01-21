@@ -26,6 +26,18 @@ echo ""
 echo -e "${GREEN}2. Creating tarballs...${NC}"
 pnpm package
 
+# Step 2b: If POSTHOG_REPO is set, link posthog-js to PostHog repo
+if [ -n "$POSTHOG_REPO" ]; then
+    echo ""
+    echo -e "${GREEN}2b. Linking posthog-js to PostHog repo...${NC}"
+    cd "$POSTHOG_REPO"
+    pnpm -r update "posthog-js@file:$REPO_ROOT/target/posthog-js.tgz"
+    pnpm install
+    cd frontend && pnpm run copy-scripts
+    cd "$REPO_ROOT"
+    echo "Linked posthog-js to $POSTHOG_REPO"
+fi
+
 # Step 3: Ensure .pnpmfile.cjs symlink exists
 echo ""
 echo -e "${GREEN}3. Setting up .pnpmfile.cjs symlink...${NC}"
