@@ -1,5 +1,12 @@
 # @posthog/rollup-plugin
 
+## 1.1.13
+
+### Patch Changes
+
+- [#2943](https://github.com/PostHog/posthog-js/pull/2943) [`4200bf5`](https://github.com/PostHog/posthog-js/commit/4200bf5953c51b9672dad5d6771f21e8f9f838fb) Thanks [@hpouillot](https://github.com/hpouillot)! - fix plugin execution order and source cache
+  (2026-01-21)
+
 ## 1.1.12
 
 ### Patch Changes
