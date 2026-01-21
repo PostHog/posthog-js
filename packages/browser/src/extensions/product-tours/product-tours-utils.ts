@@ -6,6 +6,7 @@ import {
     ProductTourStep,
     DEFAULT_PRODUCT_TOUR_APPEARANCE,
 } from '../../posthog-product-tours-types'
+import { findElement } from './element-inference'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
 import { document as _document, window as _window } from '../../utils/globals'
 import { getFontFamily, getContrastingTextColor, hexToRgba } from '../surveys/surveys-extension-utils'
@@ -49,6 +50,28 @@ export function findElementBySelector(selector: string): ElementFindResult {
     } catch {
         return { element: null, error: 'not_found', matchCount: 0 }
     }
+}
+
+/**
+ * Find element for a step based on its lookup mode.
+ * Default: use inference. If useManualSelector is true: use CSS selector.
+ */
+export function findStepElement(step: ProductTourStep): ElementFindResult {
+    const useManualSelector = step.useManualSelector ?? false
+
+    if (useManualSelector) {
+        if (!step.selector) {
+            return { element: null, error: 'not_found', matchCount: 0 }
+        }
+        return findElementBySelector(step.selector)
+    }
+
+    if (!step.inferenceData) {
+        return { element: null, error: 'not_found', matchCount: 0 }
+    }
+
+    const element = findElement(step.inferenceData)
+    return element ? { element, error: null, matchCount: 1 } : { element: null, error: 'not_found', matchCount: 0 }
 }
 
 export function isElementVisible(element: HTMLElement): boolean {
