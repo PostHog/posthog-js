@@ -68,7 +68,6 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
 
                 for (const fileName in bundle) {
                     const chunk = bundle[fileName]
-                    console.log(chunk.type)
                     if (chunk.type === 'chunk') {
                         const chunkPath = path.resolve(...basePaths, fileName)
                         chunks[chunkPath] = chunk
