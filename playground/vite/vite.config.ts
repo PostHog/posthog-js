@@ -1,6 +1,8 @@
 /* eslint-env node */
 import posthog from '@posthog/rollup-plugin'
 import { defineConfig } from 'vite'
+//@ts-ignore
+import sri from 'vite-plugin-sri'
 
 export default defineConfig({
     plugins: [
@@ -13,5 +15,6 @@ export default defineConfig({
                 deleteAfterUpload: false,
             },
         }),
+        sri(),
     ],
 })

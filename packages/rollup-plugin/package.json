@@ -33,8 +33,8 @@
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
-        "rollup": "~4.53.2",
+        "@types/jest": "catalog:",
         "jest": "catalog:",
-        "@types/jest": "catalog:"
+        "rollup": "~4.53.2"
     }
 }
