@@ -1,5 +1,12 @@
 # @posthog/rollup-plugin
 
+## 1.1.12
+
+### Patch Changes
+
+- [#2937](https://github.com/PostHog/posthog-js/pull/2937) [`b3b770b`](https://github.com/PostHog/posthog-js/commit/b3b770bc2671e790581511bd88573f1436ea6962) Thanks [@hpouillot](https://github.com/hpouillot)! - fix browser warnings by generating hidden sourcemaps
+  (2026-01-21)
+
 ## 1.1.11
 
 ### Patch Changes

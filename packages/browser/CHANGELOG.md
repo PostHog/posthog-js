@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.333.0
+
+### Minor Changes
+
+- [#2942](https://github.com/PostHog/posthog-js/pull/2942) [`994206d`](https://github.com/PostHog/posthog-js/commit/994206d4ceac218061ef35eec744a0698fb0afed) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Send context on sendMessage
+  (2026-01-21)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.333.0
+
 ## 1.332.0
 
 ### Minor Changes
