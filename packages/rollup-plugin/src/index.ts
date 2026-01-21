@@ -56,19 +56,26 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                 const args = ['sourcemap', 'process']
                 const cliPath = posthogOptions.cliBinaryPath
                 const chunks: { [fileName: string]: OutputChunk } = {}
+                const basePaths = []
+
                 if (options.dir) {
-                    for (const fileName in bundle) {
-                        const chunk = bundle[fileName]
-                        if (chunk.type === 'chunk') {
-                            const chunkPath = path.resolve(options.dir, fileName)
-                            chunks[chunkPath] = chunk
-                            args.push('--file', chunkPath)
-                        }
-                    }
-                } else if (options.file) {
-                    const filePath = path.resolve(options.file)
-                    args.push('--file', filePath)
+                    basePaths.push(options.dir)
                 }
+
+                if (options.file) {
+                    basePaths.push(path.dirname(options.file))
+                }
+
+                for (const fileName in bundle) {
+                    const chunk = bundle[fileName]
+                    console.log(chunk.type)
+                    if (chunk.type === 'chunk') {
+                        const chunkPath = path.resolve(...basePaths, fileName)
+                        chunks[chunkPath] = chunk
+                        args.push('--file', chunkPath)
+                    }
+                }
+
                 if (posthogOptions.sourcemaps.project) {
                     args.push('--project', posthogOptions.sourcemaps.project)
                 }
@@ -92,6 +99,7 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                     stdio: 'inherit',
                     cwd: process.cwd(),
                 })
+
                 // we need to update code for others plugins to work
                 await Promise.all(
                     Object.entries(chunks).map(([chunkPath, chunk]) =>

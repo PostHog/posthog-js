@@ -26,8 +26,6 @@ export default {
             logLevel: 'info',
             sourcemaps: {
                 enabled: true,
-                project: packageJson.name,
-                version: packageJson.version,
             },
         }),
     ],

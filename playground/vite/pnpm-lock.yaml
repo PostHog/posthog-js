@@ -199,7 +199,7 @@ packages:
     version: 1.11.0
 
   '@posthog/rollup-plugin@file:../../target/posthog-rollup-plugin.tgz':
-    resolution: {integrity: sha512-rDN3TkJNAzJXTS99AagPlOyaSj58iGhpix6xZz81+2V3GX79DPdE9f6cbFjINIjZ7HFDLHCF1aPGV7UYuQ6Eeg==, tarball: file:../../target/posthog-rollup-plugin.tgz}
+    resolution: {integrity: sha512-AeOsjOc5i4k2t1vBfKIcytSlgditDbzrbfeb7atr1/SRvGXn/UkQgTB/7wtmaxIewvML642PffJ393J7jcx2Xg==, tarball: file:../../target/posthog-rollup-plugin.tgz}
     version: 1.1.9
     peerDependencies:
       rollup: '>= 4.0.0'
