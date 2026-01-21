@@ -93,13 +93,13 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                     cwd: process.cwd(),
                 })
                 // we need to update code for others plugins to work
-                await Promise.all([
+                await Promise.all(
                     Object.entries(chunks).map(([chunkPath, chunk]) =>
                         fs.readFile(chunkPath, 'utf8').then((content) => {
                             chunk.code = content
                         })
-                    ),
-                ])
+                    )
+                )
             },
         },
     } as Plugin
