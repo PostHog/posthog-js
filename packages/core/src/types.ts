@@ -71,6 +71,12 @@ export type PostHogCoreOptions = {
    * @deprecated Use evaluationContexts instead. This property will be removed in a future version.
    */
   evaluationEnvironments?: readonly string[]
+  /**
+   * Allows modification or dropping of events before they're sent to PostHog.
+   * If an array is provided, the functions are run in order.
+   * If a function returns null, the event will be dropped.
+   */
+  before_send?: BeforeSendFn | BeforeSendFn[]
 }
 
 export enum PostHogPersistedProperty {
@@ -260,7 +266,12 @@ export type PostHogV2FlagsResponse = Omit<PostHogFlagsResponse, 'featureFlags' |
  * When we pull flags from persistence, we can normalize them to PostHogFeatureFlagDetails
  * so that we can support v1 and v2 of the API.
  */
-export type PostHogFlagsStorageFormat = Pick<PostHogFeatureFlagDetails, 'flags'>
+export type PostHogFlagsStorageFormat = Pick<PostHogFeatureFlagDetails, 'flags'> &
+  Partial<Pick<PostHogFlagsResponse, 'requestId' | 'evaluatedAt'>> & {
+    errorsWhileComputingFlags?: boolean
+    quotaLimited?: string[]
+    requestError?: FeatureFlagRequestError
+  }
 
 /**
  * Models legacy flags and payloads return type for many public methods.
@@ -272,6 +283,51 @@ export type PostHogFlagsAndPayloadsResponse = Partial<
 export type JsonType = string | number | boolean | null | { [key: string]: JsonType } | Array<JsonType> | JsonType[]
 
 export type FetchLike = (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>
+
+/**
+ * Error type constants for the $feature_flag_error property.
+ *
+ * These values are sent in analytics events to track flag evaluation failures.
+ * They should not be changed without considering impact on existing dashboards
+ * and queries that filter on these values.
+ *
+ * Error values:
+ *   ERRORS_WHILE_COMPUTING: Server returned errorsWhileComputingFlags=true
+ *   FLAG_MISSING: Requested flag not in API response
+ *   QUOTA_LIMITED: Rate/quota limit exceeded
+ *   TIMEOUT: Request timed out
+ *   CONNECTION_ERROR: Network connection failed
+ *   apiError: HTTP error with status code (e.g., api_error_500)
+ */
+export const FeatureFlagError = {
+  ERRORS_WHILE_COMPUTING: 'errors_while_computing_flags',
+  FLAG_MISSING: 'flag_missing',
+  QUOTA_LIMITED: 'quota_limited',
+  TIMEOUT: 'timeout',
+  CONNECTION_ERROR: 'connection_error',
+  UNKNOWN_ERROR: 'unknown_error',
+  apiError: (status: number): string => `api_error_${status}`,
+} as const
+
+export type FeatureFlagErrorType =
+  | (typeof FeatureFlagError)[Exclude<keyof typeof FeatureFlagError, 'apiError'>]
+  | ReturnType<typeof FeatureFlagError.apiError>
+  | string
+
+/**
+ * Represents an error that occurred during a feature flag request.
+ */
+export type FeatureFlagRequestError = {
+  type: 'timeout' | 'connection_error' | 'api_error' | 'unknown_error'
+  statusCode?: number
+}
+
+/**
+ * Result type for getFlags that includes either a successful response or error information.
+ */
+export type GetFlagsResult =
+  | { success: true; response: PostHogFeatureFlagsResponse }
+  | { success: false; error: FeatureFlagRequestError }
 
 export type FeatureFlagDetail = {
   key: string
@@ -566,3 +622,28 @@ export const knownUnsafeEditableEvent = [
  * Some features of PostHog rely on receiving 100% of these events
  */
 export type KnownUnsafeEditableEvent = (typeof knownUnsafeEditableEvent)[number]
+
+/**
+ * Represents an event before it's sent to PostHog.
+ * This is the interface exposed to the `before_send` hook, matching the web SDK's `CaptureResult`.
+ */
+export type CaptureEvent = {
+  /** UUID for the event (optional to allow compatibility with Node SDK's EventMessage) */
+  uuid?: string
+  /** The name of the event */
+  event: string
+  /** Properties associated with the event (optional to allow compatibility with Node SDK's EventMessage) */
+  properties?: PostHogEventProperties
+  /** Properties to set on the person (overrides existing values) */
+  $set?: PostHogEventProperties
+  /** Properties to set on the person only once (does not override existing values) */
+  $set_once?: PostHogEventProperties
+  /** Timestamp for the event */
+  timestamp?: Date
+}
+
+/**
+ * Function type for the `before_send` hook.
+ * Receives an event and can return a modified event or null to drop the event.
+ */
+export type BeforeSendFn = (event: CaptureEvent | null) => CaptureEvent | null

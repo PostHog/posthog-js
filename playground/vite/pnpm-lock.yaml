@@ -195,12 +195,12 @@ packages:
     hasBin: true
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-xGSyLRHYeIBN28L7LS/G3+CtPncnSUxMJaY4EoO9UZZ4UQ6myV5XforQA7b9sjNevotZjX0qZGj7Vwx8MOzavA==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.11.0
+    resolution: {integrity: sha512-/9b/JG9B7ynREuk8EfD9xRQlTWeEmx2m7AECMNy9n/CDWzbFfPti/qSV4o3BF5dICAQf82otpn+8Khg1KTdDYw==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.13.0
 
   '@posthog/rollup-plugin@file:../../target/posthog-rollup-plugin.tgz':
-    resolution: {integrity: sha512-AeOsjOc5i4k2t1vBfKIcytSlgditDbzrbfeb7atr1/SRvGXn/UkQgTB/7wtmaxIewvML642PffJ393J7jcx2Xg==, tarball: file:../../target/posthog-rollup-plugin.tgz}
-    version: 1.1.9
+    resolution: {integrity: sha512-icZd9FWrmbN02bxS9wRiw9fwpcegnE+96F8JhrS8ICy3gDcUt3mACIKbp74WuWUG+0ASUdhgdlRdj/3c1BKeTg==, tarball: file:../../target/posthog-rollup-plugin.tgz}
+    version: 1.1.11
     peerDependencies:
       rollup: '>= 4.0.0'
 

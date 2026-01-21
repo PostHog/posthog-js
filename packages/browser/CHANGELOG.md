@@ -1,5 +1,47 @@
 # posthog-js
 
+## 1.332.0
+
+### Minor Changes
+
+- [#2882](https://github.com/PostHog/posthog-js/pull/2882) [`8a5a3d5`](https://github.com/PostHog/posthog-js/commit/8a5a3d5693facda62b90b66dead338f7dca19705) Thanks [@adboio](https://github.com/adboio)! - add support for question prefill in popover surveys, add useThumbSurvey hook
+  (2026-01-20)
+
+### Patch Changes
+
+- Updated dependencies [[`8a5a3d5`](https://github.com/PostHog/posthog-js/commit/8a5a3d5693facda62b90b66dead338f7dca19705)]:
+    - @posthog/core@1.13.0
+    - @posthog/types@1.332.0
+
+## 1.331.3
+
+### Patch Changes
+
+- [#2916](https://github.com/PostHog/posthog-js/pull/2916) [`cbab5d2`](https://github.com/PostHog/posthog-js/commit/cbab5d2585b284b1adace8307a8acdb080501227) Thanks [@adboio](https://github.com/adboio)! - fix product tour tooltips on mobile
+  (2026-01-20)
+
+- [#2933](https://github.com/PostHog/posthog-js/pull/2933) [`d9eaf41`](https://github.com/PostHog/posthog-js/commit/d9eaf413bea479af86d6418f45a58ee1df2a8fe0) Thanks [@adboio](https://github.com/adboio)! - add url params to posthog logo in surveys footer
+  (2026-01-20)
+- Updated dependencies []:
+    - @posthog/types@1.331.3
+
+## 1.331.2
+
+### Patch Changes
+
+- [#2939](https://github.com/PostHog/posthog-js/pull/2939) [`6442f5d`](https://github.com/PostHog/posthog-js/commit/6442f5d6cd8ae097c07584f102bc6001948dce59) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: Rate limiting configuration changes are respected
+  (2026-01-20)
+- Updated dependencies []:
+    - @posthog/types@1.331.2
+
+## 1.331.1
+
+### Patch Changes
+
+- Updated dependencies [[`b7fa003`](https://github.com/PostHog/posthog-js/commit/b7fa003ef6ef74bdf4666be0748d89a5a6169054), [`f0cbc0d`](https://github.com/PostHog/posthog-js/commit/f0cbc0d8e4e5efc27d9595676e886d6d3d3892f4)]:
+    - @posthog/core@1.12.0
+    - @posthog/types@1.331.1
+
 ## 1.331.0
 
 ### Minor Changes

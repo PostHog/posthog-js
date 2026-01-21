@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "1.332.0",
+    "version": "1.331.3",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -2227,27 +2227,6 @@
       "example": "DisplaySurveyPopoverOptions | DisplaySurveyInlineOptions"
     },
     {
-      "id": "DisplaySurveyPopoverOptions",
-      "name": "DisplaySurveyPopoverOptions",
-      "properties": [
-        {
-          "type": "DisplaySurveyType.Popover",
-          "name": "displayType"
-        },
-        {
-          "description": "Override the survey's configured position",
-          "type": "SurveyPosition",
-          "name": "position"
-        },
-        {
-          "description": "CSS selector for the element to position the survey next to (when position is NextToTrigger)",
-          "type": "string",
-          "name": "selector"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
-    },
-    {
       "id": "DisplaySurveyType",
       "name": "DisplaySurveyType",
       "properties": [
@@ -3848,13 +3827,6 @@
         }
       ],
       "path": "lib/src/posthog-surveys-types.d.ts"
-    },
-    {
-      "id": "SurveyResponseValue",
-      "name": "SurveyResponseValue",
-      "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
-      "example": "string | number | string[] | null"
     },
     {
       "id": "SurveySchedule",

@@ -12,6 +12,7 @@ export default defineConfig({
             host: process.env.POSTHOG_API_HOST,
             sourcemaps: {
                 enabled: true,
+                deleteAfterUpload: false,
             },
         }),
         sri(),

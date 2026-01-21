@@ -5,6 +5,7 @@ import { cookieConsentGiven, PERSON_PROCESSING_MODE } from '@/src/posthog'
 import { setAllPersonProfilePropertiesAsPersonPropertiesForFlags } from 'posthog-js/lib/src/customizations'
 import { STORED_PERSON_PROPERTIES_KEY } from 'posthog-js/lib/src/constants'
 import { DisplaySurveyType, Survey } from 'posthog-js'
+import { SessionInteractions } from '@/src/SessionInteractions'
 
 export default function Home() {
     const posthog = usePostHog()
@@ -115,6 +116,8 @@ export default function Home() {
                 </button>
                 <button onClick={() => setModalOpen(true)}>Open Modal</button>
             </div>
+
+            <SessionInteractions />
 
             {modalOpen && (
                 <div

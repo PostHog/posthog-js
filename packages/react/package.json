@@ -1,6 +1,6 @@
 {
     "name": "@posthog/react",
-    "version": "1.6.0",
+    "version": "1.7.0",
     "description": "Provides components and hooks for React integrations of PostHog.",
     "repository": {
         "type": "git",
@@ -26,7 +26,8 @@
     "types": "dist/types/index.d.ts",
     "files": [
         "dist",
-        "src"
+        "src",
+        "surveys"
     ],
     "peerDependencies": {
         "@types/react": ">=16.8.0",
