@@ -1068,6 +1068,7 @@ describe('PostHog React Native', () => {
       })
     })
   })
+})
 
 describe('Feature flag error tracking', () => {
   let posthog: PostHog
