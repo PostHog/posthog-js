@@ -166,6 +166,8 @@ function removeTourFromDom(tourId: string): void {
     container?.remove()
 }
 
+const PRODUCT_TOUR_TARGETING_FLAG_PREFIX = 'product-tour-targeting-'
+
 export class ProductTourManager {
     private _instance: PostHog
     private _activeTour: ProductTour | null = null
@@ -399,12 +401,19 @@ export class ProductTourManager {
                 break
         }
 
-        if (tour.internal_targeting_flag_key) {
-            const flagValue = this._instance.featureFlags?.getFeatureFlag(tour.internal_targeting_flag_key)
-            if (!flagValue) {
-                logger.info(`Tour ${tour.id} failed feature flag check: ${tour.internal_targeting_flag_key}`)
-                return false
-            }
+        if (!this._isProductToursFeatureFlagEnabled({ flagKey: tour.internal_targeting_flag_key })) {
+            logger.info(`Tour ${tour.id} failed feature flag check: ${tour.internal_targeting_flag_key}`)
+            return false
+        }
+
+        const linkedFlagVariant = tour.conditions?.linkedFlagVariant
+        if (
+            !this._isProductToursFeatureFlagEnabled({ flagKey: tour.linked_flag_key, flagVariant: linkedFlagVariant })
+        ) {
+            logger.info(
+                `Tour ${tour.id} failed feature flag check: ${tour.linked_flag_key}, variant: ${linkedFlagVariant}`
+            )
+            return false
         }
 
         return true
@@ -827,6 +836,21 @@ export class ProductTourManager {
         this._renderTooltipWithPreact(null, handleSubmit, handleDismiss)
 
         logger.info(`Rendered survey step for tour step ${this._currentStepIndex}`)
+    }
+
+    private _isProductToursFeatureFlagEnabled({ flagKey, flagVariant }: { flagKey?: string; flagVariant?: string }) {
+        if (!flagKey) {
+            return true
+        }
+        const isFeatureEnabled = !!this._instance.featureFlags.isFeatureEnabled(flagKey, {
+            send_event: !flagKey.startsWith(PRODUCT_TOUR_TARGETING_FLAG_PREFIX),
+        })
+        let flagVariantCheck = true
+        if (flagVariant) {
+            const flagVariantValue = this._instance.featureFlags.getFeatureFlag(flagKey, { send_event: false })
+            flagVariantCheck = flagVariantValue === flagVariant || flagVariant === 'any'
+        }
+        return isFeatureEnabled && flagVariantCheck
     }
 
     private _cleanup(): void {

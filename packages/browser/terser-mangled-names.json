@@ -235,6 +235,7 @@
         "_isPolling",
         "_isPostHogException",
         "_isPreviewMode",
+        "_isProductToursFeatureFlagEnabled",
         "_isReadonly",
         "_isRecordingEnabled",
         "_isResuming",
