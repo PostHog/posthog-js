@@ -110,6 +110,7 @@ export class WebVitalsAutocapture {
         if (assignableWindow.__PosthogExtensions__?.postHogWebVitalsCallbacks) {
             // already loaded
             cb()
+            return
         }
         assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'web-vitals', (err) => {
             if (err) {
@@ -190,6 +191,7 @@ export class WebVitalsAutocapture {
         if (urlHasChanged) {
             // we need to send what we have
             this._flushToCapture()
+
             // poor performance is >4s, we wait twice that time to send
             // this is in case we haven't received all metrics
             // we'll at least gather some
@@ -227,6 +229,14 @@ export class WebVitalsAutocapture {
     }
 
     private _startCapturing = () => {
+        // IMPORTANT: web-vitals does not provide cleanup functions and warns against
+        // calling functions more than once per page load. Each call creates new
+        // PerformanceObservers that persist for the page lifetime.
+        // See: https://github.com/GoogleChrome/web-vitals/issues/629
+        if (this._initialized) {
+            return
+        }
+
         let onLCP: WebVitalsMetricCallback | undefined
         let onCLS: WebVitalsMetricCallback | undefined
         let onFCP: WebVitalsMetricCallback | undefined
