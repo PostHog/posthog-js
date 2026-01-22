@@ -18,12 +18,17 @@ export const FIFTEEN_MINUTES_IN_MILLIS = 15 * ONE_MINUTE_IN_MILLIS
 
 type WebVitalsEventBuffer = { url: string | undefined; metrics: any[]; firstMetricTimestamp: number | undefined }
 
+type CleanupFunction = () => void
+
 export class WebVitalsAutocapture {
     private _enabledServerSide: boolean = false
     private _initialized = false
 
     private _buffer: WebVitalsEventBuffer = { url: undefined, metrics: [], firstMetricTimestamp: undefined }
     private _delayedFlushTimer: ReturnType<typeof setTimeout> | undefined
+
+    // Store cleanup functions returned by web-vitals library to prevent memory leaks
+    private _cleanupFunctions: CleanupFunction[] = []
 
     constructor(private readonly _instance: PostHog) {
         this._enabledServerSide = !!this._instance.persistence?.props[WEB_VITALS_ENABLED_SERVER_SIDE]
@@ -82,6 +87,17 @@ export class WebVitalsAutocapture {
             logger.info('enabled, starting...')
             this._loadScript(this._startCapturing)
         }
+    }
+
+    /**
+     * Stop capturing and clean up all observers.
+     * Call this when the PostHog instance is being destroyed to prevent memory leaks.
+     */
+    public stop(): void {
+        this._flushToCapture()
+        this._stopCapturing()
+        this._initialized = false
+        logger.info('stopped')
     }
 
     public onRemoteConfig(response: RemoteConfig) {
@@ -190,6 +206,13 @@ export class WebVitalsAutocapture {
         if (urlHasChanged) {
             // we need to send what we have
             this._flushToCapture()
+
+            // Reset observers on URL change to prevent memory leaks.
+            // The web-vitals library can hold DOM references in its internal state.
+            // By stopping and restarting, we allow the old state to be garbage collected.
+            this._stopCapturing()
+            this._startCapturing()
+
             // poor performance is >4s, we wait twice that time to send
             // this is in case we haven't received all metrics
             // we'll at least gather some
@@ -227,10 +250,16 @@ export class WebVitalsAutocapture {
     }
 
     private _startCapturing = () => {
-        let onLCP: WebVitalsMetricCallback | undefined
-        let onCLS: WebVitalsMetricCallback | undefined
-        let onFCP: WebVitalsMetricCallback | undefined
-        let onINP: WebVitalsMetricCallback | undefined
+        // Clean up any existing observers before starting new ones
+        this._stopCapturing()
+
+        // The web-vitals library functions return cleanup functions that can be called
+        // to stop observing and free internal state. The return type is optional as older
+        // versions or mocks might not return cleanup functions.
+        let onLCP: ((callback: WebVitalsMetricCallback) => CleanupFunction | void) | undefined
+        let onCLS: ((callback: WebVitalsMetricCallback) => CleanupFunction | void) | undefined
+        let onFCP: ((callback: WebVitalsMetricCallback) => CleanupFunction | void) | undefined
+        let onINP: ((callback: WebVitalsMetricCallback) => CleanupFunction | void) | undefined
 
         const posthogExtensions = assignableWindow.__PosthogExtensions__
         if (!isUndefined(posthogExtensions) && !isUndefined(posthogExtensions.postHogWebVitalsCallbacks)) {
@@ -242,20 +271,50 @@ export class WebVitalsAutocapture {
             return
         }
 
-        // register performance observers
+        // Register performance observers and store cleanup functions
+        // The web-vitals library returns cleanup functions that must be called
+        // to stop observing and free internal state (which can hold DOM references)
         if (this.allowedMetrics.indexOf('LCP') > -1) {
-            onLCP(this._addToBuffer.bind(this))
+            const cleanup = onLCP(this._addToBuffer.bind(this))
+            if (cleanup) {
+                this._cleanupFunctions.push(cleanup)
+            }
         }
         if (this.allowedMetrics.indexOf('CLS') > -1) {
-            onCLS(this._addToBuffer.bind(this))
+            const cleanup = onCLS(this._addToBuffer.bind(this))
+            if (cleanup) {
+                this._cleanupFunctions.push(cleanup)
+            }
         }
         if (this.allowedMetrics.indexOf('FCP') > -1) {
-            onFCP(this._addToBuffer.bind(this))
+            const cleanup = onFCP(this._addToBuffer.bind(this))
+            if (cleanup) {
+                this._cleanupFunctions.push(cleanup)
+            }
         }
         if (this.allowedMetrics.indexOf('INP') > -1) {
-            onINP(this._addToBuffer.bind(this))
+            const cleanup = onINP(this._addToBuffer.bind(this))
+            if (cleanup) {
+                this._cleanupFunctions.push(cleanup)
+            }
         }
 
         this._initialized = true
+    }
+
+    /**
+     * Stop capturing web vitals and clean up observers.
+     * This releases internal state in the web-vitals library that can hold DOM references.
+     */
+    private _stopCapturing = () => {
+        // Call all cleanup functions to stop PerformanceObservers and free internal state
+        for (const cleanup of this._cleanupFunctions) {
+            try {
+                cleanup()
+            } catch (e) {
+                logger.error('Error cleaning up web vitals observer', e)
+            }
+        }
+        this._cleanupFunctions = []
     }
 }
