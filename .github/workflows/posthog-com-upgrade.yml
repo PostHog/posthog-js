@@ -83,6 +83,7 @@ jobs:
                   branch: ${{ steps.generate-branch-name.outputs.branch_name }}
                   delete-branch: true
                   title: 'chore(deps): Update ${{ github.event.inputs.package_name }} to ${{ github.event.inputs.package_version }}'
+                  team-reviewers: PostHog/team-client-libraries
                   body: |
                       ## Changes
 
