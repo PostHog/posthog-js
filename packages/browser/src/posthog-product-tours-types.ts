@@ -70,6 +70,8 @@ export interface ProductTourStep {
     linkedSurveyQuestionId?: string
     /** Enhanced element data for more reliable lookup at runtime */
     inferenceData?: InferredSelector
+    /** Use CSS selector instead of inference. Defaults to false (use inference). */
+    useManualSelector?: boolean
     /** Maximum tooltip width in pixels (defaults to 320px) */
     maxWidth?: number
     /** Position for modal/survey steps (defaults to middle_center) */

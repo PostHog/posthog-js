@@ -11,12 +11,11 @@ import {
 import { SurveyEventName, SurveyEventProperties } from '../../posthog-surveys-types'
 import {
     addProductTourCSSVariablesToElement,
-    findElementBySelector,
+    findStepElement,
     getElementMetadata,
     getProductTourStylesheet,
     normalizeUrl,
 } from './product-tours-utils'
-import { findElement } from './element-inference'
 import { ProductTourTooltip } from './components/ProductTourTooltip'
 import { ProductTourBanner } from './components/ProductTourBanner'
 import { createLogger } from '../../utils/logger'
@@ -416,58 +415,6 @@ export class ProductTourManager {
 
         this.cancelPendingTour(tour.id)
 
-        // Validate all step selectors before showing the tour
-        // Steps without selectors are modal steps and don't need validation
-        const selectorFailures: Array<{
-            stepIndex: number
-            stepId: string
-            selector: string
-            error: string
-            matchCount: number
-        }> = []
-
-        for (let i = 0; i < tour.steps.length; i++) {
-            const step = tour.steps[i]
-
-            // Skip validation for modal steps (no selector)
-            if (!step.selector) {
-                continue
-            }
-
-            const result = findElementBySelector(step.selector)
-
-            if (result.error === 'not_found' || result.error === 'not_visible') {
-                selectorFailures.push({
-                    stepIndex: i,
-                    stepId: step.id,
-                    selector: step.selector,
-                    error: result.error,
-                    matchCount: result.matchCount,
-                })
-            }
-        }
-
-        if (selectorFailures.length > 0) {
-            // Emit events for each failed selector for debugging/data purposes
-            for (const failure of selectorFailures) {
-                this._captureEvent('product tour step selector failed', {
-                    $product_tour_id: tour.id,
-                    $product_tour_step_id: failure.stepId,
-                    $product_tour_step_order: failure.stepIndex,
-                    $product_tour_step_selector: failure.selector,
-                    $product_tour_error: failure.error,
-                    $product_tour_matches_count: failure.matchCount,
-                    $product_tour_failure_phase: 'validation',
-                })
-            }
-
-            const failedSelectors = selectorFailures.map((f) => `Step ${f.stepIndex}: "${f.selector}" (${f.error})`)
-            logger.warn(
-                `Tour "${tour.name}" (${tour.id}): ${selectorFailures.length} selector(s) failed to match:\n  - ${failedSelectors.join('\n  - ')}${options?.enableStrictValidation === true ? '\n\nenableStrictValidation is true, not displaying tour.' : ''}`
-            )
-            if (options?.enableStrictValidation === true) return
-        }
-
         this._activeTour = tour
         this._setStepIndex(0)
 
@@ -671,24 +618,12 @@ export class ProductTourManager {
             return
         }
 
-        if (!step.selector) {
-            logger.warn('Unable to render element step - no selector defined.')
-            return
+        const result = findStepElement(step)
+
+        const inferenceProps = {
+            $use_manual_selector: step.useManualSelector ?? false,
+            $inference_data_present: !!step.inferenceData,
         }
-
-        const result = findElementBySelector(step.selector)
-
-        // shadow mode: try inference to compare with selector results
-        const inferenceProps = step.inferenceData
-            ? (() => {
-                  const inferenceElement = findElement(step.inferenceData)
-                  return {
-                      $inference_data_present: true,
-                      $inference_found: !!inferenceElement,
-                      $inference_matches_selector: result.element === inferenceElement,
-                  }
-              })()
-            : { $inference_data_present: false }
 
         const previousStep = this._currentStepIndex > 0 ? this._activeTour.steps[this._currentStepIndex - 1] : null
         const shouldWaitForElement = previousStep?.progressionTrigger === 'click' || this._isResuming
