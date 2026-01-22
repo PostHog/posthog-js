@@ -124,24 +124,19 @@ describe('web vitals', () => {
 
                 loadScriptMock.mockImplementation((_ph, _path, callback) => {
                     // we need a set of fake web vitals handlers, so we can manually trigger the events
-                    // The real web-vitals library returns cleanup functions
                     assignableWindow.__PosthogExtensions__ = {}
                     assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
                         onLCP: (cb: any) => {
                             onLCPCallback = cb
-                            return jest.fn() // cleanup function
                         },
                         onCLS: (cb: any) => {
                             onCLSCallback = cb
-                            return jest.fn() // cleanup function
                         },
                         onFCP: (cb: any) => {
                             onFCPCallback = cb
-                            return jest.fn() // cleanup function
                         },
                         onINP: (cb: any) => {
                             onINPCallback = cb
-                            return jest.fn() // cleanup function
                         },
                     }
                     callback()
@@ -228,15 +223,6 @@ describe('web vitals', () => {
                 jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
                 expect(beforeSendMock).toBeCalledTimes(1)
-            })
-
-            it('should have a stop() method that can be called without errors', async () => {
-                // The stop() method should exist and be callable
-                expect(posthog.webVitalsAutocapture!.stop).toBeDefined()
-                expect(typeof posthog.webVitalsAutocapture!.stop).toBe('function')
-
-                // Calling stop() should not throw and should flush any pending metrics
-                expect(() => posthog.webVitalsAutocapture!.stop()).not.toThrow()
             })
         }
     )
