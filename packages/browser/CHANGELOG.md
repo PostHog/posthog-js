@@ -1,5 +1,25 @@
 # posthog-js
 
+## 1.334.0
+
+### Minor Changes
+
+- [#2802](https://github.com/PostHog/posthog-js/pull/2802) [`f8c17bc`](https://github.com/PostHog/posthog-js/commit/f8c17bca4846ea8d0a479169548af40c6f28075e) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: add external_scripts_inject_target config to control script injection location
+  (2026-01-22)
+
+### Patch Changes
+
+- [#2950](https://github.com/PostHog/posthog-js/pull/2950) [`8543f0f`](https://github.com/PostHog/posthog-js/commit/8543f0fc30651cbee6cec6563b860ec840f9c890) Thanks [@fuziontech](https://github.com/fuziontech)! - fix(web-vitals): reduce memory leak in SPAs
+    - Upgrade web-vitals from v4.2.4 to v5.1.0 (includes internal memory fixes from v5.0.3)
+    - Remove duplicate observer creation on URL change
+
+    Note: web-vitals has inherent memory accumulation in SPAs due to internal state.
+    The v5 upgrade reduces this but doesn't fully eliminate it since web-vitals
+    doesn't provide cleanup functions (Issue #629 was closed as "not planned"). (2026-01-22)
+
+- Updated dependencies []:
+    - @posthog/types@1.334.0
+
 ## 1.333.0
 
 ### Minor Changes
