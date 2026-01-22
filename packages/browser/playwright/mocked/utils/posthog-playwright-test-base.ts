@@ -10,6 +10,7 @@ const lazyLoadedJSFiles = [
     'lazy-recorder',
     'conversations',
     'surveys',
+    'product-tours',
     'exception-autocapture',
     'tracing-headers',
     'web-vitals',
