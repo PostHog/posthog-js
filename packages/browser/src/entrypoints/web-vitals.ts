@@ -8,7 +8,7 @@ import {
     onFCP as onFCPWithAttribution,
 } from 'web-vitals/attribution'
 
-const loadCallbacks = async (useAttribution: boolean = true) => {
+const loadCallbacks = (useAttribution: boolean = true) => {
     const postHogWebVitalsCallbacks = useAttribution
         ? {
               onLCP: onLCPWithAttribution,

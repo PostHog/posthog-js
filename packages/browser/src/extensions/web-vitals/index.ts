@@ -130,10 +130,7 @@ export class WebVitalsAutocapture {
             const loadWebVitalsCallbacks = assignableWindow.__PosthogExtensions__?.loadWebVitalsCallbacks
             if (loadWebVitalsCallbacks) {
                 loadWebVitalsCallbacks(this.useAttribution)
-                    .then(cb)
-                    .catch((e: Error) => {
-                        logger.error('failed to load web vitals', e)
-                    })
+                cb()
             } else {
                 cb()
             }
