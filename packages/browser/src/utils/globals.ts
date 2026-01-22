@@ -240,7 +240,7 @@ interface PostHogExtensions {
         onFCP: (metric: any) => void
         onINP: (metric: any) => void
     }
-    loadWebVitalsCallbacks?: (useAttribution?: boolean) => Promise<PostHogExtensions['postHogWebVitalsCallbacks']>
+    loadWebVitalsCallbacks?: (useAttribution?: boolean) => PostHogExtensions['postHogWebVitalsCallbacks']
     tracingHeadersPatchFns?: {
         _patchFetch: (hostnames: string[], distinctId: string, sessionManager?: SessionIdManager) => () => void
         _patchXHR: (hostnames: string[], distinctId: string, sessionManager?: SessionIdManager) => () => void
