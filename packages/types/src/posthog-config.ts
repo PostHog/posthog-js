@@ -179,6 +179,19 @@ export interface PerformanceCaptureConfig {
      * @default 5000
      */
     web_vitals_delayed_flush_ms?: number
+
+    /**
+     * Whether to include attribution data in web vitals metrics.
+     * Attribution data includes additional debugging information like
+     * which elements caused layout shifts (CLS), timing breakdowns, etc.
+     *
+     * Disabling this uses a lighter build of the web-vitals library
+     * which may help reduce memory usage in SPAs where elements
+     * causing layout shifts are removed during navigation.
+     *
+     * @default true
+     */
+    web_vitals_attribution?: boolean
 }
 
 export interface DeadClickCandidate {
