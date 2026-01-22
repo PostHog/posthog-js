@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.334.1
+
+### Patch Changes
+
+- [#2940](https://github.com/PostHog/posthog-js/pull/2940) [`d38842d`](https://github.com/PostHog/posthog-js/commit/d38842d0337fad8ea78ee6dfea375d2045608049) Thanks [@adboio](https://github.com/adboio)! - enable element inference for product tours
+  (2026-01-22)
+- Updated dependencies []:
+    - @posthog/types@1.334.1
+
 ## 1.334.0
 
 ### Minor Changes
