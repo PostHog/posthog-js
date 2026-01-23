@@ -2,7 +2,7 @@ import { DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS, MAX_SESSION_IDLE_TIMEOUT_SECONDS,
 import { SESSION_ID } from '../constants'
 import { sessionStore } from '../storage'
 import { uuid7ToTimestampMs, uuidv7 } from '../uuidv7'
-import { BootstrapConfig, PostHogConfig, Properties } from '../types'
+import { PostHogConfig, Properties } from '../types'
 import { PostHogPersistence } from '../posthog-persistence'
 import { assignableWindow } from '../utils/globals'
 import { createMockPostHog } from './helpers/posthog-instance'
@@ -82,18 +82,10 @@ describe('Session ID manager', () => {
         it('should allow bootstrapping of the session id', () => {
             // arrange
             const bootstrapSessionId = 'bootstrap-session-id'
-            const bootstrap: BootstrapConfig = {
-                sessionID: bootstrapSessionId,
-            }
-            const sessionIdManager = new SessionIdManager(
-                createMockPostHog({
-                    config: { ...config, bootstrap },
-                    persistence: persistence as PostHogPersistence,
-                    register: jest.fn(),
-                })
-            )
+            const sessionIdManager = sessionIdMgr(persistence)
 
             // act
+            sessionIdManager.setBootstrapSessionId(bootstrapSessionId)
             const { sessionId, sessionStartTimestamp } = sessionIdManager.checkAndGetSessionAndWindowId(false, now)
 
             // assert

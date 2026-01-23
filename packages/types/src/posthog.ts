@@ -5,7 +5,7 @@
  * It can be used to type `window.posthog` when loading PostHog via a script tag.
  */
 
-import type { PostHogConfig } from './posthog-config'
+import type { PostHogConfig, ResetOptions } from './posthog-config'
 import type { Properties, JsonType } from './common'
 import type { CaptureResult, CaptureOptions } from './capture'
 import type { FeatureFlagsCallback, EarlyAccessFeatureCallback, EarlyAccessFeatureStage } from './feature-flags'
@@ -131,9 +131,9 @@ export interface PostHog {
     /**
      * Reset the user's identity and start a new session.
      *
-     * @param reset_device_id - Whether to reset the device ID as well
+     * @param options - Boolean to reset device ID (legacy), or an options object with resetDeviceID and bootstrap config
      */
-    reset(reset_device_id?: boolean): void
+    reset(options?: boolean | ResetOptions): void
 
     /**
      * Create a person profile for the current user.
