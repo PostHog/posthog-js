@@ -257,6 +257,166 @@ describe('featureflags', () => {
         expect(instance.capture).toHaveBeenCalled()
     })
 
+    describe('getFeatureFlagResult', () => {
+        it('should return the result with flag value and payload for boolean flags', () => {
+            featureFlags._hasLoadedFlags = true
+
+            const result = featureFlags.getFeatureFlagResult('beta-feature')
+
+            expect(result).toEqual({
+                key: 'beta-feature',
+                enabled: true,
+                variant: undefined,
+                payload: { some: 'payload' },
+            })
+            expect(instance.capture).toHaveBeenCalledWith('$feature_flag_called', expect.any(Object))
+        })
+
+        it('should return the result with variant for multivariate flags', () => {
+            featureFlags._hasLoadedFlags = true
+
+            const result = featureFlags.getFeatureFlagResult('multivariate-flag')
+
+            expect(result).toEqual({
+                key: 'multivariate-flag',
+                enabled: true,
+                variant: 'variant-1',
+                payload: undefined,
+            })
+            expect(instance.capture).toHaveBeenCalled()
+        })
+
+        it('should return undefined for non-existent flags', () => {
+            featureFlags._hasLoadedFlags = true
+
+            const result = featureFlags.getFeatureFlagResult('non-existent-flag')
+
+            expect(result).toEqual(undefined)
+        })
+
+        it('should return result with enabled false for disabled flags', () => {
+            featureFlags._hasLoadedFlags = true
+
+            const result = featureFlags.getFeatureFlagResult('disabled-flag')
+
+            expect(result).toEqual({
+                key: 'disabled-flag',
+                enabled: false,
+                variant: undefined,
+                payload: undefined,
+            })
+        })
+
+        it('should respect send_event option', () => {
+            featureFlags._hasLoadedFlags = true
+
+            const result = featureFlags.getFeatureFlagResult('beta-feature', { send_event: false })
+
+            expect(result).toEqual({
+                key: 'beta-feature',
+                enabled: true,
+                variant: undefined,
+                payload: { some: 'payload' },
+            })
+            expect(instance.capture).not.toHaveBeenCalled()
+        })
+
+        it('should return raw string payload when JSON parsing fails', () => {
+            featureFlags._hasLoadedFlags = true
+            instance.persistence.register({
+                $feature_flag_payloads: {
+                    'invalid-json-flag': 'not valid json {{{',
+                },
+                $enabled_feature_flags: {
+                    'invalid-json-flag': true,
+                },
+            })
+
+            const result = featureFlags.getFeatureFlagResult('invalid-json-flag', { send_event: false })
+
+            expect(result).toEqual({
+                key: 'invalid-json-flag',
+                enabled: true,
+                variant: undefined,
+                payload: 'not valid json {{{',
+            })
+        })
+
+        it('should return override result when flag is overridden', () => {
+            instance.__loaded = true
+            featureFlags._hasLoadedFlags = true
+            featureFlags.overrideFeatureFlags({
+                flags: { 'overridden-flag': 'override-variant' },
+                payloads: { 'overridden-flag': { custom: 'payload' } },
+                suppressWarning: true,
+            })
+
+            const result = featureFlags.getFeatureFlagResult('overridden-flag', { send_event: false })
+
+            expect(result).toEqual({
+                key: 'overridden-flag',
+                enabled: true,
+                variant: 'override-variant',
+                payload: { custom: 'payload' },
+            })
+        })
+
+        it('should return disabled result when flag is overridden to false', () => {
+            instance.__loaded = true
+            featureFlags._hasLoadedFlags = true
+            featureFlags.overrideFeatureFlags({
+                flags: { 'disabled-override-flag': false },
+                suppressWarning: true,
+            })
+
+            const result = featureFlags.getFeatureFlagResult('disabled-override-flag', { send_event: false })
+
+            expect(result).toEqual({
+                key: 'disabled-override-flag',
+                enabled: false,
+                variant: undefined,
+                payload: undefined,
+            })
+        })
+
+        it('should return payload even when flag is overridden to false', () => {
+            instance.__loaded = true
+            featureFlags._hasLoadedFlags = true
+            featureFlags.overrideFeatureFlags({
+                flags: { 'disabled-with-payload': false },
+                payloads: { 'disabled-with-payload': { some: 'data' } },
+                suppressWarning: true,
+            })
+
+            const result = featureFlags.getFeatureFlagResult('disabled-with-payload', { send_event: false })
+
+            expect(result).toEqual({
+                key: 'disabled-with-payload',
+                enabled: false,
+                variant: undefined,
+                payload: { some: 'data' },
+            })
+        })
+
+        it('should return disabled result when flag is overridden to undefined', () => {
+            instance.__loaded = true
+            featureFlags._hasLoadedFlags = true
+            featureFlags.overrideFeatureFlags({
+                flags: { 'undefined-override-flag': undefined as any },
+                suppressWarning: true,
+            })
+
+            const result = featureFlags.getFeatureFlagResult('undefined-override-flag', { send_event: false })
+
+            expect(result).toEqual({
+                key: 'undefined-override-flag',
+                enabled: false,
+                variant: undefined,
+                payload: undefined,
+            })
+        })
+    })
+
     describe('feature flag overrides', () => {
         beforeEach(() => {
             // Common setup used across multiple tests
@@ -2563,6 +2723,42 @@ describe('updateFlags', () => {
         posthog.updateFlags({ 'test-flag': true }, { 'test-flag': { some: 'payload' } })
 
         expect(posthog.getFeatureFlagPayload('test-flag')).toEqual({ some: 'payload' })
+    })
+
+    it('should return flag result with value and payload via getFeatureFlagResult', async () => {
+        const posthog = await createPosthogInstance()
+
+        posthog.updateFlags(
+            { 'boolean-flag': true, 'variant-flag': 'control', 'disabled-flag': false },
+            { 'boolean-flag': { discount: 10 }, 'variant-flag': { version: 'a' } }
+        )
+
+        const booleanResult = posthog.getFeatureFlagResult('boolean-flag', { send_event: false })
+        expect(booleanResult).toEqual({
+            key: 'boolean-flag',
+            enabled: true,
+            variant: undefined,
+            payload: { discount: 10 },
+        })
+
+        const variantResult = posthog.getFeatureFlagResult('variant-flag', { send_event: false })
+        expect(variantResult).toEqual({
+            key: 'variant-flag',
+            enabled: true,
+            variant: 'control',
+            payload: { version: 'a' },
+        })
+
+        const disabledResult = posthog.getFeatureFlagResult('disabled-flag', { send_event: false })
+        expect(disabledResult).toEqual({
+            key: 'disabled-flag',
+            enabled: false,
+            variant: undefined,
+            payload: undefined,
+        })
+
+        const missingResult = posthog.getFeatureFlagResult('non-existent', { send_event: false })
+        expect(missingResult).toBeUndefined()
     })
 
     // Note: Falsy payload values (null, 0, false, '') are filtered out by normalizeFlagsResponse
