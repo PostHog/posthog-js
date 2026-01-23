@@ -11,12 +11,11 @@ import {
 import { SurveyEventName, SurveyEventProperties } from '../../posthog-surveys-types'
 import {
     addProductTourCSSVariablesToElement,
-    findElementBySelector,
+    findStepElement,
     getElementMetadata,
     getProductTourStylesheet,
     normalizeUrl,
 } from './product-tours-utils'
-import { findElement } from './element-inference'
 import { ProductTourTooltip } from './components/ProductTourTooltip'
 import { ProductTourBanner } from './components/ProductTourBanner'
 import { createLogger } from '../../utils/logger'
@@ -166,6 +165,8 @@ function removeTourFromDom(tourId: string): void {
     }
     container?.remove()
 }
+
+const PRODUCT_TOUR_TARGETING_FLAG_PREFIX = 'product-tour-targeting-'
 
 export class ProductTourManager {
     private _instance: PostHog
@@ -400,12 +401,19 @@ export class ProductTourManager {
                 break
         }
 
-        if (tour.internal_targeting_flag_key) {
-            const flagValue = this._instance.featureFlags?.getFeatureFlag(tour.internal_targeting_flag_key)
-            if (!flagValue) {
-                logger.info(`Tour ${tour.id} failed feature flag check: ${tour.internal_targeting_flag_key}`)
-                return false
-            }
+        if (!this._isProductToursFeatureFlagEnabled({ flagKey: tour.internal_targeting_flag_key })) {
+            logger.info(`Tour ${tour.id} failed feature flag check: ${tour.internal_targeting_flag_key}`)
+            return false
+        }
+
+        const linkedFlagVariant = tour.conditions?.linkedFlagVariant
+        if (
+            !this._isProductToursFeatureFlagEnabled({ flagKey: tour.linked_flag_key, flagVariant: linkedFlagVariant })
+        ) {
+            logger.info(
+                `Tour ${tour.id} failed feature flag check: ${tour.linked_flag_key}, variant: ${linkedFlagVariant}`
+            )
+            return false
         }
 
         return true
@@ -415,58 +423,6 @@ export class ProductTourManager {
         const renderReason: ProductTourRenderReason = options?.reason ?? 'auto'
 
         this.cancelPendingTour(tour.id)
-
-        // Validate all step selectors before showing the tour
-        // Steps without selectors are modal steps and don't need validation
-        const selectorFailures: Array<{
-            stepIndex: number
-            stepId: string
-            selector: string
-            error: string
-            matchCount: number
-        }> = []
-
-        for (let i = 0; i < tour.steps.length; i++) {
-            const step = tour.steps[i]
-
-            // Skip validation for modal steps (no selector)
-            if (!step.selector) {
-                continue
-            }
-
-            const result = findElementBySelector(step.selector)
-
-            if (result.error === 'not_found' || result.error === 'not_visible') {
-                selectorFailures.push({
-                    stepIndex: i,
-                    stepId: step.id,
-                    selector: step.selector,
-                    error: result.error,
-                    matchCount: result.matchCount,
-                })
-            }
-        }
-
-        if (selectorFailures.length > 0) {
-            // Emit events for each failed selector for debugging/data purposes
-            for (const failure of selectorFailures) {
-                this._captureEvent('product tour step selector failed', {
-                    $product_tour_id: tour.id,
-                    $product_tour_step_id: failure.stepId,
-                    $product_tour_step_order: failure.stepIndex,
-                    $product_tour_step_selector: failure.selector,
-                    $product_tour_error: failure.error,
-                    $product_tour_matches_count: failure.matchCount,
-                    $product_tour_failure_phase: 'validation',
-                })
-            }
-
-            const failedSelectors = selectorFailures.map((f) => `Step ${f.stepIndex}: "${f.selector}" (${f.error})`)
-            logger.warn(
-                `Tour "${tour.name}" (${tour.id}): ${selectorFailures.length} selector(s) failed to match:\n  - ${failedSelectors.join('\n  - ')}${options?.enableStrictValidation === true ? '\n\nenableStrictValidation is true, not displaying tour.' : ''}`
-            )
-            if (options?.enableStrictValidation === true) return
-        }
 
         this._activeTour = tour
         this._setStepIndex(0)
@@ -671,24 +627,12 @@ export class ProductTourManager {
             return
         }
 
-        if (!step.selector) {
-            logger.warn('Unable to render element step - no selector defined.')
-            return
+        const result = findStepElement(step)
+
+        const inferenceProps = {
+            $use_manual_selector: step.useManualSelector ?? false,
+            $inference_data_present: !!step.inferenceData,
         }
-
-        const result = findElementBySelector(step.selector)
-
-        // shadow mode: try inference to compare with selector results
-        const inferenceProps = step.inferenceData
-            ? (() => {
-                  const inferenceElement = findElement(step.inferenceData)
-                  return {
-                      $inference_data_present: true,
-                      $inference_found: !!inferenceElement,
-                      $inference_matches_selector: result.element === inferenceElement,
-                  }
-              })()
-            : { $inference_data_present: false }
 
         const previousStep = this._currentStepIndex > 0 ? this._activeTour.steps[this._currentStepIndex - 1] : null
         const shouldWaitForElement = previousStep?.progressionTrigger === 'click' || this._isResuming
@@ -892,6 +836,21 @@ export class ProductTourManager {
         this._renderTooltipWithPreact(null, handleSubmit, handleDismiss)
 
         logger.info(`Rendered survey step for tour step ${this._currentStepIndex}`)
+    }
+
+    private _isProductToursFeatureFlagEnabled({ flagKey, flagVariant }: { flagKey?: string; flagVariant?: string }) {
+        if (!flagKey) {
+            return true
+        }
+        const isFeatureEnabled = !!this._instance.featureFlags.isFeatureEnabled(flagKey, {
+            send_event: !flagKey.startsWith(PRODUCT_TOUR_TARGETING_FLAG_PREFIX),
+        })
+        let flagVariantCheck = true
+        if (flagVariant) {
+            const flagVariantValue = this._instance.featureFlags.getFeatureFlag(flagKey, { send_event: false })
+            flagVariantCheck = flagVariantValue === flagVariant || flagVariant === 'any'
+        }
+        return isFeatureEnabled && flagVariantCheck
     }
 
     private _cleanup(): void {

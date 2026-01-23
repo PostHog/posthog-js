@@ -327,6 +327,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // as we make some decisions based on them without referencing LinkedFlag etc
     private _triggerMatching: TriggerStatusMatching = new PendingTriggerMatching()
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
+    private _fullSnapshotTimestamps: Array<[string, number]> = []
 
     private _windowId: string
     private _sessionId: string
@@ -1008,6 +1009,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._updateWindowAndSessionIds(event)
         }
 
+        if (rawEvent.type === EventType.FullSnapshot) {
+            this._fullSnapshotTimestamps.push([this._sessionId, rawEvent.timestamp])
+            if (this._fullSnapshotTimestamps.length > 6) {
+                this._fullSnapshotTimestamps = this._fullSnapshotTimestamps.slice(-6)
+            }
+        }
+
         // Route lifecycle events using their payload IDs:
         // - $session_ending uses currentSessionId (the old session it's ending)
         // - $session_starting uses nextSessionId (the new session it's starting)
@@ -1474,6 +1482,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_current_session_duration: this._sessionDuration,
             $sdk_debug_session_start: sessionStartTimestamp,
             $sdk_debug_replay_flushed_size: this._flushedSizeTracker?.currentTrackedSize,
+            $sdk_debug_replay_full_snapshots: this._fullSnapshotTimestamps,
         }
     }
 

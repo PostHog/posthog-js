@@ -1105,6 +1105,60 @@ describe('Lazy SessionRecording', () => {
             })
         })
 
+        describe('full snapshot timestamp tracking', () => {
+            beforeEach(() => {
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                        },
+                    })
+                )
+            })
+
+            it.each([
+                [1, [1000]],
+                [6, [1000, 2000, 3000, 4000, 5000, 6000]],
+                [8, [3000, 4000, 5000, 6000, 7000, 8000]],
+            ])('tracks last 6 full snapshot timestamps when %s snapshots emitted', (count, expectedTimestamps) => {
+                for (let i = 1; i <= count; i++) {
+                    _emit(createFullSnapshot({ timestamp: i * 1000 }))
+                }
+
+                const snapshots = sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimestamps']
+                expect(snapshots).toEqual(expectedTimestamps.map((ts: number) => [sessionId, ts]))
+            })
+
+            it('exposes full snapshot timestamps in sdkDebugProperties', () => {
+                _emit(createFullSnapshot({ timestamp: 1000 }))
+                _emit(createFullSnapshot({ timestamp: 2000 }))
+
+                expect(sessionRecording.sdkDebugProperties.$sdk_debug_replay_full_snapshots).toEqual([
+                    [sessionId, 1000],
+                    [sessionId, 2000],
+                ])
+            })
+
+            it('records the session id at the time of the snapshot', () => {
+                const firstSessionId = sessionId
+
+                _emit(createFullSnapshot({ timestamp: 1000 }))
+                _emit(createFullSnapshot({ timestamp: 2000 }))
+
+                sessionManager.resetSessionId()
+                sessionId = 'rotated-session-id'
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
+                _emit(createFullSnapshot({ timestamp: 3000 }))
+
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimestamps']).toEqual([
+                    [firstSessionId, 1000],
+                    [firstSessionId, 2000],
+                    ['rotated-session-id', 3000],
+                ])
+            })
+        })
+
         describe('when pageview capture is disabled', () => {
             beforeEach(() => {
                 jest.spyOn(sessionRecording, 'tryAddCustomEvent')

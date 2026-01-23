@@ -63,4 +63,42 @@ test.describe('Web Vitals', () => {
         const webVitalsEvents = (await page.capturedEvents()).filter((event) => event.event === '$web_vitals')
         expect(webVitalsEvents.length).toBe(0)
     })
+    ;[
+        { attributionConfig: true, shouldHaveAttribution: true },
+        { attributionConfig: false, shouldHaveAttribution: false },
+        { attributionConfig: undefined, shouldHaveAttribution: true },
+    ].forEach(({ attributionConfig, shouldHaveAttribution }) => {
+        test(`web_vitals_attribution: ${attributionConfig} ${shouldHaveAttribution ? 'includes' : 'excludes'} attribution data`, async ({
+            page,
+            context,
+        }) => {
+            await start(
+                {
+                    ...startOptions,
+                    options: {
+                        capture_performance: {
+                            web_vitals: true,
+                            web_vitals_attribution: attributionConfig,
+                        },
+                    },
+                },
+                page,
+                context
+            )
+
+            await pollUntilEventCaptured(page, '$web_vitals')
+
+            const webVitalsEvents = (await page.capturedEvents()).filter((event) => event.event === '$web_vitals')
+            expect(webVitalsEvents.length).toBeGreaterThan(0)
+
+            const fcpEvent = webVitalsEvents[0].properties.$web_vitals_FCP_event
+            expect(fcpEvent).toBeDefined()
+
+            if (shouldHaveAttribution) {
+                expect(fcpEvent.attribution).toBeDefined()
+            } else {
+                expect(fcpEvent.attribution).toBeUndefined()
+            }
+        })
+    })
 })

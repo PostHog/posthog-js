@@ -1,5 +1,102 @@
 # posthog-js
 
+## 1.335.0
+
+### Minor Changes
+
+- [#2953](https://github.com/PostHog/posthog-js/pull/2953) [`c8d3fbe`](https://github.com/PostHog/posthog-js/commit/c8d3fbe5e3a4944596d7a34086484affd94d7329) Thanks [@pauldambra](https://github.com/pauldambra)! - allows using web vitals with and without attribution
+  (2026-01-23)
+
+### Patch Changes
+
+- [#2947](https://github.com/PostHog/posthog-js/pull/2947) [`b586b6b`](https://github.com/PostHog/posthog-js/commit/b586b6bdd8d77f1b6805b987233d50784d7a6084) Thanks [@adboio](https://github.com/adboio)! - enable linked flags for product tours
+  (2026-01-23)
+- Updated dependencies [[`c8d3fbe`](https://github.com/PostHog/posthog-js/commit/c8d3fbe5e3a4944596d7a34086484affd94d7329)]:
+    - @posthog/types@1.335.0
+
+## 1.334.1
+
+### Patch Changes
+
+- [#2940](https://github.com/PostHog/posthog-js/pull/2940) [`d38842d`](https://github.com/PostHog/posthog-js/commit/d38842d0337fad8ea78ee6dfea375d2045608049) Thanks [@adboio](https://github.com/adboio)! - enable element inference for product tours
+  (2026-01-22)
+- Updated dependencies []:
+    - @posthog/types@1.334.1
+
+## 1.334.0
+
+### Minor Changes
+
+- [#2802](https://github.com/PostHog/posthog-js/pull/2802) [`f8c17bc`](https://github.com/PostHog/posthog-js/commit/f8c17bca4846ea8d0a479169548af40c6f28075e) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: add external_scripts_inject_target config to control script injection location
+  (2026-01-22)
+
+### Patch Changes
+
+- [#2950](https://github.com/PostHog/posthog-js/pull/2950) [`8543f0f`](https://github.com/PostHog/posthog-js/commit/8543f0fc30651cbee6cec6563b860ec840f9c890) Thanks [@fuziontech](https://github.com/fuziontech)! - fix(web-vitals): reduce memory leak in SPAs
+    - Upgrade web-vitals from v4.2.4 to v5.1.0 (includes internal memory fixes from v5.0.3)
+    - Remove duplicate observer creation on URL change
+
+    Note: web-vitals has inherent memory accumulation in SPAs due to internal state.
+    The v5 upgrade reduces this but doesn't fully eliminate it since web-vitals
+    doesn't provide cleanup functions (Issue #629 was closed as "not planned"). (2026-01-22)
+
+- Updated dependencies []:
+    - @posthog/types@1.334.0
+
+## 1.333.0
+
+### Minor Changes
+
+- [#2942](https://github.com/PostHog/posthog-js/pull/2942) [`994206d`](https://github.com/PostHog/posthog-js/commit/994206d4ceac218061ef35eec744a0698fb0afed) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Send context on sendMessage
+  (2026-01-21)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.333.0
+
+## 1.332.0
+
+### Minor Changes
+
+- [#2882](https://github.com/PostHog/posthog-js/pull/2882) [`8a5a3d5`](https://github.com/PostHog/posthog-js/commit/8a5a3d5693facda62b90b66dead338f7dca19705) Thanks [@adboio](https://github.com/adboio)! - add support for question prefill in popover surveys, add useThumbSurvey hook
+  (2026-01-20)
+
+### Patch Changes
+
+- Updated dependencies [[`8a5a3d5`](https://github.com/PostHog/posthog-js/commit/8a5a3d5693facda62b90b66dead338f7dca19705)]:
+    - @posthog/core@1.13.0
+    - @posthog/types@1.332.0
+
+## 1.331.3
+
+### Patch Changes
+
+- [#2916](https://github.com/PostHog/posthog-js/pull/2916) [`cbab5d2`](https://github.com/PostHog/posthog-js/commit/cbab5d2585b284b1adace8307a8acdb080501227) Thanks [@adboio](https://github.com/adboio)! - fix product tour tooltips on mobile
+  (2026-01-20)
+
+- [#2933](https://github.com/PostHog/posthog-js/pull/2933) [`d9eaf41`](https://github.com/PostHog/posthog-js/commit/d9eaf413bea479af86d6418f45a58ee1df2a8fe0) Thanks [@adboio](https://github.com/adboio)! - add url params to posthog logo in surveys footer
+  (2026-01-20)
+- Updated dependencies []:
+    - @posthog/types@1.331.3
+
+## 1.331.2
+
+### Patch Changes
+
+- [#2939](https://github.com/PostHog/posthog-js/pull/2939) [`6442f5d`](https://github.com/PostHog/posthog-js/commit/6442f5d6cd8ae097c07584f102bc6001948dce59) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: Rate limiting configuration changes are respected
+  (2026-01-20)
+- Updated dependencies []:
+    - @posthog/types@1.331.2
+
+## 1.331.1
+
+### Patch Changes
+
+- Updated dependencies [[`b7fa003`](https://github.com/PostHog/posthog-js/commit/b7fa003ef6ef74bdf4666be0748d89a5a6169054), [`f0cbc0d`](https://github.com/PostHog/posthog-js/commit/f0cbc0d8e4e5efc27d9595676e886d6d3d3892f4)]:
+    - @posthog/core@1.12.0
+    - @posthog/types@1.331.1
+
 ## 1.331.0
 
 ### Minor Changes

@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.331.0",
+    "version": "1.335.0",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
@@ -45,8 +45,9 @@
     "files": [
         "lib/*",
         "dist/*",
-        "react/dist/*",
-        "react/package.json"
+        "react/dist/**",
+        "react/package.json",
+        "react/surveys/package.json"
     ],
     "dependencies": {
         "@posthog/core": "workspace:*",
@@ -56,7 +57,7 @@
         "fflate": "^0.4.8",
         "preact": "^10.28.0",
         "query-selector-shadow-dom": "^1.0.1",
-        "web-vitals": "^4.2.4",
+        "web-vitals": "^5.1.0",
         "@opentelemetry/api": "^1.9.0",
         "@opentelemetry/api-logs": "^0.208.0",
         "@opentelemetry/exporter-logs-otlp-http": "^0.208.0",
