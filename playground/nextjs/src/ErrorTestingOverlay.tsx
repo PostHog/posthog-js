@@ -144,40 +144,22 @@ export function ErrorTestingOverlay() {
                 </button>
 
                 <div style={{ fontSize: '11px', color: '#888', marginTop: '8px', marginBottom: '4px' }}>
-                    Event Triggers:
+                    Trigger Event:
                 </div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                    <button
-                        onClick={() => captureEvent('purchase_completed')}
-                        style={{
-                            flex: 1,
-                            padding: '8px',
-                            backgroundColor: '#28a745',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '11px',
-                        }}
-                    >
-                        purchase_completed
-                    </button>
-                    <button
-                        onClick={() => captureEvent('signup')}
-                        style={{
-                            flex: 1,
-                            padding: '8px',
-                            backgroundColor: '#17a2b8',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '11px',
-                        }}
-                    >
-                        signup
-                    </button>
-                </div>
+                <button
+                    onClick={() => captureEvent('custom_event_trigger_autocapture')}
+                    style={{
+                        padding: '10px 12px',
+                        backgroundColor: '#6f42c1',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontWeight: '500',
+                    }}
+                >
+                    📡 Send Trigger Event
+                </button>
             </div>
 
             {lastAction && (
