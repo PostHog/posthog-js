@@ -109,41 +109,88 @@ export class ErrorTrackingIngestionControls {
      * With match_type: 'all', all conditions must pass.
      */
     shouldCaptureError(): IngestionDecision {
+        const url = this._getCurrentUrl()
+        const sessionId = this._instance.get_session_id()
+
+        logger.info('Evaluating ingestion controls', {
+            configReceived: this._configReceived,
+            currentUrl: url,
+            sessionId,
+        })
+
         // If no config received yet, allow capture (fail open)
         if (!this._configReceived) {
+            logger.info('Decision: capture (no config received yet, failing open)')
             return { shouldCapture: true, reason: 'no_config' }
         }
 
-        const sessionId = this._instance.get_session_id()
-
         // Check URL blocklist first - always blocks regardless of other conditions
-        if (this._isUrlBlocked()) {
+        const urlBlocked = this._isUrlBlocked()
+        logger.info('URL blocklist check', {
+            configured: this._urlBlocklist.length > 0,
+            patterns: this._urlBlocklist.map((t) => t.url),
+            blocked: urlBlocked,
+        })
+        if (urlBlocked) {
+            logger.info('Decision: block (URL matches blocklist)')
             return { shouldCapture: false, reason: 'url_blocked' }
         }
 
         // With match_type: 'all', all configured conditions must pass
         // If no conditions are configured, we capture
 
-        // Check URL triggers (if configured, current URL must match)
-        if (this._urlTriggers.length > 0 && !this._isUrlTriggerActivated(sessionId)) {
+        // Check URL triggers (if configured, must have visited a matching URL this session)
+        const urlTriggerConfigured = this._urlTriggers.length > 0
+        const urlTriggerActivated = this._isUrlTriggerActivated(sessionId)
+        logger.info('URL trigger check', {
+            configured: urlTriggerConfigured,
+            patterns: this._urlTriggers.map((t) => t.url),
+            activated: urlTriggerActivated,
+        })
+        if (urlTriggerConfigured && !urlTriggerActivated) {
+            logger.info('Decision: block (URL trigger configured but not activated)')
             return { shouldCapture: false, reason: 'url_trigger_pending' }
         }
 
         // Check event triggers (if configured, a trigger event must have fired this session)
-        if (this._eventTriggers.length > 0 && !this._isEventTriggerActivated(sessionId)) {
+        const eventTriggerConfigured = this._eventTriggers.length > 0
+        const eventTriggerActivated = this._isEventTriggerActivated(sessionId)
+        logger.info('Event trigger check', {
+            configured: eventTriggerConfigured,
+            events: this._eventTriggers,
+            activated: eventTriggerActivated,
+        })
+        if (eventTriggerConfigured && !eventTriggerActivated) {
+            logger.info('Decision: block (event trigger configured but not activated)')
             return { shouldCapture: false, reason: 'event_trigger_pending' }
         }
 
         // Check linked feature flag (if configured, flag must be enabled)
-        if (!isNullish(this._linkedFeatureFlag) && !this._linkedFlagSeen) {
+        const linkedFlagConfigured = !isNullish(this._linkedFeatureFlag)
+        logger.info('Linked feature flag check', {
+            configured: linkedFlagConfigured,
+            flag: this._linkedFeatureFlag,
+            seen: this._linkedFlagSeen,
+        })
+        if (linkedFlagConfigured && !this._linkedFlagSeen) {
+            logger.info('Decision: block (linked feature flag configured but not matched)')
             return { shouldCapture: false, reason: 'linked_flag_pending' }
         }
 
         // Check sample rate (if configured, apply sampling)
-        if (!isNullish(this._sampleRate) && !this._isSampled()) {
+        const samplingConfigured = !isNullish(this._sampleRate)
+        const sampled = this._isSampled()
+        logger.info('Sampling check', {
+            configured: samplingConfigured,
+            sampleRate: this._sampleRate,
+            sampled,
+        })
+        if (samplingConfigured && !sampled) {
+            logger.info('Decision: block (sampled out)')
             return { shouldCapture: false, reason: 'sampled_out' }
         }
 
+        logger.info('Decision: capture (all conditions passed)')
         return { shouldCapture: true, reason: 'capture' }
     }
 
