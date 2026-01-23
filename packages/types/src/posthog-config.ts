@@ -140,6 +140,11 @@ export interface BootstrapConfig {
     sessionID?: string
 }
 
+export interface ResetOptions {
+    resetDeviceID?: boolean
+    bootstrap?: BootstrapConfig
+}
+
 export type SupportedWebVitalsMetrics = 'LCP' | 'CLS' | 'FCP' | 'INP'
 
 export interface PerformanceCaptureConfig {

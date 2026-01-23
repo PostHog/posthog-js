@@ -46,6 +46,7 @@ import { SessionIdManager } from './sessionid'
 import { SiteApps } from './site-apps'
 import { localStore } from './storage'
 import {
+    BootstrapConfig,
     CaptureOptions,
     CaptureResult,
     Compression,
@@ -64,6 +65,7 @@ import {
     QueuedRequestWithOptions,
     RemoteConfig,
     RequestCallback,
+    ResetOptions,
     SessionIdChangedCallback,
     SnippetArrayItem,
     ToolbarParams,
@@ -589,35 +591,8 @@ export class PostHog implements PostHogInterface {
             })
         }
 
-        // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
-        // eslint-disable-next-line posthog-js/no-direct-undefined-check
-        if (config.bootstrap?.distinctID !== undefined) {
-            const uuid = this.config.get_device_id(uuidv7())
-            const deviceID = config.bootstrap?.isIdentifiedID ? uuid : config.bootstrap.distinctID
-            this.persistence.set_property(USER_STATE, config.bootstrap?.isIdentifiedID ? 'identified' : 'anonymous')
-            this.register({
-                distinct_id: config.bootstrap.distinctID,
-                $device_id: deviceID,
-            })
-        }
-
-        if (this._hasBootstrappedFeatureFlags()) {
-            const activeFlags = Object.keys(config.bootstrap?.featureFlags || {})
-                .filter((flag) => !!config.bootstrap?.featureFlags?.[flag])
-                .reduce((res: Record<string, string | boolean>, key) => {
-                    res[key] = config.bootstrap?.featureFlags?.[key] || false
-                    return res
-                }, {})
-            const featureFlagPayloads = Object.keys(config.bootstrap?.featureFlagPayloads || {})
-                .filter((key) => activeFlags[key])
-                .reduce((res: Record<string, JsonType>, key) => {
-                    if (config.bootstrap?.featureFlagPayloads?.[key]) {
-                        res[key] = config.bootstrap?.featureFlagPayloads?.[key]
-                    }
-                    return res
-                }, {})
-
-            this.featureFlags.receivedFeatureFlags({ featureFlags: activeFlags, featureFlagPayloads })
+        if (config.bootstrap) {
+            this._applyBootstrap(config.bootstrap)
         }
 
         if (startInCookielessMode) {
@@ -1031,6 +1006,41 @@ export class PostHog implements PostHogInterface {
             (this.config.bootstrap?.featureFlags && Object.keys(this.config.bootstrap?.featureFlags).length > 0) ||
             false
         )
+    }
+
+    private _applyBootstrap(bootstrap: BootstrapConfig): void {
+        // eslint-disable-next-line posthog-js/no-direct-undefined-check
+        if (bootstrap.distinctID !== undefined) {
+            const uuid = this.config.get_device_id(uuidv7())
+            const deviceID = bootstrap.isIdentifiedID ? uuid : bootstrap.distinctID
+            this.persistence?.set_property(USER_STATE, bootstrap.isIdentifiedID ? 'identified' : 'anonymous')
+            this.register({
+                distinct_id: bootstrap.distinctID,
+                $device_id: deviceID,
+            })
+        }
+
+        if (bootstrap.featureFlags && Object.keys(bootstrap.featureFlags).length > 0) {
+            const activeFlags = Object.keys(bootstrap.featureFlags)
+                .filter((flag) => !!bootstrap.featureFlags?.[flag])
+                .reduce((res: Record<string, string | boolean>, key) => {
+                    res[key] = bootstrap.featureFlags?.[key] || false
+                    return res
+                }, {})
+            const featureFlagPayloads = Object.keys(bootstrap.featureFlagPayloads || {})
+                .filter((key) => activeFlags[key])
+                .reduce((res: Record<string, JsonType>, key) => {
+                    if (bootstrap.featureFlagPayloads?.[key]) {
+                        res[key] = bootstrap.featureFlagPayloads[key]
+                    }
+                    return res
+                }, {})
+            this.featureFlags.receivedFeatureFlags({ featureFlags: activeFlags, featureFlagPayloads })
+        }
+
+        if (bootstrap.sessionID) {
+            this.sessionManager?.setBootstrapSessionId(bootstrap.sessionID)
+        }
     }
 
     /**
@@ -2540,13 +2550,29 @@ export class PostHog implements PostHogInterface {
      * posthog.reset(true)  // also resets device_id
      * ```
      *
+     * @example
+     * ```js
+     * // reset with a custom anonymous ID and feature flags
+     * posthog.reset({
+     *     bootstrap: {
+     *         distinctID: myAnonymousID,
+     *         isIdentifiedID: false,
+     *         featureFlags: { 'my-flag': true },
+     *     }
+     * })
+     * ```
+     *
      * @public
      */
-    reset(reset_device_id?: boolean): void {
+    reset(options?: boolean | ResetOptions): void {
         logger.info('reset')
         if (!this.__loaded) {
             return logger.uninitializedWarning('posthog.reset')
         }
+
+        const resetDeviceID = isBoolean(options) ? options : (options?.resetDeviceID ?? false)
+        const bootstrap = isBoolean(options) ? undefined : options?.bootstrap
+
         const device_id = this.get_property('$device_id')
         this.consent.reset()
         this.persistence?.clear()
@@ -2569,7 +2595,7 @@ export class PostHog implements PostHogInterface {
             this.register_once(
                 {
                     distinct_id: uuid,
-                    $device_id: reset_device_id ? uuid : device_id,
+                    $device_id: resetDeviceID ? uuid : device_id,
                 },
                 ''
             )
@@ -2581,6 +2607,10 @@ export class PostHog implements PostHogInterface {
             },
             1
         )
+
+        if (bootstrap) {
+            this._applyBootstrap(bootstrap)
+        }
     }
 
     /**

@@ -96,15 +96,6 @@ export class SessionIdManager {
             sessionStore._set(this._primary_window_exists_storage_key, true)
         }
 
-        if (this._config.bootstrap?.sessionID) {
-            try {
-                const sessionStartTimestamp = uuid7ToTimestampMs(this._config.bootstrap.sessionID)
-                this._setSessionId(this._config.bootstrap.sessionID, new Date().getTime(), sessionStartTimestamp)
-            } catch (e) {
-                logger.error('Invalid sessionID in bootstrap', e)
-            }
-        }
-
         this._listenToReloadWindow()
     }
 
@@ -197,6 +188,15 @@ export class SessionIdManager {
     // new ids will be generated.
     resetSessionId(): void {
         this._setSessionId(null, null, null)
+    }
+
+    setBootstrapSessionId(sessionID: string): void {
+        try {
+            const sessionStartTimestamp = uuid7ToTimestampMs(sessionID)
+            this._setSessionId(sessionID, new Date().getTime(), sessionStartTimestamp)
+        } catch (e) {
+            logger.error('Invalid sessionID in bootstrap', e)
+        }
     }
 
     /**
