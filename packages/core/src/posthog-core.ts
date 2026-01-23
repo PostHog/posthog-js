@@ -395,10 +395,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     options?: PostHogCaptureOptions
   ): void {
     this.wrap(() => {
-      if (!this._requirePersonProcessing('posthog.group')) {
-        return
-      }
-
       this.groups({
         [groupType]: groupKey,
       })

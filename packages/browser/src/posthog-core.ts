@@ -2377,10 +2377,6 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        if (!this._requirePersonProcessing('posthog.group')) {
-            return
-        }
-
         const existingGroups = this.getGroups()
 
         // if group key changes, remove stored group properties
