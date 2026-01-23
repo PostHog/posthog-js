@@ -1,4 +1,5 @@
 import { ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS, ERROR_TRACKING_SUPPRESSION_RULES } from './constants'
+import { AutocaptureDecider } from './extensions/error-tracking/autoCaptureDecider'
 import { PostHog } from './posthog-core'
 import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
@@ -26,10 +27,12 @@ export class PostHogExceptions {
     private readonly _instance: PostHog
     private _suppressionRules: ErrorTrackingSuppressionRule[] = []
     private _errorPropertiesBuilder: ErrorTracking.ErrorPropertiesBuilder = buildErrorPropertiesBuilder()
+    private _autocaptureDecider: AutocaptureDecider
 
     constructor(instance: PostHog) {
         this._instance = instance
         this._suppressionRules = this._instance.persistence?.get_property(ERROR_TRACKING_SUPPRESSION_RULES) ?? []
+        this._autocaptureDecider = new AutocaptureDecider(instance)
     }
 
     onRemoteConfig(response: RemoteConfig) {
@@ -45,6 +48,8 @@ export class PostHogExceptions {
                 [ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS]: captureExtensionExceptions,
             })
         }
+
+        this._autocaptureDecider.init(response)
     }
 
     private get _captureExtensionExceptions() {

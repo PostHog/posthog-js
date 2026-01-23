@@ -5,7 +5,7 @@ import {
     TRIGGER_PENDING,
 } from '../../../extensions/replay/external/triggerMatching'
 import { createMockPostHog } from '../../helpers/posthog-instance'
-import { SessionRecordingUrlTrigger } from '../../../types'
+import { UrlTrigger } from '../../../types'
 import { SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION } from '../../../constants'
 
 describe('checkUrlTriggerConditions - activation loop detection', () => {
@@ -24,10 +24,7 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
         })
     }
 
-    const configureTriggers = (
-        triggers: SessionRecordingUrlTrigger[],
-        blocklist: SessionRecordingUrlTrigger[] = []
-    ) => {
+    const configureTriggers = (triggers: UrlTrigger[], blocklist: UrlTrigger[] = []) => {
         urlTriggerMatching.onConfig({
             urlTriggers: triggers,
             urlBlocklist: blocklist,
@@ -336,7 +333,7 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
 
     describe('regex cache', () => {
         it('compiles regex patterns when config is set', () => {
-            const triggers: SessionRecordingUrlTrigger[] = [
+            const triggers: UrlTrigger[] = [
                 { url: 'https://example\\.com/.*', matching: 'regex' },
                 { url: 'https://test\\.com/page', matching: 'regex' },
             ]
@@ -350,7 +347,7 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
         })
 
         it('compiles blocklist regex patterns', () => {
-            const blocklist: SessionRecordingUrlTrigger[] = [{ url: 'https://blocked\\.com/.*', matching: 'regex' }]
+            const blocklist: UrlTrigger[] = [{ url: 'https://blocked\\.com/.*', matching: 'regex' }]
 
             configureTriggers([], blocklist)
 
@@ -397,7 +394,7 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
         })
 
         it('does not cache duplicate patterns', () => {
-            const triggers: SessionRecordingUrlTrigger[] = [
+            const triggers: UrlTrigger[] = [
                 { url: 'pattern', matching: 'regex' },
                 { url: 'pattern', matching: 'regex' },
                 { url: 'pattern', matching: 'regex' },
@@ -410,7 +407,7 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
         })
 
         it('handles invalid regex patterns gracefully', () => {
-            const triggers: SessionRecordingUrlTrigger[] = [
+            const triggers: UrlTrigger[] = [
                 { url: '[invalid(regex', matching: 'regex' },
                 { url: 'valid\\.pattern', matching: 'regex' },
             ]
@@ -423,7 +420,7 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
         })
 
         it('handles invalid blocklist regex patterns gracefully', () => {
-            const blocklist: SessionRecordingUrlTrigger[] = [{ url: '*invalid*', matching: 'regex' }]
+            const blocklist: UrlTrigger[] = [{ url: '*invalid*', matching: 'regex' }]
 
             configureTriggers([], blocklist)
 

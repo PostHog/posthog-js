@@ -175,9 +175,9 @@ export type SessionRecordingRemoteConfig = SessionRecordingCanvasOptions & {
     linkedFlag?: string | FlagVariant | null
     networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
     masking?: Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>
-    urlTriggers?: SessionRecordingUrlTrigger[]
+    urlTriggers?: UrlTrigger[]
     scriptConfig?: { script?: string | undefined }
-    urlBlocklist?: SessionRecordingUrlTrigger[]
+    urlBlocklist?: UrlTrigger[]
     eventTriggers?: string[]
     /**
      * Controls how event, url, sampling, and linked flag triggers are combined
@@ -242,6 +242,9 @@ export interface RemoteConfig {
         autocaptureExceptions?: boolean
         captureExtensionExceptions?: boolean
         suppressionRules?: ErrorTrackingSuppressionRule[]
+        autoCaptureControls?: {
+            [library: string]: ErrorTrackingAutoCaptureControls
+        }
     }
 
     /**
@@ -429,9 +432,23 @@ export type ErrorEventArgs = [
 // but provided as an array of literal types, so we can constrain the level below
 export const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debug'] as const
 
-export interface SessionRecordingUrlTrigger {
+export interface UrlTrigger {
     url: string
     matching: 'regex'
+}
+
+export interface ErrorTrackingAutoCaptureControls {
+    id?: string | null
+    library: string
+    matchType: 'any' | 'all'
+    sampleRate?: number | null
+    linkedFeatureFlag?: {
+        key: string
+        variant?: string | null
+    } | null
+    eventTriggers?: string[]
+    urlTriggers?: UrlTrigger[]
+    urlBlocklist?: UrlTrigger[]
 }
 
 export type PropertyMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'

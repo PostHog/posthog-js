@@ -3,10 +3,10 @@ import {
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
 } from '../../../constants'
 import { PostHog } from '../../../posthog-core'
-import { FlagVariant, RemoteConfig, SessionRecordingPersistedConfig, SessionRecordingUrlTrigger } from '../../../types'
+import { FlagVariant, RemoteConfig, SessionRecordingPersistedConfig, UrlTrigger } from '../../../types'
 import { isNullish, isBoolean, isString, isObject } from '@posthog/core'
 import { window } from '../../../utils/globals'
-import { logger } from '../../../utils/logger'
+import { urlMatchesTriggers, compileRegexCache } from '../../../utils/policyMatching'
 
 export const DISABLED = 'disabled'
 export const SAMPLED = 'sampled'
@@ -53,23 +53,6 @@ export type SessionRecordingStatus = (typeof sessionRecordingStatuses)[number]
 
 // while we have both lazy and eager loaded replay we might get either type of config
 type ReplayConfigType = RemoteConfig | SessionRecordingPersistedConfig
-
-function sessionRecordingUrlTriggerMatches(
-    url: string,
-    triggers: SessionRecordingUrlTrigger[],
-    compiledRegexCache?: Map<string, RegExp>
-) {
-    return triggers.some((trigger) => {
-        switch (trigger.matching) {
-            case 'regex': {
-                const regex = compiledRegexCache?.get(trigger.url) ?? new RegExp(trigger.url)
-                return regex.test(url)
-            }
-            default:
-                return false
-        }
-    })
-}
 
 export interface TriggerStatusMatching {
     triggerStatus(sessionId: string): TriggerStatus
@@ -135,8 +118,8 @@ const isEagerLoadedConfig = (x: ReplayConfigType): x is RemoteConfig => {
 }
 
 export class URLTriggerMatching implements TriggerStatusMatching {
-    _urlTriggers: SessionRecordingUrlTrigger[] = []
-    _urlBlocklist: SessionRecordingUrlTrigger[] = []
+    _urlTriggers: UrlTrigger[] = []
+    _urlBlocklist: UrlTrigger[] = []
 
     private _compiledTriggerRegexes: Map<string, RegExp> = new Map()
     private _compiledBlocklistRegexes: Map<string, RegExp> = new Map()
@@ -169,28 +152,8 @@ export class URLTriggerMatching implements TriggerStatusMatching {
      * This prevents recreating RegExp objects on every rrweb event
      */
     private _compileRegexCache(): void {
-        this._compiledTriggerRegexes.clear()
-        this._compiledBlocklistRegexes.clear()
-
-        for (const trigger of this._urlTriggers) {
-            if (trigger.matching === 'regex' && !this._compiledTriggerRegexes.has(trigger.url)) {
-                try {
-                    this._compiledTriggerRegexes.set(trigger.url, new RegExp(trigger.url))
-                } catch (e) {
-                    logger.error('Invalid URL trigger regex pattern:', trigger.url, e)
-                }
-            }
-        }
-
-        for (const trigger of this._urlBlocklist) {
-            if (trigger.matching === 'regex' && !this._compiledBlocklistRegexes.has(trigger.url)) {
-                try {
-                    this._compiledBlocklistRegexes.set(trigger.url, new RegExp(trigger.url))
-                } catch (e) {
-                    logger.error('Invalid URL blocklist regex pattern:', trigger.url, e)
-                }
-            }
-        }
+        this._compiledTriggerRegexes = compileRegexCache(this._urlTriggers, 'URL trigger')
+        this._compiledBlocklistRegexes = compileRegexCache(this._urlBlocklist, 'URL blocklist')
     }
 
     /**
@@ -238,7 +201,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         this._lastCheckedUrl = url
 
         const wasBlocked = this.urlBlocked
-        const isNowBlocked = sessionRecordingUrlTriggerMatches(url, this._urlBlocklist, this._compiledBlocklistRegexes)
+        const isNowBlocked = urlMatchesTriggers(url, this._urlBlocklist, this._compiledBlocklistRegexes)
 
         if (wasBlocked && isNowBlocked) {
             return
@@ -251,7 +214,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         }
 
         const isActivated = this._urlTriggerStatus(sessionId) === TRIGGER_ACTIVATED
-        const urlMatches = sessionRecordingUrlTriggerMatches(url, this._urlTriggers, this._compiledTriggerRegexes)
+        const urlMatches = urlMatchesTriggers(url, this._urlTriggers, this._compiledTriggerRegexes)
 
         if (!isActivated && urlMatches) {
             onActivate('url')
