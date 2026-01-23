@@ -28,19 +28,11 @@ export class PostHogExceptions {
     private _suppressionRules: ErrorTrackingSuppressionRule[] = []
     private _errorPropertiesBuilder: ErrorTracking.ErrorPropertiesBuilder = buildErrorPropertiesBuilder()
     private _ingestionControls: ErrorTrackingIngestionControls
-    private _eventCapturedUnsubscribe: (() => void) | null = null
 
     constructor(instance: PostHog) {
         this._instance = instance
         this._suppressionRules = this._instance.persistence?.get_property(ERROR_TRACKING_SUPPRESSION_RULES) ?? []
         this._ingestionControls = new ErrorTrackingIngestionControls(instance)
-
-        // Subscribe to captured events to activate event triggers
-        this._eventCapturedUnsubscribe = this._instance.on('eventCaptured', (event) => {
-            if (event?.event) {
-                this._ingestionControls.onEventCaptured(event.event)
-            }
-        })
     }
 
     onRemoteConfig(response: RemoteConfig) {

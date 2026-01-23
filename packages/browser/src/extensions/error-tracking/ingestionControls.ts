@@ -7,10 +7,6 @@ import { createLogger } from '../../utils/logger'
 
 const logger = createLogger('[Error Tracking]')
 
-// Constants for persistence keys
-const ERROR_TRACKING_URL_TRIGGER_ACTIVATED_SESSION = '$error_tracking_url_trigger_activated_session'
-const ERROR_TRACKING_EVENT_TRIGGER_ACTIVATED_SESSION = '$error_tracking_event_trigger_activated_session'
-
 // Store original history methods for cleanup
 let originalPushState: typeof history.pushState | null = null
 let originalReplaceState: typeof history.replaceState | null = null
@@ -26,33 +22,26 @@ export interface ErrorTrackingRemoteConfig {
 
 /**
  * Result of checking whether an error should be captured.
- * With match_type: 'all', all configured conditions must pass.
  */
 export interface IngestionDecision {
     /** Whether the error should be captured */
     shouldCapture: boolean
     /** Reason for the decision - useful for debugging */
-    reason:
-        | 'no_config'
-        | 'url_blocked'
-        | 'url_trigger_pending'
-        | 'event_trigger_pending'
-        | 'linked_flag_pending'
-        | 'sampled_out'
-        | 'capture'
+    reason: 'no_config' | 'url_blocked' | 'linked_flag_pending' | 'sampled_out' | 'capture'
 }
 
 /**
  * Manages ingestion controls for error tracking.
- * Handles URL triggers/blocklist, event triggers, linked feature flags, and sampling.
- *
- * With match_type: 'all' (the only supported mode currently), all configured conditions
- * must be met for an error to be captured.
+ * 
+ * Simple model:
+ * - By default, errors are captured
+ * - Visiting a blocklisted URL → blocks capture
+ * - Visiting a trigger URL → unblocks capture
+ * - Linked feature flag and sampling are additional conditions
  */
 export class ErrorTrackingIngestionControls {
     private _urlTriggers: SDKPolicyConfigUrlTrigger[] = []
     private _urlBlocklist: SDKPolicyConfigUrlTrigger[] = []
-    private _eventTriggers: string[] = []
     private _linkedFeatureFlag: string | null = null
     private _sampleRate: number | null = null
 
@@ -64,9 +53,10 @@ export class ErrorTrackingIngestionControls {
 
     private _configReceived: boolean = false
 
-    // URL monitoring state
+    // Simple state: are we currently blocked?
     private _lastCheckedUrl: string = ''
     private _urlMonitoringCleanup: (() => void) | null = null
+    private _urlBlocked: boolean = false
 
     constructor(private readonly _instance: PostHog) {}
 
@@ -83,7 +73,6 @@ export class ErrorTrackingIngestionControls {
 
         this._urlTriggers = errorTrackingConfig.url_triggers ?? []
         this._urlBlocklist = errorTrackingConfig.url_blocklist ?? []
-        this._eventTriggers = errorTrackingConfig.event_triggers ?? []
         this._linkedFeatureFlag = errorTrackingConfig.linked_feature_flag ?? null
         this._sampleRate = errorTrackingConfig.sample_rate ?? null
 
@@ -95,175 +84,121 @@ export class ErrorTrackingIngestionControls {
         logger.info('Ingestion controls configured', {
             urlTriggers: this._urlTriggers.length,
             urlBlocklist: this._urlBlocklist.length,
-            eventTriggers: this._eventTriggers.length,
             linkedFeatureFlag: this._linkedFeatureFlag,
             sampleRate: this._sampleRate,
         })
 
         // Check initial URL immediately after config is received
-        this._checkUrlTrigger()
+        this._checkUrlConditions()
     }
 
     /**
-     * Check whether an error should be captured based on all configured conditions.
-     * With match_type: 'all', all conditions must pass.
+     * Check whether an error should be captured.
+     * 
+     * Simple logic:
+     * - If blocked by URL → don't capture
+     * - If linked flag configured but not seen → don't capture
+     * - If sampled out → don't capture
+     * - Otherwise → capture
      */
     shouldCaptureError(): IngestionDecision {
         const url = this._getCurrentUrl()
-        const sessionId = this._instance.get_session_id()
 
         logger.info('Evaluating ingestion controls', {
             configReceived: this._configReceived,
             currentUrl: url,
-            sessionId,
+            urlBlocked: this._urlBlocked,
         })
 
         // If no config received yet, allow capture (fail open)
         if (!this._configReceived) {
-            logger.info('Decision: capture (no config received yet, failing open)')
+            logger.info('Decision: capture (no config received yet)')
             return { shouldCapture: true, reason: 'no_config' }
         }
 
-        // Check URL blocklist first - always blocks regardless of other conditions
-        const urlBlocked = this._isUrlBlocked()
-        logger.info('URL blocklist check', {
-            configured: this._urlBlocklist.length > 0,
-            patterns: this._urlBlocklist.map((t) => t.url),
-            blocked: urlBlocked,
-        })
-        if (urlBlocked) {
-            logger.info('Decision: block (URL matches blocklist)')
+        // Check if currently blocked by URL
+        if (this._urlBlocked) {
+            logger.info('Decision: block (currently blocked by URL)')
             return { shouldCapture: false, reason: 'url_blocked' }
         }
 
-        // With match_type: 'all', all configured conditions must pass
-        // If no conditions are configured, we capture
-
-        // Check URL triggers (if configured, must have visited a matching URL this session)
-        const urlTriggerConfigured = this._urlTriggers.length > 0
-        const urlTriggerActivated = this._isUrlTriggerActivated(sessionId)
-        logger.info('URL trigger check', {
-            configured: urlTriggerConfigured,
-            patterns: this._urlTriggers.map((t) => t.url),
-            activated: urlTriggerActivated,
-        })
-        if (urlTriggerConfigured && !urlTriggerActivated) {
-            logger.info('Decision: block (URL trigger configured but not activated)')
-            return { shouldCapture: false, reason: 'url_trigger_pending' }
-        }
-
-        // Check event triggers (if configured, a trigger event must have fired this session)
-        const eventTriggerConfigured = this._eventTriggers.length > 0
-        const eventTriggerActivated = this._isEventTriggerActivated(sessionId)
-        logger.info('Event trigger check', {
-            configured: eventTriggerConfigured,
-            events: this._eventTriggers,
-            activated: eventTriggerActivated,
-        })
-        if (eventTriggerConfigured && !eventTriggerActivated) {
-            logger.info('Decision: block (event trigger configured but not activated)')
-            return { shouldCapture: false, reason: 'event_trigger_pending' }
-        }
-
         // Check linked feature flag (if configured, flag must be enabled)
-        const linkedFlagConfigured = !isNullish(this._linkedFeatureFlag)
-        logger.info('Linked feature flag check', {
-            configured: linkedFlagConfigured,
-            flag: this._linkedFeatureFlag,
-            seen: this._linkedFlagSeen,
-        })
-        if (linkedFlagConfigured && !this._linkedFlagSeen) {
-            logger.info('Decision: block (linked feature flag configured but not matched)')
+        if (!isNullish(this._linkedFeatureFlag) && !this._linkedFlagSeen) {
+            logger.info('Decision: block (linked feature flag not matched)', {
+                flag: this._linkedFeatureFlag,
+                seen: this._linkedFlagSeen,
+            })
             return { shouldCapture: false, reason: 'linked_flag_pending' }
         }
 
         // Check sample rate (if configured, apply sampling)
-        const samplingConfigured = !isNullish(this._sampleRate)
-        const sampled = this._isSampled()
-        logger.info('Sampling check', {
-            configured: samplingConfigured,
-            sampleRate: this._sampleRate,
-            sampled,
-        })
-        if (samplingConfigured && !sampled) {
-            logger.info('Decision: block (sampled out)')
+        if (!isNullish(this._sampleRate) && !this._isSampled()) {
+            logger.info('Decision: block (sampled out)', { sampleRate: this._sampleRate })
             return { shouldCapture: false, reason: 'sampled_out' }
         }
 
-        logger.info('Decision: capture (all conditions passed)')
+        logger.info('Decision: capture')
         return { shouldCapture: true, reason: 'capture' }
     }
 
     /**
-     * Check if the current URL matches any blocklist pattern.
+     * Check the current URL against triggers and blocklist.
+     * 
+     * Simple logic:
+     * - Visiting blocklisted URL → blocked = true
+     * - Visiting trigger URL → blocked = false
+     * - Other URLs → no change
      */
-    private _isUrlBlocked(): boolean {
-        if (this._urlBlocklist.length === 0) {
-            return false
-        }
-
-        const url = this._getCurrentUrl()
-        if (!url) {
-            return false
-        }
-
-        return urlMatchesTriggers(url, this._urlBlocklist, this._compiledBlocklistRegexes)
-    }
-
-    /**
-     * Check if URL trigger has been activated for this session.
-     * Activation happens via URL monitoring, not at error capture time.
-     */
-    private _isUrlTriggerActivated(sessionId: string): boolean {
-        const activatedSession = this._instance.get_property(ERROR_TRACKING_URL_TRIGGER_ACTIVATED_SESSION)
-        return activatedSession === sessionId
-    }
-
-    /**
-     * Check the current URL against triggers and activate if matched.
-     * This is called on navigation events and when config is received.
-     */
-    private _checkUrlTrigger(): void {
-        if (this._urlTriggers.length === 0) {
-            return
-        }
-
+    private _checkUrlConditions(): void {
         const url = this._getCurrentUrl()
         if (!url || url === this._lastCheckedUrl) {
             return
         }
         this._lastCheckedUrl = url
 
-        const sessionId = this._instance.get_session_id()
-        const alreadyActivated = this._instance.get_property(ERROR_TRACKING_URL_TRIGGER_ACTIVATED_SESSION) === sessionId
+        const matchesBlocklist =
+            this._urlBlocklist.length > 0 &&
+            urlMatchesTriggers(url, this._urlBlocklist, this._compiledBlocklistRegexes)
+        const matchesTrigger =
+            this._urlTriggers.length > 0 &&
+            urlMatchesTriggers(url, this._urlTriggers, this._compiledTriggerRegexes)
 
-        if (!alreadyActivated && urlMatchesTriggers(url, this._urlTriggers, this._compiledTriggerRegexes)) {
-            this._instance.register_for_session({
-                [ERROR_TRACKING_URL_TRIGGER_ACTIVATED_SESSION]: sessionId,
-            })
-            logger.info('URL trigger activated', { url })
+        logger.info('URL navigation detected', {
+            url,
+            matchesBlocklist,
+            matchesTrigger,
+            wasBlocked: this._urlBlocked,
+        })
+
+        if (matchesBlocklist) {
+            if (!this._urlBlocked) {
+                this._urlBlocked = true
+                logger.info('URL BLOCKED - errors will not be captured until a trigger URL is visited', { url })
+            }
+        } else if (matchesTrigger) {
+            if (this._urlBlocked) {
+                this._urlBlocked = false
+                logger.info('URL UNBLOCKED - trigger URL visited, errors can now be captured', { url })
+            }
         }
     }
 
     /**
-     * Set up monitoring for URL changes to activate triggers on navigation.
-     * This ensures triggers activate when the user visits matching URLs,
-     * not just when errors occur.
+     * Set up monitoring for URL changes.
      */
     private _setupUrlMonitoring(): void {
-        // Clean up any existing monitoring
         this._urlMonitoringCleanup?.()
 
-        if (this._urlTriggers.length === 0 || typeof window === 'undefined') {
+        const hasUrlConfig = this._urlTriggers.length > 0 || this._urlBlocklist.length > 0
+        if (!hasUrlConfig || typeof window === 'undefined') {
             return
         }
 
-        const checkUrl = () => this._checkUrlTrigger()
+        const checkUrl = () => this._checkUrlConditions()
 
-        // Listen for popstate (back/forward navigation)
         window.addEventListener('popstate', checkUrl)
+        window.addEventListener('hashchange', checkUrl)
 
-        // Wrap pushState and replaceState for SPA navigation
         if (window.history) {
             if (!originalPushState) {
                 originalPushState = window.history.pushState.bind(window.history)
@@ -283,18 +218,11 @@ export class ErrorTrackingIngestionControls {
             }
         }
 
-        // Also listen for hashchange
-        window.addEventListener('hashchange', checkUrl)
-
-        // Capture window reference for cleanup (we already checked it's defined above)
         const win = window
-
-        // Store cleanup function
         this._urlMonitoringCleanup = () => {
             win.removeEventListener('popstate', checkUrl)
             win.removeEventListener('hashchange', checkUrl)
 
-            // Restore original history methods
             if (originalPushState && win.history) {
                 win.history.pushState = originalPushState
             }
@@ -305,55 +233,26 @@ export class ErrorTrackingIngestionControls {
     }
 
     /**
-     * Check if an event trigger has been activated for this session.
-     */
-    private _isEventTriggerActivated(sessionId: string): boolean {
-        const activatedSession = this._instance.get_property(ERROR_TRACKING_EVENT_TRIGGER_ACTIVATED_SESSION)
-        return activatedSession === sessionId
-    }
-
-    /**
-     * Call this when a captured event matches an event trigger.
-     * This should be called from the event capture flow.
-     */
-    onEventCaptured(eventName: string): void {
-        if (this._eventTriggers.length === 0) {
-            return
-        }
-
-        if (this._eventTriggers.includes(eventName)) {
-            const sessionId = this._instance.get_session_id()
-            this._instance.register_for_session({
-                [ERROR_TRACKING_EVENT_TRIGGER_ACTIVATED_SESSION]: sessionId,
-            })
-            logger.info('Event trigger activated', { event: eventName })
-        }
-    }
-
-    /**
      * Check if this session passes sampling.
-     * Sampling is determined once per session.
      */
     private _isSampled(): boolean {
         if (isNullish(this._sampleRate)) {
             return true
         }
 
-        // Use the session ID to deterministically decide sampling
-        // This ensures the same session always gets the same result
         const sessionId = this._instance.get_session_id()
         if (!sessionId) {
             return true
         }
 
-        // Simple hash of session ID to get a deterministic 0-1 value
+        // Simple hash of session ID for deterministic sampling
         let hash = 0
         for (let i = 0; i < sessionId.length; i++) {
             const char = sessionId.charCodeAt(i)
             hash = (hash << 5) - hash + char
-            hash = hash & hash // Convert to 32bit integer
+            hash = hash & hash
         }
-        const normalizedHash = Math.abs(hash) / 2147483647 // Normalize to 0-1
+        const normalizedHash = Math.abs(hash) / 2147483647
 
         return normalizedHash < this._sampleRate
     }
@@ -371,7 +270,6 @@ export class ErrorTrackingIngestionControls {
     }
 
     private _setupLinkedFlagListener(): void {
-        // Clean up any existing listener
         this._flagListenerCleanup()
         this._linkedFlagSeen = false
 
@@ -380,6 +278,7 @@ export class ErrorTrackingIngestionControls {
         }
 
         const flagKey = this._linkedFeatureFlag
+        logger.info('Setting up linked feature flag listener', { flag: flagKey })
 
         this._flagListenerCleanup = this._instance.onFeatureFlags((_flags, variants) => {
             if (!isObject(variants) || !(flagKey in variants)) {
@@ -392,23 +291,29 @@ export class ErrorTrackingIngestionControls {
             if (isBoolean(variantValue)) {
                 flagMatches = variantValue === true
             } else if (isString(variantValue)) {
-                // Any truthy string variant counts as enabled
                 flagMatches = variantValue.length > 0
             }
 
+            logger.info('Linked feature flag evaluation', {
+                flag: flagKey,
+                value: variantValue,
+                matches: flagMatches,
+            })
+
             if (flagMatches && !this._linkedFlagSeen) {
                 this._linkedFlagSeen = true
-                logger.info('Linked feature flag matched', { flag: flagKey })
+                logger.info('Linked feature flag ACTIVATED', { flag: flagKey })
             }
         })
     }
 
     /**
-     * Clean up resources (e.g., flag listeners, URL monitoring).
+     * Clean up resources.
      */
     stop(): void {
         this._flagListenerCleanup()
         this._urlMonitoringCleanup?.()
         this._lastCheckedUrl = ''
+        this._urlBlocked = false
     }
 }
