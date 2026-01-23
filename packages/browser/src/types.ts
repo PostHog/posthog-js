@@ -174,9 +174,9 @@ export type SessionRecordingRemoteConfig = SessionRecordingCanvasOptions & {
     linkedFlag?: string | FlagVariant | null
     networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
     masking?: Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>
-    urlTriggers?: SessionRecordingUrlTrigger[]
+    urlTriggers?: SDKConfigUrlTrigger[]
     scriptConfig?: { script?: string | undefined }
-    urlBlocklist?: SessionRecordingUrlTrigger[]
+    urlBlocklist?: SDKConfigUrlTrigger[]
     eventTriggers?: string[]
     /**
      * Controls how event, url, sampling, and linked flag triggers are combined
@@ -241,6 +241,14 @@ export interface RemoteConfig {
         autocaptureExceptions?: boolean
         captureExtensionExceptions?: boolean
         suppressionRules?: ErrorTrackingSuppressionRule[]
+        match_type?: 'any' | 'all'
+        // This is 0-1
+        sample_rate?: number | null
+        minimum_duration_milliseconds?: number | null
+        linked_feature_flag?: string | null
+        event_triggers?: string[]
+        url_triggers?: SDKConfigUrlTrigger[]
+        url_blocklist?: SDKConfigUrlTrigger[]
     }
 
     /**
@@ -428,7 +436,7 @@ export type ErrorEventArgs = [
 // but provided as an array of literal types, so we can constrain the level below
 export const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debug'] as const
 
-export interface SessionRecordingUrlTrigger {
+export interface SDKConfigUrlTrigger {
     url: string
     matching: 'regex'
 }
