@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.335.2
+
+### Patch Changes
+
+- [#2958](https://github.com/PostHog/posthog-js/pull/2958) [`592a5d7`](https://github.com/PostHog/posthog-js/commit/592a5d788760c54744fb2b8ce71c8301c110e4a6) Thanks [@adboio](https://github.com/adboio)! - fix: update cancel button on surveys to be black
+  (2026-01-23)
+- Updated dependencies []:
+    - @posthog/types@1.335.2
+
 ## 1.335.1
 
 ### Patch Changes
