@@ -227,6 +227,24 @@ describe('web vitals', () => {
         }
     )
 
+    describe('web_vitals_attribution config', () => {
+        it.each([
+            [undefined, true],
+            [true, true],
+            [false, false],
+        ])(
+            'when web_vitals_attribution is %p, useAttribution should be %p',
+            async (attributionConfig, expectedUseAttribution) => {
+                posthog = await createPosthogInstance(uuidv7(), {
+                    capture_performance: { web_vitals: true, web_vitals_attribution: attributionConfig },
+                    capture_pageview: false,
+                })
+
+                expect(posthog.webVitalsAutocapture!.useAttribution).toBe(expectedUseAttribution)
+            }
+        )
+    })
+
     describe('afterFlagsResponse()', () => {
         beforeEach(async () => {
             // we need a set of fake web vitals handlers, so we can manually trigger the events

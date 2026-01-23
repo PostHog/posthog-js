@@ -49,6 +49,13 @@ export class WebVitalsAutocapture {
         return clientConfig || DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS
     }
 
+    public get useAttribution(): boolean {
+        const clientConfig: boolean | undefined = isObject(this._instance.config.capture_performance)
+            ? this._instance.config.capture_performance.web_vitals_attribution
+            : undefined
+        return clientConfig ?? true
+    }
+
     public get _maxAllowedValue(): number {
         const configured =
             isObject(this._instance.config.capture_performance) &&
@@ -112,12 +119,21 @@ export class WebVitalsAutocapture {
             cb()
             return
         }
+
         assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'web-vitals', (err) => {
             if (err) {
                 logger.error('failed to load script', err)
                 return
             }
-            cb()
+
+            // Call the loader function with the attribution config
+            const loadWebVitalsCallbacks = assignableWindow.__PosthogExtensions__?.loadWebVitalsCallbacks
+            if (loadWebVitalsCallbacks) {
+                loadWebVitalsCallbacks(this.useAttribution)
+                cb()
+            } else {
+                cb()
+            }
         })
     }
 

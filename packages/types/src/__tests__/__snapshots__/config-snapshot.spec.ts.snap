@@ -524,6 +524,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "web_vitals_delayed_flush_ms": [
         "undefined",
         "number"
+      ],
+      "web_vitals_attribution": [
+        "undefined",
+        "false",
+        "true"
       ]
     }
   ],
