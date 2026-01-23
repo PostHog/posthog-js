@@ -693,6 +693,7 @@ export const sendEventToPosthog = async ({
     ...(usage.cacheReadInputTokens ? { $ai_cache_read_input_tokens: usage.cacheReadInputTokens } : {}),
     ...(usage.cacheCreationInputTokens ? { $ai_cache_creation_input_tokens: usage.cacheCreationInputTokens } : {}),
     ...(usage.webSearchCount ? { $ai_web_search_count: usage.webSearchCount } : {}),
+    ...(usage.rawUsage ? { $ai_usage: usage.rawUsage } : {}),
   }
 
   const properties = {

@@ -443,6 +443,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             cacheReadInputTokens: extractCacheReadTokens(usageObj),
             webSearchCount,
             ...additionalTokenValues,
+            rawUsage: { usage: result.usage, providerMetadata },
           }
 
           adjustAnthropicV3CacheTokens(model, provider, usage)
@@ -619,10 +620,11 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
 
               const webSearchCount = extractWebSearchCount(providerMetadata, usage)
 
-              // Update usage with web search count
+              // Update usage with web search count and raw metadata
               const finalUsage = {
                 ...usage,
                 webSearchCount,
+                rawUsage: { usage, providerMetadata },
               }
 
               adjustAnthropicV3CacheTokens(model, provider, finalUsage)

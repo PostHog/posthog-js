@@ -76,6 +76,7 @@ export class WrappedModels {
             0,
           cacheReadInputTokens: metadata?.cachedContentTokenCount ?? 0,
           webSearchCount: calculateGoogleWebSearchCount(response),
+          rawUsage: metadata,
         },
         tools: availableTools,
       })
@@ -113,6 +114,7 @@ export class WrappedModels {
       inputTokens: 0,
       outputTokens: 0,
       webSearchCount: 0,
+      rawUsage: undefined,
     }
 
     try {
@@ -176,6 +178,7 @@ export class WrappedModels {
               0,
             cacheReadInputTokens: metadata.cachedContentTokenCount ?? 0,
             webSearchCount: usage.webSearchCount,
+            rawUsage: metadata,
           }
         }
         yield chunk
@@ -202,6 +205,7 @@ export class WrappedModels {
         usage: {
           ...usage,
           webSearchCount: usage.webSearchCount,
+          rawUsage: usage.rawUsage,
         },
         tools: availableTools,
       })
