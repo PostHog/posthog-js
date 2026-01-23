@@ -4,6 +4,7 @@ import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig }
 import { createLogger } from './utils/logger'
 import { propertyComparisons } from './utils/property-utils'
 import { isString, isArray, ErrorTracking, isNullish } from '@posthog/core'
+import { ErrorTrackingIngestionControls } from './extensions/error-tracking/ingestionControls'
 
 const logger = createLogger('[Error tracking]')
 
@@ -26,10 +27,20 @@ export class PostHogExceptions {
     private readonly _instance: PostHog
     private _suppressionRules: ErrorTrackingSuppressionRule[] = []
     private _errorPropertiesBuilder: ErrorTracking.ErrorPropertiesBuilder = buildErrorPropertiesBuilder()
+    private _ingestionControls: ErrorTrackingIngestionControls
+    private _eventCapturedUnsubscribe: (() => void) | null = null
 
     constructor(instance: PostHog) {
         this._instance = instance
         this._suppressionRules = this._instance.persistence?.get_property(ERROR_TRACKING_SUPPRESSION_RULES) ?? []
+        this._ingestionControls = new ErrorTrackingIngestionControls(instance)
+
+        // Subscribe to captured events to activate event triggers
+        this._eventCapturedUnsubscribe = this._instance.on('eventCaptured', (event) => {
+            if (event?.event) {
+                this._ingestionControls.onEventCaptured(event.event)
+            }
+        })
     }
 
     onRemoteConfig(response: RemoteConfig) {
@@ -45,6 +56,9 @@ export class PostHogExceptions {
                 [ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS]: captureExtensionExceptions,
             })
         }
+
+        // Initialize ingestion controls with remote config
+        this._ingestionControls.onRemoteConfig(response)
     }
 
     private get _captureExtensionExceptions() {
@@ -86,6 +100,13 @@ export class PostHogExceptions {
                 logger.info('Skipping exception capture because it was thrown by the PostHog SDK')
                 return
             }
+        }
+
+        // Check ingestion controls (URL triggers, event triggers, linked flags, sampling)
+        const decision = this._ingestionControls.shouldCaptureError()
+        if (!decision.shouldCapture) {
+            logger.info('Skipping exception capture due to ingestion controls', { reason: decision.reason })
+            return
         }
 
         return this._instance.capture('$exception', properties, {
