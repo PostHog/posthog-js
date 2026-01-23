@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.14.0
+
+### Minor Changes
+
+- [#2917](https://github.com/PostHog/posthog-js/pull/2917) [`933c763`](https://github.com/PostHog/posthog-js/commit/933c7639ae30390ca562a0891d59649711b53522) Thanks [@marandaneto](https://github.com/marandaneto)! - feat: add support for person_profiles react native, core and web-lite
+  (2026-01-23)
+
 ## 1.13.0
 
 ### Minor Changes
