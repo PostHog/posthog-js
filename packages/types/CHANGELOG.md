@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.335.0
+
+### Minor Changes
+
+- [#2953](https://github.com/PostHog/posthog-js/pull/2953) [`c8d3fbe`](https://github.com/PostHog/posthog-js/commit/c8d3fbe5e3a4944596d7a34086484affd94d7329) Thanks [@pauldambra](https://github.com/pauldambra)! - allows using web vitals with and without attribution
+  (2026-01-23)
+
 ## 1.334.1
 
 ## 1.334.0
