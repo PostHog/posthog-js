@@ -11,6 +11,10 @@ const logger = createLogger('[Error Tracking]')
 const ERROR_TRACKING_URL_TRIGGER_ACTIVATED_SESSION = '$error_tracking_url_trigger_activated_session'
 const ERROR_TRACKING_EVENT_TRIGGER_ACTIVATED_SESSION = '$error_tracking_event_trigger_activated_session'
 
+// Store original history methods for cleanup
+let originalPushState: typeof history.pushState | null = null
+let originalReplaceState: typeof history.replaceState | null = null
+
 export interface ErrorTrackingRemoteConfig {
     match_type?: 'all'
     sample_rate?: number | null
@@ -60,6 +64,10 @@ export class ErrorTrackingIngestionControls {
 
     private _configReceived: boolean = false
 
+    // URL monitoring state
+    private _lastCheckedUrl: string = ''
+    private _urlMonitoringCleanup: (() => void) | null = null
+
     constructor(private readonly _instance: PostHog) {}
 
     /**
@@ -81,6 +89,7 @@ export class ErrorTrackingIngestionControls {
 
         this._compileRegexCaches()
         this._setupLinkedFlagListener()
+        this._setupUrlMonitoring()
 
         this._configReceived = true
         logger.info('Ingestion controls configured', {
@@ -90,6 +99,9 @@ export class ErrorTrackingIngestionControls {
             linkedFeatureFlag: this._linkedFeatureFlag,
             sampleRate: this._sampleRate,
         })
+
+        // Check initial URL immediately after config is received
+        this._checkUrlTrigger()
     }
 
     /**
@@ -152,32 +164,97 @@ export class ErrorTrackingIngestionControls {
     }
 
     /**
-     * Check if the current URL matches any trigger pattern.
-     * If it does, activate the trigger for this session.
+     * Check if URL trigger has been activated for this session.
+     * Activation happens via URL monitoring, not at error capture time.
      */
     private _isUrlTriggerActivated(sessionId: string): boolean {
-        // Check if already activated for this session
         const activatedSession = this._instance.get_property(ERROR_TRACKING_URL_TRIGGER_ACTIVATED_SESSION)
-        if (activatedSession === sessionId) {
-            return true
+        return activatedSession === sessionId
+    }
+
+    /**
+     * Check the current URL against triggers and activate if matched.
+     * This is called on navigation events and when config is received.
+     */
+    private _checkUrlTrigger(): void {
+        if (this._urlTriggers.length === 0) {
+            return
         }
 
-        // Check current URL
         const url = this._getCurrentUrl()
-        if (!url) {
-            return false
+        if (!url || url === this._lastCheckedUrl) {
+            return
         }
+        this._lastCheckedUrl = url
 
-        if (urlMatchesTriggers(url, this._urlTriggers, this._compiledTriggerRegexes)) {
-            // Activate for this session
+        const sessionId = this._instance.get_session_id()
+        const alreadyActivated = this._instance.get_property(ERROR_TRACKING_URL_TRIGGER_ACTIVATED_SESSION) === sessionId
+
+        if (!alreadyActivated && urlMatchesTriggers(url, this._urlTriggers, this._compiledTriggerRegexes)) {
             this._instance.register_for_session({
                 [ERROR_TRACKING_URL_TRIGGER_ACTIVATED_SESSION]: sessionId,
             })
-            logger.info('URL trigger activated')
-            return true
+            logger.info('URL trigger activated', { url })
+        }
+    }
+
+    /**
+     * Set up monitoring for URL changes to activate triggers on navigation.
+     * This ensures triggers activate when the user visits matching URLs,
+     * not just when errors occur.
+     */
+    private _setupUrlMonitoring(): void {
+        // Clean up any existing monitoring
+        this._urlMonitoringCleanup?.()
+
+        if (this._urlTriggers.length === 0 || typeof window === 'undefined') {
+            return
         }
 
-        return false
+        const checkUrl = () => this._checkUrlTrigger()
+
+        // Listen for popstate (back/forward navigation)
+        window.addEventListener('popstate', checkUrl)
+
+        // Wrap pushState and replaceState for SPA navigation
+        if (window.history) {
+            if (!originalPushState) {
+                originalPushState = window.history.pushState.bind(window.history)
+            }
+            if (!originalReplaceState) {
+                originalReplaceState = window.history.replaceState.bind(window.history)
+            }
+
+            window.history.pushState = function (...args) {
+                originalPushState?.apply(this, args)
+                checkUrl()
+            }
+
+            window.history.replaceState = function (...args) {
+                originalReplaceState?.apply(this, args)
+                checkUrl()
+            }
+        }
+
+        // Also listen for hashchange
+        window.addEventListener('hashchange', checkUrl)
+
+        // Capture window reference for cleanup (we already checked it's defined above)
+        const win = window
+
+        // Store cleanup function
+        this._urlMonitoringCleanup = () => {
+            win.removeEventListener('popstate', checkUrl)
+            win.removeEventListener('hashchange', checkUrl)
+
+            // Restore original history methods
+            if (originalPushState && win.history) {
+                win.history.pushState = originalPushState
+            }
+            if (originalReplaceState && win.history) {
+                win.history.replaceState = originalReplaceState
+            }
+        }
     }
 
     /**
@@ -280,9 +357,11 @@ export class ErrorTrackingIngestionControls {
     }
 
     /**
-     * Clean up resources (e.g., flag listeners).
+     * Clean up resources (e.g., flag listeners, URL monitoring).
      */
     stop(): void {
         this._flagListenerCleanup()
+        this._urlMonitoringCleanup?.()
+        this._lastCheckedUrl = ''
     }
 }
