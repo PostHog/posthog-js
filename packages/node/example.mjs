@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable no-undef */
 /**
  * PostHog Node.js library example
  *
@@ -357,9 +358,7 @@ if (choice === '1') {
   console.log('PRODUCTION-STYLE MULTIVARIATE DEPENDENCY CHAIN')
   console.log('-'.repeat(60))
   console.log('🔗 Testing complex multivariate flag dependencies...')
-  console.log(
-    "   Structure: 'multivariate-root-flag' -> 'multivariate-intermediate-flag' -> 'multivariate-leaf-flag'"
-  )
+  console.log("   Structure: 'multivariate-root-flag' -> 'multivariate-intermediate-flag' -> 'multivariate-leaf-flag'")
   console.log('')
   console.log("📋 Required setup (if flags don't exist):")
   console.log("   1. Create 'multivariate-leaf-flag' with fruit variants (pineapple, mango, papaya, kiwi)")

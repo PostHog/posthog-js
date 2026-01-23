@@ -71,6 +71,46 @@ export type PostHogCoreOptions = {
    * @deprecated Use evaluationContexts instead. This property will be removed in a future version.
    */
   evaluationEnvironments?: readonly string[]
+
+  /**
+   * Determines when to create Person Profiles for users.
+   *
+   * - 'always': Always create a person profile for every user (anonymous and identified).
+   * - 'identified_only': Only create a person profile when the user is identified via identify(), alias(), or group().
+   *   Events captured before identification will NOT have person profiles and will be anonymous events.
+   * - 'never': Never create person profiles. identify(), alias(), and group() will be no-ops.
+   *
+   * @default 'identified_only'
+   *
+   * @example
+   * ```ts
+   * // Only create profiles when users are identified (recommended for most apps)
+   * const posthog = new PostHog('<api_key>', {
+   *   personProfiles: 'identified_only',
+   * })
+   *
+   * // Later when user logs in:
+   * posthog.identify('user-123', { email: 'user@example.com' })
+   * ```
+   *
+   * @example
+   * ```ts
+   * // Always create profiles (for apps where you want to track all users)
+   * const posthog = new PostHog('<api_key>', {
+   *   personProfiles: 'always',
+   * })
+   * ```
+   *
+   * @example
+   * ```ts
+   * // Never create profiles (anonymous analytics only)
+   * const posthog = new PostHog('<api_key>', {
+   *   personProfiles: 'never',
+   * })
+   * ```
+   */
+  personProfiles?: 'always' | 'identified_only' | 'never'
+
   /**
    * Allows modification or dropping of events before they're sent to PostHog.
    * If an array is provided, the functions are run in order.
@@ -83,6 +123,8 @@ export enum PostHogPersistedProperty {
   AnonymousId = 'anonymous_id',
   DistinctId = 'distinct_id',
   Props = 'props',
+  EnablePersonProcessing = 'enable_person_processing',
+  PersonMode = 'person_mode', // 'identified' | 'anonymous'
   FeatureFlagDetails = 'feature_flag_details',
   FeatureFlags = 'feature_flags',
   FeatureFlagPayloads = 'feature_flag_payloads',

@@ -44,6 +44,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   private _sessionMaxLengthSeconds: number = 24 * 60 * 60 // 24 hours
   protected sessionProps: PostHogEventProperties = {}
 
+  // person profiles
+  protected _personProfiles: 'always' | 'identified_only' | 'never'
+
   constructor(apiKey: string, options?: PostHogCoreOptions) {
     // Default for stateful mode is to not disable geoip. Only override if explicitly set
     const disableGeoipOption = options?.disableGeoip ?? false
@@ -55,6 +58,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
     this.sendFeatureFlagEvent = options?.sendFeatureFlagEvent ?? true
     this._sessionExpirationTimeSeconds = options?.sessionExpirationTimeSeconds ?? 1800 // 30 minutes
+    this._personProfiles = options?.personProfiles ?? 'identified_only'
     this._beforeSend = options?.before_send
   }
 
@@ -72,6 +76,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
         if (!distinctId) {
           this.setPersistedProperty(PostHogPersistedProperty.DistinctId, bootstrap.distinctId)
+          // Mark the user as identified if bootstrapping with an identified ID
+          this.setPersistedProperty(PostHogPersistedProperty.PersonMode, 'identified')
         }
       } else {
         const anonymousId = this.getPersistedProperty(PostHogPersistedProperty.AnonymousId)
@@ -264,6 +270,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   identify(distinctId?: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
     this.wrap(() => {
+      if (!this._requirePersonProcessing('posthog.identify')) {
+        return
+      }
+
       const previousDistinctId = this.getDistinctId()
       distinctId = distinctId || previousDistinctId
 
@@ -288,6 +298,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         // We keep the AnonymousId to be used by flags calls and identify to link the previousId
         this.setPersistedProperty(PostHogPersistedProperty.AnonymousId, previousDistinctId)
         this.setPersistedProperty(PostHogPersistedProperty.DistinctId, distinctId)
+        // Mark the user as identified
+        this.setPersistedProperty(PostHogPersistedProperty.PersonMode, 'identified')
         this.reloadFeatureFlags()
       }
 
@@ -305,12 +317,26 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
       const allProperties = this.enrichProperties(properties)
 
+      // Add $process_person_profile flag to event properties
+      const hasPersonProcessing = this._hasPersonProcessing()
+      allProperties['$process_person_profile'] = hasPersonProcessing
+      allProperties['$is_identified'] = this._isIdentified()
+
+      // If the event has person processing, ensure that all future events will too
+      if (hasPersonProcessing) {
+        this._requirePersonProcessing('capture')
+      }
+
       super.captureStateless(distinctId, event, allProperties, options)
     })
   }
 
   alias(alias: string): void {
     this.wrap(() => {
+      if (!this._requirePersonProcessing('posthog.alias')) {
+        return
+      }
+
       const distinctId = this.getDistinctId()
       const allProperties = this.enrichProperties({})
 
@@ -999,6 +1025,126 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       $ai_metric_value: String(metricValue),
       $ai_trace_id: String(traceId),
     })
+  }
+
+  /***
+   *** PERSON PROFILES
+   ***/
+
+  /**
+   * Returns whether the current user is identified (has a person profile).
+   *
+   * This checks:
+   * 1. If PersonMode is explicitly set to 'identified'
+   * 2. For backwards compatibility: if DistinctId differs from AnonymousId
+   *    (meaning the user was identified before the SDK was upgraded)
+   *
+   * @internal
+   */
+  protected _isIdentified(): boolean {
+    const personMode = this.getPersistedProperty<string>(PostHogPersistedProperty.PersonMode)
+
+    // If PersonMode is explicitly set, use that
+    if (personMode === 'identified') {
+      return true
+    }
+
+    // For backwards compatibility: if PersonMode is not set but DistinctId differs from AnonymousId,
+    // the user was identified before this SDK version was installed
+    if (personMode === undefined) {
+      const distinctId = this.getPersistedProperty<string>(PostHogPersistedProperty.DistinctId)
+      const anonymousId = this.getPersistedProperty<string>(PostHogPersistedProperty.AnonymousId)
+
+      // If both exist and are different, the user was previously identified
+      if (distinctId && anonymousId && distinctId !== anonymousId) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  /**
+   * Returns the current groups object from super properties.
+   * @internal
+   */
+  protected _getGroups(): PostHogGroupProperties {
+    return (this.props.$groups || {}) as PostHogGroupProperties
+  }
+
+  /**
+   * Determines whether the current user should have person processing enabled.
+   *
+   * Returns true if:
+   * - person_profiles is set to 'always', OR
+   * - person_profiles is 'identified_only' AND (user is identified OR has groups OR person processing was explicitly enabled)
+   *
+   * Returns false if:
+   * - person_profiles is 'never', OR
+   * - person_profiles is 'identified_only' AND user is not identified AND has no groups AND person processing was not enabled
+   *
+   * @internal
+   */
+  protected _hasPersonProcessing(): boolean {
+    if (this._personProfiles === 'always') {
+      return true
+    }
+
+    if (this._personProfiles === 'never') {
+      return false
+    }
+
+    // person_profiles === 'identified_only'
+    // Check if user is identified, has groups, or person processing was explicitly enabled
+    const isIdentified = this._isIdentified()
+    const hasGroups = Object.keys(this._getGroups()).length > 0
+    const personProcessingEnabled =
+      this.getPersistedProperty<boolean>(PostHogPersistedProperty.EnablePersonProcessing) === true
+
+    return isIdentified || hasGroups || personProcessingEnabled
+  }
+
+  /**
+   * Enables person processing if the config allows it.
+   *
+   * If person_profiles is 'never', this logs an error and returns false.
+   * Otherwise, it enables person processing and returns true.
+   *
+   * @param functionName - The name of the function calling this method (for error messages)
+   * @returns true if person processing is enabled, false if it's blocked by config
+   * @internal
+   */
+  protected _requirePersonProcessing(functionName: string): boolean {
+    if (this._personProfiles === 'never') {
+      this._logger.error(`${functionName} was called, but personProfiles is set to "never". This call will be ignored.`)
+      return false
+    }
+
+    // Mark that person processing has been explicitly enabled
+    this.setPersistedProperty(PostHogPersistedProperty.EnablePersonProcessing, true)
+    return true
+  }
+
+  /**
+   * Creates a person profile for the current user, if they don't already have one.
+   *
+   * If personProfiles is 'identified_only' and no profile exists, this will create one.
+   * If personProfiles is 'never', this will log an error and do nothing.
+   * If personProfiles is 'always' or a profile already exists, this is a no-op.
+   *
+   * @public
+   */
+  createPersonProfile(): void {
+    if (this._hasPersonProcessing()) {
+      // Person profile already exists, no need to do anything
+      return
+    }
+    if (!this._requirePersonProcessing('posthog.createPersonProfile')) {
+      return
+    }
+    // Capture a $set event to create the person profile
+    // We don't set any properties here, but the server will create the profile
+    this.capture('$set', { $set: {}, $set_once: {} })
   }
 
   /**
