@@ -4,6 +4,7 @@ import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig }
 import { createLogger } from './utils/logger'
 import { propertyComparisons } from './utils/property-utils'
 import { isString, isArray, ErrorTracking, isNullish } from '@posthog/core'
+import { IngestionControlsAggregateDecider } from './extensions/error-tracking/ingestionControls'
 
 const logger = createLogger('[Error tracking]')
 
@@ -26,10 +27,12 @@ export class PostHogExceptions {
     private readonly _instance: PostHog
     private _suppressionRules: ErrorTrackingSuppressionRule[] = []
     private _errorPropertiesBuilder: ErrorTracking.ErrorPropertiesBuilder = buildErrorPropertiesBuilder()
+    private _ingestionControls: IngestionControlsAggregateDecider
 
     constructor(instance: PostHog) {
         this._instance = instance
         this._suppressionRules = this._instance.persistence?.get_property(ERROR_TRACKING_SUPPRESSION_RULES) ?? []
+        this._ingestionControls = new IngestionControlsAggregateDecider(instance)
     }
 
     onRemoteConfig(response: RemoteConfig) {
@@ -45,6 +48,9 @@ export class PostHogExceptions {
                 [ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS]: captureExtensionExceptions,
             })
         }
+
+        // Initialize ingestion controls with remote config
+        this._ingestionControls.init(response)
     }
 
     private get _captureExtensionExceptions() {
@@ -86,6 +92,12 @@ export class PostHogExceptions {
                 logger.info('Skipping exception capture because it was thrown by the PostHog SDK')
                 return
             }
+        }
+
+        // Check ingestion controls (URL, events, flags, sampling)
+        if (!this._ingestionControls.decide()) {
+            logger.info('Skipping exception capture due to ingestion controls')
+            return
         }
 
         return this._instance.capture('$exception', properties, {
