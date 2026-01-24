@@ -10,6 +10,7 @@ import {
   SurveyPosition,
   SurveyQuestionDescriptionContentType,
   SurveyMatchType,
+  SurveySchedule,
 } from '@posthog/core'
 
 // Extended operator type to include numeric operators not in core SurveyMatchType
@@ -173,7 +174,10 @@ export const hasEvents = (survey: Survey): boolean => {
 // }
 
 export const canActivateRepeatedly = (survey: Survey): boolean => {
-  return !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey))
+  return (
+    !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey)) ||
+    survey.schedule === SurveySchedule.Always
+  )
 }
 
 /**
