@@ -485,6 +485,7 @@ export type RatingSurveyQuestion = SurveyQuestionBase & {
   scale: 2 | 3 | 5 | 7 | 10
   lowerBoundLabel: string
   upperBoundLabel: string
+  skipSubmitButton?: boolean
 }
 
 export enum SurveyRatingDisplay {
@@ -497,6 +498,7 @@ export type MultipleSurveyQuestion = SurveyQuestionBase & {
   choices: string[]
   hasOpenChoice?: boolean
   shuffleOptions?: boolean
+  skipSubmitButton?: boolean
 }
 
 export enum SurveyQuestionType {
