@@ -175,8 +175,7 @@ export const hasEvents = (survey: Survey): boolean => {
 
 export const canActivateRepeatedly = (survey: Survey): boolean => {
   return (
-    !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey)) ||
-    survey.schedule === SurveySchedule.Always
+    !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey)) || survey.schedule === SurveySchedule.Always
   )
 }
 
