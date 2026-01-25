@@ -36,12 +36,13 @@ export interface IngestionDecision {
  * Simple model:
  * - By default, errors are captured
  * - Visiting a blocklisted URL → blocks capture
- * - Visiting a trigger URL → unblocks capture
+ * - Visiting a trigger URL or capturing a trigger event → unblocks capture
  * - Linked feature flag and sampling are additional conditions
  */
 export class ErrorTrackingIngestionControls {
     private _urlTriggers: SDKPolicyConfigUrlTrigger[] = []
     private _urlBlocklist: SDKPolicyConfigUrlTrigger[] = []
+    private _eventTriggers: string[] = []
     private _linkedFeatureFlag: string | null = null
     private _sampleRate: number | null = null
 
@@ -73,6 +74,7 @@ export class ErrorTrackingIngestionControls {
 
         this._urlTriggers = errorTrackingConfig.url_triggers ?? []
         this._urlBlocklist = errorTrackingConfig.url_blocklist ?? []
+        this._eventTriggers = errorTrackingConfig.event_triggers ?? []
         this._linkedFeatureFlag = errorTrackingConfig.linked_feature_flag ?? null
         this._sampleRate = errorTrackingConfig.sample_rate ?? null
 
@@ -84,6 +86,7 @@ export class ErrorTrackingIngestionControls {
         logger.info('Ingestion controls configured', {
             urlTriggers: this._urlTriggers.length,
             urlBlocklist: this._urlBlocklist.length,
+            eventTriggers: this._eventTriggers.length,
             linkedFeatureFlag: this._linkedFeatureFlag,
             sampleRate: this._sampleRate,
         })
@@ -184,6 +187,29 @@ export class ErrorTrackingIngestionControls {
     }
 
     /**
+     * Called when an event is captured. If it matches a trigger event, unblocks capture.
+     */
+    onEventCaptured(eventName: string): void {
+        if (this._eventTriggers.length === 0) {
+            return
+        }
+
+        const matches = this._eventTriggers.includes(eventName)
+        if (matches) {
+            logger.info('Event trigger matched', {
+                event: eventName,
+                configuredTriggers: this._eventTriggers,
+                wasBlocked: this._urlBlocked,
+            })
+
+            if (this._urlBlocked) {
+                this._urlBlocked = false
+                logger.info('UNBLOCKED by event trigger - errors can now be captured', { event: eventName })
+            }
+        }
+    }
+
+    /**
      * Set up monitoring for URL changes.
      */
     private _setupUrlMonitoring(): void {
@@ -217,7 +243,7 @@ export class ErrorTrackingIngestionControls {
                 checkUrl()
             }
         }
-
+ 
         const win = window
         this._urlMonitoringCleanup = () => {
             win.removeEventListener('popstate', checkUrl)

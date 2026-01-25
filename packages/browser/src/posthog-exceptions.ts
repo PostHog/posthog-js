@@ -33,6 +33,13 @@ export class PostHogExceptions {
         this._instance = instance
         this._suppressionRules = this._instance.persistence?.get_property(ERROR_TRACKING_SUPPRESSION_RULES) ?? []
         this._ingestionControls = new ErrorTrackingIngestionControls(instance)
+
+        // Subscribe to captured events to check for event triggers
+        this._instance.on('eventCaptured', (event) => {
+            if (event?.event) {
+                this._ingestionControls.onEventCaptured(event.event)
+            }
+        })
     }
 
     onRemoteConfig(response: RemoteConfig) {
