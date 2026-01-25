@@ -1,18 +1,16 @@
-import type { RemoteConfig, SDKPolicyConfigUrlTrigger } from '../../../types'
+import type { SDKPolicyConfigUrlTrigger } from '../../../types'
 import { urlMatchesTriggers, compileRegexCache } from '../../../utils/policyMatching'
-import type { Decider, DeciderContext, DeciderResult } from './types'
-
-// Store original history methods at module level for proper cleanup
-let originalPushState: typeof history.pushState | null = null
-let originalReplaceState: typeof history.replaceState | null = null
+import type { Decider, DeciderContext } from './types'
 
 /**
- * URL Decider - handles URL-based ingestion control.
+ * URL Decider - monitors URL changes and notifies aggregate.
  *
- * Logic:
- * - By default, allows capture
- * - Visiting a blocklisted URL → blocks capture
- * - Visiting a trigger URL → unblocks capture
+ * This decider doesn't maintain blocking state itself.
+ * It just watches for URL changes and calls callbacks when:
+ * - Current URL matches blocklist → onBlocklistMatch()
+ * - Current URL matches trigger → onTriggerMatch()
+ *
+ * The aggregate decider maintains the actual blocked state.
  */
 export class URLDecider implements Decider {
     readonly name = 'url'
@@ -22,17 +20,14 @@ export class URLDecider implements Decider {
     private _urlBlocklist: SDKPolicyConfigUrlTrigger[] = []
     private _compiledTriggerRegexes: Map<string, RegExp> = new Map()
     private _compiledBlocklistRegexes: Map<string, RegExp> = new Map()
-
-    private _blocked: boolean = false
     private _lastCheckedUrl: string = ''
-    private _cleanupFn: (() => void) | null = null
 
-    init(context: DeciderContext, config: RemoteConfig): void {
+    init(context: DeciderContext): void {
         this._context = context
 
-        const errorTracking = config.errorTracking
-        this._urlTriggers = errorTracking?.url_triggers ?? []
-        this._urlBlocklist = errorTracking?.url_blocklist ?? []
+        const config = context.config.errorTracking
+        this._urlTriggers = config?.url_triggers ?? []
+        this._urlBlocklist = config?.url_blocklist ?? []
 
         this._compileRegexCaches()
         this._setupUrlMonitoring()
@@ -42,38 +37,12 @@ export class URLDecider implements Decider {
             blocklistPatterns: this._urlBlocklist.length,
         })
 
-        // Check initial URL
         this._checkCurrentUrl()
     }
 
-    evaluate(): DeciderResult | null {
-        // No URL config = no opinion
-        if (this._urlTriggers.length === 0 && this._urlBlocklist.length === 0) {
-            return null
-        }
-
-        return {
-            shouldCapture: !this._blocked,
-            reason: this._blocked ? 'URL is currently blocked' : 'URL allows capture',
-        }
-    }
-
-    /**
-     * Called externally when a trigger condition is met (e.g., event trigger).
-     * Allows other deciders to unblock URL state.
-     */
-    unblock(): void {
-        if (this._blocked) {
-            this._blocked = false
-            this._log('Externally unblocked')
-        }
-    }
-
-    shutdown(): void {
-        this._cleanupFn?.()
-        this._cleanupFn = null
-        this._lastCheckedUrl = ''
-        this._blocked = false
+    shouldCapture(): boolean | null {
+        // URL decider doesn't vote - it only notifies via callbacks
+        return null
     }
 
     private _log(message: string, data?: Record<string, unknown>): void {
@@ -104,25 +73,18 @@ export class URLDecider implements Decider {
             this._urlTriggers.length > 0 &&
             urlMatchesTriggers(url, this._urlTriggers, this._compiledTriggerRegexes)
 
-        this._log('URL checked', {
-            url,
-            matchesBlocklist,
-            matchesTrigger,
-            wasBlocked: this._blocked,
-        })
+        this._log('URL checked', { url, matchesBlocklist, matchesTrigger })
 
-        if (matchesBlocklist && !this._blocked) {
-            this._blocked = true
-            this._log('BLOCKED - URL matches blocklist', { url })
-        } else if (matchesTrigger && this._blocked) {
-            this._blocked = false
-            this._log('UNBLOCKED - URL matches trigger', { url })
+        if (matchesBlocklist) {
+            this._log('Blocklist match', { url })
+            this._context?.onBlocklistMatch()
+        } else if (matchesTrigger) {
+            this._log('Trigger match', { url })
+            this._context?.onTriggerMatch()
         }
     }
 
     private _setupUrlMonitoring(): void {
-        this._cleanupFn?.()
-
         const win = this._context?.window
         if (!win || (this._urlTriggers.length === 0 && this._urlBlocklist.length === 0)) {
             return
@@ -130,39 +92,21 @@ export class URLDecider implements Decider {
 
         const checkUrl = () => this._checkCurrentUrl()
 
-        // Listen for navigation events
         win.addEventListener('popstate', checkUrl)
         win.addEventListener('hashchange', checkUrl)
 
-        // Wrap history methods for SPA navigation
         if (win.history) {
-            if (!originalPushState) {
-                originalPushState = win.history.pushState.bind(win.history)
-            }
-            if (!originalReplaceState) {
-                originalReplaceState = win.history.replaceState.bind(win.history)
-            }
+            const originalPushState = win.history.pushState.bind(win.history)
+            const originalReplaceState = win.history.replaceState.bind(win.history)
 
             win.history.pushState = function (...args) {
-                originalPushState?.apply(this, args)
+                originalPushState(...args)
                 checkUrl()
             }
 
             win.history.replaceState = function (...args) {
-                originalReplaceState?.apply(this, args)
+                originalReplaceState(...args)
                 checkUrl()
-            }
-        }
-
-        this._cleanupFn = () => {
-            win.removeEventListener('popstate', checkUrl)
-            win.removeEventListener('hashchange', checkUrl)
-
-            if (originalPushState && win.history) {
-                win.history.pushState = originalPushState
-            }
-            if (originalReplaceState && win.history) {
-                win.history.replaceState = originalReplaceState
             }
         }
     }

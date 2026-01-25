@@ -3,168 +3,107 @@ import type { RemoteConfig } from '../../types'
 import { window as globalWindow } from '../../utils/globals'
 import { createLogger } from '../../utils/logger'
 
-import {
-    type Decider,
-    type DeciderContext,
-    type DeciderResult,
-    URLDecider,
-    FlagDecider,
-    SampleDecider,
-    EventDecider,
-} from './deciders'
+import type { Decider, DeciderContext } from './deciders/types'
+import { URLDecider } from './deciders/url-decider'
+import { FlagDecider } from './deciders/flag-decider'
+import { SampleDecider } from './deciders/sample-decider'
+import { EventDecider } from './deciders/event-decider'
 
 const logger = createLogger('[Error Tracking]')
 
 /**
- * Result of the aggregate decision.
- */
-export interface AggregateDecision {
-    /** Whether capture should proceed */
-    shouldCapture: boolean
-    /** The decider that made the blocking decision, or 'all_passed' */
-    decidedBy: string
-    /** Human-readable reason */
-    reason: string
-}
-
-/**
  * Aggregate Decider - orchestrates all individual deciders.
  *
- * This is the main entry point for ingestion control decisions.
- * It initializes and manages all sub-deciders, and combines their
- * decisions into a final verdict.
+ * Maintains the blocked state which can be set by URL blocklist
+ * and cleared by URL triggers or event triggers.
  *
- * Architecture:
- * - Each decider is responsible for one aspect of ingestion control
- * - Deciders are initialized with a shared context (no global access)
- * - The aggregate decider queries each decider and combines results
- * - If ANY decider blocks, capture is blocked (AND logic)
+ * Decision logic:
+ * 1. If blocked → don't capture
+ * 2. If any decider returns false → don't capture
+ * 3. Otherwise → capture
  */
 export class IngestionControlsAggregateDecider {
     private readonly _posthog: PostHog
     private readonly _deciders: Decider[] = []
-    private readonly _urlDecider: URLDecider
-    private readonly _eventDecider: EventDecider
 
-    private _context: DeciderContext | null = null
+    private _blocked: boolean = false
     private _initialized: boolean = false
 
     constructor(posthog: PostHog) {
         this._posthog = posthog
-
-        // Create all deciders
-        this._urlDecider = new URLDecider()
-        this._eventDecider = new EventDecider()
-
-        this._deciders = [
-            this._urlDecider,
-            new FlagDecider(),
-            new SampleDecider(),
-            this._eventDecider,
-        ]
-
-        // Wire up event decider to unblock URL decider when triggered
-        this._eventDecider.setTriggerCallback(() => {
-            this._urlDecider.unblock()
-            this._log('Event trigger fired - URL decider unblocked')
-        })
     }
 
-    /**
-     * Initialize all deciders with remote config.
-     * Called when remote config is received.
-     */
     init(config: RemoteConfig): void {
-        // Build shared context
-        this._context = this._buildContext()
+        const context = this._buildContext(config)
 
-        // Initialize all deciders
+        // Create and init all deciders
+        this._deciders.length = 0
+        this._deciders.push(
+            new URLDecider(),
+            new EventDecider(),
+            new FlagDecider(),
+            new SampleDecider()
+        )
+
         for (const decider of this._deciders) {
-            decider.init(this._context, config)
+            decider.init(context)
         }
 
         this._initialized = true
-        this._log('Initialized with config', {
-            deciders: this._deciders.map((d) => d.name),
-        })
+        this._log('Initialized', { deciders: this._deciders.map((d) => d.name) })
     }
 
-    /**
-     * Make the aggregate decision about whether to capture.
-     *
-     * Logic: If ANY decider blocks, capture is blocked.
-     * Deciders that return null have no opinion and are skipped.
-     */
-    decide(): AggregateDecision {
-        this._log('Evaluating all deciders')
-
-        // If not initialized, allow capture (fail open)
+    decide(): boolean {
         if (!this._initialized) {
             this._log('Not initialized - allowing capture')
-            return {
-                shouldCapture: true,
-                decidedBy: 'not_initialized',
-                reason: 'Config not received yet, failing open',
-            }
+            return true
         }
 
-        // Evaluate each decider
-        const results: { decider: string; result: DeciderResult }[] = []
+        // Check blocked state (set by URL blocklist, cleared by triggers)
+        if (this._blocked) {
+            this._log('Blocked by URL blocklist')
+            return false
+        }
 
+        // Check each decider
         for (const decider of this._deciders) {
-            const result = decider.evaluate()
+            const result = decider.shouldCapture()
 
-            // null = no opinion, skip
             if (result === null) {
-                this._log(`[${decider.name}] No opinion (not configured)`)
                 continue
             }
 
-            results.push({ decider: decider.name, result })
+            this._log(`[${decider.name}] ${result ? '✓' : '✗'}`)
 
-            this._log(`[${decider.name}] ${result.shouldCapture ? '✓' : '✗'} ${result.reason}`)
-
-            // If this decider blocks, we're done
-            if (!result.shouldCapture) {
-                this._log(`Decision: BLOCK by ${decider.name}`)
-                return {
-                    shouldCapture: false,
-                    decidedBy: decider.name,
-                    reason: result.reason,
-                }
+            if (!result) {
+                this._log(`Blocked by ${decider.name}`)
+                return false
             }
         }
 
-        // All deciders passed (or had no opinion)
-        this._log('Decision: CAPTURE (all deciders passed)')
-        return {
-            shouldCapture: true,
-            decidedBy: 'all_passed',
-            reason: results.length > 0 ? 'All configured deciders allow capture' : 'No deciders configured',
-        }
+        this._log('All checks passed - capturing')
+        return true
     }
 
-    /**
-     * Clean up all deciders.
-     */
-    shutdown(): void {
-        for (const decider of this._deciders) {
-            decider.shutdown()
-        }
-        this._initialized = false
-        this._log('Shutdown complete')
-    }
-
-    private _buildContext(): DeciderContext {
+    private _buildContext(config: RemoteConfig): DeciderContext {
         return {
             posthog: this._posthog,
             window: globalWindow,
-            log: (message: string, data?: Record<string, unknown>) => {
+            config,
+            log: (message, data) => {
                 if (data) {
                     logger.info(message, data)
                 } else {
                     logger.info(message)
                 }
+            },
+            onBlocklistMatch: () => {
+                this._blocked = true
+                this._log('State: BLOCKED (blocklist match)')
+            },
+            onTriggerMatch: () => {
+                this._blocked = false
+                this._log('State: UNBLOCKED (trigger match)')
             },
         }
     }

@@ -95,12 +95,8 @@ export class PostHogExceptions {
         }
 
         // Check ingestion controls (URL, events, flags, sampling)
-        const decision = this._ingestionControls.decide()
-        if (!decision.shouldCapture) {
-            logger.info('Skipping exception capture due to ingestion controls', {
-                decidedBy: decision.decidedBy,
-                reason: decision.reason,
-            })
+        if (!this._ingestionControls.decide()) {
+            logger.info('Skipping exception capture due to ingestion controls')
             return
         }
 

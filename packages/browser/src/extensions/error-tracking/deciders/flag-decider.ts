@@ -1,14 +1,10 @@
-import type { RemoteConfig } from '../../../types'
-import type { Decider, DeciderContext, DeciderResult } from './types'
+import type { Decider, DeciderContext } from './types'
 
 /**
- * Flag Decider - handles feature flag based ingestion control.
+ * Flag Decider - evaluates based on feature flag.
  *
- * Logic:
- * - If no linked flag configured → no opinion
- * - If flag is not yet evaluated → blocks capture
- * - If flag matches (true or non-empty string) → allows capture
- * - If flag doesn't match → blocks capture
+ * Returns false if flag is configured but not enabled.
+ * Returns null if no flag is configured.
  */
 export class FlagDecider implements Decider {
     readonly name = 'flag'
@@ -16,12 +12,10 @@ export class FlagDecider implements Decider {
     private _context: DeciderContext | null = null
     private _linkedFlag: string | null = null
     private _flagMatched: boolean = false
-    private _cleanupFn: (() => void) | null = null
 
-    init(context: DeciderContext, config: RemoteConfig): void {
+    init(context: DeciderContext): void {
         this._context = context
-        this._linkedFlag = config.errorTracking?.linked_feature_flag ?? null
-        this._flagMatched = false
+        this._linkedFlag = context.config.errorTracking?.linked_feature_flag ?? null
 
         if (this._linkedFlag) {
             this._setupFlagListener()
@@ -29,24 +23,11 @@ export class FlagDecider implements Decider {
         }
     }
 
-    evaluate(): DeciderResult | null {
-        // No flag configured = no opinion
+    shouldCapture(): boolean | null {
         if (!this._linkedFlag) {
             return null
         }
-
-        return {
-            shouldCapture: this._flagMatched,
-            reason: this._flagMatched
-                ? `Feature flag "${this._linkedFlag}" is enabled`
-                : `Feature flag "${this._linkedFlag}" is not enabled`,
-        }
-    }
-
-    shutdown(): void {
-        this._cleanupFn?.()
-        this._cleanupFn = null
-        this._flagMatched = false
+        return this._flagMatched
     }
 
     private _log(message: string, data?: Record<string, unknown>): void {
@@ -54,8 +35,6 @@ export class FlagDecider implements Decider {
     }
 
     private _setupFlagListener(): void {
-        this._cleanupFn?.()
-
         const posthog = this._context?.posthog
         const flagKey = this._linkedFlag
 
@@ -63,39 +42,16 @@ export class FlagDecider implements Decider {
             return
         }
 
-        this._cleanupFn = posthog.onFeatureFlags((_flags: string[], variants: Record<string, unknown>) => {
+        posthog.onFeatureFlags((_flags: string[], variants: Record<string, unknown>) => {
             if (!variants || !(flagKey in variants)) {
-                this._log('Flag not present in response', { flag: flagKey })
                 return
             }
 
             const value = variants[flagKey]
-            const matches = this._evaluateFlagValue(value)
+            const matches = value === true || (typeof value === 'string' && value.length > 0)
 
-            this._log('Flag evaluated', {
-                flag: flagKey,
-                value,
-                matches,
-                previouslyMatched: this._flagMatched,
-            })
-
-            if (matches && !this._flagMatched) {
-                this._flagMatched = true
-                this._log('Flag MATCHED - capture enabled', { flag: flagKey })
-            } else if (!matches && this._flagMatched) {
-                this._flagMatched = false
-                this._log('Flag UNMATCHED - capture disabled', { flag: flagKey })
-            }
+            this._log('Flag evaluated', { flag: flagKey, value, matches })
+            this._flagMatched = matches
         })
-    }
-
-    private _evaluateFlagValue(value: unknown): boolean {
-        if (typeof value === 'boolean') {
-            return value === true
-        }
-        if (typeof value === 'string') {
-            return value.length > 0
-        }
-        return false
     }
 }
