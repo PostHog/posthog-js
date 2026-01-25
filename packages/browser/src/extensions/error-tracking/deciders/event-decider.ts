@@ -1,16 +1,16 @@
 import type { Decider, DeciderContext } from './types'
 
 /**
- * Event Decider - listens for trigger events and notifies aggregate.
+ * Event Decider - listens for trigger events.
  *
- * When a configured trigger event is captured, calls onTriggerMatch().
- * The aggregate decider handles the state change.
+ * When a configured trigger event is captured, sets internal state to allow capture.
  */
 export class EventDecider implements Decider {
     readonly name = 'event'
 
     private _context: DeciderContext | null = null
     private _eventTriggers: string[] = []
+    private _triggered: boolean = false
 
     init(context: DeciderContext): void {
         this._context = context
@@ -23,8 +23,10 @@ export class EventDecider implements Decider {
     }
 
     shouldCapture(): boolean | null {
-        // Event decider doesn't vote - it only notifies via callbacks
-        return null
+        if (this._eventTriggers.length === 0) {
+            return null
+        }
+        return this._triggered
     }
 
     private _log(message: string, data?: Record<string, unknown>): void {
@@ -43,8 +45,8 @@ export class EventDecider implements Decider {
             }
 
             if (this._eventTriggers.includes(event.event)) {
+                this._triggered = true
                 this._log('Trigger event captured', { event: event.event })
-                this._context?.onTriggerMatch()
             }
         })
     }

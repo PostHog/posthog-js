@@ -11,8 +11,6 @@ const createMockContext = (sampleRate: number | null): DeciderContext => ({
         },
     } as RemoteConfig,
     log: jest.fn(),
-    onBlocklistMatch: jest.fn(),
-    onTriggerMatch: jest.fn(),
 })
 
 describe('SampleDecider', () => {

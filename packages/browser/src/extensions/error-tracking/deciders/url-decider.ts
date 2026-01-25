@@ -3,14 +3,12 @@ import { urlMatchesTriggers, compileRegexCache } from '../../../utils/policyMatc
 import type { Decider, DeciderContext } from './types'
 
 /**
- * URL Decider - monitors URL changes and notifies aggregate.
+ * URL Decider - handles URL-based blocking and triggering.
  *
- * This decider doesn't maintain blocking state itself.
- * It just watches for URL changes and calls callbacks when:
- * - Current URL matches blocklist → onBlocklistMatch()
- * - Current URL matches trigger → onTriggerMatch()
- *
- * The aggregate decider maintains the actual blocked state.
+ * State:
+ * - Starts unblocked (capture allowed)
+ * - Visiting a blocklisted URL → blocked
+ * - Visiting a trigger URL → unblocked
  */
 export class URLDecider implements Decider {
     readonly name = 'url'
@@ -21,6 +19,7 @@ export class URLDecider implements Decider {
     private _compiledTriggerRegexes: Map<string, RegExp> = new Map()
     private _compiledBlocklistRegexes: Map<string, RegExp> = new Map()
     private _lastCheckedUrl: string = ''
+    private _blocked: boolean = false
 
     init(context: DeciderContext): void {
         this._context = context
@@ -41,8 +40,10 @@ export class URLDecider implements Decider {
     }
 
     shouldCapture(): boolean | null {
-        // URL decider doesn't vote - it only notifies via callbacks
-        return null
+        if (this._urlTriggers.length === 0 && this._urlBlocklist.length === 0) {
+            return null
+        }
+        return !this._blocked
     }
 
     private _log(message: string, data?: Record<string, unknown>): void {
@@ -76,11 +77,11 @@ export class URLDecider implements Decider {
         this._log('URL checked', { url, matchesBlocklist, matchesTrigger })
 
         if (matchesBlocklist) {
-            this._log('Blocklist match', { url })
-            this._context?.onBlocklistMatch()
+            this._blocked = true
+            this._log('BLOCKED', { url })
         } else if (matchesTrigger) {
-            this._log('Trigger match', { url })
-            this._context?.onTriggerMatch()
+            this._blocked = false
+            this._log('UNBLOCKED', { url })
         }
     }
 

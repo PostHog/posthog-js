@@ -14,19 +14,13 @@ const logger = createLogger('[Error Tracking]')
 /**
  * Aggregate Decider - orchestrates all individual deciders.
  *
- * Maintains the blocked state which can be set by URL blocklist
- * and cleared by URL triggers or event triggers.
- *
- * Decision logic:
- * 1. If blocked → don't capture
- * 2. If any decider returns false → don't capture
- * 3. Otherwise → capture
+ * Decision logic: If ANY decider returns false → don't capture.
+ * Deciders returning null have no opinion and are skipped.
  */
 export class IngestionControlsAggregateDecider {
     private readonly _posthog: PostHog
     private readonly _deciders: Decider[] = []
 
-    private _blocked: boolean = false
     private _initialized: boolean = false
 
     constructor(posthog: PostHog) {
@@ -36,7 +30,6 @@ export class IngestionControlsAggregateDecider {
     init(config: RemoteConfig): void {
         const context = this._buildContext(config)
 
-        // Create and init all deciders
         this._deciders.length = 0
         this._deciders.push(
             new URLDecider(),
@@ -59,13 +52,6 @@ export class IngestionControlsAggregateDecider {
             return true
         }
 
-        // Check blocked state (set by URL blocklist, cleared by triggers)
-        if (this._blocked) {
-            this._log('Blocked by URL blocklist')
-            return false
-        }
-
-        // Check each decider
         for (const decider of this._deciders) {
             const result = decider.shouldCapture()
 
@@ -81,7 +67,7 @@ export class IngestionControlsAggregateDecider {
             }
         }
 
-        this._log('All checks passed - capturing')
+        this._log('All checks passed')
         return true
     }
 
@@ -96,14 +82,6 @@ export class IngestionControlsAggregateDecider {
                 } else {
                     logger.info(message)
                 }
-            },
-            onBlocklistMatch: () => {
-                this._blocked = true
-                this._log('State: BLOCKED (blocklist match)')
-            },
-            onTriggerMatch: () => {
-                this._blocked = false
-                this._log('State: UNBLOCKED (trigger match)')
             },
         }
     }
