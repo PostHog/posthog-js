@@ -94,6 +94,31 @@ describe('PostHog Core - Person Profiles', () => {
       expect(body.batch[0].properties.$process_person_profile).toBe(true)
     })
 
+    it('should set $process_person_profile to true after groups()', async () => {
+      posthog.groups({ company: 'company-123' })
+      await waitForPromises()
+
+      mocks.fetch.mockClear()
+      posthog.capture('test-event')
+      await waitForPromises()
+
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0].properties.$process_person_profile).toBe(true)
+    })
+
+    it('should allow groupIdentify() to work', async () => {
+      posthog.groupIdentify('company', 'company-123', { name: 'Acme Inc' })
+      await waitForPromises()
+
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      const batchCall = mocks.fetch.mock.calls[0]
+      const body = parseBody(batchCall)
+      expect(body.batch[0].event).toBe('$groupidentify')
+      expect(body.batch[0].properties.$group_type).toBe('company')
+      expect(body.batch[0].properties.$group_key).toBe('company-123')
+      expect(body.batch[0].properties.$group_set).toEqual({ name: 'Acme Inc' })
+    })
+
     it('should allow createPersonProfile() to enable person processing', async () => {
       posthog.createPersonProfile()
       await waitForPromises()
@@ -174,6 +199,48 @@ describe('PostHog Core - Person Profiles', () => {
 
     it('should not send alias events', async () => {
       posthog.alias('alias-id')
+      await waitForPromises()
+
+      const batchCalls = mocks.fetch.mock.calls.filter((call) => call[0].includes('/batch/'))
+      expect(batchCalls.length).toBe(0)
+    })
+
+    it('should not register groups via group()', async () => {
+      posthog.group('company', 'company-123')
+      await waitForPromises()
+
+      // Capture an event and verify $groups is not set
+      mocks.fetch.mockClear()
+      posthog.capture('test-event')
+      await waitForPromises()
+
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0].properties.$groups).toBeUndefined()
+    })
+
+    it('should not register groups via groups()', async () => {
+      posthog.groups({ company: 'company-123', team: 'team-456' })
+      await waitForPromises()
+
+      // Capture an event and verify $groups is not set
+      mocks.fetch.mockClear()
+      posthog.capture('test-event')
+      await waitForPromises()
+
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0].properties.$groups).toBeUndefined()
+    })
+
+    it('should not send groupIdentify events', async () => {
+      posthog.groupIdentify('company', 'company-123', { name: 'Acme Inc' })
+      await waitForPromises()
+
+      const batchCalls = mocks.fetch.mock.calls.filter((call) => call[0].includes('/batch/'))
+      expect(batchCalls.length).toBe(0)
+    })
+
+    it('should not send groupIdentify events when called via group() with properties', async () => {
+      posthog.group('company', 'company-123', { name: 'Acme Inc' })
       await waitForPromises()
 
       const batchCalls = mocks.fetch.mock.calls.filter((call) => call[0].includes('/batch/'))
