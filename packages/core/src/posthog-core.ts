@@ -372,6 +372,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   groups(groups: PostHogGroupProperties): void {
     this.wrap(() => {
+      if (!this._requirePersonProcessing('posthog.group')) {
+        return
+      }
+
       // Get persisted groups
       const existingGroups = this.props.$groups || {}
 
@@ -412,6 +416,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     options?: PostHogCaptureOptions
   ): void {
     this.wrap(() => {
+      if (!this._requirePersonProcessing('posthog.groupIdentify')) {
+        return
+      }
+
       const distinctId = this.getDistinctId()
       const eventProperties = this.enrichProperties({})
       super.groupIdentifyStateless(groupType, groupKey, groupProperties, options, distinctId, eventProperties)
