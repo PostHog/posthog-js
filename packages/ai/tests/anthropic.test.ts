@@ -384,6 +384,11 @@ describe('PostHogAnthropic', () => {
         hasOutput: true,
         properties: { custom_prop: 'test_value' },
       })
+
+      const captureMock = mockPostHogClient.capture as jest.Mock
+      const [captureArgs] = captureMock.mock.calls
+      const { properties } = captureArgs[0]
+      expect(properties['$ai_usage']).toBeDefined()
     })
 
     conditionalTest('should handle system prompts correctly', async () => {
