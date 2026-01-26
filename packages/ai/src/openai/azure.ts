@@ -224,8 +224,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                     ]
 
               const latency = (Date.now() - startTime) / 1000
-              const timeToFirstToken =
-                firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
+              const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
               await sendEventToPosthog({
                 client: this.phClient,
                 ...posthogParams,
@@ -419,8 +418,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               }
 
               const latency = (Date.now() - startTime) / 1000
-              const timeToFirstToken =
-                firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
+              const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
               await sendEventToPosthog({
                 client: this.phClient,
                 ...posthogParams,

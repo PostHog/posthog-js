@@ -590,8 +590,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
 
             flush: async () => {
               const latency = (Date.now() - startTime) / 1000
-              const timeToFirstToken =
-                firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
+              const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
               // Build content array similar to mapVercelOutput structure
               const content: OutputContentItem[] = []
               if (reasoningText) {

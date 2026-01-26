@@ -187,8 +187,7 @@ export class WrappedModels {
       }
 
       const latency = (Date.now() - startTime) / 1000
-      const timeToFirstToken =
-        firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
+      const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
 
       const availableTools = extractAvailableToolCalls('gemini', geminiParams)
 
