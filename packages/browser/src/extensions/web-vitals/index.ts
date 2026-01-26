@@ -120,20 +120,15 @@ export class WebVitalsAutocapture {
             return
         }
 
-        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'web-vitals', (err) => {
+        const kind = this.useAttribution ? 'web-vitals-with-attribution' : 'web-vitals'
+
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, kind, (err) => {
             if (err) {
                 logger.error('failed to load script', err)
                 return
             }
 
-            // Call the loader function with the attribution config
-            const loadWebVitalsCallbacks = assignableWindow.__PosthogExtensions__?.loadWebVitalsCallbacks
-            if (loadWebVitalsCallbacks) {
-                loadWebVitalsCallbacks(this.useAttribution)
-                cb()
-            } else {
-                cb()
-            }
+            cb()
         })
     }
 
