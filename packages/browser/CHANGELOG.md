@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.335.3
+
+### Patch Changes
+
+- [#2956](https://github.com/PostHog/posthog-js/pull/2956) [`3f26f7f`](https://github.com/PostHog/posthog-js/commit/3f26f7fcfbcc549473310cb81243bf641d8a3753) Thanks [@ksvat](https://github.com/ksvat)! - Bump rr-web dependency version
+  (2026-01-26)
+- Updated dependencies []:
+    - @posthog/types@1.335.3
+
 ## 1.335.2
 
 ### Patch Changes
