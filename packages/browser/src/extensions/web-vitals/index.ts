@@ -53,7 +53,7 @@ export class WebVitalsAutocapture {
         const clientConfig: boolean | undefined = isObject(this._instance.config.capture_performance)
             ? this._instance.config.capture_performance.web_vitals_attribution
             : undefined
-        return clientConfig ?? true
+        return clientConfig ?? false
     }
 
     public get _maxAllowedValue(): number {

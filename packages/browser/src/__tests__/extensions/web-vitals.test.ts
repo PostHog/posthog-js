@@ -229,7 +229,7 @@ describe('web vitals', () => {
 
     describe('web_vitals_attribution config', () => {
         it.each([
-            [undefined, true],
+            [undefined, false],
             [true, true],
             [false, false],
         ])(
