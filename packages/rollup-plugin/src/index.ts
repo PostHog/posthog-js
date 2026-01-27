@@ -77,7 +77,9 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                 }
 
                 if (Object.keys(chunks).length === 0) {
-                    console.log('No chunks found, skipping sourcemap processing for this stage. Your build may be multi-stage and this stage may not be relevant')
+                    console.log(
+                        'No chunks found, skipping sourcemap processing for this stage. Your build may be multi-stage and this stage may not be relevant'
+                    )
                     return
                 }
 
