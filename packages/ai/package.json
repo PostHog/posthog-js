@@ -22,7 +22,7 @@
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "devDependencies": {
-    "@ai-sdk/provider": "^3.0.4",
+    "@ai-sdk/provider": "^3.0.5",
     "@posthog-tooling/rollup-utils": "workspace:*",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@types/jest": "catalog:",
@@ -44,8 +44,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
-    "@google/genai": "^1.34.0",
-    "@langchain/core": "^1.1.8",
+    "@google/genai": "^1.38.0",
+    "@langchain/core": "^1.1.17",
     "@posthog/core": "workspace:*",
     "langchain": "^1.2.3",
     "openai": "^6.16.0",

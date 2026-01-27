@@ -1,0 +1,6 @@
+---
+'@posthog/ai': patch
+---
+dependencies updates:
+    - Updated dependency [`@google/genai@^1.38.0` ↗︎](https://www.npmjs.com/package/@google/genai/v/1.38.0) (from `^1.34.0`, in `dependencies`)
+    - Updated dependency [`@langchain/core@^1.1.17` ↗︎](https://www.npmjs.com/package/@langchain/core/v/1.1.17) (from `^1.1.8`, in `dependencies`)
