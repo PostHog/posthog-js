@@ -192,7 +192,7 @@ export function ProductTourSurveyStepInner({
     return (
         <>
             <button class="ph-tour-dismiss" onClick={onDismiss} aria-label="Close survey" style={cursorStyle}>
-                {cancelSVG}
+                {cancelSVG()}
             </button>
 
             <div class="ph-tour-survey-question">{survey.questionText}</div>
