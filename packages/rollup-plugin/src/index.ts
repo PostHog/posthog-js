@@ -68,11 +68,19 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
 
                 for (const fileName in bundle) {
                     const chunk = bundle[fileName]
-                    if (chunk.type === 'chunk') {
+                    const isJsFile = /\.(js|mjs|cjs)$/.test(fileName)
+                    if (chunk.type === 'chunk' && isJsFile) {
                         const chunkPath = path.resolve(...basePaths, fileName)
                         chunks[chunkPath] = chunk
                         args.push('--file', chunkPath)
                     }
+                }
+
+                if (Object.keys(chunks).length === 0) {
+                    console.log(
+                        'No chunks found, skipping sourcemap processing for this stage. Your build may be multi-stage and this stage may not be relevant'
+                    )
+                    return
                 }
 
                 if (posthogOptions.sourcemaps.project) {

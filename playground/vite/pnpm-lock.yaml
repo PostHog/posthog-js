@@ -189,18 +189,18 @@ packages:
     resolution: {integrity: sha512-ZT55BDLV0yv0RBm2czMiZ+SqCGO7AvmOM3G/w2xhVPH+te0aKgFjmBvGlL1dH+ql2tgGO3MVrbb3jCKyvpgnxA==}
     engines: {node: 20 || >=22}
 
-  '@posthog/cli@0.5.20':
-    resolution: {integrity: sha512-Rgo7ppkZNmH/StfdxYY7aT+fHx+TKS8kc2qU3r+bDDNa1hGUaT/PQJF6W8jSDlAcaZVuDQDWA0ofnVXgjXjMTw==}
+  '@posthog/cli@0.5.26':
+    resolution: {integrity: sha512-X3k2jtSaR7CGghcBlduU2qZdqu8iSYmMx/Uy2XxJCXCsnyiD/jcuNSwUrH2y3IbNPmxb0kTWKEtcR+HCvP/zcg==}
     engines: {node: '>=14', npm: '>=6'}
     hasBin: true
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-/9b/JG9B7ynREuk8EfD9xRQlTWeEmx2m7AECMNy9n/CDWzbFfPti/qSV4o3BF5dICAQf82otpn+8Khg1KTdDYw==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.13.0
+    resolution: {integrity: sha512-ehiNMv339pzHVgWw/v0gCPU/NVgNpdRRQ+/heV3/jinHwUrA9gzKQIdx74L0sT4p2GCXW0c3Ae23zSxgqViCFg==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.14.0
 
   '@posthog/rollup-plugin@file:../../target/posthog-rollup-plugin.tgz':
-    resolution: {integrity: sha512-icZd9FWrmbN02bxS9wRiw9fwpcegnE+96F8JhrS8ICy3gDcUt3mACIKbp74WuWUG+0ASUdhgdlRdj/3c1BKeTg==, tarball: file:../../target/posthog-rollup-plugin.tgz}
-    version: 1.1.11
+    resolution: {integrity: sha512-O82nk0Zlrgh3xaZhf9RA3JzH6i5nruPix4iQjqjYsggM4TjcWd6y7DBpiPD0hLYmHA3BZ+n9KI2omlnAJ++d9Q==, tarball: file:../../target/posthog-rollup-plugin.tgz}
+    version: 1.1.14
     peerDependencies:
       rollup: '>= 4.0.0'
 
@@ -766,7 +766,7 @@ snapshots:
     dependencies:
       '@isaacs/balanced-match': 4.0.1
 
-  '@posthog/cli@0.5.20':
+  '@posthog/cli@0.5.26':
     dependencies:
       axios: 1.13.2
       axios-proxy-builder: 0.1.2
@@ -782,7 +782,7 @@ snapshots:
 
   '@posthog/rollup-plugin@file:../../target/posthog-rollup-plugin.tgz(rollup@4.54.0)':
     dependencies:
-      '@posthog/cli': 0.5.20
+      '@posthog/cli': 0.5.26
       '@posthog/core': file:../../target/posthog-core.tgz
       rollup: 4.54.0
     transitivePeerDependencies:

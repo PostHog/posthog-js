@@ -31,8 +31,8 @@ catalogs:
       specifier: ^7.27.1
       version: 7.28.5
     '@posthog/cli':
-      specifier: ~0.5.20
-      version: 0.5.20
+      specifier: ~0.5.26
+      version: 0.5.26
     '@rslib/core':
       specifier: 0.10.6
       version: 0.10.6
@@ -501,7 +501,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.5.20
+        version: 0.5.26
       '@posthog/core':
         specifier: workspace:*
         version: link:../core
@@ -572,7 +572,7 @@ importers:
         version: 4.1.3(magicast@0.3.5)
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.5.20
+        version: 0.5.26
       '@posthog/core':
         specifier: workspace:*
         version: link:../core
@@ -775,7 +775,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.5.20
+        version: 0.5.26
       '@posthog/core':
         specifier: workspace:*
         version: link:../core
@@ -843,7 +843,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.5.20
+        version: 0.5.26
       '@posthog/core':
         specifier: workspace:*
         version: link:../core
@@ -3421,8 +3421,8 @@ packages:
   '@poppinss/exception@1.2.2':
     resolution: {integrity: sha512-m7bpKCD4QMlFCjA/nKTs23fuvoVFoA83brRKmObCUNmi/9tVu8Ve3w4YQAnJu4q3Tjf5fr685HYIC/IA2zHRSg==}
 
-  '@posthog/cli@0.5.20':
-    resolution: {integrity: sha512-Rgo7ppkZNmH/StfdxYY7aT+fHx+TKS8kc2qU3r+bDDNa1hGUaT/PQJF6W8jSDlAcaZVuDQDWA0ofnVXgjXjMTw==}
+  '@posthog/cli@0.5.26':
+    resolution: {integrity: sha512-X3k2jtSaR7CGghcBlduU2qZdqu8iSYmMx/Uy2XxJCXCsnyiD/jcuNSwUrH2y3IbNPmxb0kTWKEtcR+HCvP/zcg==}
     engines: {node: '>=14', npm: '>=6'}
     hasBin: true
 
@@ -16639,7 +16639,7 @@ snapshots:
 
   '@poppinss/exception@1.2.2': {}
 
-  '@posthog/cli@0.5.20':
+  '@posthog/cli@0.5.26':
     dependencies:
       axios: 1.13.2
       axios-proxy-builder: 0.1.2
