@@ -574,7 +574,7 @@ packages:
     version: 1.14.0
 
   '@posthog/rollup-plugin@file:../../target/posthog-rollup-plugin.tgz':
-    resolution: {integrity: sha512-aqm0yJVO81bMaF77+SPhXPvRkPUc1N9QQ+VzvBwzBCk0iO/IVo7Vwivf1OIIRE3pMCS+HQ81hPMY8XFE2GmQoA==, tarball: file:../../target/posthog-rollup-plugin.tgz}
+    resolution: {integrity: sha512-F+qbpgpn2Z/uqhr+9D6AI+MvTZkFolInYHzK/q/vvtf+8CHvT0lN6k9kxN9WI0DTodU6n2rUxP0Fn3I69eWIbA==, tarball: file:../../target/posthog-rollup-plugin.tgz}
     version: 1.1.14
     peerDependencies:
       rollup: '>= 4.0.0'
