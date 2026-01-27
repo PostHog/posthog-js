@@ -440,7 +440,8 @@ export class WrappedResponses extends Responses {
                 model: openAIParams.model,
                 provider: 'openai',
                 input: formatOpenAIResponsesInput(
-                  sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions
+                  sanitizeOpenAIResponse(openAIParams.input),
+                  openAIParams.instructions
                 ),
                 output: finalContent,
                 latency,
@@ -469,7 +470,8 @@ export class WrappedResponses extends Responses {
                 model: openAIParams.model,
                 provider: 'openai',
                 input: formatOpenAIResponsesInput(
-                  sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions
+                  sanitizeOpenAIResponse(openAIParams.input),
+                  openAIParams.instructions
                 ),
                 output: [],
                 latency: 0,
