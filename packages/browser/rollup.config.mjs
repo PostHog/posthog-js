@@ -156,6 +156,9 @@ const plugins = (es5, noExternal) => [
                               '_conversations',
                               '_send_request', // called by conversations external bundle
 
+                              // used in product-tours - external bundle needs to access this on the posthog instance
+                              '_addCaptureHook',
+
                               // part of setup/teardown code, preserve these out of caution
                               '_init',
                               '_dom_loaded',

@@ -8,7 +8,6 @@
         "_activateTrigger",
         "_activeTour",
         "_addActionHook",
-        "_addCaptureHook",
         "_addDomEventHandlers",
         "_addEventTriggerListener",
         "_addGreetingMessage",
