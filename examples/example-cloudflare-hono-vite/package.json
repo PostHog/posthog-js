@@ -1,0 +1,21 @@
+{
+  "name": "example-cloudflare-hono-vite",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "pnpm build && vite preview",
+    "deploy": "pnpm build && wrangler deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
+  },
+  "dependencies": {
+    "hono": "^4.11.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.2.3",
+    "@posthog/rollup-plugin": "*",
+    "vite": "^6.3.5",
+    "vite-ssr-components": "^0.5.2",
+    "wrangler": "^4.17.0"
+  }
+}
