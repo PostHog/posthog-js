@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.335.5
+
+### Patch Changes
+
+- [#2981](https://github.com/PostHog/posthog-js/pull/2981) [`b5c1981`](https://github.com/PostHog/posthog-js/commit/b5c198143ba6befe200054680365ec9d9ccc3fbe) Thanks [@adboio](https://github.com/adboio)! - fix survey close button color
+  (2026-01-27)
+- Updated dependencies []:
+    - @posthog/types@1.335.5
+
 ## 1.335.4
 
 ### Patch Changes
