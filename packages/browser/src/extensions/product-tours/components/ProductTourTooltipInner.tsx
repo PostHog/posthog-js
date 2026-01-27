@@ -75,7 +75,7 @@ export function ProductTourTooltipInner({
     return (
         <>
             <button class="ph-tour-dismiss" onClick={onDismiss} aria-label="Close tour" style={cursorStyle}>
-                {cancelSVG}
+                {cancelSVG()}
             </button>
 
             <div class="ph-tour-content" dangerouslySetInnerHTML={{ __html: getStepHtml(step) }} />

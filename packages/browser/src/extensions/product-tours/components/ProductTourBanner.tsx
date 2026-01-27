@@ -85,7 +85,7 @@ export function ProductTourBanner({
                     }}
                     aria-label="Close banner"
                 >
-                    {cancelSVG}
+                    {cancelSVG()}
                 </button>
             )}
         </>

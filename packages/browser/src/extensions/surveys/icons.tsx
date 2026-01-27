@@ -33,21 +33,23 @@ export const thumbsDownEmoji = (
         <path d="M22 4h-2c-.55 0-1 .45-1 1v9c0 .55.45 1 1 1h2V4zM2.17 11.12c-.11.25-.17.52-.17.8V13c0 1.1.9 2 2 2h5.5l-.92 4.65c-.05.22-.02.46.08.66.23.45.52.86.88 1.22L10 22l6.41-6.41c.38-.38.59-.89.59-1.42V6.34C17 5.05 15.95 4 14.66 4H6.55c-.7 0-1.36.37-1.72.97l-2.66 6.15z" />
     </svg>
 )
-export const cancelSVG = (
+export const cancelSVG = ({ fill = 'currentColor' }: { fill?: string } = {}) => (
     <svg
         width="12"
         height="12"
         viewBox="0 0 12 12"
-        fill="none"
+        fill={fill}
         xmlns="http://www.w3.org/2000/svg"
-        aria-labelledby="close-survey-title"
+        aria-labelledby="close-survey-title-adam"
     >
-        <title id="close-survey-title">Close survey</title>
+        <title id="close-survey-title" className="adam-testing">
+            Close survey
+        </title>
         <path
             fill-rule="evenodd"
             clip-rule="evenodd"
             d="M0.164752 0.164752C0.384422 -0.0549175 0.740578 -0.0549175 0.960248 0.164752L6 5.20451L11.0398 0.164752C11.2594 -0.0549175 11.6156 -0.0549175 11.8352 0.164752C12.0549 0.384422 12.0549 0.740578 11.8352 0.960248L6.79549 6L11.8352 11.0398C12.0549 11.2594 12.0549 11.6156 11.8352 11.8352C11.6156 12.0549 11.2594 12.0549 11.0398 11.8352L6 6.79549L0.960248 11.8352C0.740578 12.0549 0.384422 12.0549 0.164752 11.8352C-0.0549175 11.6156 -0.0549175 11.2594 0.164752 11.0398L5.20451 6L0.164752 0.960248C-0.0549175 0.740578 -0.0549175 0.384422 0.164752 0.164752Z"
-            fill="currentColor"
+            fill={fill}
         />
     </svg>
 )
