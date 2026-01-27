@@ -1,5 +1,14 @@
 # posthog-react-native
 
+## 4.24.1
+
+### Patch Changes
+
+- [#2971](https://github.com/PostHog/posthog-js/pull/2971) [`f51560c`](https://github.com/PostHog/posthog-js/commit/f51560caf78386cef5278f7cf0e9f253b2ec0e50) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: groups and groupidentify is a no-op if person profiles is set to never
+  (2026-01-27)
+- Updated dependencies [[`f51560c`](https://github.com/PostHog/posthog-js/commit/f51560caf78386cef5278f7cf0e9f253b2ec0e50)]:
+  - @posthog/core@1.14.1
+
 ## 4.24.0
 
 ### Minor Changes

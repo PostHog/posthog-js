@@ -1,5 +1,0 @@
----
-'posthog-js': patch
----
-
-Bump rrweb dependency version to 0.0.37

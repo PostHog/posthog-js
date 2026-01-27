@@ -1,5 +1,18 @@
 # posthog-js
 
+## 1.335.4
+
+### Patch Changes
+
+- [#2980](https://github.com/PostHog/posthog-js/pull/2980) [`f81d065`](https://github.com/PostHog/posthog-js/commit/f81d065aef7eacf568dea612dd2676331bd8d5c0) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: Bump preact minimum version to 10.28.2
+  (2026-01-27)
+
+- [#2978](https://github.com/PostHog/posthog-js/pull/2978) [`724587d`](https://github.com/PostHog/posthog-js/commit/724587d6fd0a852f17b78d3912e43c6628dd13d9) Thanks [@fasyy612](https://github.com/fasyy612)! - Bump rrweb dependency version to 0.0.37
+  (2026-01-27)
+- Updated dependencies [[`f51560c`](https://github.com/PostHog/posthog-js/commit/f51560caf78386cef5278f7cf0e9f253b2ec0e50)]:
+    - @posthog/core@1.14.1
+    - @posthog/types@1.335.4
+
 ## 1.335.3
 
 ### Patch Changes

@@ -1,5 +1,17 @@
 # @posthog/rollup-plugin
 
+## 1.2.0
+
+### Minor Changes
+
+- [#2979](https://github.com/PostHog/posthog-js/pull/2979) [`a1cf608`](https://github.com/PostHog/posthog-js/commit/a1cf608bb3ffc1efa199d5e1557291f4af4eb957) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - handle no files case and non js maps
+  (2026-01-27)
+
+### Patch Changes
+
+- Updated dependencies [[`f51560c`](https://github.com/PostHog/posthog-js/commit/f51560caf78386cef5278f7cf0e9f253b2ec0e50)]:
+    - @posthog/core@1.14.1
+
 ## 1.1.14
 
 ### Patch Changes

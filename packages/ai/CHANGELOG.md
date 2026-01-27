@@ -1,5 +1,22 @@
 # posthog-ai
 
+## 7.6.0
+
+### Minor Changes
+
+- [#2955](https://github.com/PostHog/posthog-js/pull/2955) [`6db4b48`](https://github.com/PostHog/posthog-js/commit/6db4b487c0e14707c14e248c620eced5ef4166e0) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Add `rawUsage` field to capture raw provider usage metadata for backend cost calculations
+  (2026-01-27)
+
+### Patch Changes
+
+- [#2974](https://github.com/PostHog/posthog-js/pull/2974) [`93da719`](https://github.com/PostHog/posthog-js/commit/93da719335372135a5ebefddeb9f6ed571d4ef5d) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates: - Updated dependency [`@google/genai@^1.38.0` ↗︎](https://www.npmjs.com/package/@google/genai/v/1.38.0) (from `^1.34.0`, in `dependencies`) - Updated dependency [`@langchain/core@^1.1.17` ↗︎](https://www.npmjs.com/package/@langchain/core/v/1.1.17) (from `^1.1.8`, in `dependencies`) (2026-01-27)
+
+- [#2977](https://github.com/PostHog/posthog-js/pull/2977) [`5544606`](https://github.com/PostHog/posthog-js/commit/5544606e159bd0589f04a9571b3ce99582b917bf) Thanks [@andrewm4894](https://github.com/andrewm4894)! - fix: sanitize base64 images before formatting in Responses API to prevent 413 payload-too-large errors
+  (2026-01-27)
+- Updated dependencies [[`f51560c`](https://github.com/PostHog/posthog-js/commit/f51560caf78386cef5278f7cf0e9f253b2ec0e50)]:
+  - @posthog/core@1.14.1
+  - posthog-node@5.24.3
+
 ## 7.5.4
 
 ### Patch Changes
