@@ -214,6 +214,10 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       expect(captureCall[0].properties['$ai_framework']).toBe('vercel')
       expect(captureCall[0].properties['$ai_model']).toBe('gpt-4')
       expect(captureCall[0].properties['$ai_provider']).toBe('openai')
+      // Verify raw usage metadata is passed for server-side extraction
+      expect(captureCall[0].properties['$ai_usage']).toBeDefined()
+      expect(captureCall[0].properties['$ai_usage'].usage).toBeDefined()
+      expect(captureCall[0].properties['$ai_usage'].providerMetadata).toBeDefined()
     })
 
     it('should handle V3 streaming with tool calls', async () => {

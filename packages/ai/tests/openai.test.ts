@@ -447,6 +447,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(properties['$ai_http_status']).toBe(200)
     expect(properties['foo']).toBe('bar')
     expect(typeof properties['$ai_latency']).toBe('number')
+    expect(properties['$ai_usage']).toBeDefined()
   })
 
   conditionalTest('groups', async () => {

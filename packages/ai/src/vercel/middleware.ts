@@ -436,6 +436,24 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
 
           // V2 usage has simple numbers, V3 has objects with .total - normalize both
           const usageObj = result.usage as Record<string, unknown>
+
+          // Extract raw response for providers that include detailed usage metadata
+          // For Gemini, candidatesTokensDetails is in result.response.body.usageMetadata
+          const rawUsageData: Record<string, unknown> = {
+            usage: result.usage,
+            providerMetadata,
+          }
+
+          // Include response body usageMetadata if it contains detailed token breakdown (e.g., candidatesTokensDetails)
+          if (result.response && typeof result.response === 'object') {
+            const responseBody = result.response.body
+            if (responseBody && typeof responseBody === 'object' && 'usageMetadata' in responseBody) {
+              rawUsageData.rawResponse = {
+                usageMetadata: responseBody.usageMetadata,
+              }
+            }
+          }
+
           const usage = {
             inputTokens: extractTokenCount(result.usage.inputTokens),
             outputTokens: extractTokenCount(result.usage.outputTokens),
@@ -443,6 +461,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             cacheReadInputTokens: extractCacheReadTokens(usageObj),
             webSearchCount,
             ...additionalTokenValues,
+            rawUsage: rawUsageData,
           }
 
           adjustAnthropicV3CacheTokens(model, provider, usage)
@@ -619,10 +638,11 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
 
               const webSearchCount = extractWebSearchCount(providerMetadata, usage)
 
-              // Update usage with web search count
+              // Update usage with web search count and raw metadata
               const finalUsage = {
                 ...usage,
                 webSearchCount,
+                rawUsage: { usage, providerMetadata },
               }
 
               adjustAnthropicV3CacheTokens(model, provider, finalUsage)

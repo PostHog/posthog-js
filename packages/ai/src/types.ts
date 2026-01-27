@@ -92,4 +92,5 @@ export interface TokenUsage {
   cacheReadInputTokens?: unknown // Use unknown for provider flexibility
   cacheCreationInputTokens?: unknown // Use unknown for provider flexibility
   webSearchCount?: number // Count of web search queries/calls used
+  rawUsage?: unknown // Raw provider usage metadata for backend processing
 }

@@ -10,6 +10,7 @@ import { version } from '../package.json'
 import { v4 as uuidv4 } from 'uuid'
 import { isString } from './typeGuards'
 import { uuidv7, ErrorTracking as CoreErrorTracking } from '@posthog/core'
+import { redactBase64DataUrl } from './sanitization'
 
 type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatCompletionCreateParams
 type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
@@ -282,6 +283,9 @@ export const formatResponseGemini = (response: any): FormattedMessage[] => {
             if (data instanceof Uint8Array || Buffer.isBuffer(data)) {
               data = Buffer.from(data).toString('base64')
             }
+
+            // Sanitize base64 data for images and other large inline data
+            data = redactBase64DataUrl(data)
 
             content.push({
               type: 'audio',
@@ -693,6 +697,7 @@ export const sendEventToPosthog = async ({
     ...(usage.cacheReadInputTokens ? { $ai_cache_read_input_tokens: usage.cacheReadInputTokens } : {}),
     ...(usage.cacheCreationInputTokens ? { $ai_cache_creation_input_tokens: usage.cacheCreationInputTokens } : {}),
     ...(usage.webSearchCount ? { $ai_web_search_count: usage.webSearchCount } : {}),
+    ...(usage.rawUsage ? { $ai_usage: usage.rawUsage } : {}),
   }
 
   const properties = {

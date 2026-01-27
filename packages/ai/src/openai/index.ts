@@ -140,6 +140,7 @@ export class WrappedCompletions extends Completions {
                   arguments: string
                 }
               >()
+              let rawUsageData: unknown
 
               for await (const chunk of stream1) {
                 // Extract model from chunk (Chat Completions chunks have model field)
@@ -195,6 +196,7 @@ export class WrappedCompletions extends Completions {
 
                 // Handle usage information
                 if (chunk.usage) {
+                  rawUsageData = chunk.usage
                   usage = {
                     ...usage,
                     inputTokens: chunk.usage.prompt_tokens ?? 0,
@@ -259,6 +261,7 @@ export class WrappedCompletions extends Completions {
                   reasoningTokens: usage.reasoningTokens,
                   cacheReadInputTokens: usage.cacheReadInputTokens,
                   webSearchCount: usage.webSearchCount,
+                  rawUsage: rawUsageData,
                 },
                 tools: availableTools,
               })
@@ -309,6 +312,7 @@ export class WrappedCompletions extends Completions {
                 reasoningTokens: result.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.prompt_tokens_details?.cached_tokens ?? 0,
                 webSearchCount: calculateWebSearchCount(result),
+                rawUsage: result.usage,
               },
               tools: availableTools,
             })
@@ -404,6 +408,7 @@ export class WrappedResponses extends Responses {
                 outputTokens: 0,
                 webSearchCount: 0,
               }
+              let rawUsageData: unknown
 
               for await (const chunk of stream1) {
                 if ('response' in chunk && chunk.response) {
@@ -427,6 +432,7 @@ export class WrappedResponses extends Responses {
                   finalContent = chunk.response.output
                 }
                 if ('response' in chunk && chunk.response?.usage) {
+                  rawUsageData = chunk.response.usage
                   usage = {
                     ...usage,
                     inputTokens: chunk.response.usage.input_tokens ?? 0,
@@ -459,6 +465,7 @@ export class WrappedResponses extends Responses {
                   reasoningTokens: usage.reasoningTokens,
                   cacheReadInputTokens: usage.cacheReadInputTokens,
                   webSearchCount: usage.webSearchCount,
+                  rawUsage: rawUsageData,
                 },
                 tools: availableTools,
               })
@@ -511,6 +518,7 @@ export class WrappedResponses extends Responses {
                 reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
                 webSearchCount: calculateWebSearchCount(result),
+                rawUsage: result.usage,
               },
               tools: availableTools,
             })
@@ -582,6 +590,7 @@ export class WrappedResponses extends Responses {
               outputTokens: result.usage?.output_tokens ?? 0,
               reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
               cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
+              rawUsage: result.usage,
             },
           })
           return result
@@ -651,6 +660,7 @@ export class WrappedEmbeddings extends Embeddings {
           httpStatus: 200,
           usage: {
             inputTokens: result.usage?.prompt_tokens ?? 0,
+            rawUsage: result.usage,
           },
         })
         return result
@@ -782,6 +792,7 @@ export class WrappedTranscriptions extends Transcriptions {
               let usage: {
                 inputTokens?: number
                 outputTokens?: number
+                rawUsage?: unknown
               } = {
                 inputTokens: 0,
                 outputTokens: 0,
@@ -797,6 +808,7 @@ export class WrappedTranscriptions extends Transcriptions {
                   usage = {
                     inputTokens: chunk.usage?.type === 'tokens' ? (chunk.usage.input_tokens ?? 0) : 0,
                     outputTokens: chunk.usage?.type === 'tokens' ? (chunk.usage.output_tokens ?? 0) : 0,
+                    rawUsage: chunk.usage,
                   }
                 }
               }
@@ -858,6 +870,7 @@ export class WrappedTranscriptions extends Transcriptions {
               usage: {
                 inputTokens: result.usage?.type === 'tokens' ? (result.usage.input_tokens ?? 0) : 0,
                 outputTokens: result.usage?.type === 'tokens' ? (result.usage.output_tokens ?? 0) : 0,
+                rawUsage: result.usage,
               },
             })
             return result

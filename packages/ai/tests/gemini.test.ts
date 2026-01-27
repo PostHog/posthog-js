@@ -166,6 +166,12 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$ai_http_status']).toBe(200)
     expect(properties['foo']).toBe('bar')
     expect(typeof properties['$ai_latency']).toBe('number')
+    // Verify raw usage metadata is passed for server-side extraction
+    expect(properties['$ai_usage']).toEqual({
+      promptTokenCount: 15,
+      candidatesTokenCount: 8,
+      totalTokenCount: 23,
+    })
   })
 
   test('streaming content generation', async () => {
@@ -208,6 +214,11 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$ai_http_status']).toBe(200)
     expect(properties['foo']).toBe('bar')
     expect(typeof properties['$ai_latency']).toBe('number')
+    // Verify raw usage metadata is passed for server-side extraction (streaming)
+    expect(properties['$ai_usage']).toEqual({
+      promptTokenCount: 15,
+      candidatesTokenCount: 8,
+    })
   })
 
   test('groups', async () => {
