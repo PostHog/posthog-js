@@ -16,6 +16,7 @@ import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } fr
 import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
 import { sanitizeOpenAI } from '../sanitization'
 import { extractPosthogParams } from '../utils'
+import { isResponseTokenChunk } from './utils'
 
 type ChatCompletion = OpenAIOrignal.ChatCompletion
 type ChatCompletionChunk = OpenAIOrignal.ChatCompletionChunk
@@ -379,17 +380,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
 
               for await (const chunk of stream1) {
                 // Track first token time on content delta events
-                if (
-                  firstTokenTime === undefined &&
-                  (chunk.type === 'response.output_item.added' ||
-                    chunk.type === 'response.content_part.added' ||
-                    chunk.type === 'response.output_text.delta' ||
-                    chunk.type === 'response.reasoning_text.delta' ||
-                    chunk.type === 'response.reasoning_summary_text.delta' ||
-                    chunk.type === 'response.audio.delta' ||
-                    chunk.type === 'response.audio.transcript.delta' ||
-                    chunk.type === 'response.refusal.delta')
-                ) {
+                if (firstTokenTime === undefined && isResponseTokenChunk(chunk)) {
                   firstTokenTime = Date.now()
                 }
 
