@@ -108,6 +108,10 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
 
                     contentBlocks.push(currentTextBlock)
                   } else if (chunk.content_block?.type === 'tool_use') {
+                    if (firstTokenTime === undefined) {
+                      firstTokenTime = Date.now()
+                    }
+
                     const toolBlock: FormattedFunctionCall = {
                       type: 'function',
                       id: chunk.content_block.id,

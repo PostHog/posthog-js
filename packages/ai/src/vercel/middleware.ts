@@ -547,6 +547,9 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
 
               // Handle tool call chunks
               if (chunk.type === 'tool-input-start') {
+                if (firstTokenTime === undefined) {
+                  firstTokenTime = Date.now()
+                }
                 // Initialize a new tool call
                 toolCallsInProgress.set(chunk.id, {
                   toolCallId: chunk.id,
@@ -565,6 +568,9 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 // Tool call is complete, keep it in the map for final processing
               }
               if (chunk.type === 'tool-call') {
+                if (firstTokenTime === undefined) {
+                  firstTokenTime = Date.now()
+                }
                 // Direct tool call chunk (complete tool call)
                 toolCallsInProgress.set(chunk.toolCallId, {
                   toolCallId: chunk.toolCallId,

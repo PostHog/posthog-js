@@ -154,6 +154,9 @@ export class WrappedModels {
               for (const part of candidate.content.parts) {
                 // Type-safe check for functionCall
                 if ('functionCall' in part) {
+                  if (firstTokenTime === undefined) {
+                    firstTokenTime = Date.now()
+                  }
                   const funcCall = (part as Part & { functionCall?: { name?: string; args?: unknown } }).functionCall
                   if (funcCall?.name) {
                     accumulatedContent.push({

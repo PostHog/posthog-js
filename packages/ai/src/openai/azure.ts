@@ -148,6 +148,9 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 // Handle tool calls
                 const deltaToolCalls = choice?.delta?.tool_calls
                 if (deltaToolCalls && Array.isArray(deltaToolCalls)) {
+                  if (firstTokenTime === undefined) {
+                    firstTokenTime = Date.now()
+                  }
                   for (const toolCall of deltaToolCalls) {
                     const index = toolCall.index
 
