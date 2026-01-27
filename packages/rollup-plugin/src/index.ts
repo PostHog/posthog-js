@@ -68,7 +68,7 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
 
                 for (const fileName in bundle) {
                     const chunk = bundle[fileName]
-                    const isJsFile = /\.(m?c?js)$/.test(fileName)
+                    const isJsFile = /\.(js|mjs|cjs)$/.test(fileName)
                     if (chunk.type === 'chunk' && isJsFile) {
                         const chunkPath = path.resolve(...basePaths, fileName)
                         chunks[chunkPath] = chunk

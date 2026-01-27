@@ -11,7 +11,7 @@ const posthog = new PostHog(
 app.get('/', async (c) => {
 
   const error = new Error('test from cloudflare')
-  posthog.captureExceptionImmediate(error, 'cloudflare-user-id')
+  await posthog.captureExceptionImmediate(error, 'cloudflare-user-id')
 
   return c.json({ success: true, message: 'Exception captured!' })
 })
