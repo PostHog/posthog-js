@@ -93,9 +93,7 @@ export const parseFlagsResponse = (
         // if not all flags were computed, we upsert flags instead of replacing them
         // but filter out flags that failed to evaluate so they don't overwrite cached values
         if (flagDetails) {
-            const successfulKeys = new Set(
-                Object.keys(flagDetails).filter((key) => !flagDetails[key]?.failed)
-            )
+            const successfulKeys = new Set(Object.keys(flagDetails).filter((key) => !flagDetails[key]?.failed))
 
             newFeatureFlags = {
                 ...currentFlags,
