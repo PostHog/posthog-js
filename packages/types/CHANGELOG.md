@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.336.0
+
+### Minor Changes
+
+- [#2954](https://github.com/PostHog/posthog-js/pull/2954) [`228930a`](https://github.com/PostHog/posthog-js/commit/228930a48b35f67cf12fc8dc155f431ff97b9f05) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Add `FeatureFlagResult` type
+  (2026-01-28)
+
 ## 1.335.5
 
 ## 1.335.4
