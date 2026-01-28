@@ -94,3 +94,38 @@ export interface TokenUsage {
   webSearchCount?: number // Count of web search queries/calls used
   rawUsage?: unknown // Raw provider usage metadata for backend processing
 }
+
+/**
+ * Options for fetching a prompt
+ */
+export interface GetPromptOptions {
+  cacheTtlSeconds?: number
+  fallback?: string
+}
+
+/**
+ * Cached prompt with metadata
+ */
+export interface CachedPrompt {
+  prompt: string
+  fetchedAt: number
+}
+
+/**
+ * API response for LLM prompts
+ */
+export interface PromptApiResponse {
+  id: number
+  name: string
+  prompt: string
+  version: number
+  created_by: string
+  created_at: string
+  updated_at: string
+  deleted: boolean
+}
+
+/**
+ * Variables for prompt compilation
+ */
+export type PromptVariables = Record<string, string | number | boolean>
