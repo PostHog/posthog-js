@@ -96,11 +96,12 @@ export class Prompts {
     // Try to fetch from API
     try {
       const prompt = await this.fetchPromptFromApi(name)
+      const fetchedAt = Date.now()
 
       // Update cache
       this.cache.set(name, {
         prompt,
-        fetchedAt: now,
+        fetchedAt,
       })
 
       return prompt
