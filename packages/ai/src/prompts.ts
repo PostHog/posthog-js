@@ -1,3 +1,5 @@
+/// <reference lib="dom" />
+
 import type { PostHog } from 'posthog-node'
 import type { CachedPrompt, GetPromptOptions, PromptApiResponse, PromptVariables, PromptsDirectOptions } from './types'
 
