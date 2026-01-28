@@ -25,8 +25,8 @@ describe('Prompts', () => {
     return {
       options: {
         personalApiKey: 'personalApiKey' in options ? options.personalApiKey : 'phx_test_key',
-        host: options.host ?? 'https://us.i.posthog.com',
       },
+      host: options.host ?? 'https://us.i.posthog.com',
     } as any
   }
 
@@ -62,7 +62,6 @@ describe('Prompts', () => {
           method: 'GET',
           headers: {
             Authorization: 'Bearer phx_test_key',
-            'Content-Type': 'application/json',
           },
         }
       )
@@ -351,7 +350,6 @@ describe('Prompts', () => {
           method: 'GET',
           headers: {
             Authorization: 'Bearer phx_direct_key',
-            'Content-Type': 'application/json',
           },
         }
       )
@@ -483,6 +481,30 @@ describe('Prompts', () => {
       const result = prompts.compile('Hello, {{name}}! Goodbye, {{name}}!', { name: 'World' })
 
       expect(result).toBe('Hello, World! Goodbye, World!')
+    })
+
+    it('should work with direct options initialization', () => {
+      const prompts = new Prompts({ personalApiKey: 'phx_test_key' })
+
+      const result = prompts.compile('Hello, {{name}}!', { name: 'World' })
+
+      expect(result).toBe('Hello, World!')
+    })
+
+    it('should handle variables with hyphens', () => {
+      const prompts = new Prompts({ personalApiKey: 'phx_test_key' })
+
+      const result = prompts.compile('User ID: {{user-id}}', { 'user-id': '12345' })
+
+      expect(result).toBe('User ID: 12345')
+    })
+
+    it('should handle variables with dots', () => {
+      const prompts = new Prompts({ personalApiKey: 'phx_test_key' })
+
+      const result = prompts.compile('Company: {{company.name}}', { 'company.name': 'Acme' })
+
+      expect(result).toBe('Company: Acme')
     })
   })
 

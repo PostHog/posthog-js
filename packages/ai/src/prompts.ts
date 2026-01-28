@@ -60,10 +60,8 @@ export class Prompts {
     this.defaultCacheTtlSeconds = options.defaultCacheTtlSeconds ?? DEFAULT_CACHE_TTL_SECONDS
 
     if (isPromptsWithPostHog(options)) {
-      // Extract from PostHog client
-      const phOptions = (options.posthog as any).options as { personalApiKey?: string; host?: string } | undefined
-      this.personalApiKey = phOptions?.personalApiKey ?? ''
-      this.host = phOptions?.host ?? 'https://us.i.posthog.com'
+      this.personalApiKey = options.posthog.options.personalApiKey ?? ''
+      this.host = options.posthog.host
     } else {
       // Direct options
       this.personalApiKey = options.personalApiKey
@@ -136,7 +134,7 @@ export class Prompts {
    * @returns The compiled prompt string
    */
   compile(prompt: string, variables: PromptVariables): string {
-    return prompt.replace(/\{\{(\w+)\}\}/g, (match, variableName) => {
+    return prompt.replace(/\{\{([\w.-]+)\}\}/g, (match, variableName) => {
       if (variableName in variables) {
         return String(variables[variableName])
       }
@@ -172,7 +170,6 @@ export class Prompts {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${this.personalApiKey}`,
-        'Content-Type': 'application/json',
       },
     })
 
