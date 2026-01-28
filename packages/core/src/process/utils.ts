@@ -21,9 +21,16 @@ const getLocalPaths = (startPath: string): string[] => {
 }
 
 export const buildLocalBinaryPaths = (cwd: string): string[] => {
+
+  const possibleLocations = [
+    'node_modules/.bin',
+    'node_modules/.pnpm/node_modules/.bin'
+  ]
+
   const localPaths = getLocalPaths(path.resolve(cwd)).map((localPath: string) =>
-    path.join(localPath, 'node_modules/.bin')
-  )
+    possibleLocations.map((location) => path.join(localPath, location))
+  ).flat()
+
   return localPaths
 }
 
