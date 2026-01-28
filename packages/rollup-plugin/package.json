@@ -1,6 +1,6 @@
 {
     "name": "@posthog/rollup-plugin",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "description": "PostHog Rollup plugin",
     "repository": {
         "type": "git",

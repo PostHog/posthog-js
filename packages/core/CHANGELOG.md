@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.15.0
+
+### Minor Changes
+
+- [#2984](https://github.com/PostHog/posthog-js/pull/2984) [`8c0c495`](https://github.com/PostHog/posthog-js/commit/8c0c495caaf4cd7f950cbc77fdfc1df499772008) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - include possible pnpm bin path
+  (2026-01-28)
+
 ## 1.14.1
 
 ### Patch Changes
