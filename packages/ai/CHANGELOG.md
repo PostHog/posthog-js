@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 7.7.0
+
+### Minor Changes
+
+- [#2982](https://github.com/PostHog/posthog-js/pull/2982) [`ce9b4db`](https://github.com/PostHog/posthog-js/commit/ce9b4dbbecfd831f76d974ae74a0b84952c3996f) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Add prompt management functions.
+  (2026-01-28)
+
 ## 7.6.1
 
 ### Patch Changes
