@@ -389,6 +389,108 @@ describe('PostHog Feature Flags v4', () => {
         })
       })
 
+      describe('when subsequent flags calls return failed flags with errorsWhileComputingFlags', () => {
+        beforeEach(() => {
+          ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+            _mocks.fetch
+              .mockImplementationOnce((url) => {
+                if (url.includes('/flags/?v=2&config=true')) {
+                  return Promise.resolve({
+                    status: 200,
+                    text: () => Promise.resolve('ok'),
+                    json: () =>
+                      Promise.resolve({
+                        flags: createMockFeatureFlags(),
+                      }),
+                  })
+                }
+                return errorAPIResponse
+              })
+              .mockImplementationOnce((url) => {
+                if (url.includes('/flags/?v=2&config=true')) {
+                  return Promise.resolve({
+                    status: 200,
+                    text: () => Promise.resolve('ok'),
+                    json: () =>
+                      Promise.resolve({
+                        flags: {
+                          'x-flag': {
+                            key: 'x-flag',
+                            enabled: true,
+                            variant: 'x-value',
+                            failed: false,
+                            reason: {
+                              code: 'matched_condition',
+                              description: 'matched condition set 5',
+                              condition_index: 0,
+                            },
+                            metadata: {
+                              id: 5,
+                              version: 1,
+                              description: 'x-flag',
+                              payload: '{"x":"value"}',
+                            },
+                          },
+                          'feature-1': {
+                            key: 'feature-1',
+                            enabled: false,
+                            variant: undefined,
+                            failed: true,
+                            reason: {
+                              code: 'database_error',
+                              description: 'Database connection error during evaluation',
+                              condition_index: undefined,
+                            },
+                            metadata: {
+                              id: 1,
+                              version: 1,
+                              description: 'feature-1',
+                              payload: undefined,
+                            },
+                          },
+                        },
+                        errorsWhileComputingFlags: true,
+                      }),
+                  })
+                }
+
+                return errorAPIResponse
+              })
+              .mockImplementation(() => {
+                return errorAPIResponse
+              })
+          })
+
+          posthog.reloadFeatureFlags()
+        })
+
+        it('should filter out failed flags and preserve their cached values', async () => {
+          expect(posthog.getFeatureFlags()).toEqual({
+            'feature-1': true,
+            'feature-2': true,
+            'json-payload': true,
+            'feature-variant': 'variant',
+          })
+
+          // second call returns feature-1 as failed (should be filtered out)
+          // and x-flag as successful (should be merged in)
+          await posthog.reloadFeatureFlagsAsync()
+
+          // feature-1 should retain its cached value (true), not be overwritten with false
+          expect(posthog.getFeatureFlags()).toEqual({
+            'feature-1': true,
+            'feature-2': true,
+            'json-payload': true,
+            'feature-variant': 'variant',
+            'x-flag': 'x-value',
+          })
+
+          expect(posthog.getFeatureFlag('feature-1')).toEqual(true)
+          expect(posthog.getFeatureFlag('x-flag')).toEqual('x-value')
+          expect(posthog.isFeatureEnabled('feature-1')).toEqual(true)
+        })
+      })
+
       describe('when subsequent flags calls return results without errors', () => {
         beforeEach(() => {
           ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
