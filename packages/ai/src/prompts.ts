@@ -1,5 +1,5 @@
 import type { PostHog } from 'posthog-node'
-import type { CachedPrompt, GetPromptOptions, PromptApiResponse, PromptVariables } from './types'
+import type { CachedPrompt, GetPromptOptions, PromptApiResponse, PromptVariables, PromptsDirectOptions } from './types'
 
 const DEFAULT_CACHE_TTL_SECONDS = 300 // 5 minutes
 
@@ -12,9 +12,15 @@ function isPromptApiResponse(data: unknown): data is PromptApiResponse {
   )
 }
 
-export interface PromptsOptions {
+export interface PromptsWithPostHogOptions {
   posthog: PostHog
   defaultCacheTtlSeconds?: number
+}
+
+export type PromptsOptions = PromptsWithPostHogOptions | PromptsDirectOptions
+
+function isPromptsWithPostHog(options: PromptsOptions): options is PromptsWithPostHogOptions {
+  return 'posthog' in options
 }
 
 /**
@@ -22,7 +28,14 @@ export interface PromptsOptions {
  *
  * @example
  * ```ts
+ * // With PostHog client
  * const prompts = new Prompts({ posthog })
+ *
+ * // Or with direct options (no PostHog client needed)
+ * const prompts = new Prompts({
+ *   personalApiKey: 'phx_xxx',
+ *   host: 'https://us.i.posthog.com',
+ * })
  *
  * // Fetch with caching and fallback
  * const template = await prompts.get('support-system-prompt', {
@@ -38,13 +51,24 @@ export interface PromptsOptions {
  * ```
  */
 export class Prompts {
-  private posthog: PostHog
+  private personalApiKey: string
+  private host: string
   private defaultCacheTtlSeconds: number
   private cache: Map<string, CachedPrompt> = new Map()
 
   constructor(options: PromptsOptions) {
-    this.posthog = options.posthog
     this.defaultCacheTtlSeconds = options.defaultCacheTtlSeconds ?? DEFAULT_CACHE_TTL_SECONDS
+
+    if (isPromptsWithPostHog(options)) {
+      // Extract from PostHog client
+      const phOptions = (options.posthog as any).options as { personalApiKey?: string; host?: string } | undefined
+      this.personalApiKey = phOptions?.personalApiKey ?? ''
+      this.host = phOptions?.host ?? 'https://us.i.posthog.com'
+    } else {
+      // Direct options
+      this.personalApiKey = options.personalApiKey
+      this.host = options.host ?? 'https://us.i.posthog.com'
+    }
   }
 
   /**
@@ -135,23 +159,19 @@ export class Prompts {
   }
 
   private async fetchPromptFromApi(name: string): Promise<string> {
-    const options = (this.posthog as any).options as { personalApiKey?: string; host?: string } | undefined
-    const personalApiKey = options?.personalApiKey
-
-    if (!personalApiKey) {
+    if (!this.personalApiKey) {
       throw new Error(
         '[PostHog Prompts] personalApiKey is required to fetch prompts. ' +
-          'Please provide it when initializing the PostHog client.'
+          'Please provide it when initializing the Prompts instance.'
       )
     }
 
-    const host = options?.host || 'https://us.i.posthog.com'
-    const url = `${host}/api/projects/@current/llm_prompts/name/${encodeURIComponent(name)}/`
+    const url = `${this.host}/api/projects/@current/llm_prompts/name/${encodeURIComponent(name)}/`
 
     const response = await fetch(url, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${personalApiKey}`,
+        Authorization: `Bearer ${this.personalApiKey}`,
         'Content-Type': 'application/json',
       },
     })

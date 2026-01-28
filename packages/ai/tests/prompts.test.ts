@@ -330,6 +330,82 @@ describe('Prompts', () => {
         expect.any(Object)
       )
     })
+
+    it('should work with direct options (no PostHog client)', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(mockPromptResponse),
+      })
+
+      const prompts = new Prompts({
+        personalApiKey: 'phx_direct_key',
+      })
+
+      const result = await prompts.get('test-prompt')
+
+      expect(result).toBe(mockPromptResponse.prompt)
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://us.i.posthog.com/api/projects/@current/llm_prompts/name/test-prompt/',
+        {
+          method: 'GET',
+          headers: {
+            Authorization: 'Bearer phx_direct_key',
+            'Content-Type': 'application/json',
+          },
+        }
+      )
+    })
+
+    it('should use custom host from direct options', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(mockPromptResponse),
+      })
+
+      const prompts = new Prompts({
+        personalApiKey: 'phx_direct_key',
+        host: 'https://eu.i.posthog.com',
+      })
+
+      await prompts.get('test-prompt')
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://eu.i.posthog.com/api/projects/@current/llm_prompts/name/test-prompt/',
+        expect.any(Object)
+      )
+    })
+
+    it('should use custom default cache TTL from direct options', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(mockPromptResponse),
+      })
+
+      const prompts = new Prompts({
+        personalApiKey: 'phx_direct_key',
+        defaultCacheTtlSeconds: 60,
+      })
+
+      // First call
+      await prompts.get('test-prompt')
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+
+      // Advance time past custom TTL
+      jest.advanceTimersByTime(61 * 1000)
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(mockPromptResponse),
+      })
+
+      // Second call - should refetch
+      await prompts.get('test-prompt')
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+    })
   })
 
   describe('compile()', () => {

@@ -129,3 +129,12 @@ export interface PromptApiResponse {
  * Variables for prompt compilation
  */
 export type PromptVariables = Record<string, string | number | boolean>
+
+/**
+ * Direct options for initializing Prompts without a PostHog client
+ */
+export interface PromptsDirectOptions {
+  personalApiKey: string
+  host?: string
+  defaultCacheTtlSeconds?: number
+}
