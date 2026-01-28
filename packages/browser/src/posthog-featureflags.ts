@@ -12,6 +12,7 @@ import {
     RemoteConfigFeatureFlagCallback,
     EarlyAccessFeatureStage,
     FeatureFlagDetail,
+    FeatureFlagResult,
 } from './types'
 import { PostHogPersistence } from './posthog-persistence'
 
@@ -528,8 +529,65 @@ export class PostHogFeatureFlags {
             logger.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
-        const flagValue = this.getFlagVariants()[key]
-        const flagReportValue = `${flagValue}`
+        const result = this.getFeatureFlagResult(key, options)
+        return result?.variant ?? result?.enabled
+    }
+
+    /*
+     * Retrieves the details for a feature flag.
+     *
+     * ### Usage:
+     *
+     *     const details = getFeatureFlagDetails("my-flag")
+     *     console.log(details.metadata.version)
+     *     console.log(details.reason)
+     *
+     * @param {String} key Key of the feature flag.
+     */
+    getFeatureFlagDetails(key: string): FeatureFlagDetail | undefined {
+        const details = this.getFlagsWithDetails()
+        return details[key]
+    }
+
+    /**
+     * @deprecated Use `getFeatureFlagResult()` instead which properly tracks the feature flag call.
+     * `getFeatureFlagPayload()` does not emit the `$feature_flag_called` event which may result in
+     * missing analytics. This method will be removed in a future version.
+     */
+    getFeatureFlagPayload(key: string): JsonType {
+        // Don't send event to maintain backwards compatibility - this method never tracked calls
+        const result = this.getFeatureFlagResult(key, { send_event: false })
+        return result?.payload
+    }
+
+    /**
+     * Get a feature flag result including both the flag value and payload, while properly tracking the call.
+     * This method emits the `$feature_flag_called` event by default.
+     *
+     * ### Usage:
+     *
+     *     const result = posthog.getFeatureFlagResult('my-flag')
+     *     if (result?.enabled) {
+     *         console.log('Flag is enabled with payload:', result.payload)
+     *     }
+     *
+     * @param {String} key Key of the feature flag.
+     * @param {Object} [options] Options for the feature flag lookup.
+     * @param {boolean} [options.send_event=true] If false, won't send the $feature_flag_called event.
+     * @returns {FeatureFlagResult | undefined} The feature flag result including key, enabled, variant, and payload.
+     */
+    getFeatureFlagResult(key: string, options: { send_event?: boolean } = {}): FeatureFlagResult | undefined {
+        if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
+            logger.warn('getFeatureFlagResult for key "' + key + '" failed. Feature flags didn\'t load in time.')
+            return undefined
+        }
+
+        const flagVariants = this.getFlagVariants()
+        const flagExists = key in flagVariants
+        const flagValue = flagVariants[key]
+        const payloads = this.getFlagPayloads()
+        const payload = payloads[key]
+        const flagReportValue = String(flagValue)
         const requestId = this._instance.get_property(PERSISTENCE_FEATURE_FLAG_REQUEST_ID) || undefined
         const evaluatedAt = this._instance.get_property(PERSISTENCE_FEATURE_FLAG_EVALUATED_AT) || undefined
         const flagCallReported: Record<string, string[]> = this._instance.get_property(FLAG_CALL_REPORTED) || {}
@@ -544,11 +602,10 @@ export class PostHogFeatureFlags {
                 this._instance.persistence?.register({ [FLAG_CALL_REPORTED]: flagCallReported })
 
                 const flagDetails = this.getFeatureFlagDetails(key)
-
                 const properties: Record<string, any | undefined> = {
                     $feature_flag: key,
                     $feature_flag_response: flagValue,
-                    $feature_flag_payload: this.getFeatureFlagPayload(key) || null,
+                    $feature_flag_payload: payload || null,
                     $feature_flag_request_id: requestId,
                     $feature_flag_evaluated_at: evaluatedAt,
                     $feature_flag_bootstrapped_response: this._instance.config.bootstrap?.featureFlags?.[key] || null,
@@ -587,28 +644,26 @@ export class PostHogFeatureFlags {
                 this._instance.capture('$feature_flag_called', properties)
             }
         }
-        return flagValue
-    }
 
-    /*
-     * Retrieves the details for a feature flag.
-     *
-     * ### Usage:
-     *
-     *     const details = getFeatureFlagDetails("my-flag")
-     *     console.log(details.metadata.version)
-     *     console.log(details.reason)
-     *
-     * @param {String} key Key of the feature flag.
-     */
-    getFeatureFlagDetails(key: string): FeatureFlagDetail | undefined {
-        const details = this.getFlagsWithDetails()
-        return details[key]
-    }
+        if (!flagExists) {
+            return undefined
+        }
 
-    getFeatureFlagPayload(key: string): JsonType {
-        const payloads = this.getFlagPayloads()
-        return payloads[key]
+        let parsedPayload = payload
+        if (!isUndefined(payload)) {
+            try {
+                parsedPayload = JSON.parse(payload as any)
+            } catch {
+                // payload is already parsed or not valid JSON, keep as-is
+            }
+        }
+
+        return {
+            key,
+            enabled: !!flagValue,
+            variant: typeof flagValue === 'string' ? flagValue : undefined,
+            payload: parsedPayload,
+        }
     }
 
     /*

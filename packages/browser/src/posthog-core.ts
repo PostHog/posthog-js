@@ -56,6 +56,7 @@ import {
     ExceptionAutoCaptureConfig,
     FeatureFlagDetail,
     FeatureFlagsCallback,
+    FeatureFlagResult,
     JsonType,
     OverrideConfig,
     PostHogConfig,
@@ -1644,15 +1645,47 @@ export class PostHog implements PostHogInterface {
      *
      * @public
      *
+     * @deprecated Use `getFeatureFlagResult()` instead
+     *
      * @param {Object|String} prop Key of the feature flag.
      */
     getFeatureFlagPayload(key: string): JsonType {
-        const payload = this.featureFlags.getFeatureFlagPayload(key)
-        try {
-            return JSON.parse(payload as any)
-        } catch {
-            return payload
-        }
+        return this.featureFlags.getFeatureFlagPayload(key)
+    }
+
+    /**
+     * Get a feature flag evaluation result including both the flag value and payload.
+     *
+     * By default, this method emits the `$feature_flag_called` event.
+     *
+     * {@label Feature flags}
+     *
+     * @example
+     * ```js
+     * const result = posthog.getFeatureFlagResult('my-flag')
+     * if (result?.enabled) {
+     *     console.log('Flag is enabled with payload:', result.payload)
+     * }
+     * ```
+     *
+     * @example
+     * ```js
+     * // multivariate flag
+     * const result = posthog.getFeatureFlagResult('button-color')
+     * if (result?.variant === 'red') {
+     *     showRedButton(result.payload)
+     * }
+     * ```
+     *
+     * @public
+     *
+     * @param {string} key Key of the feature flag.
+     * @param {Object} [options] Options for the feature flag lookup.
+     * @param {boolean} [options.send_event=true] If false, won't send the $feature_flag_called event.
+     * @returns {FeatureFlagResult | undefined} The feature flag result including key, enabled, variant, and payload.
+     */
+    getFeatureFlagResult(key: string, options?: { send_event?: boolean }): FeatureFlagResult | undefined {
+        return this.featureFlags.getFeatureFlagResult(key, options)
     }
 
     /**

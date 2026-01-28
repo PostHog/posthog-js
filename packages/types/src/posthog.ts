@@ -8,7 +8,12 @@
 import type { PostHogConfig } from './posthog-config'
 import type { Properties, JsonType } from './common'
 import type { CaptureResult, CaptureOptions } from './capture'
-import type { FeatureFlagsCallback, EarlyAccessFeatureCallback, EarlyAccessFeatureStage } from './feature-flags'
+import type {
+    FeatureFlagsCallback,
+    EarlyAccessFeatureCallback,
+    EarlyAccessFeatureStage,
+    FeatureFlagResult,
+} from './feature-flags'
 import type { SessionIdChangedCallback } from './session-recording'
 import type { RequestCallback } from './request'
 import type { SurveyRenderReason } from './survey'
@@ -183,8 +188,20 @@ export interface PostHog {
      *
      * @param key - The feature flag key
      * @returns The feature flag payload
+     * @deprecated Use `getFeatureFlagResult()` instead which properly tracks the feature flag call.
      */
     getFeatureFlagPayload(key: string): JsonType
+
+    /**
+     * Get a feature flag evaluation result including both the flag value and payload.
+     *
+     * By default, this method emits the `$feature_flag_called` event.
+     *
+     * @param key - The feature flag key
+     * @param options - Options for the feature flag lookup
+     * @returns The feature flag result including key, enabled, variant, and payload, or undefined if not loaded
+     */
+    getFeatureFlagResult(key: string, options?: { send_event?: boolean }): FeatureFlagResult | undefined
 
     /**
      * Check if a feature flag is enabled.

@@ -55,6 +55,20 @@ export interface EarlyAccessFeature {
 export type EarlyAccessFeatureStage = 'concept' | 'alpha' | 'beta' | 'general-availability'
 export type EarlyAccessFeatureCallback = (earlyAccessFeatures: EarlyAccessFeature[]) => void
 
+/**
+ * Result of evaluating a feature flag, including both the flag value and its payload.
+ */
+export type FeatureFlagResult = {
+    /** The key of the feature flag */
+    readonly key: string
+    /** Whether the feature flag is enabled (truthy value) */
+    readonly enabled: boolean
+    /** The variant key if this is a multivariate flag, undefined for boolean flags */
+    readonly variant: string | undefined
+    /** The JSON payload associated with this flag, if any */
+    readonly payload: JsonType | undefined
+}
+
 export interface EarlyAccessFeatureResponse {
     earlyAccessFeatures: EarlyAccessFeature[]
 }
