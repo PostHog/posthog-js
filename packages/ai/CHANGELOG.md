@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 7.8.0
+
+### Minor Changes
+
+- [#2915](https://github.com/PostHog/posthog-js/pull/2915) [`e105fd0`](https://github.com/PostHog/posthog-js/commit/e105fd06334e6953ed923c15f6b1392cafce0322) Thanks [@richardsolomou](https://github.com/richardsolomou)! - feat(llma): add time to first token reporting
+  (2026-01-29)
+
 ## 7.7.0
 
 ### Minor Changes
