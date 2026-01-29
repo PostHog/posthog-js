@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.16.0
+
+### Minor Changes
+
+- [#2967](https://github.com/PostHog/posthog-js/pull/2967) [`cbe84c1`](https://github.com/PostHog/posthog-js/commit/cbe84c1ea8b6dd398569ed401139e9698e08fd64) Thanks [@adboio](https://github.com/adboio)! - support auto-submit on selection for survey rating questions
+  (2026-01-29)
+
 ## 1.15.0
 
 ### Minor Changes
