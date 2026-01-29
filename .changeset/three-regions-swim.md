@@ -1,0 +1,5 @@
+---
+'posthog-node': patch
+---
+
+fix: before_send in node infered the type as any instead of EventMessage or null
