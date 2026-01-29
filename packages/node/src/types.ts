@@ -94,7 +94,7 @@ export type FeatureFlagCondition = {
 
 export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
 
-export type PostHogOptions = PostHogCoreOptions & {
+export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
   persistence?: 'memory'
   personalApiKey?: string
   privacyMode?: boolean
