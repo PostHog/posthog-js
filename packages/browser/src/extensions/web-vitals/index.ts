@@ -53,7 +53,7 @@ export class WebVitalsAutocapture {
         const clientConfig: boolean | undefined = isObject(this._instance.config.capture_performance)
             ? this._instance.config.capture_performance.web_vitals_attribution
             : undefined
-        return clientConfig ?? true
+        return clientConfig ?? false
     }
 
     public get _maxAllowedValue(): number {
@@ -120,20 +120,15 @@ export class WebVitalsAutocapture {
             return
         }
 
-        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'web-vitals', (err) => {
+        const kind = this.useAttribution ? 'web-vitals-with-attribution' : 'web-vitals'
+
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, kind, (err) => {
             if (err) {
                 logger.error('failed to load script', err)
                 return
             }
 
-            // Call the loader function with the attribution config
-            const loadWebVitalsCallbacks = assignableWindow.__PosthogExtensions__?.loadWebVitalsCallbacks
-            if (loadWebVitalsCallbacks) {
-                loadWebVitalsCallbacks(this.useAttribution)
-                cb()
-            } else {
-                cb()
-            }
+            cb()
         })
     }
 

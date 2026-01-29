@@ -66,7 +66,7 @@ test.describe('Web Vitals', () => {
     ;[
         { attributionConfig: true, shouldHaveAttribution: true },
         { attributionConfig: false, shouldHaveAttribution: false },
-        { attributionConfig: undefined, shouldHaveAttribution: true },
+        { attributionConfig: undefined, shouldHaveAttribution: false },
     ].forEach(({ attributionConfig, shouldHaveAttribution }) => {
         test(`web_vitals_attribution: ${attributionConfig} ${shouldHaveAttribution ? 'includes' : 'excludes'} attribution data`, async ({
             page,

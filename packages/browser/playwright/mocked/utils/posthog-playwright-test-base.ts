@@ -14,6 +14,7 @@ const lazyLoadedJSFiles = [
     'exception-autocapture',
     'tracing-headers',
     'web-vitals',
+    'web-vitals-with-attribution',
     'dead-clicks-autocapture',
 ]
 

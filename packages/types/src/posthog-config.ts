@@ -189,7 +189,7 @@ export interface PerformanceCaptureConfig {
      * which may help reduce memory usage in SPAs where elements
      * causing layout shifts are removed during navigation.
      *
-     * @default true
+     * @default false
      */
     web_vitals_attribution?: boolean
 }
