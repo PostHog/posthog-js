@@ -1,5 +1,20 @@
 # posthog-js
 
+## 1.336.2
+
+### Patch Changes
+
+- [#2985](https://github.com/PostHog/posthog-js/pull/2985) [`2ed9623`](https://github.com/PostHog/posthog-js/commit/2ed9623261d93dbcd89981151c3bee6e55903fa0) Thanks [@adboio](https://github.com/adboio)! - support custom banner container for product tours
+  (2026-01-29)
+
+- [#2991](https://github.com/PostHog/posthog-js/pull/2991) [`2b32a60`](https://github.com/PostHog/posthog-js/commit/2b32a60721498936c8092c8bbf75297878140217) Thanks [@lricoy](https://github.com/lricoy)! - treat undefined and null the same when receiving config
+  (2026-01-29)
+
+- [#2973](https://github.com/PostHog/posthog-js/pull/2973) [`c1aa45c`](https://github.com/PostHog/posthog-js/commit/c1aa45ca4e4b4907974b14dc5e9aa388225347bb) Thanks [@lricoy](https://github.com/lricoy)! - make attribution opt-in by default to reduce memory usage
+  (2026-01-29)
+- Updated dependencies []:
+    - @posthog/types@1.336.2
+
 ## 1.336.1
 
 ### Patch Changes
