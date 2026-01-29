@@ -515,6 +515,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
     doStream: {
       value: async (params: LanguageModelCallOptions) => {
         const startTime = Date.now()
+        let firstTokenTime: number | undefined
         let generatedText = ''
         let reasoningText = ''
         let usage: {
@@ -551,14 +552,23 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             transform(chunk, controller) {
               // Handle streaming patterns - compatible with both V2 and V3
               if (chunk.type === 'text-delta') {
+                if (firstTokenTime === undefined) {
+                  firstTokenTime = Date.now()
+                }
                 generatedText += chunk.delta
               }
               if (chunk.type === 'reasoning-delta') {
+                if (firstTokenTime === undefined) {
+                  firstTokenTime = Date.now()
+                }
                 reasoningText += chunk.delta
               }
 
               // Handle tool call chunks
               if (chunk.type === 'tool-input-start') {
+                if (firstTokenTime === undefined) {
+                  firstTokenTime = Date.now()
+                }
                 // Initialize a new tool call
                 toolCallsInProgress.set(chunk.id, {
                   toolCallId: chunk.id,
@@ -577,6 +587,9 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 // Tool call is complete, keep it in the map for final processing
               }
               if (chunk.type === 'tool-call') {
+                if (firstTokenTime === undefined) {
+                  firstTokenTime = Date.now()
+                }
                 // Direct tool call chunk (complete tool call)
                 toolCallsInProgress.set(chunk.toolCallId, {
                   toolCallId: chunk.toolCallId,
@@ -602,6 +615,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
 
             flush: async () => {
               const latency = (Date.now() - startTime) / 1000
+              const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
               // Build content array similar to mapVercelOutput structure
               const content: OutputContentItem[] = []
               if (reasoningText) {
@@ -656,6 +670,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
                 output: output,
                 latency,
+                timeToFirstToken,
                 baseURL,
                 params: mergedParams as any,
                 httpStatus: 200,

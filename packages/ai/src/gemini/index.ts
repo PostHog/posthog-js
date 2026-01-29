@@ -110,6 +110,7 @@ export class WrappedModels {
     const { providerParams: geminiParams, posthogParams } = extractPosthogParams(params)
     const startTime = Date.now()
     const accumulatedContent: FormattedContent = []
+    let firstTokenTime: number | undefined
     let usage: TokenUsage = {
       inputTokens: 0,
       outputTokens: 0,
@@ -121,6 +122,10 @@ export class WrappedModels {
       const stream = await this.client.models.generateContentStream(geminiParams as GenerateContentParameters)
 
       for await (const chunk of stream) {
+        // Track first token time when we get text content
+        if (firstTokenTime === undefined && chunk.text) {
+          firstTokenTime = Date.now()
+        }
         const chunkWebSearchCount = calculateGoogleWebSearchCount(chunk)
         if (chunkWebSearchCount > 0 && chunkWebSearchCount > (usage.webSearchCount ?? 0)) {
           usage.webSearchCount = chunkWebSearchCount
@@ -151,6 +156,9 @@ export class WrappedModels {
               for (const part of candidate.content.parts) {
                 // Type-safe check for functionCall
                 if ('functionCall' in part) {
+                  if (firstTokenTime === undefined) {
+                    firstTokenTime = Date.now()
+                  }
                   const funcCall = (part as Part & { functionCall?: { name?: string; args?: unknown } }).functionCall
                   if (funcCall?.name) {
                     accumulatedContent.push({
@@ -185,6 +193,7 @@ export class WrappedModels {
       }
 
       const latency = (Date.now() - startTime) / 1000
+      const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
 
       const availableTools = extractAvailableToolCalls('gemini', geminiParams)
 
@@ -199,6 +208,7 @@ export class WrappedModels {
         input: this.formatInputForPostHog(geminiParams),
         output,
         latency,
+        timeToFirstToken,
         baseURL: 'https://generativelanguage.googleapis.com',
         params: params as GenerateContentParameters & MonitoringParams,
         httpStatus: 200,

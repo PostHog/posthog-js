@@ -330,6 +330,28 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(vertexClient.models).toBeDefined()
   })
 
+  test('streaming tracks time to first token', async () => {
+    const stream = client.models.generateContentStream({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Write a short poem',
+      posthogDistinctId: 'test-ttft-user',
+    })
+
+    for await (const _chunk of stream) {
+      // Just consume the stream
+    }
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+
+    // Time to first token should be present and be a number
+    expect(typeof properties['$ai_time_to_first_token']).toBe('number')
+    expect(properties['$ai_time_to_first_token']).toBeGreaterThanOrEqual(0)
+    // Time to first token should be less than or equal to total latency
+    expect(properties['$ai_time_to_first_token']).toBeLessThanOrEqual(properties['$ai_latency'])
+  })
+
   test('streaming with function calls', async () => {
     // Mock streaming response with function calls
     const mockStreamWithFunctions = [
