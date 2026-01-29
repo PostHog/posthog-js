@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.24.5
+
+### Patch Changes
+
+- [#2987](https://github.com/PostHog/posthog-js/pull/2987) [`25f4173`](https://github.com/PostHog/posthog-js/commit/25f4173e01fd026cb71f036ce2bfb7caa6cb637d) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: before_send in node inferred the type as any instead of EventMessage or null
+  (2026-01-29)
+
 ## 5.24.4
 
 ### Patch Changes

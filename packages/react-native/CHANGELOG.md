@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.25.0
+
+### Minor Changes
+
+- [#2983](https://github.com/PostHog/posthog-js/pull/2983) [`e925210`](https://github.com/PostHog/posthog-js/commit/e925210182f295f17f93ed0e1c3936ac010960d5) Thanks [@marandaneto](https://github.com/marandaneto)! - feat: allow recording masking with a view wrapper and without accessibilitylabel
+  (2026-01-29)
+
 ## 4.24.2
 
 ### Patch Changes
