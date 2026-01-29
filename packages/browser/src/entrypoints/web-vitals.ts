@@ -1,27 +1,31 @@
+/**
+ * Web Vitals entrypoint (without attribution)
+ *
+ * This is the default, lighter bundle (~6KB) that captures core web vitals metrics
+ * without attribution data. Attribution data includes debugging information like
+ * which elements caused layout shifts, timing breakdowns, etc.
+ *
+ * We split this into two bundles because:
+ * 1. Attribution code adds ~6KB to the bundle size
+ * 2. Attribution can cause memory issues in SPAs (onCLS holds references to detached DOM elements)
+ * 3. Most users only need aggregate metrics, not debugging attribution data
+ *
+ * For attribution data, use web-vitals-with-attribution.ts instead by setting:
+ *   capture_performance: { web_vitals_attribution: true }
+ *
+ * @see web-vitals-with-attribution.ts
+ */
 import { assignableWindow } from '../utils/globals'
 
 import { onINP, onLCP, onCLS, onFCP } from 'web-vitals'
-import {
-    onINP as onINPWithAttribution,
-    onLCP as onLCPWithAttribution,
-    onCLS as onCLSWithAttribution,
-    onFCP as onFCPWithAttribution,
-} from 'web-vitals/attribution'
 
-const loadCallbacks = (useAttribution: boolean = true) => {
-    const postHogWebVitalsCallbacks = useAttribution
-        ? {
-              onLCP: onLCPWithAttribution,
-              onCLS: onCLSWithAttribution,
-              onFCP: onFCPWithAttribution,
-              onINP: onINPWithAttribution,
-          }
-        : {
-              onLCP,
-              onCLS,
-              onFCP,
-              onINP,
-          }
+const loadCallbacks = () => {
+    const postHogWebVitalsCallbacks = {
+        onLCP,
+        onCLS,
+        onFCP,
+        onINP,
+    }
 
     assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
     assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
@@ -36,7 +40,7 @@ const loadCallbacks = (useAttribution: boolean = true) => {
     return postHogWebVitalsCallbacks
 }
 
-assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
-assignableWindow.__PosthogExtensions__.loadWebVitalsCallbacks = loadCallbacks
+// self-register on load
+loadCallbacks()
 
 export default loadCallbacks

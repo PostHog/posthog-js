@@ -229,7 +229,7 @@ describe('web vitals', () => {
 
     describe('web_vitals_attribution config', () => {
         it.each([
-            [undefined, true],
+            [undefined, false],
             [true, true],
             [false, false],
         ])(
@@ -243,6 +243,37 @@ describe('web vitals', () => {
                 expect(posthog.webVitalsAutocapture!.useAttribution).toBe(expectedUseAttribution)
             }
         )
+
+        it.each([
+            [undefined, 'web-vitals'],
+            [false, 'web-vitals'],
+            [true, 'web-vitals-with-attribution'],
+        ])('when web_vitals_attribution is %p, should load %s bundle', async (attributionConfig, expectedBundle) => {
+            const loadScriptMock = jest.fn().mockImplementation((_ph, _kind, callback) => {
+                assignableWindow.__PosthogExtensions__ = {}
+                assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
+                    onLCP: jest.fn(),
+                    onCLS: jest.fn(),
+                    onFCP: jest.fn(),
+                    onINP: jest.fn(),
+                }
+                callback()
+            })
+
+            assignableWindow.__PosthogExtensions__ = {}
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                capture_performance: { web_vitals: true, web_vitals_attribution: attributionConfig },
+                capture_pageview: false,
+            })
+
+            posthog.webVitalsAutocapture!.onRemoteConfig({
+                capturePerformance: { web_vitals: true },
+            } as RemoteConfig)
+
+            expect(loadScriptMock).toHaveBeenCalledWith(expect.anything(), expectedBundle, expect.any(Function))
+        })
     })
 
     describe('afterFlagsResponse()', () => {

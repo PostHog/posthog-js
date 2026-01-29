@@ -164,6 +164,7 @@ export type PostHogExtensionKind =
     | 'toolbar'
     | 'exception-autocapture'
     | 'web-vitals'
+    | 'web-vitals-with-attribution'
     | 'recorder'
     | 'lazy-recorder'
     | 'tracing-headers'
