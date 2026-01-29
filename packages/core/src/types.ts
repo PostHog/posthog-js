@@ -547,6 +547,12 @@ export enum SurveyMatchType {
   NotIcontains = 'not_icontains',
 }
 
+export enum SurveySchedule {
+  Once = 'once',
+  Recurring = 'recurring',
+  Always = 'always',
+}
+
 export type SurveyElement = {
   text?: string
   $el_text?: string
@@ -603,6 +609,7 @@ export type Survey = {
   end_date?: string
   current_iteration?: number
   current_iteration_start_date?: string
+  schedule?: SurveySchedule
 }
 
 export type SurveyActionType = {

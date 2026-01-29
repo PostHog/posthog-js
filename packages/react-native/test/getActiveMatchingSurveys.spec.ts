@@ -1,5 +1,5 @@
 import { getActiveMatchingSurveys } from '../src/surveys/getActiveMatchingSurveys'
-import { Survey, SurveyMatchType, SurveyType } from '@posthog/core'
+import { Survey, SurveyMatchType, SurveySchedule, SurveyType } from '@posthog/core'
 import { FeatureFlagValue } from '@posthog/core'
 
 // Mock the native-deps module
@@ -314,6 +314,45 @@ describe('getActiveMatchingSurveys', () => {
 
       expect(result).toHaveLength(1)
       expect(result[0].id).toBe('new-survey')
+    })
+
+    it('should include surveys that have been seen when schedule is Always', () => {
+      const surveys = [
+        createMockSurvey({
+          id: 'seen-survey-1',
+          schedule: SurveySchedule.Always,
+          conditions: {
+            events: {
+              values: [],
+              repeatedActivation: false,
+            },
+          },
+        }),
+      ]
+
+      const result = getActiveMatchingSurveys(surveys, mockFlags, mockSeenSurveys, mockActivatedSurveys)
+
+      expect(result).toHaveLength(1)
+      expect(result[0].id).toBe('seen-survey-1')
+    })
+
+    it('should exclude surveys that have been seen when schedule is Once', () => {
+      const surveys = [
+        createMockSurvey({
+          id: 'seen-survey-1',
+          schedule: SurveySchedule.Once,
+          conditions: {
+            events: {
+              values: [],
+              repeatedActivation: false,
+            },
+          },
+        }),
+      ]
+
+      const result = getActiveMatchingSurveys(surveys, mockFlags, mockSeenSurveys, mockActivatedSurveys)
+
+      expect(result).toHaveLength(0)
     })
   })
 
