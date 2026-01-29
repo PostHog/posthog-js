@@ -83,6 +83,20 @@ describe('web vitals', () => {
             },
         ],
         [
+            null,
+            ['CLS', 'FCP', 'INP', 'LCP'] as SupportedWebVitalsMetrics[],
+            {
+                $web_vitals_LCP_event: expectedEmittedWebVitals('LCP'),
+                $web_vitals_LCP_value: 123.45,
+                $web_vitals_CLS_event: expectedEmittedWebVitals('CLS'),
+                $web_vitals_CLS_value: 123.45,
+                $web_vitals_FCP_event: expectedEmittedWebVitals('FCP'),
+                $web_vitals_FCP_value: 123.45,
+                $web_vitals_INP_event: expectedEmittedWebVitals('INP'),
+                $web_vitals_INP_value: 123.45,
+            },
+        ],
+        [
             ['CLS', 'FCP', 'INP', 'LCP'] as SupportedWebVitalsMetrics[],
             ['CLS', 'FCP', 'INP', 'LCP'] as SupportedWebVitalsMetrics[],
             {
@@ -109,7 +123,7 @@ describe('web vitals', () => {
     ])(
         'the behaviour when client config is %s',
         (
-            clientConfig: SupportedWebVitalsMetrics[] | undefined,
+            clientConfig: SupportedWebVitalsMetrics[] | undefined | null,
             expectedAllowedMetrics: SupportedWebVitalsMetrics[],
             expectedProperties: Record<string, any>
         ) => {
