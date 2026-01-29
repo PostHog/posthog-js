@@ -14,7 +14,8 @@ export interface JSONContent {
 export type ProductTourStepType = 'element' | 'modal' | 'survey' | 'banner'
 
 export interface ProductTourBannerConfig {
-    behavior: 'sticky' | 'static'
+    behavior: 'sticky' | 'static' | 'custom'
+    selector?: string
     action?: {
         type: 'none' | 'link' | 'trigger_tour'
         link?: string
@@ -143,6 +144,7 @@ export type ProductTourDismissReason =
     | 'user_clicked_outside'
     | 'escape_key'
     | 'element_unavailable'
+    | 'container_unavailable'
 
 export type ProductTourRenderReason = 'auto' | 'api' | 'trigger' | 'event'
 
