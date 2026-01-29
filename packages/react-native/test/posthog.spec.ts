@@ -1012,6 +1012,61 @@ describe('PostHog React Native', () => {
         expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
       })
     })
+
+    describe('reset with propertiesToKeep', () => {
+      let storage: PostHogCustomStorage
+      let cache: Record<string, string>
+
+      beforeEach(async () => {
+        cache = {}
+        storage = {
+          getItem: jest.fn((key: string) => cache[key]),
+          setItem: jest.fn((key: string, value: string) => {
+            cache[key] = value
+          }),
+        }
+      })
+
+      it('should preserve specified properties when reset is called with propertiesToKeep', async () => {
+        posthog = new PostHog('test-api-key', {
+          customStorage: storage,
+          flushInterval: 0,
+          setDefaultPersonProperties: false,
+        })
+        await posthog.ready()
+
+        posthog.overrideFeatureFlag({ testFlag: true })
+        posthog.register({ customProp: 'value' })
+
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual({ testFlag: true })
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual({ customProp: 'value' })
+
+        posthog.reset([PostHogPersistedProperty.OverrideFeatureFlags])
+
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual({ testFlag: true })
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual(undefined)
+      })
+
+      it('should clear all properties when reset is called without propertiesToKeep', async () => {
+        posthog = new PostHog('test-api-key', {
+          customStorage: storage,
+          flushInterval: 0,
+          setDefaultPersonProperties: false,
+        })
+        await posthog.ready()
+
+        posthog.overrideFeatureFlag({ testFlag: true })
+        posthog.register({ customProp: 'value' })
+
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual({ testFlag: true })
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual({ customProp: 'value' })
+
+        posthog.reset()
+
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual(undefined)
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual(undefined)
+      })
+    })
   })
 })
 

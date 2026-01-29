@@ -377,10 +377,18 @@ export class PostHog extends PostHogCore {
    * posthog.reset()
    * ```
    *
+   * @example
+   * ```js
+   * // reset but keep feature flag overrides
+   * posthog.reset([PostHogPersistedProperty.OverrideFeatureFlags])
+   * ```
+   *
+   * @param propertiesToKeep - Optional array of persisted properties to preserve during reset
+   *
    * @public
    */
-  reset(): void {
-    super.reset()
+  reset(propertiesToKeep?: PostHogPersistedProperty[]): void {
+    super.reset(propertiesToKeep)
 
     if (this._setDefaultPersonProperties) {
       // Reset reloads flags asyncrhonously, but doesn't wait for it.
