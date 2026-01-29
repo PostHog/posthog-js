@@ -2,6 +2,7 @@ import { render } from 'preact'
 import { PostHog } from '../../posthog-core'
 import {
     ProductTour,
+    ProductTourBannerConfig,
     ProductTourCallback,
     ProductTourDismissReason,
     ProductTourRenderReason,
@@ -126,7 +127,10 @@ function retrieveTourShadow(tour: ProductTour): { shadow: ShadowRoot; isNewlyCre
     }
 }
 
-function retrieveBannerShadow(tour: ProductTour): { shadow: ShadowRoot; isNewlyCreated: boolean } {
+function retrieveBannerShadow(
+    tour: ProductTour,
+    bannerConfig?: ProductTourBannerConfig
+): { shadow: ShadowRoot; isNewlyCreated: boolean } | null {
     const containerClass = `${CONTAINER_CLASS}-${tour.id}`
     const existingDiv = document.querySelector(`.${containerClass}`)
 
@@ -149,7 +153,17 @@ function retrieveBannerShadow(tour: ProductTour): { shadow: ShadowRoot; isNewlyC
         shadow.appendChild(stylesheet)
     }
 
-    document.body.insertBefore(div, document.body.firstChild)
+    if (bannerConfig?.behavior === 'custom' && bannerConfig.selector) {
+        const customContainer = document.querySelector(bannerConfig.selector)
+        if (customContainer) {
+            customContainer.appendChild(div)
+        } else {
+            logger.warn(`Custom banner container not found: ${bannerConfig.selector}. Banner will not be displayed.`)
+            return null
+        }
+    } else {
+        document.body.insertBefore(div, document.body.firstChild)
+    }
 
     return {
         shadow,
@@ -747,7 +761,18 @@ export class ProductTourManager {
         }
 
         const step = this._activeTour.steps[this._currentStepIndex]
-        const { shadow } = retrieveBannerShadow(this._activeTour)
+        const result = retrieveBannerShadow(this._activeTour, step.bannerConfig)
+
+        if (!result) {
+            this._captureEvent('product tour banner container selector failed', {
+                $product_tour_id: this._activeTour.id,
+                $product_tour_banner_selector: step?.bannerConfig?.selector,
+            })
+            this.dismissTour('container_unavailable')
+            return
+        }
+
+        const { shadow } = result
 
         const handleTriggerTour = () => {
             const tourId = step.bannerConfig?.action?.tourId
