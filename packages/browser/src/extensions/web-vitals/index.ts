@@ -37,7 +37,7 @@ export class WebVitalsAutocapture {
         )
             ? this._instance.config.capture_performance?.web_vitals_allowed_metrics
             : undefined
-        return !isUndefined(clientConfigMetricAllowList)
+        return !isNullish(clientConfigMetricAllowList)
             ? clientConfigMetricAllowList
             : this._instance.persistence?.props[WEB_VITALS_ALLOWED_METRICS] || ['CLS', 'FCP', 'INP', 'LCP']
     }
