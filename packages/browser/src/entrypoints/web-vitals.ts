@@ -19,28 +19,23 @@ import { assignableWindow } from '../utils/globals'
 
 import { onINP, onLCP, onCLS, onFCP } from 'web-vitals'
 
-const loadCallbacks = () => {
-    const postHogWebVitalsCallbacks = {
-        onLCP,
-        onCLS,
-        onFCP,
-        onINP,
-    }
-
-    assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
-    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
-
-    // we used to put posthogWebVitalsCallbacks on window, and now we put it on __PosthogExtensions__
-    // but that means that old clients which lazily load this extension are looking in the wrong place
-    // yuck,
-    // so we also put it directly on the window
-    // when 1.161.1 is the oldest version seen in production we can remove this
-    assignableWindow.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
-
-    return postHogWebVitalsCallbacks
+const postHogWebVitalsCallbacks = {
+    onLCP,
+    onCLS,
+    onFCP,
+    onINP,
 }
 
-// self-register on load
-loadCallbacks()
+assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
 
-export default loadCallbacks
+// we used to put posthogWebVitalsCallbacks on window, and now we put it on __PosthogExtensions__
+// but that means that old clients which lazily load this extension are looking in the wrong place
+// yuck,
+// so we also put it directly on the window
+// when 1.161.1 is the oldest version seen in production we can remove this
+assignableWindow.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
+// deprecated function kept for backwards compatibility
+assignableWindow.__PosthogExtensions__.loadWebVitalsCallbacks = () => postHogWebVitalsCallbacks
+
+export default postHogWebVitalsCallbacks

@@ -25,28 +25,21 @@ import {
     onFCP as onFCPWithAttribution,
 } from 'web-vitals/attribution'
 
-const loadCallbacks = () => {
-    const postHogWebVitalsCallbacks = {
-        onLCP: onLCPWithAttribution,
-        onCLS: onCLSWithAttribution,
-        onFCP: onFCPWithAttribution,
-        onINP: onINPWithAttribution,
-    }
-
-    assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
-    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
-
-    // we used to put posthogWebVitalsCallbacks on window, and now we put it on __PosthogExtensions__
-    // but that means that old clients which lazily load this extension are looking in the wrong place
-    // yuck,
-    // so we also put it directly on the window
-    // when 1.161.1 is the oldest version seen in production we can remove this
-    assignableWindow.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
-
-    return postHogWebVitalsCallbacks
+const postHogWebVitalsCallbacks = {
+    onLCP: onLCPWithAttribution,
+    onCLS: onCLSWithAttribution,
+    onFCP: onFCPWithAttribution,
+    onINP: onINPWithAttribution,
 }
 
-// self-register on load
-loadCallbacks()
+assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
 
-export default loadCallbacks
+// we used to put posthogWebVitalsCallbacks on window, and now we put it on __PosthogExtensions__
+// but that means that old clients which lazily load this extension are looking in the wrong place
+// yuck,
+// so we also put it directly on the window
+// when 1.161.1 is the oldest version seen in production we can remove this
+assignableWindow.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
+
+export default postHogWebVitalsCallbacks
