@@ -1,5 +1,17 @@
 # posthog-react-native
 
+## 4.27.0
+
+### Minor Changes
+
+- [#2966](https://github.com/PostHog/posthog-js/pull/2966) [`727536c`](https://github.com/PostHog/posthog-js/commit/727536cf5f1ab5a8d21fa9d4e2e6b13efc851fca) Thanks [@adboio](https://github.com/adboio)! - support "always" survey schedule
+  (2026-01-29)
+
+### Patch Changes
+
+- Updated dependencies [[`727536c`](https://github.com/PostHog/posthog-js/commit/727536cf5f1ab5a8d21fa9d4e2e6b13efc851fca)]:
+  - @posthog/core@1.17.0
+
 ## 4.26.0
 
 ### Minor Changes
