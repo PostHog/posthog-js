@@ -153,11 +153,19 @@ let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 &&
 
 const defaultsThatVaryByConfig = (
     defaults?: ConfigDefaults
-): Pick<PostHogConfig, 'rageclick' | 'capture_pageview' | 'session_recording' | 'external_scripts_inject_target'> => ({
+): Pick<
+    PostHogConfig,
+    | 'rageclick'
+    | 'capture_pageview'
+    | 'session_recording'
+    | 'external_scripts_inject_target'
+    | 'deferred_init_extensions'
+> => ({
     rageclick: defaults && defaults >= '2025-11-30' ? { content_ignorelist: true } : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
     external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
+    deferred_init_extensions: !!defaults && defaults >= '2026-01-30',
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
@@ -180,7 +188,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     save_referrer: true,
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     defaults: defaults ?? 'unset',
-    __preview_deferred_init_extensions: false, // Opt-in only for now
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookie_expiration: 365,
     upgrade: false,
@@ -264,6 +271,9 @@ export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostH
     }
     if (!isUndefined(origConfig.verbose)) {
         renames.debug = origConfig.verbose
+    }
+    if (!isUndefined(origConfig.__preview_deferred_init_extensions)) {
+        renames.deferred_init_extensions = origConfig.__preview_deferred_init_extensions
     }
     // on_xhr_error is not present, as the type is different to on_request_error
 
@@ -528,6 +538,9 @@ export class PostHog implements PostHogInterface {
         if (this.config.on_xhr_error) {
             logger.error('on_xhr_error is deprecated. Use on_request_error instead')
         }
+        if (!isUndefined(config.__preview_deferred_init_extensions)) {
+            logger.warn('__preview_deferred_init_extensions is deprecated. Use deferred_init_extensions instead')
+        }
 
         this.compression = config.disable_compression ? undefined : Compression.GZipJS
 
@@ -562,7 +575,7 @@ export class PostHog implements PostHogInterface {
         }
 
         // Conditionally defer extension initialization based on config
-        if (this.config.__preview_deferred_init_extensions) {
+        if (this.config.deferred_init_extensions) {
             // EXPERIMENTAL: Defer non-critical extension initialization to next tick
             // This reduces main thread blocking during init
             // while keeping critical path (persistence, sessions, capture) synchronous
@@ -654,11 +667,15 @@ export class PostHog implements PostHogInterface {
 
         this.toolbar.maybeLoadToolbar()
 
-        // We want to avoid promises for IE11 compatibility, so we use callbacks here
-        if (config.segment) {
-            setupSegmentIntegration(this, () => this._loaded())
-        } else {
-            this._loaded()
+        // Only call _loaded() synchronously when NOT using deferred init
+        // When deferred init is enabled, _loaded() is called at the end of _initExtensions
+        if (!this.config.deferred_init_extensions) {
+            // We want to avoid promises for IE11 compatibility, so we use callbacks here
+            if (config.segment) {
+                setupSegmentIntegration(this, () => this._loaded())
+            } else {
+                this._loaded()
+            }
         }
 
         if (isFunction(this.config._onCapture) && this.config._onCapture !== __NOOP) {
@@ -767,7 +784,7 @@ export class PostHog implements PostHogInterface {
 
         while (queue.length > 0) {
             // Only time-slice if deferred init is enabled, otherwise run synchronously
-            if (this.config.__preview_deferred_init_extensions) {
+            if (this.config.deferred_init_extensions) {
                 // we don't support IE11 anymore, so performance.now is safe
                 // eslint-disable-next-line compat/compat
                 const elapsed = performance.now() - initStartTime
@@ -798,13 +815,19 @@ export class PostHog implements PostHogInterface {
         // eslint-disable-next-line compat/compat
         const taskInitTiming = Math.round(performance.now() - initStartTime)
         this.register_for_session({
-            $sdk_debug_extensions_init_method: this.config.__preview_deferred_init_extensions
-                ? 'deferred'
-                : 'synchronous',
+            $sdk_debug_extensions_init_method: this.config.deferred_init_extensions ? 'deferred' : 'synchronous',
             $sdk_debug_extensions_init_time_ms: taskInitTiming,
         })
-        if (this.config.__preview_deferred_init_extensions) {
+        if (this.config.deferred_init_extensions) {
             logger.info(`PostHog extensions initialized (${taskInitTiming}ms)`)
+
+            // Call _loaded() now that extensions are truly ready (deferred mode only)
+            // This ensures the loaded callback fires after extensions are initialized
+            if (this.config.segment) {
+                setupSegmentIntegration(this, () => this._loaded())
+            } else {
+                this._loaded()
+            }
         }
     }
 
@@ -818,7 +841,7 @@ export class PostHog implements PostHogInterface {
         }
 
         // Store config in case extensions aren't initialized yet (only needed for deferred init)
-        if (this.config.__preview_deferred_init_extensions) {
+        if (this.config.deferred_init_extensions) {
             this._pendingRemoteConfig = config
         }
 

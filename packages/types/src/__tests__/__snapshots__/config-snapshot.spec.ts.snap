@@ -292,7 +292,12 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "\\"2025-05-24\\"",
     "\\"unset\\""
   ],
+  "deferred_init_extensions": [
+    "false",
+    "true"
+  ],
   "__preview_deferred_init_extensions": [
+    "undefined",
     "false",
     "true"
   ],

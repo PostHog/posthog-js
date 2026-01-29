@@ -49,7 +49,7 @@ describe('deferred extension initialization', () => {
             } as RemoteConfig
 
             const posthog = await createPosthogInstance(token, {
-                __preview_deferred_init_extensions: true,
+                deferred_init_extensions: true,
                 advanced_disable_decide: false,
                 capture_pageview: false,
                 disable_session_recording: true,
@@ -77,7 +77,7 @@ describe('deferred extension initialization', () => {
             } as RemoteConfig
 
             const posthog = await createPosthogInstance(token, {
-                __preview_deferred_init_extensions: true,
+                deferred_init_extensions: true,
                 advanced_disable_decide: false,
                 capture_pageview: false,
                 disable_session_recording: true,
@@ -100,7 +100,7 @@ describe('deferred extension initialization', () => {
             } as RemoteConfig
 
             const posthog = await createPosthogInstance(token, {
-                __preview_deferred_init_extensions: false, // sync init
+                deferred_init_extensions: false, // sync init
                 advanced_disable_decide: false,
                 capture_pageview: false,
                 disable_session_recording: true,
@@ -119,28 +119,28 @@ describe('deferred extension initialization', () => {
                 supportedCompression: ['gzip'],
             } as RemoteConfig
 
+            let loadedCalled = false
             const posthog = await createPosthogInstance(token, {
-                __preview_deferred_init_extensions: true,
+                deferred_init_extensions: true,
                 advanced_disable_decide: false,
                 capture_pageview: false,
                 disable_session_recording: true,
+                loaded: () => {
+                    loadedCalled = true
+                },
             })
 
-            // Call _onRemoteConfig before extensions are ready
-            posthog._onRemoteConfig(remoteConfig)
-            expect((posthog as any)._pendingRemoteConfig).toEqual(remoteConfig)
-
-            // Spy on _onRemoteConfig to see if it gets called again during replay
-            const onRemoteConfigSpy = jest.spyOn(posthog as any, '_onRemoteConfig')
-
-            // Wait for extensions to initialize
-            await new Promise((resolve) => setTimeout(resolve, 200))
-
-            // _onRemoteConfig should have been called again with the pending config during replay
-            expect(onRemoteConfigSpy).toHaveBeenCalledWith(remoteConfig)
-            // Extensions should be initialized, proving the replay worked
+            // With deferred init, loaded callback now fires AFTER extensions are initialized
+            // So by the time createPosthogInstance resolves, extensions are already ready
+            expect(loadedCalled).toBe(true)
             expect(posthog.sessionRecording).toBeDefined()
             expect(posthog.autocapture).toBeDefined()
+
+            // The pending config mechanism still works - verify by calling _onRemoteConfig
+            // and checking it's stored (though it won't need replay since extensions are ready)
+            posthog._onRemoteConfig(remoteConfig)
+            // Config is still stored for reference
+            expect((posthog as any)._pendingRemoteConfig).toEqual(remoteConfig)
         })
     })
 
@@ -149,7 +149,7 @@ describe('deferred extension initialization', () => {
             const token = uuidv7()
 
             const posthog = await createPosthogInstance(token, {
-                __preview_deferred_init_extensions: false,
+                deferred_init_extensions: false,
                 capture_pageview: false,
             })
 
@@ -162,7 +162,7 @@ describe('deferred extension initialization', () => {
             const token = uuidv7()
 
             const posthog = await createPosthogInstance(token, {
-                __preview_deferred_init_extensions: true,
+                deferred_init_extensions: true,
                 capture_pageview: false,
             })
 
@@ -173,6 +173,22 @@ describe('deferred extension initialization', () => {
             await new Promise((resolve) => setTimeout(resolve, 200))
 
             // Now extensions should be initialized
+            expect(posthog.sessionRecording).toBeDefined()
+            expect(posthog.autocapture).toBeDefined()
+        })
+
+        it('should support deprecated __preview_deferred_init_extensions config', async () => {
+            const token = uuidv7()
+
+            const posthog = await createPosthogInstance(token, {
+                __preview_deferred_init_extensions: true,
+                capture_pageview: false,
+            })
+
+            // The deprecated config should map to deferred_init_extensions
+            expect(posthog.config.deferred_init_extensions).toBe(true)
+
+            // Extensions should still be initialized
             expect(posthog.sessionRecording).toBeDefined()
             expect(posthog.autocapture).toBeDefined()
         })
