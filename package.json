@@ -42,7 +42,7 @@
         "@types/node": "^22.19.1",
         "@typescript-eslint/eslint-plugin": "^8.48.1",
         "@typescript-eslint/parser": "^8.48.1",
-        "eslint": "8.57.0",
+        "eslint": "9.26.0",
         "eslint-config-posthog-js": "link:tooling/eslint-plugin-posthog-js",
         "eslint-config-prettier": "^8.10.2",
         "eslint-plugin-compat": "^6.0.2",
