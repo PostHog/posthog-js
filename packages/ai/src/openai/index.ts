@@ -18,6 +18,7 @@ import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } fr
 import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 import { extractPosthogParams } from '../utils'
+import { isResponseTokenChunk } from './utils'
 
 const Chat = OpenAIOrignal.Chat
 const Completions = Chat.Completions
@@ -119,6 +120,7 @@ export class WrappedCompletions extends Completions {
               const contentBlocks: FormattedContent = []
               let accumulatedContent = ''
               let modelFromResponse: string | undefined
+              let firstTokenTime: number | undefined
               let usage: {
                 inputTokens?: number
                 outputTokens?: number
@@ -158,12 +160,18 @@ export class WrappedCompletions extends Completions {
                 // Handle text content
                 const deltaContent = choice?.delta?.content
                 if (deltaContent) {
+                  if (firstTokenTime === undefined) {
+                    firstTokenTime = Date.now()
+                  }
                   accumulatedContent += deltaContent
                 }
 
                 // Handle tool calls
                 const deltaToolCalls = choice?.delta?.tool_calls
                 if (deltaToolCalls && Array.isArray(deltaToolCalls)) {
+                  if (firstTokenTime === undefined) {
+                    firstTokenTime = Date.now()
+                  }
                   for (const toolCall of deltaToolCalls) {
                     const index = toolCall.index
 
@@ -243,6 +251,7 @@ export class WrappedCompletions extends Completions {
                     ]
 
               const latency = (Date.now() - startTime) / 1000
+              const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
               const availableTools = extractAvailableToolCalls('openai', openAIParams)
               await sendEventToPosthog({
                 client: this.phClient,
@@ -252,6 +261,7 @@ export class WrappedCompletions extends Completions {
                 input: sanitizeOpenAI(openAIParams.messages),
                 output: formattedOutput,
                 latency,
+                timeToFirstToken,
                 baseURL: this.baseURL,
                 params: body,
                 httpStatus: 200,
@@ -397,6 +407,7 @@ export class WrappedResponses extends Responses {
             try {
               let finalContent: unknown[] = []
               let modelFromResponse: string | undefined
+              let firstTokenTime: number | undefined
               let usage: {
                 inputTokens?: number
                 outputTokens?: number
@@ -411,6 +422,11 @@ export class WrappedResponses extends Responses {
               let rawUsageData: unknown
 
               for await (const chunk of stream1) {
+                // Track first token time on content delta events
+                if (firstTokenTime === undefined && isResponseTokenChunk(chunk)) {
+                  firstTokenTime = Date.now()
+                }
+
                 if ('response' in chunk && chunk.response) {
                   // Extract model from response object in chunk (for stored prompts)
                   if (!modelFromResponse && chunk.response.model) {
@@ -444,6 +460,7 @@ export class WrappedResponses extends Responses {
               }
 
               const latency = (Date.now() - startTime) / 1000
+              const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
               const availableTools = extractAvailableToolCalls('openai', openAIParams)
               await sendEventToPosthog({
                 client: this.phClient,
@@ -456,6 +473,7 @@ export class WrappedResponses extends Responses {
                 ),
                 output: finalContent,
                 latency,
+                timeToFirstToken,
                 baseURL: this.baseURL,
                 params: body,
                 httpStatus: 200,
@@ -789,6 +807,7 @@ export class WrappedTranscriptions extends Transcriptions {
           ;(async () => {
             try {
               let finalContent: string = ''
+              let firstTokenTime: number | undefined
               let usage: {
                 inputTokens?: number
                 outputTokens?: number
@@ -801,6 +820,11 @@ export class WrappedTranscriptions extends Transcriptions {
               const doneEvent: OpenAIOrignal.Audio.Transcriptions.TranscriptionTextDoneEvent['type'] =
                 'transcript.text.done'
               for await (const chunk of stream1) {
+                // Track first token on text delta events
+                if (firstTokenTime === undefined && chunk.type === 'transcript.text.delta') {
+                  firstTokenTime = Date.now()
+                }
+
                 if (chunk.type === doneEvent && 'text' in chunk && chunk.text && chunk.text.length > 0) {
                   finalContent = chunk.text
                 }
@@ -814,6 +838,7 @@ export class WrappedTranscriptions extends Transcriptions {
               }
 
               const latency = (Date.now() - startTime) / 1000
+              const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
               const availableTools = extractAvailableToolCalls('openai', openAIParams)
               await sendEventToPosthog({
                 client: this.phClient,
@@ -823,6 +848,7 @@ export class WrappedTranscriptions extends Transcriptions {
                 input: openAIParams.prompt,
                 output: finalContent,
                 latency,
+                timeToFirstToken,
                 baseURL: this.baseURL,
                 params: body,
                 httpStatus: 200,

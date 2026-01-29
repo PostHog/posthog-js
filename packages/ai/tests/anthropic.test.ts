@@ -469,6 +469,40 @@ describe('PostHogAnthropic', () => {
       })
     })
 
+    conditionalTest('should track time to first token in streaming', async () => {
+      mockStreamChunks = createMockStreamChunks({
+        content: 'Hello from Claude!',
+      })
+
+      const stream = await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [{ role: 'user', content: 'Say hello' }],
+        max_tokens: 100,
+        stream: true,
+        posthogDistinctId: 'test-ttft-user',
+      })
+
+      // Consume the stream
+      for await (const _chunk of stream) {
+        // Just consume
+      }
+
+      // Allow async capture to complete
+      await waitForAsyncCapture()
+
+      const captureMock = mockPostHogClient.capture as jest.Mock
+      expect(captureMock).toHaveBeenCalledTimes(1)
+
+      const [captureArgs] = captureMock.mock.calls
+      const { properties } = captureArgs[0]
+
+      // Time to first token should be present and be a number
+      expect(typeof properties['$ai_time_to_first_token']).toBe('number')
+      expect(properties['$ai_time_to_first_token']).toBeGreaterThanOrEqual(0)
+      // Time to first token should be less than or equal to total latency
+      expect(properties['$ai_time_to_first_token']).toBeLessThanOrEqual(properties['$ai_latency'])
+    })
+
     conditionalTest('should handle streaming with tool calls', async () => {
       mockStreamChunks = createMockStreamChunks({
         content: 'I will check the weather for you.',

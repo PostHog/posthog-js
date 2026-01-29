@@ -220,6 +220,86 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       expect(captureCall[0].properties['$ai_usage'].providerMetadata).toBeDefined()
     })
 
+    it('should track time to first token in V3 streaming', async () => {
+      const streamParts: LanguageModelV3StreamPart[] = [
+        { type: 'text-delta', id: 'text-1', delta: 'Hello ' },
+        { type: 'text-delta', id: 'text-1', delta: 'world!' },
+        {
+          type: 'finish',
+          usage: v3TokenUsage(10, 5),
+          finishReason: { unified: 'stop' as const, raw: undefined },
+        },
+      ]
+
+      const baseModel = createMockStreamingModel('v3', streamParts)
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-v3-ttft',
+      })
+
+      const result = await model.doStream({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Hello' }] }],
+      })
+
+      const reader = result.stream.getReader()
+      while (!(await reader.read()).done) {
+        // Consume stream
+      }
+
+      await flushPromises()
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+      // Time to first token should be present and be a number
+      expect(typeof captureCall[0].properties['$ai_time_to_first_token']).toBe('number')
+      expect(captureCall[0].properties['$ai_time_to_first_token']).toBeGreaterThanOrEqual(0)
+      // Time to first token should be less than or equal to total latency
+      expect(captureCall[0].properties['$ai_time_to_first_token']).toBeLessThanOrEqual(
+        captureCall[0].properties['$ai_latency']
+      )
+    })
+
+    it('should track time to first token in V2 streaming', async () => {
+      const streamParts: LanguageModelV2StreamPart[] = [
+        { type: 'text-delta', id: 'text-1', delta: 'Hello ' },
+        { type: 'text-delta', id: 'text-1', delta: 'world!' },
+        {
+          type: 'finish',
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          finishReason: 'stop' as const,
+        },
+      ]
+
+      const baseModel = createMockStreamingModel('v2', streamParts)
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-v2-ttft',
+      })
+
+      const result = await model.doStream({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Hello' }] }],
+      })
+
+      const reader = result.stream.getReader()
+      while (!(await reader.read()).done) {
+        // Consume stream
+      }
+
+      await flushPromises()
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+      // Time to first token should be present and be a number
+      expect(typeof captureCall[0].properties['$ai_time_to_first_token']).toBe('number')
+      expect(captureCall[0].properties['$ai_time_to_first_token']).toBeGreaterThanOrEqual(0)
+      // Time to first token should be less than or equal to total latency
+      expect(captureCall[0].properties['$ai_time_to_first_token']).toBeLessThanOrEqual(
+        captureCall[0].properties['$ai_latency']
+      )
+    })
+
     it('should handle V3 streaming with tool calls', async () => {
       const streamParts: LanguageModelV3StreamPart[] = [
         { type: 'text-delta', id: 'text-1', delta: 'Let me check ' },

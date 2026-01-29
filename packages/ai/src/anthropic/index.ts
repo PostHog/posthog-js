@@ -78,6 +78,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
         const contentBlocks: FormattedContentItem[] = []
         const toolsInProgress: Map<string, ToolInProgress> = new Map()
         let currentTextBlock: FormattedTextContent | null = null
+        let firstTokenTime: number | undefined
 
         const usage: {
           inputTokens: number
@@ -109,6 +110,10 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
 
                     contentBlocks.push(currentTextBlock)
                   } else if (chunk.content_block?.type === 'tool_use') {
+                    if (firstTokenTime === undefined) {
+                      firstTokenTime = Date.now()
+                    }
+
                     const toolBlock: FormattedFunctionCall = {
                       type: 'function',
                       id: chunk.content_block.id,
@@ -133,6 +138,10 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 if ('delta' in chunk) {
                   if ('text' in chunk.delta) {
                     const delta = chunk.delta.text
+
+                    if (firstTokenTime === undefined) {
+                      firstTokenTime = Date.now()
+                    }
 
                     accumulatedContent += delta
 
@@ -197,6 +206,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
               usage.rawUsage = lastRawUsage
 
               const latency = (Date.now() - startTime) / 1000
+              const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
 
               const availableTools = extractAvailableToolCalls('anthropic', anthropicParams)
 
@@ -224,6 +234,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic')),
                 output: formattedOutput,
                 latency,
+                timeToFirstToken,
                 baseURL: this.baseURL,
                 params: body,
                 httpStatus: 200,
