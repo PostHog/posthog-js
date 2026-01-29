@@ -3,6 +3,7 @@ import {
     createTour,
     createStep,
     createElementStep,
+    createBannerStep,
     tourTooltip,
     tourContainer,
     startWithTours,
@@ -204,6 +205,107 @@ test.describe('product tours - step types and positioning', () => {
 
             const spotlight = tourContainer(page, 'modal-no-spotlight').locator('.ph-tour-spotlight')
             await expect(spotlight).not.toBeVisible()
+        })
+    })
+
+    test.describe('banner steps', () => {
+        const bannerBehaviors = [
+            {
+                behavior: 'static' as const,
+                selector: undefined,
+                expectedClass: null,
+                expectedParent: 'body',
+            },
+            {
+                behavior: 'sticky' as const,
+                selector: undefined,
+                expectedClass: 'ph-tour-banner--sticky',
+                expectedParent: 'body',
+            },
+            {
+                behavior: 'custom' as const,
+                selector: '#custom-banner-container',
+                expectedClass: 'ph-tour-banner--custom',
+                expectedParent: '#custom-banner-container',
+            },
+        ]
+
+        for (const { behavior, selector, expectedClass, expectedParent } of bannerBehaviors) {
+            test(`${behavior} banner renders correctly`, async ({ page, context }) => {
+                const tourId = `${behavior}-banner`
+                const tour = createTour({
+                    id: tourId,
+                    steps: [createBannerStep({ bannerConfig: { behavior, selector } })],
+                })
+                await startWithTours(page, context, [tour])
+
+                const banner = tourContainer(page, tourId).locator('.ph-tour-banner')
+                await expect(banner).toBeVisible({ timeout: 5000 })
+
+                if (expectedClass) {
+                    await expect(banner).toHaveClass(new RegExp(expectedClass))
+                }
+
+                const parentSelector = await page.evaluate(
+                    ({ tourId, expectedParent }) => {
+                        const container = document.querySelector(`.ph-product-tour-container-${tourId}`)
+                        if (expectedParent === 'body') {
+                            return container?.parentElement === document.body
+                        }
+                        return document.querySelector(expectedParent)?.contains(container)
+                    },
+                    { tourId, expectedParent }
+                )
+                expect(parentSelector).toBe(true)
+            })
+        }
+
+        test('custom banner does not render when selector not found', async ({ page, context }) => {
+            const tour = createTour({
+                id: 'custom-missing',
+                steps: [createBannerStep({ bannerConfig: { behavior: 'custom', selector: '#nonexistent' } })],
+            })
+            await startWithTours(page, context, [tour])
+
+            // Wait for tour to be shown then dismissed
+            await expect
+                .poll(() => page.evaluate((key) => localStorage.getItem(key), tourDismissedKey('custom-missing')))
+                .toBeTruthy()
+
+            // Banner should not be visible
+            const banner = tourContainer(page, 'custom-missing').locator('.ph-tour-banner')
+            await expect(banner).not.toBeVisible()
+        })
+
+        test('banner can be dismissed', async ({ page, context }) => {
+            const tour = createTour({
+                id: 'banner-dismiss',
+                steps: [createBannerStep()],
+            })
+            await startWithTours(page, context, [tour])
+
+            const container = tourContainer(page, 'banner-dismiss')
+            const banner = container.locator('.ph-tour-banner')
+            await expect(banner).toBeVisible({ timeout: 5000 })
+
+            await container.locator('.ph-tour-banner-dismiss').click()
+            await expect(banner).not.toBeVisible()
+            expect(
+                await page.evaluate((key) => localStorage.getItem(key), tourDismissedKey('banner-dismiss'))
+            ).toBeTruthy()
+        })
+
+        test('banner hides dismiss button when display_frequency is always', async ({ page, context }) => {
+            const tour = createTour({
+                id: 'banner-no-dismiss',
+                steps: [createBannerStep()],
+                display_frequency: 'always',
+            })
+            await startWithTours(page, context, [tour])
+
+            const container = tourContainer(page, 'banner-no-dismiss')
+            await expect(container.locator('.ph-tour-banner')).toBeVisible({ timeout: 5000 })
+            await expect(container.locator('.ph-tour-banner-dismiss')).not.toBeVisible()
         })
     })
 })
