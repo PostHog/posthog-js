@@ -421,3 +421,88 @@ describe('posthog instance persistence', () => {
         expect(localPlusCookieCalls.length).toBeGreaterThan(0)
     })
 })
+
+describe('cross-tab sync via storage events', () => {
+    let lib: PostHogPersistence
+    let storageEventListeners: ((event: StorageEvent) => void)[]
+
+    beforeEach(() => {
+        storageEventListeners = []
+        jest.spyOn(window, 'addEventListener').mockImplementation((type, listener) => {
+            if (type === 'storage') {
+                storageEventListeners.push(listener as (event: StorageEvent) => void)
+            }
+        })
+        jest.spyOn(window, 'removeEventListener').mockImplementation((type, listener) => {
+            if (type === 'storage') {
+                storageEventListeners = storageEventListeners.filter((l) => l !== listener)
+            }
+        })
+    })
+
+    afterEach(() => {
+        lib?.destroy()
+        lib?.clear()
+        jest.restoreAllMocks()
+    })
+
+    it('should reload props when storage event fires for matching key', () => {
+        lib = new PostHogPersistence(makePostHogConfig('test', 'localStorage'))
+        lib.register({ distinct_id: 'original' })
+
+        // Simulate another tab writing to localStorage
+        localStorage.setItem('ph__posthog', JSON.stringify({ distinct_id: 'from-other-tab', new_prop: 'value' }))
+
+        // Fire storage event (simulating what browser does when another tab writes)
+        const event = new StorageEvent('storage', {
+            key: 'ph__posthog',
+            newValue: JSON.stringify({ distinct_id: 'from-other-tab', new_prop: 'value' }),
+        })
+        storageEventListeners.forEach((listener) => listener(event))
+
+        expect(lib.props.distinct_id).toBe('from-other-tab')
+        expect(lib.props.new_prop).toBe('value')
+    })
+
+    it('should ignore storage events for unrelated keys', () => {
+        lib = new PostHogPersistence(makePostHogConfig('test', 'localStorage'))
+        lib.register({ distinct_id: 'original' })
+
+        // Fire storage event for a different key
+        const event = new StorageEvent('storage', {
+            key: 'some_other_key',
+            newValue: JSON.stringify({ distinct_id: 'should-not-change' }),
+        })
+        storageEventListeners.forEach((listener) => listener(event))
+
+        expect(lib.props.distinct_id).toBe('original')
+    })
+
+    it('should ignore storage events with null newValue (deletion)', () => {
+        lib = new PostHogPersistence(makePostHogConfig('test', 'localStorage'))
+        lib.register({ distinct_id: 'original' })
+
+        // Fire storage event with null newValue (indicates deletion)
+        const event = new StorageEvent('storage', {
+            key: 'ph__posthog',
+            newValue: null,
+        })
+        storageEventListeners.forEach((listener) => listener(event))
+
+        // Props should remain unchanged
+        expect(lib.props.distinct_id).toBe('original')
+    })
+
+    it('should remove listener on destroy', () => {
+        lib = new PostHogPersistence(makePostHogConfig('test', 'localStorage'))
+        expect(storageEventListeners.length).toBe(1)
+
+        lib.destroy()
+        expect(storageEventListeners.length).toBe(0)
+    })
+
+    it('should register storage event listener on initialization', () => {
+        lib = new PostHogPersistence(makePostHogConfig('test', 'localStorage'))
+        expect(storageEventListeners.length).toBe(1)
+    })
+})

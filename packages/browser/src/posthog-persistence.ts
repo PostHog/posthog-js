@@ -1,6 +1,7 @@
 /* eslint camelcase: "off" */
 
-import { each, extend, include, stripEmptyProperties } from './utils'
+import { each, extend, include, stripEmptyProperties, addEventListener } from './utils'
+import { window } from './utils/globals'
 import { cookieStore, createLocalPlusCookieStore, localStore, memoryStore, sessionStore } from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
 import {
@@ -12,7 +13,7 @@ import {
     PERSISTENCE_RESERVED_PROPERTIES,
 } from './constants'
 
-import { isUndefined } from '@posthog/core'
+import { isUndefined, isNull } from '@posthog/core'
 import {
     getCampaignParams,
     getInitialPersonPropsFromInfo,
@@ -69,6 +70,7 @@ export class PostHogPersistence {
     private _expire_days: number | undefined
     private _default_expiry: number | undefined
     private _cross_subdomain: boolean | undefined
+    private _onStorage?: (event: StorageEvent) => void
 
     /**
      * @param {PostHogConfig} config initial PostHog configuration
@@ -81,6 +83,19 @@ export class PostHogPersistence {
         this._name = parseName(config)
         this._storage = this._buildStorage(config)
         this.load()
+
+        if (window) {
+            this._onStorage = (event: StorageEvent) => {
+                if (event.key === this._name && !isNull(event.newValue)) {
+                    // this is pretty brute force, and likely susceptible to
+                    // race conditions. otoh, we already have race conditions
+                    // which clobber data. i'll need to think about this more.
+                    this.load()
+                }
+            }
+            addEventListener(window, 'storage', this._onStorage as EventListener)
+        }
+
         if (config.debug) {
             logger.info('Persistence loaded', config['persistence'], { ...this.props })
         }
@@ -196,6 +211,17 @@ export class PostHogPersistence {
     clear(): void {
         this.remove()
         this.props = {}
+    }
+
+    /**
+     * Cleans up the persistence instance by removing event listeners.
+     * Call this when disposing of a PostHog instance to prevent memory leaks.
+     */
+    destroy(): void {
+        if (this._onStorage && window) {
+            window.removeEventListener('storage', this._onStorage as EventListener)
+            this._onStorage = undefined
+        }
     }
 
     /**
