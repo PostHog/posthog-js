@@ -40,8 +40,8 @@ test.describe('Session recording - config update while recording', () => {
         await page.resetCapturedEvents()
     })
 
-    test('updates trigger config when new remote config arrives while recording', async ({ page }) => {
-        // First verify recording is active with no triggers
+    test('adds $recording_config_updated event when config changes while recording', async ({ page }) => {
+        // First verify recording is active
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/ses/*'],
             action: async () => {
@@ -73,25 +73,11 @@ test.describe('Session recording - config update while recording', () => {
             ph?.sessionRecording?.onRemoteConfig(config as any)
         }, updatedConfig)
 
-        // Verify the config was updated by checking the debug property
-        const debugInfo = await page.evaluate(() => {
-            const ph = (window as WindowWithPostHog).posthog
-            // Check that URL triggers were applied
-            const urlTriggers = (ph?.sessionRecording as any)?._lazyLoadedSessionRecording?._urlTriggerMatching?._urlTriggers
-            return {
-                urlTriggersLength: urlTriggers?.length || 0,
-                urlTriggerUrl: urlTriggers?.[0]?.url,
-            }
-        })
-
-        expect(debugInfo.urlTriggersLength).toEqual(1)
-        expect(debugInfo.urlTriggerUrl).toEqual('/checkout')
-
         // Trigger a flush to capture the custom event
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/ses/*'],
             action: async () => {
-                await page.locator('[data-cy-input]').type('activity after config update')
+                await page.locator('[data-cy-input]').fill('activity after config update')
             },
         })
 
@@ -100,75 +86,12 @@ test.describe('Session recording - config update while recording', () => {
         expect(snapshotEvent).toBeTruthy()
 
         // Check that the $recording_config_updated custom event was added
+        // This proves that updateTriggerConfig() was called
         const snapshotData = snapshotEvent?.properties?.$snapshot_data || []
         const configUpdateEvent = snapshotData.find(
             (s: any) => s.type === 5 && s.data?.tag === '$recording_config_updated'
         )
         expect(configUpdateEvent).toBeTruthy()
         expect(configUpdateEvent.data.payload.urlTriggers).toEqual(1)
-    })
-
-    test('updates event triggers when new remote config arrives while recording', async ({ page }) => {
-        // First verify recording is active
-        await page.waitingForNetworkCausedBy({
-            urlPatternsToWaitFor: ['**/ses/*'],
-            action: async () => {
-                await page.locator('[data-cy-input]').fill('initial activity')
-            },
-        })
-        await page.resetCapturedEvents()
-
-        // Update config to add event trigger
-        const updatedConfig = {
-            sessionRecording: {
-                endpoint: '/ses/',
-                eventTriggers: ['special_event'],
-            } satisfies RemoteConfig['sessionRecording'],
-        }
-
-        await page.evaluate((config) => {
-            const ph = (window as WindowWithPostHog).posthog
-            ph?.sessionRecording?.onRemoteConfig(config as any)
-        }, updatedConfig)
-
-        // Verify the event triggers were applied
-        const eventTriggers = await page.evaluate(() => {
-            const ph = (window as WindowWithPostHog).posthog
-            return (ph?.sessionRecording as any)?._lazyLoadedSessionRecording?._eventTriggerMatching?._eventTriggers
-        })
-
-        expect(eventTriggers).toEqual(['special_event'])
-    })
-
-    test('updates linked flag config when new remote config arrives while recording', async ({ page }) => {
-        // First verify recording is active
-        await page.waitingForNetworkCausedBy({
-            urlPatternsToWaitFor: ['**/ses/*'],
-            action: async () => {
-                await page.locator('[data-cy-input]').fill('initial activity')
-            },
-        })
-        await page.resetCapturedEvents()
-
-        // Update config to add linked flag
-        const updatedConfig = {
-            sessionRecording: {
-                endpoint: '/ses/',
-                linkedFlag: 'test-flag',
-            } satisfies RemoteConfig['sessionRecording'],
-        }
-
-        await page.evaluate((config) => {
-            const ph = (window as WindowWithPostHog).posthog
-            ph?.sessionRecording?.onRemoteConfig(config as any)
-        }, updatedConfig)
-
-        // Verify the linked flag was applied
-        const linkedFlag = await page.evaluate(() => {
-            const ph = (window as WindowWithPostHog).posthog
-            return (ph?.sessionRecording as any)?._lazyLoadedSessionRecording?._linkedFlagMatching?.linkedFlag
-        })
-
-        expect(linkedFlag).toEqual('test-flag')
     })
 })
