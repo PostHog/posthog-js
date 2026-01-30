@@ -13,6 +13,7 @@ import {
     TooltipPosition,
     TooltipDimensions,
     PositionResult,
+    findStepElement,
 } from '../product-tours-utils'
 import { getPopoverPosition } from '../../surveys/surveys-extension-utils'
 import { addEventListener } from '../../../utils'
@@ -125,12 +126,18 @@ export function ProductTourTooltip({
     const tooltipRef = useRef<HTMLDivElement>(null)
     const previousStepRef = useRef(stepIndex)
     const isTransitioningRef = useRef(false)
+    const resolvedElementRef = useRef<HTMLElement | null>(targetElement)
 
     // Modal and survey steps use screen positioning (not anchored to an element)
     const isScreenPositioned = displayedStep.type === 'modal' || displayedStep.type === 'survey'
 
+    useLayoutEffect(() => {
+        resolvedElementRef.current = targetElement
+    }, [targetElement])
+
     const updatePosition = useCallback(() => {
-        if (!targetElement || !tooltipRef.current) return
+        const element = resolvedElementRef.current
+        if (!element || !tooltipRef.current) return
 
         const tooltipRect = tooltipRef.current.getBoundingClientRect()
         const tooltipDimensions: TooltipDimensions = {
@@ -138,11 +145,11 @@ export function ProductTourTooltip({
             height: tooltipRect.height,
         }
 
-        const targetRect = targetElement.getBoundingClientRect()
+        const targetRect = element.getBoundingClientRect()
         setPosition(calculateTooltipPosition(targetRect, tooltipDimensions))
         setSpotlightStyle(getSpotlightStyle(targetRect))
         setIsMeasured(true)
-    }, [targetElement])
+    }, [])
 
     useLayoutEffect(() => {
         if (!isScreenPositioned && !isMeasured && tooltipRef.current && targetElement) {
@@ -162,15 +169,22 @@ export function ProductTourTooltip({
 
         const enterStep = () => {
             // Only scroll/position for element steps
-            if (targetElement && step.type === 'element') {
-                scrollToElement(targetElement, () => {
-                    if (previousStepRef.current !== currentStepIndex) return
-                    updatePosition()
-                    setTimeout(finishEntering, 50)
-                })
-            } else {
-                setTimeout(finishEntering, 50)
+            if (resolvedElementRef.current && step.type === 'element') {
+                if (!resolvedElementRef.current.isConnected) {
+                    resolvedElementRef.current = findStepElement(step).element
+                }
+
+                if (resolvedElementRef.current) {
+                    scrollToElement(resolvedElementRef.current, () => {
+                        if (previousStepRef.current !== currentStepIndex) return
+                        updatePosition()
+                        setTimeout(finishEntering, 50)
+                    })
+                    return
+                }
             }
+
+            setTimeout(finishEntering, 50)
         }
 
         if (!isStepChange) {
@@ -243,8 +257,8 @@ export function ProductTourTooltip({
 
     const handleSpotlightClick = (e: MouseEvent) => {
         e.stopPropagation()
-        if (targetElement) {
-            targetElement.click()
+        if (resolvedElementRef.current) {
+            resolvedElementRef.current.click()
         }
         onNext()
     }
