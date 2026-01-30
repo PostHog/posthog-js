@@ -646,9 +646,16 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             const currentFlagDetails = this.getKnownFeatureFlagDetails()
             this._logger.info('Cached feature flags: ', JSON.stringify(currentFlagDetails))
 
+            const filteredFlags: Record<string, FeatureFlagDetail> = {}
+            for (const key in res.flags) {
+              if (!res.flags[key].failed) {
+                filteredFlags[key] = res.flags[key]
+              }
+            }
+
             newFeatureFlagDetails = {
               ...res,
-              flags: { ...currentFlagDetails?.flags, ...res.flags },
+              flags: { ...currentFlagDetails?.flags, ...filteredFlags },
             }
           }
           this.setKnownFeatureFlagDetails({

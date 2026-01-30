@@ -377,6 +377,7 @@ export type FeatureFlagDetail = {
   variant: string | undefined
   reason: EvaluationReason | undefined
   metadata: FeatureFlagMetadata | undefined
+  failed?: boolean
 }
 
 export type FeatureFlagMetadata = {

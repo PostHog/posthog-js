@@ -1861,6 +1861,93 @@ describe('featureflags', () => {
         })
     })
 
+    describe('when subsequent /flags?v=2 calls return failed flags with errorsWhileComputingFlags', () => {
+        beforeEach(() => {
+            instance.persistence.register({
+                $feature_flag_payloads: {
+                    'beta-feature': {
+                        some: 'payload',
+                    },
+                    'alpha-feature-2': 200,
+                },
+                $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
+                $enabled_feature_flags: {
+                    'beta-feature': true,
+                    'alpha-feature-2': true,
+                    'multivariate-flag': 'variant-1',
+                    'disabled-flag': false,
+                },
+                $feature_flag_details: {
+                    'beta-feature': {
+                        key: 'beta-feature',
+                        enabled: true,
+                        variant: undefined,
+                        metadata: { payload: { some: 'payload' } },
+                    },
+                    'alpha-feature-2': {
+                        key: 'alpha-feature-2',
+                        enabled: true,
+                        variant: undefined,
+                        metadata: { payload: 200 },
+                    },
+                    'multivariate-flag': {
+                        key: 'multivariate-flag',
+                        enabled: true,
+                        variant: 'variant-1',
+                        metadata: { payload: undefined },
+                    },
+                    'disabled-flag': {
+                        key: 'disabled-flag',
+                        enabled: false,
+                        variant: undefined,
+                        metadata: undefined,
+                    },
+                },
+                $override_feature_flags: false,
+            })
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 200,
+                    json: {
+                        flags: {
+                            'x-flag': {
+                                key: 'x-flag',
+                                enabled: true,
+                                variant: 'x-value',
+                                failed: false,
+                                reason: { code: 'condition_match', description: 'Matched condition set 1' },
+                                metadata: { id: 10, version: 1 },
+                            },
+                            'beta-feature': {
+                                key: 'beta-feature',
+                                enabled: false,
+                                variant: undefined,
+                                failed: true,
+                                reason: { code: 'database_error', description: 'Database connection error' },
+                                metadata: { id: 2, version: 1 },
+                            },
+                        },
+                        errorsWhileComputingFlags: true,
+                    },
+                })
+            )
+        })
+
+        it('should filter out failed flags and preserve their cached values', () => {
+            featureFlags.reloadFeatureFlags()
+
+            jest.runAllTimers()
+
+            expect(featureFlags.getFlagVariants()).toEqual({
+                'alpha-feature-2': true,
+                'beta-feature': true, // preserved from cache, not overwritten by failed evaluation
+                'disabled-flag': false,
+                'multivariate-flag': 'variant-1',
+                'x-flag': 'x-value', // new successful flag merged in
+            })
+        })
+    })
+
     describe('when subsequent /flags?v=1 calls return results without errors', () => {
         beforeEach(() => {
             instance._send_request = jest.fn().mockImplementation(({ callback }) =>

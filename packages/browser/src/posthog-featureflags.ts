@@ -91,9 +91,33 @@ export const parseFlagsResponse = (
     let newFeatureFlagDetails = flagDetails
     if (response.errorsWhileComputingFlags) {
         // if not all flags were computed, we upsert flags instead of replacing them
-        newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
-        newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
-        newFeatureFlagDetails = { ...currentFlagDetails, ...newFeatureFlagDetails }
+        // but filter out flags that failed to evaluate so they don't overwrite cached values
+        if (flagDetails) {
+            const successfulKeys = new Set(Object.keys(flagDetails).filter((key) => !flagDetails[key]?.failed))
+
+            newFeatureFlags = {
+                ...currentFlags,
+                ...Object.fromEntries(Object.entries(newFeatureFlags).filter(([key]) => successfulKeys.has(key))),
+            }
+            newFeatureFlagPayloads = {
+                ...currentFlagPayloads,
+                ...Object.fromEntries(
+                    Object.entries(newFeatureFlagPayloads || {}).filter(([key]) => successfulKeys.has(key))
+                ),
+            }
+            newFeatureFlagDetails = {
+                ...currentFlagDetails,
+                ...Object.fromEntries(
+                    Object.entries(newFeatureFlagDetails || {}).filter(([key]) => successfulKeys.has(key))
+                ),
+            }
+        } else {
+            // v1 responses don't have flagDetails, so we can't filter by failed field
+            // Fall back to the original merge behavior
+            newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
+            newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
+            newFeatureFlagDetails = { ...currentFlagDetails, ...newFeatureFlagDetails }
+        }
     }
 
     persistence &&
