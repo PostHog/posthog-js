@@ -357,6 +357,39 @@ describe('PostHog Node.js', () => {
       )
       warnSpy.mockRestore()
     })
+
+    it('should include registered super properties in captured events', async () => {
+      expect(mockedFetch).toHaveBeenCalledTimes(0)
+      
+      posthog.register({ super_prop: 'super_value' })
+      posthog.capture({ distinctId: '123', event: 'test-event', properties: { local_prop: 'local_value' } })
+
+      await waitForFlushTimer()
+
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents?.[0]).toMatchObject({
+        distinct_id: '123',
+        event: 'test-event',
+        properties: expect.objectContaining({
+          super_prop: 'super_value',
+          local_prop: 'local_value',
+        }),
+      })
+    })
+
+    it('should allow event properties to override registered properties', async () => {
+      posthog.register({ shared_prop: 'original_value' })
+      posthog.capture({ 
+        distinctId: '123', 
+        event: 'test-event', 
+        properties: { shared_prop: 'new_value' } 
+      })
+
+      await waitForFlushTimer()
+
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents?.[0].properties.shared_prop).toBe('new_value')
+    })
   })
 
   describe('before_send', () => {
