@@ -1,7 +1,6 @@
 import { RemoteConfig } from '@/types'
 import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
-import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 
 const startOptions = {
     options: {
