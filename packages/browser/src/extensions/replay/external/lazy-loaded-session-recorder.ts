@@ -860,7 +860,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._removeEventTriggerCaptureHook?.()
         this._addEventTriggerListener()
 
-        // Update linked flag matching
+        // Update linked flag matching - stop first to clean up previous listener
+        this._linkedFlagMatching.stop()
         this._linkedFlagMatching.onConfig(config, (flag, variant) => {
             this._reportStarted('linked_flag_matched', {
                 flag,
