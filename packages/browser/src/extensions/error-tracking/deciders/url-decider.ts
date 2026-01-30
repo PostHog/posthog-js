@@ -5,10 +5,10 @@ import type { Decider, DeciderContext } from './types'
 /**
  * URL Decider - handles URL-based blocking and triggering.
  *
- * State:
- * - Starts unblocked (capture allowed)
- * - Visiting a blocklisted URL → blocked
- * - Visiting a trigger URL → unblocked
+ * Behavior:
+ * - Only triggers configured: starts blocked (false), trigger URL unblocks (true)
+ * - Only blocklist configured: starts unblocked (true), block URL blocks (false)
+ * - Both configured: starts unblocked (true), block URL blocks, trigger URL unblocks
  */
 export class URLDecider implements Decider {
     readonly name = 'url'
@@ -19,7 +19,7 @@ export class URLDecider implements Decider {
     private _compiledTriggerRegexes: Map<string, RegExp> = new Map()
     private _compiledBlocklistRegexes: Map<string, RegExp> = new Map()
     private _lastCheckedUrl: string = ''
-    private _blocked: boolean = false
+    private _allowed: boolean = true
 
     init(context: DeciderContext): void {
         this._context = context
@@ -28,12 +28,17 @@ export class URLDecider implements Decider {
         this._urlTriggers = config?.url_triggers ?? []
         this._urlBlocklist = config?.url_blocklist ?? []
 
+        // If only triggers configured (no blocklist), start blocked
+        const hasOnlyTriggers = this._urlTriggers.length > 0 && this._urlBlocklist.length === 0
+        this._allowed = !hasOnlyTriggers
+
         this._compileRegexCaches()
         this._setupUrlMonitoring()
 
         this._log('Initialized', {
             triggerPatterns: this._urlTriggers.length,
             blocklistPatterns: this._urlBlocklist.length,
+            initialState: this._allowed ? 'allowed' : 'blocked',
         })
 
         this._checkCurrentUrl()
@@ -43,7 +48,7 @@ export class URLDecider implements Decider {
         if (this._urlTriggers.length === 0 && this._urlBlocklist.length === 0) {
             return null
         }
-        return !this._blocked
+        return this._allowed
     }
 
     private _log(message: string, data?: Record<string, unknown>): void {
@@ -76,12 +81,12 @@ export class URLDecider implements Decider {
 
         this._log('URL checked', { url, matchesBlocklist, matchesTrigger })
 
-        if (matchesBlocklist) {
-            this._blocked = true
-            this._log('BLOCKED', { url })
-        } else if (matchesTrigger) {
-            this._blocked = false
-            this._log('UNBLOCKED', { url })
+        if (matchesTrigger) {
+            this._allowed = true
+            this._log('ALLOWED (trigger match)', { url })
+        } else if (matchesBlocklist) {
+            this._allowed = false
+            this._log('BLOCKED (blocklist match)', { url })
         }
     }
 
