@@ -1,6 +1,9 @@
 import { test as base, Page, expect } from '@playwright/test'
 import { PostHog } from '@/posthog-core'
 import { CaptureResult } from '@/types'
+import { shouldSkipForVersion } from '../../compat-skips'
+
+export type StaticOverrides = Record<string, string>
 
 const lazyLoadedJSFiles = [
     'array',
@@ -47,7 +50,23 @@ declare module '@playwright/test' {
     }
 }
 
-export const test = base.extend<{ mockStaticAssets: void; page: Page }>({
+export const test = base.extend<{
+    mockStaticAssets: void
+    page: Page
+    staticOverrides: StaticOverrides
+    autoSkipCompat: void
+}>({
+    staticOverrides: [{}, { option: true }],
+    autoSkipCompat: [
+        async ({}, use, testInfo) => {
+            const skipReason = shouldSkipForVersion(testInfo.title, process.env.COMPAT_VERSION)
+            if (skipReason) {
+                testInfo.skip(true, skipReason)
+            }
+            await use()
+        },
+        { auto: true },
+    ],
     page: async ({ page }, use) => {
         // Add custom methods to the page object
         page.resetCapturedEvents = async function () {
@@ -82,7 +101,7 @@ export const test = base.extend<{ mockStaticAssets: void; page: Page }>({
         await use(page)
     },
     mockStaticAssets: [
-        async ({ context }, use) => {
+        async ({ context, staticOverrides }, use) => {
             void context.route('**/e/*', (route) => {
                 route.fulfill({
                     status: 200,
@@ -105,12 +124,15 @@ export const test = base.extend<{ mockStaticAssets: void; page: Page }>({
             })
 
             lazyLoadedJSFiles.forEach((key: string) => {
+                const fileName = `${key}.js`
+                const sourceFile = staticOverrides[fileName] ?? fileName
                 void context.route(new RegExp(`^.*/static/${key}\\.js(\\?.*)?$`), (route) => {
                     route.fulfill({
                         headers: {
                             loaded: 'using relative path by playwright',
+                            source: sourceFile,
                         },
-                        path: `./dist/${key}.js`,
+                        path: `./dist/${sourceFile}`,
                     })
                 })
 
@@ -123,9 +145,7 @@ export const test = base.extend<{ mockStaticAssets: void; page: Page }>({
             })
 
             await use()
-            // there's no teardown, so nothing here
         },
-        // auto so that tests don't need to remember they need this... every test needs it
         { auto: true },
     ],
 })

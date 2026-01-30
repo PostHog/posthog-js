@@ -304,13 +304,13 @@ importers:
         specifier: workspace:*
         version: link:../../tooling/rollup-utils
       '@posthog/rrweb-plugin-console-record':
-        specifier: ^0.0.37
+        specifier: 0.0.37
         version: 0.0.37(@posthog/rrweb-utils@0.0.37)(@posthog/rrweb@0.0.37)
       '@posthog/rrweb-record':
-        specifier: ^0.0.37
+        specifier: 0.0.37
         version: 0.0.37
       '@posthog/rrweb-types':
-        specifier: ^0.0.37
+        specifier: 0.0.37
         version: 0.0.37
       '@rollup/plugin-babel':
         specifier: ^6.0.4
