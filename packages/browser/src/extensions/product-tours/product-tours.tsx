@@ -251,7 +251,7 @@ export class ProductTourManager {
             this._evaluateAndDisplayTours()
         }, CHECK_INTERVAL_MS)
 
-        this._evaluateAndDisplayTours()
+        this._evaluateAndDisplayTours(true)
         addEventListener(document, 'visibilitychange', this._handleVisibilityChange)
     }
 
@@ -297,7 +297,7 @@ export class ProductTourManager {
         }
     }
 
-    private _evaluateAndDisplayTours(): void {
+    private _evaluateAndDisplayTours(forceReload?: boolean): void {
         if (document?.getElementById(TOOLBAR_ID)) {
             return
         }
@@ -370,7 +370,7 @@ export class ProductTourManager {
                     this._removeTriggerSelectorListener(tour.id)
                 }
             })
-        })
+        }, forceReload)
     }
 
     private _showOrQueueTour(tour: ProductTour, reason: ProductTourRenderReason): void {
@@ -433,7 +433,7 @@ export class ProductTourManager {
         return true
     }
 
-    showTour(tour: ProductTour, options?: ShowTourOptions): void {
+    showTour(tour: ProductTour, options?: ShowTourOptions): boolean {
         const renderReason: ProductTourRenderReason = options?.reason ?? 'auto'
 
         this.cancelPendingTour(tour.id)
@@ -456,7 +456,7 @@ export class ProductTourManager {
             })
         }
 
-        this._renderCurrentStep()
+        return this._renderCurrentStep()
     }
 
     showTourById(tourId: string, reason?: ProductTourRenderReason): void {
@@ -590,16 +590,16 @@ export class ProductTourManager {
         this._cleanup()
     }
 
-    private _renderCurrentStep(retryCount: number = 0): void {
+    private _renderCurrentStep(retryCount: number = 0): boolean {
         if (!this._activeTour) {
-            return
+            return false
         }
 
         const step = this._activeTour.steps[this._currentStepIndex]
         if (!step) {
             logger.warn(`Step ${this._currentStepIndex} not found in tour ${this._activeTour.id}`)
             this._cleanup()
-            return
+            return false
         }
 
         // Banner step - render full-width banner
@@ -613,18 +613,18 @@ export class ProductTourManager {
 
             this._isResuming = false
             this._renderBanner()
-            return
+            return true
         }
 
         // Survey step - render native survey step component
         if (step.type === 'survey') {
             if (step.survey) {
                 this._renderSurveyStep()
-            } else {
-                logger.warn('Unable to render survey step - survey data not found')
+                return true
             }
 
-            return
+            logger.warn('Unable to render survey step - survey data not found')
+            return false
         }
 
         // Modal step (no selector) - render without a target element
@@ -638,7 +638,7 @@ export class ProductTourManager {
 
             this._isResuming = false
             this._renderTooltipWithPreact(null)
-            return
+            return true
         }
 
         const result = findStepElement(step)
@@ -662,7 +662,8 @@ export class ProductTourManager {
                 setTimeout(() => {
                     this._renderCurrentStep(retryCount + 1)
                 }, retryTimeout)
-                return
+
+                return false
             }
 
             const waitDurationMs = retryCount * retryTimeout
@@ -685,7 +686,7 @@ export class ProductTourManager {
                     (shouldWaitForElement ? ` after waiting ${waitDurationMs}ms` : '')
             )
             this.dismissTour('element_unavailable')
-            return
+            return false
         }
 
         if (result.error === 'multiple_matches') {
@@ -703,7 +704,7 @@ export class ProductTourManager {
         }
 
         if (!result.element) {
-            return
+            return false
         }
 
         const element = result.element
@@ -724,6 +725,7 @@ export class ProductTourManager {
 
         this._isResuming = false
         this._renderTooltipWithPreact(element)
+        return true
     }
 
     private _renderTooltipWithPreact(
@@ -912,21 +914,34 @@ export class ProductTourManager {
 
         if (!currentElement.hasAttribute(TRIGGER_LISTENER_ATTRIBUTE)) {
             const listener = (event: Event) => {
-                event.stopPropagation()
-
                 if (this._activeTour) {
                     logger.info(`Tour ${tour.id} trigger clicked but another tour is active`)
                     return
                 }
 
-                // manual triggers only check launch status, no other conditions
-                if (!isTourInDateRange(tour)) {
+                let currentTour: ProductTour | undefined
+                this._instance.productTours?.getProductTours((tours) => {
+                    currentTour = tours.find((t) => t.id === tour.id)
+                })
+
+                if (!currentTour) {
+                    logger.warn(`Tour ${tour.id} no longer exists. Removing stale listener.`)
+                    this._removeTriggerSelectorListener(tour.id)
+                    return
+                }
+
+                if (!isTourInDateRange(currentTour)) {
                     logger.warn(`Tour ${tour.id} trigger clicked, but tour is not launched - not showing tour.`)
                     return
                 }
 
                 logger.info(`Tour ${tour.id} triggered by click on ${selector}`)
-                this.showTour(tour, { reason: 'trigger' })
+
+                if (this.showTour(currentTour, { reason: 'trigger' })) {
+                    event.stopPropagation()
+                } else {
+                    logger.info(`Tour ${tour.id} failed to show; not intercepting click.`)
+                }
             }
 
             addEventListener(currentElement, 'click', listener)
