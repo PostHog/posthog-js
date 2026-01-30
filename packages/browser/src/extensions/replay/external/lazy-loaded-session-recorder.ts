@@ -819,6 +819,67 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
+    /**
+     * Updates recording configuration when new remote config arrives while recording is already started.
+     * This fixes a race condition where:
+     * 1. Recording starts with stale/cached config from localStorage
+     * 2. New decide response arrives with updated config
+     * 3. Without this method, the new config would be persisted but never applied to the running recorder
+     *
+     * Note: Some settings (canvas, network capture, console log, masking) are baked into rrweb
+     * at startup and cannot be hot-updated without restarting the recorder.
+     */
+    updateTriggerConfig() {
+        const config = this._remoteConfig
+        if (!config) {
+            return
+        }
+
+        // Update endpoint if changed
+        if (config.endpoint) {
+            this._endpoint = config.endpoint
+        }
+
+        // Update the trigger match type and rebuild the composite matcher if needed
+        if (config.triggerMatchType === 'any') {
+            this._statusMatcher = anyMatchSessionRecordingStatus
+            this._triggerMatching = new OrTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
+        } else {
+            this._statusMatcher = allMatchSessionRecordingStatus
+            this._triggerMatching = new AndTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
+        }
+        this._instance.register_for_session({
+            $sdk_debug_replay_remote_trigger_matching_config: config.triggerMatchType,
+        })
+
+        // Update URL trigger matching with new config (includes urlTriggers and urlBlocklist)
+        this._urlTriggerMatching.onConfig(config)
+
+        // Update event trigger matching and re-add the listener if needed
+        this._eventTriggerMatching.onConfig(config)
+        this._removeEventTriggerCaptureHook?.()
+        this._addEventTriggerListener()
+
+        // Update linked flag matching
+        this._linkedFlagMatching.onConfig(config, (flag, variant) => {
+            this._reportStarted('linked_flag_matched', {
+                flag,
+                variant,
+            })
+        })
+
+        logger.info('recording config updated while recording')
+        this._tryAddCustomEvent('$recording_config_updated', {
+            triggerMatchType: config.triggerMatchType,
+            urlTriggers: config.urlTriggers?.length || 0,
+            urlBlocklist: config.urlBlocklist?.length || 0,
+            eventTriggers: config.eventTriggers?.length || 0,
+            linkedFlag: config.linkedFlag ? 'set' : 'unset',
+            sampleRate: config.sampleRate,
+            minimumDurationMilliseconds: config.minimumDurationMilliseconds,
+        })
+    }
+
     private _onSessionIdCallback: SessionIdChangedCallback = (sessionId, windowId, changeReason) => {
         if (!changeReason) return
 

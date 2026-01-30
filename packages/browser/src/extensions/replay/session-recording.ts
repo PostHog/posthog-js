@@ -71,6 +71,9 @@ export class SessionRecording {
 
     startIfEnabledOrStop(startReason?: SessionStartReason) {
         if (this._isRecordingEnabled && this._lazyLoadedSessionRecording?.isStarted) {
+            // Recording is already running - update config in case new remote config arrived
+            // This handles the race condition where recording started with stale cached config
+            this._lazyLoadedSessionRecording.updateTriggerConfig()
             return
         }
 
