@@ -16,15 +16,29 @@ REPO_ROOT="$( cd "$PLAYGROUND_DIR/../.." && pwd )"
 echo -e "${BLUE}🚀 PostHog JS Local Development Setup${NC}"
 echo ""
 
-# Step 1: Build packages
-echo -e "${GREEN}1. Building packages...${NC}"
-cd "$REPO_ROOT"
+# Step 1: Build browser package
+echo -e "${GREEN}1. Building browser package...${NC}"
+cd "$REPO_ROOT/packages/browser"
+
+# Set local dev version so we can verify the build is being used
+ORIGINAL_VERSION=$(jq -r .version package.json)
+jq '.version = "0.0.0-local"' package.json > tmp.json && mv tmp.json package.json
+echo -e "${YELLOW}Set version to 0.0.0-local (was $ORIGINAL_VERSION)${NC}"
+
 pnpm build
 
-# Step 2: Package into tarballs
+# Restore original version
+jq --arg v "$ORIGINAL_VERSION" '.version = $v' package.json > tmp.json && mv tmp.json package.json
+echo -e "${YELLOW}Restored version to $ORIGINAL_VERSION${NC}"
+
+cd "$REPO_ROOT"
+
+# Step 2: Package browser into tarball
 echo ""
-echo -e "${GREEN}2. Creating tarballs...${NC}"
-pnpm package
+echo -e "${GREEN}2. Creating tarball...${NC}"
+mkdir -p "$REPO_ROOT/target"
+cd "$REPO_ROOT/packages/browser"
+PACKAGE_DEST="$REPO_ROOT/target" pnpm package
 
 # Step 2b: If POSTHOG_REPO is set, link posthog-js to PostHog repo
 if [ -n "$POSTHOG_REPO" ]; then
