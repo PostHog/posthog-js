@@ -401,6 +401,8 @@ interface SendSurveyEventArgs {
     posthog?: PostHog
     /** Additional properties to include in the survey event */
     properties?: Properties
+    /** The language that was applied to the survey (for tracking) */
+    surveyLanguage?: string | null
 }
 
 const getSurveyResponseValue = (responses: Record<string, string | number | string[] | null>, questionId?: string) => {
@@ -421,6 +423,7 @@ export const sendSurveyEvent = ({
     posthog,
     isSurveyCompleted,
     properties,
+    surveyLanguage,
 }: SendSurveyEventArgs) => {
     if (!posthog) {
         logger.error('[survey sent] event not captured, PostHog instance not found.')
@@ -439,6 +442,7 @@ export const sendSurveyEvent = ({
         })),
         [SurveyEventProperties.SURVEY_SUBMISSION_ID]: surveySubmissionId,
         [SurveyEventProperties.SURVEY_COMPLETED]: isSurveyCompleted,
+        ...(surveyLanguage && { $survey_language: surveyLanguage }),
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         ...responses,
         ...properties,
@@ -630,6 +634,8 @@ interface SurveyContextProps {
     surveySubmissionId: string
     /** Additional properties to include in all survey events */
     properties?: Properties
+    /** The language that was applied to the survey (for tracking) */
+    surveyLanguage?: string | null
 }
 
 export const SurveyContext = createContext<SurveyContextProps>({
@@ -640,6 +646,7 @@ export const SurveyContext = createContext<SurveyContextProps>({
     onPreviewSubmit: () => {},
     surveySubmissionId: '',
     properties: undefined,
+    surveyLanguage: null,
 })
 
 export const useSurveyContext = () => {
