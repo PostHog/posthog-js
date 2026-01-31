@@ -6,8 +6,9 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY patches ./patches
 COPY tooling ./tooling
+COPY packages/types ./packages/types
 COPY packages/core ./packages/core
-COPY packages/node ./packages/node
+COPY packages/browser ./packages/browser
 
 # Install pnpm
 RUN npm install -g pnpm
@@ -15,18 +16,19 @@ RUN npm install -g pnpm
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
-# Build the core and node packages
+# Build the types, core, and browser packages
+RUN pnpm --filter @posthog/types build
 RUN pnpm --filter @posthog/core build
-RUN pnpm --filter posthog-node build
+RUN pnpm --filter posthog-js build
 
 # Set up adapter in separate directory
 WORKDIR /app/adapter
 
 # Copy adapter code
-COPY packages/node/sdk_compliance_adapter/adapter.js ./
+COPY compliance/browser/adapter.js ./
 
-# Install adapter dependencies (express) in clean directory
-RUN npm init -y && npm install express
+# Install adapter dependencies (express, jsdom) in clean directory
+RUN npm init -y && npm install express jsdom-global
 
 EXPOSE 8080
 

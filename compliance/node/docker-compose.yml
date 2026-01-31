@@ -1,8 +1,8 @@
 services:
   sdk-adapter:
     build:
-      context: ../../..
-      dockerfile: packages/node/sdk_compliance_adapter/Dockerfile
+      context: ../..
+      dockerfile: compliance/node/Dockerfile
     ports:
       - "8080:8080"
     networks:

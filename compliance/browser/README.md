@@ -7,7 +7,7 @@ Uses jsdom to run the browser SDK in Node.js for testing.
 ## Running Tests
 
 ```bash
-# From packages/browser/sdk_compliance_adapter
+# From compliance/browser
 docker-compose up --build --abort-on-container-exit
 ```
 

@@ -5,11 +5,13 @@ on:
     branches: [ main, master ]
     paths:
       - 'packages/node/**'
+      - 'packages/core/**'
       - '.github/workflows/sdk-compliance-tests-node.yml'
   pull_request:
     branches: [ main, master ]
     paths:
       - 'packages/node/**'
+      - 'packages/core/**'
       - '.github/workflows/sdk-compliance-tests-node.yml'
   workflow_dispatch:
 
@@ -22,7 +24,7 @@ jobs:
   test-node-sdk:
     uses: PostHog/posthog-sdk-test-harness/.github/workflows/test-sdk-action.yml@main
     with:
-      adapter-dockerfile: packages/node/sdk_compliance_adapter/Dockerfile
+      adapter-dockerfile: compliance/node/Dockerfile
       adapter-context: .
       test-harness-version: latest
       report-name: node-sdk-compliance-report

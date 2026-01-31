@@ -213,7 +213,7 @@ global.fetch = async (url, options) => {
 
 // Import the built browser SDK AFTER setting up overrides
 console.log('[ADAPTER] Importing PostHog SDK...')
-const PostHogModule = require('../packages/browser/dist/module')
+const PostHogModule = require('../../packages/browser/dist/module')
 
 // Create a PostHog instance
 const { PostHog } = PostHogModule
@@ -232,7 +232,7 @@ app.use((req, res, next) => {
 app.get('/health', (req, res) => {
     res.json({
         sdk_name: 'posthog-js',
-        sdk_version: require('../packages/browser/package.json').version,
+        sdk_version: require('../../packages/browser/package.json').version,
         adapter_version: '1.0.0',
     })
 })
@@ -294,9 +294,9 @@ app.post('/capture', (req, res) => {
     }
 
     try {
-        // Set distinct_id
+        // Identify the user if distinct_id provided
         if (distinct_id) {
-            state.instance.register({ distinct_id })
+            state.instance.identify(distinct_id)
         }
 
         // Capture event

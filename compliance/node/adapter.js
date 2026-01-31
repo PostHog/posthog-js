@@ -5,7 +5,7 @@
  */
 
 const express = require('express')
-const { PostHog } = require('../packages/node/dist/entrypoints/index.node')
+const { PostHog } = require('../../packages/node/dist/entrypoints/index.node')
 
 const app = express()
 app.use(express.json())
@@ -23,7 +23,7 @@ const state = {
 app.get('/health', (req, res) => {
     res.json({
         sdk_name: 'posthog-node',
-        sdk_version: require('../packages/node/package.json').version,
+        sdk_version: require('../../packages/node/package.json').version,
         adapter_version: '1.0.0',
     })
 })

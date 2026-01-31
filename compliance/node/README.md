@@ -5,7 +5,7 @@ Compliance adapter for the posthog-node SDK with the [PostHog SDK Test Harness](
 ## Running Tests
 
 ```bash
-# From packages/node/sdk_compliance_adapter
+# From compliance/node
 docker-compose up --build --abort-on-container-exit
 ```
 

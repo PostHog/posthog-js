@@ -5,11 +5,13 @@ on:
     branches: [ main, master ]
     paths:
       - 'packages/browser/**'
+      - 'packages/core/**'
       - '.github/workflows/sdk-compliance-tests-browser.yml'
   pull_request:
     branches: [ main, master ]
     paths:
       - 'packages/browser/**'
+      - 'packages/core/**'
       - '.github/workflows/sdk-compliance-tests-browser.yml'
   workflow_dispatch:
 
@@ -22,7 +24,7 @@ jobs:
   test-browser-sdk:
     uses: PostHog/posthog-sdk-test-harness/.github/workflows/test-sdk-action.yml@main
     with:
-      adapter-dockerfile: packages/browser/sdk_compliance_adapter/Dockerfile
+      adapter-dockerfile: compliance/browser/Dockerfile
       adapter-context: .
       test-harness-version: latest
       report-name: browser-sdk-compliance-report
