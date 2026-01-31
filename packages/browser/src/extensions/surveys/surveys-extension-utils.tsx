@@ -402,6 +402,8 @@ interface SendSurveyEventArgs {
     posthog?: PostHog
     /** Additional properties to include in the survey event */
     properties?: Properties
+    /** The language that was applied to the survey (for tracking) */
+    surveyLanguage?: string | null
 }
 
 const getSurveyResponseValue = (responses: Record<string, string | number | string[] | null>, questionId?: string) => {
@@ -422,6 +424,7 @@ export const sendSurveyEvent = ({
     posthog,
     isSurveyCompleted,
     properties,
+    surveyLanguage,
 }: SendSurveyEventArgs) => {
     if (!posthog) {
         logger.error('[survey sent] event not captured, PostHog instance not found.')
@@ -440,6 +443,7 @@ export const sendSurveyEvent = ({
         })),
         [SurveyEventProperties.SURVEY_SUBMISSION_ID]: surveySubmissionId,
         [SurveyEventProperties.SURVEY_COMPLETED]: isSurveyCompleted,
+        ...(surveyLanguage && { $survey_language: surveyLanguage }),
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         ...responses,
         ...properties,
@@ -468,6 +472,7 @@ const _buildSurveyEventProperties = (
     [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
     [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
     [SurveyEventProperties.SURVEY_PARTIALLY_COMPLETED]: _surveyHasResponses(inProgressSurvey),
+    ...(inProgressSurvey?.surveyLanguage && { $survey_language: inProgressSurvey.surveyLanguage }),
     sessionRecordingUrl: posthog.get_session_replay_url?.(),
     ...inProgressSurvey?.responses,
     [SurveyEventProperties.SURVEY_SUBMISSION_ID]: inProgressSurvey?.surveySubmissionId,
@@ -624,6 +629,8 @@ interface SurveyContextProps {
     surveySubmissionId: string
     /** Additional properties to include in all survey events */
     properties?: Properties
+    /** The language that was applied to the survey (for tracking) */
+    surveyLanguage?: string | null
 }
 
 export const SurveyContext = createContext<SurveyContextProps>({
@@ -634,6 +641,7 @@ export const SurveyContext = createContext<SurveyContextProps>({
     onPreviewSubmit: () => {},
     surveySubmissionId: '',
     properties: undefined,
+    surveyLanguage: null,
 })
 
 export const useSurveyContext = () => {
@@ -693,6 +701,7 @@ interface InProgressSurveyState {
     surveySubmissionId: string
     lastQuestionIndex: number
     responses: Record<string, string | number | string[] | null>
+    surveyLanguage?: string | null
 }
 
 const getInProgressSurveyStateKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {

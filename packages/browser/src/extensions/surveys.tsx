@@ -69,6 +69,7 @@ import {
     calculatePrefillStartIndex,
 } from '../utils/survey-url-prefill'
 import { getNextSurveyStep } from '../utils/survey-branching'
+import { applySurveyTranslationForUser } from '../utils/survey-translations'
 
 // Re-export for surveys-preview entrypoint
 export { getNextSurveyStep }
@@ -180,25 +181,30 @@ export class SurveyManager {
     }
 
     public handlePopoverSurvey = (surveyParam: Survey, options?: DisplaySurveyPopoverOptions): void => {
+        const { survey: translatedSurvey, language: surveyLanguage } = applySurveyTranslationForUser(
+            surveyParam,
+            this._posthog
+        )
+
         // apply overrides for position / selector (needed for thumb surveys)
         const survey =
             options?.position || options?.selector
                 ? {
-                      ...surveyParam,
+                      ...translatedSurvey,
                       appearance: {
-                          ...surveyParam.appearance,
+                          ...translatedSurvey.appearance,
                           ...(options.position && { position: options.position }),
                           ...(options.selector && { widgetSelector: options.selector }),
                       },
                   }
-                : surveyParam
+                : translatedSurvey
 
         this._clearSurveyTimeout(survey.id)
 
         const { properties, initialResponses } = options ?? {}
         const hasPrefillData = initialResponses && Object.keys(initialResponses).length > 0
         const isSurveyCompleted = hasPrefillData
-            ? this._handleInitialResponses(survey, initialResponses, properties)
+            ? this._handleInitialResponses(survey, initialResponses, properties, surveyLanguage)
             : false
 
         // if the survey is done (from prefill) and there is no thank-you, we can break early
@@ -232,6 +238,7 @@ export class SurveyManager {
             style: positionStyle,
             isSurveyCompleted: isSurveyCompleted,
             skipShownEvent: options?.skipShownEvent,
+            surveyLanguage: surveyLanguage,
         }
 
         if (delaySeconds <= 0) {
@@ -368,33 +375,49 @@ export class SurveyManager {
     }
 
     public renderPopover = (survey: Survey): void => {
-        const { shadow } = retrieveSurveyShadow(survey, this._posthog)
+        const { survey: translatedSurvey, language: surveyLanguage } = applySurveyTranslationForUser(
+            survey,
+            this._posthog
+        )
+
+        const { shadow } = retrieveSurveyShadow(translatedSurvey, this._posthog)
         render(
-            <SurveyPopup posthog={this._posthog} survey={survey} removeSurveyFromFocus={this._removeSurveyFromFocus} />,
+            <SurveyPopup
+                posthog={this._posthog}
+                survey={translatedSurvey}
+                removeSurveyFromFocus={this._removeSurveyFromFocus}
+                surveyLanguage={surveyLanguage}
+            />,
             shadow
         )
     }
 
     public renderSurvey = (survey: Survey, selector: Element, properties?: Properties): void => {
+        const { survey: translatedSurvey, language: surveyLanguage } = applySurveyTranslationForUser(
+            survey,
+            this._posthog
+        )
+
         let isSurveyCompleted = false
         if (this._posthog.config?.surveys?.prefillFromUrl) {
-            isSurveyCompleted = this._handleUrlPrefill(survey)
+            isSurveyCompleted = this._handleUrlPrefill(translatedSurvey, surveyLanguage)
         }
 
         render(
             <SurveyPopup
                 posthog={this._posthog}
-                survey={survey}
+                survey={translatedSurvey}
                 removeSurveyFromFocus={this._removeSurveyFromFocus}
                 isPopup={false}
                 properties={properties}
                 isSurveyCompleted={isSurveyCompleted}
+                surveyLanguage={surveyLanguage}
             />,
             selector
         )
     }
 
-    private _handleUrlPrefill(survey: Survey): boolean {
+    private _handleUrlPrefill(survey: Survey, surveyLanguage?: string | null): boolean {
         // Only handle prefill once per survey session to avoid overwriting in-progress responses
         if (this._prefillHandledSurveys.has(survey.id)) {
             return false
@@ -408,7 +431,7 @@ export class SurveyManager {
 
         logger.info('[Survey Prefill] Detected URL prefill parameters')
 
-        const result = this._processPrefillData(survey, params)
+        const result = this._processPrefillData(survey, params, surveyLanguage)
         if (!result) {
             return false
         }
@@ -428,6 +451,7 @@ export class SurveyManager {
                 surveySubmissionId: submissionId,
                 posthog: this._posthog,
                 isSurveyCompleted,
+                surveyLanguage,
             })
         }
 
@@ -445,7 +469,8 @@ export class SurveyManager {
     private _handleInitialResponses(
         survey: Survey,
         initialResponses: Record<number, SurveyResponseValue>,
-        properties?: Properties
+        properties?: Properties,
+        surveyLanguage?: string | null
     ): boolean {
         const prefillParams: { [key: number]: string[] } = {}
         for (const [indexStr, value] of Object.entries(initialResponses)) {
@@ -455,7 +480,7 @@ export class SurveyManager {
 
         logger.info('[Survey] Processing initial responses')
 
-        const result = this._processPrefillData(survey, prefillParams)
+        const result = this._processPrefillData(survey, prefillParams, surveyLanguage)
         if (!result) {
             return false
         }
@@ -470,6 +495,7 @@ export class SurveyManager {
             posthog: this._posthog,
             isSurveyCompleted,
             properties,
+            surveyLanguage,
         })
 
         return isSurveyCompleted
@@ -477,7 +503,8 @@ export class SurveyManager {
 
     private _processPrefillData(
         survey: Survey,
-        prefillParams: Record<number, string[]>
+        prefillParams: Record<number, string[]>,
+        surveyLanguage?: string | null
     ): {
         responses: Record<string, any>
         submissionId: string
@@ -508,6 +535,7 @@ export class SurveyManager {
                 surveySubmissionId: submissionId,
                 responses: responses,
                 lastQuestionIndex: startQuestionIndex,
+                surveyLanguage: surveyLanguage,
             })
 
             logger.info('[Survey Prefill] Stored prefilled responses in localStorage')
@@ -940,7 +968,8 @@ export function usePopupVisibility(
     removeSurveyFromFocus: (survey: SurveyWithTypeAndAppearance) => void,
     isPopup: boolean,
     surveyContainerRef?: RefObject<HTMLDivElement>,
-    skipShownEvent?: boolean
+    skipShownEvent?: boolean,
+    surveyLanguage?: string | null
 ) {
     const [isPopupVisible, setIsPopupVisible] = useState(
         isPreviewMode || millisecondDelay === 0 || survey.type === SurveyType.ExternalSurvey
@@ -1015,6 +1044,7 @@ export function usePopupVisibility(
                     [SurveyEventProperties.SURVEY_ID]: survey.id,
                     [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
                     [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
+                    ...(surveyLanguage && { $survey_language: surveyLanguage }),
                     sessionRecordingUrl: posthog.get_session_replay_url?.(),
                 })
             }
@@ -1070,6 +1100,8 @@ interface SurveyPopupProps {
     isSurveyCompleted?: boolean
     /** When true, `survey shown` events will not be emitted automatically */
     skipShownEvent?: boolean
+    /** The language that was applied to the survey (for tracking) */
+    surveyLanguage?: string | null
 }
 
 function getTabPositionStyles(position: SurveyTabPosition = SurveyTabPosition.Right): JSX.CSSProperties {
@@ -1106,6 +1138,7 @@ export function SurveyPopup({
     properties,
     isSurveyCompleted,
     skipShownEvent,
+    surveyLanguage,
 }: SurveyPopupProps) {
     const surveyContainerRef = useRef<HTMLDivElement>(null)
     const isPreviewMode = Number.isInteger(previewPageIndex)
@@ -1121,7 +1154,8 @@ export function SurveyPopup({
         removeSurveyFromFocus,
         isPopup,
         surveyContainerRef,
-        skipShownEvent
+        skipShownEvent,
+        surveyLanguage
     )
 
     /**
@@ -1147,8 +1181,9 @@ export function SurveyPopup({
             onPreviewSubmit,
             posthog,
             properties,
+            surveyLanguage,
         }
-    }, [isPreviewMode, previewPageIndex, isPopup, posthog, survey, onPopupSurveyDismissed, onPreviewSubmit, properties])
+    }, [isPreviewMode, previewPageIndex, isPopup, posthog, survey, onPopupSurveyDismissed, onPreviewSubmit, properties, surveyLanguage])
 
     if (!isPopupVisible) {
         return null
@@ -1209,6 +1244,7 @@ export function Questions({
         surveySubmissionId,
         isPreviewMode,
         properties,
+        surveyLanguage,
     } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(() => {
         const inProgressSurveyData = getInProgressSurveyState(survey)
@@ -1256,6 +1292,7 @@ export function Questions({
                 surveySubmissionId: surveySubmissionId,
                 responses: newResponses,
                 lastQuestionIndex: nextStep,
+                surveyLanguage: surveyLanguage,
             })
         }
 
@@ -1269,6 +1306,7 @@ export function Questions({
                 isSurveyCompleted,
                 posthog,
                 properties,
+                surveyLanguage,
             })
         }
     }
