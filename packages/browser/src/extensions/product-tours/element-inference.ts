@@ -87,6 +87,7 @@ export interface InferredSelector {
     autoData: string
     text: string | null
     excludeText?: boolean
+    precision?: number
 }
 
 function getElementText(element: HTMLElement): string | null {
@@ -159,7 +160,7 @@ export function findElement(selector: InferredSelector): HTMLElement | null {
             logger.error('Invalid autoData structure:', autoData)
             return null
         }
-        const { text, excludeText } = selector
+        const { text, excludeText, precision = 1 } = selector
 
         // excludeText -> user setting, usually if the target element
         // has dynamic/localized text
@@ -174,10 +175,15 @@ export function findElement(selector: InferredSelector): HTMLElement | null {
             return null
         }
 
+        // precision controls how many groups to search
+        // 1 = strict (only most specific group), 0 = loose (all groups)
+        const maxGroups = Math.max(1, Math.ceil((1 - precision) * groups.length))
+
         const visibilityCache = new WeakMap<HTMLElement, boolean>()
 
         // try each selector group, starting w/ most specific (lowest cardinality)
-        for (const group of groups) {
+        for (let i = 0; i < maxGroups; i++) {
+            const group = groups[i]
             const votes = new Map<HTMLElement, number>()
             let winner: HTMLElement | null = null
             let maxVotes = 0
