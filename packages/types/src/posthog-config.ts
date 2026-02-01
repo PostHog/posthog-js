@@ -1365,6 +1365,31 @@ export interface PostHogConfig {
      * */
     cookieless_mode?: 'always' | 'on_reject'
 
+    /**
+     * A hostname pattern to match test environments. When the current hostname matches,
+     * `setTestUser()` is called automatically on startup, enabling person processing
+     * and setting `$test_user: true`.
+     *
+     * Can be a string (exact match) or RegExp (pattern match).
+     * Set to `null` to explicitly disable (useful when using `defaults: '2026-01-30'`).
+     *
+     * @default undefined (when defaults is before '2026-01-30')
+     * @default /^(localhost|127\.0\.0\.1)$/ (when defaults >= '2026-01-30')
+     *
+     * @example
+     * ```js
+     * // Exact match
+     * posthog.init('token', { test_hostname: 'example.com' })
+     *
+     * // Regex pattern
+     * posthog.init('token', { test_hostname: /\.local$/ })
+     *
+     * // Disable
+     * posthog.init('token', { test_hostname: null })
+     * ```
+     */
+    testuser_hostname?: string | RegExp | null
+
     // ------- PREVIEW CONFIGS -------
 
     /**
