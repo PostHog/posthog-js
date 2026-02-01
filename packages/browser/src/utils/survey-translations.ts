@@ -57,9 +57,7 @@ function findBestTranslationMatch(
     const normalizedTarget = normalizeLanguageCode(targetLanguage)
 
     // Try exact match first (case-insensitive)
-    const exactMatch = Object.keys(translations).find(
-        (key) => normalizeLanguageCode(key) === normalizedTarget
-    )
+    const exactMatch = Object.keys(translations).find((key) => normalizeLanguageCode(key) === normalizedTarget)
     if (exactMatch) {
         logger.info(`Found exact translation match: ${exactMatch}`)
         return exactMatch
@@ -68,9 +66,7 @@ function findBestTranslationMatch(
     // Try base language fallback (e.g., fr-CA -> fr)
     if (normalizedTarget.includes('-')) {
         const baseLanguage = getBaseLanguage(normalizedTarget)
-        const baseMatch = Object.keys(translations).find(
-            (key) => normalizeLanguageCode(key) === baseLanguage
-        )
+        const baseMatch = Object.keys(translations).find((key) => normalizeLanguageCode(key) === baseLanguage)
         if (baseMatch) {
             logger.info(`Found base language translation match: ${baseMatch} (from ${targetLanguage})`)
             return baseMatch
@@ -84,17 +80,20 @@ function findBestTranslationMatch(
  * Merges translated question fields on top of default question fields
  * @param question - The original question object
  * @param targetLanguage - The target language code
- * @returns A new question object with translated fields merged
+ * @returns An object with the translated question and the matched language key
  */
-function mergeQuestionTranslation(question: SurveyQuestion, targetLanguage: string): SurveyQuestion {
+function mergeQuestionTranslation(
+    question: SurveyQuestion,
+    targetLanguage: string
+): { question: SurveyQuestion; matchedKey: string | null } {
     const translationKey = findBestTranslationMatch(question.translations, targetLanguage)
     if (!translationKey) {
-        return question
+        return { question, matchedKey: null }
     }
 
     const questionTranslation = question.translations?.[translationKey]
     if (!questionTranslation) {
-        return question
+        return { question, matchedKey: null }
     }
 
     const translated = { ...question }
@@ -124,7 +123,7 @@ function mergeQuestionTranslation(question: SurveyQuestion, targetLanguage: stri
         ;(translated as any).choices = questionTranslation.choices
     }
 
-    return translated
+    return { question: translated, matchedKey: translationKey }
 }
 
 /**
@@ -171,10 +170,18 @@ export function applySurveyTranslation(
         }
     }
 
-    // Always try to apply question-level translations
-    const translatedQuestions = survey.questions.map((question) => mergeQuestionTranslation(question, targetLanguage))
+    // Always try to apply question-level translations (each question has its own translations field)
+    const translatedResults = survey.questions.map((question) => mergeQuestionTranslation(question, targetLanguage))
+    const translatedQuestions = translatedResults.map((r) => r.question)
     const anyQuestionTranslated = translatedQuestions.some((q, i) => q !== survey.questions[i])
-    
+
+    // Track the first matched key from question translations if we don't have a survey-level match
+    let questionMatchedKey: string | null = null
+    if (!translationKey) {
+        const firstMatch = translatedResults.find((r) => r.matchedKey)
+        questionMatchedKey = firstMatch?.matchedKey || null
+    }
+
     if (anyQuestionTranslated) {
         translated.questions = translatedQuestions
         hasTranslation = true
@@ -183,7 +190,7 @@ export function applySurveyTranslation(
 
     return {
         survey: translated,
-        matchedKey: hasTranslation ? (translationKey || targetLanguage) : null,
+        matchedKey: hasTranslation ? translationKey || questionMatchedKey : null,
     }
 }
 

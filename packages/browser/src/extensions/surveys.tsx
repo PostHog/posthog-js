@@ -1183,7 +1183,17 @@ export function SurveyPopup({
             properties,
             surveyLanguage,
         }
-    }, [isPreviewMode, previewPageIndex, isPopup, posthog, survey, onPopupSurveyDismissed, onPreviewSubmit, properties, surveyLanguage])
+    }, [
+        isPreviewMode,
+        previewPageIndex,
+        isPopup,
+        posthog,
+        survey,
+        onPopupSurveyDismissed,
+        onPreviewSubmit,
+        properties,
+        surveyLanguage,
+    ])
 
     if (!isPopupVisible) {
         return null
