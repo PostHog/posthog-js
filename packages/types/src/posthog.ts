@@ -140,6 +140,29 @@ export interface PostHog {
      */
     createPersonProfile(): void
 
+    /**
+     * Marks the current user as a test user by setting the `$test_user` person property to `true`.
+     * This also enables person processing for the current user.
+     *
+     * This is useful for using in a cohort your internal/test filters for your posthog org.
+     * @see https://posthog.com/tutorials/filter-internal-users
+     * Create a cohort with `$test_user` IS SET, and set your internal test filters to be NOT IN that cohort.
+     *
+     * {@label Identification}
+     *
+     * @example
+     * ```js
+     * // Manually mark as test user
+     * posthog.setTestUser()
+     *
+     * // Or use test_hostname config for automatic detection
+     * posthog.init('token', { test_hostname: 'localhost' })
+     * ```
+     *
+     * @public
+     */
+    setTestUser(): void
+
     // ============================================================================
     // Groups
     // ============================================================================

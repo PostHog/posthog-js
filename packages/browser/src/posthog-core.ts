@@ -3152,8 +3152,9 @@ export class PostHog implements PostHogInterface {
      * Marks the current user as a test user by setting the `$test_user` person property to `true`.
      * This also enables person processing for the current user.
      *
-     * This is useful for filtering out internal/test traffic from your analytics.
-     * Test users can be filtered using cohorts with the `$test_user` property.
+     * This is useful for using in a cohort your internal/test filters for your posthog org.
+     * @see https://posthog.com/tutorials/filter-internal-users
+     * Create a cohort with `$test_user` IS SET, and set your internal test filters to be NOT IN that cohort.
      *
      * {@label Identification}
      *
