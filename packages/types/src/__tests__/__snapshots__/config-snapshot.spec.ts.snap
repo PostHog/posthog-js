@@ -639,6 +639,12 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "\\"always\\"",
     "\\"on_reject\\""
   ],
+  "testuser_hostname": [
+    "undefined",
+    "null",
+    "string",
+    "RegExp"
+  ],
   "__add_tracing_headers": [
     "undefined",
     "string[]"
