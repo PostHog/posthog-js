@@ -1163,6 +1163,65 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   /**
+   * Sets properties on the person profile associated with the current `distinct_id`.
+   * Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)
+   *
+   * {@label Identification}
+   *
+   * @remarks
+   * Updates user properties that are stored with the person profile in PostHog.
+   * If `personProfiles` is set to `identified_only` and no profile exists, this will create one.
+   *
+   * @example
+   * ```js
+   * // set user properties
+   * posthog.setPersonProperties({
+   *     email: 'user@example.com',
+   *     plan: 'premium'
+   * })
+   * ```
+   *
+   * @example
+   * ```js
+   * // set properties with $set_once
+   * posthog.setPersonProperties(
+   *     { name: 'Max Hedgehog' },  // $set properties
+   *     { initial_url: '/blog' }   // $set_once properties
+   * )
+   * ```
+   *
+   * @public
+   *
+   * @param userPropertiesToSet - Optional: An object of properties to store about the user.
+   *   These properties will overwrite any existing values for the same keys.
+   * @param userPropertiesToSetOnce - Optional: An object of properties to store about the user.
+   *   If a property is previously set, this does not override that value.
+   */
+  setPersonProperties(
+    userPropertiesToSet?: { [key: string]: string },
+    userPropertiesToSetOnce?: { [key: string]: string }
+  ): void {
+    this.wrap(() => {
+      if (!userPropertiesToSet && !userPropertiesToSetOnce) {
+        return
+      }
+
+      if (!this._requirePersonProcessing('posthog.setPersonProperties')) {
+        return
+      }
+
+      // Update person properties for feature flags evaluation
+      // Merge setOnce first, then set to allow overwriting
+      const mergedProperties = { ...(userPropertiesToSetOnce || {}), ...(userPropertiesToSet || {}) }
+      if (Object.keys(mergedProperties).length > 0) {
+        this.setPersonPropertiesForFlags(mergedProperties)
+      }
+
+      this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
+    })
+  }
+
+  /**
    * Override processBeforeEnqueue to run before_send hooks.
    * This runs after prepareMessage, giving users full control over the final event.
    *

@@ -1041,6 +1041,60 @@ export class PostHog extends PostHogCore {
     super.createPersonProfile()
   }
 
+  /**
+   * Sets properties on the person profile associated with the current `distinct_id`.
+   * Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)
+   *
+   * {@label Identification}
+   *
+   * @remarks
+   * Updates user properties that are stored with the person profile in PostHog.
+   * If `personProfiles` is set to `identified_only` and no profile exists, this will create one.
+   *
+   * @example
+   * ```js
+   * // set user properties
+   * posthog.setPersonProperties({
+   *     email: 'user@example.com',
+   *     plan: 'premium'
+   * })
+   * ```
+   *
+   * @example
+   * ```js
+   * // set properties with $set_once
+   * posthog.setPersonProperties(
+   *     { name: 'Max Hedgehog' },  // $set properties
+   *     { initial_url: '/blog' }   // $set_once properties
+   * )
+   * ```
+   *
+   * @example
+   * ```js
+   * // set properties without reloading feature flags
+   * posthog.setPersonProperties({ plan: 'premium' }, undefined, false)
+   * ```
+   *
+   * @public
+   *
+   * @param userPropertiesToSet - Optional: An object of properties to store about the user.
+   *   These properties will overwrite any existing values for the same keys.
+   * @param userPropertiesToSetOnce - Optional: An object of properties to store about the user.
+   *   If a property is previously set, this does not override that value.
+   * @param reloadFeatureFlags - Whether to reload feature flags after setting the properties. Defaults to true.
+   */
+  setPersonProperties(
+    userPropertiesToSet?: { [key: string]: string },
+    userPropertiesToSetOnce?: { [key: string]: string },
+    reloadFeatureFlags = true
+  ): void {
+    super.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce)
+
+    if (reloadFeatureFlags) {
+      this.reloadFeatureFlags()
+    }
+  }
+
   public async getSurveys(): Promise<SurveyResponse['surveys']> {
     if (this._disableSurveys === true) {
       this._logger.info('Loading surveys is disabled.')
