@@ -97,6 +97,56 @@ test.describe('product tours - auto triggers', () => {
         await expect(tourTooltip(page, 'click-trigger')).toBeVisible({ timeout: 5000 })
     })
 
+    test('click propagates when tour is deleted from API', async ({ page, context }) => {
+        const tour = createTour({
+            id: 'deleted-tour',
+            auto_launch: false,
+            conditions: { selector: '#click-trigger-btn' },
+        })
+
+        await startWithTours(page, context, [tour])
+
+        await page.evaluate(() => {
+            ;(window as any).buttonClickCount = 0
+            const btn = document.getElementById('click-trigger-btn')
+            if (btn) {
+                // eslint-disable-next-line posthog-js/no-add-event-listener
+                btn.addEventListener('click', () => {
+                    ;(window as any).buttonClickCount++
+                })
+            }
+        })
+
+        await page.waitForTimeout(2000)
+
+        // First click - tour shows, same-element handlers still fire
+        await page.click('#click-trigger-btn')
+        await expect(tourTooltip(page, 'deleted-tour')).toBeVisible({ timeout: 5000 })
+        expect(await page.evaluate(() => (window as any).buttonClickCount)).toBe(1)
+
+        // Dismiss the tour
+        await page.locator('.ph-product-tour-container-deleted-tour .ph-tour-dismiss').click()
+        await expect(tourTooltip(page, 'deleted-tour')).not.toBeVisible()
+
+        // Update the API to return no tours (simulating deletion)
+        await page.route('**/api/product_tours/**', async (route) => {
+            await route.fulfill({ json: { product_tours: [] } })
+        })
+
+        // Clear the cache to force a refresh
+        await page.evaluate(() => {
+            ;(window as any).posthog.productTours.clearCache()
+        })
+
+        // Wait for next evaluation cycle to pick up empty tours and clean up listeners
+        await page.waitForTimeout(2000)
+
+        // Click again - tour deleted, click still propagates
+        await page.click('#click-trigger-btn')
+        await expect(tourTooltip(page, 'deleted-tour')).not.toBeVisible()
+        expect(await page.evaluate(() => (window as any).buttonClickCount)).toBe(2)
+    })
+
     test.describe('event property filtering', () => {
         test('triggers when event properties match (exact)', async ({ page, context }) => {
             const tour = createTour({

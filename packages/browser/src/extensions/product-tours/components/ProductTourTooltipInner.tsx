@@ -132,7 +132,7 @@ export function ProductTourTooltipInner({
 
             {showPostHogBranding && (
                 <a
-                    href={isInteractive ? 'https://posthog.com/product-tours' : undefined}
+                    href={isInteractive ? 'https://posthog.com/docs/product-tours' : undefined}
                     target={isInteractive ? '_blank' : undefined}
                     rel={isInteractive ? 'noopener noreferrer' : undefined}
                     class="ph-tour-branding"
