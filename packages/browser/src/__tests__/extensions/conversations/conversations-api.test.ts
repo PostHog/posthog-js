@@ -297,6 +297,52 @@ describe('Conversations API Methods', () => {
                 expect(result).toEqual(mockResponse)
                 expect(mockManager.getMessages).toHaveBeenCalledWith(undefined, afterTimestamp)
             })
+
+            it('should handle messages with rich_content (TipTap JSON)', async () => {
+                const mockResponse: GetMessagesResponse = {
+                    ticket_id: 'ticket-123',
+                    ticket_status: 'open',
+                    messages: [
+                        {
+                            id: 'msg-1',
+                            content: 'Hello with formatting',
+                            rich_content: {
+                                type: 'doc',
+                                content: [
+                                    {
+                                        type: 'paragraph',
+                                        content: [
+                                            {
+                                                type: 'text',
+                                                text: 'Hello ',
+                                            },
+                                            {
+                                                type: 'text',
+                                                text: 'bold and italic',
+                                                marks: [{ type: 'bold' }, { type: 'italic' }],
+                                            },
+                                        ],
+                                    },
+                                ],
+                            },
+                            author_type: 'human',
+                            author_name: 'Support Agent',
+                            created_at: '2024-01-01T00:00:00Z',
+                            is_private: false,
+                        },
+                    ],
+                    has_more: false,
+                    unread_count: 0,
+                }
+
+                ;(mockManager.getMessages as jest.Mock).mockResolvedValue(mockResponse)
+
+                const result = await conversations.getMessages()
+
+                expect(result).toEqual(mockResponse)
+                expect(result?.messages[0].rich_content).toBeDefined()
+                expect(result?.messages[0].rich_content?.type).toBe('doc')
+            })
         })
 
         describe('markAsRead', () => {

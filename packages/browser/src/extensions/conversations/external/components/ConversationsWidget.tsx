@@ -11,7 +11,7 @@ import { getStyles } from './styles'
 import { OpenChatButton } from './OpenChatButton'
 import { SendMessageButton } from './SendMessageButton'
 import { CloseChatButton } from './CloseChatButton'
-import { MarkdownContent } from './MarkdownContent'
+import { RichContent } from './RichContent'
 
 const logger = createLogger('[ConversationsWidget]')
 
@@ -400,7 +400,12 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
             <div key={message.id} style={messageStyle}>
                 {!isCustomer && message.author_name && <div style={styles.messageAuthor}>{message.author_name}</div>}
                 <div style={contentStyle}>
-                    <MarkdownContent content={message.content} isCustomer={isCustomer} primaryColor={primaryColor} />
+                    <RichContent
+                        richContent={message.rich_content}
+                        content={message.content}
+                        isCustomer={isCustomer}
+                        primaryColor={primaryColor}
+                    />
                 </div>
                 <div style={styles.messageTime}>{this._formatTime(message.created_at)}</div>
             </div>
