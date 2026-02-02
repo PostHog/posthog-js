@@ -721,11 +721,7 @@ export class PostHog extends PostHogCore {
    * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
   setPersonPropertiesForFlags(properties: Record<string, string>, reloadFeatureFlags = true): void {
-    super.setPersonPropertiesForFlags(properties)
-
-    if (reloadFeatureFlags) {
-      this.reloadFeatureFlags()
-    }
+    super.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
   }
 
   /**

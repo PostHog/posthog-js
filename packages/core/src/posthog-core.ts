@@ -429,7 +429,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   /***
    * PROPERTIES
    ***/
-  setPersonPropertiesForFlags(properties: { [type: string]: string }): void {
+  setPersonPropertiesForFlags(properties: { [type: string]: string }, reloadFeatureFlags = true): void {
     this.wrap(() => {
       // Get persisted person properties
       const existingProperties =
@@ -439,6 +439,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         ...existingProperties,
         ...properties,
       })
+
+      if (reloadFeatureFlags) {
+        this.reloadFeatureFlags()
+      }
     })
   }
 
@@ -1216,20 +1220,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       // Merge setOnce first, then set to allow overwriting
       const mergedProperties = { ...(userPropertiesToSetOnce || {}), ...(userPropertiesToSet || {}) }
       if (Object.keys(mergedProperties).length > 0) {
-        // Directly update persisted properties to avoid triggering reload in subclasses
-        const existingProperties =
-          this.getPersistedProperty<Record<string, string>>(PostHogPersistedProperty.PersonProperties) || {}
-        this.setPersistedProperty<PostHogEventProperties>(PostHogPersistedProperty.PersonProperties, {
-          ...existingProperties,
-          ...mergedProperties,
-        })
+        this.setPersonPropertiesForFlags(mergedProperties, reloadFeatureFlags)
       }
 
       this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
-
-      if (reloadFeatureFlags) {
-        this.reloadFeatureFlags()
-      }
     })
   }
 
