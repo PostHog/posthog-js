@@ -155,8 +155,8 @@ export interface PostHog {
      * // Manually mark as test user
      * posthog.setTestUser()
      *
-     * // Or use test_hostname config for automatic detection
-     * posthog.init('token', { test_hostname: 'localhost' })
+     * // Or use test_user_hostname config for automatic detection
+     * posthog.init('token', { test_user_hostname: 'localhost' })
      * ```
      *
      * @public

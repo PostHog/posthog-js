@@ -3,4 +3,4 @@
 '@posthog/types': minor
 ---
 
-Add a function isTestUser() and config option testuser_hostname
+Add a function isTestUser() and config option test_user_hostname

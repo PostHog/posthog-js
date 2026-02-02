@@ -1379,16 +1379,16 @@ export interface PostHogConfig {
      * @example
      * ```js
      * // Exact match
-     * posthog.init('token', { test_hostname: 'example.com' })
+     * posthog.init('token', { test_user_hostname: 'example.com' })
      *
      * // Regex pattern
-     * posthog.init('token', { test_hostname: /\.local$/ })
+     * posthog.init('token', { test_user_hostname: /\.local$/ })
      *
      * // Disable
-     * posthog.init('token', { test_hostname: null })
+     * posthog.init('token', { test_user_hostname: null })
      * ```
      */
-    testuser_hostname?: string | RegExp | null
+    test_user_hostname?: string | RegExp | null
 
     // ------- PREVIEW CONFIGS -------
 

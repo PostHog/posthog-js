@@ -423,12 +423,12 @@ describe('posthog core', () => {
             expect(beforeSendMock).toHaveBeenCalledTimes(1)
         })
 
-        describe('test_hostname config', () => {
+        describe('test_user_hostname config', () => {
             it('should call setTestUser automatically when hostname matches regex', async () => {
                 mockHostName.mockReturnValue('localhost')
                 const { beforeSendMock } = setup({
                     person_profiles: 'identified_only',
-                    testuser_hostname: /^(localhost|127\.0\.0\.1)$/,
+                    test_user_hostname: /^(localhost|127\.0\.0\.1)$/,
                 })
 
                 const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
@@ -440,7 +440,7 @@ describe('posthog core', () => {
                 mockHostName.mockReturnValue('localhost')
                 const { beforeSendMock } = setup({
                     person_profiles: 'identified_only',
-                    testuser_hostname: 'localhost',
+                    test_user_hostname: 'localhost',
                 })
 
                 const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
@@ -451,7 +451,7 @@ describe('posthog core', () => {
                 mockHostName.mockReturnValue('localhost.example.com')
                 const { beforeSendMock } = setup({
                     person_profiles: 'identified_only',
-                    testuser_hostname: 'localhost',
+                    test_user_hostname: 'localhost',
                 })
 
                 const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
@@ -462,7 +462,7 @@ describe('posthog core', () => {
                 mockHostName.mockReturnValue('production.example.com')
                 const { beforeSendMock } = setup({
                     person_profiles: 'identified_only',
-                    testuser_hostname: /^localhost$/,
+                    test_user_hostname: /^localhost$/,
                 })
 
                 const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
@@ -474,10 +474,10 @@ describe('posthog core', () => {
                 const { posthog, beforeSendMock } = setup({
                     person_profiles: 'identified_only',
                     defaults: '2026-01-30',
-                    testuser_hostname: null,
+                    test_user_hostname: null,
                 })
 
-                expect(posthog.config.testuser_hostname).toBeNull()
+                expect(posthog.config.test_user_hostname).toBeNull()
                 const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
                 expect(setEvents.length).toEqual(0)
             })

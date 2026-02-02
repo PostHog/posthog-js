@@ -155,13 +155,13 @@ const defaultsThatVaryByConfig = (
     defaults?: ConfigDefaults
 ): Pick<
     PostHogConfig,
-    'rageclick' | 'capture_pageview' | 'session_recording' | 'external_scripts_inject_target' | 'testuser_hostname'
+    'rageclick' | 'capture_pageview' | 'session_recording' | 'external_scripts_inject_target' | 'test_user_hostname'
 > => ({
     rageclick: defaults && defaults >= '2025-11-30' ? { content_ignorelist: true } : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
     external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
-    testuser_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
+    test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
@@ -866,10 +866,10 @@ export class PostHog implements PostHogInterface {
 
         this._start_queue_if_opted_in()
 
-        // Check if current hostname matches test_hostname pattern and mark as test user before any events
-        if (this.config.testuser_hostname && location?.hostname) {
+        // Check if current hostname matches test_user_hostname pattern and mark as test user before any events
+        if (this.config.test_user_hostname && location?.hostname) {
             const hostname = location.hostname
-            const pattern = this.config.testuser_hostname
+            const pattern = this.config.test_user_hostname
             const matches = typeof pattern === 'string' ? hostname === pattern : pattern.test(hostname)
             if (matches) {
                 this.setTestUser()
@@ -3163,8 +3163,8 @@ export class PostHog implements PostHogInterface {
      * // Manually mark as test user
      * posthog.setTestUser()
      *
-     * // Or use test_hostname config for automatic detection
-     * posthog.init('token', { test_hostname: 'localhost' })
+     * // Or use test_user_hostname config for automatic detection
+     * posthog.init('token', { test_user_hostname: 'localhost' })
      * ```
      *
      * @public

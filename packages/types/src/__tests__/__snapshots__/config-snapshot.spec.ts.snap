@@ -639,7 +639,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "\\"always\\"",
     "\\"on_reject\\""
   ],
-  "testuser_hostname": [
+  "test_user_hostname": [
     "undefined",
     "null",
     "string",
