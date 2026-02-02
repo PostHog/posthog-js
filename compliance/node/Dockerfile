@@ -30,4 +30,5 @@ RUN npm init -y && npm install express
 
 EXPOSE 8080
 
+USER node
 CMD ["node", "adapter.js"]

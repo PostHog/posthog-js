@@ -9,10 +9,6 @@ const express = require('express')
 // Set up jsdom
 require('jsdom-global')()
 
-console.log('[ADAPTER] jsdom initialized')
-console.log('[ADAPTER] fetch available:', typeof fetch !== 'undefined')
-console.log('[ADAPTER] XMLHttpRequest available:', typeof XMLHttpRequest !== 'undefined')
-
 // Add localStorage polyfill if jsdom didn't provide it
 if (typeof localStorage === 'undefined') {
     global.localStorage = {
@@ -58,25 +54,21 @@ global.XMLHttpRequest = function() {
     let requestBody = null
 
     xhr.open = function(method, url, ...args) {
-        console.log('[ADAPTER] XHR.open called for URL:', url)
         requestUrl = url
         return originalOpen.apply(this, [method, url, ...args])
     }
 
     xhr.send = function(body) {
-        console.log('[ADAPTER] XHR.send called with body type:', typeof body)
         requestBody = body
 
         const originalOnReadyStateChange = xhr.onreadystatechange
         xhr.onreadystatechange = function() {
             if (xhr.readyState === 4 && requestUrl && (requestUrl.includes('/e') || requestUrl.includes('/batch')) && !requestUrl.includes('/flags')) {
-                console.log('[ADAPTER] XHR completed:', requestUrl, 'status:', xhr.status)
                 try {
                     let events = []
 
                     if (requestBody && typeof requestBody === 'string') {
                         const parsed = JSON.parse(requestBody)
-                        console.log('[ADAPTER] XHR parsed body, isArray:', Array.isArray(parsed))
 
                         if (Array.isArray(parsed)) {
                             events = parsed
@@ -98,13 +90,11 @@ global.XMLHttpRequest = function() {
                         uuid_list: events.map(e => e.uuid).filter(Boolean),
                     })
 
-                    console.log('[ADAPTER] XHR tracked request: events=', events.length, 'status=', xhr.status)
-
                     if (xhr.status === 200) {
                         state.totalEventsSent += events.length
                     }
                 } catch (e) {
-                    console.error('[ADAPTER] XHR tracking error:', e)
+                    // Ignore parsing errors
                 }
             }
 
@@ -120,28 +110,22 @@ global.XMLHttpRequest = function() {
 }
 
 // Override fetch to track requests
-console.log('[ADAPTER] Setting up fetch override, originalFetch:', typeof global.fetch)
 const originalFetch = global.fetch
 global.fetch = async (url, options) => {
-    console.log('[ADAPTER] Fetch called for URL:', url)
     const response = await originalFetch(url, options)
 
     // Track requests to mock server (only /e/ or /batch/, not /flags/)
     if ((url.includes('/batch') || url.includes('/e')) && !url.includes('/flags')) {
-        console.log('[ADAPTER] Tracking request to:', url)
         try {
             let events = []
 
             if (options?.body) {
                 const contentType = options.headers?.['Content-Type'] || options.headers?.get?.('Content-Type')
 
-                console.log(`[ADAPTER DEBUG] Request to ${url}, Content-Type: ${contentType}, Body type: ${typeof options.body}`)
-
                 // Handle different content types
                 if (contentType === 'application/json' && typeof options.body === 'string') {
                     // Plain JSON
                     const parsed = JSON.parse(options.body)
-                    console.log(`[ADAPTER DEBUG] Parsed JSON, isArray: ${Array.isArray(parsed)}, keys: ${Array.isArray(parsed) ? 'N/A' : Object.keys(parsed).join(',')}`)
                     // Browser SDK sends plain arrays or single objects (not wrapped in batch/data keys)
                     if (Array.isArray(parsed)) {
                         events = parsed
@@ -156,7 +140,6 @@ global.fetch = async (url, options) => {
                     if (match) {
                         const decoded = Buffer.from(decodeURIComponent(match[1]), 'base64').toString()
                         const parsed = JSON.parse(decoded)
-                        console.log(`[ADAPTER DEBUG] Decoded base64, isArray: ${Array.isArray(parsed)}`)
                         // Browser SDK sends plain arrays or single objects
                         if (Array.isArray(parsed)) {
                             events = parsed
@@ -166,23 +149,8 @@ global.fetch = async (url, options) => {
                             events = [parsed]
                         }
                     }
-                } else if (options.body instanceof Blob) {
-                    console.log(`[ADAPTER DEBUG] Body is Blob, size: ${options.body.size}`)
-                    // Gzipped data - for now, skip parsing
-                    // We could add gzip decompression here if needed
-                } else {
-                    console.log(`[ADAPTER DEBUG] Unhandled body type/content-type`)
                 }
-
-                console.log(`[ADAPTER DEBUG] Extracted ${events.length} events, UUIDs: ${events.map(e => e.uuid).filter(Boolean).join(',')}`)
-                if (events.length > 0) {
-                    console.log(`[ADAPTER DEBUG] First event keys:`, Object.keys(events[0]).join(','))
-                    console.log(`[ADAPTER DEBUG] First event distinct_id:`, events[0].distinct_id)
-                    console.log(`[ADAPTER DEBUG] First event token:`, events[0].token || events[0].api_key)
-                    console.log(`[ADAPTER DEBUG] First event properties.$distinct_id:`, events[0].properties?.distinct_id)
-                }
-            } else {
-                console.log(`[ADAPTER DEBUG] No body in request`)
+                // Note: Blob bodies (gzipped data) are not parsed
             }
 
             // Extract retry count from URL if present
@@ -197,14 +165,11 @@ global.fetch = async (url, options) => {
                 uuid_list: events.map(e => e.uuid).filter(Boolean),
             })
 
-            console.log(`[ADAPTER DEBUG] Recorded request: status=${response.status}, events=${events.length}, retry=${retryCount}`)
-
             if (response.status === 200) {
                 state.totalEventsSent += events.length
             }
         } catch (e) {
             // Ignore parsing errors
-            console.error('[ADAPTER DEBUG] Error parsing request:', e)
         }
     }
 
@@ -212,22 +177,14 @@ global.fetch = async (url, options) => {
 }
 
 // Import the built browser SDK AFTER setting up overrides
-console.log('[ADAPTER] Importing PostHog SDK...')
 const PostHogModule = require('../../packages/browser/dist/module')
 
 // Create a PostHog instance
 const { PostHog } = PostHogModule
 const posthog = new PostHog()
-console.log('[ADAPTER] PostHog instance created')
 
 const app = express()
 app.use(express.json())
-
-// Log all incoming requests
-app.use((req, res, next) => {
-    console.log(`[ADAPTER] ${req.method} ${req.path}`)
-    next()
-})
 
 app.get('/health', (req, res) => {
     res.json({
@@ -275,8 +232,6 @@ app.post('/init', (req, res) => {
         },
     })
 
-    console.log('[ADAPTER] PostHog initialized with flush_interval:', flush_interval_ms ?? 100, 'flush_at:', flush_at ?? 1)
-
     state.instance = posthog
 
     res.json({ success: true })
@@ -312,43 +267,27 @@ app.post('/capture', (req, res) => {
 })
 
 app.post('/flush', async (req, res) => {
-    console.log('[ADAPTER] /flush called, waiting for events to be sent...')
-    console.log('[ADAPTER] Current state: captured=', state.capturedEvents.length, 'sent=', state.totalEventsSent, 'requests=', state.requestsMade.length)
-
     // Browser SDK doesn't have explicit flush - it uses internal timers
     // Need generous wait for Docker network latency
     await new Promise(resolve => setTimeout(resolve, 2000))
-
-    console.log('[ADAPTER] /flush complete: captured=', state.capturedEvents.length, 'sent=', state.totalEventsSent, 'requests=', state.requestsMade.length)
 
     res.json({ success: true, events_flushed: state.totalEventsSent })
 })
 
 app.get('/state', (req, res) => {
-    console.log('[ADAPTER] /state endpoint HIT!')
-
     const pendingEvents = state.capturedEvents.length - state.totalEventsSent
 
-    console.log('[ADAPTER] /state called, requests_made count:', state.requestsMade.length)
-    console.log('[ADAPTER] /state requests_made:', JSON.stringify(state.requestsMade, null, 2))
-
-    const response = {
+    res.json({
         pending_events: Math.max(0, pendingEvents),
         total_events_captured: state.capturedEvents.length,
         total_events_sent: state.totalEventsSent,
         total_retries: 0,
         last_error: null,
         requests_made: state.requestsMade,
-    }
-
-    console.log('[ADAPTER] /state response:', JSON.stringify(response, null, 2))
-
-    res.json(response)
+    })
 })
 
 app.post('/reset', (req, res) => {
-    console.log('[ADAPTER] /reset called, clearing', state.requestsMade.length, 'tracked requests')
-
     if (state.instance) {
         state.instance.reset()
     }

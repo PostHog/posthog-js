@@ -32,4 +32,5 @@ RUN npm init -y && npm install express jsdom-global
 
 EXPOSE 8080
 
+USER node
 CMD ["node", "adapter.js"]
