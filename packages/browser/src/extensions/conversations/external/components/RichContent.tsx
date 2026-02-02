@@ -17,28 +17,49 @@ interface RichContentProps {
 
 /**
  * Sanitize URL to prevent javascript: and other dangerous protocols.
- * Only allows http:, https:, and relative URLs.
+ * Only allows http:, https:, mailto:, tel:, and relative URLs.
+ *
+ * Security measures:
+ * - Removes ASCII control characters (0x00-0x1F, 0x7F) that could obfuscate protocols
+ * - Removes Unicode whitespace and zero-width characters
+ * - Collapses whitespace when checking protocols to prevent "java script:" bypasses
+ * - Blocks javascript:, vbscript:, data:, and file: protocols
+ * - Blocks protocol-relative URLs (//example.com)
  */
 function sanitizeUrl(url: string): string | undefined {
     if (!url || typeof url !== 'string') {
         return undefined
     }
 
-    const trimmedUrl = url.trim()
+    // Remove ASCII control characters (0x00-0x1F, 0x7F DEL) that could obfuscate protocols
+    // Also remove zero-width characters (U+200B-U+200D, U+FEFF) that could be used for obfuscation
+    // eslint-disable-next-line no-control-regex
+    const cleanedUrl = url.replace(/[\x00-\x1f\x7f\u200b-\u200d\ufeff]/g, '')
+    const trimmedUrl = cleanedUrl.trim()
     if (!trimmedUrl) {
         return undefined
     }
 
-    const lowerUrl = trimmedUrl.toLowerCase()
+    // Collapse all whitespace (including Unicode whitespace) when checking protocol
+    // This prevents bypasses like "java script:" or "java\u00A0script:" (non-breaking space)
+    const normalizedForCheck = trimmedUrl.replace(/\s+/g, '').toLowerCase()
+
+    // Block dangerous protocols
     if (
-        lowerUrl.startsWith('javascript:') ||
-        lowerUrl.startsWith('vbscript:') ||
-        lowerUrl.startsWith('data:') ||
-        lowerUrl.startsWith('file:')
+        normalizedForCheck.startsWith('javascript:') ||
+        normalizedForCheck.startsWith('vbscript:') ||
+        normalizedForCheck.startsWith('data:') ||
+        normalizedForCheck.startsWith('file:')
     ) {
         return undefined
     }
 
+    // Allow relative URLs (check against trimmed URL, not normalized)
+    // Note: We explicitly check for '//' first to block protocol-relative URLs (e.g., //evil.com)
+    // which could be used to load content from attacker-controlled domains
+    if (trimmedUrl.startsWith('//')) {
+        return undefined
+    }
     if (
         trimmedUrl.startsWith('/') ||
         trimmedUrl.startsWith('./') ||
@@ -48,6 +69,8 @@ function sanitizeUrl(url: string): string | undefined {
         return trimmedUrl
     }
 
+    // Allow safe absolute URLs
+    const lowerUrl = trimmedUrl.toLowerCase()
     if (
         lowerUrl.startsWith('http://') ||
         lowerUrl.startsWith('https://') ||
