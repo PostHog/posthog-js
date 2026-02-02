@@ -894,6 +894,149 @@ export class PostHog extends PostHogCore {
   }
 
   /**
+   * Starts session recording.
+   * This method will have no effect if PostHog is not enabled, or if session replay is disabled in your project settings.
+   *
+   * Note: This is only available on iOS and Android. On web/macOS, this is a no-op.
+   *
+   * {@label Session Replay}
+   *
+   * @example
+   * ```js
+   * // Resume the current session recording
+   * await posthog.startSessionRecording()
+   * ```
+   *
+   * @example
+   * ```js
+   * // Start a new session recording
+   * await posthog.startSessionRecording(false)
+   * ```
+   *
+   * @public
+   *
+   * @param resumeCurrent - Whether to resume recording of current session (true) or start a new session (false). Defaults to true.
+   */
+  async startSessionRecording(resumeCurrent: boolean = true): Promise<void> {
+    await this._initPromise
+
+    if (this.isDisabled) {
+      return
+    }
+
+    if (!OptionalReactNativeSessionReplay) {
+      // Web/macOS - silently return
+      return
+    }
+
+    try {
+      // Check if the plugin supports startRecording
+      if (!OptionalReactNativeSessionReplay.startRecording) {
+        this._logger.warn('startRecording is not available. Please update posthog-react-native-session-replay.')
+        return
+      }
+
+      // Check if session replay is already initialized
+      const isEnabled = await OptionalReactNativeSessionReplay.isEnabled()
+
+      if (!isEnabled) {
+        this._logger.warn('Session replay is not enabled. Enable it via options.enableSessionReplay first.')
+        return
+      }
+
+      // Handle session ID if not resuming
+      if (!resumeCurrent) {
+        super.resetSessionId()
+        const newSessionId = this.getSessionId()
+        this._currentSessionId = newSessionId
+      }
+
+      await OptionalReactNativeSessionReplay.startRecording(resumeCurrent)
+      this._enableSessionReplay = true
+      this._logger.info(`Session recording ${resumeCurrent ? 'resumed' : 'started'}.`)
+    } catch (e) {
+      this._logger.error(`Failed to start session recording: ${e}`)
+    }
+  }
+
+  /**
+   * Stops the current session recording if one is in progress.
+   *
+   * Note: This is only available on iOS and Android. On web/macOS, this is a no-op.
+   *
+   * {@label Session Replay}
+   *
+   * @example
+   * ```js
+   * await posthog.stopSessionRecording()
+   * ```
+   *
+   * @public
+   */
+  async stopSessionRecording(): Promise<void> {
+    await this._initPromise
+
+    if (this.isDisabled) {
+      return
+    }
+
+    if (!OptionalReactNativeSessionReplay) {
+      // Web/macOS - silently return
+      return
+    }
+
+    try {
+      // Check if the plugin supports stopRecording
+      if (!OptionalReactNativeSessionReplay.stopRecording) {
+        this._logger.warn('stopRecording is not available. Please update posthog-react-native-session-replay.')
+        return
+      }
+
+      await OptionalReactNativeSessionReplay.stopRecording()
+      this._enableSessionReplay = false
+      this._logger.info('Session recording stopped.')
+    } catch (e) {
+      this._logger.error(`Failed to stop session recording: ${e}`)
+    }
+  }
+
+  /**
+   * Returns whether session replay is currently active.
+   *
+   * Note: This is only available on iOS and Android. On web/macOS, this always returns false.
+   *
+   * {@label Session Replay}
+   *
+   * @example
+   * ```js
+   * const isActive = await posthog.isSessionReplayActive()
+   * ```
+   *
+   * @public
+   *
+   * @returns Whether session replay is currently active
+   */
+  async isSessionReplayActive(): Promise<boolean> {
+    await this._initPromise
+
+    if (this.isDisabled) {
+      return false
+    }
+
+    if (!OptionalReactNativeSessionReplay) {
+      // Web/macOS - always return false
+      return false
+    }
+
+    try {
+      return await OptionalReactNativeSessionReplay.isEnabled()
+    } catch (e) {
+      this._logger.error(`Failed to check session replay status: ${e}`)
+      return false
+    }
+  }
+
+  /**
    * Associates events with a specific user. Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)
    *
    * {@label Identification}
