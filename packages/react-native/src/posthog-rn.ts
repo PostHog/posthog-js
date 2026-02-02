@@ -936,14 +936,6 @@ export class PostHog extends PostHogCore {
         return
       }
 
-      // Check if session replay is already initialized
-      const isEnabled = await OptionalReactNativeSessionReplay.isEnabled()
-
-      if (!isEnabled) {
-        this._logger.warn('Session replay is not enabled. Enable it via options.enableSessionReplay first.')
-        return
-      }
-
       // Handle session ID if not resuming
       if (!resumeCurrent) {
         super.resetSessionId()
@@ -951,6 +943,7 @@ export class PostHog extends PostHogCore {
         this._currentSessionId = newSessionId
       }
 
+      // Let the native SDK handle remote config flag check
       await OptionalReactNativeSessionReplay.startRecording(resumeCurrent)
       this._enableSessionReplay = true
       this._logger.info(`Session recording ${resumeCurrent ? 'resumed' : 'started'}.`)
