@@ -899,6 +899,8 @@ export class PostHog extends PostHogCore {
    *
    * Note: This is only available on iOS and Android. On web/macOS, this is a no-op.
    *
+   * Requires `posthog-react-native-session-replay` version 1.3.0 or higher.
+   *
    * {@label Session Replay}
    *
    * @example
@@ -939,11 +941,12 @@ export class PostHog extends PostHogCore {
       // Handle session ID if not resuming
       if (!resumeCurrent) {
         super.resetSessionId()
-        const newSessionId = this.getSessionId()
+        const newSessionId = super.getSessionId()
         this._currentSessionId = newSessionId
+        // sync with native
+        this._resetSessionId(OptionalReactNativeSessionReplay, String(newSessionId))
       }
 
-      // Let the native SDK handle remote config flag check
       await OptionalReactNativeSessionReplay.startRecording(resumeCurrent)
       this._enableSessionReplay = true
       this._logger.info(`Session recording ${resumeCurrent ? 'resumed' : 'started'}.`)
@@ -956,6 +959,8 @@ export class PostHog extends PostHogCore {
    * Stops the current session recording if one is in progress.
    *
    * Note: This is only available on iOS and Android. On web/macOS, this is a no-op.
+   *
+   * Requires `posthog-react-native-session-replay` version 1.3.0 or higher.
    *
    * {@label Session Replay}
    *
