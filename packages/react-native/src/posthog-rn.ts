@@ -1088,11 +1088,7 @@ export class PostHog extends PostHogCore {
     userPropertiesToSetOnce?: { [key: string]: string },
     reloadFeatureFlags = true
   ): void {
-    super.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce)
-
-    if (reloadFeatureFlags) {
-      this.reloadFeatureFlags()
-    }
+    super.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce, reloadFeatureFlags)
   }
 
   public async getSurveys(): Promise<SurveyResponse['surveys']> {

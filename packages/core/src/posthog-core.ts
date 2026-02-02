@@ -1196,10 +1196,12 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    *   These properties will overwrite any existing values for the same keys.
    * @param userPropertiesToSetOnce - Optional: An object of properties to store about the user.
    *   If a property is previously set, this does not override that value.
+   * @param reloadFeatureFlags - Whether to reload feature flags after setting the properties. Defaults to true.
    */
   setPersonProperties(
     userPropertiesToSet?: { [key: string]: string },
-    userPropertiesToSetOnce?: { [key: string]: string }
+    userPropertiesToSetOnce?: { [key: string]: string },
+    reloadFeatureFlags = true
   ): void {
     this.wrap(() => {
       if (!userPropertiesToSet && !userPropertiesToSetOnce) {
@@ -1214,10 +1216,20 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       // Merge setOnce first, then set to allow overwriting
       const mergedProperties = { ...(userPropertiesToSetOnce || {}), ...(userPropertiesToSet || {}) }
       if (Object.keys(mergedProperties).length > 0) {
-        this.setPersonPropertiesForFlags(mergedProperties)
+        // Directly update persisted properties to avoid triggering reload in subclasses
+        const existingProperties =
+          this.getPersistedProperty<Record<string, string>>(PostHogPersistedProperty.PersonProperties) || {}
+        this.setPersistedProperty<PostHogEventProperties>(PostHogPersistedProperty.PersonProperties, {
+          ...existingProperties,
+          ...mergedProperties,
+        })
       }
 
       this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
+
+      if (reloadFeatureFlags) {
+        this.reloadFeatureFlags()
+      }
     })
   }
 
