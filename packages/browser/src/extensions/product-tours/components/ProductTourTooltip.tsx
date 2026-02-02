@@ -14,6 +14,7 @@ import {
     TooltipDimensions,
     PositionResult,
     findStepElement,
+    hasElementTarget,
 } from '../product-tours-utils'
 import { getPopoverPosition } from '../../surveys/surveys-extension-utils'
 import { addEventListener } from '../../../utils'
@@ -128,8 +129,8 @@ export function ProductTourTooltip({
     const isTransitioningRef = useRef(false)
     const resolvedElementRef = useRef<HTMLElement | null>(targetElement)
 
-    // Modal and survey steps use screen positioning (not anchored to an element)
-    const isScreenPositioned = displayedStep.type === 'modal' || displayedStep.type === 'survey'
+    // Steps without element targeting use screen positioning
+    const isScreenPositioned = !hasElementTarget(displayedStep) || displayedStep.type === 'survey'
 
     useLayoutEffect(() => {
         resolvedElementRef.current = targetElement
@@ -168,8 +169,8 @@ export function ProductTourTooltip({
         }
 
         const enterStep = () => {
-            // Only scroll/position for element steps
-            if (resolvedElementRef.current && step.type === 'element') {
+            // Only scroll/position for steps with element targeting
+            if (resolvedElementRef.current && hasElementTarget(step)) {
                 if (!resolvedElementRef.current.isConnected) {
                     resolvedElementRef.current = findStepElement(step).element
                 }
@@ -201,8 +202,8 @@ export function ProductTourTooltip({
         setTimeout(() => {
             if (previousStepRef.current !== currentStepIndex) return
 
-            // Reset position for element steps to prevent flash at old position
-            if (step.type === 'element') {
+            // Reset position for element-targeted steps to prevent flash at old position
+            if (hasElementTarget(step)) {
                 setPosition(null)
                 setSpotlightStyle(null)
                 setIsMeasured(false)

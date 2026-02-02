@@ -28,6 +28,13 @@ export interface ElementFindResult {
     matchCount: number
 }
 
+export function hasElementTarget(step: ProductTourStep): boolean {
+    if (step.useManualSelector) {
+        return !!step.selector
+    }
+    return !!step.inferenceData
+}
+
 export function findElementBySelector(selector: string): ElementFindResult {
     try {
         const elements = document.querySelectorAll(selector)
