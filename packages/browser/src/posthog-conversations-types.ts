@@ -74,6 +74,37 @@ export interface ConversationsRemoteConfig {
 export type MessageAuthorType = 'customer' | 'AI' | 'human'
 
 /**
+ * TipTap mark types for inline formatting
+ */
+export interface TipTapMark {
+    type: 'bold' | 'italic' | 'underline' | 'strike' | 'code' | 'link'
+    attrs?: {
+        href?: string
+        target?: string
+        [key: string]: unknown
+    }
+}
+
+/**
+ * TipTap node representing content in the document tree
+ */
+export interface TipTapNode {
+    type: string
+    attrs?: Record<string, unknown>
+    content?: TipTapNode[]
+    marks?: TipTapMark[]
+    text?: string
+}
+
+/**
+ * TipTap document - the root node of rich content
+ */
+export interface TipTapDoc {
+    type: 'doc'
+    content?: TipTapNode[]
+}
+
+/**
  * A message in a conversation
  */
 export interface Message {
@@ -83,9 +114,15 @@ export interface Message {
     id: string
 
     /**
-     * The message content/text
+     * The message content as plain text (fallback)
      */
     content: string
+
+    /**
+     * Rich content in TipTap JSON format (preferred for rendering)
+     * Falls back to `content` if missing or invalid
+     */
+    rich_content?: TipTapDoc
 
     /**
      * Type of the message author
