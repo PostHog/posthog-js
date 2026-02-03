@@ -207,7 +207,6 @@ const plugins = (es5, noExternal) => [
                               'posthog',
                               'version',
                               'surveys',
-                              'feedbackManager',
                               'calculateEventProperties',
 
                               // possibly used by naughty users - we should decide if we want make these part of the public API, but be cautious for now

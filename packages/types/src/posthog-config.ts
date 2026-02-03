@@ -799,13 +799,6 @@ export interface PostHogConfig {
     disable_product_tours: boolean
 
     /**
-     * Determines whether PostHog should disable all feedback recording functionality.
-     *
-     * @default true (disabled until feature is ready for GA)
-     */
-    disable_feedback_recording: boolean
-
-    /**
      * Survey-specific configuration options.
      *
      * @default undefined

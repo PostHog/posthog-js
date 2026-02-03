@@ -14,14 +14,7 @@ import type { SAMPLED } from './extensions/replay/external/triggerMatching'
 export type { Property, Properties, JsonType, JsonRecord } from '@posthog/types'
 
 // Capture types
-export type {
-    KnownEventName,
-    EventName,
-    CaptureResult,
-    CaptureOptions,
-    BeforeSendFn,
-    UserFeedbackRecordingResult,
-} from '@posthog/types'
+export type { KnownEventName, EventName, CaptureResult, CaptureOptions, BeforeSendFn } from '@posthog/types'
 
 // Feature flag types
 export type {
@@ -277,11 +270,6 @@ export interface RemoteConfig {
      * Whether product tours are enabled
      */
     productTours?: boolean
-
-    /**
-     * Whether feedback recording is enabled
-     */
-    feedbackRecording?: boolean
 
     /**
      * Parameters for the toolbar

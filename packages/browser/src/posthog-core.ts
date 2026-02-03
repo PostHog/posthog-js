@@ -111,7 +111,6 @@ import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
 import { SessionRecording } from './extensions/replay/session-recording'
-import { FeedbackRecordingManager } from './extensions/feedback-recording'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -193,7 +192,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_surveys_automatic_display: false,
     disable_conversations: false,
     disable_product_tours: true,
-    disable_feedback_recording: true,
     disable_external_dependency_loading: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
@@ -346,7 +344,6 @@ export class PostHog implements PostHogInterface {
     deadClicksAutocapture?: DeadClicksAutocapture
     historyAutocapture?: HistoryAutocapture
     productTours?: PostHogProductTours
-    feedbackManager?: FeedbackRecordingManager
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -735,10 +732,6 @@ export class PostHog implements PostHogInterface {
         })
 
         initTasks.push(() => {
-            this.feedbackManager = new FeedbackRecordingManager(this)
-        })
-
-        initTasks.push(() => {
             this.heatmaps = new Heatmaps(this)
             this.heatmaps.startIfEnabled()
         })
@@ -855,7 +848,6 @@ export class PostHog implements PostHogInterface {
         this.logs.onRemoteConfig(config)
         this.conversations.onRemoteConfig(config)
         this.productTours?.onRemoteConfig(config)
-        this.feedbackManager?.onRemoteConfig(config)
         this.webVitalsAutocapture?.onRemoteConfig(config)
         this.exceptionObserver?.onRemoteConfig(config)
         this.exceptions.onRemoteConfig(config)
