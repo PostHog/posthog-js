@@ -30,7 +30,7 @@ import {
 import { Compression, FeatureFlagError, PostHogPersistedProperty } from './types'
 import { maybeAdd, PostHogCoreStateless, QuotaLimitedFeature } from './posthog-core-stateless'
 import { uuidv7 } from './vendor/uuidv7'
-import { isEmptyObject, isPlainError } from './utils'
+import { isEmptyObject, isNullish, isPlainError } from './utils'
 
 export abstract class PostHogCore extends PostHogCoreStateless {
   // options
@@ -1208,7 +1208,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     reloadFeatureFlags = true
   ): void {
     this.wrap(() => {
-      if (isEmptyObject(userPropertiesToSet) && isEmptyObject(userPropertiesToSetOnce)) {
+      const isSetEmpty = isNullish(userPropertiesToSet) || isEmptyObject(userPropertiesToSet)
+      const isSetOnceEmpty = isNullish(userPropertiesToSetOnce) || isEmptyObject(userPropertiesToSetOnce)
+      if (isSetEmpty && isSetOnceEmpty) {
         return
       }
 
