@@ -1,4 +1,22 @@
 // Inline styles following PostHog design system
+
+/**
+ * Calculate contrasting text color (black or white) based on background brightness
+ * Uses HSP (Highly Sensitive Purity) brightness formula
+ */
+function getContrastTextColor(hexColor: string): string {
+    const hex = hexColor.replace(/^#/, '')
+    const fullHex = hex.length === 3 ? hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2] : hex
+
+    const r = parseInt(fullHex.slice(0, 2), 16)
+    const g = parseInt(fullHex.slice(2, 4), 16)
+    const b = parseInt(fullHex.slice(4, 6), 16)
+
+    // HSP brightness formula
+    const hsp = Math.sqrt(0.299 * (r * r) + 0.587 * (g * g) + 0.114 * (b * b))
+    return hsp > 127.5 ? '#020617' : 'white'
+}
+
 export const getStyles = (primaryColor: string) => ({
     widget: {
         position: 'fixed' as const,
@@ -15,7 +33,7 @@ export const getStyles = (primaryColor: string) => ({
         height: '50px',
         borderRadius: '50%',
         background: primaryColor,
-        color: 'white',
+        color: getContrastTextColor(primaryColor),
         border: 'none',
         cursor: 'pointer',
         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
@@ -64,7 +82,7 @@ export const getStyles = (primaryColor: string) => ({
     },
     header: {
         background: primaryColor,
-        color: 'white',
+        color: getContrastTextColor(primaryColor),
         padding: '8px 12px',
         display: 'flex',
         justifyContent: 'space-between',
@@ -82,7 +100,7 @@ export const getStyles = (primaryColor: string) => ({
     headerButton: {
         background: 'transparent',
         border: 'none',
-        color: 'white',
+        color: getContrastTextColor(primaryColor),
         cursor: 'pointer',
         padding: '6px 8px',
         fontSize: '16px',
@@ -130,7 +148,7 @@ export const getStyles = (primaryColor: string) => ({
     },
     messageContentCustomer: {
         background: primaryColor,
-        color: 'white',
+        color: getContrastTextColor(primaryColor),
         borderBottomRightRadius: '2px',
     },
     messageContentAgent: {
@@ -185,7 +203,7 @@ export const getStyles = (primaryColor: string) => ({
         height: '33px', // Match input minHeight for vertical alignment
         borderRadius: '10px',
         background: primaryColor,
-        color: 'white',
+        color: getContrastTextColor(primaryColor),
         border: 'none',
         cursor: 'pointer',
         display: 'flex',
@@ -252,7 +270,7 @@ export const getStyles = (primaryColor: string) => ({
         padding: '12px 16px',
         borderRadius: '6px',
         background: primaryColor,
-        color: 'white',
+        color: getContrastTextColor(primaryColor),
         border: 'none',
         cursor: 'pointer',
         fontSize: '14px',
