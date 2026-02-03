@@ -1219,9 +1219,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       // Update person properties for feature flags evaluation
       // Merge setOnce first, then set to allow overwriting
       const mergedProperties = { ...(userPropertiesToSetOnce || {}), ...(userPropertiesToSet || {}) }
-      if (Object.keys(mergedProperties).length > 0) {
-        this.setPersonPropertiesForFlags(mergedProperties, reloadFeatureFlags)
-      }
+      this.setPersonPropertiesForFlags(mergedProperties, reloadFeatureFlags)
 
       this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
     })
