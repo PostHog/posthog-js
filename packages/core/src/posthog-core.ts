@@ -30,7 +30,7 @@ import {
 import { Compression, FeatureFlagError, PostHogPersistedProperty } from './types'
 import { maybeAdd, PostHogCoreStateless, QuotaLimitedFeature } from './posthog-core-stateless'
 import { uuidv7 } from './vendor/uuidv7'
-import { isPlainError } from './utils'
+import { isEmptyObject, isNullish, isPlainError } from './utils'
 
 export abstract class PostHogCore extends PostHogCoreStateless {
   // options
@@ -429,16 +429,20 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   /***
    * PROPERTIES
    ***/
-  setPersonPropertiesForFlags(properties: { [type: string]: string }): void {
+  setPersonPropertiesForFlags(properties: { [type: string]: JsonType }, reloadFeatureFlags = true): void {
     this.wrap(() => {
       // Get persisted person properties
       const existingProperties =
-        this.getPersistedProperty<Record<string, string>>(PostHogPersistedProperty.PersonProperties) || {}
+        this.getPersistedProperty<Record<string, JsonType>>(PostHogPersistedProperty.PersonProperties) || {}
 
       this.setPersistedProperty<PostHogEventProperties>(PostHogPersistedProperty.PersonProperties, {
         ...existingProperties,
         ...properties,
       })
+
+      if (reloadFeatureFlags) {
+        this.reloadFeatureFlags()
+      }
     })
   }
 
@@ -1160,6 +1164,67 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     // Capture a $set event to create the person profile
     // We don't set any properties here, but the server will create the profile
     this.capture('$set', { $set: {}, $set_once: {} })
+  }
+
+  /**
+   * Sets properties on the person profile associated with the current `distinct_id`.
+   * Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)
+   *
+   * {@label Identification}
+   *
+   * @remarks
+   * Updates user properties that are stored with the person profile in PostHog.
+   * If `personProfiles` is set to `identified_only` and no profile exists, this will create one.
+   *
+   * @example
+   * ```js
+   * // set user properties
+   * posthog.setPersonProperties({
+   *     email: 'user@example.com',
+   *     plan: 'premium'
+   * })
+   * ```
+   *
+   * @example
+   * ```js
+   * // set properties with $set_once
+   * posthog.setPersonProperties(
+   *     { name: 'Max Hedgehog' },  // $set properties
+   *     { initial_url: '/blog' }   // $set_once properties
+   * )
+   * ```
+   *
+   * @public
+   *
+   * @param userPropertiesToSet - Optional: An object of properties to store about the user.
+   *   These properties will overwrite any existing values for the same keys.
+   * @param userPropertiesToSetOnce - Optional: An object of properties to store about the user.
+   *   If a property is previously set, this does not override that value.
+   * @param reloadFeatureFlags - Whether to reload feature flags after setting the properties. Defaults to true.
+   */
+  setPersonProperties(
+    userPropertiesToSet?: { [key: string]: JsonType },
+    userPropertiesToSetOnce?: { [key: string]: JsonType },
+    reloadFeatureFlags = true
+  ): void {
+    this.wrap(() => {
+      const isSetEmpty = isNullish(userPropertiesToSet) || isEmptyObject(userPropertiesToSet)
+      const isSetOnceEmpty = isNullish(userPropertiesToSetOnce) || isEmptyObject(userPropertiesToSetOnce)
+      if (isSetEmpty && isSetOnceEmpty) {
+        return
+      }
+
+      if (!this._requirePersonProcessing('posthog.setPersonProperties')) {
+        return
+      }
+
+      // Update person properties for feature flags evaluation
+      // Merge setOnce first, then set to allow overwriting
+      const mergedProperties = { ...(userPropertiesToSetOnce || {}), ...(userPropertiesToSet || {}) }
+      this.setPersonPropertiesForFlags(mergedProperties, reloadFeatureFlags)
+
+      this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
+    })
   }
 
   /**

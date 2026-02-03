@@ -987,6 +987,32 @@ describe('PostHog React Native', () => {
         expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
       })
 
+      it('should reload feature flags by default when calling setPersonProperties', async () => {
+        posthog.setPersonProperties({ email: 'test@example.com' })
+
+        await waitForExpect(200, () => {
+          expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/flags/'),
+            expect.any(Object)
+          )
+        })
+      })
+
+      it('should not reload feature flags when reloadFeatureFlags is false for setPersonProperties', async () => {
+        // Clear any previous calls
+        ;(globalThis as any).window.fetch.mockClear()
+
+        posthog.setPersonProperties({ email: 'test@example.com' }, undefined, false)
+
+        // Wait for any async operations
+        await new Promise((resolve) => setTimeout(resolve, 100))
+
+        // Should have the batch call for $set event, but not a flags call
+        const allCalls = (globalThis as any).window.fetch.mock.calls
+        const flagsCalls = allCalls.filter((call: any) => call[0].includes('/flags/'))
+        expect(flagsCalls.length).toBe(0)
+      })
+
       it('should reload feature flags by default when calling resetGroupPropertiesForFlags', async () => {
         posthog.setGroupPropertiesForFlags({ company: { name: 'Acme Inc' } }, false)
         ;(globalThis as any).window.fetch.mockClear()
