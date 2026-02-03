@@ -154,11 +154,15 @@ let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 &&
 
 const defaultsThatVaryByConfig = (
     defaults?: ConfigDefaults
-): Pick<PostHogConfig, 'rageclick' | 'capture_pageview' | 'session_recording' | 'external_scripts_inject_target'> => ({
+): Pick<
+    PostHogConfig,
+    'rageclick' | 'capture_pageview' | 'session_recording' | 'external_scripts_inject_target' | 'test_user_hostname'
+> => ({
     rageclick: defaults && defaults >= '2025-11-30' ? { content_ignorelist: true } : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
     external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
+    test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
@@ -862,6 +866,16 @@ export class PostHog implements PostHogInterface {
         }
 
         this._start_queue_if_opted_in()
+
+        // Check if current hostname matches test_user_hostname pattern and mark as test user before any events
+        if (this.config.test_user_hostname && location?.hostname) {
+            const hostname = location.hostname
+            const pattern = this.config.test_user_hostname
+            const matches = typeof pattern === 'string' ? hostname === pattern : pattern.test(hostname)
+            if (matches) {
+                this.setTestUser()
+            }
+        }
 
         // this happens after "loaded" so a user can call identify or any other things before the pageview fires
         if (this.config.capture_pageview) {
@@ -3165,6 +3179,34 @@ export class PostHog implements PostHogInterface {
         }
         // sent a $set event. We don't set any properties here, but attribution props will be added later
         this.setPersonProperties({}, {})
+    }
+
+    /**
+     * Marks the current user as a test user by setting the `$test_user` person property to `true`.
+     * This also enables person processing for the current user.
+     *
+     * This is useful for using in a cohort your internal/test filters for your posthog org.
+     * @see https://posthog.com/tutorials/filter-internal-users
+     * Create a cohort with `$test_user` IS SET, and set your internal test filters to be NOT IN that cohort.
+     *
+     * {@label Identification}
+     *
+     * @example
+     * ```js
+     * // Manually mark as test user
+     * posthog.setTestUser()
+     *
+     * // Or use test_user_hostname config for automatic detection
+     * posthog.init('token', { test_user_hostname: 'localhost' })
+     * ```
+     *
+     * @public
+     */
+    setTestUser(): void {
+        if (!this._requirePersonProcessing('posthog.setTestUser')) {
+            return
+        }
+        this.setPersonProperties({ $test_user: true })
     }
 
     /**
