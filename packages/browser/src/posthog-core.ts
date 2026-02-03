@@ -111,7 +111,7 @@ import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
 import { SessionRecording } from './extensions/replay/session-recording'
-import { FeedbackRecordingManager } from './extensions/feedback-recording'
+import { FeedbackRecordingManager } from './posthog-feedback-recording'
 
 /*
 SIMPLE STYLE GUIDE:
