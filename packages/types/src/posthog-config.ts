@@ -1368,7 +1368,7 @@ export interface PostHogConfig {
     /**
      * A hostname pattern to match test environments. When the current hostname matches,
      * `setTestUser()` is called automatically on startup, enabling person processing
-     * and setting `$test_user: true`.
+     * and setting `$internal_or_test_user: true`.
      *
      * Can be a string (exact match) or RegExp (pattern match).
      * Set to `null` to explicitly disable (useful when using `defaults: '2026-01-30'`).

@@ -383,7 +383,7 @@ describe('posthog core', () => {
             return { posthog, beforeSendMock }
         }
 
-        it('should set $test_user person property to true', () => {
+        it('should set $internal_or_test_user person property to true', () => {
             const { posthog, beforeSendMock } = setup({ person_profiles: 'always' })
 
             posthog.setTestUser()
@@ -391,7 +391,7 @@ describe('posthog core', () => {
             expect(beforeSendMock).toHaveBeenCalledTimes(1)
             const call = beforeSendMock.mock.calls[0][0]
             expect(call.event).toEqual('$set')
-            expect(call.properties.$set).toEqual({ $test_user: true })
+            expect(call.properties.$set).toEqual({ $internal_or_test_user: true })
         })
 
         it('should enable person processing when called in identified_only mode', () => {
@@ -433,7 +433,7 @@ describe('posthog core', () => {
 
                 const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
                 expect(setEvents.length).toEqual(1)
-                expect(setEvents[0][0].properties.$set).toEqual({ $test_user: true })
+                expect(setEvents[0][0].properties.$set).toEqual({ $internal_or_test_user: true })
             })
 
             it('should work with string exact match', () => {
