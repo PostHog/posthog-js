@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.338.0
+
+### Minor Changes
+
+- [#3020](https://github.com/PostHog/posthog-js/pull/3020) [`5ccf27e`](https://github.com/PostHog/posthog-js/commit/5ccf27e1eb37f349c0f9602830df65a7cd3d02a4) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Fix issue with contrast colors in support widget
+  (2026-02-03)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.338.0
+
 ## 1.337.1
 
 ### Patch Changes
