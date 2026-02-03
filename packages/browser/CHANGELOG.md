@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.339.1
+
+### Patch Changes
+
+- [#3007](https://github.com/PostHog/posthog-js/pull/3007) [`af665cc`](https://github.com/PostHog/posthog-js/commit/af665cc98b2fe2f59bdc5226bcf616b0a5bd0f25) Thanks [@adboio](https://github.com/adboio)! - add element inference precision to tours; do not mark as shown until we know first step rendered successfully
+  (2026-02-03)
+- Updated dependencies []:
+    - @posthog/types@1.339.1
+
 ## 1.339.0
 
 ### Minor Changes
