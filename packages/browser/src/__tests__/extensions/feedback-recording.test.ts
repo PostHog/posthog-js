@@ -1,27 +1,40 @@
-import { FeedbackRecordingManager, generateFeedbackRecording } from '../../extensions/feedback-recording'
-import * as FeedbackUI from '../../extensions/feedback-recording/components/FeedbackRecordingUI'
+import { FeedbackRecordingManager } from '../../posthog-feedback-recording'
 import { PostHog } from '../../posthog-core'
 import { RemoteConfig } from '../../types'
 import { assignableWindow } from '../../utils/globals'
 import { createMockPostHog } from '../helpers/posthog-instance'
-import { AudioRecorder } from '../../extensions/feedback-recording/audio-recorder'
 import '@testing-library/jest-dom'
-
-jest.mock('../../extensions/feedback-recording/components/FeedbackRecordingUI')
 
 describe('FeedbackRecordingManager', () => {
     let instance: PostHog
     let manager: FeedbackRecordingManager
-    let audioRecorderMock: jest.Mocked<AudioRecorder>
+    let extensionMock: {
+        renderFeedbackRecordingUI: jest.Mock
+        removeUI: jest.Mock
+        startAudioRecording: jest.Mock
+        stopAudioRecording: jest.Mock
+        cancelAudioRecording: jest.Mock
+        isAudioRecording: jest.Mock
+    }
     let loadScriptMock: jest.Mock
     let originalFileReader: typeof FileReader
 
     beforeEach(() => {
         originalFileReader = global.FileReader
+
+        extensionMock = {
+            renderFeedbackRecordingUI: jest.fn(),
+            removeUI: jest.fn(),
+            startAudioRecording: jest.fn().mockResolvedValue(undefined),
+            stopAudioRecording: jest.fn().mockResolvedValue(null),
+            cancelAudioRecording: jest.fn().mockResolvedValue(undefined),
+            isAudioRecording: jest.fn().mockReturnValue(false),
+        }
+
         loadScriptMock = jest.fn()
         loadScriptMock.mockImplementation((_ph, _path, callback) => {
             assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
-            assignableWindow.__PosthogExtensions__.generateFeedbackRecording = generateFeedbackRecording
+            assignableWindow.__PosthogExtensions__.generateFeedbackRecording = () => extensionMock
             callback()
         })
 
@@ -48,16 +61,7 @@ describe('FeedbackRecordingManager', () => {
             sessionRecording: {} as any,
         })
 
-        audioRecorderMock = {
-            startRecording: jest.fn().mockResolvedValue(undefined),
-            stopRecording: jest.fn().mockResolvedValue(null),
-            cancelRecording: jest.fn().mockResolvedValue(undefined),
-            isRecording: jest.fn().mockReturnValue(false),
-            isSupported: jest.fn().mockReturnValue(true),
-            getSupportedMimeTypes: jest.fn().mockReturnValue(['audio/webm']),
-        } as unknown as jest.Mocked<AudioRecorder>
-
-        manager = new FeedbackRecordingManager(instance, audioRecorderMock)
+        manager = new FeedbackRecordingManager(instance)
 
         // Enable feedback recording via remote config for most tests
         manager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
@@ -84,7 +88,7 @@ describe('FeedbackRecordingManager', () => {
     describe('onRemoteConfig', () => {
         it('should not enable feedback recording if disabled via config', () => {
             instance.config._experimental_disable_feedback_recording = true
-            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+            const newManager = new FeedbackRecordingManager(instance)
 
             newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
 
@@ -95,7 +99,7 @@ describe('FeedbackRecordingManager', () => {
 
         it('should enable feedback recording when server returns true', () => {
             instance.config._experimental_disable_feedback_recording = false
-            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+            const newManager = new FeedbackRecordingManager(instance)
 
             newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
 
@@ -105,7 +109,7 @@ describe('FeedbackRecordingManager', () => {
 
         it('should not enable feedback recording when server returns false', () => {
             instance.config._experimental_disable_feedback_recording = false
-            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+            const newManager = new FeedbackRecordingManager(instance)
 
             newManager.onRemoteConfig({ feedbackRecording: false } as RemoteConfig)
 
@@ -114,7 +118,7 @@ describe('FeedbackRecordingManager', () => {
 
         it('should not enable feedback recording when server returns undefined', () => {
             instance.config._experimental_disable_feedback_recording = false
-            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+            const newManager = new FeedbackRecordingManager(instance)
 
             newManager.onRemoteConfig({} as RemoteConfig)
 
@@ -129,66 +133,66 @@ describe('FeedbackRecordingManager', () => {
 
         it('should not launch UI when disabled via config', async () => {
             instance.config._experimental_disable_feedback_recording = true
-            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+            const newManager = new FeedbackRecordingManager(instance)
             newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
 
             await newManager.launchFeedbackRecordingUI(jest.fn())
 
-            expect(FeedbackUI.renderFeedbackRecordingUI).not.toHaveBeenCalled()
+            expect(extensionMock.renderFeedbackRecordingUI).not.toHaveBeenCalled()
         })
 
         it('should not launch UI when remote config not loaded yet', async () => {
             instance.config._experimental_disable_feedback_recording = false
-            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+            const newManager = new FeedbackRecordingManager(instance)
             // Don't call onRemoteConfig - simulating remote config not loaded yet
 
             await newManager.launchFeedbackRecordingUI(jest.fn())
 
-            expect(FeedbackUI.renderFeedbackRecordingUI).not.toHaveBeenCalled()
+            expect(extensionMock.renderFeedbackRecordingUI).not.toHaveBeenCalled()
         })
 
         it('should not launch UI when not enabled server-side', async () => {
             instance.config._experimental_disable_feedback_recording = false
-            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+            const newManager = new FeedbackRecordingManager(instance)
             newManager.onRemoteConfig({ feedbackRecording: false } as RemoteConfig)
 
             await newManager.launchFeedbackRecordingUI(jest.fn())
 
-            expect(FeedbackUI.renderFeedbackRecordingUI).not.toHaveBeenCalled()
+            expect(extensionMock.renderFeedbackRecordingUI).not.toHaveBeenCalled()
         })
 
         it('should not launch UI when session recording is disabled', async () => {
             instance.config._experimental_disable_feedback_recording = false
             instance.config.disable_session_recording = true
-            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+            const newManager = new FeedbackRecordingManager(instance)
             newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
 
             await newManager.launchFeedbackRecordingUI(jest.fn())
 
-            expect(FeedbackUI.renderFeedbackRecordingUI).not.toHaveBeenCalled()
+            expect(extensionMock.renderFeedbackRecordingUI).not.toHaveBeenCalled()
         })
 
         it('should not launch UI when session recording is not loaded', async () => {
             instance.config._experimental_disable_feedback_recording = false
             instance.config.disable_session_recording = false
             ;(instance as any).sessionRecording = undefined
-            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+            const newManager = new FeedbackRecordingManager(instance)
             newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
 
             await newManager.launchFeedbackRecordingUI(jest.fn())
 
-            expect(FeedbackUI.renderFeedbackRecordingUI).not.toHaveBeenCalled()
+            expect(extensionMock.renderFeedbackRecordingUI).not.toHaveBeenCalled()
         })
 
         it('should launch UI when enabled in both config and server-side', async () => {
             instance.config._experimental_disable_feedback_recording = false
             instance.config.disable_session_recording = false
-            const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
+            const newManager = new FeedbackRecordingManager(instance)
             newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
 
             await newManager.launchFeedbackRecordingUI(jest.fn())
 
-            expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalled()
+            expect(extensionMock.renderFeedbackRecordingUI).toHaveBeenCalled()
         })
     })
 
@@ -204,12 +208,12 @@ describe('FeedbackRecordingManager', () => {
 
             expect(assignableWindow.__PosthogExtensions__?.generateFeedbackRecording).toBeDefined()
             expect(loadScriptMock).toHaveBeenCalledTimes(1)
-            expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalled()
+            expect(extensionMock.renderFeedbackRecordingUI).toHaveBeenCalled()
 
             // if called again, should not load again
             await manager.launchFeedbackRecordingUI(jest.fn())
             expect(loadScriptMock).toHaveBeenCalledTimes(1)
-            expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalled()
+            expect(extensionMock.renderFeedbackRecordingUI).toHaveBeenCalled()
         })
 
         it('should successfully launch UI when no recording is active', async () => {
@@ -218,9 +222,9 @@ describe('FeedbackRecordingManager', () => {
             const callback = jest.fn()
             await manager.launchFeedbackRecordingUI(callback)
 
-            expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledTimes(1)
+            expect(extensionMock.renderFeedbackRecordingUI).toHaveBeenCalledTimes(1)
 
-            expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledWith(
+            expect(extensionMock.renderFeedbackRecordingUI).toHaveBeenCalledWith(
                 expect.objectContaining({
                     posthogInstance: instance,
                     handleStartRecording: expect.any(Function),
@@ -244,7 +248,7 @@ describe('FeedbackRecordingManager', () => {
             await manager.launchFeedbackRecordingUI(callback)
 
             // UI should not be rendered when loading fails
-            expect(FeedbackUI.renderFeedbackRecordingUI).not.toHaveBeenCalled()
+            expect(extensionMock.renderFeedbackRecordingUI).not.toHaveBeenCalled()
         })
 
         it('should handle concurrent loading attempts', async () => {
@@ -264,9 +268,7 @@ describe('FeedbackRecordingManager', () => {
             await manager.launchFeedbackRecordingUI(callback1)
 
             // Start a recording to make it active
-            const handleStartRecording = (
-                FeedbackUI.renderFeedbackRecordingUI as jest.MockedFunction<typeof FeedbackUI.renderFeedbackRecordingUI>
-            ).mock.lastCall![0].handleStartRecording
+            const handleStartRecording = extensionMock.renderFeedbackRecordingUI.mock.lastCall![0].handleStartRecording
             await handleStartRecording()
 
             expect(manager.isFeedbackRecordingActive()).toBe(true)
@@ -275,7 +277,7 @@ describe('FeedbackRecordingManager', () => {
             await manager.launchFeedbackRecordingUI(callback2)
 
             // Should only have called renderFeedbackRecordingUI once (from first launch)
-            expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledTimes(1)
+            expect(extensionMock.renderFeedbackRecordingUI).toHaveBeenCalledTimes(1)
         })
 
         describe('recording workflow', () => {
@@ -291,28 +293,16 @@ describe('FeedbackRecordingManager', () => {
                 onRecordingEnded = jest.fn()
                 await manager.launchFeedbackRecordingUI(onRecordingEnded)
 
-                handleStartRecording = (
-                    FeedbackUI.renderFeedbackRecordingUI as jest.MockedFunction<
-                        typeof FeedbackUI.renderFeedbackRecordingUI
-                    >
-                ).mock.lastCall![0].handleStartRecording
-                stopCallback = (
-                    FeedbackUI.renderFeedbackRecordingUI as jest.MockedFunction<
-                        typeof FeedbackUI.renderFeedbackRecordingUI
-                    >
-                ).mock.lastCall![0].onRecordingEnded
-                onCancel = (
-                    FeedbackUI.renderFeedbackRecordingUI as jest.MockedFunction<
-                        typeof FeedbackUI.renderFeedbackRecordingUI
-                    >
-                ).mock.lastCall![0].onCancel
+                handleStartRecording = extensionMock.renderFeedbackRecordingUI.mock.lastCall![0].handleStartRecording
+                stopCallback = extensionMock.renderFeedbackRecordingUI.mock.lastCall![0].onRecordingEnded
+                onCancel = extensionMock.renderFeedbackRecordingUI.mock.lastCall![0].onCancel
             })
 
             describe('start', () => {
                 it('calls the correct audio recording methods when starting', async () => {
                     feedbackId = await handleStartRecording()
 
-                    expect(audioRecorderMock.startRecording).toHaveBeenCalledTimes(1)
+                    expect(extensionMock.startAudioRecording).toHaveBeenCalledTimes(1)
                     expect(manager.isFeedbackRecordingActive()).toBe(true)
                     expect(manager.getCurrentFeedbackRecordingId()).toBe(feedbackId)
                 })
@@ -326,7 +316,7 @@ describe('FeedbackRecordingManager', () => {
                 })
 
                 it('continues recording even if audio recording fails', async () => {
-                    audioRecorderMock.startRecording.mockRejectedValue(new Error('Audio not supported'))
+                    extensionMock.startAudioRecording.mockRejectedValue(new Error('Audio not supported'))
 
                     feedbackId = await handleStartRecording()
 
@@ -363,7 +353,7 @@ describe('FeedbackRecordingManager', () => {
                     feedbackId = await handleStartRecording()
                     await stopCallback(feedbackId)
 
-                    expect(audioRecorderMock.stopRecording).toHaveBeenCalledTimes(1)
+                    expect(extensionMock.stopAudioRecording).toHaveBeenCalledTimes(1)
                     expect(onRecordingEnded).toHaveBeenCalledTimes(1)
                     expect(manager.isFeedbackRecordingActive()).toBe(false)
                     expect(manager.getCurrentFeedbackRecordingId()).toBeNull()
@@ -380,7 +370,7 @@ describe('FeedbackRecordingManager', () => {
 
                 it('uploads the audio when recording stops', async () => {
                     const mockBlob = new Blob(['audio data'], { type: 'audio/webm' })
-                    audioRecorderMock.stopRecording.mockResolvedValue({
+                    extensionMock.stopAudioRecording.mockResolvedValue({
                         blob: mockBlob,
                         mimeType: 'audio/webm',
                         durationMs: 5000,
@@ -416,7 +406,7 @@ describe('FeedbackRecordingManager', () => {
                 })
 
                 it('does not upload when no audio blob is returned', async () => {
-                    audioRecorderMock.stopRecording.mockResolvedValue({
+                    extensionMock.stopAudioRecording.mockResolvedValue({
                         blob: null,
                         mimeType: 'audio/webm',
                         durationMs: 0,
@@ -432,7 +422,7 @@ describe('FeedbackRecordingManager', () => {
 
                 it('does not upload when audio blob is too large', async () => {
                     const largeMockBlob = { size: 11 * 1024 * 1024, type: 'audio/webm' } as Blob
-                    audioRecorderMock.stopRecording.mockResolvedValue({
+                    extensionMock.stopAudioRecording.mockResolvedValue({
                         blob: largeMockBlob,
                         mimeType: 'audio/webm',
                         durationMs: 5000,
@@ -447,7 +437,7 @@ describe('FeedbackRecordingManager', () => {
 
                 it('handles FileReader errors during upload', async () => {
                     const mockBlob = new Blob(['audio data'], { type: 'audio/webm' })
-                    audioRecorderMock.stopRecording.mockResolvedValue({
+                    extensionMock.stopAudioRecording.mockResolvedValue({
                         blob: mockBlob,
                         mimeType: 'audio/webm',
                         durationMs: 5000,
@@ -496,11 +486,11 @@ describe('FeedbackRecordingManager', () => {
                 it('should cancel audio recording if in progress', async () => {
                     feedbackId = await handleStartRecording()
 
-                    audioRecorderMock.isRecording.mockReturnValue(true)
+                    extensionMock.isAudioRecording.mockReturnValue(true)
 
                     manager.cleanup()
 
-                    expect(audioRecorderMock.cancelRecording).toHaveBeenCalled()
+                    expect(extensionMock.cancelAudioRecording).toHaveBeenCalled()
                 })
 
                 it('should clear feedback recording state', async () => {
@@ -542,7 +532,7 @@ describe('FeedbackRecordingManager', () => {
 
                     await manager.launchFeedbackRecordingUI(jest.fn())
 
-                    expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledTimes(2)
+                    expect(extensionMock.renderFeedbackRecordingUI).toHaveBeenCalledTimes(2)
                 })
 
                 it('should allow launching UI again after cancellation', async () => {
@@ -550,7 +540,7 @@ describe('FeedbackRecordingManager', () => {
 
                     await manager.launchFeedbackRecordingUI(jest.fn())
 
-                    expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledTimes(2)
+                    expect(extensionMock.renderFeedbackRecordingUI).toHaveBeenCalledTimes(2)
                 })
             })
         })
@@ -564,7 +554,7 @@ describe('FeedbackRecordingManager', () => {
 
             await manager.launchFeedbackRecordingUI(jest.fn())
 
-            expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledTimes(2)
+            expect(extensionMock.renderFeedbackRecordingUI).toHaveBeenCalledTimes(2)
         })
     })
 
@@ -574,15 +564,7 @@ describe('FeedbackRecordingManager', () => {
 
             await manager.launchFeedbackRecordingUI(jest.fn())
 
-            expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledTimes(1)
-        })
-    })
-
-    describe('generateFeedbackRecording', () => {
-        it('should create a new FeedbackRecordingManager instance', () => {
-            const result = generateFeedbackRecording(instance)
-
-            expect(result).toBeInstanceOf(FeedbackRecordingManager)
+            expect(extensionMock.renderFeedbackRecordingUI).toHaveBeenCalledTimes(1)
         })
     })
 })
