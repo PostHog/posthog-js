@@ -33,7 +33,7 @@ export class FeedbackRecordingManager {
 
     onRemoteConfig(response: RemoteConfig): void {
         // Don't enable feedback recording if disabled via config
-        if (this._instance.config.disable_feedback_recording) {
+        if (this._instance.config._experimental_disable_feedback_recording) {
             return
         }
 
@@ -66,7 +66,7 @@ export class FeedbackRecordingManager {
 
     async launchFeedbackRecordingUI(onRecordingEnded?: (result: UserFeedbackRecordingResult) => void): Promise<void> {
         // Check if feedback recording is disabled via config
-        if (this._instance.config.disable_feedback_recording) {
+        if (this._instance.config._experimental_disable_feedback_recording) {
             logger.info('Feedback recording is disabled via config.')
             return
         }
