@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.338.1
+
+### Patch Changes
+
+- [#3002](https://github.com/PostHog/posthog-js/pull/3002) [`3105ff6`](https://github.com/PostHog/posthog-js/commit/3105ff6d0783c77ed75b1eb1be33617d836fd43f) Thanks [@adboio](https://github.com/adboio)! - fix stale element references in multi-page product tours
+  (2026-02-03)
+- Updated dependencies []:
+    - @posthog/types@1.338.1
+
 ## 1.338.0
 
 ### Minor Changes
