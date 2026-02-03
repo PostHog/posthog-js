@@ -36,7 +36,7 @@ function isPromptsWithPostHog(options: PromptsOptions): options is PromptsWithPo
  * // Or with direct options (no PostHog client needed)
  * const prompts = new Prompts({
  *   personalApiKey: 'phx_xxx',
- *   host: 'https://us.i.posthog.com',
+ *   host: 'https://app.posthog.com',
  * })
  *
  * // Fetch with caching and fallback
@@ -67,7 +67,7 @@ export class Prompts {
     } else {
       // Direct options
       this.personalApiKey = options.personalApiKey
-      this.host = options.host ?? 'https://us.i.posthog.com'
+      this.host = options.host ?? 'https://app.posthog.com'
     }
   }
 
@@ -167,7 +167,7 @@ export class Prompts {
       )
     }
 
-    const url = `${this.host}/api/projects/@current/llm_prompts/name/${encodeURIComponent(name)}/`
+    const url = `${this.host}/api/environments/@current/llm_prompts/name/${encodeURIComponent(name)}/`
 
     const response = await fetch(url, {
       method: 'GET',
