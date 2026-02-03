@@ -441,22 +441,28 @@ export class ProductTourManager {
         this._activeTour = tour
         this._setStepIndex(0)
 
-        this._captureEvent('product tour shown', {
-            $product_tour_id: tour.id,
-            $product_tour_name: tour.name,
-            $product_tour_iteration: tour.current_iteration || 1,
-            $product_tour_render_reason: renderReason,
-        })
+        const rendered = this._renderCurrentStep()
 
-        if (!this._isPreviewMode) {
-            localStore._set(`${TOUR_SHOWN_KEY_PREFIX}${tour.id}`, true)
-
-            this._instance.capture('$set', {
-                $set: { [`$product_tour_shown/${tour.id}`]: true },
+        if (rendered) {
+            this._captureEvent('product tour shown', {
+                $product_tour_id: tour.id,
+                $product_tour_name: tour.name,
+                $product_tour_iteration: tour.current_iteration || 1,
+                $product_tour_render_reason: renderReason,
             })
+
+            if (!this._isPreviewMode) {
+                localStore._set(`${TOUR_SHOWN_KEY_PREFIX}${tour.id}`, true)
+
+                this._instance.capture('$set', {
+                    $set: { [`$product_tour_shown/${tour.id}`]: true },
+                })
+            }
+        } else {
+            this._cleanup()
         }
 
-        return this._renderCurrentStep()
+        return rendered
     }
 
     showTourById(tourId: string, reason?: ProductTourRenderReason): void {
@@ -680,6 +686,13 @@ export class ProductTourManager {
                 $product_tour_wait_duration_ms: waitDurationMs,
                 ...inferenceProps,
             })
+
+            if (this._currentStepIndex === 0 && !this._isResuming) {
+                logger.warn(
+                    `Tour "${this._activeTour.name}" failed to show: element for first step not found (${result.error})`
+                )
+                return false
+            }
 
             logger.warn(
                 `Tour "${this._activeTour.name}" dismissed: element for step ${this._currentStepIndex} became unavailable (${result.error})` +
