@@ -915,11 +915,9 @@ export class PostHog extends PostHogCore {
    * await posthog.startSessionRecording(false)
    * ```
    *
-   * @public
-   *
    * @param resumeCurrent - Whether to resume recording of current session (true) or start a new session (false). Defaults to true.
    */
-  async startSessionRecording(resumeCurrent: boolean = true): Promise<void> {
+  public async startSessionRecording(resumeCurrent: boolean = true): Promise<void> {
     await this._initPromise
 
     if (this.isDisabled) {
@@ -942,13 +940,13 @@ export class PostHog extends PostHogCore {
       if (!resumeCurrent) {
         super.resetSessionId()
         const newSessionId = super.getSessionId()
-        this._currentSessionId = newSessionId
-        // sync with native
+        // sync native + rn sessionId
         this._resetSessionId(OptionalReactNativeSessionReplay, String(newSessionId))
+        this._currentSessionId = newSessionId
       }
 
       await OptionalReactNativeSessionReplay.startRecording(resumeCurrent)
-      this._enableSessionReplay = true
+      // this._enableSessionReplay = true
       this._logger.info(`Session recording ${resumeCurrent ? 'resumed' : 'started'}.`)
     } catch (e) {
       this._logger.error(`Failed to start session recording: ${e}`)
@@ -969,9 +967,8 @@ export class PostHog extends PostHogCore {
    * await posthog.stopSessionRecording()
    * ```
    *
-   * @public
    */
-  async stopSessionRecording(): Promise<void> {
+  public async stopSessionRecording(): Promise<void> {
     await this._initPromise
 
     if (this.isDisabled) {
@@ -991,7 +988,7 @@ export class PostHog extends PostHogCore {
       }
 
       await OptionalReactNativeSessionReplay.stopRecording()
-      this._enableSessionReplay = false
+      // this._enableSessionReplay = false
       this._logger.info('Session recording stopped.')
     } catch (e) {
       this._logger.error(`Failed to stop session recording: ${e}`)
