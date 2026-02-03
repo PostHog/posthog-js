@@ -30,7 +30,7 @@ import {
 import { Compression, FeatureFlagError, PostHogPersistedProperty } from './types'
 import { maybeAdd, PostHogCoreStateless, QuotaLimitedFeature } from './posthog-core-stateless'
 import { uuidv7 } from './vendor/uuidv7'
-import { isPlainError } from './utils'
+import { isEmptyObject, isPlainError } from './utils'
 
 export abstract class PostHogCore extends PostHogCoreStateless {
   // options
@@ -429,11 +429,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   /***
    * PROPERTIES
    ***/
-  setPersonPropertiesForFlags(properties: { [type: string]: string }, reloadFeatureFlags = true): void {
+  setPersonPropertiesForFlags(properties: { [type: string]: JsonType }, reloadFeatureFlags = true): void {
     this.wrap(() => {
       // Get persisted person properties
       const existingProperties =
-        this.getPersistedProperty<Record<string, string>>(PostHogPersistedProperty.PersonProperties) || {}
+        this.getPersistedProperty<Record<string, JsonType>>(PostHogPersistedProperty.PersonProperties) || {}
 
       this.setPersistedProperty<PostHogEventProperties>(PostHogPersistedProperty.PersonProperties, {
         ...existingProperties,
@@ -1203,12 +1203,12 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    * @param reloadFeatureFlags - Whether to reload feature flags after setting the properties. Defaults to true.
    */
   setPersonProperties(
-    userPropertiesToSet?: { [key: string]: string },
-    userPropertiesToSetOnce?: { [key: string]: string },
+    userPropertiesToSet?: { [key: string]: JsonType },
+    userPropertiesToSetOnce?: { [key: string]: JsonType },
     reloadFeatureFlags = true
   ): void {
     this.wrap(() => {
-      if (!userPropertiesToSet && !userPropertiesToSetOnce) {
+      if (isEmptyObject(userPropertiesToSet) && isEmptyObject(userPropertiesToSetOnce)) {
         return
       }
 

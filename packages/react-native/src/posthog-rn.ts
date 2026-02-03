@@ -720,7 +720,7 @@ export class PostHog extends PostHogCore {
    * @param properties The person properties to set for flag evaluation
    * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
-  setPersonPropertiesForFlags(properties: Record<string, string>, reloadFeatureFlags = true): void {
+  setPersonPropertiesForFlags(properties: Record<string, JsonType>, reloadFeatureFlags = true): void {
     super.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
   }
 
@@ -1080,8 +1080,8 @@ export class PostHog extends PostHogCore {
    * @param reloadFeatureFlags - Whether to reload feature flags after setting the properties. Defaults to true.
    */
   setPersonProperties(
-    userPropertiesToSet?: { [key: string]: string },
-    userPropertiesToSetOnce?: { [key: string]: string },
+    userPropertiesToSet?: { [key: string]: JsonType },
+    userPropertiesToSetOnce?: { [key: string]: JsonType },
     reloadFeatureFlags = true
   ): void {
     super.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce, reloadFeatureFlags)
