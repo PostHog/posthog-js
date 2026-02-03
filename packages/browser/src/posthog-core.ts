@@ -111,7 +111,7 @@ import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
 import { SessionRecording } from './extensions/replay/session-recording'
-import { FeedbackRecordingManager } from './posthog-feedback-recording'
+import { PostHogFeedbackRecording } from './posthog-feedback-recording'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -346,7 +346,7 @@ export class PostHog implements PostHogInterface {
     deadClicksAutocapture?: DeadClicksAutocapture
     historyAutocapture?: HistoryAutocapture
     productTours?: PostHogProductTours
-    feedbackManager?: FeedbackRecordingManager
+    feedbackManager?: PostHogFeedbackRecording
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -735,7 +735,7 @@ export class PostHog implements PostHogInterface {
         })
 
         initTasks.push(() => {
-            this.feedbackManager = new FeedbackRecordingManager(this)
+            this.feedbackManager = new PostHogFeedbackRecording(this)
         })
 
         initTasks.push(() => {
