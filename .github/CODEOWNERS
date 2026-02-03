@@ -12,9 +12,7 @@ packages/browser/src/utils/survey-event-receiver.ts    @PostHog/team-surveys
 packages/browser/src/utils/survey-utils.ts             @PostHog/team-surveys
 
 # Mobile
-packages/react-native/                                 @PostHog/team-mobile
-examples/example_rn_macos/                             @PostHog/team-mobile
-packages/example-expo-53/                              @PostHog/team-mobile
+packages/react-native/                                 @PostHog/team-client-libraries
 
 # AI
 /packages/ai/package.json                              @PostHog/team-llm-analytics
