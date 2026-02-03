@@ -111,7 +111,7 @@ import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
 import { SessionRecording } from './extensions/replay/session-recording'
-import { FeedbackRecordingManager } from './extensions/feedback-recording'
+import { PostHogFeedbackRecording } from './posthog-feedback-recording'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -193,9 +193,9 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_surveys_automatic_display: false,
     disable_conversations: false,
     disable_product_tours: true,
-    disable_feedback_recording: true,
     disable_external_dependency_loading: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
+    _experimental_disable_feedback_recording: true,
     secure_cookie: window?.location?.protocol === 'https:',
     ip: false,
     opt_out_capturing_by_default: false,
@@ -346,7 +346,7 @@ export class PostHog implements PostHogInterface {
     deadClicksAutocapture?: DeadClicksAutocapture
     historyAutocapture?: HistoryAutocapture
     productTours?: PostHogProductTours
-    feedbackManager?: FeedbackRecordingManager
+    feedbackManager?: PostHogFeedbackRecording
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -735,7 +735,7 @@ export class PostHog implements PostHogInterface {
         })
 
         initTasks.push(() => {
-            this.feedbackManager = new FeedbackRecordingManager(this)
+            this.feedbackManager = new PostHogFeedbackRecording(this)
         })
 
         initTasks.push(() => {

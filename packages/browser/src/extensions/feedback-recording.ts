@@ -1,43 +1,57 @@
-import { isNull, isUndefined } from '@posthog/core'
-import { createLogger } from '../utils/logger'
-import { uuidv7 } from '../uuidv7'
-import { assignableWindow } from '../utils/globals'
-import { RemoteConfig, RequestResponse, UserFeedbackRecordingResult } from '../types'
+import { isNull } from '@posthog/core'
 import { PostHog } from '../posthog-core'
 import { renderFeedbackRecordingUI } from './feedback-recording/components/FeedbackRecordingUI'
 import { removeFeedbackRecordingUIFromDOM } from './feedback-recording/feedback-recording-utils'
 import { AudioRecorder } from './feedback-recording/audio-recorder'
+import { createLogger } from '../utils/logger'
+import { uuidv7 } from '../uuidv7'
+import { RequestResponse, UserFeedbackRecordingResult } from '../types'
 
 const logger = createLogger('[PostHog FeedbackManager]')
 
 const MAX_AUDIO_SIZE = 10 * 1024 * 1024 // 10MB limit to match backend
 
 export class FeedbackRecordingManager {
+    private _posthog: PostHog
+    private _audioRecorder: AudioRecorder
     private _feedbackRecordingId: string | null = null
-    private _isLoaded: boolean = false
-    private _isLoading: boolean = false
-    private _isUIActive: boolean = false
     private _didStartSessionRecording: boolean = false
-    // This is set to undefined until the remote config is loaded
-    // then it's set to true if feedback recording is enabled
-    // or false if feedback recording is disabled in the project settings
-    private _isFeedbackRecordingEnabled?: boolean = undefined
 
-    constructor(
-        private _instance: PostHog,
-        private _audioRecorder: AudioRecorder = new AudioRecorder()
-    ) {
-        // Check if we're in the extension context (loaded from bundle)
-        this._isLoaded = !!assignableWindow?.__PosthogExtensions__?.generateFeedbackRecording
+    constructor(posthog: PostHog) {
+        this._posthog = posthog
+        this._audioRecorder = new AudioRecorder()
     }
 
-    onRemoteConfig(response: RemoteConfig): void {
-        // Don't enable feedback recording if disabled via config
-        if (this._instance.config.disable_feedback_recording) {
-            return
+    launchFeedbackRecordingUI(
+        onRecordingEnded: (result: UserFeedbackRecordingResult) => void,
+        onCancel: () => void
+    ): void {
+        renderFeedbackRecordingUI({
+            posthogInstance: this._posthog,
+            handleStartRecording: () => this._startRecording(),
+            onRecordingEnded: async (feedbackId: string) => {
+                await this._stopRecording(feedbackId, onRecordingEnded)
+            },
+            onCancel: () => {
+                this._resetState()
+                logger.info('Feedback recording UI cancelled')
+                onCancel()
+            },
+        })
+    }
+
+    cleanup(): void {
+        if (this._audioRecorder.isRecording()) {
+            this._audioRecorder.cancelRecording()
         }
 
-        this._isFeedbackRecordingEnabled = !!response.feedbackRecording
+        if (this._didStartSessionRecording) {
+            this._posthog.stopSessionRecording()
+            logger.info('Stopped session recording during cleanup')
+        }
+
+        removeFeedbackRecordingUIFromDOM()
+        this._resetState()
     }
 
     getCurrentFeedbackRecordingId(): string | null {
@@ -48,120 +62,11 @@ export class FeedbackRecordingManager {
         return !isNull(this._feedbackRecordingId)
     }
 
-    public cleanup(): void {
-        if (this._audioRecorder.isRecording()) {
-            this._audioRecorder.cancelRecording()
-        }
-
-        if (this._didStartSessionRecording) {
-            this._instance.stopSessionRecording()
-            logger.info('Stopped session recording during cleanup')
-        }
-
-        this._resetState()
-        removeFeedbackRecordingUIFromDOM()
-
-        logger.info('Feedback recording cleaned up')
-    }
-
-    async launchFeedbackRecordingUI(onRecordingEnded?: (result: UserFeedbackRecordingResult) => void): Promise<void> {
-        // Check if feedback recording is disabled via config
-        if (this._instance.config.disable_feedback_recording) {
-            logger.info('Feedback recording is disabled via config.')
-            return
-        }
-
-        // Wait for remote config to load
-        if (isUndefined(this._isFeedbackRecordingEnabled)) {
-            logger.info('Feedback recording remote config not loaded yet.')
-            return
-        }
-
-        // Check if feedback recording is enabled server-side
-        if (!this._isFeedbackRecordingEnabled) {
-            logger.info('Feedback recording is not enabled for this project.')
-            return
-        }
-
-        // Check if session recording is available since feedback recording depends on it
-        if (this._instance.config.disable_session_recording || !this._instance.sessionRecording) {
-            logger.info('Feedback recording requires session recording to be enabled and loaded.')
-            return
-        }
-
-        if (this._isUIActive) {
-            logger.warn('Feedback recording UI is already active. Request to launch a new UI will be ignored.')
-            return
-        }
-
-        if (this._feedbackRecordingId) {
-            logger.warn(
-                `Feedback recording is already in progress with id ${this._feedbackRecordingId}. Request to start a new recording will be ignored.`
-            )
-            return
-        }
-
-        // Handle lazy loading if not loaded yet
-        if (!this._isLoaded) {
-            if (this._isLoading) {
-                logger.info('Feedback recording is already loading...')
-                return
-            }
-
-            await this._loadFeedbackRecording()
-
-            // eslint-disable-next-line compat/compat
-            if (!this._isLoaded) {
-                logger.error('Failed to load feedback recording')
-                return
-            }
-        }
-
-        this._isUIActive = true
-        this._showFeedbackRecordingUI(onRecordingEnded || (() => {}))
-    }
-
-    private async _loadFeedbackRecording(): Promise<void> {
-        const phExtensions = assignableWindow?.__PosthogExtensions__
-        if (!phExtensions) {
-            logger.error('PostHog Extensions not found')
-            return
-        }
-
-        if (phExtensions.generateFeedbackRecording) {
-            // Already loaded
-            this._isLoaded = true
-            return
-        }
-
-        if (!phExtensions.loadExternalDependency) {
-            logger.error('PostHog loadExternalDependency extension not found')
-            return
-        }
-
-        this._isLoading = true
-
-        // eslint-disable-next-line compat/compat
-        return new Promise((resolve) => {
-            phExtensions.loadExternalDependency!(this._instance, 'feedback-recording', (err) => {
-                this._isLoading = false
-                if (err || !phExtensions.generateFeedbackRecording) {
-                    logger.error('Could not load feedback recording script', err)
-                    this._isLoaded = false
-                } else {
-                    logger.info('Feedback recording loaded successfully')
-                    this._isLoaded = true
-                }
-                resolve()
-            })
-        })
-    }
-
-    async _startFeedbackRecording(): Promise<string> {
+    private async _startRecording(): Promise<string> {
         const feedbackId = uuidv7()
         this._feedbackRecordingId = feedbackId
 
-        this._instance.capture('$user_feedback_recording_started', {
+        this._posthog.capture('$user_feedback_recording_started', {
             $feedback_recording_id: feedbackId,
         })
 
@@ -171,10 +76,9 @@ export class FeedbackRecordingManager {
             logger.warn('Failed to start audio recording:', error)
         }
 
-        // Start session recording if it's not already active
-        const wasSessionRecordingActive = this._instance.sessionRecordingStarted()
+        const wasSessionRecordingActive = this._posthog.sessionRecordingStarted()
         if (!wasSessionRecordingActive) {
-            this._instance.startSessionRecording(true)
+            this._posthog.startSessionRecording(true)
             this._didStartSessionRecording = true
             logger.info('Started session recording for feedback')
         } else {
@@ -186,11 +90,11 @@ export class FeedbackRecordingManager {
     }
 
     private _handleStopped(feedbackRecordingId: string): UserFeedbackRecordingResult {
-        this._instance.capture('$user_feedback_recording_stopped', {
+        this._posthog.capture('$user_feedback_recording_stopped', {
             $feedback_recording_id: feedbackRecordingId,
         })
 
-        return { feedback_id: feedbackRecordingId, session_id: this._instance.get_session_id() }
+        return { feedback_id: feedbackRecordingId, session_id: this._posthog.get_session_id() }
     }
 
     private _uploadAudioBlob(feedbackId: string, audioBlob: Blob): void {
@@ -207,13 +111,13 @@ export class FeedbackRecordingManager {
             }
             const base64Data = reader.result.split(',')[1] // Remove data:audio/webm;base64, prefix
 
-            const url = this._instance.requestRouter.endpointFor('api', `/api/feedback/audio`)
+            const url = this._posthog.requestRouter.endpointFor('api', `/api/feedback/audio`)
 
-            this._instance._send_request({
+            this._posthog._send_request({
                 method: 'POST',
                 url,
                 data: {
-                    token: this._instance.config.token,
+                    token: this._posthog.config.token,
                     feedback_id: feedbackId,
                     audio_data: base64Data,
                     audio_mime_type: audioBlob.type,
@@ -234,12 +138,12 @@ export class FeedbackRecordingManager {
         reader.readAsDataURL(audioBlob)
     }
 
-    private async _stopFeedbackRecording(
+    private async _stopRecording(
         feedbackId: string,
         onRecordingEnded: (result: UserFeedbackRecordingResult) => void
     ): Promise<void> {
         if (this._didStartSessionRecording) {
-            this._instance.stopSessionRecording()
+            this._posthog.stopSessionRecording()
             logger.info('Stopped session recording after feedback recording ended')
         }
 
@@ -256,32 +160,13 @@ export class FeedbackRecordingManager {
         this._resetState()
     }
 
-    private _showFeedbackRecordingUI(onRecordingEnded: (result: UserFeedbackRecordingResult) => void) {
-        const _onRecordingEnded = async (feedbackId: string) => {
-            await this._stopFeedbackRecording(feedbackId, onRecordingEnded)
-        }
-
-        const _onCancel = () => {
-            this._resetState()
-            logger.info('Feedback recording UI cancelled')
-        }
-
-        renderFeedbackRecordingUI({
-            posthogInstance: this._instance,
-            handleStartRecording: () => this._startFeedbackRecording(),
-            onRecordingEnded: _onRecordingEnded,
-            onCancel: _onCancel,
-        })
-    }
-
     private _resetState(): void {
         this._feedbackRecordingId = null
-        this._isUIActive = false
         this._didStartSessionRecording = false
     }
 }
 
 // Extension generator function for the extension system
-export function generateFeedbackRecording(posthog: PostHog): FeedbackRecordingManager {
-    return new FeedbackRecordingManager(posthog)
+export function generateFeedbackRecording(instance: PostHog): FeedbackRecordingManager {
+    return new FeedbackRecordingManager(instance)
 }

@@ -803,7 +803,7 @@ export interface PostHogConfig {
      *
      * @default true (disabled until feature is ready for GA)
      */
-    disable_feedback_recording: boolean
+    _experimental_disable_feedback_recording: boolean
 
     /**
      * Survey-specific configuration options.
