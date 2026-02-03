@@ -167,7 +167,7 @@ function renderTextWithMarks(
                             href={safeUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            referrerPolicy="no-referrer"
+                            referrerpolicy="no-referrer"
                             style={styles.link}
                         >
                             {element}
