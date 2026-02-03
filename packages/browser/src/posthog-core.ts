@@ -204,6 +204,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_feedback_recording: true,
     disable_external_dependency_loading: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
+    _experimental_disable_feedback_recording: true,
     secure_cookie: window?.location?.protocol === 'https:',
     ip: false,
     opt_out_capturing_by_default: false,

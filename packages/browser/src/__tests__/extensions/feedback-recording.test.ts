@@ -33,7 +33,7 @@ describe('FeedbackRecordingManager', () => {
             config: {
                 api_host: 'https://test.com',
                 token: 'test-token',
-                disable_feedback_recording: false,
+                _experimental_disable_feedback_recording: false,
                 disable_session_recording: false,
             } as any,
             capture: jest.fn(),
@@ -83,7 +83,7 @@ describe('FeedbackRecordingManager', () => {
 
     describe('onRemoteConfig', () => {
         it('should not enable feedback recording if disabled via config', () => {
-            instance.config.disable_feedback_recording = true
+            instance.config._experimental_disable_feedback_recording = true
             const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
 
             newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
@@ -94,7 +94,7 @@ describe('FeedbackRecordingManager', () => {
         })
 
         it('should enable feedback recording when server returns true', () => {
-            instance.config.disable_feedback_recording = false
+            instance.config._experimental_disable_feedback_recording = false
             const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
 
             newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
@@ -104,7 +104,7 @@ describe('FeedbackRecordingManager', () => {
         })
 
         it('should not enable feedback recording when server returns false', () => {
-            instance.config.disable_feedback_recording = false
+            instance.config._experimental_disable_feedback_recording = false
             const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
 
             newManager.onRemoteConfig({ feedbackRecording: false } as RemoteConfig)
@@ -113,7 +113,7 @@ describe('FeedbackRecordingManager', () => {
         })
 
         it('should not enable feedback recording when server returns undefined', () => {
-            instance.config.disable_feedback_recording = false
+            instance.config._experimental_disable_feedback_recording = false
             const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
 
             newManager.onRemoteConfig({} as RemoteConfig)
@@ -128,7 +128,7 @@ describe('FeedbackRecordingManager', () => {
         })
 
         it('should not launch UI when disabled via config', async () => {
-            instance.config.disable_feedback_recording = true
+            instance.config._experimental_disable_feedback_recording = true
             const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
             newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
 
@@ -138,7 +138,7 @@ describe('FeedbackRecordingManager', () => {
         })
 
         it('should not launch UI when remote config not loaded yet', async () => {
-            instance.config.disable_feedback_recording = false
+            instance.config._experimental_disable_feedback_recording = false
             const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
             // Don't call onRemoteConfig - simulating remote config not loaded yet
 
@@ -148,7 +148,7 @@ describe('FeedbackRecordingManager', () => {
         })
 
         it('should not launch UI when not enabled server-side', async () => {
-            instance.config.disable_feedback_recording = false
+            instance.config._experimental_disable_feedback_recording = false
             const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
             newManager.onRemoteConfig({ feedbackRecording: false } as RemoteConfig)
 
@@ -158,7 +158,7 @@ describe('FeedbackRecordingManager', () => {
         })
 
         it('should not launch UI when session recording is disabled', async () => {
-            instance.config.disable_feedback_recording = false
+            instance.config._experimental_disable_feedback_recording = false
             instance.config.disable_session_recording = true
             const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
             newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
@@ -169,7 +169,7 @@ describe('FeedbackRecordingManager', () => {
         })
 
         it('should not launch UI when session recording is not loaded', async () => {
-            instance.config.disable_feedback_recording = false
+            instance.config._experimental_disable_feedback_recording = false
             instance.config.disable_session_recording = false
             ;(instance as any).sessionRecording = undefined
             const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
@@ -181,7 +181,7 @@ describe('FeedbackRecordingManager', () => {
         })
 
         it('should launch UI when enabled in both config and server-side', async () => {
-            instance.config.disable_feedback_recording = false
+            instance.config._experimental_disable_feedback_recording = false
             instance.config.disable_session_recording = false
             const newManager = new FeedbackRecordingManager(instance, audioRecorderMock)
             newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
