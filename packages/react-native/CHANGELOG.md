@@ -1,5 +1,17 @@
 # posthog-react-native
 
+## 4.29.0
+
+### Minor Changes
+
+- [#3009](https://github.com/PostHog/posthog-js/pull/3009) [`c99e5fe`](https://github.com/PostHog/posthog-js/commit/c99e5feb043870357c8f722eb52542327c3f472b) Thanks [@marandaneto](https://github.com/marandaneto)! - feat: add setPersonProperties method
+  (2026-02-03)
+
+### Patch Changes
+
+- Updated dependencies [[`c99e5fe`](https://github.com/PostHog/posthog-js/commit/c99e5feb043870357c8f722eb52542327c3f472b)]:
+  - @posthog/core@1.19.0
+
 ## 4.28.0
 
 ### Minor Changes
