@@ -1,5 +1,17 @@
 # posthog-react-native
 
+## 4.28.0
+
+### Minor Changes
+
+- [#2944](https://github.com/PostHog/posthog-js/pull/2944) [`578fc2a`](https://github.com/PostHog/posthog-js/commit/578fc2a83392a64028cde4187bfc0dcaf6f110c4) Thanks [@RayKay91](https://github.com/RayKay91)! - Allow for properties to be excluded from reset
+  (2026-02-03)
+
+### Patch Changes
+
+- Updated dependencies [[`7768010`](https://github.com/PostHog/posthog-js/commit/77680105f1e8baf5ed1934d423494793d11ff01a)]:
+  - @posthog/core@1.18.0
+
 ## 4.27.0
 
 ### Minor Changes

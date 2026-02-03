@@ -11,6 +11,7 @@ import { getStyles } from './styles'
 import { OpenChatButton } from './OpenChatButton'
 import { SendMessageButton } from './SendMessageButton'
 import { CloseChatButton } from './CloseChatButton'
+import { RichContent } from './RichContent'
 
 const logger = createLogger('[ConversationsWidget]')
 
@@ -384,7 +385,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         )
     }
 
-    private _renderMessage(message: Message, styles: ReturnType<typeof getStyles>) {
+    private _renderMessage(message: Message, styles: ReturnType<typeof getStyles>, primaryColor: string) {
         const isCustomer = message.author_type === 'customer'
         const messageStyle = {
             ...styles.message,
@@ -398,7 +399,14 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         return (
             <div key={message.id} style={messageStyle}>
                 {!isCustomer && message.author_name && <div style={styles.messageAuthor}>{message.author_name}</div>}
-                <div style={contentStyle}>{message.content}</div>
+                <div style={contentStyle}>
+                    <RichContent
+                        richContent={message.rich_content}
+                        content={message.content}
+                        isCustomer={isCustomer}
+                        primaryColor={primaryColor}
+                    />
+                </div>
                 <div style={styles.messageTime}>{this._formatTime(message.created_at)}</div>
             </div>
         )
@@ -447,7 +455,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
                     ) : (
                         <>
                             <div style={styles.messages}>
-                                {messages.map((message) => this._renderMessage(message, styles))}
+                                {messages.map((message) => this._renderMessage(message, styles, primaryColor))}
                                 <div
                                     ref={(el) => {
                                         this._messagesEndRef = el
