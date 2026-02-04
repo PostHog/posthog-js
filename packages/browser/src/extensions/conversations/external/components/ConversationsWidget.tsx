@@ -416,14 +416,16 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         const { config } = this.props
         const { state, messages, inputValue, isLoading, error, showIdentificationForm } = this.state
         const primaryColor = config.color || '#5375ff'
+        const widgetPosition = config.widgetPosition || 'bottom_right'
         const placeholderText = config.placeholderText || 'Type your message...'
-        const styles = getStyles(primaryColor)
+        const styles = getStyles(primaryColor, widgetPosition)
 
         // Button only (closed state)
         if (state === 'closed') {
             return (
                 <OpenChatButton
                     primaryColor={primaryColor}
+                    position={widgetPosition}
                     handleToggleOpen={this._handleToggleOpen}
                     unreadCount={this.state.unreadCount}
                 />
