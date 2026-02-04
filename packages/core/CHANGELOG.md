@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.20.0
+
+### Minor Changes
+
+- [#3023](https://github.com/PostHog/posthog-js/pull/3023) [`bb62809`](https://github.com/PostHog/posthog-js/commit/bb62809917845685ae7e2e6d5adad6be5528356e) Thanks [@marandaneto](https://github.com/marandaneto)! - feat: only capture $set events if the user properties have changed
+  (2026-02-04)
+
 ## 1.19.0
 
 ### Minor Changes

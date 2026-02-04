@@ -1,5 +1,18 @@
 # posthog-js
 
+## 1.340.0
+
+### Minor Changes
+
+- [#3024](https://github.com/PostHog/posthog-js/pull/3024) [`2b2725e`](https://github.com/PostHog/posthog-js/commit/2b2725efc24416cc659ea963d4a121c0c8666db7) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Support widget position
+  (2026-02-04)
+
+### Patch Changes
+
+- Updated dependencies [[`bb62809`](https://github.com/PostHog/posthog-js/commit/bb62809917845685ae7e2e6d5adad6be5528356e)]:
+    - @posthog/core@1.20.0
+    - @posthog/types@1.340.0
+
 ## 1.339.1
 
 ### Patch Changes

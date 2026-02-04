@@ -1,5 +1,18 @@
 # posthog-ai
 
+## 7.8.5
+
+### Patch Changes
+
+- [#3021](https://github.com/PostHog/posthog-js/pull/3021) [`e7ceae5`](https://github.com/PostHog/posthog-js/commit/e7ceae5b5a3a95df84519d99014d587f1d86fd5c) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - fix(llma): small prompt management fixes
+  (2026-02-04)
+
+- [#3030](https://github.com/PostHog/posthog-js/pull/3030) [`98d6274`](https://github.com/PostHog/posthog-js/commit/98d6274a1da337560b2acf4f62eeefba1f8e5fd4) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Changes prompts default URL.
+  (2026-02-04)
+- Updated dependencies [[`bb62809`](https://github.com/PostHog/posthog-js/commit/bb62809917845685ae7e2e6d5adad6be5528356e)]:
+  - @posthog/core@1.20.0
+  - posthog-node@5.24.10
+
 ## 7.8.4
 
 ### Patch Changes
