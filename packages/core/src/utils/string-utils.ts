@@ -1,3 +1,5 @@
+import type { JsonType } from '../types'
+
 export function includes(str: string, needle: string): boolean
 export function includes<T>(arr: T[], needle: T): boolean
 export function includes(str: unknown[] | string, needle: unknown): boolean {
@@ -29,14 +31,14 @@ export function isDistinctIdStringLike(value: string): boolean {
  */
 export function getPersonPropertiesHash(
   distinct_id: string,
-  userPropertiesToSet?: Record<string, any>,
-  userPropertiesToSetOnce?: Record<string, any>
+  userPropertiesToSet?: { [key: string]: JsonType },
+  userPropertiesToSetOnce?: { [key: string]: JsonType }
 ): string {
-  const sortKeys = (obj?: Record<string, any>): Record<string, any> | undefined =>
+  const sortKeys = (obj?: { [key: string]: JsonType }): { [key: string]: JsonType } | undefined =>
     obj
       ? Object.keys(obj)
           .sort()
-          .reduce((acc: Record<string, any>, key) => ((acc[key] = obj[key]), acc), {})
+          .reduce((acc: { [key: string]: JsonType }, key) => ((acc[key] = obj[key]), acc), {})
       : undefined
   return JSON.stringify({
     distinct_id,
