@@ -1934,6 +1934,10 @@ export class PostHog implements PostHogInterface {
      * listener is registered, the first callback will be the next event
      * _after_ registering a listener
      *
+     * Available events:
+     * - `eventCaptured`: Emitted immediately before trying to send an event
+     * - `featureFlagsLoading`: Emitted when feature flags are being reloaded (e.g. after `identify()`, `group()`, or `reloadFeatureFlags()`)
+     *
      * {@label Capture}
      *
      * @example
@@ -1943,14 +1947,30 @@ export class PostHog implements PostHogInterface {
      * })
      * ```
      *
+     * @example
+     * ```js
+     * // Track when feature flags are loading to show a loading state
+     * posthog.on('featureFlagsLoading', () => {
+     *   console.log('Feature flags are being reloaded...')
+     * })
+     * ```
+     *
      * @public
      *
      * @param {String} event The event to listen for.
      * @param {Function} cb The callback function to call when the event is emitted.
      * @returns {Function} A function that can be called to unsubscribe the listener.
      */
-    on(event: 'eventCaptured', cb: (...args: any[]) => void): () => void {
+    on(event: 'eventCaptured' | 'featureFlagsLoading', cb: (...args: any[]) => void): () => void {
         return this._internalEventEmitter.on(event, cb)
+    }
+
+    /**
+     * @internal
+     * Emit an internal event. Used by other modules to trigger events.
+     */
+    _emit(event: 'eventCaptured' | 'featureFlagsLoading', payload?: any): void {
+        this._internalEventEmitter.emit(event, payload)
     }
 
     /**

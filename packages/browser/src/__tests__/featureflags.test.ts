@@ -1038,6 +1038,81 @@ describe('featureflags', () => {
         })
     })
 
+    describe('featureFlagsLoading event', () => {
+        beforeEach(() => {
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 200,
+                    json: {
+                        featureFlags: {
+                            first: 'variant-1',
+                            second: true,
+                        },
+                    },
+                })
+            )
+        })
+
+        it('should emit featureFlagsLoading event when reloadFeatureFlags is called', () => {
+            const loadingCallback = jest.fn()
+            instance.on('featureFlagsLoading', loadingCallback)
+
+            featureFlags.reloadFeatureFlags()
+
+            expect(loadingCallback).toHaveBeenCalledTimes(1)
+            expect(loadingCallback).toHaveBeenCalledWith(true)
+        })
+
+        it('should not emit featureFlagsLoading event if already debouncing', () => {
+            const loadingCallback = jest.fn()
+            instance.on('featureFlagsLoading', loadingCallback)
+
+            featureFlags.reloadFeatureFlags()
+            featureFlags.reloadFeatureFlags()
+            featureFlags.reloadFeatureFlags()
+
+            // Should only emit once because subsequent calls are debounced
+            expect(loadingCallback).toHaveBeenCalledTimes(1)
+        })
+
+        it('should emit featureFlagsLoading before onFeatureFlags callback', () => {
+            const callOrder: string[] = []
+
+            instance.on('featureFlagsLoading', () => {
+                callOrder.push('loading')
+            })
+
+            featureFlags.onFeatureFlags(() => {
+                callOrder.push('loaded')
+            })
+
+            featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            expect(callOrder).toEqual(['loading', 'loaded'])
+        })
+
+        it('should not emit featureFlagsLoading if reloading is disabled', () => {
+            const loadingCallback = jest.fn()
+            instance.on('featureFlagsLoading', loadingCallback)
+
+            featureFlags.setReloadingPaused(true)
+            featureFlags.reloadFeatureFlags()
+
+            expect(loadingCallback).not.toHaveBeenCalled()
+        })
+
+        it('should not emit featureFlagsLoading if feature flags are disabled', () => {
+            const loadingCallback = jest.fn()
+            instance.on('featureFlagsLoading', loadingCallback)
+
+            instance.config.advanced_disable_feature_flags = true
+            featureFlags.reloadFeatureFlags()
+
+            expect(loadingCallback).not.toHaveBeenCalled()
+        })
+    })
+
     describe('earlyAccessFeatures', () => {
         afterEach(() => {
             instance.persistence.clear()
