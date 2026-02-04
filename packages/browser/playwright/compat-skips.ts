@@ -11,13 +11,7 @@ import { satisfies } from 'compare-versions'
  *
  * Format: Map of version ranges to test patterns with required reasons
  *
- * Example:
- *   '<1.335.0': [
- *     {
- *       test: 'web_vitals_attribution: true includes attribution data',
- *       reason: 'web_vitals_attribution option added in #2953',
- *     },
- *   ]
+
  */
 export const compatSkips: { range: string; test: string; reason: string }[] = [
     {
