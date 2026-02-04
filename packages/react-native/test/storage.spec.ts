@@ -77,7 +77,7 @@ describe('PostHog React Native', () => {
       })
 
       // Wait should not have completed yet
-      await Promise.resolve() // tick
+      await new Promise((r) => setTimeout(r, 5))
       expect(waitCompleted).toBe(false)
 
       // Now resolve the write
@@ -85,6 +85,39 @@ describe('PostHog React Native', () => {
       await waitPromise
 
       // Wait should have completed
+      expect(waitCompleted).toBe(true)
+    })
+
+    it('should wait for all pending persist operations', async () => {
+      const resolvers: Array<() => void> = []
+      mockedOptionalFileSystem!.writeAsStringAsync.mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            resolvers.push(resolve)
+          })
+      )
+
+      // Trigger multiple persists rapidly
+      storage.setItem('a', '1')
+      storage.setItem('b', '2')
+      storage.setItem('c', '3')
+
+      expect(resolvers.length).toBe(3)
+
+      let waitCompleted = false
+      const waitPromise = storage.waitForPersist().then(() => {
+        waitCompleted = true
+      })
+
+      // Resolve first two, but not the third
+      resolvers[0]()
+      resolvers[1]()
+      await new Promise((r) => setTimeout(r, 5))
+      expect(waitCompleted).toBe(false)
+
+      // Resolve the last one
+      resolvers[2]()
+      await waitPromise
       expect(waitCompleted).toBe(true)
     })
 
