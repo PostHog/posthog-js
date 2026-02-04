@@ -1,0 +1,22 @@
+services:
+  sdk-adapter:
+    build:
+      context: ../..
+      dockerfile: compliance/browser/Dockerfile
+    ports:
+      # nosemgrep: trailofbits.yaml.docker-compose.port-all-interfaces.port-all-interfaces
+      - "8080:8080"
+    networks:
+      - test-network
+
+  test-harness:
+    image: posthog-sdk-test-harness:debug
+    command: ["run", "--adapter-url", "http://sdk-adapter:8080", "--mock-url", "http://test-harness:8081", "--sdk-type", "client", "--debug"]
+    networks:
+      - test-network
+    depends_on:
+      - sdk-adapter
+
+networks:
+  test-network:
+    driver: bridge
