@@ -5,6 +5,7 @@ import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { PostHogConfig } from '../types'
 import { createMockPostHog, createPosthogInstance } from './helpers/posthog-instance'
+import { SimpleEventEmitter } from '../utils/simple-event-emitter'
 
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
@@ -22,6 +23,7 @@ describe('featureflags', () => {
     let mockWarn
 
     beforeEach(() => {
+        const internalEventEmitter = new SimpleEventEmitter()
         instance = {
             config: { ...config },
             get_distinct_id: () => 'blah id',
@@ -43,6 +45,8 @@ describe('featureflags', () => {
             reloadFeatureFlags: () => featureFlags.reloadFeatureFlags(),
             _shouldDisableFlags: () =>
                 instance.config.advanced_disable_flags || instance.config.advanced_disable_decide || false,
+            _emit: (event: string, payload?: any) => internalEventEmitter.emit(event, payload),
+            on: (event: string, cb: (...args: any[]) => void) => internalEventEmitter.on(event, cb),
         }
 
         featureFlags = new PostHogFeatureFlags(instance)
