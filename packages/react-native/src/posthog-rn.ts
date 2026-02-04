@@ -921,9 +921,11 @@ export class PostHog extends PostHogCore {
    * await posthog.startSessionRecording(false)
    * ```
    *
+   * @public
+   *
    * @param resumeCurrent - Whether to resume recording of current session (true) or start a new session (false). Defaults to true.
    */
-  public async startSessionRecording(resumeCurrent: boolean = true): Promise<void> {
+  async startSessionRecording(resumeCurrent: boolean = true): Promise<void> {
     await this._initPromise
 
     if (this.isDisabled) {
@@ -982,9 +984,9 @@ export class PostHog extends PostHogCore {
    * ```js
    * await posthog.stopSessionRecording()
    * ```
-   *
+   * @public
    */
-  public async stopSessionRecording(): Promise<void> {
+  async stopSessionRecording(): Promise<void> {
     await this._initPromise
 
     if (this.isDisabled) {
@@ -1385,13 +1387,13 @@ export class PostHog extends PostHogCore {
    * @returns true if the native SDK is ready (initialized or already was), false otherwise
    */
   private async initializeSessionReplayNative(options?: PostHogOptions): Promise<boolean> {
-    if (this._sessionReplayNativeInitialized) {
-      return true
-    }
-
     if (!OptionalReactNativeSessionReplay) {
       this._logger.warn('Session replay enabled but not installed.')
       return false
+    }
+
+    if (this._sessionReplayNativeInitialized) {
+      return true
     }
 
     const sessionId = this.getSessionId()
