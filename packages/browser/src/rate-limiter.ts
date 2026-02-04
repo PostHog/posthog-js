@@ -7,6 +7,8 @@ const logger = createLogger('[RateLimiter]')
 
 const ONE_MINUTE_IN_MILLISECONDS = 60 * 1000
 const RATE_LIMIT_EVENT = '$$client_ingestion_warning'
+const DEFAULT_EVENTS_PER_SECOND = 10
+const BURST_LIMIT_MULTIPLIER = 10
 
 interface CaptureResponse {
     quota_limited?: string[]
@@ -15,21 +17,23 @@ interface CaptureResponse {
 export class RateLimiter {
     instance: PostHog
     serverLimits: Record<string, number> = {}
-
-    captureEventsPerSecond: number
-    captureEventsBurstLimit: number
     lastEventRateLimited = false
 
     constructor(instance: PostHog) {
         this.instance = instance
+        this.lastEventRateLimited = this.clientRateLimitContext(true).isRateLimited
+    }
 
-        this.captureEventsPerSecond = instance.config.rate_limiting?.events_per_second || 10
-        this.captureEventsBurstLimit = Math.max(
-            instance.config.rate_limiting?.events_burst_limit || this.captureEventsPerSecond * 10,
+    get captureEventsPerSecond(): number {
+        return this.instance.config.rate_limiting?.events_per_second || DEFAULT_EVENTS_PER_SECOND
+    }
+
+    get captureEventsBurstLimit(): number {
+        return Math.max(
+            this.instance.config.rate_limiting?.events_burst_limit ||
+                this.captureEventsPerSecond * BURST_LIMIT_MULTIPLIER,
             this.captureEventsPerSecond
         )
-
-        this.lastEventRateLimited = this.clientRateLimitContext(true).isRateLimited
     }
 
     public clientRateLimitContext(checkOnly = false): {
@@ -38,17 +42,18 @@ export class RateLimiter {
     } {
         // This is primarily to prevent runaway loops from flooding capture with millions of events for a single user.
         // It's as much for our protection as theirs.
+        const { captureEventsBurstLimit, captureEventsPerSecond } = this
         const now = new Date().getTime()
         const bucket = this.instance.persistence?.get_property(CAPTURE_RATE_LIMIT) ?? {
-            tokens: this.captureEventsBurstLimit,
+            tokens: captureEventsBurstLimit,
             last: now,
         }
 
-        bucket.tokens += ((now - bucket.last) / 1000) * this.captureEventsPerSecond
+        bucket.tokens += ((now - bucket.last) / 1000) * captureEventsPerSecond
         bucket.last = now
 
-        if (bucket.tokens > this.captureEventsBurstLimit) {
-            bucket.tokens = this.captureEventsBurstLimit
+        if (bucket.tokens > captureEventsBurstLimit) {
+            bucket.tokens = captureEventsBurstLimit
         }
 
         const isRateLimited = bucket.tokens < 1
@@ -61,7 +66,7 @@ export class RateLimiter {
             this.instance.capture(
                 RATE_LIMIT_EVENT,
                 {
-                    $$client_ingestion_warning_message: `posthog-js client rate limited. Config is set to ${this.captureEventsPerSecond} events per second and ${this.captureEventsBurstLimit} events burst limit.`,
+                    $$client_ingestion_warning_message: `posthog-js client rate limited. Config is set to ${captureEventsPerSecond} events per second and ${captureEventsBurstLimit} events burst limit.`,
                 },
                 {
                     skip_client_rate_limiting: true,

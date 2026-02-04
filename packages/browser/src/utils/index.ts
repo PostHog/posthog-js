@@ -1,7 +1,7 @@
 import { Breaker, Properties } from '../types'
 import { nativeForEach, nativeIndexOf } from './globals'
 import { logger } from './logger'
-import { isFormData, isNull, isNullish, isNumber, isString, isUndefined, hasOwnProperty, isArray } from '@posthog/core'
+import { isFormData, isNull, isNullish, isNumber, isString, hasOwnProperty, isArray } from '@posthog/core'
 
 const breaker: Breaker = {}
 
@@ -265,8 +265,8 @@ export function migrateConfigField<T>(
     defaultValue: T,
     loggerInstance?: { warn: (message: string) => void }
 ): T {
-    const hasNewField = newField in config && !isUndefined(config[newField])
-    const hasOldField = oldField in config && !isUndefined(config[oldField])
+    const hasNewField = newField in config && !isNullish(config[newField])
+    const hasOldField = oldField in config && !isNullish(config[oldField])
 
     if (hasNewField) {
         return config[newField]

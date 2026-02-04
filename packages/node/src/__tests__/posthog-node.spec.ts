@@ -2069,7 +2069,7 @@ describe('PostHog Node.js', () => {
           event: '$feature_flag_called',
         })
       )
-      expect(getLastBatchEvents()?.[0].properties).toEqual({
+      expect(getLastBatchEvents()?.[0].properties).toMatchObject({
         $feature_flag: 'beta-feature',
         $feature_flag_response: true,
         $lib: 'posthog-node',
@@ -2471,12 +2471,12 @@ describe('PostHog Node.js', () => {
     })
   })
 
-  describe('evaluation environments', () => {
+  describe('evaluation contexts', () => {
     beforeEach(() => {
       mockedFetch.mockClear()
     })
 
-    it('should send evaluation environments when configured', async () => {
+    it('should send evaluation contexts when configured', async () => {
       mockedFetch.mockImplementation(
         apiImplementation({
           decideFlags: { 'test-flag': true },
@@ -2486,7 +2486,7 @@ describe('PostHog Node.js', () => {
 
       const posthogWithEnvs = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
-        evaluationEnvironments: ['production', 'backend'],
+        evaluationContexts: ['production', 'backend'],
         ...posthogImmediateResolveOptions,
       })
 
@@ -2496,14 +2496,14 @@ describe('PostHog Node.js', () => {
         'http://example.com/flags/?v=2&config=true',
         expect.objectContaining({
           method: 'POST',
-          body: expect.stringContaining('"evaluation_environments":["production","backend"]'),
+          body: expect.stringContaining('"evaluation_contexts":["production","backend"]'),
         })
       )
 
       await posthogWithEnvs.shutdown()
     })
 
-    it('should not send evaluation environments when not configured', async () => {
+    it('should not send evaluation contexts when not configured', async () => {
       mockedFetch.mockImplementation(
         apiImplementation({
           decideFlags: { 'test-flag': true },
@@ -2522,14 +2522,14 @@ describe('PostHog Node.js', () => {
         'http://example.com/flags/?v=2&config=true',
         expect.objectContaining({
           method: 'POST',
-          body: expect.not.stringContaining('evaluation_environments'),
+          body: expect.not.stringContaining('evaluation_contexts'),
         })
       )
 
       await posthogWithoutEnvs.shutdown()
     })
 
-    it('should not send evaluation environments when configured as empty array', async () => {
+    it('should not send evaluation contexts when configured as empty array', async () => {
       mockedFetch.mockImplementation(
         apiImplementation({
           decideFlags: { 'test-flag': true },
@@ -2539,7 +2539,7 @@ describe('PostHog Node.js', () => {
 
       const posthogWithEmptyEnvs = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
-        evaluationEnvironments: [],
+        evaluationContexts: [],
         ...posthogImmediateResolveOptions,
       })
 
@@ -2549,11 +2549,38 @@ describe('PostHog Node.js', () => {
         'http://example.com/flags/?v=2&config=true',
         expect.objectContaining({
           method: 'POST',
-          body: expect.not.stringContaining('evaluation_environments'),
+          body: expect.not.stringContaining('evaluation_contexts'),
         })
       )
 
       await posthogWithEmptyEnvs.shutdown()
+    })
+
+    it('should support deprecated evaluationEnvironments field', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          decideFlags: { 'test-flag': true },
+          flagsPayloads: {},
+        })
+      )
+
+      const posthogWithDeprecated = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        evaluationEnvironments: ['production', 'backend'],
+        ...posthogImmediateResolveOptions,
+      })
+
+      await posthogWithDeprecated.getAllFlags('some-distinct-id')
+
+      expect(mockedFetch).toHaveBeenCalledWith(
+        'http://example.com/flags/?v=2&config=true',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"evaluation_contexts":["production","backend"]'),
+        })
+      )
+
+      await posthogWithDeprecated.shutdown()
     })
   })
 

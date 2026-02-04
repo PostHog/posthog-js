@@ -14,7 +14,8 @@ export interface JSONContent {
 export type ProductTourStepType = 'element' | 'modal' | 'survey' | 'banner'
 
 export interface ProductTourBannerConfig {
-    behavior: 'sticky' | 'static'
+    behavior: 'sticky' | 'static' | 'custom'
+    selector?: string
     action?: {
         type: 'none' | 'link' | 'trigger_tour'
         link?: string
@@ -70,6 +71,8 @@ export interface ProductTourStep {
     linkedSurveyQuestionId?: string
     /** Enhanced element data for more reliable lookup at runtime */
     inferenceData?: InferredSelector
+    /** Use CSS selector instead of inference. Defaults to false (use inference). */
+    useManualSelector?: boolean
     /** Maximum tooltip width in pixels (defaults to 320px) */
     maxWidth?: number
     /** Position for modal/survey steps (defaults to middle_center) */
@@ -94,6 +97,7 @@ export interface ProductTourConditions {
     actions?: {
         values: SurveyActionType[]
     } | null
+    linkedFlagVariant?: string
 }
 
 export interface ProductTourAppearance {
@@ -140,6 +144,7 @@ export type ProductTourDismissReason =
     | 'user_clicked_outside'
     | 'escape_key'
     | 'element_unavailable'
+    | 'container_unavailable'
 
 export type ProductTourRenderReason = 'auto' | 'api' | 'trigger' | 'event'
 

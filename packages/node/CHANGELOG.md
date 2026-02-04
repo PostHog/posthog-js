@@ -1,5 +1,130 @@
 # posthog-node
 
+## 5.24.9
+
+### Patch Changes
+
+- Updated dependencies [[`c99e5fe`](https://github.com/PostHog/posthog-js/commit/c99e5feb043870357c8f722eb52542327c3f472b)]:
+  - @posthog/core@1.19.0
+
+## 5.24.8
+
+### Patch Changes
+
+- Updated dependencies [[`7768010`](https://github.com/PostHog/posthog-js/commit/77680105f1e8baf5ed1934d423494793d11ff01a)]:
+  - @posthog/core@1.18.0
+
+## 5.24.7
+
+### Patch Changes
+
+- Updated dependencies [[`727536c`](https://github.com/PostHog/posthog-js/commit/727536cf5f1ab5a8d21fa9d4e2e6b13efc851fca)]:
+  - @posthog/core@1.17.0
+
+## 5.24.6
+
+### Patch Changes
+
+- Updated dependencies [[`cbe84c1`](https://github.com/PostHog/posthog-js/commit/cbe84c1ea8b6dd398569ed401139e9698e08fd64)]:
+  - @posthog/core@1.16.0
+
+## 5.24.5
+
+### Patch Changes
+
+- [#2987](https://github.com/PostHog/posthog-js/pull/2987) [`25f4173`](https://github.com/PostHog/posthog-js/commit/25f4173e01fd026cb71f036ce2bfb7caa6cb637d) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: before_send in node inferred the type as any instead of EventMessage or null
+  (2026-01-29)
+
+## 5.24.4
+
+### Patch Changes
+
+- Updated dependencies [[`8c0c495`](https://github.com/PostHog/posthog-js/commit/8c0c495caaf4cd7f950cbc77fdfc1df499772008)]:
+  - @posthog/core@1.15.0
+
+## 5.24.3
+
+### Patch Changes
+
+- Updated dependencies [[`f51560c`](https://github.com/PostHog/posthog-js/commit/f51560caf78386cef5278f7cf0e9f253b2ec0e50)]:
+  - @posthog/core@1.14.1
+
+## 5.24.2
+
+### Patch Changes
+
+- Updated dependencies [[`933c763`](https://github.com/PostHog/posthog-js/commit/933c7639ae30390ca562a0891d59649711b53522)]:
+  - @posthog/core@1.14.0
+
+## 5.24.1
+
+### Patch Changes
+
+- Updated dependencies [[`8a5a3d5`](https://github.com/PostHog/posthog-js/commit/8a5a3d5693facda62b90b66dead338f7dca19705)]:
+  - @posthog/core@1.13.0
+
+## 5.24.0
+
+### Minor Changes
+
+- [#2897](https://github.com/PostHog/posthog-js/pull/2897) [`b7fa003`](https://github.com/PostHog/posthog-js/commit/b7fa003ef6ef74bdf4666be0748d89a5a6169054) Thanks [@matheus-vb](https://github.com/matheus-vb)! - Add $feature_flag_error to $feature_flag_called events to track flag evaluation failures
+  (2026-01-20)
+
+### Patch Changes
+
+- Updated dependencies [[`b7fa003`](https://github.com/PostHog/posthog-js/commit/b7fa003ef6ef74bdf4666be0748d89a5a6169054), [`f0cbc0d`](https://github.com/PostHog/posthog-js/commit/f0cbc0d8e4e5efc27d9595676e886d6d3d3892f4)]:
+  - @posthog/core@1.12.0
+
+## 5.23.0
+
+### Minor Changes
+
+- [#2900](https://github.com/PostHog/posthog-js/pull/2900) [`23770e9`](https://github.com/PostHog/posthog-js/commit/23770e9e2eed1aca5c2bc7a34a6d64dc115b0d11) Thanks [@dmarticus](https://github.com/dmarticus)! - Renamed `evaluationEnvironments` to `evaluationContexts` for clearer semantics. The term "contexts" better reflects that this feature is for specifying evaluation contexts (e.g., "web", "mobile", "checkout") rather than deployment environments (e.g., "staging", "production").
+
+  ### Deprecated
+  - `posthog.init` option `evaluationEnvironments` is now deprecated in favor of `evaluationContexts`. The old property will continue to work and will log a deprecation warning. It will be removed in a future major version.
+
+  ### Migration Guide
+
+  ````javascript
+  // Before
+  posthog.init('<ph_project_api_key>', {
+      evaluationEnvironments: ['production', 'web', 'checkout'],
+  })
+
+  // After
+  posthog.init('<ph_project_api_key>', {
+      evaluationContexts: ['production', 'web', 'checkout'],
+  })
+  ``` (2026-01-19)
+  ````
+
+### Patch Changes
+
+- Updated dependencies [[`23770e9`](https://github.com/PostHog/posthog-js/commit/23770e9e2eed1aca5c2bc7a34a6d64dc115b0d11)]:
+  - @posthog/core@1.11.0
+
+## 5.22.0
+
+### Minor Changes
+
+- [#2930](https://github.com/PostHog/posthog-js/pull/2930) [`c9b773a`](https://github.com/PostHog/posthog-js/commit/c9b773aefd25fcc81a60dff02348e8e724b87565) Thanks [@marandaneto](https://github.com/marandaneto)! - chore: Bump node min. ^20.20.0 || >=22.22.0 due to https://nodejs.org/en/blog/vulnerability/january-2026-dos-mitigation-async-hooks
+  (2026-01-19)
+
+## 5.21.2
+
+### Patch Changes
+
+- [#2920](https://github.com/PostHog/posthog-js/pull/2920) [`099ee0c`](https://github.com/PostHog/posthog-js/commit/099ee0c3e4babc632abf52ecdc1df700c6087566) Thanks [@haacked](https://github.com/haacked)! - Add getFeatureFlagResult method to retrieve flag value and payload in a single API call.
+  (2026-01-19)
+
+## 5.21.1
+
+### Patch Changes
+
+- Updated dependencies [[`d37e570`](https://github.com/PostHog/posthog-js/commit/d37e5709863e869825df57d0854588140c4294b2)]:
+  - @posthog/core@1.10.0
+
 ## 5.21.0
 
 ### Minor Changes

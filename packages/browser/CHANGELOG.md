@@ -1,5 +1,364 @@
 # posthog-js
 
+## 1.339.1
+
+### Patch Changes
+
+- [#3007](https://github.com/PostHog/posthog-js/pull/3007) [`af665cc`](https://github.com/PostHog/posthog-js/commit/af665cc98b2fe2f59bdc5226bcf616b0a5bd0f25) Thanks [@adboio](https://github.com/adboio)! - add element inference precision to tours; do not mark as shown until we know first step rendered successfully
+  (2026-02-03)
+- Updated dependencies []:
+    - @posthog/types@1.339.1
+
+## 1.339.0
+
+### Minor Changes
+
+- [#3006](https://github.com/PostHog/posthog-js/pull/3006) [`b3ec434`](https://github.com/PostHog/posthog-js/commit/b3ec4346e77917121c4fe7bfd966d09850df00f6) Thanks [@robbie-c](https://github.com/robbie-c)! - Add a function isTestUser() and config option test_user_hostname
+  (2026-02-03)
+
+### Patch Changes
+
+- [#2993](https://github.com/PostHog/posthog-js/pull/2993) [`5420f4d`](https://github.com/PostHog/posthog-js/commit/5420f4d5efb35e38d54df8dc0ec0c479f9e80eba) Thanks [@pauldambra](https://github.com/pauldambra)! - upgrade to posthog/rrweb 0.0.40
+  (2026-02-03)
+- Updated dependencies [[`b3ec434`](https://github.com/PostHog/posthog-js/commit/b3ec4346e77917121c4fe7bfd966d09850df00f6)]:
+    - @posthog/types@1.339.0
+
+## 1.338.1
+
+### Patch Changes
+
+- [#3002](https://github.com/PostHog/posthog-js/pull/3002) [`3105ff6`](https://github.com/PostHog/posthog-js/commit/3105ff6d0783c77ed75b1eb1be33617d836fd43f) Thanks [@adboio](https://github.com/adboio)! - fix stale element references in multi-page product tours
+  (2026-02-03)
+- Updated dependencies []:
+    - @posthog/types@1.338.1
+
+## 1.338.0
+
+### Minor Changes
+
+- [#3020](https://github.com/PostHog/posthog-js/pull/3020) [`5ccf27e`](https://github.com/PostHog/posthog-js/commit/5ccf27e1eb37f349c0f9602830df65a7cd3d02a4) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Fix issue with contrast colors in support widget
+  (2026-02-03)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.338.0
+
+## 1.337.1
+
+### Patch Changes
+
+- Updated dependencies [[`c99e5fe`](https://github.com/PostHog/posthog-js/commit/c99e5feb043870357c8f722eb52542327c3f472b)]:
+    - @posthog/core@1.19.0
+    - @posthog/types@1.337.1
+
+## 1.337.0
+
+### Minor Changes
+
+- [#2996](https://github.com/PostHog/posthog-js/pull/2996) [`7768010`](https://github.com/PostHog/posthog-js/commit/77680105f1e8baf5ed1934d423494793d11ff01a) Thanks [@matheus-vb](https://github.com/matheus-vb)! - Filter out flags marked as failed before merging with cached values, preventing transient backend errors from overwriting previously evaluated flag states
+  (2026-02-03)
+
+- [#3000](https://github.com/PostHog/posthog-js/pull/3000) [`4a1af3b`](https://github.com/PostHog/posthog-js/commit/4a1af3bcdc659127fbdab43dbfe887096bfd9c8d) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Render markdown in support product
+  (2026-02-03)
+
+### Patch Changes
+
+- [#3001](https://github.com/PostHog/posthog-js/pull/3001) [`9bd4dbc`](https://github.com/PostHog/posthog-js/commit/9bd4dbc89017b009cdbdc6ac21456b1f2bc590f4) Thanks [@adboio](https://github.com/adboio)! - do not intercept element clicks if a product tour fails to show
+  (2026-02-03)
+- Updated dependencies [[`7768010`](https://github.com/PostHog/posthog-js/commit/77680105f1e8baf5ed1934d423494793d11ff01a)]:
+    - @posthog/core@1.18.0
+    - @posthog/types@1.337.0
+
+## 1.336.4
+
+### Patch Changes
+
+- Updated dependencies [[`727536c`](https://github.com/PostHog/posthog-js/commit/727536cf5f1ab5a8d21fa9d4e2e6b13efc851fca)]:
+    - @posthog/core@1.17.0
+    - @posthog/types@1.336.4
+
+## 1.336.3
+
+### Patch Changes
+
+- Updated dependencies [[`cbe84c1`](https://github.com/PostHog/posthog-js/commit/cbe84c1ea8b6dd398569ed401139e9698e08fd64)]:
+    - @posthog/core@1.16.0
+    - @posthog/types@1.336.3
+
+## 1.336.2
+
+### Patch Changes
+
+- [#2985](https://github.com/PostHog/posthog-js/pull/2985) [`2ed9623`](https://github.com/PostHog/posthog-js/commit/2ed9623261d93dbcd89981151c3bee6e55903fa0) Thanks [@adboio](https://github.com/adboio)! - support custom banner container for product tours
+  (2026-01-29)
+
+- [#2991](https://github.com/PostHog/posthog-js/pull/2991) [`2b32a60`](https://github.com/PostHog/posthog-js/commit/2b32a60721498936c8092c8bbf75297878140217) Thanks [@lricoy](https://github.com/lricoy)! - treat undefined and null the same when receiving config
+  (2026-01-29)
+
+- [#2973](https://github.com/PostHog/posthog-js/pull/2973) [`c1aa45c`](https://github.com/PostHog/posthog-js/commit/c1aa45ca4e4b4907974b14dc5e9aa388225347bb) Thanks [@lricoy](https://github.com/lricoy)! - make attribution opt-in by default to reduce memory usage
+  (2026-01-29)
+- Updated dependencies []:
+    - @posthog/types@1.336.2
+
+## 1.336.1
+
+### Patch Changes
+
+- Updated dependencies [[`8c0c495`](https://github.com/PostHog/posthog-js/commit/8c0c495caaf4cd7f950cbc77fdfc1df499772008)]:
+    - @posthog/core@1.15.0
+    - @posthog/types@1.336.1
+
+## 1.336.0
+
+### Minor Changes
+
+- [#2954](https://github.com/PostHog/posthog-js/pull/2954) [`228930a`](https://github.com/PostHog/posthog-js/commit/228930a48b35f67cf12fc8dc155f431ff97b9f05) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Add `getFeatureFlagResult` method
+  (2026-01-28)
+
+### Patch Changes
+
+- Updated dependencies [[`228930a`](https://github.com/PostHog/posthog-js/commit/228930a48b35f67cf12fc8dc155f431ff97b9f05)]:
+    - @posthog/types@1.336.0
+
+## 1.335.5
+
+### Patch Changes
+
+- [#2981](https://github.com/PostHog/posthog-js/pull/2981) [`b5c1981`](https://github.com/PostHog/posthog-js/commit/b5c198143ba6befe200054680365ec9d9ccc3fbe) Thanks [@adboio](https://github.com/adboio)! - fix survey close button color
+  (2026-01-27)
+- Updated dependencies []:
+    - @posthog/types@1.335.5
+
+## 1.335.4
+
+### Patch Changes
+
+- [#2980](https://github.com/PostHog/posthog-js/pull/2980) [`f81d065`](https://github.com/PostHog/posthog-js/commit/f81d065aef7eacf568dea612dd2676331bd8d5c0) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: Bump preact minimum version to 10.28.2
+  (2026-01-27)
+
+- [#2978](https://github.com/PostHog/posthog-js/pull/2978) [`724587d`](https://github.com/PostHog/posthog-js/commit/724587d6fd0a852f17b78d3912e43c6628dd13d9) Thanks [@fasyy612](https://github.com/fasyy612)! - Bump rrweb dependency version to 0.0.37
+  (2026-01-27)
+- Updated dependencies [[`f51560c`](https://github.com/PostHog/posthog-js/commit/f51560caf78386cef5278f7cf0e9f253b2ec0e50)]:
+    - @posthog/core@1.14.1
+    - @posthog/types@1.335.4
+
+## 1.335.3
+
+### Patch Changes
+
+- [#2956](https://github.com/PostHog/posthog-js/pull/2956) [`3f26f7f`](https://github.com/PostHog/posthog-js/commit/3f26f7fcfbcc549473310cb81243bf641d8a3753) Thanks [@ksvat](https://github.com/ksvat)! - Bump rr-web dependency version
+  (2026-01-26)
+- Updated dependencies []:
+    - @posthog/types@1.335.3
+
+## 1.335.2
+
+### Patch Changes
+
+- [#2958](https://github.com/PostHog/posthog-js/pull/2958) [`592a5d7`](https://github.com/PostHog/posthog-js/commit/592a5d788760c54744fb2b8ce71c8301c110e4a6) Thanks [@adboio](https://github.com/adboio)! - fix: update cancel button on surveys to be black
+  (2026-01-23)
+- Updated dependencies []:
+    - @posthog/types@1.335.2
+
+## 1.335.1
+
+### Patch Changes
+
+- Updated dependencies [[`933c763`](https://github.com/PostHog/posthog-js/commit/933c7639ae30390ca562a0891d59649711b53522)]:
+    - @posthog/core@1.14.0
+    - @posthog/types@1.335.1
+
+## 1.335.0
+
+### Minor Changes
+
+- [#2953](https://github.com/PostHog/posthog-js/pull/2953) [`c8d3fbe`](https://github.com/PostHog/posthog-js/commit/c8d3fbe5e3a4944596d7a34086484affd94d7329) Thanks [@pauldambra](https://github.com/pauldambra)! - allows using web vitals with and without attribution
+  (2026-01-23)
+
+### Patch Changes
+
+- [#2947](https://github.com/PostHog/posthog-js/pull/2947) [`b586b6b`](https://github.com/PostHog/posthog-js/commit/b586b6bdd8d77f1b6805b987233d50784d7a6084) Thanks [@adboio](https://github.com/adboio)! - enable linked flags for product tours
+  (2026-01-23)
+- Updated dependencies [[`c8d3fbe`](https://github.com/PostHog/posthog-js/commit/c8d3fbe5e3a4944596d7a34086484affd94d7329)]:
+    - @posthog/types@1.335.0
+
+## 1.334.1
+
+### Patch Changes
+
+- [#2940](https://github.com/PostHog/posthog-js/pull/2940) [`d38842d`](https://github.com/PostHog/posthog-js/commit/d38842d0337fad8ea78ee6dfea375d2045608049) Thanks [@adboio](https://github.com/adboio)! - enable element inference for product tours
+  (2026-01-22)
+- Updated dependencies []:
+    - @posthog/types@1.334.1
+
+## 1.334.0
+
+### Minor Changes
+
+- [#2802](https://github.com/PostHog/posthog-js/pull/2802) [`f8c17bc`](https://github.com/PostHog/posthog-js/commit/f8c17bca4846ea8d0a479169548af40c6f28075e) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: add external_scripts_inject_target config to control script injection location
+  (2026-01-22)
+
+### Patch Changes
+
+- [#2950](https://github.com/PostHog/posthog-js/pull/2950) [`8543f0f`](https://github.com/PostHog/posthog-js/commit/8543f0fc30651cbee6cec6563b860ec840f9c890) Thanks [@fuziontech](https://github.com/fuziontech)! - fix(web-vitals): reduce memory leak in SPAs
+    - Upgrade web-vitals from v4.2.4 to v5.1.0 (includes internal memory fixes from v5.0.3)
+    - Remove duplicate observer creation on URL change
+
+    Note: web-vitals has inherent memory accumulation in SPAs due to internal state.
+    The v5 upgrade reduces this but doesn't fully eliminate it since web-vitals
+    doesn't provide cleanup functions (Issue #629 was closed as "not planned"). (2026-01-22)
+
+- Updated dependencies []:
+    - @posthog/types@1.334.0
+
+## 1.333.0
+
+### Minor Changes
+
+- [#2942](https://github.com/PostHog/posthog-js/pull/2942) [`994206d`](https://github.com/PostHog/posthog-js/commit/994206d4ceac218061ef35eec744a0698fb0afed) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Send context on sendMessage
+  (2026-01-21)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.333.0
+
+## 1.332.0
+
+### Minor Changes
+
+- [#2882](https://github.com/PostHog/posthog-js/pull/2882) [`8a5a3d5`](https://github.com/PostHog/posthog-js/commit/8a5a3d5693facda62b90b66dead338f7dca19705) Thanks [@adboio](https://github.com/adboio)! - add support for question prefill in popover surveys, add useThumbSurvey hook
+  (2026-01-20)
+
+### Patch Changes
+
+- Updated dependencies [[`8a5a3d5`](https://github.com/PostHog/posthog-js/commit/8a5a3d5693facda62b90b66dead338f7dca19705)]:
+    - @posthog/core@1.13.0
+    - @posthog/types@1.332.0
+
+## 1.331.3
+
+### Patch Changes
+
+- [#2916](https://github.com/PostHog/posthog-js/pull/2916) [`cbab5d2`](https://github.com/PostHog/posthog-js/commit/cbab5d2585b284b1adace8307a8acdb080501227) Thanks [@adboio](https://github.com/adboio)! - fix product tour tooltips on mobile
+  (2026-01-20)
+
+- [#2933](https://github.com/PostHog/posthog-js/pull/2933) [`d9eaf41`](https://github.com/PostHog/posthog-js/commit/d9eaf413bea479af86d6418f45a58ee1df2a8fe0) Thanks [@adboio](https://github.com/adboio)! - add url params to posthog logo in surveys footer
+  (2026-01-20)
+- Updated dependencies []:
+    - @posthog/types@1.331.3
+
+## 1.331.2
+
+### Patch Changes
+
+- [#2939](https://github.com/PostHog/posthog-js/pull/2939) [`6442f5d`](https://github.com/PostHog/posthog-js/commit/6442f5d6cd8ae097c07584f102bc6001948dce59) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: Rate limiting configuration changes are respected
+  (2026-01-20)
+- Updated dependencies []:
+    - @posthog/types@1.331.2
+
+## 1.331.1
+
+### Patch Changes
+
+- Updated dependencies [[`b7fa003`](https://github.com/PostHog/posthog-js/commit/b7fa003ef6ef74bdf4666be0748d89a5a6169054), [`f0cbc0d`](https://github.com/PostHog/posthog-js/commit/f0cbc0d8e4e5efc27d9595676e886d6d3d3892f4)]:
+    - @posthog/core@1.12.0
+    - @posthog/types@1.331.1
+
+## 1.331.0
+
+### Minor Changes
+
+- [#2900](https://github.com/PostHog/posthog-js/pull/2900) [`23770e9`](https://github.com/PostHog/posthog-js/commit/23770e9e2eed1aca5c2bc7a34a6d64dc115b0d11) Thanks [@dmarticus](https://github.com/dmarticus)! - Renamed `evaluationEnvironments` to `evaluationContexts` for clearer semantics. The term "contexts" better reflects that this feature is for specifying evaluation contexts (e.g., "web", "mobile", "checkout") rather than deployment environments (e.g., "staging", "production").
+
+    ### Deprecated
+    - `posthog.init` option `evaluationEnvironments` is now deprecated in favor of `evaluationContexts`. The old property will continue to work and will log a deprecation warning. It will be removed in a future major version.
+
+    ### Migration Guide
+
+    ````javascript
+    // Before
+    posthog.init('<ph_project_api_key>', {
+        evaluationEnvironments: ['production', 'web', 'checkout'],
+    })
+
+    // After
+    posthog.init('<ph_project_api_key>', {
+        evaluationContexts: ['production', 'web', 'checkout'],
+    })
+    ``` (2026-01-19)
+    ````
+
+### Patch Changes
+
+- Updated dependencies [[`23770e9`](https://github.com/PostHog/posthog-js/commit/23770e9e2eed1aca5c2bc7a34a6d64dc115b0d11)]:
+    - @posthog/core@1.11.0
+    - @posthog/types@1.331.0
+
+## 1.330.0
+
+### Minor Changes
+
+- [#2929](https://github.com/PostHog/posthog-js/pull/2929) [`6695383`](https://github.com/PostHog/posthog-js/commit/669538338970f4de22fe8c694db4cc880ba92ba9) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Add more context to a ticket when created
+  (2026-01-19)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.330.0
+
+## 1.329.0
+
+### Minor Changes
+
+- [#2927](https://github.com/PostHog/posthog-js/pull/2927) [`da78b8c`](https://github.com/PostHog/posthog-js/commit/da78b8c7e2fd7ecb9f16703a0e19582572b7ffbd) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Remove loading state in support product
+  (2026-01-19)
+
+### Patch Changes
+
+- [#2926](https://github.com/PostHog/posthog-js/pull/2926) [`3676972`](https://github.com/PostHog/posthog-js/commit/3676972e7ddd75496ac17d9528508d97269c4e8a) Thanks [@pawel-cebula](https://github.com/pawel-cebula)! - Fix TypeError when logging objects with null/undefined property values in flattenObject
+  (2026-01-19)
+- Updated dependencies []:
+    - @posthog/types@1.329.0
+
+## 1.328.0
+
+### Minor Changes
+
+- [#2925](https://github.com/PostHog/posthog-js/pull/2925) [`ce4566d`](https://github.com/PostHog/posthog-js/commit/ce4566d9107c7fd7d802274c1b8ccf477b8ccd0d) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Restore fetch wrappers to most recent working version
+  (2026-01-17)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.328.0
+
+## 1.327.0
+
+### Minor Changes
+
+- [#2923](https://github.com/PostHog/posthog-js/pull/2923) [`b8b7f90`](https://github.com/PostHog/posthog-js/commit/b8b7f9058cba58b2ff2eb76ab49776304dabef1c) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Fixed issue with fetch wrappers reconsuming request bodies and generating mismatched FormData boundaries
+  (2026-01-17)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.327.0
+
+## 1.326.0
+
+### Minor Changes
+
+- [#2881](https://github.com/PostHog/posthog-js/pull/2881) [`d37e570`](https://github.com/PostHog/posthog-js/commit/d37e5709863e869825df57d0854588140c4294b2) Thanks [@adboio](https://github.com/adboio)! - add support for thumbs up/down survey rating scale
+  (2026-01-16)
+
+### Patch Changes
+
+- Updated dependencies [[`d37e570`](https://github.com/PostHog/posthog-js/commit/d37e5709863e869825df57d0854588140c4294b2)]:
+    - @posthog/core@1.10.0
+    - @posthog/types@1.326.0
+
 ## 1.325.0
 
 ### Minor Changes

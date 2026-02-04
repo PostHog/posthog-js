@@ -43,7 +43,8 @@ export function renderProductTourPreview({
 
     const isSurveyStep = step.type === 'survey'
     const isBannerStep = step.type === 'banner'
-    const tooltipClass = isSurveyStep ? 'ph-tour-tooltip ph-tour-survey-step' : 'ph-tour-tooltip'
+    const isModal = step.type === 'modal'
+    const tooltipClass = `ph-tour-tooltip${isModal ? ' ph-tour-tooltip--modal' : ''}${isSurveyStep ? ' ph-tour-survey-step' : ''}`
 
     if (isBannerStep) {
         render(

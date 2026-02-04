@@ -37,7 +37,7 @@ export class WebVitalsAutocapture {
         )
             ? this._instance.config.capture_performance?.web_vitals_allowed_metrics
             : undefined
-        return !isUndefined(clientConfigMetricAllowList)
+        return !isNullish(clientConfigMetricAllowList)
             ? clientConfigMetricAllowList
             : this._instance.persistence?.props[WEB_VITALS_ALLOWED_METRICS] || ['CLS', 'FCP', 'INP', 'LCP']
     }
@@ -47,6 +47,13 @@ export class WebVitalsAutocapture {
             ? this._instance.config.capture_performance.web_vitals_delayed_flush_ms
             : undefined
         return clientConfig || DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS
+    }
+
+    public get useAttribution(): boolean {
+        const clientConfig: boolean | undefined = isObject(this._instance.config.capture_performance)
+            ? this._instance.config.capture_performance.web_vitals_attribution
+            : undefined
+        return clientConfig ?? false
     }
 
     public get _maxAllowedValue(): number {
@@ -110,12 +117,17 @@ export class WebVitalsAutocapture {
         if (assignableWindow.__PosthogExtensions__?.postHogWebVitalsCallbacks) {
             // already loaded
             cb()
+            return
         }
-        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'web-vitals', (err) => {
+
+        const kind = this.useAttribution ? 'web-vitals-with-attribution' : 'web-vitals'
+
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, kind, (err) => {
             if (err) {
                 logger.error('failed to load script', err)
                 return
             }
+
             cb()
         })
     }
@@ -190,6 +202,7 @@ export class WebVitalsAutocapture {
         if (urlHasChanged) {
             // we need to send what we have
             this._flushToCapture()
+
             // poor performance is >4s, we wait twice that time to send
             // this is in case we haven't received all metrics
             // we'll at least gather some
@@ -227,6 +240,14 @@ export class WebVitalsAutocapture {
     }
 
     private _startCapturing = () => {
+        // IMPORTANT: web-vitals does not provide cleanup functions and warns against
+        // calling functions more than once per page load. Each call creates new
+        // PerformanceObservers that persist for the page lifetime.
+        // See: https://github.com/GoogleChrome/web-vitals/issues/629
+        if (this._initialized) {
+            return
+        }
+
         let onLCP: WebVitalsMetricCallback | undefined
         let onCLS: WebVitalsMetricCallback | undefined
         let onFCP: WebVitalsMetricCallback | undefined

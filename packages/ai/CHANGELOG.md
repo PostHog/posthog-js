@@ -1,5 +1,129 @@
 # posthog-ai
 
+## 7.8.4
+
+### Patch Changes
+
+- Updated dependencies [[`c99e5fe`](https://github.com/PostHog/posthog-js/commit/c99e5feb043870357c8f722eb52542327c3f472b)]:
+  - @posthog/core@1.19.0
+  - posthog-node@5.24.9
+
+## 7.8.3
+
+### Patch Changes
+
+- [#3008](https://github.com/PostHog/posthog-js/pull/3008) [`26adbc8`](https://github.com/PostHog/posthog-js/commit/26adbc8bc9271090cbed667cf81c24c1639b4a1f) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates: - Updated dependency [`@anthropic-ai/sdk@^0.72.1` ↗︎](https://www.npmjs.com/package/@anthropic-ai/sdk/v/0.72.1) (from `^0.71.2`, in `dependencies`) - Updated dependency [`openai@^6.17.0` ↗︎](https://www.npmjs.com/package/openai/v/6.17.0) (from `^6.16.0`, in `dependencies`) (2026-02-03)
+- Updated dependencies [[`7768010`](https://github.com/PostHog/posthog-js/commit/77680105f1e8baf5ed1934d423494793d11ff01a)]:
+  - @posthog/core@1.18.0
+  - posthog-node@5.24.8
+
+## 7.8.2
+
+### Patch Changes
+
+- Updated dependencies [[`727536c`](https://github.com/PostHog/posthog-js/commit/727536cf5f1ab5a8d21fa9d4e2e6b13efc851fca)]:
+  - @posthog/core@1.17.0
+  - posthog-node@5.24.7
+
+## 7.8.1
+
+### Patch Changes
+
+- Updated dependencies [[`cbe84c1`](https://github.com/PostHog/posthog-js/commit/cbe84c1ea8b6dd398569ed401139e9698e08fd64)]:
+  - @posthog/core@1.16.0
+  - posthog-node@5.24.6
+
+## 7.8.0
+
+### Minor Changes
+
+- [#2915](https://github.com/PostHog/posthog-js/pull/2915) [`e105fd0`](https://github.com/PostHog/posthog-js/commit/e105fd06334e6953ed923c15f6b1392cafce0322) Thanks [@richardsolomou](https://github.com/richardsolomou)! - feat(llma): add time to first token reporting
+  (2026-01-29)
+
+## 7.7.0
+
+### Minor Changes
+
+- [#2982](https://github.com/PostHog/posthog-js/pull/2982) [`ce9b4db`](https://github.com/PostHog/posthog-js/commit/ce9b4dbbecfd831f76d974ae74a0b84952c3996f) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Add prompt management functions.
+  (2026-01-28)
+
+## 7.6.1
+
+### Patch Changes
+
+- Updated dependencies [[`8c0c495`](https://github.com/PostHog/posthog-js/commit/8c0c495caaf4cd7f950cbc77fdfc1df499772008)]:
+  - @posthog/core@1.15.0
+  - posthog-node@5.24.4
+
+## 7.6.0
+
+### Minor Changes
+
+- [#2955](https://github.com/PostHog/posthog-js/pull/2955) [`6db4b48`](https://github.com/PostHog/posthog-js/commit/6db4b487c0e14707c14e248c620eced5ef4166e0) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Add `rawUsage` field to capture raw provider usage metadata for backend cost calculations
+  (2026-01-27)
+
+### Patch Changes
+
+- [#2974](https://github.com/PostHog/posthog-js/pull/2974) [`93da719`](https://github.com/PostHog/posthog-js/commit/93da719335372135a5ebefddeb9f6ed571d4ef5d) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates: - Updated dependency [`@google/genai@^1.38.0` ↗︎](https://www.npmjs.com/package/@google/genai/v/1.38.0) (from `^1.34.0`, in `dependencies`) - Updated dependency [`@langchain/core@^1.1.17` ↗︎](https://www.npmjs.com/package/@langchain/core/v/1.1.17) (from `^1.1.8`, in `dependencies`) (2026-01-27)
+
+- [#2977](https://github.com/PostHog/posthog-js/pull/2977) [`5544606`](https://github.com/PostHog/posthog-js/commit/5544606e159bd0589f04a9571b3ce99582b917bf) Thanks [@andrewm4894](https://github.com/andrewm4894)! - fix: sanitize base64 images before formatting in Responses API to prevent 413 payload-too-large errors
+  (2026-01-27)
+- Updated dependencies [[`f51560c`](https://github.com/PostHog/posthog-js/commit/f51560caf78386cef5278f7cf0e9f253b2ec0e50)]:
+  - @posthog/core@1.14.1
+  - posthog-node@5.24.3
+
+## 7.5.4
+
+### Patch Changes
+
+- Updated dependencies [[`933c763`](https://github.com/PostHog/posthog-js/commit/933c7639ae30390ca562a0891d59649711b53522)]:
+  - @posthog/core@1.14.0
+  - posthog-node@5.24.2
+
+## 7.5.3
+
+### Patch Changes
+
+- Updated dependencies [[`8a5a3d5`](https://github.com/PostHog/posthog-js/commit/8a5a3d5693facda62b90b66dead338f7dca19705)]:
+  - @posthog/core@1.13.0
+  - posthog-node@5.24.1
+
+## 7.5.2
+
+### Patch Changes
+
+- Updated dependencies [[`b7fa003`](https://github.com/PostHog/posthog-js/commit/b7fa003ef6ef74bdf4666be0748d89a5a6169054), [`f0cbc0d`](https://github.com/PostHog/posthog-js/commit/f0cbc0d8e4e5efc27d9595676e886d6d3d3892f4)]:
+  - @posthog/core@1.12.0
+  - posthog-node@5.24.0
+
+## 7.5.1
+
+### Patch Changes
+
+- Updated dependencies [[`23770e9`](https://github.com/PostHog/posthog-js/commit/23770e9e2eed1aca5c2bc7a34a6d64dc115b0d11)]:
+  - @posthog/core@1.11.0
+  - posthog-node@5.23.0
+
+## 7.5.0
+
+### Minor Changes
+
+- [#2930](https://github.com/PostHog/posthog-js/pull/2930) [`c9b773a`](https://github.com/PostHog/posthog-js/commit/c9b773aefd25fcc81a60dff02348e8e724b87565) Thanks [@marandaneto](https://github.com/marandaneto)! - chore: Bump node min. ^20.20.0 || >=22.22.0 due to https://nodejs.org/en/blog/vulnerability/january-2026-dos-mitigation-async-hooks
+  (2026-01-19)
+
+### Patch Changes
+
+- Updated dependencies [[`c9b773a`](https://github.com/PostHog/posthog-js/commit/c9b773aefd25fcc81a60dff02348e8e724b87565)]:
+  - posthog-node@5.22.0
+
+## 7.4.3
+
+### Patch Changes
+
+- Updated dependencies [[`d37e570`](https://github.com/PostHog/posthog-js/commit/d37e5709863e869825df57d0854588140c4294b2)]:
+  - @posthog/core@1.10.0
+  - posthog-node@5.21.1
+
 ## 7.4.2
 
 ### Patch Changes

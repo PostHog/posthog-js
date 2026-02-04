@@ -216,6 +216,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "undefined",
     "(stylesheet: HTMLStyleElement) => HTMLStyleElement | null"
   ],
+  "external_scripts_inject_target": [
+    "undefined",
+    "\\"body\\"",
+    "\\"head\\""
+  ],
   "enable_recording_console_log": [
     "undefined",
     "false",
@@ -282,6 +287,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   "properties_string_max_length": "number",
   "defaults": [
+    "\\"2026-01-30\\"",
     "\\"2025-11-30\\"",
     "\\"2025-05-24\\"",
     "\\"unset\\""
@@ -459,6 +465,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true"
   ],
+  "evaluation_contexts": [
+    "undefined",
+    "readonly string[]"
+  ],
   "evaluation_environments": [
     "undefined",
     "readonly string[]"
@@ -514,6 +524,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "web_vitals_delayed_flush_ms": [
         "undefined",
         "number"
+      ],
+      "web_vitals_attribution": [
+        "undefined",
+        "false",
+        "true"
       ]
     }
   ],
@@ -623,6 +638,12 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "undefined",
     "\\"always\\"",
     "\\"on_reject\\""
+  ],
+  "test_user_hostname": [
+    "undefined",
+    "null",
+    "string",
+    "RegExp"
   ],
   "__add_tracing_headers": [
     "undefined",

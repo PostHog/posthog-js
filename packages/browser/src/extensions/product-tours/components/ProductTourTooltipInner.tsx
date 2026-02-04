@@ -64,6 +64,8 @@ export function ProductTourTooltipInner({
     const isInteractive = !!(onNext || onPrevious || onDismiss || onButtonClick)
     const cursorStyle = isInteractive ? undefined : { cursor: 'default' }
 
+    const showPostHogBranding = !whiteLabel && isFirstStep
+
     const handleButtonClick = (button: ProductTourStepButton) => {
         if (onButtonClick) {
             onButtonClick(button)
@@ -73,7 +75,7 @@ export function ProductTourTooltipInner({
     return (
         <>
             <button class="ph-tour-dismiss" onClick={onDismiss} aria-label="Close tour" style={cursorStyle}>
-                {cancelSVG}
+                {cancelSVG()}
             </button>
 
             <div class="ph-tour-content" dangerouslySetInnerHTML={{ __html: getStepHtml(step) }} />
@@ -128,9 +130,9 @@ export function ProductTourTooltipInner({
                 </div>
             </div>
 
-            {!whiteLabel && (
+            {showPostHogBranding && (
                 <a
-                    href={isInteractive ? 'https://posthog.com/product-tours' : undefined}
+                    href={isInteractive ? 'https://posthog.com/docs/product-tours' : undefined}
                     target={isInteractive ? '_blank' : undefined}
                     rel={isInteractive ? 'noopener noreferrer' : undefined}
                     class="ph-tour-branding"

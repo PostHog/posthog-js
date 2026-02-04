@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const path = require('path')
 
 // Dynamically resolve package paths so config doesn't need updating on version bumps.
@@ -28,5 +29,5 @@ module.exports = {
     transform: {
         '^.+\\.(js|jsx|ts|tsx|mjs)$': 'babel-jest',
     },
-    transformIgnorePatterns: ['node_modules/(?!(@testing-library/preact|preact))'],
+    transformIgnorePatterns: ['/node_modules/(?!.*(query-selector-shadow-dom|@testing-library/preact|preact/))'],
 }

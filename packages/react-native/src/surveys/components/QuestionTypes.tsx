@@ -6,6 +6,8 @@ import {
   DissatisfiedEmoji,
   NeutralEmoji,
   SatisfiedEmoji,
+  ThumbsDownEmoji,
+  ThumbsUpEmoji,
   VeryDissatisfiedEmoji,
   VerySatisfiedEmoji,
 } from '../icons'
@@ -132,10 +134,20 @@ export function RatingQuestion({
         <View style={styles.ratingOptions}>
           {question.display === SurveyRatingDisplay.Emoji && (
             <View style={styles.ratingOptionsEmoji}>
-              {(question.scale === 3 ? threeScaleEmojis : fiveScaleEmojis).map((Emoji, idx) => {
+              {emojiScaleLists[question.scale]?.map((Emoji, idx) => {
                 const active = idx + 1 === rating
                 return (
-                  <TouchableOpacity key={idx} style={styles.ratingsEmoji} onPress={() => setRating(idx + 1)}>
+                  <TouchableOpacity
+                    key={idx}
+                    style={styles.ratingsEmoji}
+                    onPress={() => {
+                      const response = idx + 1
+                      setRating(response)
+                      if (question.skipSubmitButton) {
+                        onSubmit(response)
+                      }
+                    }}
+                  >
                     <Emoji fill={active ? appearance.ratingButtonActiveColor : appearance.ratingButtonColor} />
                   </TouchableOpacity>
                 )
@@ -153,7 +165,12 @@ export function RatingQuestion({
                     active={active}
                     appearance={appearance}
                     num={number}
-                    setActiveNumber={setRating}
+                    setActiveNumber={(response) => {
+                      setRating(response)
+                      if (question.skipSubmitButton) {
+                        onSubmit(response)
+                      }
+                    }}
                   />
                 )
               })}
@@ -184,6 +201,7 @@ export function RatingQuestion({
         submitDisabled={rating === null && !question.optional}
         appearance={appearance}
         onSubmit={() => onSubmit(rating)}
+        skipSubmitButton={question.skipSubmitButton}
       />
     </>
   )
@@ -230,11 +248,15 @@ export function MultipleChoiceQuestion({
   onSubmit: (choices: string | string[] | null) => void
 }): JSX.Element {
   question = question as MultipleSurveyQuestion
+  const isSingleChoice = question.type === SurveyQuestionType.SingleChoice
   const allowMultiple = question.type === SurveyQuestionType.MultipleChoice
   const openChoice = question.hasOpenChoice ? question.choices[question.choices.length - 1] : null
   const choices = useMemo(() => getDisplayOrderChoices(question as MultipleSurveyQuestion), [question])
   const [selectedChoices, setSelectedChoices] = useState<string[]>([])
   const [openEndedInput, setOpenEndedInput] = useState('')
+
+  // Only skip submit for single-choice questions without open choice
+  const shouldSkipSubmit = question.skipSubmitButton && isSingleChoice && !question.hasOpenChoice
 
   return (
     <View>
@@ -266,6 +288,9 @@ export function MultipleChoiceQuestion({
                   )
                 } else {
                   setSelectedChoices([choice])
+                  if (shouldSkipSubmit && !isOpenChoice) {
+                    onSubmit(choice)
+                  }
                 }
               }}
             >
@@ -306,13 +331,17 @@ export function MultipleChoiceQuestion({
           // For multiple choice questions, always return an array
           onSubmit(allowMultiple ? result : result[0])
         }}
+        skipSubmitButton={shouldSkipSubmit}
       />
     </View>
   )
 }
 
-const threeScaleEmojis = [DissatisfiedEmoji, NeutralEmoji, SatisfiedEmoji]
-const fiveScaleEmojis = [VeryDissatisfiedEmoji, DissatisfiedEmoji, NeutralEmoji, SatisfiedEmoji, VerySatisfiedEmoji]
+const emojiScaleLists: Record<number, (typeof ThumbsUpEmoji)[]> = {
+  2: [ThumbsUpEmoji, ThumbsDownEmoji],
+  3: [DissatisfiedEmoji, NeutralEmoji, SatisfiedEmoji],
+  5: [VeryDissatisfiedEmoji, DissatisfiedEmoji, NeutralEmoji, SatisfiedEmoji, VerySatisfiedEmoji],
+}
 const fiveScaleNumbers = [1, 2, 3, 4, 5]
 const sevenScaleNumbers = [1, 2, 3, 4, 5, 6, 7]
 const tenScaleNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]

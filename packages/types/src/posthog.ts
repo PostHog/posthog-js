@@ -8,7 +8,12 @@
 import type { PostHogConfig } from './posthog-config'
 import type { Properties, JsonType } from './common'
 import type { CaptureResult, CaptureOptions } from './capture'
-import type { FeatureFlagsCallback, EarlyAccessFeatureCallback, EarlyAccessFeatureStage } from './feature-flags'
+import type {
+    FeatureFlagsCallback,
+    EarlyAccessFeatureCallback,
+    EarlyAccessFeatureStage,
+    FeatureFlagResult,
+} from './feature-flags'
 import type { SessionIdChangedCallback } from './session-recording'
 import type { RequestCallback } from './request'
 import type { SurveyRenderReason } from './survey'
@@ -140,6 +145,29 @@ export interface PostHog {
      */
     createPersonProfile(): void
 
+    /**
+     * Marks the current user as a test user by setting the `$test_user` person property to `true`.
+     * This also enables person processing for the current user.
+     *
+     * This is useful for using in a cohort your internal/test filters for your posthog org.
+     * @see https://posthog.com/tutorials/filter-internal-users
+     * Create a cohort with `$test_user` IS SET, and set your internal test filters to be NOT IN that cohort.
+     *
+     * {@label Identification}
+     *
+     * @example
+     * ```js
+     * // Manually mark as test user
+     * posthog.setTestUser()
+     *
+     * // Or use test_user_hostname config for automatic detection
+     * posthog.init('token', { test_user_hostname: 'localhost' })
+     * ```
+     *
+     * @public
+     */
+    setTestUser(): void
+
     // ============================================================================
     // Groups
     // ============================================================================
@@ -183,8 +211,20 @@ export interface PostHog {
      *
      * @param key - The feature flag key
      * @returns The feature flag payload
+     * @deprecated Use `getFeatureFlagResult()` instead which properly tracks the feature flag call.
      */
     getFeatureFlagPayload(key: string): JsonType
+
+    /**
+     * Get a feature flag evaluation result including both the flag value and payload.
+     *
+     * By default, this method emits the `$feature_flag_called` event.
+     *
+     * @param key - The feature flag key
+     * @param options - Options for the feature flag lookup
+     * @returns The feature flag result including key, enabled, variant, and payload, or undefined if not loaded
+     */
+    getFeatureFlagResult(key: string, options?: { send_event?: boolean }): FeatureFlagResult | undefined
 
     /**
      * Check if a feature flag is enabled.

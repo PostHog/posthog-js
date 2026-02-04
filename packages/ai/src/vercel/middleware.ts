@@ -436,6 +436,24 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
 
           // V2 usage has simple numbers, V3 has objects with .total - normalize both
           const usageObj = result.usage as Record<string, unknown>
+
+          // Extract raw response for providers that include detailed usage metadata
+          // For Gemini, candidatesTokensDetails is in result.response.body.usageMetadata
+          const rawUsageData: Record<string, unknown> = {
+            usage: result.usage,
+            providerMetadata,
+          }
+
+          // Include response body usageMetadata if it contains detailed token breakdown (e.g., candidatesTokensDetails)
+          if (result.response && typeof result.response === 'object') {
+            const responseBody = result.response.body
+            if (responseBody && typeof responseBody === 'object' && 'usageMetadata' in responseBody) {
+              rawUsageData.rawResponse = {
+                usageMetadata: responseBody.usageMetadata,
+              }
+            }
+          }
+
           const usage = {
             inputTokens: extractTokenCount(result.usage.inputTokens),
             outputTokens: extractTokenCount(result.usage.outputTokens),
@@ -443,6 +461,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             cacheReadInputTokens: extractCacheReadTokens(usageObj),
             webSearchCount,
             ...additionalTokenValues,
+            rawUsage: rawUsageData,
           }
 
           adjustAnthropicV3CacheTokens(model, provider, usage)
@@ -496,6 +515,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
     doStream: {
       value: async (params: LanguageModelCallOptions) => {
         const startTime = Date.now()
+        let firstTokenTime: number | undefined
         let generatedText = ''
         let reasoningText = ''
         let usage: {
@@ -532,14 +552,23 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             transform(chunk, controller) {
               // Handle streaming patterns - compatible with both V2 and V3
               if (chunk.type === 'text-delta') {
+                if (firstTokenTime === undefined) {
+                  firstTokenTime = Date.now()
+                }
                 generatedText += chunk.delta
               }
               if (chunk.type === 'reasoning-delta') {
+                if (firstTokenTime === undefined) {
+                  firstTokenTime = Date.now()
+                }
                 reasoningText += chunk.delta
               }
 
               // Handle tool call chunks
               if (chunk.type === 'tool-input-start') {
+                if (firstTokenTime === undefined) {
+                  firstTokenTime = Date.now()
+                }
                 // Initialize a new tool call
                 toolCallsInProgress.set(chunk.id, {
                   toolCallId: chunk.id,
@@ -558,6 +587,9 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 // Tool call is complete, keep it in the map for final processing
               }
               if (chunk.type === 'tool-call') {
+                if (firstTokenTime === undefined) {
+                  firstTokenTime = Date.now()
+                }
                 // Direct tool call chunk (complete tool call)
                 toolCallsInProgress.set(chunk.toolCallId, {
                   toolCallId: chunk.toolCallId,
@@ -583,6 +615,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
 
             flush: async () => {
               const latency = (Date.now() - startTime) / 1000
+              const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
               // Build content array similar to mapVercelOutput structure
               const content: OutputContentItem[] = []
               if (reasoningText) {
@@ -619,10 +652,11 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
 
               const webSearchCount = extractWebSearchCount(providerMetadata, usage)
 
-              // Update usage with web search count
+              // Update usage with web search count and raw metadata
               const finalUsage = {
                 ...usage,
                 webSearchCount,
+                rawUsage: { usage, providerMetadata },
               }
 
               adjustAnthropicV3CacheTokens(model, provider, finalUsage)
@@ -636,6 +670,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
                 output: output,
                 latency,
+                timeToFirstToken,
                 baseURL,
                 params: mergedParams as any,
                 httpStatus: 200,

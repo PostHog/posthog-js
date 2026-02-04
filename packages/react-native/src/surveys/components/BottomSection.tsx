@@ -9,13 +9,19 @@ export function BottomSection({
   appearance,
   onSubmit,
   link,
+  skipSubmitButton,
 }: {
   text: string
   submitDisabled: boolean
   appearance: SurveyAppearanceTheme
   onSubmit: () => void
   link?: string | null
+  skipSubmitButton?: boolean
 }): JSX.Element {
+  if (skipSubmitButton) {
+    return <></>
+  }
+
   return (
     <View style={styles.bottomSection}>
       <TouchableOpacity

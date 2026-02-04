@@ -83,6 +83,20 @@ describe('web vitals', () => {
             },
         ],
         [
+            null,
+            ['CLS', 'FCP', 'INP', 'LCP'] as SupportedWebVitalsMetrics[],
+            {
+                $web_vitals_LCP_event: expectedEmittedWebVitals('LCP'),
+                $web_vitals_LCP_value: 123.45,
+                $web_vitals_CLS_event: expectedEmittedWebVitals('CLS'),
+                $web_vitals_CLS_value: 123.45,
+                $web_vitals_FCP_event: expectedEmittedWebVitals('FCP'),
+                $web_vitals_FCP_value: 123.45,
+                $web_vitals_INP_event: expectedEmittedWebVitals('INP'),
+                $web_vitals_INP_value: 123.45,
+            },
+        ],
+        [
             ['CLS', 'FCP', 'INP', 'LCP'] as SupportedWebVitalsMetrics[],
             ['CLS', 'FCP', 'INP', 'LCP'] as SupportedWebVitalsMetrics[],
             {
@@ -109,7 +123,7 @@ describe('web vitals', () => {
     ])(
         'the behaviour when client config is %s',
         (
-            clientConfig: SupportedWebVitalsMetrics[] | undefined,
+            clientConfig: SupportedWebVitalsMetrics[] | undefined | null,
             expectedAllowedMetrics: SupportedWebVitalsMetrics[],
             expectedProperties: Record<string, any>
         ) => {
@@ -226,6 +240,55 @@ describe('web vitals', () => {
             })
         }
     )
+
+    describe('web_vitals_attribution config', () => {
+        it.each([
+            [undefined, false],
+            [true, true],
+            [false, false],
+        ])(
+            'when web_vitals_attribution is %p, useAttribution should be %p',
+            async (attributionConfig, expectedUseAttribution) => {
+                posthog = await createPosthogInstance(uuidv7(), {
+                    capture_performance: { web_vitals: true, web_vitals_attribution: attributionConfig },
+                    capture_pageview: false,
+                })
+
+                expect(posthog.webVitalsAutocapture!.useAttribution).toBe(expectedUseAttribution)
+            }
+        )
+
+        it.each([
+            [undefined, 'web-vitals'],
+            [false, 'web-vitals'],
+            [true, 'web-vitals-with-attribution'],
+        ])('when web_vitals_attribution is %p, should load %s bundle', async (attributionConfig, expectedBundle) => {
+            const loadScriptMock = jest.fn().mockImplementation((_ph, _kind, callback) => {
+                assignableWindow.__PosthogExtensions__ = {}
+                assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
+                    onLCP: jest.fn(),
+                    onCLS: jest.fn(),
+                    onFCP: jest.fn(),
+                    onINP: jest.fn(),
+                }
+                callback()
+            })
+
+            assignableWindow.__PosthogExtensions__ = {}
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                capture_performance: { web_vitals: true, web_vitals_attribution: attributionConfig },
+                capture_pageview: false,
+            })
+
+            posthog.webVitalsAutocapture!.onRemoteConfig({
+                capturePerformance: { web_vitals: true },
+            } as RemoteConfig)
+
+            expect(loadScriptMock).toHaveBeenCalledWith(expect.anything(), expectedBundle, expect.any(Function))
+        })
+    })
 
     describe('afterFlagsResponse()', () => {
         beforeEach(async () => {

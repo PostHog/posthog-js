@@ -245,8 +245,9 @@ describe('PostHog Feature Flags v4', () => {
           expect(posthog.isFeatureEnabled('feature-variant')).toEqual(undefined)
           expect(posthog.isFeatureEnabled('feature-missing')).toEqual(undefined)
 
-          expect(posthog.getFeatureFlagPayloads()).toEqual(undefined)
-          expect(posthog.getFeatureFlagPayload('feature-1')).toEqual(undefined)
+          // When errored out, we return cached values (which are empty in this case)
+          expect(posthog.getFeatureFlagPayloads()).toEqual({})
+          expect(posthog.getFeatureFlagPayload('feature-1')).toEqual(null)
         })
       })
 
@@ -385,6 +386,108 @@ describe('PostHog Feature Flags v4', () => {
           expect(posthog.isFeatureEnabled('feature-variant')).toEqual(true)
           expect(posthog.isFeatureEnabled('feature-missing')).toEqual(false)
           expect(posthog.isFeatureEnabled('x-flag')).toEqual(true)
+        })
+      })
+
+      describe('when subsequent flags calls return failed flags with errorsWhileComputingFlags', () => {
+        beforeEach(() => {
+          ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+            _mocks.fetch
+              .mockImplementationOnce((url) => {
+                if (url.includes('/flags/?v=2&config=true')) {
+                  return Promise.resolve({
+                    status: 200,
+                    text: () => Promise.resolve('ok'),
+                    json: () =>
+                      Promise.resolve({
+                        flags: createMockFeatureFlags(),
+                      }),
+                  })
+                }
+                return errorAPIResponse
+              })
+              .mockImplementationOnce((url) => {
+                if (url.includes('/flags/?v=2&config=true')) {
+                  return Promise.resolve({
+                    status: 200,
+                    text: () => Promise.resolve('ok'),
+                    json: () =>
+                      Promise.resolve({
+                        flags: {
+                          'x-flag': {
+                            key: 'x-flag',
+                            enabled: true,
+                            variant: 'x-value',
+                            failed: false,
+                            reason: {
+                              code: 'matched_condition',
+                              description: 'matched condition set 5',
+                              condition_index: 0,
+                            },
+                            metadata: {
+                              id: 5,
+                              version: 1,
+                              description: 'x-flag',
+                              payload: '{"x":"value"}',
+                            },
+                          },
+                          'feature-1': {
+                            key: 'feature-1',
+                            enabled: false,
+                            variant: undefined,
+                            failed: true,
+                            reason: {
+                              code: 'database_error',
+                              description: 'Database connection error during evaluation',
+                              condition_index: undefined,
+                            },
+                            metadata: {
+                              id: 1,
+                              version: 1,
+                              description: 'feature-1',
+                              payload: undefined,
+                            },
+                          },
+                        },
+                        errorsWhileComputingFlags: true,
+                      }),
+                  })
+                }
+
+                return errorAPIResponse
+              })
+              .mockImplementation(() => {
+                return errorAPIResponse
+              })
+          })
+
+          posthog.reloadFeatureFlags()
+        })
+
+        it('should filter out failed flags and preserve their cached values', async () => {
+          expect(posthog.getFeatureFlags()).toEqual({
+            'feature-1': true,
+            'feature-2': true,
+            'json-payload': true,
+            'feature-variant': 'variant',
+          })
+
+          // second call returns feature-1 as failed (should be filtered out)
+          // and x-flag as successful (should be merged in)
+          await posthog.reloadFeatureFlagsAsync()
+
+          // feature-1 should retain its cached value (true), not be overwritten with false
+          expect(posthog.getFeatureFlags()).toEqual({
+            'feature-1': true,
+            'feature-2': true,
+            'json-payload': true,
+            'feature-variant': 'variant',
+            'x-flag': 'x-value',
+          })
+
+          expect(posthog.getFeatureFlag('feature-1')).toEqual(true)
+          expect(posthog.getFeatureFlag('x-flag')).toEqual('x-value')
+          expect(posthog.isFeatureEnabled('feature-1')).toEqual(true)
         })
       })
 
@@ -682,9 +785,14 @@ describe('PostHog Feature Flags v4', () => {
           evaluatedAt: 1640995200000,
         }
         const normalizedFeatureFlags = normalizeFlagsResponse(expectedFeatureFlags as PostHogV2FlagsResponse)
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.FeatureFlagDetails)).toEqual(
-          normalizedFeatureFlags
-        )
+
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.FeatureFlagDetails)).toEqual({
+          flags: normalizedFeatureFlags.flags,
+          requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+          evaluatedAt: 1640995200000,
+          errorsWhileComputingFlags: undefined,
+          quotaLimited: undefined,
+        })
       })
 
       it('should include feature flags in subsequent captures', async () => {
@@ -767,11 +875,11 @@ describe('PostHog Feature Flags v4', () => {
           signal: expect.anything(),
         })
 
-        // Verify all flag methods return undefined when quota limited
-        expect(posthog.getFeatureFlags()).toEqual(undefined)
+        // When quota limited with no prior cached flags, return empty results
+        expect(posthog.getFeatureFlags()).toEqual({})
         expect(posthog.getFeatureFlag('feature-1')).toEqual(undefined)
-        expect(posthog.getFeatureFlagPayloads()).toEqual(undefined)
-        expect(posthog.getFeatureFlagPayload('feature-1')).toEqual(undefined)
+        expect(posthog.getFeatureFlagPayloads()).toEqual({})
+        expect(posthog.getFeatureFlagPayload('feature-1')).toEqual(null)
       })
 
       it('should emit debug message when quota limited', async () => {
@@ -780,7 +888,7 @@ describe('PostHog Feature Flags v4', () => {
         await posthog.reloadFeatureFlagsAsync()
 
         expect(warnSpy).toHaveBeenCalledWith(
-          '[FEATURE FLAGS] Feature flags quota limit exceeded - unsetting all flags. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
+          '[FEATURE FLAGS] Feature flags quota limit exceeded. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
         )
       })
     })

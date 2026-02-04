@@ -2,6 +2,7 @@ import { type JSX, type RefObject, render, Fragment } from 'preact'
 import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { PostHog } from '../posthog-core'
 import {
+    DisplaySurveyPopoverOptions,
     Survey,
     SurveyCallback,
     SurveyEventName,
@@ -10,6 +11,7 @@ import {
     SurveyQuestion,
     SurveyQuestionBranchingType,
     SurveyQuestionType,
+    SurveyResponseValue,
     SurveySchedule,
     SurveyTabPosition,
     SurveyType,
@@ -25,7 +27,7 @@ import {
     isSurveyRunning,
     SURVEY_LOGGER as logger,
 } from '../utils/survey-utils'
-import { isNull, isUndefined } from '@posthog/core'
+import { isArray, isNull, isUndefined } from '@posthog/core'
 import { Properties } from '../types'
 import { SURVEYS } from '../constants'
 import { uuidv7 } from '../uuidv7'
@@ -177,9 +179,48 @@ export class SurveyManager {
         }
     }
 
-    public handlePopoverSurvey = (survey: Survey, properties?: Properties): void => {
+    public handlePopoverSurvey = (surveyParam: Survey, options?: DisplaySurveyPopoverOptions): void => {
+        // apply overrides for position / selector (needed for thumb surveys)
+        const survey =
+            options?.position || options?.selector
+                ? {
+                      ...surveyParam,
+                      appearance: {
+                          ...surveyParam.appearance,
+                          ...(options.position && { position: options.position }),
+                          ...(options.selector && { widgetSelector: options.selector }),
+                      },
+                  }
+                : surveyParam
+
         this._clearSurveyTimeout(survey.id)
+
+        const { properties, initialResponses } = options ?? {}
+        const hasPrefillData = initialResponses && Object.keys(initialResponses).length > 0
+        const isSurveyCompleted = hasPrefillData
+            ? this._handleInitialResponses(survey, initialResponses, properties)
+            : false
+
+        // if the survey is done (from prefill) and there is no thank-you, we can break early
+        if (isSurveyCompleted && !survey.appearance?.displayThankYouMessage) {
+            return
+        }
+
         this._addSurveyToFocus(survey)
+
+        // Calculate position style for NextToTrigger positioning
+        let positionStyle: JSX.CSSProperties = {}
+        if (survey.appearance?.position === SurveyPosition.NextToTrigger && survey.appearance?.widgetSelector) {
+            const targetElement = document.querySelector(survey.appearance.widgetSelector) as HTMLElement | null
+            if (targetElement) {
+                positionStyle =
+                    getNextToTriggerPosition(
+                        targetElement,
+                        parseInt(survey.appearance?.maxWidth || defaultSurveyAppearance.maxWidth)
+                    ) || {}
+            }
+        }
+
         const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
         const { shadow } = retrieveSurveyShadow(survey, this._posthog)
         if (delaySeconds <= 0) {
@@ -189,6 +230,8 @@ export class SurveyManager {
                     survey={survey}
                     removeSurveyFromFocus={this._removeSurveyFromFocus}
                     properties={properties}
+                    style={positionStyle}
+                    isSurveyCompleted={isSurveyCompleted}
                 />,
                 shadow
             )
@@ -207,6 +250,8 @@ export class SurveyManager {
                     survey={{ ...survey, appearance: { ...survey.appearance, surveyPopupDelaySeconds: 0 } }}
                     removeSurveyFromFocus={this._removeSurveyFromFocus}
                     properties={properties}
+                    style={positionStyle}
+                    isSurveyCompleted={isSurveyCompleted}
                 />,
                 shadow
             )
@@ -350,26 +395,101 @@ export class SurveyManager {
             return
         }
 
+        const { params } = extractPrefillParamsFromUrl(window.location.search)
+
+        if (Object.keys(params).length === 0) {
+            return
+        }
+
+        logger.info('[Survey Prefill] Detected URL prefill parameters')
+
+        const result = this._processPrefillData(survey, params)
+        if (!result) {
+            return
+        }
+
+        const { responses, submissionId, isSurveyCompleted, skippedResponses } = result
+
+        /**
+         * auto-submit some survey events on pageload only if:
+         * 1) survey is complete, OR
+         * 2) partial responses are enabled AND the skipped questions were set to auto-submit
+         */
+        const shouldAutoSubmitPrefilled = Object.keys(skippedResponses).length > 0 && survey.enable_partial_responses
+        if (shouldAutoSubmitPrefilled || isSurveyCompleted) {
+            sendSurveyEvent({
+                responses: isSurveyCompleted ? responses : skippedResponses,
+                survey,
+                surveySubmissionId: submissionId,
+                posthog: this._posthog,
+                isSurveyCompleted,
+            })
+        }
+
+        // Mark this survey as having been prefilled
+        this._prefillHandledSurveys.add(survey.id)
+    }
+
+    /**
+     * process prefilled responses for non-hosted surveys
+     *
+     * @returns boolean, true if the survey is completed
+     */
+    private _handleInitialResponses(
+        survey: Survey,
+        initialResponses: Record<number, SurveyResponseValue>,
+        properties?: Properties
+    ): boolean {
+        const prefillParams: { [key: number]: string[] } = {}
+        for (const [indexStr, value] of Object.entries(initialResponses)) {
+            const index = parseInt(indexStr)
+            prefillParams[index] = isArray(value) ? value.map(String) : [String(value)]
+        }
+
+        logger.info('[Survey] Processing initial responses')
+
+        const result = this._processPrefillData(survey, prefillParams)
+        if (!result) {
+            return false
+        }
+
+        const { responses, submissionId, isSurveyCompleted } = result
+
+        // always capture immediately
+        sendSurveyEvent({
+            responses,
+            survey,
+            surveySubmissionId: submissionId,
+            posthog: this._posthog,
+            isSurveyCompleted,
+            properties,
+        })
+
+        return isSurveyCompleted
+    }
+
+    private _processPrefillData(
+        survey: Survey,
+        prefillParams: Record<number, string[]>
+    ): {
+        responses: Record<string, any>
+        submissionId: string
+        startQuestionIndex: number
+        isSurveyCompleted: boolean
+        skippedResponses: Record<string, any>
+    } | null {
         try {
-            const { params } = extractPrefillParamsFromUrl(window.location.search)
-
-            if (Object.keys(params).length === 0) {
-                return
-            }
-
-            logger.info('[Survey Prefill] Detected URL prefill parameters')
-
-            const responses = convertPrefillToResponses(survey, params)
+            const responses = convertPrefillToResponses(survey, prefillParams)
 
             if (Object.keys(responses).length === 0) {
                 logger.warn('[Survey Prefill] No valid responses after conversion')
-                return
+                return null
             }
 
             const submissionId = uuidv7()
 
             // calculate which question to start at based on prefilled questions
-            const prefilledIndices = Object.keys(params).map((k) => parseInt(k, 10))
+            const prefilledIndices = Object.keys(prefillParams).map((k) => parseInt(k, 10))
             const { startQuestionIndex, skippedResponses } = calculatePrefillStartIndex(
                 survey,
                 prefilledIndices,
@@ -380,32 +500,15 @@ export class SurveyManager {
             setInProgressSurveyState(survey, {
                 surveySubmissionId: submissionId,
                 responses: responses,
-                lastQuestionIndex: isSurveyCompleted ? survey.questions.length - 1 : startQuestionIndex,
+                lastQuestionIndex: startQuestionIndex,
             })
 
             logger.info('[Survey Prefill] Stored prefilled responses in localStorage')
 
-            /**
-             * auto-submit some survey events on pageload only if:
-             * 1) survey is complete, OR
-             * 2) partial responses are enabled AND the skipped questions were set to auto-submit
-             */
-            const shouldAutoSubmitPrefilled =
-                Object.keys(skippedResponses).length > 0 && survey.enable_partial_responses
-            if (shouldAutoSubmitPrefilled || isSurveyCompleted) {
-                sendSurveyEvent({
-                    responses: isSurveyCompleted ? responses : skippedResponses,
-                    survey,
-                    surveySubmissionId: submissionId,
-                    posthog: this._posthog,
-                    isSurveyCompleted,
-                })
-            }
-
-            // Mark this survey as having been prefilled
-            this._prefillHandledSurveys.add(survey.id)
+            return { responses, submissionId, startQuestionIndex, isSurveyCompleted, skippedResponses }
         } catch (error) {
-            logger.error('[Survey Prefill] Error handling URL prefill:', error)
+            logger.error('[Survey Prefill] Error handling prefill:', error)
+            return null
         }
     }
 
@@ -953,6 +1056,8 @@ interface SurveyPopupProps {
     onCloseConfirmationMessage?: () => void
     /** Additional properties to include in all survey events */
     properties?: Properties
+    /** if true, survey popup will only render if there is a thank-you message */
+    isSurveyCompleted?: boolean
 }
 
 function getTabPositionStyles(position: SurveyTabPosition = SurveyTabPosition.Right): JSX.CSSProperties {
@@ -987,6 +1092,7 @@ export function SurveyPopup({
     onPopupSurveyDismissed = () => {},
     onCloseConfirmationMessage = () => {},
     properties,
+    isSurveyCompleted,
 }: SurveyPopupProps) {
     const surveyContainerRef = useRef<HTMLDivElement>(null)
     const isPreviewMode = Number.isInteger(previewPageIndex)
@@ -1004,7 +1110,15 @@ export function SurveyPopup({
         surveyContainerRef
     )
 
-    const shouldShowConfirmation = isSurveySent || previewPageIndex === survey.questions.length
+    /**
+     * show confirmation if:
+     * 1) isSurveySent is true (completed via normal flow)
+     * 2) we're on the preview page for it
+     * 3) the target start question (from prefill) is >= the length of the survey
+     */
+    const shouldShowConfirmation =
+        isSurveySent || previewPageIndex === survey.questions.length || isSurveyCompleted === true
+
     const surveyContextValue = useMemo(() => {
         const getInProgressSurvey = getInProgressSurveyState(survey)
         return {

@@ -64,6 +64,7 @@ export default function App({ Component, pageProps }: AppProps) {
                 />
             </Head>
 
+            <div id="ph-custom-banner-container"></div>
             <main className="max-w-full overflow-hidden">
                 <PageHeader />
                 <Component {...pageProps} />

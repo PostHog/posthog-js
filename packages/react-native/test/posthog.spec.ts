@@ -2,13 +2,67 @@ import { PostHog, PostHogCustomStorage, PostHogPersistedProperty } from '../src'
 import { Linking, AppState, AppStateStatus } from 'react-native'
 import { waitForExpect } from './test-utils'
 import { PostHogRNStorage } from '../src/storage'
+import { FeatureFlagError } from '@posthog/core'
 
 Linking.getInitialURL = jest.fn(() => Promise.resolve(null))
 AppState.addEventListener = jest.fn()
 
 describe('PostHog React Native', () => {
-  describe('evaluation environments', () => {
-    it('should send evaluation environments when configured', async () => {
+  describe('evaluation contexts', () => {
+    it('should send evaluation contexts when configured', async () => {
+      posthog = new PostHog('test-token', {
+        evaluationContexts: ['production', 'mobile'],
+        flushInterval: 0,
+      })
+      await posthog.ready()
+
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/flags/?v=2&config=true'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"evaluation_contexts":["production","mobile"]'),
+        })
+      )
+    })
+
+    it('should not send evaluation contexts when not configured', async () => {
+      posthog = new PostHog('test-token', {
+        flushInterval: 0,
+      })
+      await posthog.ready()
+
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/flags/?v=2&config=true'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.not.stringContaining('evaluation_contexts'),
+        })
+      )
+    })
+
+    it('should not send evaluation contexts when configured as empty array', async () => {
+      posthog = new PostHog('test-token', {
+        evaluationContexts: [],
+        flushInterval: 0,
+      })
+      await posthog.ready()
+
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/flags/?v=2&config=true'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.not.stringContaining('evaluation_contexts'),
+        })
+      )
+    })
+
+    it('should support deprecated evaluationEnvironments field', async () => {
       posthog = new PostHog('test-token', {
         evaluationEnvironments: ['production', 'mobile'],
         flushInterval: 0,
@@ -21,42 +75,7 @@ describe('PostHog React Native', () => {
         expect.stringContaining('/flags/?v=2&config=true'),
         expect.objectContaining({
           method: 'POST',
-          body: expect.stringContaining('"evaluation_environments":["production","mobile"]'),
-        })
-      )
-    })
-
-    it('should not send evaluation environments when not configured', async () => {
-      posthog = new PostHog('test-token', {
-        flushInterval: 0,
-      })
-      await posthog.ready()
-
-      await posthog.reloadFeatureFlagsAsync()
-
-      expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/flags/?v=2&config=true'),
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.not.stringContaining('evaluation_environments'),
-        })
-      )
-    })
-
-    it('should not send evaluation environments when configured as empty array', async () => {
-      posthog = new PostHog('test-token', {
-        evaluationEnvironments: [],
-        flushInterval: 0,
-      })
-      await posthog.ready()
-
-      await posthog.reloadFeatureFlagsAsync()
-
-      expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/flags/?v=2&config=true'),
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.not.stringContaining('evaluation_environments'),
+          body: expect.stringContaining('"evaluation_contexts":["production","mobile"]'),
         })
       )
     })
@@ -968,6 +987,32 @@ describe('PostHog React Native', () => {
         expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
       })
 
+      it('should reload feature flags by default when calling setPersonProperties', async () => {
+        posthog.setPersonProperties({ email: 'test@example.com' })
+
+        await waitForExpect(200, () => {
+          expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/flags/'),
+            expect.any(Object)
+          )
+        })
+      })
+
+      it('should not reload feature flags when reloadFeatureFlags is false for setPersonProperties', async () => {
+        // Clear any previous calls
+        ;(globalThis as any).window.fetch.mockClear()
+
+        posthog.setPersonProperties({ email: 'test@example.com' }, undefined, false)
+
+        // Wait for any async operations
+        await new Promise((resolve) => setTimeout(resolve, 100))
+
+        // Should have the batch call for $set event, but not a flags call
+        const allCalls = (globalThis as any).window.fetch.mock.calls
+        const flagsCalls = allCalls.filter((call: any) => call[0].includes('/flags/'))
+        expect(flagsCalls.length).toBe(0)
+      })
+
       it('should reload feature flags by default when calling resetGroupPropertiesForFlags', async () => {
         posthog.setGroupPropertiesForFlags({ company: { name: 'Acme Inc' } }, false)
         ;(globalThis as any).window.fetch.mockClear()
@@ -992,6 +1037,307 @@ describe('PostHog React Native', () => {
 
         expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
       })
+    })
+
+    describe('reset with propertiesToKeep', () => {
+      let storage: PostHogCustomStorage
+      let cache: Record<string, string>
+
+      beforeEach(async () => {
+        cache = {}
+        storage = {
+          getItem: jest.fn((key: string) => cache[key]),
+          setItem: jest.fn((key: string, value: string) => {
+            cache[key] = value
+          }),
+        }
+      })
+
+      it('should preserve specified properties when reset is called with propertiesToKeep', async () => {
+        posthog = new PostHog('test-api-key', {
+          customStorage: storage,
+          flushInterval: 0,
+          setDefaultPersonProperties: false,
+        })
+        await posthog.ready()
+
+        posthog.overrideFeatureFlag({ testFlag: true })
+        posthog.register({ customProp: 'value' })
+
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual({ testFlag: true })
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual({ customProp: 'value' })
+
+        posthog.reset([PostHogPersistedProperty.OverrideFeatureFlags])
+
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual({ testFlag: true })
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual(undefined)
+      })
+
+      it('should clear all properties when reset is called without propertiesToKeep', async () => {
+        posthog = new PostHog('test-api-key', {
+          customStorage: storage,
+          flushInterval: 0,
+          setDefaultPersonProperties: false,
+        })
+        await posthog.ready()
+
+        posthog.overrideFeatureFlag({ testFlag: true })
+        posthog.register({ customProp: 'value' })
+
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual({ testFlag: true })
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual({ customProp: 'value' })
+
+        posthog.reset()
+
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual(undefined)
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual(undefined)
+      })
+    })
+  })
+})
+
+describe('Feature flag error tracking', () => {
+  let posthog: PostHog
+
+  beforeEach(() => {
+    ;(globalThis as any).window.fetch = jest.fn()
+    posthog = new PostHog('test-api-key', {
+      flushAt: 1,
+      host: 'https://app.posthog.com',
+      fetchRetryCount: 0,
+      preloadFeatureFlags: false,
+      sendFeatureFlagEvent: true,
+    })
+  })
+
+  afterEach(async () => {
+    ;(globalThis as any).window.fetch = undefined
+    posthog.setPersistedProperty(PostHogPersistedProperty.FeatureFlagDetails, null)
+    posthog.setPersistedProperty(PostHogPersistedProperty.FlagsEndpointWasHit, null)
+    await posthog.shutdown()
+  })
+
+  it('should set $feature_flag_error to flag_missing when flag is not in response', async () => {
+    ;(globalThis as any).window.fetch = jest.fn().mockImplementation((url: string) => {
+      if (url.includes('/flags/')) {
+        return Promise.resolve({
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              flags: {
+                'other-flag': {
+                  key: 'other-flag',
+                  enabled: true,
+                  variant: undefined,
+                  reason: undefined,
+                  metadata: { id: 1, version: 1, payload: undefined, description: undefined },
+                },
+              },
+              errorsWhileComputingFlags: false,
+              requestId: 'test-request-id',
+              evaluatedAt: Date.now(),
+            }),
+        })
+      }
+      return Promise.resolve({ status: 200, json: () => Promise.resolve({ status: 'ok' }) })
+    })
+
+    await posthog.reloadFeatureFlagsAsync()
+
+    // Access a non-existent flag
+    posthog.getFeatureFlag('non-existent-flag')
+
+    await waitForExpect(500, () => {
+      const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
+      const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+      expect(captureCall).toBeDefined()
+      const body = JSON.parse(captureCall[1].body)
+      const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
+      expect(featureFlagEvent).toBeDefined()
+      expect(featureFlagEvent.properties.$feature_flag_error).toBe(FeatureFlagError.FLAG_MISSING)
+    })
+  })
+
+  it('should set $feature_flag_error to errors_while_computing_flags when server returns that flag', async () => {
+    ;(globalThis as any).window.fetch = jest.fn().mockImplementation((url: string) => {
+      if (url.includes('/flags/')) {
+        return Promise.resolve({
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              flags: {
+                'some-flag': {
+                  key: 'some-flag',
+                  enabled: true,
+                  variant: undefined,
+                  reason: undefined,
+                  metadata: { id: 1, version: 1, payload: undefined, description: undefined },
+                },
+              },
+              errorsWhileComputingFlags: true,
+              requestId: 'test-request-id',
+              evaluatedAt: Date.now(),
+            }),
+        })
+      }
+      return Promise.resolve({ status: 200, json: () => Promise.resolve({ status: 'ok' }) })
+    })
+
+    await posthog.reloadFeatureFlagsAsync()
+
+    // Access the flag that exists
+    posthog.getFeatureFlag('some-flag')
+
+    await waitForExpect(500, () => {
+      const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
+      const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+      expect(captureCall).toBeDefined()
+      const body = JSON.parse(captureCall[1].body)
+      const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
+      expect(featureFlagEvent).toBeDefined()
+      expect(featureFlagEvent.properties.$feature_flag_error).toBe(FeatureFlagError.ERRORS_WHILE_COMPUTING)
+    })
+  })
+
+  it('should set $feature_flag_error to quota_limited when quota limited', async () => {
+    ;(globalThis as any).window.fetch = jest.fn().mockImplementation((url: string) => {
+      if (url.includes('/flags/')) {
+        return Promise.resolve({
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              flags: {},
+              errorsWhileComputingFlags: false,
+              quotaLimited: ['feature_flags'],
+              requestId: 'test-request-id',
+              evaluatedAt: Date.now(),
+            }),
+        })
+      }
+      return Promise.resolve({ status: 200, json: () => Promise.resolve({ status: 'ok' }) })
+    })
+
+    await posthog.reloadFeatureFlagsAsync()
+
+    // Access any flag when quota limited (no cached flags exist)
+    const result = posthog.getFeatureFlag('any-flag')
+    expect(result).toBeUndefined()
+
+    await waitForExpect(500, () => {
+      const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
+      const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+      expect(captureCall).toBeDefined()
+      const body = JSON.parse(captureCall[1].body)
+      const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
+      expect(featureFlagEvent).toBeDefined()
+      // FLAG_MISSING is not tracked when quota limited since we cannot determine if the flag is truly missing
+      expect(featureFlagEvent.properties.$feature_flag_error).toBe(FeatureFlagError.QUOTA_LIMITED)
+    })
+  })
+
+  it('should set $feature_flag_error to api_error_500 when request fails with 500', async () => {
+    // First, let the initial setup succeed
+    ;(globalThis as any).window.fetch = jest.fn().mockImplementation((url: string) => {
+      if (url.includes('/flags/')) {
+        return Promise.resolve({
+          status: 500,
+          json: () => Promise.reject(new Error('Server error')),
+        })
+      }
+      return Promise.resolve({ status: 200, json: () => Promise.resolve({ status: 'ok' }) })
+    })
+
+    await posthog.reloadFeatureFlagsAsync()
+
+    // Access a flag when request failed
+    posthog.getFeatureFlag('any-flag')
+
+    await waitForExpect(500, () => {
+      const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
+      const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+      expect(captureCall).toBeDefined()
+      const body = JSON.parse(captureCall[1].body)
+      const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
+      expect(featureFlagEvent).toBeDefined()
+      expect(featureFlagEvent.properties.$feature_flag_error).toBe(FeatureFlagError.apiError(500))
+    })
+  })
+
+  it('should join multiple errors with commas', async () => {
+    ;(globalThis as any).window.fetch = jest.fn().mockImplementation((url: string) => {
+      if (url.includes('/flags/')) {
+        return Promise.resolve({
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              flags: {},
+              errorsWhileComputingFlags: true,
+              requestId: 'test-request-id',
+              evaluatedAt: Date.now(),
+            }),
+        })
+      }
+      return Promise.resolve({ status: 200, json: () => Promise.resolve({ status: 'ok' }) })
+    })
+
+    await posthog.reloadFeatureFlagsAsync()
+
+    // Access a non-existent flag when errors while computing
+    posthog.getFeatureFlag('missing-flag')
+
+    await waitForExpect(500, () => {
+      const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
+      const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+      expect(captureCall).toBeDefined()
+      const body = JSON.parse(captureCall[1].body)
+      const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
+      expect(featureFlagEvent).toBeDefined()
+      expect(featureFlagEvent.properties.$feature_flag_error).toBe(
+        `${FeatureFlagError.ERRORS_WHILE_COMPUTING},${FeatureFlagError.FLAG_MISSING}`
+      )
+    })
+  })
+
+  it('should not set $feature_flag_error when flag is found successfully', async () => {
+    ;(globalThis as any).window.fetch = jest.fn().mockImplementation((url: string) => {
+      if (url.includes('/flags/')) {
+        return Promise.resolve({
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              flags: {
+                'my-flag': {
+                  key: 'my-flag',
+                  enabled: true,
+                  variant: undefined,
+                  reason: undefined,
+                  metadata: { id: 1, version: 1, payload: undefined, description: undefined },
+                },
+              },
+              errorsWhileComputingFlags: false,
+              requestId: 'test-request-id',
+              evaluatedAt: Date.now(),
+            }),
+        })
+      }
+      return Promise.resolve({ status: 200, json: () => Promise.resolve({ status: 'ok' }) })
+    })
+
+    await posthog.reloadFeatureFlagsAsync()
+
+    // Access the existing flag
+    const result = posthog.getFeatureFlag('my-flag')
+    expect(result).toBe(true)
+
+    await waitForExpect(500, () => {
+      const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
+      const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+      expect(captureCall).toBeDefined()
+      const body = JSON.parse(captureCall[1].body)
+      const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
+      expect(featureFlagEvent).toBeDefined()
+      // $feature_flag_error should not be present
+      expect(featureFlagEvent.properties.$feature_flag_error).toBeUndefined()
     })
   })
 })

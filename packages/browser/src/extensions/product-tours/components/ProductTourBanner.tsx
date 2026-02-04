@@ -67,7 +67,11 @@ export function ProductTourBanner({
     // "always" display frequency means no dismiss button
     const showDismissButton = displayFrequency !== 'always'
 
-    const classNames = ['ph-tour-banner', config.behavior === 'sticky' && 'ph-tour-banner--sticky']
+    const classNames = [
+        'ph-tour-banner',
+        config.behavior === 'sticky' && 'ph-tour-banner--sticky',
+        config.behavior === 'custom' && 'ph-tour-banner--custom',
+    ]
         .filter(Boolean)
         .join(' ')
 
@@ -85,7 +89,7 @@ export function ProductTourBanner({
                     }}
                     aria-label="Close banner"
                 >
-                    {cancelSVG}
+                    {cancelSVG()}
                 </button>
             )}
         </>

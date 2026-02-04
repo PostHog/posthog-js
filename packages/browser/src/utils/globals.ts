@@ -164,6 +164,7 @@ export type PostHogExtensionKind =
     | 'toolbar'
     | 'exception-autocapture'
     | 'web-vitals'
+    | 'web-vitals-with-attribution'
     | 'recorder'
     | 'lazy-recorder'
     | 'tracing-headers'
@@ -240,6 +241,12 @@ interface PostHogExtensions {
         onFCP: (metric: any) => void
         onINP: (metric: any) => void
     }
+    /**
+     * @deprecated
+     *
+     * this was introduced briefly, it is now always a no-op and only kept for backwards compatibility
+     */
+    loadWebVitalsCallbacks?: (useAttribution?: boolean) => PostHogExtensions['postHogWebVitalsCallbacks']
     tracingHeadersPatchFns?: {
         _patchFetch: (hostnames: string[], distinctId: string, sessionManager?: SessionIdManager) => () => void
         _patchXHR: (hostnames: string[], distinctId: string, sessionManager?: SessionIdManager) => () => void

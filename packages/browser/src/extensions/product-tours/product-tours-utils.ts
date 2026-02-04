@@ -6,6 +6,7 @@ import {
     ProductTourStep,
     DEFAULT_PRODUCT_TOUR_APPEARANCE,
 } from '../../posthog-product-tours-types'
+import { findElement } from './element-inference'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
 import { document as _document, window as _window } from '../../utils/globals'
 import { getFontFamily, getContrastingTextColor, hexToRgba } from '../surveys/surveys-extension-utils'
@@ -51,6 +52,28 @@ export function findElementBySelector(selector: string): ElementFindResult {
     }
 }
 
+/**
+ * Find element for a step based on its lookup mode.
+ * Default: use inference. If useManualSelector is true: use CSS selector.
+ */
+export function findStepElement(step: ProductTourStep): ElementFindResult {
+    const useManualSelector = step.useManualSelector ?? false
+
+    if (useManualSelector) {
+        if (!step.selector) {
+            return { element: null, error: 'not_found', matchCount: 0 }
+        }
+        return findElementBySelector(step.selector)
+    }
+
+    if (!step.inferenceData) {
+        return { element: null, error: 'not_found', matchCount: 0 }
+    }
+
+    const element = findElement(step.inferenceData)
+    return element ? { element, error: null, matchCount: 1 } : { element: null, error: 'not_found', matchCount: 0 }
+}
+
 export function isElementVisible(element: HTMLElement): boolean {
     const style = window.getComputedStyle(element)
 
@@ -88,9 +111,22 @@ export interface PositionResult {
     bottom?: number
     left?: number
     right?: number
+    arrowOffset: number // pixels from center (positive = right/down)
 }
 
 const TOOLTIP_MARGIN = 12
+const VIEWPORT_PADDING = 8
+
+function clampToViewport(
+    value: number,
+    dimension: number,
+    viewportDimension: number
+): { clamped: number; offset: number } {
+    const min = VIEWPORT_PADDING + dimension / 2
+    const max = viewportDimension - VIEWPORT_PADDING - dimension / 2
+    const clamped = Math.max(min, Math.min(max, value))
+    return { clamped, offset: value - clamped }
+}
 
 export interface TooltipDimensions {
     width: number
@@ -111,15 +147,28 @@ export function calculateTooltipPosition(targetRect: DOMRect, tooltipDimensions:
     const targetCenterX = targetRect.left + targetRect.width / 2
 
     if (spaceRight >= width + TOOLTIP_MARGIN) {
-        return { position: 'right', top: targetCenterY, left: targetRect.right + TOOLTIP_MARGIN }
+        // right of element
+        const left = targetRect.right + TOOLTIP_MARGIN
+        const { clamped: top, offset: arrowOffset } = clampToViewport(targetCenterY, height, viewportHeight)
+        return { position: 'right', top, left, arrowOffset }
     }
     if (spaceLeft >= width + TOOLTIP_MARGIN) {
-        return { position: 'left', top: targetCenterY, right: viewportWidth - targetRect.left + TOOLTIP_MARGIN }
+        // left of element
+        const right = viewportWidth - targetRect.left + TOOLTIP_MARGIN
+        const { clamped: top, offset: arrowOffset } = clampToViewport(targetCenterY, height, viewportHeight)
+        return { position: 'left', top, right, arrowOffset }
     }
     if (spaceAbove >= height + TOOLTIP_MARGIN && spaceBelow < height + TOOLTIP_MARGIN) {
-        return { position: 'top', bottom: viewportHeight - targetRect.top + TOOLTIP_MARGIN, left: targetCenterX }
+        // above element
+        const bottom = viewportHeight - targetRect.top + TOOLTIP_MARGIN
+        const { clamped: left, offset: arrowOffset } = clampToViewport(targetCenterX, width, viewportWidth)
+        return { position: 'top', bottom, left, arrowOffset }
     }
-    return { position: 'bottom', top: targetRect.bottom + TOOLTIP_MARGIN, left: targetCenterX }
+
+    // default: below element
+    const top = targetRect.bottom + TOOLTIP_MARGIN
+    const { clamped: left, offset: arrowOffset } = clampToViewport(targetCenterX, width, viewportWidth)
+    return { position: 'bottom', top, left, arrowOffset }
 }
 
 export function getSpotlightStyle(targetRect: DOMRect, padding: number = 8): Record<string, string> {

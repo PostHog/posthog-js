@@ -120,6 +120,8 @@ describe('ConversationsManager', () => {
                 endpointFor: jest.fn((type: string, path: string) => `https://test.posthog.com${path}`),
             },
             get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
+            get_session_id: jest.fn().mockReturnValue('test-session-id-123'),
+            get_session_replay_url: jest.fn().mockReturnValue('https://app.posthog.com/replay/test-session?t=100'),
             persistence: {
                 props: {
                     $name: 'Test User',
@@ -389,6 +391,135 @@ describe('ConversationsManager', () => {
                     data: expect.objectContaining({
                         ticket_id: 'ticket-123',
                         message: 'Second message',
+                    }),
+                })
+            )
+        })
+
+        it('should capture session context when creating a new ticket', async () => {
+            await act(async () => {
+                await manager.sendMessage('First message')
+            })
+
+            expect(mockPosthog._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    data: expect.objectContaining({
+                        session_id: 'test-session-id-123',
+                        session_context: expect.objectContaining({
+                            session_replay_url: 'https://app.posthog.com/replay/test-session?t=100',
+                            current_url: expect.any(String),
+                        }),
+                    }),
+                })
+            )
+        })
+
+        it('should include session_id and replay_url but no current_url in follow-up messages', async () => {
+            // Send first message to create ticket
+            await act(async () => {
+                await manager.sendMessage('First message')
+            })
+            jest.clearAllMocks()
+
+            // Send second message to existing ticket
+            await act(async () => {
+                await manager.sendMessage('Second message')
+            })
+
+            const sendRequestCall = (mockPosthog._send_request as jest.Mock).mock.calls[0][0]
+            // session_id and replay_url should be included for debugging context
+            expect(sendRequestCall.data.session_id).toBe('test-session-id-123')
+            expect(sendRequestCall.data.session_context).toEqual({
+                session_replay_url: 'https://app.posthog.com/replay/test-session?t=100',
+                current_url: undefined, // only sent with new tickets
+            })
+        })
+
+        it('should capture session context when forcing a new ticket', async () => {
+            // Send first message
+            await act(async () => {
+                await manager.sendMessage('First message')
+            })
+            jest.clearAllMocks()
+
+            // Force new ticket
+            await act(async () => {
+                await manager.sendMessage('New ticket message', undefined, true)
+            })
+
+            expect(mockPosthog._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    data: expect.objectContaining({
+                        ticket_id: null,
+                        session_id: 'test-session-id-123',
+                        session_context: expect.objectContaining({
+                            session_replay_url: 'https://app.posthog.com/replay/test-session?t=100',
+                            current_url: expect.any(String),
+                        }),
+                    }),
+                })
+            )
+        })
+
+        it('should handle missing session ID gracefully', async () => {
+            // Mock get_session_id to return empty string
+            ;(mockPosthog.get_session_id as jest.Mock).mockReturnValue('')
+
+            await act(async () => {
+                await manager.sendMessage('First message')
+            })
+
+            const sendRequestCall = (mockPosthog._send_request as jest.Mock).mock.calls[0][0]
+            expect(sendRequestCall.data.session_id).toBeUndefined()
+            // session_context should still be present (has current_url)
+            expect(sendRequestCall.data.session_context).toBeDefined()
+        })
+
+        it('should handle missing session replay URL gracefully', async () => {
+            // Mock get_session_replay_url to return empty string
+            ;(mockPosthog.get_session_replay_url as jest.Mock).mockReturnValue('')
+
+            await act(async () => {
+                await manager.sendMessage('First message')
+            })
+
+            const sendRequestCall = (mockPosthog._send_request as jest.Mock).mock.calls[0][0]
+            // session_id should still be present
+            expect(sendRequestCall.data.session_id).toBe('test-session-id-123')
+            // session_context should have current_url, replay_url is undefined when empty
+            expect(sendRequestCall.data.session_context).toEqual({
+                session_replay_url: undefined,
+                current_url: expect.any(String),
+            })
+        })
+
+        it('should call get_session_replay_url with correct parameters', async () => {
+            await act(async () => {
+                await manager.sendMessage('First message')
+            })
+
+            expect(mockPosthog.get_session_replay_url).toHaveBeenCalledWith({
+                withTimestamp: true,
+                timestampLookBack: 30,
+            })
+        })
+
+        it('should handle error during session context capture without failing message send', async () => {
+            // Mock get_session_id to throw an error
+            ;(mockPosthog.get_session_id as jest.Mock).mockImplementation(() => {
+                throw new Error('Session ID error')
+            })
+
+            // Message should still send successfully
+            await act(async () => {
+                await manager.sendMessage('First message')
+            })
+
+            // Verify message was sent even though session capture failed
+            expect(mockPosthog._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    data: expect.objectContaining({
+                        message: 'First message',
                     }),
                 })
             )

@@ -40,7 +40,7 @@ export function Cancel({ onClick }: { onClick: () => void }) {
             aria-label="Close survey"
             type="button"
         >
-            {cancelSVG}
+            {cancelSVG({ fill: 'black' })}
         </button>
     )
 }

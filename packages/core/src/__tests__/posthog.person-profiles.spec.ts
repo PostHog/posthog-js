@@ -30,6 +30,26 @@ describe('PostHog Core - Person Profiles', () => {
       expect(body.batch[0].properties.$process_person_profile).toBe(false)
     })
 
+    it('should set $is_identified to false for anonymous users', async () => {
+      posthog.capture('test-event')
+      await waitForPromises()
+
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0].properties.$is_identified).toBe(false)
+    })
+
+    it('should set $is_identified to true after identify()', async () => {
+      posthog.identify('user-123')
+      await waitForPromises()
+
+      mocks.fetch.mockClear()
+      posthog.capture('test-event')
+      await waitForPromises()
+
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0].properties.$is_identified).toBe(true)
+    })
+
     it('should set $process_person_profile to true after identify()', async () => {
       posthog.identify('user-123')
       await waitForPromises()
@@ -72,6 +92,31 @@ describe('PostHog Core - Person Profiles', () => {
 
       const body = parseBody(mocks.fetch.mock.calls[0])
       expect(body.batch[0].properties.$process_person_profile).toBe(true)
+    })
+
+    it('should set $process_person_profile to true after groups()', async () => {
+      posthog.groups({ company: 'company-123' })
+      await waitForPromises()
+
+      mocks.fetch.mockClear()
+      posthog.capture('test-event')
+      await waitForPromises()
+
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0].properties.$process_person_profile).toBe(true)
+    })
+
+    it('should allow groupIdentify() to work', async () => {
+      posthog.groupIdentify('company', 'company-123', { name: 'Acme Inc' })
+      await waitForPromises()
+
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      const batchCall = mocks.fetch.mock.calls[0]
+      const body = parseBody(batchCall)
+      expect(body.batch[0].event).toBe('$groupidentify')
+      expect(body.batch[0].properties.$group_type).toBe('company')
+      expect(body.batch[0].properties.$group_key).toBe('company-123')
+      expect(body.batch[0].properties.$group_set).toEqual({ name: 'Acme Inc' })
     })
 
     it('should allow createPersonProfile() to enable person processing', async () => {
@@ -154,6 +199,48 @@ describe('PostHog Core - Person Profiles', () => {
 
     it('should not send alias events', async () => {
       posthog.alias('alias-id')
+      await waitForPromises()
+
+      const batchCalls = mocks.fetch.mock.calls.filter((call) => call[0].includes('/batch/'))
+      expect(batchCalls.length).toBe(0)
+    })
+
+    it('should not register groups via group()', async () => {
+      posthog.group('company', 'company-123')
+      await waitForPromises()
+
+      // Capture an event and verify $groups is not set
+      mocks.fetch.mockClear()
+      posthog.capture('test-event')
+      await waitForPromises()
+
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0].properties.$groups).toBeUndefined()
+    })
+
+    it('should not register groups via groups()', async () => {
+      posthog.groups({ company: 'company-123', team: 'team-456' })
+      await waitForPromises()
+
+      // Capture an event and verify $groups is not set
+      mocks.fetch.mockClear()
+      posthog.capture('test-event')
+      await waitForPromises()
+
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0].properties.$groups).toBeUndefined()
+    })
+
+    it('should not send groupIdentify events', async () => {
+      posthog.groupIdentify('company', 'company-123', { name: 'Acme Inc' })
+      await waitForPromises()
+
+      const batchCalls = mocks.fetch.mock.calls.filter((call) => call[0].includes('/batch/'))
+      expect(batchCalls.length).toBe(0)
+    })
+
+    it('should not send groupIdentify events when called via group() with properties', async () => {
+      posthog.group('company', 'company-123', { name: 'Acme Inc' })
       await waitForPromises()
 
       const batchCalls = mocks.fetch.mock.calls.filter((call) => call[0].includes('/batch/'))
@@ -267,6 +354,178 @@ describe('PostHog Core - Person Profiles', () => {
 
       const body = parseBody(mocks.fetch.mock.calls[0])
       expect(body.batch[0].properties.$process_person_profile).toBe(false)
+    })
+  })
+
+  describe('setPersonProperties', () => {
+    describe('personProfiles: "identified_only" (default)', () => {
+      let posthog: PostHogCoreTestClient
+      let mocks: PostHogCoreTestClientMocks
+
+      beforeEach(() => {
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+          flushAt: 1,
+          personProfiles: 'identified_only',
+        })
+      })
+
+      it('should send a $set event with provided properties', async () => {
+        posthog.setPersonProperties({ email: 'test@example.com', name: 'Test User' }, undefined, false)
+        await waitForPromises()
+
+        expect(mocks.fetch).toHaveBeenCalled()
+        const batchCall = mocks.fetch.mock.calls.find((call: any) => call[0].includes('/batch'))
+        const body = parseBody(batchCall)
+        expect(body.batch[0].event).toBe('$set')
+        expect(body.batch[0].properties.$set).toEqual({ email: 'test@example.com', name: 'Test User' })
+        expect(body.batch[0].properties.$set_once).toEqual({})
+      })
+
+      it('should send a $set event with $set_once properties', async () => {
+        posthog.setPersonProperties(undefined, { first_login: '2022-01-01' }, false)
+        await waitForPromises()
+
+        expect(mocks.fetch).toHaveBeenCalled()
+        const batchCall = mocks.fetch.mock.calls.find((call: any) => call[0].includes('/batch'))
+        const body = parseBody(batchCall)
+        expect(body.batch[0].event).toBe('$set')
+        expect(body.batch[0].properties.$set).toEqual({})
+        expect(body.batch[0].properties.$set_once).toEqual({ first_login: '2022-01-01' })
+      })
+
+      it('should send both $set and $set_once properties', async () => {
+        posthog.setPersonProperties({ email: 'test@example.com' }, { first_login: '2022-01-01' }, false)
+        await waitForPromises()
+
+        expect(mocks.fetch).toHaveBeenCalled()
+        const batchCall = mocks.fetch.mock.calls.find((call: any) => call[0].includes('/batch'))
+        const body = parseBody(batchCall)
+        expect(body.batch[0].event).toBe('$set')
+        expect(body.batch[0].properties.$set).toEqual({ email: 'test@example.com' })
+        expect(body.batch[0].properties.$set_once).toEqual({ first_login: '2022-01-01' })
+      })
+
+      it('should enable person processing for subsequent events', async () => {
+        // First capture without setPersonProperties
+        posthog.capture('before-event')
+        await waitForPromises()
+
+        let batchCall = mocks.fetch.mock.calls.find((call: any) => call[0].includes('/batch'))
+        let body = parseBody(batchCall)
+        expect(body.batch[0].properties.$process_person_profile).toBe(false)
+
+        mocks.fetch.mockClear()
+
+        // Now call setPersonProperties (with reloadFeatureFlags=false to simplify test)
+        posthog.setPersonProperties({ email: 'test@example.com' }, undefined, false)
+        await waitForPromises()
+
+        // Check the $set event has person processing enabled
+        batchCall = mocks.fetch.mock.calls.find((call: any) => call[0].includes('/batch'))
+        body = parseBody(batchCall)
+        expect(body.batch[0].event).toBe('$set')
+        expect(body.batch[0].properties.$process_person_profile).toBe(true)
+
+        mocks.fetch.mockClear()
+
+        // Capture another event - should now have person processing enabled
+        posthog.capture('after-event')
+        await waitForPromises()
+
+        batchCall = mocks.fetch.mock.calls.find((call: any) => call[0].includes('/batch'))
+        body = parseBody(batchCall)
+        expect(body.batch[0].properties.$process_person_profile).toBe(true)
+      })
+
+      it('should reload feature flags by default', async () => {
+        posthog.setPersonProperties({ email: 'test@example.com' })
+        await waitForPromises()
+
+        const flagsCall = mocks.fetch.mock.calls.find((call: any) => call[0].includes('/flags'))
+        expect(flagsCall).toBeDefined()
+      })
+
+      it('should not reload feature flags when reloadFeatureFlags is false', async () => {
+        posthog.setPersonProperties({ email: 'test@example.com' }, undefined, false)
+        await waitForPromises()
+
+        const flagsCall = mocks.fetch.mock.calls.find((call: any) => call[0].includes('/flags'))
+        expect(flagsCall).toBeUndefined()
+      })
+
+      it('should not send event if both properties are undefined', async () => {
+        posthog.setPersonProperties(undefined, undefined)
+        await waitForPromises()
+
+        expect(mocks.fetch).not.toHaveBeenCalled()
+      })
+
+      it('should update person properties for feature flag evaluation', async () => {
+        posthog.setPersonProperties({ plan: 'enterprise' })
+        await waitForPromises()
+
+        expect(mocks.storage.setItem).toHaveBeenCalledWith(
+          PostHogPersistedProperty.PersonProperties,
+          expect.objectContaining({ plan: 'enterprise' })
+        )
+      })
+    })
+
+    describe('personProfiles: "always"', () => {
+      let posthog: PostHogCoreTestClient
+      let mocks: PostHogCoreTestClientMocks
+
+      beforeEach(() => {
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+          flushAt: 1,
+          personProfiles: 'always',
+        })
+      })
+
+      it('should send a $set event', async () => {
+        posthog.setPersonProperties({ email: 'test@example.com' }, undefined, false)
+        await waitForPromises()
+
+        expect(mocks.fetch).toHaveBeenCalled()
+        const batchCall = mocks.fetch.mock.calls.find((call: any) => call[0].includes('/batch'))
+        const body = parseBody(batchCall)
+        expect(body.batch[0].event).toBe('$set')
+        expect(body.batch[0].properties.$set).toEqual({ email: 'test@example.com' })
+      })
+    })
+
+    describe('personProfiles: "never"', () => {
+      let posthog: PostHogCoreTestClient
+      let mocks: PostHogCoreTestClientMocks
+
+      beforeEach(() => {
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+          flushAt: 1,
+          personProfiles: 'never',
+        })
+      })
+
+      it('should not send a $set event', async () => {
+        posthog.setPersonProperties({ email: 'test@example.com' })
+        await waitForPromises()
+
+        const batchCalls = mocks.fetch.mock.calls.filter((call) => call[0].includes('/batch/'))
+        expect(batchCalls.length).toBe(0)
+      })
+
+      it('should not enable person processing for subsequent events', async () => {
+        posthog.setPersonProperties({ email: 'test@example.com' })
+        await waitForPromises()
+
+        posthog.capture('test-event')
+        await waitForPromises()
+
+        const batchCalls = mocks.fetch.mock.calls.filter((call) => call[0].includes('/batch/'))
+        if (batchCalls.length > 0) {
+          const body = parseBody(batchCalls[0])
+          expect(body.batch[0].properties.$process_person_profile).toBe(false)
+        }
+      })
     })
   })
 })

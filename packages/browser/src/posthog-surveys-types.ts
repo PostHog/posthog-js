@@ -108,7 +108,7 @@ export interface LinkSurveyQuestion extends SurveyQuestionBase {
 export interface RatingSurveyQuestion extends SurveyQuestionBase {
     type: SurveyQuestionType.Rating
     display: 'number' | 'emoji'
-    scale: 3 | 5 | 7 | 10
+    scale: 2 | 3 | 5 | 7 | 10
     lowerBoundLabel: string
     upperBoundLabel: string
     skipSubmitButton?: boolean
@@ -298,10 +298,16 @@ interface DisplaySurveyOptionsBase {
     displayType: DisplaySurveyType
     /** Additional properties to include in all survey events (shown, sent, dismissed) */
     properties?: Properties
+    /** Pre-filled responses by question index (0-based) */
+    initialResponses?: Record<number, SurveyResponseValue>
 }
 
-interface DisplaySurveyPopoverOptions extends DisplaySurveyOptionsBase {
+export interface DisplaySurveyPopoverOptions extends DisplaySurveyOptionsBase {
     displayType: DisplaySurveyType.Popover
+    /** Override the survey's configured position */
+    position?: SurveyPosition
+    /** CSS selector for the element to position the survey next to (when position is NextToTrigger) */
+    selector?: string
 }
 
 interface DisplaySurveyInlineOptions extends DisplaySurveyOptionsBase {
@@ -327,3 +333,5 @@ export interface SurveyConfig {
      */
     autoSubmitDelay?: number
 }
+
+export type SurveyResponseValue = string | number | string[] | null

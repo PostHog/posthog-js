@@ -1,5 +1,102 @@
 # @posthog/core
 
+## 1.19.0
+
+### Minor Changes
+
+- [#3009](https://github.com/PostHog/posthog-js/pull/3009) [`c99e5fe`](https://github.com/PostHog/posthog-js/commit/c99e5feb043870357c8f722eb52542327c3f472b) Thanks [@marandaneto](https://github.com/marandaneto)! - feat: add setPersonProperties method
+  (2026-02-03)
+
+## 1.18.0
+
+### Minor Changes
+
+- [#2996](https://github.com/PostHog/posthog-js/pull/2996) [`7768010`](https://github.com/PostHog/posthog-js/commit/77680105f1e8baf5ed1934d423494793d11ff01a) Thanks [@matheus-vb](https://github.com/matheus-vb)! - Filter out flags marked as failed before merging with cached values, preventing transient backend errors from overwriting previously evaluated flag states
+  (2026-02-03)
+
+## 1.17.0
+
+### Minor Changes
+
+- [#2966](https://github.com/PostHog/posthog-js/pull/2966) [`727536c`](https://github.com/PostHog/posthog-js/commit/727536cf5f1ab5a8d21fa9d4e2e6b13efc851fca) Thanks [@adboio](https://github.com/adboio)! - support "always" survey schedule
+  (2026-01-29)
+
+## 1.16.0
+
+### Minor Changes
+
+- [#2967](https://github.com/PostHog/posthog-js/pull/2967) [`cbe84c1`](https://github.com/PostHog/posthog-js/commit/cbe84c1ea8b6dd398569ed401139e9698e08fd64) Thanks [@adboio](https://github.com/adboio)! - support auto-submit on selection for survey rating questions
+  (2026-01-29)
+
+## 1.15.0
+
+### Minor Changes
+
+- [#2984](https://github.com/PostHog/posthog-js/pull/2984) [`8c0c495`](https://github.com/PostHog/posthog-js/commit/8c0c495caaf4cd7f950cbc77fdfc1df499772008) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - include possible pnpm bin path
+  (2026-01-28)
+
+## 1.14.1
+
+### Patch Changes
+
+- [#2971](https://github.com/PostHog/posthog-js/pull/2971) [`f51560c`](https://github.com/PostHog/posthog-js/commit/f51560caf78386cef5278f7cf0e9f253b2ec0e50) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: groups and groupidentify is a no-op if person profiles is set to never
+  (2026-01-27)
+
+## 1.14.0
+
+### Minor Changes
+
+- [#2917](https://github.com/PostHog/posthog-js/pull/2917) [`933c763`](https://github.com/PostHog/posthog-js/commit/933c7639ae30390ca562a0891d59649711b53522) Thanks [@marandaneto](https://github.com/marandaneto)! - feat: add support for person_profiles react native, core and web-lite
+  (2026-01-23)
+
+## 1.13.0
+
+### Minor Changes
+
+- [#2882](https://github.com/PostHog/posthog-js/pull/2882) [`8a5a3d5`](https://github.com/PostHog/posthog-js/commit/8a5a3d5693facda62b90b66dead338f7dca19705) Thanks [@adboio](https://github.com/adboio)! - add support for question prefill in popover surveys, add useThumbSurvey hook
+  (2026-01-20)
+
+## 1.12.0
+
+### Minor Changes
+
+- [#2897](https://github.com/PostHog/posthog-js/pull/2897) [`b7fa003`](https://github.com/PostHog/posthog-js/commit/b7fa003ef6ef74bdf4666be0748d89a5a6169054) Thanks [@matheus-vb](https://github.com/matheus-vb)! - Add $feature_flag_error to $feature_flag_called events to track flag evaluation failures
+  (2026-01-20)
+
+- [#2931](https://github.com/PostHog/posthog-js/pull/2931) [`f0cbc0d`](https://github.com/PostHog/posthog-js/commit/f0cbc0d8e4e5efc27d9595676e886d6d3d3892f4) Thanks [@marandaneto](https://github.com/marandaneto)! - chore: before_send support for web lite and react native
+  (2026-01-20)
+
+## 1.11.0
+
+### Minor Changes
+
+- [#2900](https://github.com/PostHog/posthog-js/pull/2900) [`23770e9`](https://github.com/PostHog/posthog-js/commit/23770e9e2eed1aca5c2bc7a34a6d64dc115b0d11) Thanks [@dmarticus](https://github.com/dmarticus)! - Renamed `evaluationEnvironments` to `evaluationContexts` for clearer semantics. The term "contexts" better reflects that this feature is for specifying evaluation contexts (e.g., "web", "mobile", "checkout") rather than deployment environments (e.g., "staging", "production").
+
+  ### Deprecated
+  - `posthog.init` option `evaluationEnvironments` is now deprecated in favor of `evaluationContexts`. The old property will continue to work and will log a deprecation warning. It will be removed in a future major version.
+
+  ### Migration Guide
+
+  ````javascript
+  // Before
+  posthog.init('<ph_project_api_key>', {
+      evaluationEnvironments: ['production', 'web', 'checkout'],
+  })
+
+  // After
+  posthog.init('<ph_project_api_key>', {
+      evaluationContexts: ['production', 'web', 'checkout'],
+  })
+  ``` (2026-01-19)
+  ````
+
+## 1.10.0
+
+### Minor Changes
+
+- [#2881](https://github.com/PostHog/posthog-js/pull/2881) [`d37e570`](https://github.com/PostHog/posthog-js/commit/d37e5709863e869825df57d0854588140c4294b2) Thanks [@adboio](https://github.com/adboio)! - add support for thumbs up/down survey rating scale
+  (2026-01-16)
+
 ## 1.9.1
 
 ### Patch Changes

@@ -11,6 +11,7 @@ import { getStyles } from './styles'
 import { OpenChatButton } from './OpenChatButton'
 import { SendMessageButton } from './SendMessageButton'
 import { CloseChatButton } from './CloseChatButton'
+import { RichContent } from './RichContent'
 
 const logger = createLogger('[ConversationsWidget]')
 
@@ -384,7 +385,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         )
     }
 
-    private _renderMessage(message: Message, styles: ReturnType<typeof getStyles>) {
+    private _renderMessage(message: Message, styles: ReturnType<typeof getStyles>, primaryColor: string) {
         const isCustomer = message.author_type === 'customer'
         const messageStyle = {
             ...styles.message,
@@ -398,7 +399,14 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         return (
             <div key={message.id} style={messageStyle}>
                 {!isCustomer && message.author_name && <div style={styles.messageAuthor}>{message.author_name}</div>}
-                <div style={contentStyle}>{message.content}</div>
+                <div style={contentStyle}>
+                    <RichContent
+                        richContent={message.rich_content}
+                        content={message.content}
+                        isCustomer={isCustomer}
+                        primaryColor={primaryColor}
+                    />
+                </div>
                 <div style={styles.messageTime}>{this._formatTime(message.created_at)}</div>
             </div>
         )
@@ -408,14 +416,16 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         const { config } = this.props
         const { state, messages, inputValue, isLoading, error, showIdentificationForm } = this.state
         const primaryColor = config.color || '#5375ff'
+        const widgetPosition = config.widgetPosition || 'bottom_right'
         const placeholderText = config.placeholderText || 'Type your message...'
-        const styles = getStyles(primaryColor)
+        const styles = getStyles(primaryColor, widgetPosition)
 
         // Button only (closed state)
         if (state === 'closed') {
             return (
                 <OpenChatButton
                     primaryColor={primaryColor}
+                    position={widgetPosition}
                     handleToggleOpen={this._handleToggleOpen}
                     unreadCount={this.state.unreadCount}
                 />
@@ -447,22 +457,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
                     ) : (
                         <>
                             <div style={styles.messages}>
-                                {messages.map((message) => this._renderMessage(message, styles))}
-                                {isLoading && (
-                                    <div style={{ ...styles.message, ...styles.messageAgent }}>
-                                        <div
-                                            style={{
-                                                ...styles.messageContent,
-                                                ...styles.messageContentAgent,
-                                                ...styles.typing,
-                                            }}
-                                        >
-                                            <span style={styles.typingDot}></span>
-                                            <span style={{ ...styles.typingDot, animationDelay: '0.2s' }}></span>
-                                            <span style={{ ...styles.typingDot, animationDelay: '0.4s' }}></span>
-                                        </div>
-                                    </div>
-                                )}
+                                {messages.map((message) => this._renderMessage(message, styles, primaryColor))}
                                 <div
                                     ref={(el) => {
                                         this._messagesEndRef = el

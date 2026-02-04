@@ -6,6 +6,7 @@ import {
     ConversationsWidgetState,
     UserProvidedTraits,
     SendMessageResponse,
+    SendMessagePayload,
     GetMessagesResponse,
     MarkAsReadResponse,
     GetTicketsOptions,
@@ -146,7 +147,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             const name = userTraits?.name || personProperties.$name || personProperties.name || null
             const email = userTraits?.email || personProperties.$email || personProperties.email || null
 
-            const payload = {
+            const payload: Partial<SendMessagePayload> = {
                 widget_session_id: this._widgetSessionId,
                 // distinct_id is only used for Person linking, not access control
                 distinct_id: distinctId,
@@ -156,6 +157,33 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     email,
                 },
                 ticket_id: ticketId,
+            }
+
+            try {
+                // Capture session ID - sent with every message
+                const capturedSessionId = this._posthog.get_session_id()
+                if (capturedSessionId) {
+                    payload.session_id = capturedSessionId
+                }
+
+                // Capture session replay URL with timestamp - sent with every message
+                const replayUrl = this._posthog.get_session_replay_url({
+                    withTimestamp: true,
+                    timestampLookBack: 30,
+                })
+
+                // Capture current URL - only for new tickets to record where user started
+                const currentUrl = isNewTicket ? window?.location?.href : undefined
+
+                if (replayUrl || currentUrl) {
+                    payload.session_context = {
+                        session_replay_url: replayUrl || undefined,
+                        current_url: currentUrl || undefined,
+                    }
+                }
+            } catch (error) {
+                // Log error but don't fail message sending
+                logger.warn('Failed to capture session context', error)
             }
 
             this._posthog._send_request({

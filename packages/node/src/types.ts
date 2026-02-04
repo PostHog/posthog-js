@@ -94,7 +94,7 @@ export type FeatureFlagCondition = {
 
 export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
 
-export type PostHogOptions = PostHogCoreOptions & {
+export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
   persistence?: 'memory'
   personalApiKey?: string
   privacyMode?: boolean
@@ -140,7 +140,7 @@ export type PostHogOptions = PostHogCoreOptions & {
    */
   before_send?: BeforeSendFn | BeforeSendFn[]
   /**
-   * Evaluation environments for feature flags.
+   * Evaluation contexts for feature flags.
    * When set, only feature flags that have at least one matching evaluation tag
    * will be evaluated for this SDK instance. Feature flags with no evaluation tags
    * will always be evaluated.
@@ -148,6 +148,11 @@ export type PostHogOptions = PostHogCoreOptions & {
    * Examples: ['production', 'backend', 'api']
    *
    * @default undefined
+   */
+  evaluationContexts?: readonly string[]
+  /**
+   * Evaluation environments for feature flags.
+   * @deprecated Use evaluationContexts instead. This property will be removed in a future version.
    */
   evaluationEnvironments?: readonly string[]
   /**
@@ -231,6 +236,16 @@ export const FeatureFlagError = {
 } as const
 
 export type FeatureFlagErrorType = (typeof FeatureFlagError)[keyof typeof FeatureFlagError] | string
+
+/**
+ * Result of evaluating a feature flag, including its value and payload.
+ */
+export type FeatureFlagResult = {
+  key: string
+  enabled: boolean
+  variant: string | undefined
+  payload: JsonType | undefined
+}
 
 export interface IPostHog {
   /**
@@ -384,6 +399,38 @@ export interface IPostHog {
       onlyEvaluateLocally?: boolean
     }
   ): Promise<JsonType | undefined>
+
+  /**
+   * @description Get the result of evaluating a feature flag, including its value and payload.
+   * This is more efficient than calling getFeatureFlag and getFeatureFlagPayload separately when you need both.
+   *
+   * @example
+   * ```ts
+   * const result = await client.getFeatureFlagResult('my-flag', 'user_123')
+   * if (result) {
+   *   console.log('Flag enabled:', result.enabled)
+   *   console.log('Variant:', result.variant)
+   *   console.log('Payload:', result.payload)
+   * }
+   * ```
+   *
+   * @param key - The feature flag key
+   * @param distinctId - The user's distinct ID
+   * @param options - Optional configuration for flag evaluation
+   * @returns Promise that resolves to the flag result or undefined
+   */
+  getFeatureFlagResult(
+    key: string,
+    distinctId: string,
+    options?: {
+      groups?: Record<string, string>
+      personProperties?: Record<string, string>
+      groupProperties?: Record<string, Record<string, string>>
+      onlyEvaluateLocally?: boolean
+      sendFeatureFlagEvents?: boolean
+      disableGeoip?: boolean
+    }
+  ): Promise<FeatureFlagResult | undefined>
 
   /**
    * @description Sets a groups properties, which allows asking questions like "Who are the most active companies"
