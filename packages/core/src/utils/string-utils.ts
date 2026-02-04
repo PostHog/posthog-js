@@ -21,3 +21,15 @@ export const stripLeadingDollar = function (s: string): string {
 export function isDistinctIdStringLike(value: string): boolean {
   return ['distinct_id', 'distinctid'].includes(value.toLowerCase())
 }
+
+/**
+ * Creates a hash string from distinct_id and person properties.
+ * Used to detect if person properties have changed to avoid duplicate $set events.
+ */
+export function getPersonPropertiesHash(
+  distinct_id: string,
+  userPropertiesToSet?: Record<string, any>,
+  userPropertiesToSetOnce?: Record<string, any>
+): string {
+  return JSON.stringify({ distinct_id, userPropertiesToSet, userPropertiesToSetOnce })
+}
