@@ -34,6 +34,7 @@ import {
 import { doesTourActivateByAction, doesTourActivateByEvent } from '../../utils/product-tour-utils'
 import { TOOLBAR_ID } from '../../constants'
 import { ProductTourEventReceiver } from '../../utils/product-tour-event-receiver'
+import { canShowTour } from '../../utils/widget-lock'
 
 const logger = createLogger('[Product Tours]')
 
@@ -197,6 +198,16 @@ export class ProductTourManager {
     constructor(instance: PostHog) {
         this._instance = instance
         this._eventReceiver = new ProductTourEventReceiver(instance)
+
+        // listener to auto-dismiss non-banner tours when the conversations chat is opened
+        const conversationsWidgetOpenedListener = () => {
+            if (this._activeTour && !this._isBannerTour(this._activeTour)) {
+                logger.info(`Dismissing tour ${this._activeTour.id} because conversations widget opened`)
+                this.dismissTour('widget_conflict')
+            }
+        }
+
+        addEventListener(window, 'PHConversationsWidgetOpened', conversationsWidgetOpenedListener)
     }
 
     private _setStepIndex(index: number): void {
@@ -434,6 +445,11 @@ export class ProductTourManager {
     }
 
     showTour(tour: ProductTour, options?: ShowTourOptions): boolean {
+        if (!this._isBannerTour(tour) && !canShowTour(this._instance)) {
+            logger.info(`Tour ${tour.id} blocked by widget coordination`)
+            return false
+        }
+
         const renderReason: ProductTourRenderReason = options?.reason ?? 'auto'
 
         this.cancelPendingTour(tour.id)
@@ -1048,10 +1064,27 @@ export class ProductTourManager {
 
         const timeoutId = setTimeout(() => {
             this._pendingTourTimeouts.delete(tourId)
+
+            if (!canShowTour(this._instance)) {
+                logger.info(`Tour ${tourId} blocked by widget coordination after delay`)
+                return
+            }
+
             logger.info(`Delay elapsed for tour ${tourId}, showing now`)
             this.showTourById(tourId, reason)
         }, delaySeconds * 1000)
 
         this._pendingTourTimeouts.set(tourId, timeoutId)
+    }
+
+    private _isBannerTour(tour: ProductTour): boolean {
+        return tour.steps.length === 1 && tour.steps[0]?.type === 'banner'
+    }
+
+    public hasActiveTour(): boolean {
+        if (!this._activeTour) {
+            return false
+        }
+        return !this._isBannerTour(this._activeTour)
     }
 }

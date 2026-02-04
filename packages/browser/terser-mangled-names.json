@@ -212,6 +212,7 @@
         "_inputRef",
         "_internalEventEmitter",
         "_internalFlagCheckSatisfied",
+        "_isBannerTour",
         "_isBelowMinimumDuration",
         "_isCalled",
         "_isConsoleLogCaptureEnabled",

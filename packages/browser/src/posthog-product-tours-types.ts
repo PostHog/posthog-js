@@ -145,6 +145,7 @@ export type ProductTourDismissReason =
     | 'escape_key'
     | 'element_unavailable'
     | 'container_unavailable'
+    | 'widget_conflict'
 
 export type ProductTourRenderReason = 'auto' | 'api' | 'trigger' | 'event'
 

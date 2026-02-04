@@ -28,6 +28,23 @@ export class PostHogConversations {
 
     constructor(private _instance: PostHog) {}
 
+    /**
+     * derived readiness state, used by the widget coordinator
+     * to let surveys & tours know when they are safe to render.
+     *
+     * returns true when the initialization checks are done
+     * and conversations are loaded, OR conversations are found
+     * to be disabled.
+     */
+    isReady(): boolean {
+        if (this._instance.config.disable_conversations) return true // disabled in posthog init config
+        if (isUndefined(this._isConversationsEnabled)) return false // no remote config yet
+        if (this._isConversationsEnabled === false) return true // disabled in remote config
+
+        // at this point we should be loading, so just return init state
+        return !this._isInitializing
+    }
+
     onRemoteConfig(response: RemoteConfig) {
         // Don't load conversations if disabled via config
         if (this._instance.config.disable_conversations) {
@@ -36,6 +53,7 @@ export class PostHogConversations {
 
         const conversations = response['conversations']
         if (isNullish(conversations)) {
+            this._isConversationsEnabled = false
             return
         }
 
@@ -192,6 +210,13 @@ export class PostHogConversations {
      */
     isVisible(): boolean {
         return this._conversationsManager?.isVisible() ?? false
+    }
+
+    /**
+     * Check if the chat pane is currently open (expanded)
+     */
+    isWidgetOpen(): boolean {
+        return this._conversationsManager?.isWidgetOpen?.() ?? false
     }
 
     /**

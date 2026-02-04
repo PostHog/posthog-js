@@ -52,6 +52,23 @@ export function createTour(overrides: Partial<ProductTour> = {}): ProductTour {
     }
 }
 
+export function createEventTriggeredTour(
+    id: string,
+    eventName: string,
+    overrides: Partial<ProductTour> = {}
+): ProductTour {
+    return createTour({
+        id,
+        auto_launch: false,
+        conditions: {
+            events: {
+                values: [{ name: eventName }],
+            },
+        },
+        ...overrides,
+    })
+}
+
 export function createElementStep(selector: string, overrides: Partial<ProductTourStep> = {}): ProductTourStep {
     return createStep({
         type: 'element',

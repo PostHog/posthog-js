@@ -201,6 +201,7 @@ export interface LazyLoadedConversationsInterface {
     show: () => void
     hide: () => void
     isVisible: () => boolean
+    isWidgetOpen: () => boolean
 
     // Lifecycle
     reset: () => void

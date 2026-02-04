@@ -69,6 +69,7 @@ import {
     calculatePrefillStartIndex,
 } from '../utils/survey-url-prefill'
 import { getNextSurveyStep } from '../utils/survey-branching'
+import { canShowSurvey } from '../utils/widget-lock'
 
 // Re-export for surveys-preview entrypoint
 export { getNextSurveyStep }
@@ -135,6 +136,15 @@ export class SurveyManager {
         this._posthog = posthog
         // This is used to track the survey that is currently in focus. We only show one survey at a time.
         this._surveyInFocus = null
+
+        const conversationsWidgetOpenedListener = () => {
+            if (this._surveyInFocus) {
+                logger.info(`Dismissing survey ${this._surveyInFocus} because conversations widget opened`)
+                this.cancelSurvey(this._surveyInFocus)
+                window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: this._surveyInFocus } }))
+            }
+        }
+        addEventListener(window, 'PHConversationsWidgetOpened', conversationsWidgetOpenedListener)
     }
 
     public handlePageUnload = (): void => {
@@ -243,6 +253,13 @@ export class SurveyManager {
             if (!doesSurveyUrlMatch(survey)) {
                 return this._removeSurveyFromFocus(survey)
             }
+
+            // re-confirm eligibility with the widget coordinator
+            if (!canShowSurvey(this._posthog)) {
+                logger.info(`Survey ${survey.id} blocked by widget coordination after delay`)
+                return this._removeSurveyFromFocus(survey)
+            }
+
             // rendering with surveyPopupDelaySeconds = 0 because we're already handling the timeout here
             render(
                 <SurveyPopup
@@ -672,8 +689,11 @@ export class SurveyManager {
                 }
 
                 // Popover Type Logic (only one shown at a time)
+                // + check eligibility from widget coordinator (no active tours or open convos)
                 if (isNull(this._surveyInFocus) && survey.type === SurveyType.Popover) {
-                    this.handlePopoverSurvey(survey)
+                    if (canShowSurvey(this._posthog)) {
+                        this.handlePopoverSurvey(survey)
+                    }
                 }
             })
 
@@ -712,6 +732,10 @@ export class SurveyManager {
         this._clearSurveyTimeout(survey.id)
         this._surveyInFocus = null
         this._removeSurveyFromDom(survey)
+    }
+
+    public hasSurveyInFocus(): boolean {
+        return !isNull(this._surveyInFocus)
     }
 
     // Expose internal state and methods for testing
