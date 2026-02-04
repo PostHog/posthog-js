@@ -25,6 +25,27 @@ export function isDistinctIdStringLike(value: string): boolean {
 }
 
 /**
+ * Recursively sorts all keys in an object and its nested objects/arrays.
+ * Used to ensure deterministic JSON serialization regardless of object construction order.
+ */
+function deepSortKeys(value: JsonType): JsonType {
+  if (value === null || typeof value !== 'object') {
+    return value
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(deepSortKeys)
+  }
+
+  return Object.keys(value)
+    .sort()
+    .reduce((acc: { [key: string]: JsonType }, key) => {
+      acc[key] = deepSortKeys(value[key])
+      return acc
+    }, {})
+}
+
+/**
  * Creates a hash string from distinct_id and person properties.
  * Used to detect if person properties have changed to avoid duplicate $set events.
  * Uses sorted keys to ensure consistent ordering regardless of object construction order.
@@ -34,15 +55,9 @@ export function getPersonPropertiesHash(
   userPropertiesToSet?: { [key: string]: JsonType },
   userPropertiesToSetOnce?: { [key: string]: JsonType }
 ): string {
-  const sortKeys = (obj?: { [key: string]: JsonType }): { [key: string]: JsonType } | undefined =>
-    obj
-      ? Object.keys(obj)
-          .sort()
-          .reduce((acc: { [key: string]: JsonType }, key) => ((acc[key] = obj[key]), acc), {})
-      : undefined
   return JSON.stringify({
     distinct_id,
-    userPropertiesToSet: sortKeys(userPropertiesToSet),
-    userPropertiesToSetOnce: sortKeys(userPropertiesToSetOnce),
+    userPropertiesToSet: userPropertiesToSet ? deepSortKeys(userPropertiesToSet) : undefined,
+    userPropertiesToSetOnce: userPropertiesToSetOnce ? deepSortKeys(userPropertiesToSetOnce) : undefined,
   })
 }
