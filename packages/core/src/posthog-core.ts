@@ -37,6 +37,7 @@ interface PendingFlagsRequest {
   sendAnonDistinctId: boolean
   fetchConfig: boolean
   resolve: (value: PostHogFeatureFlagsResponse | undefined) => void
+  reject: (reason?: unknown) => void
 }
 
 export abstract class PostHogCore extends PostHogCoreStateless {
@@ -514,8 +515,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       // This ensures that requests with $anon_distinct_id (from identify()) are not lost
       this._logger.info('Feature flags are being loaded already, queuing reload.')
       // Return a promise that resolves when the pending request completes
-      return new Promise((resolve) => {
-        this._pendingFlagsRequest = { sendAnonDistinctId, fetchConfig, resolve }
+      return new Promise((resolve, reject) => {
+        this._pendingFlagsRequest = { sendAnonDistinctId, fetchConfig, resolve, reject }
       })
     }
     return this._flagsAsync(sendAnonDistinctId, fetchConfig)
@@ -701,7 +702,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           this._pendingFlagsRequest = undefined
           this._logger.info('Executing pending feature flags reload.')
           // Execute the pending request and resolve its promise with the result
-          this.flagsAsync(pendingRequest.sendAnonDistinctId, pendingRequest.fetchConfig).then(pendingRequest.resolve)
+          this.flagsAsync(pendingRequest.sendAnonDistinctId, pendingRequest.fetchConfig)
+            .then(pendingRequest.resolve)
+            .catch(pendingRequest.reject)
         }
       })
     return this._flagsResponsePromise
