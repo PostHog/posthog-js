@@ -156,13 +156,104 @@ describe('PostHog Feature Flags v4', () => {
       expect(posthog.getFeatureFlags()).toEqual(expectedFeatureFlagResponses)
     })
 
-    it('should only call fetch once if already calling', async () => {
+    it('should queue only one pending reload when called multiple times during in-flight request', async () => {
+      // Multiple calls during an in-flight request should:
+      // 1. Not make multiple immediate calls
+      // 2. Queue a pending reload that executes after the first completes
       expect(mocks.fetch).toHaveBeenCalledTimes(0)
       posthog.reloadFeatureFlagsAsync()
       posthog.reloadFeatureFlagsAsync()
       const flags = await posthog.reloadFeatureFlagsAsync()
-      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      await waitForPromises() // Wait for pending reload to complete
+      // First call + one pending reload = 2 calls
+      expect(mocks.fetch).toHaveBeenCalledTimes(2)
       expect(flags).toEqual(expectedFeatureFlagResponses)
+    })
+
+    it('should execute pending reload after current request completes', async () => {
+      // This test verifies the fix for the race condition where identify() calls
+      // with $anon_distinct_id were dropped when preloadFeatureFlags was in flight.
+      // See: https://github.com/PostHog/posthog-ios/issues/456
+
+      let resolveFirstRequest: () => void
+      let resolveSecondRequest: () => void
+      let fetchCallCount = 0
+
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+        _mocks.fetch.mockImplementation((url) => {
+          if (url.includes('/flags/')) {
+            fetchCallCount++
+            const currentCall = fetchCallCount
+
+            if (currentCall === 1) {
+              // First request - delay to simulate network latency
+              return new Promise((resolve) => {
+                resolveFirstRequest = () =>
+                  resolve({
+                    status: 200,
+                    text: () => Promise.resolve('ok'),
+                    json: () =>
+                      Promise.resolve({
+                        flags: createMockFeatureFlags(),
+                        requestId: 'first-request',
+                        evaluatedAt: 1640995200000,
+                      }),
+                  })
+              })
+            } else {
+              // Second request (pending reload)
+              return new Promise((resolve) => {
+                resolveSecondRequest = () =>
+                  resolve({
+                    status: 200,
+                    text: () => Promise.resolve('ok'),
+                    json: () =>
+                      Promise.resolve({
+                        flags: createMockFeatureFlags(),
+                        requestId: 'second-request',
+                        evaluatedAt: 1640995200001,
+                      }),
+                  })
+              })
+            }
+          }
+
+          return Promise.resolve({
+            status: 200,
+            text: () => Promise.resolve('ok'),
+            json: () => Promise.resolve({ status: 'ok' }),
+          })
+        })
+      })
+
+      // Start first request (simulates preloadFeatureFlags)
+      const firstReload = posthog.reloadFeatureFlagsAsync()
+
+      // Wait a tick to ensure first request is in flight
+      await waitForPromises()
+
+      // Start second request while first is in flight (simulates identify() -> reloadFeatureFlags())
+      const secondReload = posthog.reloadFeatureFlagsAsync()
+
+      // At this point, fetch should have been called once
+      expect(fetchCallCount).toBe(1)
+
+      // Complete the first request
+      resolveFirstRequest!()
+      await firstReload
+      await waitForPromises()
+
+      // After first request completes, the pending reload should be triggered
+      // and fetch should be called again
+      expect(fetchCallCount).toBe(2)
+
+      // Complete the second request
+      resolveSecondRequest!()
+      await secondReload
+      await waitForPromises()
+
+      // Both requests should have completed
+      expect(fetchCallCount).toBe(2)
     })
 
     it('should emit featureflags event when flags are loaded', async () => {

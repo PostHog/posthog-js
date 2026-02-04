@@ -94,12 +94,17 @@ describe('PostHog Feature Flags v1', () => {
       expect(posthog.getFeatureFlags()).toEqual(createMockFeatureFlags())
     })
 
-    it('should only call fetch once if already calling', async () => {
+    it('should queue only one pending reload when called multiple times during in-flight request', async () => {
+      // Multiple calls during an in-flight request should:
+      // 1. Not make multiple immediate calls
+      // 2. Queue a pending reload that executes after the first completes
       expect(mocks.fetch).toHaveBeenCalledTimes(0)
       posthog.reloadFeatureFlagsAsync()
       posthog.reloadFeatureFlagsAsync()
       const flags = await posthog.reloadFeatureFlagsAsync()
-      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      await waitForPromises() // Wait for pending reload to complete
+      // First call + one pending reload = 2 calls
+      expect(mocks.fetch).toHaveBeenCalledTimes(2)
       expect(flags).toEqual(createMockFeatureFlags())
     })
 

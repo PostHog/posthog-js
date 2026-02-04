@@ -32,6 +32,12 @@ import { maybeAdd, PostHogCoreStateless, QuotaLimitedFeature } from './posthog-c
 import { uuidv7 } from './vendor/uuidv7'
 import { isEmptyObject, isNullish, isPlainError } from './utils'
 
+// Stores the parameters for a pending feature flags reload request
+interface PendingFlagsRequest {
+  sendAnonDistinctId: boolean
+  fetchConfig: boolean
+}
+
 export abstract class PostHogCore extends PostHogCoreStateless {
   // options
   private sendFeatureFlagEvent: boolean
@@ -43,6 +49,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   protected _sessionExpirationTimeSeconds: number
   private _sessionMaxLengthSeconds: number = 24 * 60 * 60 // 24 hours
   protected sessionProps: PostHogEventProperties = {}
+
+  // Track if an additional reload was requested while a request was in flight
+  // This prevents dropping reload requests (e.g., from identify()) when preload is in progress
+  private _pendingFlagsRequest?: PendingFlagsRequest
 
   // person profiles
   protected _personProfiles: 'always' | 'identified_only' | 'never'
@@ -499,6 +509,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   ): Promise<PostHogFeatureFlagsResponse | undefined> {
     await this._initPromise
     if (this._flagsResponsePromise) {
+      // Queue the reload request instead of dropping it
+      // This ensures that requests with $anon_distinct_id (from identify()) are not lost
+      this._logger.info('Feature flags are being loaded already, queuing reload.')
+      this._pendingFlagsRequest = { sendAnonDistinctId, fetchConfig }
       return this._flagsResponsePromise
     }
     return this._flagsAsync(sendAnonDistinctId, fetchConfig)
@@ -677,6 +691,14 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       })
       .finally(() => {
         this._flagsResponsePromise = undefined
+
+        // Check if there's a pending reload request and execute it
+        const pendingRequest = this._pendingFlagsRequest
+        if (pendingRequest) {
+          this._pendingFlagsRequest = undefined
+          this._logger.info('Executing pending feature flags reload.')
+          this.flagsAsync(pendingRequest.sendAnonDistinctId, pendingRequest.fetchConfig)
+        }
       })
     return this._flagsResponsePromise
   }
