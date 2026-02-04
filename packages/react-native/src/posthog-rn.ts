@@ -289,6 +289,15 @@ export class PostHog extends PostHogCore {
     return value !== null ? this._storage.setItem(key, value) : this._storage.removeItem(key)
   }
 
+  /**
+   * Waits for any pending storage operations to complete.
+   * This ensures data has been safely written to async storage before
+   * considering events as sent, preventing duplicate events on app crash/restart.
+   */
+  protected async flushStorage(): Promise<void> {
+    await this._storage.waitForPersist()
+  }
+
   fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> {
     return fetch(url, options)
   }

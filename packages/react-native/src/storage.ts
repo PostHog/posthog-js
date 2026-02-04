@@ -10,6 +10,7 @@ export class PostHogRNStorage {
   memoryCache: PostHogStorageContents = {}
   storage: PostHogCustomStorage
   preloadPromise: Promise<void> | undefined
+  private _pendingPersist: Promise<void> | null = null
 
   constructor(storage: PostHogCustomStorage) {
     this.storage = storage
@@ -29,13 +30,34 @@ export class PostHogRNStorage {
     }
   }
 
+  /**
+   * Waits for any pending storage persist operation to complete.
+   * This ensures data has been written to the underlying storage before proceeding.
+   */
+  async waitForPersist(): Promise<void> {
+    if (this._pendingPersist) {
+      await this._pendingPersist
+    }
+  }
+
   persist(): void {
     const payload = {
       version: POSTHOG_STORAGE_VERSION,
       content: this.memoryCache,
     }
 
-    void this.storage.setItem(POSTHOG_STORAGE_KEY, JSON.stringify(payload))
+    const result = this.storage.setItem(POSTHOG_STORAGE_KEY, JSON.stringify(payload))
+
+    // Track async persist operations so we can wait for them if needed
+    if (isPromise(result)) {
+      this._pendingPersist = result
+        .catch((err) => {
+          console.warn('PostHog storage persist failed:', err)
+        })
+        .finally(() => {
+          this._pendingPersist = null
+        })
+    }
   }
 
   getItem(key: string): any | null | undefined {
