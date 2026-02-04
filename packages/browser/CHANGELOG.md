@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.341.0
+
+### Minor Changes
+
+- [#3027](https://github.com/PostHog/posthog-js/pull/3027) [`d7b37f7`](https://github.com/PostHog/posthog-js/commit/d7b37f7d5140955da5adb11b6a6d4317a676bcc7) Thanks [@robbie-c](https://github.com/robbie-c)! - Rename setTestUser to setInternalOrTestUser
+  (2026-02-04)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.341.0
+
 ## 1.340.0
 
 ### Minor Changes
