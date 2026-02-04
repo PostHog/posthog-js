@@ -1,4 +1,9 @@
 /**
+ * Position of the widget on the screen
+ */
+export type WidgetPosition = 'bottom_left' | 'bottom_right' | 'top_left' | 'top_right'
+
+/**
  * Remote configuration for conversations from the PostHog server
  */
 export interface ConversationsRemoteConfig {
@@ -66,6 +71,12 @@ export interface ConversationsRemoteConfig {
      * Empty array or not present means show on all domains.
      */
     domains?: string[]
+
+    /**
+     * Position of the widget on the screen
+     * @default 'bottom_right'
+     */
+    widgetPosition?: WidgetPosition
 }
 
 /**
