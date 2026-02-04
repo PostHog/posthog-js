@@ -399,9 +399,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     options?: PostHogCaptureOptions
   ): void {
     this.wrap(() => {
-      // Enable person processing when groups are used (if allowed by config)
-      this._requirePersonProcessing('posthog.group')
-
       this.groups({
         [groupType]: groupKey,
       })
