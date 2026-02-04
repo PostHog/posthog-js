@@ -1367,8 +1367,8 @@ export interface PostHogConfig {
 
     /**
      * A hostname pattern to match test environments. When the current hostname matches,
-     * `setTestUser()` is called automatically on startup, enabling person processing
-     * and setting `$test_user: true`.
+     * `setInternalOrTestUser()` is called automatically on startup, enabling person processing
+     * and setting `$internal_or_test_user: true`.
      *
      * Can be a string (exact match) or RegExp (pattern match).
      * Set to `null` to explicitly disable (useful when using `defaults: '2026-01-30'`).
@@ -1379,16 +1379,16 @@ export interface PostHogConfig {
      * @example
      * ```js
      * // Exact match
-     * posthog.init('token', { test_user_hostname: 'example.com' })
+     * posthog.init('token', { internal_or_test_user_hostname: 'example.com' })
      *
      * // Regex pattern
-     * posthog.init('token', { test_user_hostname: /\.local$/ })
+     * posthog.init('token', { internal_or_test_user_hostname: /\.local$/ })
      *
      * // Disable
-     * posthog.init('token', { test_user_hostname: null })
+     * posthog.init('token', { internal_or_test_user_hostname: null })
      * ```
      */
-    test_user_hostname?: string | RegExp | null
+    internal_or_test_user_hostname?: string | RegExp | null
 
     // ------- PREVIEW CONFIGS -------
 
