@@ -25,11 +25,22 @@ export function isDistinctIdStringLike(value: string): boolean {
 /**
  * Creates a hash string from distinct_id and person properties.
  * Used to detect if person properties have changed to avoid duplicate $set events.
+ * Uses sorted keys to ensure consistent ordering regardless of object construction order.
  */
 export function getPersonPropertiesHash(
   distinct_id: string,
   userPropertiesToSet?: Record<string, any>,
   userPropertiesToSetOnce?: Record<string, any>
 ): string {
-  return JSON.stringify({ distinct_id, userPropertiesToSet, userPropertiesToSetOnce })
+  const sortKeys = (obj?: Record<string, any>): Record<string, any> | undefined =>
+    obj
+      ? Object.keys(obj)
+          .sort()
+          .reduce((acc: Record<string, any>, key) => ((acc[key] = obj[key]), acc), {})
+      : undefined
+  return JSON.stringify({
+    distinct_id,
+    userPropertiesToSet: sortKeys(userPropertiesToSet),
+    userPropertiesToSetOnce: sortKeys(userPropertiesToSetOnce),
+  })
 }
