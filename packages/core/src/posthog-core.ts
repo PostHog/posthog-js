@@ -514,6 +514,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       // Queue the reload request instead of dropping it
       // This ensures that requests with $anon_distinct_id (from identify()) are not lost
       this._logger.info('Feature flags are being loaded already, queuing reload.')
+      // Resolve any existing pending promise with the in-flight request's result to avoid hanging promises
+      if (this._pendingFlagsRequest) {
+        this._flagsResponsePromise.then(this._pendingFlagsRequest.resolve).catch(this._pendingFlagsRequest.reject)
+      }
       // Return a promise that resolves when the pending request completes
       return new Promise((resolve, reject) => {
         this._pendingFlagsRequest = { sendAnonDistinctId, fetchConfig, resolve, reject }
