@@ -26,7 +26,7 @@ describe('Prompts', () => {
       options: {
         personalApiKey: 'personalApiKey' in options ? options.personalApiKey : 'phx_test_key',
       },
-      host: options.host ?? 'https://app.posthog.com',
+      host: options.host ?? 'https://us.posthog.com',
     } as any
   }
 
@@ -57,7 +57,7 @@ describe('Prompts', () => {
 
       expect(result).toBe(mockPromptResponse.prompt)
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://app.posthog.com/api/environments/@current/llm_prompts/name/test-prompt/',
+        'https://us.posthog.com/api/environments/@current/llm_prompts/name/test-prompt/',
         {
           method: 'GET',
           headers: {
@@ -325,7 +325,7 @@ describe('Prompts', () => {
       await prompts.get('prompt with spaces/and/slashes')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://app.posthog.com/api/environments/@current/llm_prompts/name/prompt%20with%20spaces%2Fand%2Fslashes/',
+        'https://us.posthog.com/api/environments/@current/llm_prompts/name/prompt%20with%20spaces%2Fand%2Fslashes/',
         expect.any(Object)
       )
     })
@@ -345,7 +345,7 @@ describe('Prompts', () => {
 
       expect(result).toBe(mockPromptResponse.prompt)
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://app.posthog.com/api/environments/@current/llm_prompts/name/test-prompt/',
+        'https://us.posthog.com/api/environments/@current/llm_prompts/name/test-prompt/',
         {
           method: 'GET',
           headers: {
