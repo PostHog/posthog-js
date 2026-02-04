@@ -45,7 +45,7 @@ describe('featureflags', () => {
             reloadFeatureFlags: () => featureFlags.reloadFeatureFlags(),
             _shouldDisableFlags: () =>
                 instance.config.advanced_disable_flags || instance.config.advanced_disable_decide || false,
-            _emit: (event: string, payload?: any) => internalEventEmitter.emit(event, payload),
+            _internalEventEmitter: internalEventEmitter,
             on: (event: string, cb: (...args: any[]) => void) => internalEventEmitter.on(event, cb),
         }
 

@@ -370,7 +370,7 @@ export class PostHog implements PostHogInterface {
     SentryIntegration: typeof SentryIntegration
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
 
-    private _internalEventEmitter = new SimpleEventEmitter()
+    _internalEventEmitter = new SimpleEventEmitter()
 
     // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
     /** @deprecated Use `flagsEndpointWasHit` instead.  We migrated to using a new feature flag endpoint and the new method is more semantically accurate */
@@ -1963,14 +1963,6 @@ export class PostHog implements PostHogInterface {
      */
     on(event: 'eventCaptured' | 'featureFlagsLoading', cb: (...args: any[]) => void): () => void {
         return this._internalEventEmitter.on(event, cb)
-    }
-
-    /**
-     * @internal
-     * Emit an internal event. Used by other modules to trigger events.
-     */
-    _emit(event: 'eventCaptured' | 'featureFlagsLoading', payload?: any): void {
-        this._internalEventEmitter.emit(event, payload)
     }
 
     /**

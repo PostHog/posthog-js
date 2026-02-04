@@ -105,7 +105,6 @@
         "_doesEventMatchFilter",
         "_elementSelectors",
         "_elementsChainAsString",
-        "_emit",
         "_enabledServerSide",
         "_endpoint",
         "_enforceIdleTimeout",
