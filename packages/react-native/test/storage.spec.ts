@@ -58,5 +58,58 @@ describe('PostHog React Native', () => {
         })
       )
     })
+
+    it('should wait for async persist to complete with waitForPersist', async () => {
+      let resolveWrite: () => void
+      const writePromise = new Promise<void>((resolve) => {
+        resolveWrite = resolve
+      })
+
+      mockedOptionalFileSystem!.writeAsStringAsync.mockImplementation(() => writePromise)
+
+      // Trigger a persist
+      storage.setItem('test', 'value')
+
+      // At this point, the write is pending
+      let waitCompleted = false
+      const waitPromise = storage.waitForPersist().then(() => {
+        waitCompleted = true
+      })
+
+      // Wait should not have completed yet
+      await Promise.resolve() // tick
+      expect(waitCompleted).toBe(false)
+
+      // Now resolve the write
+      resolveWrite!()
+      await waitPromise
+
+      // Wait should have completed
+      expect(waitCompleted).toBe(true)
+    })
+
+    it('should resolve waitForPersist immediately if no pending persist', async () => {
+      // No writes pending
+      await storage.waitForPersist()
+      // Should complete immediately without error
+    })
+
+    it('should handle persist errors gracefully in waitForPersist', async () => {
+      mockedOptionalFileSystem!.writeAsStringAsync.mockImplementation(() =>
+        Promise.reject(new Error('Storage write failed'))
+      )
+
+      // Suppress console.warn for this test
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+
+      // Trigger a persist that will fail
+      storage.setItem('test', 'value')
+
+      // waitForPersist should still resolve (not reject)
+      await storage.waitForPersist()
+
+      expect(consoleSpy).toHaveBeenCalledWith('PostHog storage persist failed:', expect.any(Error))
+      consoleSpy.mockRestore()
+    })
   })
 })
