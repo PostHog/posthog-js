@@ -25,6 +25,7 @@ import {
     SAMPLED,
     SessionRecordingStatus,
     TRIGGER_PENDING,
+    TriggerStatus,
     TriggerStatusMatching,
     TriggerType,
     URLTriggerMatching,
@@ -325,7 +326,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _eventTriggerMatching: EventTriggerMatching
     // we need to be able to check the state of the event and url triggers separately
     // as we make some decisions based on them without referencing LinkedFlag etc
-    private _triggerMatching: TriggerStatusMatching = new PendingTriggerMatching()
+    private _triggerMatching: TriggerStatusMatching<string, TriggerStatus> = new PendingTriggerMatching()
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
     private _fullSnapshotTimestamps: Array<[string, number]> = []
 
@@ -605,7 +606,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private get _fullSnapshotIntervalMillis(): number {
         if (
-            this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING &&
+            this._triggerMatching.matches(this.sessionId) === TRIGGER_PENDING &&
             !['sampled', 'active'].includes(this.status)
         ) {
             return ONE_MINUTE
@@ -668,7 +669,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _activateTrigger(triggerType: TriggerType) {
-        if (this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING) {
+        if (this._triggerMatching.matches(this.sessionId) === TRIGGER_PENDING) {
             // status is stored separately for URL and event triggers
             this._instance?.persistence?.register({
                 [triggerType === 'url'
@@ -975,7 +976,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // we always start trigger pending so need to wait for flags before we know if we're really pending
         if (
             rawEvent.type === EventType.FullSnapshot &&
-            this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING
+            this._triggerMatching.matches(this.sessionId) === TRIGGER_PENDING
         ) {
             this._clearBufferBeforeMostRecentMeta()
         }

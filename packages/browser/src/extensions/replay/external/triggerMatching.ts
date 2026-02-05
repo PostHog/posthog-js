@@ -71,15 +71,89 @@ function sessionRecordingUrlTriggerMatches(
     })
 }
 
-export interface TriggerStatusMatching {
-    triggerStatus(sessionId: string): TriggerStatus
+export interface TriggerStatusMatching<TriggerCandidate, TResult> {
+    version: null | 'replay-2026-02'
+    matches: (x: TriggerCandidate) => TResult
     stop(): void
 }
-export class OrTriggerMatching implements TriggerStatusMatching {
-    constructor(private readonly _matchers: TriggerStatusMatching[]) {}
 
-    triggerStatus(sessionId: string): TriggerStatus {
-        const statuses = this._matchers.map((m) => m.triggerStatus(sessionId))
+export interface MatchResult<TContext = void> {
+    matched: boolean
+    configured: boolean
+    context?: TContext
+}
+
+export class OrMatching<TInput, TContext = void> implements TriggerStatusMatching<TInput, MatchResult<TContext>> {
+    version = 'replay-2026-02' as const
+
+    constructor(private readonly _matchers: TriggerStatusMatching<TInput, MatchResult<TContext>>[]) {}
+
+    matches(input: TInput): MatchResult<TContext> {
+        let hasConfigured = false
+        for (const m of this._matchers) {
+            const result = m.matches(input)
+            if (result.matched) {
+                return result
+            }
+            if (result.configured) {
+                hasConfigured = true
+            }
+        }
+        return { matched: false, configured: hasConfigured }
+    }
+
+    stop(): void {
+        this._matchers.forEach((m) => m.stop())
+    }
+}
+
+export class AndMatching<TInput, TContext = void> implements TriggerStatusMatching<TInput, MatchResult<TContext>> {
+    version = 'replay-2026-02' as const
+
+    constructor(private readonly _matchers: TriggerStatusMatching<TInput, MatchResult<TContext>>[]) {}
+
+    matches(input: TInput): MatchResult<TContext> {
+        const configuredResults: MatchResult<TContext>[] = []
+        for (const m of this._matchers) {
+            const result = m.matches(input)
+            if (result.configured) {
+                configuredResults.push(result)
+            }
+        }
+
+        if (configuredResults.length === 0) {
+            return { matched: false, configured: false }
+        }
+
+        const allMatched = configuredResults.every((r) => r.matched)
+        return {
+            matched: allMatched,
+            configured: true,
+            context: configuredResults[0]?.context,
+        }
+    }
+
+    stop(): void {
+        this._matchers.forEach((m) => m.stop())
+    }
+}
+
+export const toTriggerStatus = (r: MatchResult): TriggerStatus =>
+    r.matched ? TRIGGER_ACTIVATED : r.configured ? TRIGGER_PENDING : TRIGGER_DISABLED
+
+export const toMatchResult = (status: TriggerStatus): MatchResult<TriggerStatus> => ({
+    matched: status === TRIGGER_ACTIVATED,
+    configured: status !== TRIGGER_DISABLED,
+    context: status,
+})
+
+export class OrTriggerMatching implements TriggerStatusMatching<string, TriggerStatus> {
+    version = null
+
+    constructor(private readonly _matchers: TriggerStatusMatching<string, TriggerStatus>[]) {}
+
+    matches(sessionId: string): TriggerStatus {
+        const statuses = this._matchers.map((m) => m.matches(sessionId))
         if (statuses.includes(TRIGGER_ACTIVATED)) {
             return TRIGGER_ACTIVATED
         }
@@ -94,13 +168,15 @@ export class OrTriggerMatching implements TriggerStatusMatching {
     }
 }
 
-export class AndTriggerMatching implements TriggerStatusMatching {
-    constructor(private readonly _matchers: TriggerStatusMatching[]) {}
+export class AndTriggerMatching implements TriggerStatusMatching<string, TriggerStatus> {
+    version = null
 
-    triggerStatus(sessionId: string): TriggerStatus {
+    constructor(private readonly _matchers: TriggerStatusMatching<string, TriggerStatus>[]) {}
+
+    matches(sessionId: string): TriggerStatus {
         const statuses = new Set<TriggerStatus>()
         for (const matcher of this._matchers) {
-            statuses.add(matcher.triggerStatus(sessionId))
+            statuses.add(matcher.matches(sessionId))
         }
 
         // trigger_disabled means no config
@@ -120,8 +196,10 @@ export class AndTriggerMatching implements TriggerStatusMatching {
     }
 }
 
-export class PendingTriggerMatching implements TriggerStatusMatching {
-    triggerStatus(): TriggerStatus {
+export class PendingTriggerMatching implements TriggerStatusMatching<string, TriggerStatus> {
+    version = null
+
+    matches(): TriggerStatus {
         return TRIGGER_PENDING
     }
 
@@ -134,7 +212,9 @@ const isEagerLoadedConfig = (x: ReplayConfigType): x is RemoteConfig => {
     return 'sessionRecording' in x
 }
 
-export class URLTriggerMatching implements TriggerStatusMatching {
+export class URLTriggerMatching implements TriggerStatusMatching<string, TriggerStatus> {
+    version = null
+
     _urlTriggers: SessionRecordingUrlTrigger[] = []
     _urlBlocklist: SessionRecordingUrlTrigger[] = []
 
@@ -209,7 +289,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         return currentTriggerSession === sessionId ? TRIGGER_ACTIVATED : TRIGGER_PENDING
     }
 
-    triggerStatus(sessionId: string): TriggerStatus {
+    matches(sessionId: string): TriggerStatus {
         const urlTriggerStatus = this._urlTriggerStatus(sessionId)
         const eitherIsActivated = urlTriggerStatus === TRIGGER_ACTIVATED
         const eitherIsPending = urlTriggerStatus === TRIGGER_PENDING
@@ -263,13 +343,15 @@ export class URLTriggerMatching implements TriggerStatusMatching {
     }
 }
 
-export class LinkedFlagMatching implements TriggerStatusMatching {
+export class LinkedFlagMatching implements TriggerStatusMatching<string, TriggerStatus> {
+    version = null
+
     linkedFlag: string | FlagVariant | null = null
     linkedFlagSeen: boolean = false
     private _flagListenerCleanup: () => void = () => {}
     constructor(private readonly _instance: PostHog) {}
 
-    triggerStatus(): TriggerStatus {
+    matches(): TriggerStatus {
         let result = TRIGGER_PENDING
         if (isNullish(this.linkedFlag)) {
             result = TRIGGER_DISABLED
@@ -328,7 +410,9 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
     }
 }
 
-export class EventTriggerMatching implements TriggerStatusMatching {
+export class EventTriggerMatching implements TriggerStatusMatching<string, TriggerStatus> {
+    version = null
+
     _eventTriggers: string[] = []
 
     constructor(private readonly _instance: PostHog) {}
@@ -358,7 +442,7 @@ export class EventTriggerMatching implements TriggerStatusMatching {
         return currentTriggerSession === sessionId ? TRIGGER_ACTIVATED : TRIGGER_PENDING
     }
 
-    triggerStatus(sessionId: string): TriggerStatus {
+    matches(sessionId: string): TriggerStatus {
         const eventTriggerStatus = this._eventTriggerStatus(sessionId)
         const result =
             eventTriggerStatus === TRIGGER_ACTIVATED
@@ -404,7 +488,7 @@ export function anyMatchSessionRecordingStatus(triggersStatus: RecordingTriggers
         triggersStatus.eventTriggerMatching,
         triggersStatus.urlTriggerMatching,
         triggersStatus.linkedFlagMatching,
-    ]).triggerStatus(triggersStatus.sessionId)
+    ]).matches(triggersStatus.sessionId)
 
     if (sampledActive) {
         return SAMPLED
@@ -447,7 +531,7 @@ export function allMatchSessionRecordingStatus(triggersStatus: RecordingTriggers
         triggersStatus.urlTriggerMatching,
         triggersStatus.linkedFlagMatching,
     ])
-    const currentTriggerStatus = andTriggerMatch.triggerStatus(triggersStatus.sessionId)
+    const currentTriggerStatus = andTriggerMatch.matches(triggersStatus.sessionId)
     const hasTriggersConfigured = currentTriggerStatus !== TRIGGER_DISABLED
 
     const hasSamplingConfigured = isBoolean(triggersStatus.isSampled)
