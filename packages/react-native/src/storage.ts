@@ -10,6 +10,7 @@ export class PostHogRNStorage {
   memoryCache: PostHogStorageContents = {}
   storage: PostHogCustomStorage
   preloadPromise: Promise<void> | undefined
+  private _pendingPromises: Set<Promise<void>> = new Set()
 
   constructor(storage: PostHogCustomStorage) {
     this.storage = storage
@@ -29,13 +30,40 @@ export class PostHogRNStorage {
     }
   }
 
+  /**
+   * Waits for all pending storage persist operations to complete.
+   * This ensures data has been written to the underlying storage before proceeding.
+   * This method never throws - errors are logged but swallowed.
+   */
+  async waitForPersist(): Promise<void> {
+    try {
+      if (this._pendingPromises.size > 0) {
+        await Promise.all(this._pendingPromises)
+      }
+    } catch {
+      // Errors already logged in persist(), safe to ignore here
+    }
+  }
+
   persist(): void {
     const payload = {
       version: POSTHOG_STORAGE_VERSION,
       content: this.memoryCache,
     }
 
-    void this.storage.setItem(POSTHOG_STORAGE_KEY, JSON.stringify(payload))
+    const result = this.storage.setItem(POSTHOG_STORAGE_KEY, JSON.stringify(payload))
+
+    // Track async persist operations so we can wait for them if needed
+    if (isPromise(result)) {
+      const promise = result
+        .catch((err) => {
+          console.warn('PostHog storage persist failed:', err)
+        })
+        .finally(() => {
+          this._pendingPromises.delete(promise)
+        })
+      this._pendingPromises.add(promise)
+    }
   }
 
   getItem(key: string): any | null | undefined {
