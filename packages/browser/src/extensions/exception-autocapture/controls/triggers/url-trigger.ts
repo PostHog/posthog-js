@@ -1,11 +1,13 @@
 import { UrlTrigger } from '../../../../types'
 import { addEventListener } from '../../../../utils'
 import { compileRegexCache, urlMatchesTriggers } from '../../../../utils/policyMatching'
-import type { Trigger, LogFn } from './types'
+import type { Trigger, LogFn, GetPersistedSessionId, SetPersistedSessionId } from './types'
 
 export interface URLTriggerOptions {
     readonly window: Window | undefined
     readonly log: LogFn
+    readonly getPersistedSessionId?: GetPersistedSessionId
+    readonly setPersistedSessionId?: SetPersistedSessionId
 }
 
 export class URLTrigger implements Trigger {
@@ -15,10 +17,12 @@ export class URLTrigger implements Trigger {
     private _urlTriggers: UrlTrigger[] = []
     private _compiledTriggerRegexes: Map<string, RegExp> = new Map()
     private _lastCheckedUrl: string = ''
-    private _triggered: boolean = false
+    private _matchedUrlInSession: boolean = false
     private _initialized: boolean = false
     private _originalPushState: History['pushState'] | null = null
     private _originalReplaceState: History['replaceState'] | null = null
+    private _getPersistedSessionId: GetPersistedSessionId | undefined
+    private _setPersistedSessionId: SetPersistedSessionId | undefined
 
     init(urlTriggers: UrlTrigger[], options: URLTriggerOptions): void {
         if (this._initialized) {
@@ -29,7 +33,9 @@ export class URLTrigger implements Trigger {
         this._urlTriggers = urlTriggers
         this._compiledTriggerRegexes = new Map()
         this._lastCheckedUrl = ''
-        this._triggered = false
+        this._matchedUrlInSession = false
+        this._getPersistedSessionId = options.getPersistedSessionId
+        this._setPersistedSessionId = options.setPersistedSessionId
 
         this._compileRegexCaches()
         this._setupUrlMonitoring()
@@ -38,11 +44,24 @@ export class URLTrigger implements Trigger {
         this._initialized = true
     }
 
-    shouldCapture(): boolean | null {
+    matches(sessionId: string): boolean | null {
         if (this._urlTriggers.length === 0) {
             return null
         }
-        return this._triggered
+
+        // Check if already triggered for this session (from persistence)
+        const persistedSessionId = this._getPersistedSessionId?.()
+        if (persistedSessionId === sessionId) {
+            return true
+        }
+
+        // Check if we matched a URL in this session (in-memory)
+        if (this._matchedUrlInSession) {
+            this._setPersistedSessionId?.(sessionId)
+            return true
+        }
+
+        return false
     }
 
     private _compileRegexCaches(): void {
@@ -54,6 +73,10 @@ export class URLTrigger implements Trigger {
     }
 
     private _checkCurrentUrl(): void {
+        if (this._matchedUrlInSession) {
+            return // Already matched
+        }
+
         const url = this._getCurrentUrl()
         if (!url || url === this._lastCheckedUrl) {
             return
@@ -64,7 +87,7 @@ export class URLTrigger implements Trigger {
             this._urlTriggers.length > 0 && urlMatchesTriggers(url, this._urlTriggers, this._compiledTriggerRegexes)
 
         if (matchesTrigger) {
-            this._triggered = true
+            this._matchedUrlInSession = true
         }
     }
 
