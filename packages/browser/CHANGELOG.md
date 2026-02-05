@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.342.0
+
+### Minor Changes
+
+- [#3032](https://github.com/PostHog/posthog-js/pull/3032) [`19d59ea`](https://github.com/PostHog/posthog-js/commit/19d59ea40a909a5018605ab04ee7598f1d1611b2) Thanks [@dmarticus](https://github.com/dmarticus)! - add featureFlagsReloading event for tracking flag reload state
+  (2026-02-05)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.342.0
+
 ## 1.341.2
 
 ### Patch Changes
