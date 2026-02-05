@@ -301,4 +301,42 @@ describe('SurveyPopup', () => {
         )
         expect(screen.getByRole('textbox')).toBeVisible()
     })
+
+    describe('survey shown event', () => {
+        test('emits survey shown event on mount by default', async () => {
+            render(
+                <SurveyPopup
+                    survey={mockSurvey}
+                    removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                    posthog={mockPosthog as any}
+                />
+            )
+
+            await waitFor(() => {
+                expect(mockPosthog.capture).toHaveBeenCalledWith(
+                    'survey shown',
+                    expect.objectContaining({
+                        $survey_id: mockSurvey.id,
+                        $survey_name: mockSurvey.name,
+                    })
+                )
+            })
+        })
+
+        test('does not emit survey shown event when skipShownEvent is true', async () => {
+            render(
+                <SurveyPopup
+                    survey={mockSurvey}
+                    removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                    posthog={mockPosthog as any}
+                    skipShownEvent={true}
+                />
+            )
+
+            // Give it a tick to run the effect
+            await new Promise((resolve) => setTimeout(resolve, 0))
+
+            expect(mockPosthog.capture).not.toHaveBeenCalledWith('survey shown', expect.anything())
+        })
+    })
 })
