@@ -11,92 +11,113 @@ import {
 } from './utils'
 
 test.describe('product tours - step types and positioning', () => {
-    test.describe('element steps', () => {
-        test('tooltip appears near target element', async ({ page, context }) => {
-            const tour = createTour({
-                id: 'element-tour',
-                steps: [createElementStep('#tour-target', { contentHtml: '<p>Click the button</p>' })],
+    const elementStepVariants = [
+        { label: 'element step (legacy)', asModal: false },
+        { label: 'modal step with selector', asModal: true },
+    ]
+
+    for (const { label, asModal } of elementStepVariants) {
+        test.describe(`element targeting - ${label}`, () => {
+            test('tooltip appears near target element', async ({ page, context }) => {
+                const tour = createTour({
+                    id: 'element-tour',
+                    steps: [createElementStep('#tour-target', { contentHtml: '<p>Click the button</p>' }, asModal)],
+                })
+                await startWithTours(page, context, [tour])
+
+                await expect(tourTooltip(page, 'element-tour')).toBeVisible({ timeout: 5000 })
+
+                const targetBox = await page.locator('#tour-target').boundingBox()
+                const tooltipBox = await tourContainer(page, 'element-tour').locator('.ph-tour-tooltip').boundingBox()
+
+                expect(targetBox).toBeTruthy()
+                expect(tooltipBox).toBeTruthy()
+
+                const closestEdgeDistance = Math.min(
+                    Math.abs(tooltipBox!.x - (targetBox!.x + targetBox!.width)), // tooltip to right of target
+                    Math.abs(tooltipBox!.x + tooltipBox!.width - targetBox!.x), // tooltip to left of target
+                    Math.abs(tooltipBox!.y - (targetBox!.y + targetBox!.height)), // tooltip below target
+                    Math.abs(tooltipBox!.y + tooltipBox!.height - targetBox!.y)
+                )
+                expect(closestEdgeDistance).toBeLessThan(50)
             })
-            await startWithTours(page, context, [tour])
 
-            await expect(tourTooltip(page, 'element-tour')).toBeVisible({ timeout: 5000 })
+            test(`progressionTrigger: click - clicking spotlight advances tour - ${label}`, async ({
+                page,
+                context,
+            }) => {
+                const tour = createTour({
+                    id: 'click-progress',
+                    steps: [
+                        createElementStep(
+                            '#tour-target',
+                            {
+                                id: 'step-1',
+                                progressionTrigger: 'click',
+                                contentHtml: '<p>Click the target to continue</p>',
+                            },
+                            asModal
+                        ),
+                        createStep({ id: 'step-2', contentHtml: '<p>Step 2</p>' }),
+                    ],
+                })
+                await startWithTours(page, context, [tour])
 
-            const targetBox = await page.locator('#tour-target').boundingBox()
-            const tooltipBox = await tourContainer(page, 'element-tour').locator('.ph-tour-tooltip').boundingBox()
+                const container = tourContainer(page, 'click-progress')
+                await expect(tourTooltip(page, 'click-progress')).toBeVisible({ timeout: 5000 })
+                await expect(container.locator('.ph-tour-content')).toContainText('Click the target')
 
-            expect(targetBox).toBeTruthy()
-            expect(tooltipBox).toBeTruthy()
+                await expect(container.locator('button:has-text("Next")')).not.toBeVisible()
 
-            const closestEdgeDistance = Math.min(
-                Math.abs(tooltipBox!.x - (targetBox!.x + targetBox!.width)), // tooltip to right of target
-                Math.abs(tooltipBox!.x + tooltipBox!.width - targetBox!.x), // tooltip to left of target
-                Math.abs(tooltipBox!.y - (targetBox!.y + targetBox!.height)), // tooltip below target
-                Math.abs(tooltipBox!.y + tooltipBox!.height - targetBox!.y)
-            )
-            expect(closestEdgeDistance).toBeLessThan(50)
-        })
+                await container.locator('.ph-tour-spotlight').click()
 
-        test('progressionTrigger: click - clicking spotlight advances tour', async ({ page, context }) => {
-            const tour = createTour({
-                id: 'click-progress',
-                steps: [
-                    createElementStep('#tour-target', {
-                        id: 'step-1',
-                        progressionTrigger: 'click',
-                        contentHtml: '<p>Click the target to continue</p>',
-                    }),
-                    createStep({ id: 'step-2', contentHtml: '<p>Step 2</p>' }),
-                ],
+                await expect(container.locator('.ph-tour-content')).toContainText('Step 2')
             })
-            await startWithTours(page, context, [tour])
 
-            const container = tourContainer(page, 'click-progress')
-            await expect(tourTooltip(page, 'click-progress')).toBeVisible({ timeout: 5000 })
-            await expect(container.locator('.ph-tour-content')).toContainText('Click the target')
+            test(`progressionTrigger: button - Next button advances tour (default) - ${label}`, async ({
+                page,
+                context,
+            }) => {
+                const tour = createTour({
+                    id: 'button-progress',
+                    steps: [
+                        createElementStep(
+                            '#tour-target',
+                            {
+                                id: 'step-1',
+                                progressionTrigger: 'button',
+                                contentHtml: '<p>Step 1 with button</p>',
+                            },
+                            asModal
+                        ),
+                        createStep({ id: 'step-2', contentHtml: '<p>Step 2</p>' }),
+                    ],
+                })
+                await startWithTours(page, context, [tour])
 
-            await expect(container.locator('button:has-text("Next")')).not.toBeVisible()
+                const container = tourContainer(page, 'button-progress')
+                await expect(tourTooltip(page, 'button-progress')).toBeVisible({ timeout: 5000 })
 
-            await container.locator('.ph-tour-spotlight').click()
+                await expect(container.locator('button:has-text("Next")')).toBeVisible()
 
-            await expect(container.locator('.ph-tour-content')).toContainText('Step 2')
-        })
-
-        test('progressionTrigger: button - Next button advances tour (default)', async ({ page, context }) => {
-            const tour = createTour({
-                id: 'button-progress',
-                steps: [
-                    createElementStep('#tour-target', {
-                        id: 'step-1',
-                        progressionTrigger: 'button',
-                        contentHtml: '<p>Step 1 with button</p>',
-                    }),
-                    createStep({ id: 'step-2', contentHtml: '<p>Step 2</p>' }),
-                ],
+                await container.locator('button:has-text("Next")').click()
+                await expect(container.locator('.ph-tour-content')).toContainText('Step 2')
             })
-            await startWithTours(page, context, [tour])
 
-            const container = tourContainer(page, 'button-progress')
-            await expect(tourTooltip(page, 'button-progress')).toBeVisible({ timeout: 5000 })
+            test(`spotlight highlights target element - ${label}`, async ({ page, context }) => {
+                const tour = createTour({
+                    id: 'spotlight-tour',
+                    steps: [createElementStep('#tour-target', { contentHtml: '<p>Look at this element</p>' }, asModal)],
+                })
+                await startWithTours(page, context, [tour])
 
-            await expect(container.locator('button:has-text("Next")')).toBeVisible()
+                await expect(tourTooltip(page, 'spotlight-tour')).toBeVisible({ timeout: 5000 })
 
-            await container.locator('button:has-text("Next")').click()
-            await expect(container.locator('.ph-tour-content')).toContainText('Step 2')
-        })
-
-        test('spotlight highlights target element', async ({ page, context }) => {
-            const tour = createTour({
-                id: 'spotlight-tour',
-                steps: [createElementStep('#tour-target', { contentHtml: '<p>Look at this element</p>' })],
+                const spotlight = tourContainer(page, 'spotlight-tour').locator('.ph-tour-spotlight')
+                await expect(spotlight).toBeVisible()
             })
-            await startWithTours(page, context, [tour])
-
-            await expect(tourTooltip(page, 'spotlight-tour')).toBeVisible({ timeout: 5000 })
-
-            const spotlight = tourContainer(page, 'spotlight-tour').locator('.ph-tour-spotlight')
-            await expect(spotlight).toBeVisible()
         })
-    })
+    }
 
     test.describe('dismiss on click outside', () => {
         test('clicking outside tour dismisses it by default', async ({ page, context }) => {

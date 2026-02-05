@@ -15,6 +15,7 @@ import {
     findStepElement,
     getElementMetadata,
     getProductTourStylesheet,
+    hasElementTarget,
     normalizeUrl,
 } from './product-tours-utils'
 import { ProductTourTooltip } from './components/ProductTourTooltip'
@@ -633,13 +634,13 @@ export class ProductTourManager {
             return false
         }
 
-        // Modal step (no selector) - render without a target element
-        if (step.type === 'modal') {
+        // Screen-positioned step (no element targeting) - render without a target element
+        if (!hasElementTarget(step)) {
             this._captureEvent('product tour step shown', {
                 $product_tour_id: this._activeTour.id,
                 $product_tour_step_id: step.id,
                 $product_tour_step_order: this._currentStepIndex,
-                $product_tour_step_type: 'modal',
+                $product_tour_step_type: step.type,
             })
 
             this._isResuming = false
