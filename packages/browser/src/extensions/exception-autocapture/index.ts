@@ -157,6 +157,11 @@ export class ExceptionObserver {
             return
         }
 
+        if (!this._instance.exceptions.shouldAutocapture()) {
+            logger.info('Skipping exception capture because of autocapture controls.')
+            return
+        }
+
         this._instance.exceptions.sendExceptionEvent(errorProperties)
     }
 }

@@ -1,7 +1,6 @@
-import { addEventListener } from './utils'
-import { addEventListener } from './utils'
-import type { UrlTrigger } from '../../../types'
-import { urlMatchesTriggers, compileRegexCache } from '../../../utils/policyMatching'
+import { UrlTrigger } from '../../../../types'
+import { addEventListener } from '../../../../utils'
+import { compileRegexCache, urlMatchesTriggers } from '../../../../utils/policyMatching'
 import type { Decider, DeciderContext } from './types'
 
 export class URLDecider implements Decider {

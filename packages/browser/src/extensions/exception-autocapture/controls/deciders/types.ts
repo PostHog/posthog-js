@@ -1,5 +1,5 @@
-import type { PostHog } from '../../../posthog-core'
-import type { ErrorTrackingAutoCaptureControls } from '../../../types'
+import { PostHog } from '@posthog/types'
+import { ErrorTrackingAutoCaptureControls } from '../../../../types'
 
 export interface DeciderContext {
     readonly posthog: PostHog

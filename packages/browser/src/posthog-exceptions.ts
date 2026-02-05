@@ -1,5 +1,5 @@
 import { ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS, ERROR_TRACKING_SUPPRESSION_RULES } from './constants'
-import { AutocaptureDecider } from './extensions/error-tracking/autoCaptureDecider'
+import { AutocaptureDecider } from './extensions/exception-autocapture/controls/autocaptureDecider'
 import { PostHog } from './posthog-core'
 import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
@@ -50,6 +50,10 @@ export class PostHogExceptions {
         }
 
         this._autocaptureDecider.init(response)
+    }
+
+    shouldAutocapture(): boolean {
+        return this._autocaptureDecider.shouldCapture()
     }
 
     private get _captureExtensionExceptions() {
