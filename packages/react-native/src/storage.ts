@@ -33,10 +33,15 @@ export class PostHogRNStorage {
   /**
    * Waits for all pending storage persist operations to complete.
    * This ensures data has been written to the underlying storage before proceeding.
+   * This method never throws - errors are logged but swallowed.
    */
   async waitForPersist(): Promise<void> {
-    if (this._pendingPromises.size > 0) {
-      await Promise.all(this._pendingPromises)
+    try {
+      if (this._pendingPromises.size > 0) {
+        await Promise.all(this._pendingPromises)
+      }
+    } catch {
+      // Errors already logged in persist(), safe to ignore here
     }
   }
 
