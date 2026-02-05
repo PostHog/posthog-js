@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.30.1
+
+### Patch Changes
+
+- [#3031](https://github.com/PostHog/posthog-js/pull/3031) [`26775e2`](https://github.com/PostHog/posthog-js/commit/26775e2ac54b0b6e2356336a68daed35cb7cd6fc) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: prevent duplicate events with transactional storage (async) updates
+  (2026-02-05)
+
 ## 4.30.0
 
 ### Minor Changes
