@@ -8,6 +8,8 @@ import type {
   JsonType,
   PostHogRemoteConfig,
   FeatureFlagValue,
+  FeatureFlagResult,
+  GetFeatureFlagResultOptions,
   PostHogV2FlagsResponse,
   PostHogV1FlagsResponse,
   PostHogFeatureFlagDetails,
@@ -21,10 +23,13 @@ import type {
 } from './types'
 import {
   createFlagsResponseFromFlagsAndPayloads,
+  getEnabledFromValue,
   getFeatureFlagValue,
   getFlagValuesFromFlags,
   getPayloadsFromFlags,
+  getVariantFromValue,
   normalizeFlagsResponse,
+  parsePayload,
   updateFlagValue,
 } from './featureFlagUtils'
 import { Compression, FeatureFlagError, PostHogPersistedProperty } from './types'
@@ -806,61 +811,69 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return getPayloadsFromFlags(details.flags)
   }
 
-  getFeatureFlag(key: string): FeatureFlagValue | undefined {
+  getFeatureFlagResult(key: string, options?: GetFeatureFlagResultOptions): FeatureFlagResult | undefined {
+    return this._getFeatureFlagResult(key, options)
+  }
+
+  protected _getFeatureFlagResult(
+    key: string,
+    options: {
+      /** Whether to send an event that the flag was evaluated. This defaults to true,
+       * but will respect the instance-level sendFeatureFlagEvent setting.
+       */
+      sendEvent?: boolean
+      /**
+       * Preserves the legacy missing-flag behavior of the named function.
+       * Each value matches how that function handled missing flags before getFeatureFlagResult existed:
+       * - 'getFeatureFlag': returns a default only when non-empty flags are cached
+       * - 'getFeatureFlagPayload': returns a default whenever any flags response was stored (even if empty, e.g. error/quota)
+       * Without this, missing flags simply return undefined (this is usually what you want).
+       */
+      missingFlagBehavior?: 'getFeatureFlag' | 'getFeatureFlagPayload'
+    } = {}
+  ): FeatureFlagResult | undefined {
     const storedDetails = this.getStoredFlagDetails()
     const details = this.getFeatureFlagDetails()
-    const errors: string[] = []
     const isQuotaLimited = storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)
-
-    if (storedDetails?.requestError) {
-      const { type, statusCode } = storedDetails.requestError
-      if (type === 'timeout') {
-        errors.push(FeatureFlagError.TIMEOUT)
-      } else if (type === 'api_error' && statusCode !== undefined) {
-        errors.push(FeatureFlagError.apiError(statusCode))
-      } else if (type === 'connection_error') {
-        errors.push(FeatureFlagError.CONNECTION_ERROR)
-      } else {
-        errors.push(FeatureFlagError.UNKNOWN_ERROR)
-      }
-    } else if (storedDetails) {
-      if (storedDetails.errorsWhileComputingFlags) {
-        errors.push(FeatureFlagError.ERRORS_WHILE_COMPUTING)
-      }
-      if (isQuotaLimited) {
-        errors.push(FeatureFlagError.QUOTA_LIMITED)
-      }
-    }
-
     const featureFlag = details?.flags[key]
+    const sendEvent = (options.sendEvent ?? this.sendFeatureFlagEvent) && !this.flagCallReported[key]
+    const flagValue: FeatureFlagValue | undefined = getFeatureFlagValue(featureFlag)
 
-    let response: FeatureFlagValue | undefined = getFeatureFlagValue(featureFlag)
-
-    if (response === undefined) {
-      // Return false for missing flags when we have successfully loaded flags.
-      const hasCachedFlags = details && Object.keys(details.flags).length > 0
-      if (hasCachedFlags) {
-        response = false
+    if (sendEvent) {
+      const errors: string[] = []
+      if (storedDetails?.requestError) {
+        const { type, statusCode } = storedDetails.requestError
+        if (type === 'timeout') {
+          errors.push(FeatureFlagError.TIMEOUT)
+        } else if (type === 'api_error' && statusCode !== undefined) {
+          errors.push(FeatureFlagError.apiError(statusCode))
+        } else if (type === 'connection_error') {
+          errors.push(FeatureFlagError.CONNECTION_ERROR)
+        } else {
+          errors.push(FeatureFlagError.UNKNOWN_ERROR)
+        }
+      } else if (storedDetails) {
+        if (storedDetails.errorsWhileComputingFlags) {
+          errors.push(FeatureFlagError.ERRORS_WHILE_COMPUTING)
+        }
+        if (isQuotaLimited) {
+          errors.push(FeatureFlagError.QUOTA_LIMITED)
+        } else if (flagValue === undefined && !featureFlag) {
+          // Track missing flags only when we had a successful, non-limited request.
+          // When quota limited or request failed, we cannot determine if the flag is truly missing.
+          errors.push(FeatureFlagError.FLAG_MISSING)
+        }
       }
 
-      // Track missing flags only when we had a successful, non-limited request.
-      // When quota limited or request failed, we cannot determine if the flag is truly missing.
-      if (details && !featureFlag && !storedDetails?.requestError && !isQuotaLimited) {
-        errors.push(FeatureFlagError.FLAG_MISSING)
-      }
-    }
-
-    if (this.sendFeatureFlagEvent && !this.flagCallReported[key]) {
       const bootstrappedResponse = this.getBootstrappedFeatureFlags()?.[key]
       const bootstrappedPayload = this.getBootstrappedFeatureFlagPayloads()?.[key]
-
       const featureFlagError = errors.length > 0 ? errors.join(',') : undefined
 
       this.flagCallReported[key] = true
 
       const properties: Record<string, any> = {
         $feature_flag: key,
-        $feature_flag_response: response,
+        $feature_flag_response: flagValue,
         ...maybeAdd('$feature_flag_id', featureFlag?.metadata?.id),
         ...maybeAdd('$feature_flag_version', featureFlag?.metadata?.version),
         ...maybeAdd('$feature_flag_reason', featureFlag?.reason?.description ?? featureFlag?.reason?.code),
@@ -876,24 +889,38 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       this.capture('$feature_flag_called', properties)
     }
 
-    return response
+    if (flagValue === undefined) {
+      // TRICKY: getFeatureFlagPayload and getFeatureFlag had different criteria for
+      //         "missing flag" vs "flags not loaded" return values before
+      //         _getFeatureFlagResult existed. Preserved for backward compatibility.
+      switch (options.missingFlagBehavior) {
+        case 'getFeatureFlagPayload':
+          return storedDetails ? { key, enabled: false, payload: null } : undefined
+        case 'getFeatureFlag':
+          return details && Object.keys(details.flags).length ? { key, enabled: false, payload: null } : undefined
+        case undefined:
+          return undefined
+      }
+    }
+
+    const rawPayload = featureFlag?.metadata?.payload
+    const payload = rawPayload !== undefined ? parsePayload(rawPayload) : null
+    return {
+      key,
+      enabled: getEnabledFromValue(flagValue),
+      variant: getVariantFromValue(flagValue),
+      payload,
+    }
+  }
+
+  getFeatureFlag(key: string): FeatureFlagValue | undefined {
+    const result = this._getFeatureFlagResult(key, { missingFlagBehavior: 'getFeatureFlag' })
+    return result?.variant ?? result?.enabled
   }
 
   getFeatureFlagPayload(key: string): JsonType | undefined {
-    const payloads = this.getFeatureFlagPayloads()
-
-    if (!payloads) {
-      return undefined
-    }
-
-    const response = payloads[key]
-
-    // Undefined means a loading or missing data issue. Null means evaluation happened and there was no match
-    if (response === undefined) {
-      return null
-    }
-
-    return response
+    const result = this._getFeatureFlagResult(key, { missingFlagBehavior: 'getFeatureFlagPayload', sendEvent: false })
+    return result?.payload
   }
 
   getFeatureFlagPayloads(): PostHogFlagsResponse['featureFlagPayloads'] | undefined {
