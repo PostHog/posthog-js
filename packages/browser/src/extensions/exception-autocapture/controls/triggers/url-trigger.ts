@@ -1,20 +1,20 @@
 import { UrlTrigger } from '../../../../types'
 import { addEventListener } from '../../../../utils'
 import { compileRegexCache, urlMatchesTriggers } from '../../../../utils/policyMatching'
-import type { Decider, DeciderContext } from './types'
+import type { Trigger, URLTriggerOptions } from './types'
 
-export class URLDecider implements Decider {
+export class URLTrigger implements Trigger {
     readonly name = 'url'
 
-    private _context: DeciderContext | null = null
+    private _window: Window | undefined
     private _urlTriggers: UrlTrigger[] = []
     private _compiledTriggerRegexes: Map<string, RegExp> = new Map()
     private _lastCheckedUrl: string = ''
     private _triggered: boolean = false
 
-    init(context: DeciderContext): void {
-        this._context = context
-        this._urlTriggers = context.config?.urlTriggers ?? []
+    init(urlTriggers: UrlTrigger[], options: URLTriggerOptions): void {
+        this._window = options.window
+        this._urlTriggers = urlTriggers
 
         this._compileRegexCaches()
         this._setupUrlMonitoring()
@@ -34,7 +34,7 @@ export class URLDecider implements Decider {
     }
 
     private _getCurrentUrl(): string | null {
-        return this._context?.window?.location?.href ?? null
+        return this._window?.location?.href ?? null
     }
 
     private _checkCurrentUrl(): void {
@@ -53,7 +53,7 @@ export class URLDecider implements Decider {
     }
 
     private _setupUrlMonitoring(): void {
-        const win = this._context?.window
+        const win = this._window
         if (!win || this._urlTriggers.length === 0) {
             return
         }

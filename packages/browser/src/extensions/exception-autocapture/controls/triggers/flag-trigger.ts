@@ -1,15 +1,21 @@
-import type { Decider, DeciderContext } from './types'
+import type { PostHog } from '@posthog/types'
+import type { Trigger, FlagTriggerOptions } from './types'
 
-export class FlagDecider implements Decider {
+export interface LinkedFlag {
+    key: string
+    variant?: string | null
+}
+
+export class FlagTrigger implements Trigger {
     readonly name = 'flag'
 
-    private _context: DeciderContext | null = null
-    private _linkedFlag: { key: string; variant?: string | null } | null = null
+    private _posthog: PostHog | null = null
+    private _linkedFlag: LinkedFlag | null = null
     private _flagMatched: boolean = false
 
-    init(context: DeciderContext): void {
-        this._context = context
-        this._linkedFlag = context.config?.linkedFeatureFlag ?? null
+    init(linkedFlag: LinkedFlag | null, options: FlagTriggerOptions): void {
+        this._posthog = options.posthog
+        this._linkedFlag = linkedFlag
 
         if (this._linkedFlag) {
             this._setupFlagListener()
@@ -24,7 +30,7 @@ export class FlagDecider implements Decider {
     }
 
     private _setupFlagListener(): void {
-        const posthog = this._context?.posthog
+        const posthog = this._posthog
         const linkedFlag = this._linkedFlag
 
         if (!posthog || !linkedFlag) {
