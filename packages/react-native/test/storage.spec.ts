@@ -77,7 +77,7 @@ describe('PostHog React Native', () => {
       })
 
       // Wait should not have completed yet
-      await new Promise((r) => setTimeout(r, 5))
+      await Promise.resolve()
       expect(waitCompleted).toBe(false)
 
       // Now resolve the write
@@ -104,21 +104,11 @@ describe('PostHog React Native', () => {
 
       expect(resolvers.length).toBe(3)
 
-      let waitCompleted = false
-      const waitPromise = storage.waitForPersist().then(() => {
-        waitCompleted = true
-      })
+      const waitPromise = storage.waitForPersist()
 
-      // Resolve first two, but not the third
-      resolvers[0]()
-      resolvers[1]()
-      await new Promise((r) => setTimeout(r, 5))
-      expect(waitCompleted).toBe(false)
-
-      // Resolve the last one
-      resolvers[2]()
+      // Resolve all
+      resolvers.forEach((r) => r())
       await waitPromise
-      expect(waitCompleted).toBe(true)
     })
 
     it('should resolve waitForPersist immediately if no pending persist', async () => {

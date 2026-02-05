@@ -10,7 +10,7 @@ export class PostHogRNStorage {
   memoryCache: PostHogStorageContents = {}
   storage: PostHogCustomStorage
   preloadPromise: Promise<void> | undefined
-  private _pendingPersistCount: number = 0
+  private _pendingPromises: Set<Promise<void>> = new Set()
 
   constructor(storage: PostHogCustomStorage) {
     this.storage = storage
@@ -35,8 +35,8 @@ export class PostHogRNStorage {
    * This ensures data has been written to the underlying storage before proceeding.
    */
   async waitForPersist(): Promise<void> {
-    while (this._pendingPersistCount > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 1))
+    if (this._pendingPromises.size > 0) {
+      await Promise.all(this._pendingPromises)
     }
   }
 
@@ -50,14 +50,14 @@ export class PostHogRNStorage {
 
     // Track async persist operations so we can wait for them if needed
     if (isPromise(result)) {
-      this._pendingPersistCount++
-      result
+      const promise = result
         .catch((err) => {
           console.warn('PostHog storage persist failed:', err)
         })
         .finally(() => {
-          this._pendingPersistCount--
+          this._pendingPromises.delete(promise)
         })
+      this._pendingPromises.add(promise)
     }
   }
 
