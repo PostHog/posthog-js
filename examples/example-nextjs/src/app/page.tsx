@@ -8,7 +8,6 @@ function randomID() {
 
 export default function Home() {
     const posthog = usePostHog()
-    
     return (
         <div>
             <main>
