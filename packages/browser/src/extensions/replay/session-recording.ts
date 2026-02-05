@@ -7,10 +7,16 @@ import {
     SESSION_RECORDING_REMOTE_CONFIG,
 } from '../../constants'
 import { PostHog } from '../../posthog-core'
-import { Properties, RemoteConfig, SessionRecordingPersistedConfig, SessionStartReason } from '../../types'
+import {
+    Properties,
+    RemoteConfig,
+    SessionRecordingPersistedConfig,
+    SessionRecordingRemoteConfig,
+    SessionStartReason,
+} from '../../types'
 import { type eventWithTime } from './types/rrweb-types'
 
-import { isNullish, isUndefined } from '@posthog/core'
+import { isNullish, isObject, isUndefined } from '@posthog/core'
 import { createLogger } from '../../utils/logger'
 import {
     assignableWindow,
@@ -69,9 +75,16 @@ export class SessionRecording {
         return window && enabled_server_side && enabled_client_side && !isDisabled
     }
 
-    startIfEnabledOrStop(startReason?: SessionStartReason) {
+    startIfEnabledOrStop(startReason?: SessionStartReason, triggerConfigChanged?: boolean) {
         if (this._isRecordingEnabled && this._lazyLoadedSessionRecording?.isStarted) {
-            return
+            if (triggerConfigChanged) {
+                // Recording is already running but trigger config changed - stop and restart
+                // This handles the race condition where recording started with stale cached config
+                this.stopRecording()
+            } else {
+                // Recording is already running and config hasn't changed - nothing to do
+                return
+            }
         }
 
         // According to the rrweb docs, rrweb is not supported on IE11 and below:
@@ -186,6 +199,27 @@ export class SessionRecording {
         }
     }
 
+    private _hasTriggerConfigChanged(newConfig: SessionRecordingRemoteConfig | undefined): boolean {
+        const persistedConfig = this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+
+        if (!persistedConfig || !newConfig) {
+            return false
+        }
+
+        // Persistence can return a JSON string or parsed object depending on the backend
+        const existingConfig: SessionRecordingPersistedConfig = isObject(persistedConfig)
+            ? persistedConfig
+            : JSON.parse(persistedConfig)
+
+        return (
+            JSON.stringify(existingConfig.urlTriggers) !== JSON.stringify(newConfig.urlTriggers) ||
+            JSON.stringify(existingConfig.urlBlocklist) !== JSON.stringify(newConfig.urlBlocklist) ||
+            JSON.stringify(existingConfig.eventTriggers) !== JSON.stringify(newConfig.eventTriggers) ||
+            JSON.stringify(existingConfig.linkedFlag) !== JSON.stringify(newConfig.linkedFlag) ||
+            existingConfig.triggerMatchType !== newConfig.triggerMatchType
+        )
+    }
+
     onRemoteConfig(response: RemoteConfig) {
         if (!('sessionRecording' in response)) {
             // if sessionRecording is not in the response, we do nothing
@@ -198,9 +232,13 @@ export class SessionRecording {
             return
         }
 
+        // Check if trigger config changed BEFORE persisting - handles race condition where recording
+        // started with stale cached config before new decide response arrived
+        const triggerConfigChanged = this._hasTriggerConfigChanged(response.sessionRecording)
+
         this._persistRemoteConfig(response)
         this._receivedFlags = true
-        this.startIfEnabledOrStop()
+        this.startIfEnabledOrStop(undefined, triggerConfigChanged)
     }
 
     log(message: string, level: 'log' | 'warn' | 'error' = 'log') {

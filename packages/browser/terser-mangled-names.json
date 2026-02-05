@@ -202,6 +202,7 @@
         "_hasLoggedDeprecationWarning",
         "_hasPassedMinimumDuration",
         "_hasPersonProcessing",
+        "_hasTriggerConfigChanged",
         "_ignoreClick",
         "_initExtensions",
         "_initialPageviewCaptured",
