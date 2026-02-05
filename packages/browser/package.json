@@ -28,6 +28,7 @@
         "test:typecheck": "cd src/__tests__ && tsc --noEmit --project tsconfig.json",
         "typecheck": "tsc --noEmit --project tsconfig.json",
         "playwright": "pnpm exec playwright test --project webkit --project firefox --project chromium",
+        "playwright:compat": "pnpm exec playwright test --config playwright.config.compat.ts",
         "playwright:integration": "pnpm exec playwright test --config playwright.config.integration.ts --project webkit --project firefox --project chromium",
         "playwright-ui": "pnpm exec playwright test --ui --project webkit --project firefox --project chromium",
         "playwright-webserver": "npx http-server ./ -p 2345",
