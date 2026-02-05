@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.341.2
+
+### Patch Changes
+
+- [#3035](https://github.com/PostHog/posthog-js/pull/3035) [`b68e991`](https://github.com/PostHog/posthog-js/commit/b68e99105b3135f619e098a042d9a91c7c9ef8cf) Thanks [@adboio](https://github.com/adboio)! - unify element<>modal steps for product tours, deprecate element steps
+  (2026-02-05)
+- Updated dependencies []:
+    - @posthog/types@1.341.2
+
 ## 1.341.1
 
 ### Patch Changes
