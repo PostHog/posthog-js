@@ -1,15 +1,16 @@
-import type { Decider, DeciderContext } from './types'
+import type { PostHog } from '@posthog/types'
+import type { Trigger, EventTriggerOptions } from './types'
 
-export class EventDecider implements Decider {
+export class EventTrigger implements Trigger {
     readonly name = 'event'
 
-    private _context: DeciderContext | null = null
+    private _posthog: PostHog | null = null
     private _eventTriggers: string[] = []
     private _triggered: boolean = false
 
-    init(context: DeciderContext): void {
-        this._context = context
-        this._eventTriggers = context.config?.eventTriggers ?? []
+    init(eventTriggers: string[], options: EventTriggerOptions): void {
+        this._posthog = options.posthog
+        this._eventTriggers = eventTriggers
 
         if (this._eventTriggers.length > 0) {
             this._setupEventListener()
@@ -24,7 +25,7 @@ export class EventDecider implements Decider {
     }
 
     private _setupEventListener(): void {
-        const posthog = this._context?.posthog
+        const posthog = this._posthog
         if (!posthog) {
             return
         }

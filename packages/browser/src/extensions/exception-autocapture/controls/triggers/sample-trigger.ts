@@ -1,15 +1,13 @@
 import { isNull } from '@posthog/core'
-import type { Decider, DeciderContext } from './types'
+import type { Trigger, SampleTriggerOptions } from './types'
 
-export class SampleDecider implements Decider {
+export class SampleTrigger implements Trigger {
     readonly name = 'sample'
 
-    private _context: DeciderContext | null = null
     private _sampleRate: number | null = null
 
-    init(context: DeciderContext): void {
-        this._context = context
-        this._sampleRate = context.config?.sampleRate ?? null
+    init(sampleRate: number | null, _options: SampleTriggerOptions): void {
+        this._sampleRate = sampleRate
     }
 
     shouldCapture(): boolean | null {
