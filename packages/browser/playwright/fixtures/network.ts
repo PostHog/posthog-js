@@ -106,6 +106,7 @@ export class NetworkPage {
         await this.page.route('**/e/**', async (route) => {
             await route.fulfill({
                 headers: { loaded: 'mock captured' },
+                json: {},
             })
         })
     }
