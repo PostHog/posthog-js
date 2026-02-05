@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.341.1
+
+### Patch Changes
+
+- [#3041](https://github.com/PostHog/posthog-js/pull/3041) [`23292d4`](https://github.com/PostHog/posthog-js/commit/23292d4cfbb589908dd6a64b1472b1d6ac2e6c1c) Thanks [@adboio](https://github.com/adboio)! - replace stopPropagation with preventDefault for tour manaul click triggers
+  (2026-02-05)
+- Updated dependencies []:
+    - @posthog/types@1.341.1
+
 ## 1.341.0
 
 ### Minor Changes
