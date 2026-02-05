@@ -1042,7 +1042,7 @@ describe('featureflags', () => {
         })
     })
 
-    describe('featureFlagsLoading event', () => {
+    describe('featureFlagsReloading event', () => {
         beforeEach(() => {
             instance._send_request = jest.fn().mockImplementation(({ callback }) =>
                 callback({
@@ -1057,9 +1057,9 @@ describe('featureflags', () => {
             )
         })
 
-        it('should emit featureFlagsLoading event when reloadFeatureFlags is called', () => {
+        it('should emit featureFlagsReloading event when reloadFeatureFlags is called', () => {
             const loadingCallback = jest.fn()
-            instance.on('featureFlagsLoading', loadingCallback)
+            instance.on('featureFlagsReloading', loadingCallback)
 
             featureFlags.reloadFeatureFlags()
 
@@ -1067,9 +1067,9 @@ describe('featureflags', () => {
             expect(loadingCallback).toHaveBeenCalledWith(true)
         })
 
-        it('should not emit featureFlagsLoading event if already debouncing', () => {
+        it('should not emit featureFlagsReloading event if already debouncing', () => {
             const loadingCallback = jest.fn()
-            instance.on('featureFlagsLoading', loadingCallback)
+            instance.on('featureFlagsReloading', loadingCallback)
 
             featureFlags.reloadFeatureFlags()
             featureFlags.reloadFeatureFlags()
@@ -1079,10 +1079,10 @@ describe('featureflags', () => {
             expect(loadingCallback).toHaveBeenCalledTimes(1)
         })
 
-        it('should emit featureFlagsLoading before onFeatureFlags callback', () => {
+        it('should emit featureFlagsReloading before onFeatureFlags callback', () => {
             const callOrder: string[] = []
 
-            instance.on('featureFlagsLoading', () => {
+            instance.on('featureFlagsReloading', () => {
                 callOrder.push('loading')
             })
 
@@ -1096,9 +1096,9 @@ describe('featureflags', () => {
             expect(callOrder).toEqual(['loading', 'loaded'])
         })
 
-        it('should not emit featureFlagsLoading if reloading is disabled', () => {
+        it('should not emit featureFlagsReloading if reloading is disabled', () => {
             const loadingCallback = jest.fn()
-            instance.on('featureFlagsLoading', loadingCallback)
+            instance.on('featureFlagsReloading', loadingCallback)
 
             featureFlags.setReloadingPaused(true)
             featureFlags.reloadFeatureFlags()
@@ -1106,9 +1106,9 @@ describe('featureflags', () => {
             expect(loadingCallback).not.toHaveBeenCalled()
         })
 
-        it('should not emit featureFlagsLoading if feature flags are disabled', () => {
+        it('should not emit featureFlagsReloading if feature flags are disabled', () => {
             const loadingCallback = jest.fn()
-            instance.on('featureFlagsLoading', loadingCallback)
+            instance.on('featureFlagsReloading', loadingCallback)
 
             instance.config.advanced_disable_feature_flags = true
             featureFlags.reloadFeatureFlags()

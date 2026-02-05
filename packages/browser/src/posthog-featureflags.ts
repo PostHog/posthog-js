@@ -395,7 +395,7 @@ export class PostHogFeatureFlags {
         }
 
         // Emit event so consumers know flags are being reloaded
-        this._instance._internalEventEmitter.emit('featureFlagsLoading', true)
+        this._instance._internalEventEmitter.emit('featureFlagsReloading', true)
 
         // Debounce multiple calls on the same tick
         this._reloadDebouncer = setTimeout(() => {
