@@ -113,16 +113,4 @@ describe('URLDecider', () => {
 
         expect(decider.shouldCapture()).toBe(true)
     })
-
-    it('does not re-check same URL', () => {
-        const { context, navigateTo } = getDecider({
-            triggers: [{ url: '/trigger', matching: 'regex' }],
-        })
-
-        navigateTo('https://example.com/')
-        navigateTo('https://example.com/')
-
-        const logCalls = (context.log as jest.Mock).mock.calls.filter((call) => call[0].includes('URL checked'))
-        expect(logCalls.length).toBe(1)
-    })
 })

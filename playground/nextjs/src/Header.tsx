@@ -30,6 +30,7 @@ export const PageHeader = () => {
                         <Link href="/external_chat">External Chat</Link>
                         <Link href="/product-tours">Product Tours</Link>
                         <Link href="/hogflix">Hogflix</Link>
+                        <Link href="/exception-autocapture">Exceptions</Link>
                     </div>
 
                     <div>
