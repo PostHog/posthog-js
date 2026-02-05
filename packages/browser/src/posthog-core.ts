@@ -156,13 +156,17 @@ const defaultsThatVaryByConfig = (
     defaults?: ConfigDefaults
 ): Pick<
     PostHogConfig,
-    'rageclick' | 'capture_pageview' | 'session_recording' | 'external_scripts_inject_target' | 'test_user_hostname'
+    | 'rageclick'
+    | 'capture_pageview'
+    | 'session_recording'
+    | 'external_scripts_inject_target'
+    | 'internal_or_test_user_hostname'
 > => ({
     rageclick: defaults && defaults >= '2025-11-30' ? { content_ignorelist: true } : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
     external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
-    test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
+    internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
@@ -867,13 +871,13 @@ export class PostHog implements PostHogInterface {
 
         this._start_queue_if_opted_in()
 
-        // Check if current hostname matches test_user_hostname pattern and mark as test user before any events
-        if (this.config.test_user_hostname && location?.hostname) {
+        // Check if current hostname matches internal_or_test_user_hostname pattern and mark as test user before any events
+        if (this.config.internal_or_test_user_hostname && location?.hostname) {
             const hostname = location.hostname
-            const pattern = this.config.test_user_hostname
+            const pattern = this.config.internal_or_test_user_hostname
             const matches = typeof pattern === 'string' ? hostname === pattern : pattern.test(hostname)
             if (matches) {
-                this.setTestUser()
+                this.setInternalOrTestUser()
             }
         }
 
@@ -3182,31 +3186,31 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
-     * Marks the current user as a test user by setting the `$test_user` person property to `true`.
+     * Marks the current user as a test user by setting the `$internal_or_test_user` person property to `true`.
      * This also enables person processing for the current user.
      *
      * This is useful for using in a cohort your internal/test filters for your posthog org.
      * @see https://posthog.com/tutorials/filter-internal-users
-     * Create a cohort with `$test_user` IS SET, and set your internal test filters to be NOT IN that cohort.
+     * Create a cohort with `$internal_or_test_user` IS SET, and set your internal test filters to be NOT IN that cohort.
      *
      * {@label Identification}
      *
      * @example
      * ```js
      * // Manually mark as test user
-     * posthog.setTestUser()
+     * posthog.setInternalOrTestUser()
      *
-     * // Or use test_user_hostname config for automatic detection
-     * posthog.init('token', { test_user_hostname: 'localhost' })
+     * // Or use internal_or_test_user_hostname config for automatic detection
+     * posthog.init('token', { internal_or_test_user_hostname: 'localhost' })
      * ```
      *
      * @public
      */
-    setTestUser(): void {
-        if (!this._requirePersonProcessing('posthog.setTestUser')) {
+    setInternalOrTestUser(): void {
+        if (!this._requirePersonProcessing('posthog.setInternalOrTestUser')) {
             return
         }
-        this.setPersonProperties({ $test_user: true })
+        this.setPersonProperties({ $internal_or_test_user: true })
     }
 
     /**

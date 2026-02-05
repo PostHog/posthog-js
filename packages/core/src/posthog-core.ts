@@ -30,7 +30,7 @@ import {
 import { Compression, FeatureFlagError, PostHogPersistedProperty } from './types'
 import { maybeAdd, PostHogCoreStateless, QuotaLimitedFeature } from './posthog-core-stateless'
 import { uuidv7 } from './vendor/uuidv7'
-import { isEmptyObject, isNullish, isPlainError } from './utils'
+import { isEmptyObject, isNullish, isPlainError, getPersonPropertiesHash, isObject } from './utils'
 
 // Stores the parameters for a pending feature flags reload request
 interface PendingFlagsRequest {
@@ -58,6 +58,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   // person profiles
   protected _personProfiles: 'always' | 'identified_only' | 'never'
+
+  // cache for person properties to avoid duplicate $set events
+  protected _cachedPersonProperties: string | null = null
 
   constructor(apiKey: string, options?: PostHogCoreOptions) {
     // Default for stateful mode is to not disable geoip. Only override if explicitly set
@@ -141,6 +144,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
       // clean up props
       this.clearProps()
+
+      // clear cached person properties
+      this._cachedPersonProperties = null
 
       for (const key of <(keyof typeof PostHogPersistedProperty)[]>Object.keys(PostHogPersistedProperty)) {
         if (!allPropertiesToKeep.includes(PostHogPersistedProperty[key])) {
@@ -306,6 +312,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         ...maybeAdd('$set_once', userPropsOnce),
       })
 
+      // Safely cast userProps and userPropsOnce to object types for hash and setPersonProperties
+      const userPropsObj = isObject(userProps) ? (userProps as { [key: string]: JsonType }) : undefined
+      const userPropsOnceObj = isObject(userPropsOnce) ? (userPropsOnce as { [key: string]: JsonType }) : undefined
+
       if (distinctId !== previousDistinctId) {
         // We keep the AnonymousId to be used by flags calls and identify to link the previousId
         this.setPersistedProperty(PostHogPersistedProperty.AnonymousId, previousDistinctId)
@@ -313,9 +323,16 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         // Mark the user as identified
         this.setPersistedProperty(PostHogPersistedProperty.PersonMode, 'identified')
         this.reloadFeatureFlags()
-      }
 
-      super.identifyStateless(distinctId, allProperties, options)
+        super.identifyStateless(distinctId, allProperties, options)
+
+        // Update the cached person properties hash
+        this._cachedPersonProperties = getPersonPropertiesHash(distinctId, userPropsObj, userPropsOnceObj)
+      } else if (userPropsObj || userPropsOnceObj) {
+        // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
+        // and if so, send a $set event
+        this.setPersonProperties(userPropsObj, userPropsOnceObj)
+      }
     })
   }
 
@@ -1251,12 +1268,24 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         return
       }
 
+      const hash = getPersonPropertiesHash(this.getDistinctId(), userPropertiesToSet, userPropertiesToSetOnce)
+
+      // If exactly this $set call has been sent before, don't send it again - determine based on hash of properties
+      if (this._cachedPersonProperties === hash) {
+        this._logger.info(
+          'A duplicate setPersonProperties call was made with the same properties. It has been ignored.'
+        )
+        return
+      }
+
       // Update person properties for feature flags evaluation
       // Merge setOnce first, then set to allow overwriting
       const mergedProperties = { ...(userPropertiesToSetOnce || {}), ...(userPropertiesToSet || {}) }
       this.setPersonPropertiesForFlags(mergedProperties, reloadFeatureFlags)
 
       this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
+
+      this._cachedPersonProperties = hash
     })
   }
 

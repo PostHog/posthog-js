@@ -282,5 +282,61 @@ describe('PostHog Core', () => {
       expect(identifyFlagsBody.$anon_distinct_id).toBe(anonId)
       expect(identifyFlagsBody.distinct_id).toBe('user-123')
     })
+
+    it('should send $set event when distinct_id is the same but properties are different', async () => {
+      // First identify with a new user
+      posthog.identify('id-1', { foo: 'bar' })
+      await waitForPromises()
+      mocks.fetch.mockClear()
+
+      // Second identify with the same user but different properties should send $set
+      posthog.identify('id-1', { foo: 'baz' })
+      await waitForPromises()
+
+      expect(mocks.fetch).toHaveBeenCalled()
+      const batchCall = mocks.fetch.mock.calls.find((call) => call[0].includes('/batch/'))
+      expect(batchCall).toBeDefined()
+      expect(parseBody(batchCall)).toMatchObject({
+        batch: [
+          {
+            event: '$set',
+            properties: {
+              $set: { foo: 'baz' },
+              $set_once: {},
+            },
+          },
+        ],
+      })
+    })
+
+    it('should not send event when distinct_id and properties are the same', async () => {
+      // First identify
+      posthog.identify('id-1', { foo: 'bar' })
+      await waitForPromises()
+      mocks.fetch.mockClear()
+
+      // Second identify with exact same properties should be ignored
+      posthog.identify('id-1', { foo: 'bar' })
+      await waitForPromises()
+
+      // Should not have made a batch call (only flags call)
+      const batchCalls = mocks.fetch.mock.calls.filter((call) => call[0].includes('/batch/'))
+      expect(batchCalls.length).toBe(0)
+    })
+
+    it('should not send event when only distinct_id is provided (no properties)', async () => {
+      // First identify
+      posthog.identify('id-1')
+      await waitForPromises()
+      mocks.fetch.mockClear()
+
+      // Second identify with no properties should not send anything
+      posthog.identify('id-1')
+      await waitForPromises()
+
+      // Should not have made a batch call
+      const batchCalls = mocks.fetch.mock.calls.filter((call) => call[0].includes('/batch/'))
+      expect(batchCalls.length).toBe(0)
+    })
   })
 })

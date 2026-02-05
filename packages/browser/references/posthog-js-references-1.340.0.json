@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "1.341.0",
+    "version": "1.340.0",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -1744,28 +1744,6 @@
         },
         {
           "category": "Identification",
-          "description": "Marks the current user as a test user by setting the `$internal_or_test_user` person property to `true`. This also enables person processing for the current user.\nThis is useful for using in a cohort your internal/test filters for your posthog org.",
-          "details": null,
-          "id": "setInternalOrTestUser",
-          "showDocs": true,
-          "title": "setInternalOrTestUser",
-          "examples": [
-            {
-              "id": "manually_mark_as_test_user",
-              "name": "Manually mark as test user",
-              "code": "\n\n// Manually mark as test user\nposthog.setInternalOrTestUser()\n\n// Or use internal_or_test_user_hostname config for automatic detection\nposthog.init('token', { internal_or_test_user_hostname: 'localhost' })\n\n\n"
-            }
-          ],
-          "releaseTag": "public",
-          "params": [],
-          "returnType": {
-            "id": "void",
-            "name": "void"
-          },
-          "path": "lib/src/posthog-core.d.ts"
-        },
-        {
-          "category": "Identification",
           "description": "Sets properties on the person profile associated with the current `distinct_id`. Learn more about [identifying users](/docs/product-analytics/identify)",
           "details": "Updates user properties that are stored with the person profile in PostHog. If `person_profiles` is set to `identified_only` and no profile exists, this will create one.",
           "id": "setPersonProperties",
@@ -1838,6 +1816,28 @@
               "name": "reloadFeatureFlags"
             }
           ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
+          },
+          "path": "lib/src/posthog-core.d.ts"
+        },
+        {
+          "category": "Identification",
+          "description": "Marks the current user as a test user by setting the `$test_user` person property to `true`. This also enables person processing for the current user.\nThis is useful for using in a cohort your internal/test filters for your posthog org.",
+          "details": null,
+          "id": "setTestUser",
+          "showDocs": true,
+          "title": "setTestUser",
+          "examples": [
+            {
+              "id": "manually_mark_as_test_user",
+              "name": "Manually mark as test user",
+              "code": "\n\n// Manually mark as test user\nposthog.setTestUser()\n\n// Or use test_user_hostname config for automatic detection\nposthog.init('token', { test_user_hostname: 'localhost' })\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
           "returnType": {
             "id": "void",
             "name": "void"

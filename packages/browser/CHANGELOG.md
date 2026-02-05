@@ -1,5 +1,30 @@
 # posthog-js
 
+## 1.341.0
+
+### Minor Changes
+
+- [#3027](https://github.com/PostHog/posthog-js/pull/3027) [`d7b37f7`](https://github.com/PostHog/posthog-js/commit/d7b37f7d5140955da5adb11b6a6d4317a676bcc7) Thanks [@robbie-c](https://github.com/robbie-c)! - Rename setTestUser to setInternalOrTestUser
+  (2026-02-04)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.341.0
+
+## 1.340.0
+
+### Minor Changes
+
+- [#3024](https://github.com/PostHog/posthog-js/pull/3024) [`2b2725e`](https://github.com/PostHog/posthog-js/commit/2b2725efc24416cc659ea963d4a121c0c8666db7) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Support widget position
+  (2026-02-04)
+
+### Patch Changes
+
+- Updated dependencies [[`bb62809`](https://github.com/PostHog/posthog-js/commit/bb62809917845685ae7e2e6d5adad6be5528356e)]:
+    - @posthog/core@1.20.0
+    - @posthog/types@1.340.0
+
 ## 1.339.1
 
 ### Patch Changes
