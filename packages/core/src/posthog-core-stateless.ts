@@ -862,6 +862,18 @@ export abstract class PostHogCoreStateless {
     return message
   }
 
+  /**
+   * Hook that allows subclasses to wait for storage operations to complete.
+   * This is called after queue changes are persisted during flush to ensure
+   * data is safely written to storage before considering events as sent.
+   *
+   * Override this in implementations with async storage (e.g., React Native)
+   * to prevent duplicate events on app crash/restart scenarios.
+   */
+  protected async flushStorage(): Promise<void> {
+    // Default: no-op for sync storage implementations
+  }
+
   protected enqueue(type: string, _message: any, options?: PostHogCaptureOptions): void {
     this.wrap(() => {
       if (this.optedOut) {
@@ -1078,11 +1090,13 @@ export abstract class PostHogCoreStateless {
       const batchItems = queue.slice(0, this.maxBatchSize)
       const batchMessages = batchItems.map((item) => item.message)
 
-      const persistQueueChange = (): void => {
+      const persistQueueChange = async (): Promise<void> => {
         const refreshedQueue = this.getPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue) || []
         const newQueue = refreshedQueue.slice(batchItems.length)
         this.setPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue, newQueue)
         queue = newQueue
+        // Wait for storage to complete to prevent duplicate events on app crash
+        await this.flushStorage()
       }
 
       const data: Record<string, any> = {
@@ -1137,14 +1151,14 @@ export abstract class PostHogCoreStateless {
         // depending on the error type, eg a malformed JSON or broken queue, it'll always return an error
         // and this will be an endless loop, in this case, if the error isn't a network issue, we always remove the items from the queue
         if (!(err instanceof PostHogFetchNetworkError)) {
-          persistQueueChange()
+          await persistQueueChange()
         }
         this._events.emit('error', err)
 
         throw err
       }
 
-      persistQueueChange()
+      await persistQueueChange()
 
       sentMessages.push(...batchMessages)
     }
