@@ -374,7 +374,7 @@ export class PostHog implements PostHogInterface {
     SentryIntegration: typeof SentryIntegration
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
 
-    private _internalEventEmitter = new SimpleEventEmitter()
+    _internalEventEmitter = new SimpleEventEmitter()
 
     // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
     /** @deprecated Use `flagsEndpointWasHit` instead.  We migrated to using a new feature flag endpoint and the new method is more semantically accurate */
@@ -1938,6 +1938,10 @@ export class PostHog implements PostHogInterface {
      * listener is registered, the first callback will be the next event
      * _after_ registering a listener
      *
+     * Available events:
+     * - `eventCaptured`: Emitted immediately before trying to send an event
+     * - `featureFlagsReloading`: Emitted when feature flags are being reloaded (e.g. after `identify()`, `group()`, or `reloadFeatureFlags()`)
+     *
      * {@label Capture}
      *
      * @example
@@ -1947,13 +1951,21 @@ export class PostHog implements PostHogInterface {
      * })
      * ```
      *
+     * @example
+     * ```js
+     * // Track when feature flags are reloading to show a loading state
+     * posthog.on('featureFlagsReloading', () => {
+     *   console.log('Feature flags are being reloaded...')
+     * })
+     * ```
+     *
      * @public
      *
      * @param {String} event The event to listen for.
      * @param {Function} cb The callback function to call when the event is emitted.
      * @returns {Function} A function that can be called to unsubscribe the listener.
      */
-    on(event: 'eventCaptured', cb: (...args: any[]) => void): () => void {
+    on(event: 'eventCaptured' | 'featureFlagsReloading', cb: (...args: any[]) => void): () => void {
         return this._internalEventEmitter.on(event, cb)
     }
 

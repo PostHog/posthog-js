@@ -5,6 +5,7 @@ import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { PostHogConfig } from '../types'
 import { createMockPostHog, createPosthogInstance } from './helpers/posthog-instance'
+import { SimpleEventEmitter } from '../utils/simple-event-emitter'
 
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
@@ -22,6 +23,7 @@ describe('featureflags', () => {
     let mockWarn
 
     beforeEach(() => {
+        const internalEventEmitter = new SimpleEventEmitter()
         instance = {
             config: { ...config },
             get_distinct_id: () => 'blah id',
@@ -43,6 +45,8 @@ describe('featureflags', () => {
             reloadFeatureFlags: () => featureFlags.reloadFeatureFlags(),
             _shouldDisableFlags: () =>
                 instance.config.advanced_disable_flags || instance.config.advanced_disable_decide || false,
+            _internalEventEmitter: internalEventEmitter,
+            on: (event: string, cb: (...args: any[]) => void) => internalEventEmitter.on(event, cb),
         }
 
         featureFlags = new PostHogFeatureFlags(instance)
@@ -1035,6 +1039,81 @@ describe('featureflags', () => {
             jest.runAllTimers()
 
             expect(called).toEqual(false)
+        })
+    })
+
+    describe('featureFlagsReloading event', () => {
+        beforeEach(() => {
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 200,
+                    json: {
+                        featureFlags: {
+                            first: 'variant-1',
+                            second: true,
+                        },
+                    },
+                })
+            )
+        })
+
+        it('should emit featureFlagsReloading event when reloadFeatureFlags is called', () => {
+            const loadingCallback = jest.fn()
+            instance.on('featureFlagsReloading', loadingCallback)
+
+            featureFlags.reloadFeatureFlags()
+
+            expect(loadingCallback).toHaveBeenCalledTimes(1)
+            expect(loadingCallback).toHaveBeenCalledWith(true)
+        })
+
+        it('should not emit featureFlagsReloading event if already debouncing', () => {
+            const loadingCallback = jest.fn()
+            instance.on('featureFlagsReloading', loadingCallback)
+
+            featureFlags.reloadFeatureFlags()
+            featureFlags.reloadFeatureFlags()
+            featureFlags.reloadFeatureFlags()
+
+            // Should only emit once because subsequent calls are debounced
+            expect(loadingCallback).toHaveBeenCalledTimes(1)
+        })
+
+        it('should emit featureFlagsReloading before onFeatureFlags callback', () => {
+            const callOrder: string[] = []
+
+            instance.on('featureFlagsReloading', () => {
+                callOrder.push('loading')
+            })
+
+            featureFlags.onFeatureFlags(() => {
+                callOrder.push('loaded')
+            })
+
+            featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            expect(callOrder).toEqual(['loading', 'loaded'])
+        })
+
+        it('should not emit featureFlagsReloading if reloading is disabled', () => {
+            const loadingCallback = jest.fn()
+            instance.on('featureFlagsReloading', loadingCallback)
+
+            featureFlags.setReloadingPaused(true)
+            featureFlags.reloadFeatureFlags()
+
+            expect(loadingCallback).not.toHaveBeenCalled()
+        })
+
+        it('should not emit featureFlagsReloading if feature flags are disabled', () => {
+            const loadingCallback = jest.fn()
+            instance.on('featureFlagsReloading', loadingCallback)
+
+            instance.config.advanced_disable_feature_flags = true
+            featureFlags.reloadFeatureFlags()
+
+            expect(loadingCallback).not.toHaveBeenCalled()
         })
     })
 
