@@ -1,5 +1,5 @@
-import { FlagDecider } from '../flag-decider'
-import type { DeciderContext } from '../types'
+import { FlagDecider } from '../../../../extensions/exception-autocapture/controls/deciders/flag-decider'
+import { DeciderContext } from '../../../../extensions/exception-autocapture/controls/deciders/types'
 
 type FlagCallback = (flags: string[], variants: Record<string, unknown>) => void
 

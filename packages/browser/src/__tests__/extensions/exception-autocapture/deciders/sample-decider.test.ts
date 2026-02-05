@@ -1,6 +1,6 @@
 import { isNull } from '@posthog/core'
-import { SampleDecider } from '../sample-decider'
-import type { DeciderContext } from '../types'
+import { SampleDecider } from '../../../../extensions/exception-autocapture/controls/deciders/sample-decider'
+import { DeciderContext } from '../../../../extensions/exception-autocapture/controls/deciders/types'
 
 const createMockContext = (sampleRate: number | null): DeciderContext => ({
     posthog: null as any,

@@ -1,7 +1,7 @@
-import type { PostHog } from '../../posthog-core'
-import type { ErrorTrackingAutoCaptureControls, RemoteConfig } from '../../types'
-import { window as globalWindow } from '../../utils/globals'
-import { createLogger } from '../../utils/logger'
+import type { PostHog } from '../../../posthog-core'
+import type { ErrorTrackingAutoCaptureControls, RemoteConfig } from '../../../types'
+import { window as globalWindow } from '../../../utils/globals'
+import { createLogger } from '../../../utils/logger'
 
 import type { Decider, DeciderContext } from './deciders/types'
 import { URLDecider } from './deciders/url-decider'
@@ -32,7 +32,7 @@ export class AutocaptureDecider {
         }
     }
 
-    decide(): boolean {
+    shouldCapture(): boolean {
         for (const decider of this._deciders) {
             const result = decider.shouldCapture()
 

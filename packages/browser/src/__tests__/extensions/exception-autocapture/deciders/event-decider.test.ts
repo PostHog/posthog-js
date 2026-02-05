@@ -1,5 +1,5 @@
-import { EventDecider } from '../event-decider'
-import type { DeciderContext } from '../types'
+import { EventDecider } from '../../../../extensions/exception-autocapture/controls/deciders/event-decider'
+import { DeciderContext } from '../../../../extensions/exception-autocapture/controls/deciders/types'
 
 type EventCallback = (event: { event: string }) => void
 

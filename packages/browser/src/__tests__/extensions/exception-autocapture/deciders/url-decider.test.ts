@@ -1,5 +1,5 @@
-import { URLDecider } from '../url-decider'
-import type { DeciderContext } from '../types'
+import { DeciderContext } from '../../../../extensions/exception-autocapture/controls/deciders/types'
+import { URLDecider } from '../../../../extensions/exception-autocapture/controls/deciders/url-decider'
 import type { UrlTrigger } from '../../../../types'
 
 interface MockWindow {
