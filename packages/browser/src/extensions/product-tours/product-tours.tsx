@@ -951,7 +951,7 @@ export class ProductTourManager {
                 logger.info(`Tour ${tour.id} triggered by click on ${selector}`)
 
                 if (this.showTour(currentTour, { reason: 'trigger' })) {
-                    event.stopPropagation()
+                    event.preventDefault()
                 } else {
                     logger.info(`Tour ${tour.id} failed to show; not intercepting click.`)
                 }
