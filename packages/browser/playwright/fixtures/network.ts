@@ -9,6 +9,7 @@ const files = fs.readdirSync(path.join(__dirname, '../../dist'))
 
 export const testNetwork = testPage.extend<{
     network: NetworkPage
+    mockIngestion: boolean
     flagsOverrides: Partial<FlagsResponse>
     staticOverrides: Record<string, string>
 }>({
@@ -21,12 +22,16 @@ export const testNetwork = testPage.extend<{
         },
         { option: true },
     ],
+    mockIngestion: true,
     network: [
-        async ({ page, flagsOverrides, staticOverrides }, use) => {
+        async ({ page, flagsOverrides, mockIngestion, staticOverrides }, use) => {
             const networkPage = new NetworkPage(page)
             await networkPage.mockStatic(staticOverrides)
             if (flagsOverrides) {
                 await networkPage.mockFlags(flagsOverrides)
+            }
+            if (mockIngestion) {
+                await networkPage.mockIngestion()
             }
             await use(networkPage)
             networkPage.expectNoFailed()

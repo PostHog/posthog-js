@@ -197,7 +197,6 @@ test.describe('ErrorTracking autocapture', () => {
         })
 
         test('should capture console errors', async ({ posthog, network, page, events }) => {
-            await network.mockIngestion()
             await posthog.init({
                 capture_exceptions: {
                     capture_console_errors: true,

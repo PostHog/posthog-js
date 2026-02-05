@@ -16,6 +16,7 @@ test.describe('ingestion', () => {
             },
             opt_out_useragent_filter: true,
         },
+        mockIngestion: false,
     })
 
     test('Custom events work and are accessible via /api/event', async ({ page, events, posthog, ingestion }) => {
