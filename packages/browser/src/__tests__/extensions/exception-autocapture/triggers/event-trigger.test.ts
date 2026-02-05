@@ -2,27 +2,39 @@ import { EventTrigger } from '../../../../extensions/exception-autocapture/contr
 
 type EventCallback = (event: { event: string }) => void
 
-const createMockPosthog = (): { posthog: any; fireEvent: (name: string) => void } => {
-    let eventCallback: EventCallback | null = null
+const createMockPosthog = (): {
+    posthog: any
+    fireEvent: (name: string) => void
+    getSubscriptionCount: () => number
+} => {
+    const callbacks: EventCallback[] = []
 
     const posthog = {
         on: jest.fn((eventName: string, callback: EventCallback) => {
             if (eventName === 'eventCaptured') {
-                eventCallback = callback
+                callbacks.push(callback)
+            }
+            return () => {
+                const index = callbacks.indexOf(callback)
+                if (index > -1) {
+                    callbacks.splice(index, 1)
+                }
             }
         }),
     }
 
     const fireEvent = (name: string) => {
-        eventCallback?.({ event: name })
+        callbacks.forEach((cb) => cb({ event: name }))
     }
 
-    return { posthog, fireEvent }
+    const getSubscriptionCount = () => callbacks.length
+
+    return { posthog, fireEvent, getSubscriptionCount }
 }
 
 describe('EventTrigger', () => {
     const getTrigger = (eventTriggers: string[]) => {
-        const { posthog, fireEvent } = createMockPosthog()
+        const { posthog, fireEvent, getSubscriptionCount } = createMockPosthog()
 
         const trigger = new EventTrigger()
         trigger.init(eventTriggers, {
@@ -30,7 +42,7 @@ describe('EventTrigger', () => {
             log: jest.fn(),
         })
 
-        return { trigger, fireEvent }
+        return { trigger, fireEvent, posthog, getSubscriptionCount }
     }
 
     it('returns null when no event triggers are configured', () => {
@@ -77,5 +89,60 @@ describe('EventTrigger', () => {
 
         fireEvent('some-other-event')
         expect(trigger.shouldCapture()).toBe(true)
+    })
+
+    describe('idempotency', () => {
+        it('resets state when init is called again', () => {
+            const { posthog, fireEvent } = createMockPosthog()
+            const trigger = new EventTrigger()
+
+            // First init
+            trigger.init(['my-event'], { posthog: posthog as any, log: jest.fn() })
+            fireEvent('my-event')
+            expect(trigger.shouldCapture()).toBe(true)
+
+            // Re-init should reset state
+            trigger.init(['my-event'], { posthog: posthog as any, log: jest.fn() })
+            expect(trigger.shouldCapture()).toBe(false)
+        })
+
+        it('unsubscribes old listener when init is called again', () => {
+            const { posthog, getSubscriptionCount } = createMockPosthog()
+            const trigger = new EventTrigger()
+
+            // First init
+            trigger.init(['my-event'], { posthog: posthog as any, log: jest.fn() })
+            expect(getSubscriptionCount()).toBe(1)
+
+            // Re-init should unsubscribe old and subscribe new
+            trigger.init(['my-event'], { posthog: posthog as any, log: jest.fn() })
+            expect(getSubscriptionCount()).toBe(1)
+
+            // Third init
+            trigger.init(['my-event'], { posthog: posthog as any, log: jest.fn() })
+            expect(getSubscriptionCount()).toBe(1)
+        })
+
+        it('can change events on re-init', () => {
+            const { posthog, fireEvent } = createMockPosthog()
+            const trigger = new EventTrigger()
+
+            // First init with one set of events
+            trigger.init(['event-a'], { posthog: posthog as any, log: jest.fn() })
+            fireEvent('event-a')
+            expect(trigger.shouldCapture()).toBe(true)
+
+            // Re-init with different events
+            trigger.init(['event-b'], { posthog: posthog as any, log: jest.fn() })
+            expect(trigger.shouldCapture()).toBe(false)
+
+            // Old event shouldn't trigger
+            fireEvent('event-a')
+            expect(trigger.shouldCapture()).toBe(false)
+
+            // New event should work
+            fireEvent('event-b')
+            expect(trigger.shouldCapture()).toBe(true)
+        })
     })
 })

@@ -60,4 +60,32 @@ describe('SampleTrigger', () => {
 
         expect(Math.abs(trueCount - iterations * 0.1)).toBeLessThanOrEqual(iterations * 0.05)
     })
+
+    describe('idempotency', () => {
+        it('can change sample rate on re-init', () => {
+            const trigger = new SampleTrigger()
+
+            // First init with 100% rate
+            trigger.init(1, { log: jest.fn() })
+            expect(trigger.shouldCapture()).toBe(true)
+
+            // Re-init with 0% rate
+            trigger.init(0, { log: jest.fn() })
+            expect(trigger.shouldCapture()).toBe(false)
+
+            // Re-init with null (disabled)
+            trigger.init(null, { log: jest.fn() })
+            expect(trigger.shouldCapture()).toBeNull()
+        })
+
+        it('calling init multiple times with same value is safe', () => {
+            const trigger = new SampleTrigger()
+
+            trigger.init(1, { log: jest.fn() })
+            trigger.init(1, { log: jest.fn() })
+            trigger.init(1, { log: jest.fn() })
+
+            expect(trigger.shouldCapture()).toBe(true)
+        })
+    })
 })
