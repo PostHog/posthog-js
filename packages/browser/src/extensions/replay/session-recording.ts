@@ -207,15 +207,17 @@ export class SessionRecording {
         }
 
         // Persistence can return a JSON string or parsed object depending on the backend
-        const existingConfig: SessionRecordingPersistedConfig = isObject(persistedConfig)
-            ? persistedConfig
-            : JSON.parse(persistedConfig)
+        let existingConfig: SessionRecordingPersistedConfig
+        try {
+            existingConfig = isObject(persistedConfig) ? persistedConfig : JSON.parse(persistedConfig)
+        } catch {
+            // If parsing fails, assume config changed to be safe
+            return true
+        }
 
+        // Only compare fields that are explicitly persisted in _persistRemoteConfig
         return (
             JSON.stringify(existingConfig.urlTriggers) !== JSON.stringify(newConfig.urlTriggers) ||
-            JSON.stringify(existingConfig.urlBlocklist) !== JSON.stringify(newConfig.urlBlocklist) ||
-            JSON.stringify(existingConfig.eventTriggers) !== JSON.stringify(newConfig.eventTriggers) ||
-            JSON.stringify(existingConfig.linkedFlag) !== JSON.stringify(newConfig.linkedFlag) ||
             existingConfig.triggerMatchType !== newConfig.triggerMatchType
         )
     }
