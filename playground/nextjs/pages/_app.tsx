@@ -4,7 +4,6 @@ import type { AppProps } from 'next/app'
 import { useEffect } from 'react'
 
 import { CookieBanner } from '@/src/CookieBanner'
-import { ErrorTestingOverlay } from '@/src/ErrorTestingOverlay'
 import { PageHeader } from '@/src/Header'
 import { useUser } from '@/src/auth'
 import { posthog, posthogHelpers } from '@/src/posthog'
@@ -70,7 +69,6 @@ export default function App({ Component, pageProps }: AppProps) {
                 <PageHeader />
                 <Component {...pageProps} />
                 <CookieBanner />
-                <ErrorTestingOverlay />
             </main>
         </PostHogProvider>
     )
