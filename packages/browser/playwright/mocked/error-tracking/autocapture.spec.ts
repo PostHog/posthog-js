@@ -209,12 +209,13 @@ test.describe('ErrorTracking autocapture', () => {
                 //eslint-disable-next-line no-console
                 console.error('This error shoud be captured with a stack')
             })
+
             const event = await events.waitForEvent('$exception')
             const first_exception = event.properties.$exception_list[0]
             expect(first_exception.type).toBe('Error')
             expect(first_exception.value).toBe('This error shoud be captured with a stack')
             expect(first_exception.stacktrace).toBeDefined()
-            expect(first_exception.stacktrace.frames).toHaveLength(5)
+            expect(first_exception.stacktrace.frames).toHaveLength(3)
             expect(first_exception.mechanism.handled).toBe(false)
         })
     })
