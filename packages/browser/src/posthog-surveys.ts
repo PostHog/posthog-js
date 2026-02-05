@@ -20,6 +20,7 @@ import {
     SURVEY_IN_PROGRESS_PREFIX,
     SURVEY_SEEN_PREFIX,
 } from './utils/survey-utils'
+import { canShowSurvey } from './utils/widget-lock'
 import { isNullish, isUndefined, isArray } from '@posthog/core'
 
 export class PostHogSurveys {
@@ -405,6 +406,10 @@ export class PostHogSurveys {
             this.renderSurvey(surveyToDisplay, options.selector, options.properties)
             return
         }
+        if (options.respectWidgetCoordination && !canShowSurvey(this._instance)) {
+            logger.info('Survey blocked by widget coordination (conversations open or tour active)')
+            return
+        }
         this._surveyManager.handlePopoverSurvey(surveyToDisplay, options)
     }
 
@@ -418,5 +423,9 @@ export class PostHogSurveys {
 
     handlePageUnload(): void {
         this._surveyManager?.handlePageUnload()
+    }
+
+    hasSurveyInFocus(): boolean {
+        return this._surveyManager?.hasSurveyInFocus?.() ?? false
     }
 }

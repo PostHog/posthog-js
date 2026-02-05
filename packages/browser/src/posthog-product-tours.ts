@@ -22,6 +22,7 @@ interface ProductTourManagerInterface {
     resetTour: (tourId: string) => void
     resetAllTours: () => void
     cancelPendingTour: (tourId: string) => void
+    hasActiveTour: () => boolean
 }
 
 const isProductToursEnabled = (instance: PostHog): boolean => {
@@ -173,5 +174,11 @@ export class PostHogProductTours {
 
     cancelPendingTour(tourId: string): void {
         this._productTourManager?.cancelPendingTour(tourId)
+    }
+
+    // the underlying implementation excludes banners, so this will
+    // return false even if a banner is active.
+    hasActiveTour(): boolean {
+        return this._productTourManager?.hasActiveTour?.() ?? false
     }
 }

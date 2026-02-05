@@ -520,6 +520,8 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         // Mark messages as read when widget opens
         if (state === 'open') {
+            window?.dispatchEvent(new CustomEvent('PHConversationsWidgetOpened'))
+
             if (this._unreadCount > 0 && this._currentTicketId) {
                 this._markMessagesAsRead()
             }
@@ -717,6 +719,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
      */
     isVisible(): boolean {
         return this._isWidgetRendered
+    }
+
+    /**
+     * Check if the chat widget pane is currently open (expanded)
+     */
+    isWidgetOpen(): boolean {
+        return this._isWidgetOpen()
     }
 
     /** Get tickets list for the current widget session */

@@ -300,6 +300,12 @@ interface DisplaySurveyOptionsBase {
     properties?: Properties
     /** Pre-filled responses by question index (0-based) */
     initialResponses?: Record<number, SurveyResponseValue>
+    /**
+     * If true, respects widget coordination rules (won't show if conversations widget
+     * is open or a tour is active). Defaults to false - programmatic display assumes
+     * the caller knows what they're doing.
+     */
+    respectWidgetCoordination?: boolean
 }
 
 export interface DisplaySurveyPopoverOptions extends DisplaySurveyOptionsBase {
