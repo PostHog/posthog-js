@@ -672,7 +672,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
             quotaLimited: res.quotaLimited,
           })
-          console.warn(
+          this._logger.warn(
             '[FEATURE FLAGS] Feature flags quota limit exceeded. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
           )
           return res
