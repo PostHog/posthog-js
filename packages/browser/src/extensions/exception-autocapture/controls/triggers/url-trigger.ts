@@ -1,7 +1,12 @@
 import { UrlTrigger } from '../../../../types'
 import { addEventListener } from '../../../../utils'
 import { compileRegexCache, urlMatchesTriggers } from '../../../../utils/policyMatching'
-import type { Trigger, URLTriggerOptions } from './types'
+import type { Trigger, LogFn } from './types'
+
+export interface URLTriggerOptions {
+    readonly window: Window | undefined
+    readonly log: LogFn
+}
 
 export class URLTrigger implements Trigger {
     readonly name = 'url'
@@ -11,15 +16,26 @@ export class URLTrigger implements Trigger {
     private _compiledTriggerRegexes: Map<string, RegExp> = new Map()
     private _lastCheckedUrl: string = ''
     private _triggered: boolean = false
+    private _initialized: boolean = false
+    private _originalPushState: History['pushState'] | null = null
+    private _originalReplaceState: History['replaceState'] | null = null
 
     init(urlTriggers: UrlTrigger[], options: URLTriggerOptions): void {
+        if (this._initialized) {
+            this._teardownUrlMonitoring()
+        }
+
         this._window = options.window
         this._urlTriggers = urlTriggers
+        this._compiledTriggerRegexes = new Map()
+        this._lastCheckedUrl = ''
+        this._triggered = false
 
         this._compileRegexCaches()
         this._setupUrlMonitoring()
-
         this._checkCurrentUrl()
+
+        this._initialized = true
     }
 
     shouldCapture(): boolean | null {
@@ -64,8 +80,11 @@ export class URLTrigger implements Trigger {
         addEventListener(win, 'hashchange', checkUrl)
 
         if (win.history) {
-            const originalPushState = win.history.pushState.bind(win.history)
-            const originalReplaceState = win.history.replaceState.bind(win.history)
+            this._originalPushState = win.history.pushState.bind(win.history)
+            this._originalReplaceState = win.history.replaceState.bind(win.history)
+
+            const originalPushState = this._originalPushState
+            const originalReplaceState = this._originalReplaceState
 
             win.history.pushState = function (...args) {
                 originalPushState(...args)
@@ -77,5 +96,22 @@ export class URLTrigger implements Trigger {
                 checkUrl()
             }
         }
+    }
+
+    private _teardownUrlMonitoring(): void {
+        const win = this._window
+        if (!win?.history) {
+            return
+        }
+
+        if (this._originalPushState) {
+            win.history.pushState = this._originalPushState
+        }
+        if (this._originalReplaceState) {
+            win.history.replaceState = this._originalReplaceState
+        }
+
+        this._originalPushState = null
+        this._originalReplaceState = null
     }
 }

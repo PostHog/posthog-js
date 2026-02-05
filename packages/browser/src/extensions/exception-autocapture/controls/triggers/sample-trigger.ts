@@ -1,5 +1,9 @@
 import { isNull } from '@posthog/core'
-import type { Trigger, SampleTriggerOptions } from './types'
+import type { Trigger, LogFn } from './types'
+
+export interface SampleTriggerOptions {
+    readonly log: LogFn
+}
 
 export class SampleTrigger implements Trigger {
     readonly name = 'sample'

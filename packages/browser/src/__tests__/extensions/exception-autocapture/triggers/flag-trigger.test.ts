@@ -2,25 +2,37 @@ import { FlagTrigger, LinkedFlag } from '../../../../extensions/exception-autoca
 
 type FlagCallback = (flags: string[], variants: Record<string, unknown>) => void
 
-const createMockPosthog = (): { posthog: any; triggerFlags: FlagCallback } => {
-    let flagCallback: FlagCallback | null = null
+const createMockPosthog = (): {
+    posthog: any
+    triggerFlags: FlagCallback
+    getSubscriptionCount: () => number
+} => {
+    const callbacks: FlagCallback[] = []
 
     const posthog = {
         onFeatureFlags: jest.fn((callback: FlagCallback) => {
-            flagCallback = callback
+            callbacks.push(callback)
+            return () => {
+                const index = callbacks.indexOf(callback)
+                if (index > -1) {
+                    callbacks.splice(index, 1)
+                }
+            }
         }),
     }
 
     const triggerFlags: FlagCallback = (flags, variants) => {
-        flagCallback?.(flags, variants)
+        callbacks.forEach((cb) => cb(flags, variants))
     }
 
-    return { posthog, triggerFlags }
+    const getSubscriptionCount = () => callbacks.length
+
+    return { posthog, triggerFlags, getSubscriptionCount }
 }
 
 describe('FlagTrigger', () => {
     const getTrigger = (linkedFlag: LinkedFlag | null) => {
-        const { posthog, triggerFlags } = createMockPosthog()
+        const { posthog, triggerFlags, getSubscriptionCount } = createMockPosthog()
 
         const trigger = new FlagTrigger()
         trigger.init(linkedFlag, {
@@ -28,7 +40,7 @@ describe('FlagTrigger', () => {
             log: jest.fn(),
         })
 
-        return { trigger, triggerFlags }
+        return { trigger, triggerFlags, posthog, getSubscriptionCount }
     }
 
     it('returns null when no flag is configured', () => {
@@ -116,6 +128,61 @@ describe('FlagTrigger', () => {
 
             triggerFlags([], { 'my-flag': true })
             expect(trigger.shouldCapture()).toBe(false)
+        })
+    })
+
+    describe('idempotency', () => {
+        it('resets state when init is called again', () => {
+            const { posthog, triggerFlags, getSubscriptionCount } = createMockPosthog()
+            const trigger = new FlagTrigger()
+
+            // First init
+            trigger.init({ key: 'my-flag' }, { posthog: posthog as any, log: jest.fn() })
+            triggerFlags([], { 'my-flag': true })
+            expect(trigger.shouldCapture()).toBe(true)
+
+            // Re-init should reset state
+            trigger.init({ key: 'my-flag' }, { posthog: posthog as any, log: jest.fn() })
+            expect(trigger.shouldCapture()).toBe(false)
+        })
+
+        it('unsubscribes old listener when init is called again', () => {
+            const { posthog, getSubscriptionCount } = createMockPosthog()
+            const trigger = new FlagTrigger()
+
+            // First init
+            trigger.init({ key: 'my-flag' }, { posthog: posthog as any, log: jest.fn() })
+            expect(getSubscriptionCount()).toBe(1)
+
+            // Re-init should unsubscribe old and subscribe new
+            trigger.init({ key: 'my-flag' }, { posthog: posthog as any, log: jest.fn() })
+            expect(getSubscriptionCount()).toBe(1)
+
+            // Third init
+            trigger.init({ key: 'my-flag' }, { posthog: posthog as any, log: jest.fn() })
+            expect(getSubscriptionCount()).toBe(1)
+        })
+
+        it('can change flag on re-init', () => {
+            const { posthog, triggerFlags } = createMockPosthog()
+            const trigger = new FlagTrigger()
+
+            // First init with one flag
+            trigger.init({ key: 'flag-a' }, { posthog: posthog as any, log: jest.fn() })
+            triggerFlags([], { 'flag-a': true })
+            expect(trigger.shouldCapture()).toBe(true)
+
+            // Re-init with different flag
+            trigger.init({ key: 'flag-b' }, { posthog: posthog as any, log: jest.fn() })
+            expect(trigger.shouldCapture()).toBe(false)
+
+            // Old flag shouldn't affect new state
+            triggerFlags([], { 'flag-a': true })
+            expect(trigger.shouldCapture()).toBe(false)
+
+            // New flag should work
+            triggerFlags([], { 'flag-b': true })
+            expect(trigger.shouldCapture()).toBe(true)
         })
     })
 })
