@@ -97,6 +97,14 @@ export class NetworkPage {
         })
     }
 
+    async mockIngestion() {
+        await this.page.route('**/e/**', async (route) => {
+            await route.fulfill({
+                headers: { loaded: 'mock captured' },
+            })
+        })
+    }
+
     async waitForSurveys() {
         await this.page.waitForResponse('**/surveys/**')
     }

@@ -197,6 +197,7 @@ test.describe('ErrorTracking autocapture', () => {
         })
 
         test('should capture console errors', async ({ posthog, network, page, events }) => {
+            await network.mockIngestion()
             await posthog.init({
                 capture_exceptions: {
                     capture_console_errors: true,
@@ -215,7 +216,8 @@ test.describe('ErrorTracking autocapture', () => {
             expect(first_exception.type).toBe('Error')
             expect(first_exception.value).toBe('This error shoud be captured with a stack')
             expect(first_exception.stacktrace).toBeDefined()
-            expect(first_exception.stacktrace.frames).toHaveLength(3)
+            // Numbers of frames varies depending on browser
+            expect(first_exception.stacktrace.frames.length).toBeGreaterThan(3)
             expect(first_exception.mechanism.handled).toBe(false)
         })
     })
