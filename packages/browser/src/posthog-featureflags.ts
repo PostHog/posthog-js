@@ -135,7 +135,7 @@ const normalizeFlagsResponse = (response: Partial<FlagsResponse>): Partial<Flags
     const flagDetails = response['flags']
 
     if (flagDetails) {
-        // This is a v=4 request.
+        // This is a /flags?v=2 request.
 
         // Map of flag keys to flag values: Record<string, string | boolean>
         response.featureFlags = Object.fromEntries(
