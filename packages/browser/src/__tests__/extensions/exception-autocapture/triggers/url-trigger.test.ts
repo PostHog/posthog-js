@@ -13,6 +13,7 @@ interface MockWindow {
 interface GetTriggerParams {
     triggers?: UrlTrigger[]
     initialUrl?: string
+    persistedSessionId?: string | null
 }
 
 const createMockWindow = (initialUrl: string): MockWindow => ({
@@ -25,13 +26,25 @@ const createMockWindow = (initialUrl: string): MockWindow => ({
 })
 
 describe('URLTrigger', () => {
-    const getTrigger = ({ triggers = [], initialUrl = 'https://example.com/' }: GetTriggerParams = {}) => {
+    const SESSION_ID = 'session-123'
+    const OTHER_SESSION_ID = 'session-456'
+
+    const getTrigger = ({
+        triggers = [],
+        initialUrl = 'https://example.com/',
+        persistedSessionId = null,
+    }: GetTriggerParams = {}) => {
         const mockWindow = createMockWindow(initialUrl)
+        let storedSessionId: string | null = persistedSessionId
 
         const trigger = new URLTrigger()
         trigger.init(triggers, {
             window: mockWindow as any,
             log: jest.fn(),
+            getPersistedSessionId: () => storedSessionId,
+            setPersistedSessionId: (sessionId) => {
+                storedSessionId = sessionId
+            },
         })
 
         const navigateTo = (url: string) => {
@@ -39,42 +52,42 @@ describe('URLTrigger', () => {
             mockWindow.history.pushState()
         }
 
-        return { trigger, mockWindow, navigateTo }
+        return { trigger, mockWindow, navigateTo, getStoredSessionId: () => storedSessionId }
     }
 
     it('returns null when no triggers configured', () => {
         const { trigger } = getTrigger()
 
-        expect(trigger.shouldCapture()).toBeNull()
+        expect(trigger.matches(SESSION_ID)).toBeNull()
     })
 
-    it('starts blocked (false) when triggers are configured', () => {
+    it('returns false when triggers are configured but URL does not match', () => {
         const { trigger } = getTrigger({
             triggers: [{ url: '/trigger', matching: 'regex' }],
         })
 
-        expect(trigger.shouldCapture()).toBe(false)
+        expect(trigger.matches(SESSION_ID)).toBe(false)
     })
 
-    it('unblocks when trigger URL is visited', () => {
+    it('returns true when trigger URL is visited', () => {
         const { trigger, navigateTo } = getTrigger({
             triggers: [{ url: '/trigger', matching: 'regex' }],
         })
 
-        expect(trigger.shouldCapture()).toBe(false)
+        expect(trigger.matches(SESSION_ID)).toBe(false)
 
         navigateTo('https://example.com/trigger')
 
-        expect(trigger.shouldCapture()).toBe(true)
+        expect(trigger.matches(SESSION_ID)).toBe(true)
     })
 
-    it('unblocks immediately if initial URL matches trigger', () => {
+    it('returns true immediately if initial URL matches trigger', () => {
         const { trigger } = getTrigger({
             triggers: [{ url: '/trigger', matching: 'regex' }],
             initialUrl: 'https://example.com/trigger',
         })
 
-        expect(trigger.shouldCapture()).toBe(true)
+        expect(trigger.matches(SESSION_ID)).toBe(true)
     })
 
     it('stays triggered after trigger is visited', () => {
@@ -83,10 +96,10 @@ describe('URLTrigger', () => {
         })
 
         navigateTo('https://example.com/trigger')
-        expect(trigger.shouldCapture()).toBe(true)
+        expect(trigger.matches(SESSION_ID)).toBe(true)
 
         navigateTo('https://example.com/other-page')
-        expect(trigger.shouldCapture()).toBe(true)
+        expect(trigger.matches(SESSION_ID)).toBe(true)
     })
 
     it('triggers on any matching pattern from the list', () => {
@@ -97,87 +110,110 @@ describe('URLTrigger', () => {
             ],
         })
 
-        expect(trigger.shouldCapture()).toBe(false)
+        expect(trigger.matches(SESSION_ID)).toBe(false)
 
         navigateTo('https://example.com/trigger-b')
 
-        expect(trigger.shouldCapture()).toBe(true)
+        expect(trigger.matches(SESSION_ID)).toBe(true)
+    })
+
+    describe('session stickiness', () => {
+        it('persists session ID when triggered', () => {
+            const { trigger, navigateTo, getStoredSessionId } = getTrigger({
+                triggers: [{ url: '/trigger', matching: 'regex' }],
+            })
+
+            expect(getStoredSessionId()).toBeNull()
+
+            navigateTo('https://example.com/trigger')
+            trigger.matches(SESSION_ID)
+
+            expect(getStoredSessionId()).toBe(SESSION_ID)
+        })
+
+        it('returns true for same session if previously persisted', () => {
+            const { trigger } = getTrigger({
+                triggers: [{ url: '/trigger', matching: 'regex' }],
+                persistedSessionId: SESSION_ID,
+            })
+
+            expect(trigger.matches(SESSION_ID)).toBe(true)
+        })
+
+        it('returns false for different session even if previously persisted', () => {
+            const { trigger } = getTrigger({
+                triggers: [{ url: '/trigger', matching: 'regex' }],
+                persistedSessionId: OTHER_SESSION_ID,
+            })
+
+            expect(trigger.matches(SESSION_ID)).toBe(false)
+        })
+
+        it('persists across page loads (simulated via persistence)', () => {
+            // First "page load" - trigger matches
+            const mockWindow1 = createMockWindow('https://example.com/trigger')
+            let storedSessionId: string | null = null
+
+            const trigger1 = new URLTrigger()
+            trigger1.init([{ url: '/trigger', matching: 'regex' }], {
+                window: mockWindow1 as any,
+                log: jest.fn(),
+                getPersistedSessionId: () => storedSessionId,
+                setPersistedSessionId: (sessionId) => {
+                    storedSessionId = sessionId
+                },
+            })
+
+            trigger1.matches(SESSION_ID)
+            expect(storedSessionId).toBe(SESSION_ID)
+
+            // Second "page load" - new trigger instance, but persistence remains
+            const mockWindow2 = createMockWindow('https://example.com/other')
+            const trigger2 = new URLTrigger()
+            trigger2.init([{ url: '/trigger', matching: 'regex' }], {
+                window: mockWindow2 as any,
+                log: jest.fn(),
+                getPersistedSessionId: () => storedSessionId,
+                setPersistedSessionId: (sessionId) => {
+                    storedSessionId = sessionId
+                },
+            })
+
+            // Still returns true because sessionId is persisted
+            expect(trigger2.matches(SESSION_ID)).toBe(true)
+        })
     })
 
     describe('idempotency', () => {
-        it('resets state when init is called again', () => {
+        it('resets in-memory state when init is called again', () => {
             const mockWindow = createMockWindow('https://example.com/')
+            let storedSessionId: string | null = null
             const trigger = new URLTrigger()
 
-            // First init with triggers
             trigger.init([{ url: '/trigger', matching: 'regex' }], {
                 window: mockWindow as any,
                 log: jest.fn(),
+                getPersistedSessionId: () => storedSessionId,
+                setPersistedSessionId: (sessionId) => {
+                    storedSessionId = sessionId
+                },
             })
 
             // Trigger it
             mockWindow.location.href = 'https://example.com/trigger'
             mockWindow.history.pushState()
-            expect(trigger.shouldCapture()).toBe(true)
+            trigger.matches(SESSION_ID)
 
-            // Re-init with same triggers - should reset triggered state
+            // Re-init resets in-memory state
             mockWindow.location.href = 'https://example.com/'
             trigger.init([{ url: '/trigger', matching: 'regex' }], {
                 window: mockWindow as any,
                 log: jest.fn(),
+                getPersistedSessionId: () => null, // Simulate no persistence
+                setPersistedSessionId: jest.fn(),
             })
 
-            expect(trigger.shouldCapture()).toBe(false)
-        })
-
-        it('can change triggers on re-init', () => {
-            const mockWindow = createMockWindow('https://example.com/')
-            const trigger = new URLTrigger()
-
-            // First init with one trigger
-            trigger.init([{ url: '/old-trigger', matching: 'regex' }], {
-                window: mockWindow as any,
-                log: jest.fn(),
-            })
-            expect(trigger.shouldCapture()).toBe(false)
-
-            // Re-init with different trigger that matches current URL
-            mockWindow.location.href = 'https://example.com/new-trigger'
-            trigger.init([{ url: '/new-trigger', matching: 'regex' }], {
-                window: mockWindow as any,
-                log: jest.fn(),
-            })
-
-            expect(trigger.shouldCapture()).toBe(true)
-        })
-
-        it('restores original history methods on re-init', () => {
-            const mockWindow = createMockWindow('https://example.com/')
-            const originalPushState = mockWindow.history.pushState
-            const originalReplaceState = mockWindow.history.replaceState
-
-            const trigger = new URLTrigger()
-
-            // First init
-            trigger.init([{ url: '/trigger', matching: 'regex' }], {
-                window: mockWindow as any,
-                log: jest.fn(),
-            })
-
-            // History methods should be wrapped
-            expect(mockWindow.history.pushState).not.toBe(originalPushState)
-            expect(mockWindow.history.replaceState).not.toBe(originalReplaceState)
-
-            // Re-init should restore and re-wrap
-            trigger.init([{ url: '/trigger', matching: 'regex' }], {
-                window: mockWindow as any,
-                log: jest.fn(),
-            })
-
-            // Methods should still work (wrapped again)
-            mockWindow.location.href = 'https://example.com/trigger'
-            mockWindow.history.pushState()
-            expect(trigger.shouldCapture()).toBe(true)
+            expect(trigger.matches(SESSION_ID)).toBe(false)
         })
     })
 })

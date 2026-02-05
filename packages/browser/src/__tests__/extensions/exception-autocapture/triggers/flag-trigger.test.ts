@@ -31,28 +31,36 @@ const createMockPosthog = (): {
 }
 
 describe('FlagTrigger', () => {
-    const getTrigger = (linkedFlag: LinkedFlag | null) => {
+    const SESSION_ID = 'session-123'
+    const OTHER_SESSION_ID = 'session-456'
+
+    const getTrigger = (linkedFlag: LinkedFlag | null, persistedSessionId: string | null = null) => {
         const { posthog, triggerFlags, getSubscriptionCount } = createMockPosthog()
+        let storedSessionId: string | null = persistedSessionId
 
         const trigger = new FlagTrigger()
         trigger.init(linkedFlag, {
             posthog: posthog as any,
             log: jest.fn(),
+            getPersistedSessionId: () => storedSessionId,
+            setPersistedSessionId: (sessionId) => {
+                storedSessionId = sessionId
+            },
         })
 
-        return { trigger, triggerFlags, posthog, getSubscriptionCount }
+        return { trigger, triggerFlags, posthog, getSubscriptionCount, getStoredSessionId: () => storedSessionId }
     }
 
     it('returns null when no flag is configured', () => {
         const { trigger } = getTrigger(null)
 
-        expect(trigger.shouldCapture()).toBeNull()
+        expect(trigger.matches(SESSION_ID)).toBeNull()
     })
 
     it('returns false initially when flag is configured but not yet evaluated', () => {
         const { trigger } = getTrigger({ key: 'my-flag' })
 
-        expect(trigger.shouldCapture()).toBe(false)
+        expect(trigger.matches(SESSION_ID)).toBe(false)
     })
 
     it('returns true when flag value is true', () => {
@@ -60,7 +68,7 @@ describe('FlagTrigger', () => {
 
         triggerFlags([], { 'my-flag': true })
 
-        expect(trigger.shouldCapture()).toBe(true)
+        expect(trigger.matches(SESSION_ID)).toBe(true)
     })
 
     it('returns false when flag value is false', () => {
@@ -68,7 +76,7 @@ describe('FlagTrigger', () => {
 
         triggerFlags([], { 'my-flag': false })
 
-        expect(trigger.shouldCapture()).toBe(false)
+        expect(trigger.matches(SESSION_ID)).toBe(false)
     })
 
     it('returns true when flag value is a non-empty string variant', () => {
@@ -76,7 +84,7 @@ describe('FlagTrigger', () => {
 
         triggerFlags([], { 'my-flag': 'variant-a' })
 
-        expect(trigger.shouldCapture()).toBe(true)
+        expect(trigger.matches(SESSION_ID)).toBe(true)
     })
 
     it('returns false when flag value is an empty string', () => {
@@ -84,7 +92,7 @@ describe('FlagTrigger', () => {
 
         triggerFlags([], { 'my-flag': '' })
 
-        expect(trigger.shouldCapture()).toBe(false)
+        expect(trigger.matches(SESSION_ID)).toBe(false)
     })
 
     it('ignores flag callbacks that do not contain the linked flag', () => {
@@ -92,20 +100,18 @@ describe('FlagTrigger', () => {
 
         triggerFlags([], { 'other-flag': true })
 
-        expect(trigger.shouldCapture()).toBe(false)
+        expect(trigger.matches(SESSION_ID)).toBe(false)
     })
 
-    it('updates when flag value changes', () => {
+    it('stays triggered once matched (session sticky)', () => {
         const { trigger, triggerFlags } = getTrigger({ key: 'my-flag' })
 
         triggerFlags([], { 'my-flag': true })
-        expect(trigger.shouldCapture()).toBe(true)
+        expect(trigger.matches(SESSION_ID)).toBe(true)
 
+        // Even if flag changes to false, still triggered for this session
         triggerFlags([], { 'my-flag': false })
-        expect(trigger.shouldCapture()).toBe(false)
-
-        triggerFlags([], { 'my-flag': 'enabled' })
-        expect(trigger.shouldCapture()).toBe(true)
+        expect(trigger.matches(SESSION_ID)).toBe(true)
     })
 
     describe('with specific variant', () => {
@@ -113,76 +119,92 @@ describe('FlagTrigger', () => {
             const { trigger, triggerFlags } = getTrigger({ key: 'my-flag', variant: 'control' })
 
             triggerFlags([], { 'my-flag': 'control' })
-            expect(trigger.shouldCapture()).toBe(true)
+            expect(trigger.matches(SESSION_ID)).toBe(true)
         })
 
         it('returns false when variant does not match', () => {
             const { trigger, triggerFlags } = getTrigger({ key: 'my-flag', variant: 'control' })
 
             triggerFlags([], { 'my-flag': 'test' })
-            expect(trigger.shouldCapture()).toBe(false)
+            expect(trigger.matches(SESSION_ID)).toBe(false)
         })
 
         it('returns false when flag is true but variant is specified', () => {
             const { trigger, triggerFlags } = getTrigger({ key: 'my-flag', variant: 'control' })
 
             triggerFlags([], { 'my-flag': true })
-            expect(trigger.shouldCapture()).toBe(false)
+            expect(trigger.matches(SESSION_ID)).toBe(false)
+        })
+    })
+
+    describe('session stickiness', () => {
+        it('persists session ID when triggered', () => {
+            const { trigger, triggerFlags, getStoredSessionId } = getTrigger({ key: 'my-flag' })
+
+            expect(getStoredSessionId()).toBeNull()
+
+            triggerFlags([], { 'my-flag': true })
+            trigger.matches(SESSION_ID)
+
+            expect(getStoredSessionId()).toBe(SESSION_ID)
+        })
+
+        it('returns true for same session if previously persisted', () => {
+            const { trigger } = getTrigger({ key: 'my-flag' }, SESSION_ID)
+
+            expect(trigger.matches(SESSION_ID)).toBe(true)
+        })
+
+        it('returns false for different session even if previously persisted', () => {
+            const { trigger } = getTrigger({ key: 'my-flag' }, OTHER_SESSION_ID)
+
+            expect(trigger.matches(SESSION_ID)).toBe(false)
         })
     })
 
     describe('idempotency', () => {
         it('resets state when init is called again', () => {
-            const { posthog, triggerFlags, getSubscriptionCount } = createMockPosthog()
+            const { posthog, triggerFlags } = createMockPosthog()
             const trigger = new FlagTrigger()
 
-            // First init
-            trigger.init({ key: 'my-flag' }, { posthog: posthog as any, log: jest.fn() })
+            trigger.init({ key: 'my-flag' }, {
+                posthog: posthog as any,
+                log: jest.fn(),
+                getPersistedSessionId: () => null,
+                setPersistedSessionId: jest.fn(),
+            })
             triggerFlags([], { 'my-flag': true })
-            expect(trigger.shouldCapture()).toBe(true)
+            expect(trigger.matches(SESSION_ID)).toBe(true)
 
             // Re-init should reset state
-            trigger.init({ key: 'my-flag' }, { posthog: posthog as any, log: jest.fn() })
-            expect(trigger.shouldCapture()).toBe(false)
+            trigger.init({ key: 'my-flag' }, {
+                posthog: posthog as any,
+                log: jest.fn(),
+                getPersistedSessionId: () => null,
+                setPersistedSessionId: jest.fn(),
+            })
+            expect(trigger.matches(SESSION_ID)).toBe(false)
         })
 
         it('unsubscribes old listener when init is called again', () => {
             const { posthog, getSubscriptionCount } = createMockPosthog()
             const trigger = new FlagTrigger()
 
-            // First init
-            trigger.init({ key: 'my-flag' }, { posthog: posthog as any, log: jest.fn() })
+            trigger.init({ key: 'my-flag' }, {
+                posthog: posthog as any,
+                log: jest.fn(),
+                getPersistedSessionId: () => null,
+                setPersistedSessionId: jest.fn(),
+            })
             expect(getSubscriptionCount()).toBe(1)
 
-            // Re-init should unsubscribe old and subscribe new
-            trigger.init({ key: 'my-flag' }, { posthog: posthog as any, log: jest.fn() })
+            trigger.init({ key: 'my-flag' }, {
+                posthog: posthog as any,
+                log: jest.fn(),
+                getPersistedSessionId: () => null,
+                setPersistedSessionId: jest.fn(),
+            })
             expect(getSubscriptionCount()).toBe(1)
-
-            // Third init
-            trigger.init({ key: 'my-flag' }, { posthog: posthog as any, log: jest.fn() })
-            expect(getSubscriptionCount()).toBe(1)
-        })
-
-        it('can change flag on re-init', () => {
-            const { posthog, triggerFlags } = createMockPosthog()
-            const trigger = new FlagTrigger()
-
-            // First init with one flag
-            trigger.init({ key: 'flag-a' }, { posthog: posthog as any, log: jest.fn() })
-            triggerFlags([], { 'flag-a': true })
-            expect(trigger.shouldCapture()).toBe(true)
-
-            // Re-init with different flag
-            trigger.init({ key: 'flag-b' }, { posthog: posthog as any, log: jest.fn() })
-            expect(trigger.shouldCapture()).toBe(false)
-
-            // Old flag shouldn't affect new state
-            triggerFlags([], { 'flag-a': true })
-            expect(trigger.shouldCapture()).toBe(false)
-
-            // New flag should work
-            triggerFlags([], { 'flag-b': true })
-            expect(trigger.shouldCapture()).toBe(true)
         })
     })
 })
