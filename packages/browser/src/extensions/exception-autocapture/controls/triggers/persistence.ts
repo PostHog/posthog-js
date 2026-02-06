@@ -48,6 +48,6 @@ export class PersistenceHelper {
     }
 
     private _buildKey(): string {
-        return `$${this._prefix}_session`
+        return `$${this._prefix}_session_id`
     }
 }
