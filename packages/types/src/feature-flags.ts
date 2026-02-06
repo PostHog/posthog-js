@@ -73,3 +73,22 @@ export type FeatureFlagResult = {
 export interface EarlyAccessFeatureResponse {
     earlyAccessFeatures: EarlyAccessFeature[]
 }
+
+/**
+ * Options for overriding feature flags on the client-side.
+ *
+ * Can be:
+ * - `false` to clear all overrides
+ * - `string[]` to enable a list of flags
+ * - `Record<string, string | boolean>` to set variants directly
+ * - An object with `flags` and/or `payloads` keys for granular control
+ */
+export type OverrideFeatureFlagsOptions =
+    | boolean
+    | string[]
+    | Record<string, string | boolean>
+    | {
+          flags?: boolean | string[] | Record<string, string | boolean>
+          payloads?: Record<string, JsonType>
+          suppressWarning?: boolean
+      }

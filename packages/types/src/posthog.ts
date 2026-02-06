@@ -13,6 +13,7 @@ import type {
     EarlyAccessFeatureCallback,
     EarlyAccessFeatureStage,
     FeatureFlagResult,
+    OverrideFeatureFlagsOptions,
 } from './feature-flags'
 import type { SessionIdChangedCallback } from './session-recording'
 import type { RequestCallback } from './request'
@@ -196,6 +197,34 @@ export interface PostHog {
     // ============================================================================
     // Feature Flags
     // ============================================================================
+
+    /**
+     * The feature flags instance. Provides access to feature flag override methods.
+     */
+    featureFlags: {
+        /**
+         * Override feature flags on the client-side. Useful for testing/debugging.
+         *
+         * @param overrideOptions - The override options
+         *
+         * @example
+         * ```typescript
+         * posthog.featureFlags.overrideFeatureFlags(false) // clear all overrides
+         * posthog.featureFlags.overrideFeatureFlags(['beta-feature']) // enable flags
+         * posthog.featureFlags.overrideFeatureFlags({'beta-feature': 'variant'}) // set variants
+         * posthog.featureFlags.overrideFeatureFlags({
+         *     flags: {'beta-feature': 'variant'},
+         *     payloads: { 'beta-feature': { someData: true } }
+         * })
+         * ```
+         */
+        overrideFeatureFlags(overrideOptions: OverrideFeatureFlagsOptions): void
+
+        /**
+         * @deprecated Use `overrideFeatureFlags` instead. This will be removed in a future version.
+         */
+        override(flags: boolean | string[] | Record<string, string | boolean>, suppressWarning?: boolean): void
+    }
 
     /**
      * Get the value of a feature flag.
@@ -555,7 +584,7 @@ export interface PostHog {
      * @param cb - The callback to call
      * @returns A function to unsubscribe
      */
-    on(event: 'eventCaptured', cb: (...args: any[]) => void): () => void
+    on(event: 'eventCaptured' | 'featureFlagsReloading', cb: (...args: any[]) => void): () => void
 
     // ============================================================================
     // Error Tracking

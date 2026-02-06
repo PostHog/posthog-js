@@ -28,6 +28,7 @@ export type {
     EarlyAccessFeatureStage,
     EarlyAccessFeatureCallback,
     EarlyAccessFeatureResponse,
+    OverrideFeatureFlagsOptions,
 } from '@posthog/types'
 
 // Request types
@@ -96,7 +97,7 @@ import type {
  * This guarantees we'll be able to use `PostHogConfig` as implemented in the browser/src/posthog-core.ts file
  * using the proper `loaded` function signature.
  */
-export type PostHogInterface = Omit<BasePostHogInterface, 'config' | 'init' | 'set_config'>
+export type PostHogInterface = Omit<BasePostHogInterface, 'config' | 'init'>
 
 /*
  * Specify that `loaded` should be using the PostHog instance type
