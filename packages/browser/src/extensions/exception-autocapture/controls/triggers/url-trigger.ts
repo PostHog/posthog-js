@@ -1,3 +1,4 @@
+import type { PostHog } from '@posthog/types'
 import { UrlTrigger } from '../../../../types'
 import { addEventListener } from '../../../../utils'
 import { compileRegexCache, urlMatchesTriggers } from '../../../../utils/policyMatching'
@@ -10,15 +11,16 @@ export class URLTrigger implements Trigger {
     private readonly _window: Window | undefined
     private readonly _urlTriggers: UrlTrigger[]
     private readonly _persistence: PersistenceHelper
+    private readonly _posthog: PostHog
 
     private _compiledTriggerRegexes: Map<string, RegExp> = new Map()
     private _lastCheckedUrl: string = ''
-    private _matchedUrlInSession: boolean = false
 
     constructor(options: TriggerOptions, urlTriggers: UrlTrigger[]) {
         this._window = options.window
         this._urlTriggers = urlTriggers
-        this._persistence = options.persistenceHelperFactory.create('url')
+        this._persistence = options.persistence.withPrefix('url')
+        this._posthog = options.posthog
 
         this._compileRegexCaches()
         this._setupUrlMonitoring()
@@ -30,18 +32,7 @@ export class URLTrigger implements Trigger {
             return null
         }
 
-        // Check if already triggered for this session (from persistence)
-        if (this._persistence.sessionMatchesTrigger(sessionId)) {
-            return true
-        }
-
-        // Check if we matched a URL in this session (in-memory)
-        if (this._matchedUrlInSession) {
-            this._persistence.matchTriggerInSession(sessionId)
-            return true
-        }
-
-        return false
+        return this._persistence.sessionMatchesTrigger(sessionId) ? true : false
     }
 
     private _compileRegexCaches(): void {
@@ -53,10 +44,6 @@ export class URLTrigger implements Trigger {
     }
 
     private _checkCurrentUrl(): void {
-        if (this._matchedUrlInSession) {
-            return // Already matched
-        }
-
         const url = this._getCurrentUrl()
         if (!url || url === this._lastCheckedUrl) {
             return
@@ -67,7 +54,7 @@ export class URLTrigger implements Trigger {
             this._urlTriggers.length > 0 && urlMatchesTriggers(url, this._urlTriggers, this._compiledTriggerRegexes)
 
         if (matchesTrigger) {
-            this._matchedUrlInSession = true
+            this._persistence.matchTriggerInSession(this._posthog.get_session_id())
         }
     }
 

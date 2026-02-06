@@ -1,3 +1,4 @@
+import type { PostHog } from '@posthog/types'
 import type { Trigger, TriggerOptions } from './types'
 import type { PersistenceHelper } from './persistence'
 
@@ -7,14 +8,12 @@ export class EventTrigger implements Trigger {
     private readonly _eventTriggers: string[]
     private readonly _persistence: PersistenceHelper
 
-    private _matchedEventInSession: boolean = false
-
     constructor(options: TriggerOptions, eventTriggers: string[]) {
         this._eventTriggers = eventTriggers
-        this._persistence = options.persistenceHelperFactory.create('event')
+        this._persistence = options.persistence.withPrefix('event')
 
         if (this._eventTriggers.length > 0) {
-            this._setupEventListener(options)
+            this._setupEventListener(options.posthog)
         }
     }
 
@@ -23,32 +22,17 @@ export class EventTrigger implements Trigger {
             return null
         }
 
-        // Check if already triggered for this session (from persistence)
-        if (this._persistence.sessionMatchesTrigger(sessionId)) {
-            return true
-        }
-
-        // Check if we matched an event in this session (in-memory)
-        if (this._matchedEventInSession) {
-            this._persistence.matchTriggerInSession(sessionId)
-            return true
-        }
-
-        return false
+        return this._persistence.sessionMatchesTrigger(sessionId) ? true : false
     }
 
-    private _setupEventListener(options: TriggerOptions): void {
-        options.posthog.on('eventCaptured', (event) => {
-            if (this._matchedEventInSession) {
-                return // Already matched
-            }
-
-            if (!event?.event || this._eventTriggers.length === 0) {
+    private _setupEventListener(posthog: PostHog): void {
+        posthog.on('eventCaptured', (event) => {
+            if (!event?.event) {
                 return
             }
 
             if (this._eventTriggers.includes(event.event)) {
-                this._matchedEventInSession = true
+                this._persistence.matchTriggerInSession(posthog.get_session_id())
             }
         })
     }
