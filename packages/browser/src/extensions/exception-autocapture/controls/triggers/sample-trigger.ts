@@ -1,27 +1,19 @@
 import { isNull } from '@posthog/core'
-import type { Trigger, LogFn, GetPersistedSessionId, SetPersistedSessionId } from './types'
-
-export interface SampleTriggerOptions {
-    readonly log: LogFn
-    readonly getPersistedSessionId?: GetPersistedSessionId
-    readonly setPersistedSessionId?: SetPersistedSessionId
-}
+import type { Trigger, TriggerOptions } from './types'
+import type { PersistenceHelper } from './persistence'
 
 export class SampleTrigger implements Trigger {
     readonly name = 'sample'
 
-    private _sampleRate: number | null = null
+    private readonly _sampleRate: number | null
+    private readonly _persistence: PersistenceHelper
+
     private _sampledSessionId: string | null = null
     private _sampled: boolean = false
-    private _getPersistedSessionId: GetPersistedSessionId | undefined
-    private _setPersistedSessionId: SetPersistedSessionId | undefined
 
-    init(sampleRate: number | null, options: SampleTriggerOptions): void {
+    constructor(options: TriggerOptions, sampleRate: number | null) {
         this._sampleRate = sampleRate
-        this._sampledSessionId = null
-        this._sampled = false
-        this._getPersistedSessionId = options.getPersistedSessionId
-        this._setPersistedSessionId = options.setPersistedSessionId
+        this._persistence = options.persistenceHelperFactory.create('sample')
     }
 
     matches(sessionId: string): boolean | null {
@@ -30,8 +22,7 @@ export class SampleTrigger implements Trigger {
         }
 
         // Check if already sampled for this session (from persistence)
-        const persistedSessionId = this._getPersistedSessionId?.()
-        if (persistedSessionId === sessionId) {
+        if (this._persistence.sessionMatchesTrigger(sessionId)) {
             return true
         }
 
@@ -45,7 +36,7 @@ export class SampleTrigger implements Trigger {
         this._sampled = Math.random() < this._sampleRate
 
         if (this._sampled) {
-            this._setPersistedSessionId?.(sessionId)
+            this._persistence.matchTriggerInSession(sessionId)
         }
 
         return this._sampled

@@ -1,47 +1,28 @@
 import { UrlTrigger } from '../../../../types'
 import { addEventListener } from '../../../../utils'
 import { compileRegexCache, urlMatchesTriggers } from '../../../../utils/policyMatching'
-import type { Trigger, LogFn, GetPersistedSessionId, SetPersistedSessionId } from './types'
-
-export interface URLTriggerOptions {
-    readonly window: Window | undefined
-    readonly log: LogFn
-    readonly getPersistedSessionId?: GetPersistedSessionId
-    readonly setPersistedSessionId?: SetPersistedSessionId
-}
+import type { Trigger, TriggerOptions } from './types'
+import type { PersistenceHelper } from './persistence'
 
 export class URLTrigger implements Trigger {
     readonly name = 'url'
 
-    private _window: Window | undefined
-    private _urlTriggers: UrlTrigger[] = []
+    private readonly _window: Window | undefined
+    private readonly _urlTriggers: UrlTrigger[]
+    private readonly _persistence: PersistenceHelper
+
     private _compiledTriggerRegexes: Map<string, RegExp> = new Map()
     private _lastCheckedUrl: string = ''
     private _matchedUrlInSession: boolean = false
-    private _initialized: boolean = false
-    private _originalPushState: History['pushState'] | null = null
-    private _originalReplaceState: History['replaceState'] | null = null
-    private _getPersistedSessionId: GetPersistedSessionId | undefined
-    private _setPersistedSessionId: SetPersistedSessionId | undefined
 
-    init(urlTriggers: UrlTrigger[], options: URLTriggerOptions): void {
-        if (this._initialized) {
-            this._teardownUrlMonitoring()
-        }
-
+    constructor(options: TriggerOptions, urlTriggers: UrlTrigger[]) {
         this._window = options.window
         this._urlTriggers = urlTriggers
-        this._compiledTriggerRegexes = new Map()
-        this._lastCheckedUrl = ''
-        this._matchedUrlInSession = false
-        this._getPersistedSessionId = options.getPersistedSessionId
-        this._setPersistedSessionId = options.setPersistedSessionId
+        this._persistence = options.persistenceHelperFactory.create('url')
 
         this._compileRegexCaches()
         this._setupUrlMonitoring()
         this._checkCurrentUrl()
-
-        this._initialized = true
     }
 
     matches(sessionId: string): boolean | null {
@@ -50,14 +31,13 @@ export class URLTrigger implements Trigger {
         }
 
         // Check if already triggered for this session (from persistence)
-        const persistedSessionId = this._getPersistedSessionId?.()
-        if (persistedSessionId === sessionId) {
+        if (this._persistence.sessionMatchesTrigger(sessionId)) {
             return true
         }
 
         // Check if we matched a URL in this session (in-memory)
         if (this._matchedUrlInSession) {
-            this._setPersistedSessionId?.(sessionId)
+            this._persistence.matchTriggerInSession(sessionId)
             return true
         }
 
@@ -103,11 +83,8 @@ export class URLTrigger implements Trigger {
         addEventListener(win, 'hashchange', checkUrl)
 
         if (win.history) {
-            this._originalPushState = win.history.pushState.bind(win.history)
-            this._originalReplaceState = win.history.replaceState.bind(win.history)
-
-            const originalPushState = this._originalPushState
-            const originalReplaceState = this._originalReplaceState
+            const originalPushState = win.history.pushState.bind(win.history)
+            const originalReplaceState = win.history.replaceState.bind(win.history)
 
             win.history.pushState = function (...args) {
                 originalPushState(...args)
@@ -119,22 +96,5 @@ export class URLTrigger implements Trigger {
                 checkUrl()
             }
         }
-    }
-
-    private _teardownUrlMonitoring(): void {
-        const win = this._window
-        if (!win?.history) {
-            return
-        }
-
-        if (this._originalPushState) {
-            win.history.pushState = this._originalPushState
-        }
-        if (this._originalReplaceState) {
-            win.history.replaceState = this._originalReplaceState
-        }
-
-        this._originalPushState = null
-        this._originalReplaceState = null
     }
 }

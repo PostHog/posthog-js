@@ -1,45 +1,26 @@
-import type { PostHog } from '@posthog/types'
-import type { Trigger, LogFn, GetPersistedSessionId, SetPersistedSessionId } from './types'
+import type { Trigger, TriggerOptions } from './types'
+import type { PersistenceHelper } from './persistence'
 
 export interface LinkedFlag {
     key: string
     variant?: string | null
 }
 
-export interface FlagTriggerOptions {
-    readonly posthog: PostHog
-    readonly log: LogFn
-    readonly getPersistedSessionId?: GetPersistedSessionId
-    readonly setPersistedSessionId?: SetPersistedSessionId
-}
-
 export class FlagTrigger implements Trigger {
     readonly name = 'flag'
 
-    private _posthog: PostHog | null = null
-    private _linkedFlag: LinkedFlag | null = null
+    private readonly _linkedFlag: LinkedFlag | null
+    private readonly _persistence: PersistenceHelper
+
     private _matchedFlagInSession: boolean = false
-    private _initialized: boolean = false
-    private _unsubscribe: (() => void) | null = null
-    private _getPersistedSessionId: GetPersistedSessionId | undefined
-    private _setPersistedSessionId: SetPersistedSessionId | undefined
 
-    init(linkedFlag: LinkedFlag | null, options: FlagTriggerOptions): void {
-        if (this._initialized) {
-            this._teardownFlagListener()
-        }
-
-        this._posthog = options.posthog
+    constructor(options: TriggerOptions, linkedFlag: LinkedFlag | null) {
         this._linkedFlag = linkedFlag
-        this._matchedFlagInSession = false
-        this._getPersistedSessionId = options.getPersistedSessionId
-        this._setPersistedSessionId = options.setPersistedSessionId
+        this._persistence = options.persistenceHelperFactory.create('flag')
 
         if (this._linkedFlag) {
-            this._setupFlagListener()
+            this._setupFlagListener(options)
         }
-
-        this._initialized = true
     }
 
     matches(sessionId: string): boolean | null {
@@ -48,29 +29,27 @@ export class FlagTrigger implements Trigger {
         }
 
         // Check if already triggered for this session (from persistence)
-        const persistedSessionId = this._getPersistedSessionId?.()
-        if (persistedSessionId === sessionId) {
+        if (this._persistence.sessionMatchesTrigger(sessionId)) {
             return true
         }
 
         // Check if we matched flag in this session (in-memory)
         if (this._matchedFlagInSession) {
-            this._setPersistedSessionId?.(sessionId)
+            this._persistence.matchTriggerInSession(sessionId)
             return true
         }
 
         return false
     }
 
-    private _setupFlagListener(): void {
-        const posthog = this._posthog
+    private _setupFlagListener(options: TriggerOptions): void {
         const linkedFlag = this._linkedFlag
 
-        if (!posthog || !linkedFlag) {
+        if (!linkedFlag) {
             return
         }
 
-        this._unsubscribe = posthog.onFeatureFlags((_flags: string[], variants: Record<string, unknown>) => {
+        options.posthog.onFeatureFlags((_flags: string[], variants: Record<string, unknown>) => {
             if (this._matchedFlagInSession) {
                 return // Already matched
             }
@@ -92,12 +71,5 @@ export class FlagTrigger implements Trigger {
                 this._matchedFlagInSession = true
             }
         })
-    }
-
-    private _teardownFlagListener(): void {
-        if (this._unsubscribe) {
-            this._unsubscribe()
-            this._unsubscribe = null
-        }
     }
 }
