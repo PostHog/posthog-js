@@ -24,21 +24,13 @@ const createMockPosthog = (sessionId: string) => {
 
 describe('FlagTrigger', () => {
     const SESSION_ID = 'session-123'
-    const OTHER_SESSION_ID = 'session-456'
 
-    const createTrigger = (
-        linkedFlag: LinkedFlag | null,
-        persistedData: Record<string, string> = {},
-        sessionId: string = SESSION_ID
-    ) => {
+    const createTrigger = (linkedFlag: LinkedFlag | null, sessionId: string = SESSION_ID) => {
         const { posthog, triggerFlags } = createMockPosthog(sessionId)
-        const storage: Record<string, string> = { ...persistedData }
 
         const persistence = new PersistenceHelper(
-            (key) => storage[key] ?? null,
-            (key, value) => {
-                storage[key] = value
-            }
+            () => null,
+            () => {}
         ).withPrefix('error_tracking')
 
         const options: TriggerOptions = {
@@ -50,93 +42,59 @@ describe('FlagTrigger', () => {
 
         const trigger = new FlagTrigger(options, linkedFlag)
 
-        return { trigger, triggerFlags, storage }
+        return { trigger, triggerFlags }
     }
 
     it('returns null when not configured', () => {
-        const { trigger, storage } = createTrigger(null)
-
+        const { trigger } = createTrigger(null)
         expect(trigger.matches(SESSION_ID)).toBeNull()
-        expect(storage['$error_tracking_flag_session_id']).toBeUndefined()
     })
 
     it('returns false before flags load', () => {
-        const { trigger, storage } = createTrigger({ key: 'my-flag' })
-
+        const { trigger } = createTrigger({ key: 'my-flag' })
         expect(trigger.matches(SESSION_ID)).toBe(false)
-        expect(storage['$error_tracking_flag_session_id']).toBeUndefined()
     })
 
     it('returns true when flag is true', () => {
-        const { trigger, triggerFlags, storage } = createTrigger({ key: 'my-flag' })
-
+        const { trigger, triggerFlags } = createTrigger({ key: 'my-flag' })
         triggerFlags([], { 'my-flag': true })
-
         expect(trigger.matches(SESSION_ID)).toBe(true)
-        expect(storage['$error_tracking_flag_session_id']).toBe(SESSION_ID)
     })
 
     it('returns false when flag is false', () => {
-        const { trigger, triggerFlags, storage } = createTrigger({ key: 'my-flag' })
-
+        const { trigger, triggerFlags } = createTrigger({ key: 'my-flag' })
         triggerFlags([], { 'my-flag': false })
-
         expect(trigger.matches(SESSION_ID)).toBe(false)
-        expect(storage['$error_tracking_flag_session_id']).toBeUndefined()
     })
 
     it('returns true when flag is a non-empty string variant', () => {
-        const { trigger, triggerFlags, storage } = createTrigger({ key: 'my-flag' })
-
+        const { trigger, triggerFlags } = createTrigger({ key: 'my-flag' })
         triggerFlags([], { 'my-flag': 'variant-a' })
-
         expect(trigger.matches(SESSION_ID)).toBe(true)
-        expect(storage['$error_tracking_flag_session_id']).toBe(SESSION_ID)
     })
 
     it('matches specific variant when configured', () => {
-        const { trigger, triggerFlags, storage } = createTrigger({ key: 'my-flag', variant: 'control' })
-
+        const { trigger, triggerFlags } = createTrigger({ key: 'my-flag', variant: 'control' })
         triggerFlags([], { 'my-flag': 'control' })
-
         expect(trigger.matches(SESSION_ID)).toBe(true)
-        expect(storage['$error_tracking_flag_session_id']).toBe(SESSION_ID)
     })
 
     it('does not match wrong variant', () => {
-        const { trigger, triggerFlags, storage } = createTrigger({ key: 'my-flag', variant: 'control' })
-
+        const { trigger, triggerFlags } = createTrigger({ key: 'my-flag', variant: 'control' })
         triggerFlags([], { 'my-flag': 'test' })
-
         expect(trigger.matches(SESSION_ID)).toBe(false)
-        expect(storage['$error_tracking_flag_session_id']).toBeUndefined()
     })
 
-    it('restores from persistence for same session', () => {
-        const { trigger, storage } = createTrigger({ key: 'my-flag' }, {
-            '$error_tracking_flag_session_id': SESSION_ID,
-        })
-
-        expect(trigger.matches(SESSION_ID)).toBe(true)
-        expect(storage['$error_tracking_flag_session_id']).toBe(SESSION_ID)
-    })
-
-    it('does not restore for different session', () => {
-        const { trigger, storage } = createTrigger({ key: 'my-flag' }, {
-            '$error_tracking_flag_session_id': OTHER_SESSION_ID,
-        })
-
-        expect(trigger.matches(SESSION_ID)).toBe(false)
-        expect(storage['$error_tracking_flag_session_id']).toBe(OTHER_SESSION_ID)
-    })
-
-    it('stays triggered even if flag changes', () => {
-        const { trigger, triggerFlags, storage } = createTrigger({ key: 'my-flag' })
+    it('follows current flag value when flag changes (not sticky)', () => {
+        const { trigger, triggerFlags } = createTrigger({ key: 'my-flag' })
 
         triggerFlags([], { 'my-flag': true })
-        triggerFlags([], { 'my-flag': false })
-
         expect(trigger.matches(SESSION_ID)).toBe(true)
-        expect(storage['$error_tracking_flag_session_id']).toBe(SESSION_ID)
+
+        triggerFlags([], { 'my-flag': false })
+        expect(trigger.matches(SESSION_ID)).toBe(false)
+
+        triggerFlags([], { 'my-flag': true })
+        expect(trigger.matches(SESSION_ID)).toBe(true)
     })
 })
