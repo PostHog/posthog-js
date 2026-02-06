@@ -4,8 +4,8 @@ import type { PersistenceHelper } from './persistence'
 
 export class SampleTrigger implements Trigger {
     readonly name = 'sample'
+    readonly sampleRate: number | null
 
-    private readonly _sampleRate: number | null
     private readonly _persistence: PersistenceHelper
 
     // Track sampling decision in memory (needed because we don't persist "sampled out")
@@ -13,12 +13,12 @@ export class SampleTrigger implements Trigger {
     private _sampled: boolean = false
 
     constructor(options: TriggerOptions, sampleRate: number | null) {
-        this._sampleRate = sampleRate
+        this.sampleRate = sampleRate
         this._persistence = options.persistence.withPrefix('sample')
     }
 
     matches(sessionId: string): boolean | null {
-        if (isNull(this._sampleRate)) {
+        if (isNull(this.sampleRate)) {
             return null
         }
 
@@ -34,7 +34,7 @@ export class SampleTrigger implements Trigger {
 
         // Make new sampling decision
         this._sampledSessionId = sessionId
-        this._sampled = Math.random() < this._sampleRate
+        this._sampled = Math.random() < this.sampleRate
 
         if (this._sampled) {
             this._persistence.matchTriggerInSession(sessionId)

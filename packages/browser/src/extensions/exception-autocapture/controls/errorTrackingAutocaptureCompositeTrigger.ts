@@ -10,6 +10,7 @@ import { FlagTrigger } from '../../triggers/behaviour/flag-trigger'
 import { SampleTrigger } from '../../triggers/behaviour/sample-trigger'
 import { EventTrigger } from '../../triggers/behaviour/event-trigger'
 import { isNull } from '@posthog/core'
+import { getTriggersStatus, AutocaptureTriggersStatus } from './triggerStatusReporter'
 
 const logger = createLogger('[Error Tracking Autocapture]')
 
@@ -69,5 +70,10 @@ export class ErrorTrackingAutocaptureCompositeTrigger {
         }
 
         return true
+    }
+
+    getStatus(): AutocaptureTriggersStatus {
+        const sessionId = this._posthog.get_session_id()
+        return getTriggersStatus(this._triggers, sessionId, this.matches())
     }
 }

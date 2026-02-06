@@ -7,9 +7,9 @@ import type { PersistenceHelper } from './persistence'
 
 export class URLTrigger implements Trigger {
     readonly name = 'url'
+    readonly urlTriggers: UrlTrigger[]
 
     private readonly _window: Window | undefined
-    private readonly _urlTriggers: UrlTrigger[]
     private readonly _persistence: PersistenceHelper
     private readonly _posthog: PostHog
 
@@ -18,7 +18,7 @@ export class URLTrigger implements Trigger {
 
     constructor(options: TriggerOptions, urlTriggers: UrlTrigger[]) {
         this._window = options.window
-        this._urlTriggers = urlTriggers
+        this.urlTriggers = urlTriggers
         this._persistence = options.persistence.withPrefix('url')
         this._posthog = options.posthog
 
@@ -28,7 +28,7 @@ export class URLTrigger implements Trigger {
     }
 
     matches(sessionId: string): boolean | null {
-        if (this._urlTriggers.length === 0) {
+        if (this.urlTriggers.length === 0) {
             return null
         }
 
@@ -36,7 +36,7 @@ export class URLTrigger implements Trigger {
     }
 
     private _compileRegexCaches(): void {
-        this._compiledTriggerRegexes = compileRegexCache(this._urlTriggers, 'URL trigger')
+        this._compiledTriggerRegexes = compileRegexCache(this.urlTriggers, 'URL trigger')
     }
 
     private _getCurrentUrl(): string | null {
@@ -51,7 +51,7 @@ export class URLTrigger implements Trigger {
         this._lastCheckedUrl = url
 
         const matchesTrigger =
-            this._urlTriggers.length > 0 && urlMatchesTriggers(url, this._urlTriggers, this._compiledTriggerRegexes)
+            this.urlTriggers.length > 0 && urlMatchesTriggers(url, this.urlTriggers, this._compiledTriggerRegexes)
 
         if (matchesTrigger) {
             this._persistence.matchTriggerInSession(this._posthog.get_session_id())
@@ -60,7 +60,7 @@ export class URLTrigger implements Trigger {
 
     private _setupUrlMonitoring(): void {
         const win = this._window
-        if (!win || this._urlTriggers.length === 0) {
+        if (!win || this.urlTriggers.length === 0) {
             return
         }
 
