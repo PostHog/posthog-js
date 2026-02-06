@@ -92,6 +92,8 @@ export type FeatureFlagCondition = {
   variant?: string
 }
 
+export type FeatureFlagBucketingIdentifier = 'distinct_id' | 'device_id' | '' | null
+
 export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
 
 export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
@@ -197,6 +199,7 @@ export type PostHogFeatureFlag = {
   id: number
   name: string
   key: string
+  bucketing_identifier?: FeatureFlagBucketingIdentifier
   filters?: {
     aggregation_group_type_index?: number
     groups?: FeatureFlagCondition[]
