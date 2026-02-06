@@ -207,13 +207,13 @@ test.describe('ErrorTracking autocapture', () => {
             await network.waitForFlags()
             await page.evaluate(() => {
                 //eslint-disable-next-line no-console
-                console.error('This error shoud be captured with a stack')
+                console.error('This error should be captured with a stack')
             })
 
             const event = await events.waitForEvent('$exception')
             const first_exception = event.properties.$exception_list[0]
             expect(first_exception.type).toBe('Error')
-            expect(first_exception.value).toBe('This error shoud be captured with a stack')
+            expect(first_exception.value).toBe('This error should be captured with a stack')
             expect(first_exception.stacktrace).toBeDefined()
             expect(first_exception.mechanism.handled).toBe(false)
         })
