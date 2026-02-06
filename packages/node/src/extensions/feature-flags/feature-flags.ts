@@ -318,6 +318,13 @@ class FeatureFlagsPoller {
     distinctId: string,
     properties: Record<string, any>
   ): string | undefined {
+    if (flag.filters?.aggregation_group_type_index != undefined) {
+      // Group flags are bucketed by group key in computeFlagValueLocally.
+      // If a group flag appears in dependency evaluation, ignore bucketing_identifier
+      // to preserve existing behavior and avoid requiring $device_id unexpectedly.
+      return distinctId
+    }
+
     if (flag.bucketing_identifier === 'device_id') {
       const deviceId = properties?.$device_id
       if (deviceId === undefined || deviceId === null || deviceId === '') {

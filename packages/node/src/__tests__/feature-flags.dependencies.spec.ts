@@ -82,6 +82,54 @@ describe('feature flag dependencies', () => {
       expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
     })
 
+    it('ignores bucketing_identifier on group flags when evaluating dependencies', async () => {
+      const flags = {
+        flags: [
+          {
+            id: 1,
+            name: 'Group Base Flag',
+            key: 'group-base-flag',
+            bucketing_identifier: 'device_id',
+            active: true,
+            filters: {
+              aggregation_group_type_index: 0,
+              groups: [{ properties: [], rollout_percentage: 100 }],
+            },
+          },
+          {
+            id: 2,
+            name: 'Dependent Flag',
+            key: 'dependent-flag',
+            active: true,
+            filters: {
+              groups: [
+                {
+                  properties: [
+                    {
+                      key: 'group-base-flag',
+                      type: 'flag',
+                      value: true,
+                      operator: 'flag_evaluates_to',
+                      dependency_chain: ['group-base-flag'],
+                    },
+                  ],
+                  rollout_percentage: 100,
+                },
+              ],
+            },
+          },
+        ],
+        group_type_mapping: { '0': 'company' },
+      }
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+      posthog = buildClient()
+
+      expect(await posthog.getFeatureFlag('dependent-flag', 'distinct-id')).toEqual(true)
+      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+      expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+    })
+
     it('evaluates true when expected true but flag returns variant', async () => {
       const flags = {
         flags: [
