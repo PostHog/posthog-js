@@ -21,7 +21,21 @@ export default function Home() {
                     }}
                 >
                     <button onClick={() => posthog.captureException(new Error('exception captured'))}>
-                        Create client exception!
+                        Capture error manually
+                    </button>
+                    <button
+                        onClick={() => {
+                            throw new Error('exception captured')
+                        }}
+                    >
+                        Capture error automatically
+                    </button>
+                    <button
+                        onClick={() => {
+                            Promise.reject(new Error('promise rejection captured'))
+                        }}
+                    >
+                        Capture promise rejection automatically
                     </button>
                     <button onClick={() => captureServerError()}>Create server exception!</button>
                     <button
@@ -33,15 +47,7 @@ export default function Home() {
                     >
                         Create custom fingerprint!
                     </button>
-                    <button
-                        onClick={() =>
-                            console.warn(
-                                'a really long string that exceeds the maximum length of a log message and is longer than the maximum length of a log message and is longer than the maximum length of a log message'
-                            )
-                        }
-                    >
-                        Log something large
-                    </button>
+                    <button onClick={() => console.error('This is an error message')}>Error log something</button>
                 </div>
             </main>
         </div>

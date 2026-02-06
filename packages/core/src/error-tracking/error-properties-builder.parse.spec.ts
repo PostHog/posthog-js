@@ -11,7 +11,7 @@ describe('ErrorPropertiesBuilder', () => {
     )
 
     function parseStack(error: Error): StackFrame[] | undefined {
-      const ctx = {}
+      const ctx = { skipFirstLines: 1 }
       //@ts-expect-error: testing private method
       const exception = errorPropertiesBuilder.parseStacktrace(
         {

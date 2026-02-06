@@ -2,6 +2,7 @@ import { DOMExceptionCoercer, ErrorEventCoercer, ErrorCoercer, ObjectCoercer, St
 import { PrimitiveCoercer } from './coercers/primitive-coercer'
 import { PromiseRejectionEventCoercer } from './coercers/promise-rejection-event'
 import { ErrorPropertiesBuilder } from './error-properties-builder'
+import { createStackParser } from './parsers'
 import { ExceptionLike } from './types'
 
 describe('ErrorPropertiesBuilder', () => {
@@ -24,7 +25,7 @@ describe('ErrorPropertiesBuilder', () => {
         new StringCoercer(),
         new PrimitiveCoercer(),
       ],
-      [],
+      createStackParser('web:javascript'),
       []
     )
 
