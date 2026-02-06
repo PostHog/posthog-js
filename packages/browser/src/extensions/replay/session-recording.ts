@@ -154,6 +154,7 @@ export class SessionRecording {
 
                 persistence.register({
                     [SESSION_RECORDING_REMOTE_CONFIG]: {
+                        cache_timestamp: Date.now(),
                         enabled: !!sessionRecordingConfigResponse,
                         ...sessionRecordingConfigResponse,
                         networkPayloadCapture: {
