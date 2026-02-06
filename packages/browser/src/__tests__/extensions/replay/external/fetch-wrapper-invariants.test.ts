@@ -166,7 +166,7 @@ describe('fetch wrapper', () => {
     })
 
     describe('downstream wrapper compatibility', () => {
-        it('downstream receives Request object as first argument', async () => {
+        it('downstream receives the original url argument', async () => {
             let receivedInput: RequestInfo | URL | undefined
             const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
                 receivedInput = input
@@ -176,10 +176,10 @@ describe('fetch wrapper', () => {
             await wrappedFetch('https://example.com/api', { method: 'POST' })
             cleanup()
 
-            expect(receivedInput).toBeInstanceOf(Request)
+            expect(receivedInput).toBe('https://example.com/api')
         })
 
-        it('downstream receives undefined as second argument (init not passed)', async () => {
+        it('downstream receives the original init argument', async () => {
             let receivedInit: RequestInit | undefined
             const { wrappedFetch, cleanup } = setupWrappedFetch(
                 async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -188,27 +188,25 @@ describe('fetch wrapper', () => {
                 }
             )
 
-            await wrappedFetch('https://example.com/api', { method: 'POST', body: 'test' })
-            cleanup()
-
-            expect(receivedInit).toBeUndefined()
-        })
-
-        it.each([
-            ['method', { method: 'PUT' } as RequestInit, (req: Request) => req.method, 'PUT'],
-            ['headers', { headers: { 'X-Custom': 'value' } }, (req: Request) => req.headers.get('X-Custom'), 'value'],
-            ['url', {}, (req: Request) => req.url, 'https://example.com/api'],
-        ])('downstream can read %s from Request object', async (_name, init, getter, expected) => {
-            let captured: string | null | undefined
-            const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
-                captured = getter(input as Request)
-                return new Response('ok')
-            })
-
+            const init = { method: 'POST', body: 'test' }
             await wrappedFetch('https://example.com/api', init)
             cleanup()
 
-            expect(captured).toBe(expected)
+            expect(receivedInit).toBe(init)
+        })
+
+        it('downstream receives Request object when caller passes one', async () => {
+            let receivedInput: RequestInfo | URL | undefined
+            const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
+                receivedInput = input
+                return new Response('ok')
+            })
+
+            const request = new Request('https://example.com/api', { method: 'POST', body: 'test' })
+            await wrappedFetch(request)
+            cleanup()
+
+            expect(receivedInput).toBe(request)
         })
     })
 
@@ -235,8 +233,8 @@ describe('fetch wrapper', () => {
         expect(headerBoundary).toContain(bodyBoundary)
     })
 
-    // TODO: Fix https://github.com/PostHog/posthog-js/issues/1326
-    it.skip('passes init to downstream wrappers', async () => {
+    // Fixed: https://github.com/PostHog/posthog-js/issues/1326
+    it('passes init to downstream wrappers', async () => {
         let capturedInit: RequestInit | undefined
         const { wrappedFetch, cleanup } = setupWrappedFetch(async (_input: RequestInfo | URL, init?: RequestInit) => {
             capturedInit = init

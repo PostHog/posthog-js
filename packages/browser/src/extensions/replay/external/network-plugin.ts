@@ -562,7 +562,10 @@ function initFetchObserver(
         return async function (url: URL | RequestInfo, init?: RequestInit | undefined) {
             // check IE earlier than this, we only initialize if Request is present
             // eslint-disable-next-line compat/compat
-            const req = new Request(url, init)
+            // When url is a Request, clone it first so new Request() doesn't consume the original's body.
+            // We only use req for header/body recording — the original (url, init) args are passed
+            // to the real fetch to preserve native body handling (especially for FormData/multipart uploads).
+            const req = url instanceof Request ? new Request(url.clone(), init) : new Request(url, init)
             let res: Response | undefined
             const networkRequest: Partial<CapturedNetworkRequest> = {}
             let start: number | undefined
@@ -588,7 +591,7 @@ function initFetchObserver(
                 }
 
                 start = win.performance.now()
-                res = await originalFetch(req)
+                res = await originalFetch(url, init)
                 end = win.performance.now()
 
                 const responseHeaders: Headers = {}
