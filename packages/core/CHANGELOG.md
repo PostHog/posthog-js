@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.20.1
+
+### Patch Changes
+
+- [#3039](https://github.com/PostHog/posthog-js/pull/3039) [`8f75dae`](https://github.com/PostHog/posthog-js/commit/8f75dae39ae2938624ca49e778915a92f2491556) Thanks [@hpouillot](https://github.com/hpouillot)! - fix(err): fix console error capturing
+  (2026-02-06)
+
 ## 1.20.0
 
 ### Minor Changes
