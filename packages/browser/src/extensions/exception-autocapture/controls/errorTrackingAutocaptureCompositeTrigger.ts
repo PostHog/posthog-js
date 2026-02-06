@@ -7,7 +7,7 @@ import type { Trigger, TriggerOptions, LogFn } from '../../triggers/behaviour/ty
 import { PersistenceHelper } from '../../triggers/behaviour/persistence'
 import { URLTrigger } from '../../triggers/behaviour/url-trigger'
 import { FlagTrigger } from '../../triggers/behaviour/flag-trigger'
-import { SampleTrigger } from '../../triggers/behaviour/sample-trigger'
+import { SampleRateTrigger } from '../../triggers/behaviour/sample-rate-trigger'
 import { EventTrigger } from '../../triggers/behaviour/event-trigger'
 import { isNull } from '@posthog/core'
 import { getTriggersStatus, AutocaptureTriggersStatus } from './triggerStatusReporter'
@@ -49,7 +49,7 @@ export class ErrorTrackingAutocaptureCompositeTrigger {
             new URLTrigger(options, config?.urlTriggers ?? []),
             new EventTrigger(options, config?.eventTriggers ?? []),
             new FlagTrigger(options, config?.linkedFeatureFlag ?? null),
-            new SampleTrigger(options, config?.sampleRate ?? null),
+            new SampleRateTrigger(options, config?.sampleRate ?? null, '$error_tracking_sample_decision'),
         ]
     }
 
