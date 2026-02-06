@@ -1,6 +1,6 @@
 import { isNull } from '@posthog/core'
-import type { PostHog } from '@posthog/types'
 import type { Trigger, TriggerOptions } from './types'
+import type { PersistenceHelper } from './persistence'
 
 interface SamplingDecision {
     sessionId: string
@@ -8,19 +8,17 @@ interface SamplingDecision {
 }
 
 export class SampleRateTrigger implements Trigger {
-    readonly name = 'sample'
+    readonly name = 'sample-rate'
     readonly sampleRate: number | null
 
-    private readonly _posthog: PostHog
-    private readonly _persistenceKey: string
+    private readonly _persistence: PersistenceHelper
 
     // In-memory cache of the sampling decision
     private _decision: SamplingDecision | null = null
 
-    constructor(options: TriggerOptions, sampleRate: number | null, persistenceKey: string) {
+    constructor(options: TriggerOptions, sampleRate: number | null) {
         this.sampleRate = sampleRate
-        this._posthog = options.posthog
-        this._persistenceKey = persistenceKey
+        this._persistence = options.persistence.withPrefix('sample')
     }
 
     matches(sessionId: string): boolean | null {
@@ -34,7 +32,7 @@ export class SampleRateTrigger implements Trigger {
         }
 
         // Check persistence
-        const persisted = this._getPersistedDecision()
+        const persisted = this._persistence.get<SamplingDecision>('decision')
         if (persisted?.sessionId === sessionId) {
             this._decision = persisted
             return persisted.sampled
@@ -43,20 +41,8 @@ export class SampleRateTrigger implements Trigger {
         // Make new sampling decision
         const sampled = Math.random() < this.sampleRate
         this._decision = { sessionId, sampled }
-        this._persistDecision(this._decision)
+        this._persistence.set('decision', this._decision)
 
         return sampled
-    }
-
-    private _getPersistedDecision(): SamplingDecision | null {
-        const value = this._posthog.get_property(this._persistenceKey)
-        if (value && typeof value === 'object' && 'sessionId' in value && 'sampled' in value) {
-            return value as SamplingDecision
-        }
-        return null
-    }
-
-    private _persistDecision(decision: SamplingDecision): void {
-        this._posthog.persistence?.register({ [this._persistenceKey]: decision })
     }
 }
