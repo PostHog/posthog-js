@@ -1,6 +1,6 @@
-import { URLTrigger } from '../../../../extensions/exception-autocapture/controls/triggers/url-trigger'
-import { PersistenceHelper } from '../../../../extensions/exception-autocapture/controls/triggers/persistence'
-import type { TriggerOptions } from '../../../../extensions/exception-autocapture/controls/triggers/types'
+import { URLTrigger } from '../../../../extensions/triggers/behaviour/url-trigger'
+import { PersistenceHelper } from '../../../../extensions/triggers/behaviour/persistence'
+import type { TriggerOptions } from '../../../../extensions/triggers/behaviour/types'
 import type { UrlTrigger } from '../../../../types'
 
 interface MockWindow {

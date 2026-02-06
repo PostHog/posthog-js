@@ -1,6 +1,6 @@
-import { EventTrigger } from '../../../../extensions/exception-autocapture/controls/triggers/event-trigger'
-import { PersistenceHelper } from '../../../../extensions/exception-autocapture/controls/triggers/persistence'
-import type { TriggerOptions } from '../../../../extensions/exception-autocapture/controls/triggers/types'
+import { EventTrigger } from '../../../../extensions/triggers/behaviour/event-trigger'
+import { PersistenceHelper } from '../../../../extensions/triggers/behaviour/persistence'
+import type { TriggerOptions } from '../../../../extensions/triggers/behaviour/types'
 
 type EventCallback = (event: { event: string }) => void
 

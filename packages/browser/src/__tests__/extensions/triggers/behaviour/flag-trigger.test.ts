@@ -1,6 +1,6 @@
-import { FlagTrigger, LinkedFlag } from '../../../../extensions/exception-autocapture/controls/triggers/flag-trigger'
-import { PersistenceHelper } from '../../../../extensions/exception-autocapture/controls/triggers/persistence'
-import type { TriggerOptions } from '../../../../extensions/exception-autocapture/controls/triggers/types'
+import { FlagTrigger, LinkedFlag } from '../../../../extensions/triggers/behaviour/flag-trigger'
+import { PersistenceHelper } from '../../../../extensions/triggers/behaviour/persistence'
+import type { TriggerOptions } from '../../../../extensions/triggers/behaviour/types'
 
 type FlagCallback = (flags: string[], variants: Record<string, unknown>) => void
 

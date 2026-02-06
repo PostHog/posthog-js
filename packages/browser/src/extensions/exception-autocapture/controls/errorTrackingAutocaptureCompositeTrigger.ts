@@ -3,12 +3,12 @@ import type { RemoteConfig } from '../../../types'
 import { window as globalWindow } from '../../../utils/globals'
 import { createLogger } from '../../../utils/logger'
 
-import type { Trigger, TriggerOptions, LogFn } from './triggers/types'
-import { PersistenceHelper } from './triggers/persistence'
-import { URLTrigger } from './triggers/url-trigger'
-import { FlagTrigger } from './triggers/flag-trigger'
-import { SampleTrigger } from './triggers/sample-trigger'
-import { EventTrigger } from './triggers/event-trigger'
+import type { Trigger, TriggerOptions, LogFn } from '../../triggers/behaviour/types'
+import { PersistenceHelper } from '../../triggers/behaviour/persistence'
+import { URLTrigger } from '../../triggers/behaviour/url-trigger'
+import { FlagTrigger } from '../../triggers/behaviour/flag-trigger'
+import { SampleTrigger } from '../../triggers/behaviour/sample-trigger'
+import { EventTrigger } from '../../triggers/behaviour/event-trigger'
 import { isNull } from '@posthog/core'
 
 const logger = createLogger('[Error Tracking Autocapture]')
