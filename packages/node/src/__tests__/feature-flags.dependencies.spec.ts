@@ -82,7 +82,7 @@ describe('feature flag dependencies', () => {
       expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
     })
 
-    it('ignores bucketing_identifier on group flags when evaluating dependencies', async () => {
+    it('uses group key bucketing for group dependencies and ignores bucketing_identifier', async () => {
       const flags = {
         flags: [
           {
@@ -125,7 +125,16 @@ describe('feature flag dependencies', () => {
 
       posthog = buildClient()
 
-      expect(await posthog.getFeatureFlag('dependent-flag', 'distinct-id')).toEqual(true)
+      // Without group context, dependency evaluation cannot match the group flag.
+      expect(await posthog.getFeatureFlag('dependent-flag', 'distinct-id')).toEqual(false)
+
+      // With group context, dependency should evaluate the group flag by group key, not $device_id.
+      expect(
+        await posthog.getFeatureFlag('dependent-flag', 'distinct-id', {
+          groups: { company: 'acme' },
+          groupProperties: { company: {} },
+        })
+      ).toEqual(true)
       expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
       expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
     })
