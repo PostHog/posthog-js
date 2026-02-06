@@ -28,11 +28,7 @@ describe('EventTrigger', () => {
     const SESSION_ID = 'session-123'
     const OTHER_SESSION_ID = 'session-456'
 
-    const createTrigger = (
-        eventTriggers: string[],
-        persistedSessionId?: string,
-        sessionId: string = SESSION_ID
-    ) => {
+    const createTrigger = (eventTriggers: string[], persistedSessionId?: string, sessionId: string = SESSION_ID) => {
         const { posthog, fireEvent } = createMockPosthog(sessionId)
         const storage: Record<string, unknown> = {}
         if (persistedSessionId) {
