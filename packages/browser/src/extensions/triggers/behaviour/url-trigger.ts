@@ -3,7 +3,7 @@ import { UrlTrigger } from '../../../types'
 import { addEventListener } from '../../../utils'
 import { compileRegexCache, urlMatchesTriggers } from '../../../utils/policyMatching'
 import type { Trigger, TriggerOptions } from './types'
-import type { PersistenceHelper } from './persistence'
+import { TriggerState, type PersistenceHelper } from './persistence'
 
 export class URLTrigger implements Trigger {
     readonly name = 'url'
@@ -32,7 +32,7 @@ export class URLTrigger implements Trigger {
             return null
         }
 
-        return this._persistence.sessionMatchesTrigger(sessionId) ? true : false
+        return this._persistence.isTriggered(sessionId)
     }
 
     private _compileRegexCaches(): void {
@@ -54,7 +54,7 @@ export class URLTrigger implements Trigger {
             this.urlTriggers.length > 0 && urlMatchesTriggers(url, this.urlTriggers, this._compiledTriggerRegexes)
 
         if (matchesTrigger) {
-            this._persistence.matchTriggerInSession(this._posthog.get_session_id())
+            this._persistence.setDecision(this._posthog.get_session_id(), TriggerState.Triggered)
         }
     }
 

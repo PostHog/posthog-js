@@ -1,6 +1,6 @@
 import type { PostHog } from '@posthog/types'
 import type { Trigger, TriggerOptions } from './types'
-import type { PersistenceHelper } from './persistence'
+import { TriggerState, type PersistenceHelper } from './persistence'
 
 export class EventTrigger implements Trigger {
     readonly name = 'event'
@@ -22,7 +22,7 @@ export class EventTrigger implements Trigger {
             return null
         }
 
-        return this._persistence.sessionMatchesTrigger(sessionId) ? true : false
+        return this._persistence.isTriggered(sessionId)
     }
 
     private _setupEventListener(posthog: PostHog): void {
@@ -32,7 +32,7 @@ export class EventTrigger implements Trigger {
             }
 
             if (this.eventTriggers.includes(event.event)) {
-                this._persistence.matchTriggerInSession(posthog.get_session_id())
+                this._persistence.setDecision(posthog.get_session_id(), TriggerState.Triggered)
             }
         })
     }
