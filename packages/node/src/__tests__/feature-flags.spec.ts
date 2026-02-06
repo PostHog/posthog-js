@@ -135,6 +135,119 @@ describe('local evaluation', () => {
     expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
   })
 
+  it('returns false when bucketing_identifier is device_id and $device_id is missing', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Device Flag',
+          key: 'device-id-flag',
+          bucketing_identifier: 'device_id',
+          active: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+    }
+
+    mockedFetch.mockImplementation(
+      apiImplementation({ localFlags: flags, decideFlags: { 'device-id-flag': 'flags-fallback-value' } })
+    )
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getFeatureFlag('device-id-flag', 'some-distinct-id')).toEqual(false)
+    expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
+  it('uses $device_id for bucketing when bucketing_identifier is device_id', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Device Bucketing Flag',
+          key: 'complex-flag',
+          bucketing_identifier: 'device_id',
+          active: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 30 }],
+          },
+        },
+      ],
+    }
+
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    const sharedDeviceId = 'some-distinct-id_within_rollout?'
+
+    expect(
+      await posthog.getFeatureFlag('complex-flag', 'some-distinct-id_within_rollout?', {
+        personProperties: { $device_id: sharedDeviceId },
+      })
+    ).toEqual(true)
+
+    expect(
+      await posthog.getFeatureFlag('complex-flag', 'some-distinct-id_outside_rollout?', {
+        personProperties: { $device_id: sharedDeviceId },
+      })
+    ).toEqual(true)
+
+    expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
+  it('treats null and empty bucketing_identifier as distinct_id', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Null Bucketing Identifier',
+          key: 'null-bucketing-identifier-flag',
+          bucketing_identifier: null,
+          active: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+        {
+          id: 2,
+          name: 'Empty Bucketing Identifier',
+          key: 'empty-bucketing-identifier-flag',
+          bucketing_identifier: '',
+          active: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+    }
+
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getFeatureFlag('null-bucketing-identifier-flag', 'some-distinct-id')).toEqual(true)
+    expect(await posthog.getFeatureFlag('empty-bucketing-identifier-flag', 'some-distinct-id')).toEqual(true)
+    expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
   it('evaluates group properties', async () => {
     const flags = {
       flags: [
