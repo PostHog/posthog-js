@@ -2572,6 +2572,62 @@ describe('Lazy SessionRecording', () => {
             expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(undefined)
             expect(sessionRecording.status).toBe('active')
         })
+
+        describe('legacy boolean true in persistence', () => {
+            it.each([
+                ['0% sample rate', '0.00', 'disabled'],
+                ['100% sample rate', '1.00', 'sampled'],
+            ] as const)(
+                'clears legacy true and makes fresh sampling decision with %s',
+                (_name, sampleRate, expectedStatus) => {
+                    // simulate legacy SDK having stored boolean true
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_IS_SAMPLED]: true,
+                    })
+                    expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(true)
+
+                    sessionRecording.onRemoteConfig(
+                        makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate } })
+                    )
+
+                    // legacy true should be treated as unknown and a fresh decision made
+                    expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).not.toBe(true)
+                    expect(sessionRecording.status).toBe(expectedStatus)
+                }
+            )
+
+            it('legacy true with 0% sample rate does not record even if session has not changed', () => {
+                // simulate legacy SDK having stored boolean true
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_IS_SAMPLED]: true,
+                })
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.00' } })
+                )
+
+                // should be disabled despite legacy true, because 0% sample rate
+                expect(sessionRecording.status).toBe('disabled')
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+                expect(posthog.capture).not.toHaveBeenCalled()
+            })
+
+            it('preserves false from persistence (not legacy, still valid format)', () => {
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_IS_SAMPLED]: false,
+                })
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.50' } })
+                )
+
+                // false is still valid format, should remain disabled
+                expect(sessionRecording.status).toBe('disabled')
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+            })
+        })
     })
 
     describe('masking', () => {
