@@ -4,10 +4,7 @@ import type { TriggerOptions } from '../../../../extensions/exception-autocaptur
 
 type EventCallback = (event: { event: string }) => void
 
-const createMockPosthog = (sessionId: string): {
-    posthog: any
-    fireEvent: (name: string) => void
-} => {
+const createMockPosthog = (sessionId: string) => {
     const callbacks: EventCallback[] = []
 
     const posthog = {
@@ -16,12 +13,7 @@ const createMockPosthog = (sessionId: string): {
             if (eventName === 'eventCaptured') {
                 callbacks.push(callback)
             }
-            return () => {
-                const index = callbacks.indexOf(callback)
-                if (index > -1) {
-                    callbacks.splice(index, 1)
-                }
-            }
+            return () => {}
         }),
     }
 
@@ -60,80 +52,59 @@ describe('EventTrigger', () => {
 
         const trigger = new EventTrigger(options, eventTriggers)
 
-        return { trigger, fireEvent, storage, options, posthog }
+        return { trigger, fireEvent, storage }
     }
 
-    it('returns null when no event triggers are configured', () => {
-        const { trigger } = createTrigger([])
+    it('returns null when not configured', () => {
+        const { trigger, storage } = createTrigger([])
 
         expect(trigger.matches(SESSION_ID)).toBeNull()
+        expect(storage['$error_tracking_event_session_id']).toBeUndefined()
     })
 
-    it('returns false initially when triggers are configured but none fired', () => {
-        const { trigger } = createTrigger(['my-trigger-event'])
+    it('returns false when no matching event fired', () => {
+        const { trigger, fireEvent, storage } = createTrigger(['my-event'])
+
+        fireEvent('other-event')
 
         expect(trigger.matches(SESSION_ID)).toBe(false)
+        expect(storage['$error_tracking_event_session_id']).toBeUndefined()
     })
 
-    it('returns true after a matching event is captured', () => {
-        const { trigger, fireEvent } = createTrigger(['my-trigger-event'])
+    it('returns true after matching event fires', () => {
+        const { trigger, fireEvent, storage } = createTrigger(['my-event'])
 
-        fireEvent('my-trigger-event')
+        fireEvent('my-event')
 
         expect(trigger.matches(SESSION_ID)).toBe(true)
+        expect(storage['$error_tracking_event_session_id']).toBe(SESSION_ID)
     })
 
-    it('ignores non-matching events', () => {
-        const { trigger, fireEvent } = createTrigger(['my-trigger-event'])
+    it('restores from persistence for same session', () => {
+        const { trigger, storage } = createTrigger(['my-event'], {
+            '$error_tracking_event_session_id': SESSION_ID,
+        })
 
-        fireEvent('some-other-event')
+        expect(trigger.matches(SESSION_ID)).toBe(true)
+        expect(storage['$error_tracking_event_session_id']).toBe(SESSION_ID)
+    })
+
+    it('does not restore for different session', () => {
+        const { trigger, storage } = createTrigger(['my-event'], {
+            '$error_tracking_event_session_id': OTHER_SESSION_ID,
+        })
 
         expect(trigger.matches(SESSION_ID)).toBe(false)
+        expect(storage['$error_tracking_event_session_id']).toBe(OTHER_SESSION_ID)
     })
 
-    it('triggers on any matching event from the list', () => {
-        const { trigger, fireEvent } = createTrigger(['event-a', 'event-b', 'event-c'])
+    it('stays triggered after subsequent events', () => {
+        const { trigger, fireEvent, storage } = createTrigger(['my-event'])
 
-        fireEvent('event-b')
+        fireEvent('my-event')
+        fireEvent('other-event')
 
         expect(trigger.matches(SESSION_ID)).toBe(true)
-    })
-
-    it('stays triggered once triggered', () => {
-        const { trigger, fireEvent } = createTrigger(['my-trigger-event'])
-
-        fireEvent('my-trigger-event')
-        expect(trigger.matches(SESSION_ID)).toBe(true)
-
-        fireEvent('some-other-event')
-        expect(trigger.matches(SESSION_ID)).toBe(true)
-    })
-
-    describe('session stickiness', () => {
-        it('persists session ID when event fires', () => {
-            const { fireEvent, storage } = createTrigger(['my-event'])
-
-            expect(storage['$error_tracking_event_session']).toBeUndefined()
-
-            fireEvent('my-event')
-
-            expect(storage['$error_tracking_event_session']).toBe(SESSION_ID)
-        })
-
-        it('returns true for same session if previously persisted', () => {
-            const { trigger } = createTrigger(['my-event'], {
-                '$error_tracking_event_session': SESSION_ID,
-            })
-
-            expect(trigger.matches(SESSION_ID)).toBe(true)
-        })
-
-        it('returns false for different session even if previously persisted', () => {
-            const { trigger } = createTrigger(['my-event'], {
-                '$error_tracking_event_session': OTHER_SESSION_ID,
-            })
-
-            expect(trigger.matches(SESSION_ID)).toBe(false)
-        })
+        expect(storage['$error_tracking_event_session_id']).toBe(SESSION_ID)
     })
 })

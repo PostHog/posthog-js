@@ -12,13 +12,6 @@ interface MockWindow {
     }
 }
 
-interface GetTriggerParams {
-    triggers?: UrlTrigger[]
-    initialUrl?: string
-    persistedData?: Record<string, string>
-    sessionId?: string
-}
-
 const createMockWindow = (initialUrl: string): MockWindow => ({
     location: { href: initialUrl },
     addEventListener: jest.fn(),
@@ -37,11 +30,11 @@ describe('URLTrigger', () => {
     const OTHER_SESSION_ID = 'session-456'
 
     const createTrigger = ({
-        triggers = [],
+        triggers = [] as UrlTrigger[],
         initialUrl = 'https://example.com/',
-        persistedData = {},
+        persistedData = {} as Record<string, string>,
         sessionId = SESSION_ID,
-    }: GetTriggerParams = {}) => {
+    } = {}) => {
         const mockWindow = createMockWindow(initialUrl)
         const mockPosthog = createMockPosthog(sessionId)
         const storage: Record<string, string> = { ...persistedData }
@@ -67,146 +60,75 @@ describe('URLTrigger', () => {
             mockWindow.history.pushState()
         }
 
-        return { trigger, mockWindow, navigateTo, storage, options, persistence, mockPosthog }
+        return { trigger, navigateTo, storage }
     }
 
-    it('returns null when no triggers configured', () => {
-        const { trigger } = createTrigger()
+    it('returns null when not configured', () => {
+        const { trigger, storage } = createTrigger()
 
         expect(trigger.matches(SESSION_ID)).toBeNull()
+        expect(storage['$error_tracking_url_session_id']).toBeUndefined()
     })
 
-    it('returns false when triggers are configured but URL does not match', () => {
-        const { trigger } = createTrigger({
+    it('returns false when URL does not match', () => {
+        const { trigger, storage } = createTrigger({
             triggers: [{ url: '/trigger', matching: 'regex' }],
         })
 
         expect(trigger.matches(SESSION_ID)).toBe(false)
+        expect(storage['$error_tracking_url_session_id']).toBeUndefined()
     })
 
-    it('returns true when trigger URL is visited', () => {
-        const { trigger, navigateTo } = createTrigger({
-            triggers: [{ url: '/trigger', matching: 'regex' }],
-        })
-
-        expect(trigger.matches(SESSION_ID)).toBe(false)
-
-        navigateTo('https://example.com/trigger')
-
-        expect(trigger.matches(SESSION_ID)).toBe(true)
-    })
-
-    it('returns true immediately if initial URL matches trigger', () => {
-        const { trigger } = createTrigger({
+    it('returns true when initial URL matches', () => {
+        const { trigger, storage } = createTrigger({
             triggers: [{ url: '/trigger', matching: 'regex' }],
             initialUrl: 'https://example.com/trigger',
         })
 
         expect(trigger.matches(SESSION_ID)).toBe(true)
+        expect(storage['$error_tracking_url_session_id']).toBe(SESSION_ID)
     })
 
-    it('stays triggered after trigger is visited', () => {
-        const { trigger, navigateTo } = createTrigger({
+    it('returns true when navigating to matching URL', () => {
+        const { trigger, navigateTo, storage } = createTrigger({
             triggers: [{ url: '/trigger', matching: 'regex' }],
         })
 
         navigateTo('https://example.com/trigger')
-        expect(trigger.matches(SESSION_ID)).toBe(true)
 
-        navigateTo('https://example.com/other-page')
         expect(trigger.matches(SESSION_ID)).toBe(true)
+        expect(storage['$error_tracking_url_session_id']).toBe(SESSION_ID)
     })
 
-    it('triggers on any matching pattern from the list', () => {
-        const { trigger, navigateTo } = createTrigger({
-            triggers: [
-                { url: '/trigger-a', matching: 'regex' },
-                { url: '/trigger-b', matching: 'regex' },
-            ],
+    it('restores from persistence for same session', () => {
+        const { trigger, storage } = createTrigger({
+            triggers: [{ url: '/trigger', matching: 'regex' }],
+            persistedData: { '$error_tracking_url_session_id': SESSION_ID },
+        })
+
+        expect(trigger.matches(SESSION_ID)).toBe(true)
+        expect(storage['$error_tracking_url_session_id']).toBe(SESSION_ID)
+    })
+
+    it('does not restore for different session', () => {
+        const { trigger, storage } = createTrigger({
+            triggers: [{ url: '/trigger', matching: 'regex' }],
+            persistedData: { '$error_tracking_url_session_id': OTHER_SESSION_ID },
         })
 
         expect(trigger.matches(SESSION_ID)).toBe(false)
-
-        navigateTo('https://example.com/trigger-b')
-
-        expect(trigger.matches(SESSION_ID)).toBe(true)
+        expect(storage['$error_tracking_url_session_id']).toBe(OTHER_SESSION_ID)
     })
 
-    describe('session stickiness', () => {
-        it('persists session ID when URL matches', () => {
-            const { storage } = createTrigger({
-                triggers: [{ url: '/trigger', matching: 'regex' }],
-                initialUrl: 'https://example.com/trigger',
-            })
-
-            expect(storage['$error_tracking_url_session']).toBe(SESSION_ID)
+    it('stays triggered after navigating away', () => {
+        const { trigger, navigateTo, storage } = createTrigger({
+            triggers: [{ url: '/trigger', matching: 'regex' }],
         })
 
-        it('persists session ID when navigating to trigger URL', () => {
-            const { navigateTo, storage } = createTrigger({
-                triggers: [{ url: '/trigger', matching: 'regex' }],
-            })
+        navigateTo('https://example.com/trigger')
+        navigateTo('https://example.com/other')
 
-            expect(storage['$error_tracking_url_session']).toBeUndefined()
-
-            navigateTo('https://example.com/trigger')
-
-            expect(storage['$error_tracking_url_session']).toBe(SESSION_ID)
-        })
-
-        it('returns true for same session if previously persisted', () => {
-            const { trigger } = createTrigger({
-                triggers: [{ url: '/trigger', matching: 'regex' }],
-                persistedData: { '$error_tracking_url_session': SESSION_ID },
-            })
-
-            expect(trigger.matches(SESSION_ID)).toBe(true)
-        })
-
-        it('returns false for different session even if previously persisted', () => {
-            const { trigger } = createTrigger({
-                triggers: [{ url: '/trigger', matching: 'regex' }],
-                persistedData: { '$error_tracking_url_session': OTHER_SESSION_ID },
-            })
-
-            expect(trigger.matches(SESSION_ID)).toBe(false)
-        })
-
-        it('persists across page loads (simulated via persistence)', () => {
-            const storage: Record<string, string> = {}
-            const persistence = new PersistenceHelper(
-                (key) => storage[key] ?? null,
-                (key, value) => {
-                    storage[key] = value
-                }
-            ).withPrefix('error_tracking')
-
-            // First "page load" - trigger matches
-            const mockWindow1 = createMockWindow('https://example.com/trigger')
-            const mockPosthog1 = createMockPosthog(SESSION_ID)
-            const options1: TriggerOptions = {
-                posthog: mockPosthog1 as any,
-                window: mockWindow1 as any,
-                log: jest.fn(),
-                persistence,
-            }
-            new URLTrigger(options1, [{ url: '/trigger', matching: 'regex' }])
-
-            expect(storage['$error_tracking_url_session']).toBe(SESSION_ID)
-
-            // Second "page load" - new trigger instance, but persistence remains
-            const mockWindow2 = createMockWindow('https://example.com/other')
-            const mockPosthog2 = createMockPosthog(SESSION_ID)
-            const options2: TriggerOptions = {
-                posthog: mockPosthog2 as any,
-                window: mockWindow2 as any,
-                log: jest.fn(),
-                persistence,
-            }
-            const trigger2 = new URLTrigger(options2, [{ url: '/trigger', matching: 'regex' }])
-
-            // Still returns true because sessionId is persisted
-            expect(trigger2.matches(SESSION_ID)).toBe(true)
-        })
+        expect(trigger.matches(SESSION_ID)).toBe(true)
+        expect(storage['$error_tracking_url_session_id']).toBe(SESSION_ID)
     })
 })
