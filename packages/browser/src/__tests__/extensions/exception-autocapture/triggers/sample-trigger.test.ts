@@ -1,5 +1,5 @@
 import { SampleTrigger } from '../../../../extensions/exception-autocapture/controls/triggers/sample-trigger'
-import { createPersistenceHelperFactory } from '../../../../extensions/exception-autocapture/controls/triggers/persistence'
+import { PersistenceHelper } from '../../../../extensions/exception-autocapture/controls/triggers/persistence'
 import type { TriggerOptions } from '../../../../extensions/exception-autocapture/controls/triggers/types'
 
 describe('SampleTrigger', () => {
@@ -9,16 +9,18 @@ describe('SampleTrigger', () => {
     const createTrigger = (sampleRate: number | null, persistedData: Record<string, string> = {}) => {
         const storage: Record<string, string> = { ...persistedData }
 
+        const persistence = new PersistenceHelper(
+            (key) => storage[key] ?? null,
+            (key, value) => {
+                storage[key] = value
+            }
+        ).withPrefix('error_tracking')
+
         const options: TriggerOptions = {
             posthog: {} as any,
             window: undefined,
             log: jest.fn(),
-            persistenceHelperFactory: createPersistenceHelperFactory(
-                (key) => storage[key] ?? null,
-                (key, value) => {
-                    storage[key] = value
-                }
-            ),
+            persistence,
         }
 
         const trigger = new SampleTrigger(options, sampleRate)

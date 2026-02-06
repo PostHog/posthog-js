@@ -4,14 +4,14 @@ import { window as globalWindow } from '../../../utils/globals'
 import { createLogger } from '../../../utils/logger'
 
 import type { Trigger, TriggerOptions, LogFn } from './triggers/types'
-import { createPersistenceHelperFactory } from './triggers/persistence'
+import { PersistenceHelper } from './triggers/persistence'
 import { URLTrigger } from './triggers/url-trigger'
 import { FlagTrigger } from './triggers/flag-trigger'
 import { SampleTrigger } from './triggers/sample-trigger'
 import { EventTrigger } from './triggers/event-trigger'
 import { isNull } from '@posthog/core'
 
-const logger = createLogger('[Error Tracking Autocapture Decider]')
+const logger = createLogger('[Error Tracking Autocapture]')
 
 const log: LogFn = (message, data) => {
     if (data) {
@@ -21,7 +21,7 @@ const log: LogFn = (message, data) => {
     }
 }
 
-export class AutocaptureDecider {
+export class ErrorTrackingAutocaptureCompositeTrigger {
     private readonly _posthog: PostHog
     private _triggers: Trigger[] = []
 
@@ -32,14 +32,16 @@ export class AutocaptureDecider {
     init(remoteConfig: RemoteConfig): void {
         const config = remoteConfig.errorTracking?.autoCaptureControls?.web
 
+        const persistence = new PersistenceHelper(
+            (key) => (this._posthog.get_property(key) as string) ?? null,
+            (key, value) => this._posthog.persistence?.register({ [key]: value })
+        ).withPrefix('error_tracking')
+
         const options: TriggerOptions = {
             posthog: this._posthog,
             window: globalWindow,
             log,
-            persistenceHelperFactory: createPersistenceHelperFactory(
-                (key) => (this._posthog.get_property(key) as string) ?? null,
-                (key, value) => this._posthog.persistence?.register({ [key]: value })
-            ),
+            persistence,
         }
 
         this._triggers = [

@@ -1,5 +1,5 @@
 import { URLTrigger } from '../../../../extensions/exception-autocapture/controls/triggers/url-trigger'
-import { createPersistenceHelperFactory } from '../../../../extensions/exception-autocapture/controls/triggers/persistence'
+import { PersistenceHelper } from '../../../../extensions/exception-autocapture/controls/triggers/persistence'
 import type { TriggerOptions } from '../../../../extensions/exception-autocapture/controls/triggers/types'
 import type { UrlTrigger } from '../../../../types'
 
@@ -16,6 +16,7 @@ interface GetTriggerParams {
     triggers?: UrlTrigger[]
     initialUrl?: string
     persistedData?: Record<string, string>
+    sessionId?: string
 }
 
 const createMockWindow = (initialUrl: string): MockWindow => ({
@@ -27,6 +28,10 @@ const createMockWindow = (initialUrl: string): MockWindow => ({
     },
 })
 
+const createMockPosthog = (sessionId: string) => ({
+    get_session_id: jest.fn(() => sessionId),
+})
+
 describe('URLTrigger', () => {
     const SESSION_ID = 'session-123'
     const OTHER_SESSION_ID = 'session-456'
@@ -35,20 +40,24 @@ describe('URLTrigger', () => {
         triggers = [],
         initialUrl = 'https://example.com/',
         persistedData = {},
+        sessionId = SESSION_ID,
     }: GetTriggerParams = {}) => {
         const mockWindow = createMockWindow(initialUrl)
+        const mockPosthog = createMockPosthog(sessionId)
         const storage: Record<string, string> = { ...persistedData }
 
+        const persistence = new PersistenceHelper(
+            (key) => storage[key] ?? null,
+            (key, value) => {
+                storage[key] = value
+            }
+        ).withPrefix('error_tracking')
+
         const options: TriggerOptions = {
-            posthog: {} as any,
+            posthog: mockPosthog as any,
             window: mockWindow as any,
             log: jest.fn(),
-            persistenceHelperFactory: createPersistenceHelperFactory(
-                (key) => storage[key] ?? null,
-                (key, value) => {
-                    storage[key] = value
-                }
-            ),
+            persistence,
         }
 
         const trigger = new URLTrigger(options, triggers)
@@ -58,7 +67,7 @@ describe('URLTrigger', () => {
             mockWindow.history.pushState()
         }
 
-        return { trigger, mockWindow, navigateTo, storage, options }
+        return { trigger, mockWindow, navigateTo, storage, options, persistence, mockPosthog }
     }
 
     it('returns null when no triggers configured', () => {
@@ -124,15 +133,23 @@ describe('URLTrigger', () => {
     })
 
     describe('session stickiness', () => {
-        it('persists session ID when triggered', () => {
-            const { trigger, navigateTo, storage } = createTrigger({
+        it('persists session ID when URL matches', () => {
+            const { storage } = createTrigger({
+                triggers: [{ url: '/trigger', matching: 'regex' }],
+                initialUrl: 'https://example.com/trigger',
+            })
+
+            expect(storage['$error_tracking_url_session']).toBe(SESSION_ID)
+        })
+
+        it('persists session ID when navigating to trigger URL', () => {
+            const { navigateTo, storage } = createTrigger({
                 triggers: [{ url: '/trigger', matching: 'regex' }],
             })
 
             expect(storage['$error_tracking_url_session']).toBeUndefined()
 
             navigateTo('https://example.com/trigger')
-            trigger.matches(SESSION_ID)
 
             expect(storage['$error_tracking_url_session']).toBe(SESSION_ID)
         })
@@ -157,33 +174,34 @@ describe('URLTrigger', () => {
 
         it('persists across page loads (simulated via persistence)', () => {
             const storage: Record<string, string> = {}
-            const persistenceHelperFactory = createPersistenceHelperFactory(
+            const persistence = new PersistenceHelper(
                 (key) => storage[key] ?? null,
                 (key, value) => {
                     storage[key] = value
                 }
-            )
+            ).withPrefix('error_tracking')
 
             // First "page load" - trigger matches
             const mockWindow1 = createMockWindow('https://example.com/trigger')
+            const mockPosthog1 = createMockPosthog(SESSION_ID)
             const options1: TriggerOptions = {
-                posthog: {} as any,
+                posthog: mockPosthog1 as any,
                 window: mockWindow1 as any,
                 log: jest.fn(),
-                persistenceHelperFactory,
+                persistence,
             }
-            const trigger1 = new URLTrigger(options1, [{ url: '/trigger', matching: 'regex' }])
+            new URLTrigger(options1, [{ url: '/trigger', matching: 'regex' }])
 
-            trigger1.matches(SESSION_ID)
             expect(storage['$error_tracking_url_session']).toBe(SESSION_ID)
 
             // Second "page load" - new trigger instance, but persistence remains
             const mockWindow2 = createMockWindow('https://example.com/other')
+            const mockPosthog2 = createMockPosthog(SESSION_ID)
             const options2: TriggerOptions = {
-                posthog: {} as any,
+                posthog: mockPosthog2 as any,
                 window: mockWindow2 as any,
                 log: jest.fn(),
-                persistenceHelperFactory,
+                persistence,
             }
             const trigger2 = new URLTrigger(options2, [{ url: '/trigger', matching: 'regex' }])
 

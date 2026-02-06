@@ -1,3 +1,4 @@
+import type { PostHog } from '@posthog/types'
 import type { Trigger, TriggerOptions } from './types'
 import type { PersistenceHelper } from './persistence'
 
@@ -12,14 +13,12 @@ export class FlagTrigger implements Trigger {
     private readonly _linkedFlag: LinkedFlag | null
     private readonly _persistence: PersistenceHelper
 
-    private _matchedFlagInSession: boolean = false
-
     constructor(options: TriggerOptions, linkedFlag: LinkedFlag | null) {
         this._linkedFlag = linkedFlag
-        this._persistence = options.persistenceHelperFactory.create('flag')
+        this._persistence = options.persistence.withPrefix('flag')
 
         if (this._linkedFlag) {
-            this._setupFlagListener(options)
+            this._setupFlagListener(options.posthog)
         }
     }
 
@@ -28,32 +27,17 @@ export class FlagTrigger implements Trigger {
             return null
         }
 
-        // Check if already triggered for this session (from persistence)
-        if (this._persistence.sessionMatchesTrigger(sessionId)) {
-            return true
-        }
-
-        // Check if we matched flag in this session (in-memory)
-        if (this._matchedFlagInSession) {
-            this._persistence.matchTriggerInSession(sessionId)
-            return true
-        }
-
-        return false
+        return this._persistence.sessionMatchesTrigger(sessionId) ? true : false
     }
 
-    private _setupFlagListener(options: TriggerOptions): void {
+    private _setupFlagListener(posthog: PostHog): void {
         const linkedFlag = this._linkedFlag
 
         if (!linkedFlag) {
             return
         }
 
-        options.posthog.onFeatureFlags((_flags: string[], variants: Record<string, unknown>) => {
-            if (this._matchedFlagInSession) {
-                return // Already matched
-            }
-
+        posthog.onFeatureFlags((_flags: string[], variants: Record<string, unknown>) => {
             if (!variants || !(linkedFlag.key in variants)) {
                 return
             }
@@ -68,7 +52,7 @@ export class FlagTrigger implements Trigger {
             }
 
             if (flagMatches) {
-                this._matchedFlagInSession = true
+                this._persistence.matchTriggerInSession(posthog.get_session_id())
             }
         })
     }

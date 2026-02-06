@@ -1,16 +1,17 @@
 import { FlagTrigger, LinkedFlag } from '../../../../extensions/exception-autocapture/controls/triggers/flag-trigger'
-import { createPersistenceHelperFactory } from '../../../../extensions/exception-autocapture/controls/triggers/persistence'
+import { PersistenceHelper } from '../../../../extensions/exception-autocapture/controls/triggers/persistence'
 import type { TriggerOptions } from '../../../../extensions/exception-autocapture/controls/triggers/types'
 
 type FlagCallback = (flags: string[], variants: Record<string, unknown>) => void
 
-const createMockPosthog = (): {
+const createMockPosthog = (sessionId: string): {
     posthog: any
     triggerFlags: FlagCallback
 } => {
     const callbacks: FlagCallback[] = []
 
     const posthog = {
+        get_session_id: jest.fn(() => sessionId),
         onFeatureFlags: jest.fn((callback: FlagCallback) => {
             callbacks.push(callback)
             return () => {
@@ -33,25 +34,31 @@ describe('FlagTrigger', () => {
     const SESSION_ID = 'session-123'
     const OTHER_SESSION_ID = 'session-456'
 
-    const createTrigger = (linkedFlag: LinkedFlag | null, persistedData: Record<string, string> = {}) => {
-        const { posthog, triggerFlags } = createMockPosthog()
+    const createTrigger = (
+        linkedFlag: LinkedFlag | null,
+        persistedData: Record<string, string> = {},
+        sessionId: string = SESSION_ID
+    ) => {
+        const { posthog, triggerFlags } = createMockPosthog(sessionId)
         const storage: Record<string, string> = { ...persistedData }
+
+        const persistence = new PersistenceHelper(
+            (key) => storage[key] ?? null,
+            (key, value) => {
+                storage[key] = value
+            }
+        ).withPrefix('error_tracking')
 
         const options: TriggerOptions = {
             posthog: posthog as any,
             window: undefined,
             log: jest.fn(),
-            persistenceHelperFactory: createPersistenceHelperFactory(
-                (key) => storage[key] ?? null,
-                (key, value) => {
-                    storage[key] = value
-                }
-            ),
+            persistence,
         }
 
         const trigger = new FlagTrigger(options, linkedFlag)
 
-        return { trigger, triggerFlags, storage, options }
+        return { trigger, triggerFlags, storage, options, posthog }
     }
 
     it('returns null when no flag is configured', () => {
@@ -141,13 +148,12 @@ describe('FlagTrigger', () => {
     })
 
     describe('session stickiness', () => {
-        it('persists session ID when triggered', () => {
-            const { trigger, triggerFlags, storage } = createTrigger({ key: 'my-flag' })
+        it('persists session ID when flag matches', () => {
+            const { triggerFlags, storage } = createTrigger({ key: 'my-flag' })
 
             expect(storage['$error_tracking_flag_session']).toBeUndefined()
 
             triggerFlags([], { 'my-flag': true })
-            trigger.matches(SESSION_ID)
 
             expect(storage['$error_tracking_flag_session']).toBe(SESSION_ID)
         })

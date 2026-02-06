@@ -1,16 +1,17 @@
 import { EventTrigger } from '../../../../extensions/exception-autocapture/controls/triggers/event-trigger'
-import { createPersistenceHelperFactory } from '../../../../extensions/exception-autocapture/controls/triggers/persistence'
+import { PersistenceHelper } from '../../../../extensions/exception-autocapture/controls/triggers/persistence'
 import type { TriggerOptions } from '../../../../extensions/exception-autocapture/controls/triggers/types'
 
 type EventCallback = (event: { event: string }) => void
 
-const createMockPosthog = (): {
+const createMockPosthog = (sessionId: string): {
     posthog: any
     fireEvent: (name: string) => void
 } => {
     const callbacks: EventCallback[] = []
 
     const posthog = {
+        get_session_id: jest.fn(() => sessionId),
         on: jest.fn((eventName: string, callback: EventCallback) => {
             if (eventName === 'eventCaptured') {
                 callbacks.push(callback)
@@ -35,25 +36,31 @@ describe('EventTrigger', () => {
     const SESSION_ID = 'session-123'
     const OTHER_SESSION_ID = 'session-456'
 
-    const createTrigger = (eventTriggers: string[], persistedData: Record<string, string> = {}) => {
-        const { posthog, fireEvent } = createMockPosthog()
+    const createTrigger = (
+        eventTriggers: string[],
+        persistedData: Record<string, string> = {},
+        sessionId: string = SESSION_ID
+    ) => {
+        const { posthog, fireEvent } = createMockPosthog(sessionId)
         const storage: Record<string, string> = { ...persistedData }
+
+        const persistence = new PersistenceHelper(
+            (key) => storage[key] ?? null,
+            (key, value) => {
+                storage[key] = value
+            }
+        ).withPrefix('error_tracking')
 
         const options: TriggerOptions = {
             posthog: posthog as any,
             window: undefined,
             log: jest.fn(),
-            persistenceHelperFactory: createPersistenceHelperFactory(
-                (key) => storage[key] ?? null,
-                (key, value) => {
-                    storage[key] = value
-                }
-            ),
+            persistence,
         }
 
         const trigger = new EventTrigger(options, eventTriggers)
 
-        return { trigger, fireEvent, storage, options }
+        return { trigger, fireEvent, storage, options, posthog }
     }
 
     it('returns null when no event triggers are configured', () => {
@@ -103,13 +110,12 @@ describe('EventTrigger', () => {
     })
 
     describe('session stickiness', () => {
-        it('persists session ID when triggered', () => {
-            const { trigger, fireEvent, storage } = createTrigger(['my-event'])
+        it('persists session ID when event fires', () => {
+            const { fireEvent, storage } = createTrigger(['my-event'])
 
             expect(storage['$error_tracking_event_session']).toBeUndefined()
 
             fireEvent('my-event')
-            trigger.matches(SESSION_ID)
 
             expect(storage['$error_tracking_event_session']).toBe(SESSION_ID)
         })
