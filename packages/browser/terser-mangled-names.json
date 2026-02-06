@@ -180,7 +180,6 @@
         "_getWindowId",
         "_handleButtonClick",
         "_handleClose",
-        "_handleDistinctIdChange",
         "_handleFormEmailChange",
         "_handleFormNameChange",
         "_handleFormSubmit",

@@ -19,6 +19,7 @@ interface WidgetProps {
     config: ConversationsRemoteConfig
     initialState?: ConversationsWidgetState
     initialUserTraits?: UserProvidedTraits | null
+    isUserIdentified?: boolean
     onSendMessage: (message: string) => Promise<void>
     onStateChange?: (state: ConversationsWidgetState) => void
     onIdentify?: (traits: UserProvidedTraits) => void
@@ -47,7 +48,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
 
         // Determine if we need to show the identification form
         const userTraits = props.initialUserTraits || null
-        const needsIdentification = this._needsIdentification(props.config, userTraits)
+        const needsIdentification = this._needsIdentification(props.config, userTraits, props.isUserIdentified)
 
         this.state = {
             state: props.initialState || 'closed',
@@ -67,7 +68,17 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
     /**
      * Check if we need to show the identification form
      */
-    private _needsIdentification(config: ConversationsRemoteConfig, traits: UserProvidedTraits | null): boolean {
+    private _needsIdentification(
+        config: ConversationsRemoteConfig,
+        traits: UserProvidedTraits | null,
+        isUserIdentified?: boolean
+    ): boolean {
+        // If user is already identified via PostHog, no form needed
+        // They've called posthog.identify() so we have their identity
+        if (isUserIdentified) {
+            return false
+        }
+
         // If requireEmail is not set, no identification needed
         if (!config.requireEmail) {
             return false
@@ -310,6 +321,16 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
      */
     getUserTraits(): UserProvidedTraits | null {
         return this.state.userTraits
+    }
+
+    /**
+     * Called when user identifies via posthog.identify()
+     * Hides the identification form since we now know who they are
+     */
+    setUserIdentified(): void {
+        if (this.state.showIdentificationForm) {
+            this.setState({ showIdentificationForm: false })
+        }
     }
 
     /**
