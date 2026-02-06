@@ -1,5 +1,5 @@
 import { URLTrigger } from '../../../../extensions/triggers/behaviour/url-trigger'
-import { PersistenceHelper, TriggerState } from '../../../../extensions/triggers/behaviour/persistence'
+import { PersistenceHelper } from '../../../../extensions/triggers/behaviour/persistence'
 import type { TriggerOptions } from '../../../../extensions/triggers/behaviour/types'
 import type { UrlTrigger } from '../../../../types'
 
@@ -32,19 +32,19 @@ describe('URLTrigger', () => {
     const createTrigger = ({
         triggers = [] as UrlTrigger[],
         initialUrl = 'https://example.com/',
-        persistedDecision,
+        persistedSessionId,
         sessionId = SESSION_ID,
     }: {
         triggers?: UrlTrigger[]
         initialUrl?: string
-        persistedDecision?: { sessionId: string; result: TriggerState }
+        persistedSessionId?: string
         sessionId?: string
     } = {}) => {
         const mockWindow = createMockWindow(initialUrl)
         const mockPosthog = createMockPosthog(sessionId)
         const storage: Record<string, unknown> = {}
-        if (persistedDecision) {
-            storage['$error_tracking_url_decision'] = persistedDecision
+        if (persistedSessionId) {
+            storage['$error_tracking_url_triggered'] = persistedSessionId
         }
 
         const persistence = new PersistenceHelper(
@@ -75,7 +75,7 @@ describe('URLTrigger', () => {
         const { trigger, storage } = createTrigger()
 
         expect(trigger.matches(SESSION_ID)).toBeNull()
-        expect(storage['$error_tracking_url_decision']).toBeUndefined()
+        expect(storage['$error_tracking_url_triggered']).toBeUndefined()
     })
 
     it('returns false when URL does not match', () => {
@@ -84,7 +84,7 @@ describe('URLTrigger', () => {
         })
 
         expect(trigger.matches(SESSION_ID)).toBe(false)
-        expect(storage['$error_tracking_url_decision']).toBeUndefined()
+        expect(storage['$error_tracking_url_triggered']).toBeUndefined()
     })
 
     it('returns true when initial URL matches', () => {
@@ -94,10 +94,7 @@ describe('URLTrigger', () => {
         })
 
         expect(trigger.matches(SESSION_ID)).toBe(true)
-        expect(storage['$error_tracking_url_decision']).toEqual({
-            sessionId: SESSION_ID,
-            result: TriggerState.Triggered,
-        })
+        expect(storage['$error_tracking_url_triggered']).toBe(SESSION_ID)
     })
 
     it('returns true when navigating to matching URL', () => {
@@ -108,36 +105,27 @@ describe('URLTrigger', () => {
         navigateTo('https://example.com/trigger')
 
         expect(trigger.matches(SESSION_ID)).toBe(true)
-        expect(storage['$error_tracking_url_decision']).toEqual({
-            sessionId: SESSION_ID,
-            result: TriggerState.Triggered,
-        })
+        expect(storage['$error_tracking_url_triggered']).toBe(SESSION_ID)
     })
 
     it('restores from persistence for same session', () => {
         const { trigger, storage } = createTrigger({
             triggers: [{ url: '/trigger', matching: 'regex' }],
-            persistedDecision: { sessionId: SESSION_ID, result: TriggerState.Triggered },
+            persistedSessionId: SESSION_ID,
         })
 
         expect(trigger.matches(SESSION_ID)).toBe(true)
-        expect(storage['$error_tracking_url_decision']).toEqual({
-            sessionId: SESSION_ID,
-            result: TriggerState.Triggered,
-        })
+        expect(storage['$error_tracking_url_triggered']).toBe(SESSION_ID)
     })
 
     it('does not restore for different session', () => {
         const { trigger, storage } = createTrigger({
             triggers: [{ url: '/trigger', matching: 'regex' }],
-            persistedDecision: { sessionId: OTHER_SESSION_ID, result: TriggerState.Triggered },
+            persistedSessionId: OTHER_SESSION_ID,
         })
 
         expect(trigger.matches(SESSION_ID)).toBe(false)
-        expect(storage['$error_tracking_url_decision']).toEqual({
-            sessionId: OTHER_SESSION_ID,
-            result: TriggerState.Triggered,
-        })
+        expect(storage['$error_tracking_url_triggered']).toBe(OTHER_SESSION_ID)
     })
 
     it('stays triggered after navigating away', () => {
@@ -149,9 +137,6 @@ describe('URLTrigger', () => {
         navigateTo('https://example.com/other')
 
         expect(trigger.matches(SESSION_ID)).toBe(true)
-        expect(storage['$error_tracking_url_decision']).toEqual({
-            sessionId: SESSION_ID,
-            result: TriggerState.Triggered,
-        })
+        expect(storage['$error_tracking_url_triggered']).toBe(SESSION_ID)
     })
 })

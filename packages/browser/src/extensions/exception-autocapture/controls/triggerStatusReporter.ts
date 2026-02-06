@@ -2,7 +2,7 @@ import type { Trigger } from '../../triggers/behaviour/types'
 import type { URLTrigger } from '../../triggers/behaviour/url-trigger'
 import type { EventTrigger } from '../../triggers/behaviour/event-trigger'
 import type { FlagTrigger } from '../../triggers/behaviour/flag-trigger'
-import type { SampleTrigger } from '../../triggers/behaviour/sample-trigger'
+import type { SampleRateTrigger } from '../../triggers/behaviour/sample-rate-trigger'
 
 export interface TriggerStatus {
     name: string
@@ -48,7 +48,7 @@ function getFlagTriggerDescription(trigger: FlagTrigger, result: boolean | null)
     return `Not matched - waiting for flag "${trigger.linkedFlag?.key}"${waitingVariantInfo}`
 }
 
-function getSampleTriggerDescription(trigger: SampleTrigger, result: boolean | null): string {
+function getSampleRateTriggerDescription(trigger: SampleRateTrigger, result: boolean | null): string {
     if (result === null) {
         return 'Not configured (no sample rate defined)'
     }
@@ -74,7 +74,7 @@ export function getTriggerStatus(trigger: Trigger, sessionId: string): TriggerSt
             description = getFlagTriggerDescription(trigger as FlagTrigger, result)
             break
         case 'sample':
-            description = getSampleTriggerDescription(trigger as SampleTrigger, result)
+            description = getSampleRateTriggerDescription(trigger as SampleRateTrigger, result)
             break
         default:
             description = result === null ? 'Not configured' : result ? 'Matched' : 'Not matched'
