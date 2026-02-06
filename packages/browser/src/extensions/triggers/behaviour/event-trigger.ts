@@ -4,21 +4,21 @@ import type { PersistenceHelper } from './persistence'
 
 export class EventTrigger implements Trigger {
     readonly name = 'event'
+    readonly eventTriggers: string[]
 
-    private readonly _eventTriggers: string[]
     private readonly _persistence: PersistenceHelper
 
     constructor(options: TriggerOptions, eventTriggers: string[]) {
-        this._eventTriggers = eventTriggers
+        this.eventTriggers = eventTriggers
         this._persistence = options.persistence.withPrefix('event')
 
-        if (this._eventTriggers.length > 0) {
+        if (this.eventTriggers.length > 0) {
             this._setupEventListener(options.posthog)
         }
     }
 
     matches(sessionId: string): boolean | null {
-        if (this._eventTriggers.length === 0) {
+        if (this.eventTriggers.length === 0) {
             return null
         }
 
@@ -31,7 +31,7 @@ export class EventTrigger implements Trigger {
                 return
             }
 
-            if (this._eventTriggers.includes(event.event)) {
+            if (this.eventTriggers.includes(event.event)) {
                 this._persistence.matchTriggerInSession(posthog.get_session_id())
             }
         })

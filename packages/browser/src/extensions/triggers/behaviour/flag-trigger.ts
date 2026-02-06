@@ -8,21 +8,20 @@ export interface LinkedFlag {
 
 export class FlagTrigger implements Trigger {
     readonly name = 'flag'
-
-    private readonly _linkedFlag: LinkedFlag | null
+    readonly linkedFlag: LinkedFlag | null
 
     private _flagMatches: boolean = false
 
     constructor(options: TriggerOptions, linkedFlag: LinkedFlag | null) {
-        this._linkedFlag = linkedFlag
+        this.linkedFlag = linkedFlag
 
-        if (this._linkedFlag) {
+        if (this.linkedFlag) {
             this._setupFlagListener(options.posthog)
         }
     }
 
     matches(_sessionId: string): boolean | null {
-        if (!this._linkedFlag) {
+        if (!this.linkedFlag) {
             return null
         }
 
@@ -30,7 +29,7 @@ export class FlagTrigger implements Trigger {
     }
 
     private _setupFlagListener(posthog: PostHog): void {
-        const linkedFlag = this._linkedFlag
+        const linkedFlag = this.linkedFlag
 
         if (!linkedFlag) {
             return
