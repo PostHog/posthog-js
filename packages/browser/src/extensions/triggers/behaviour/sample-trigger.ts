@@ -1,20 +1,26 @@
 import { isNull } from '@posthog/core'
+import type { PostHog } from '../../../posthog-core'
 import type { Trigger, TriggerOptions } from './types'
-import type { PersistenceHelper } from './persistence'
+
+interface SamplingDecision {
+    sessionId: string
+    sampled: boolean
+}
+
+const PERSISTENCE_KEY = '$error_tracking_sample_decision'
 
 export class SampleTrigger implements Trigger {
     readonly name = 'sample'
     readonly sampleRate: number | null
 
-    private readonly _persistence: PersistenceHelper
+    private readonly _posthog: PostHog
 
-    // Track sampling decision in memory (needed because we don't persist "sampled out")
-    private _sampledSessionId: string | null = null
-    private _sampled: boolean = false
+    // In-memory cache of the sampling decision
+    private _decision: SamplingDecision | null = null
 
     constructor(options: TriggerOptions, sampleRate: number | null) {
         this.sampleRate = sampleRate
-        this._persistence = options.persistence.withPrefix('sample')
+        this._posthog = options.posthog
     }
 
     matches(sessionId: string): boolean | null {
@@ -22,24 +28,35 @@ export class SampleTrigger implements Trigger {
             return null
         }
 
-        // Check if already sampled for this session (from persistence)
-        if (this._persistence.sessionMatchesTrigger(sessionId)) {
-            return true
+        // Check in-memory cache first
+        if (this._decision?.sessionId === sessionId) {
+            return this._decision.sampled
         }
 
-        // Check if we already made a sampling decision for this session (in-memory)
-        if (this._sampledSessionId === sessionId) {
-            return this._sampled
+        // Check persistence
+        const persisted = this._getPersistedDecision()
+        if (persisted?.sessionId === sessionId) {
+            this._decision = persisted
+            return persisted.sampled
         }
 
         // Make new sampling decision
-        this._sampledSessionId = sessionId
-        this._sampled = Math.random() < this.sampleRate
+        const sampled = Math.random() < this.sampleRate
+        this._decision = { sessionId, sampled }
+        this._persistDecision(this._decision)
 
-        if (this._sampled) {
-            this._persistence.matchTriggerInSession(sessionId)
+        return sampled
+    }
+
+    private _getPersistedDecision(): SamplingDecision | null {
+        const value = this._posthog.get_property(PERSISTENCE_KEY)
+        if (value && typeof value === 'object' && 'sessionId' in value && 'sampled' in value) {
+            return value as SamplingDecision
         }
+        return null
+    }
 
-        return this._sampled
+    private _persistDecision(decision: SamplingDecision): void {
+        this._posthog.persistence?.register({ [PERSISTENCE_KEY]: decision })
     }
 }
