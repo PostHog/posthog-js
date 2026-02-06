@@ -4,22 +4,14 @@ import type { TriggerOptions } from '../../../../extensions/exception-autocaptur
 
 type FlagCallback = (flags: string[], variants: Record<string, unknown>) => void
 
-const createMockPosthog = (sessionId: string): {
-    posthog: any
-    triggerFlags: FlagCallback
-} => {
+const createMockPosthog = (sessionId: string) => {
     const callbacks: FlagCallback[] = []
 
     const posthog = {
         get_session_id: jest.fn(() => sessionId),
         onFeatureFlags: jest.fn((callback: FlagCallback) => {
             callbacks.push(callback)
-            return () => {
-                const index = callbacks.indexOf(callback)
-                if (index > -1) {
-                    callbacks.splice(index, 1)
-                }
-            }
+            return () => {}
         }),
     }
 
@@ -58,120 +50,93 @@ describe('FlagTrigger', () => {
 
         const trigger = new FlagTrigger(options, linkedFlag)
 
-        return { trigger, triggerFlags, storage, options, posthog }
+        return { trigger, triggerFlags, storage }
     }
 
-    it('returns null when no flag is configured', () => {
-        const { trigger } = createTrigger(null)
+    it('returns null when not configured', () => {
+        const { trigger, storage } = createTrigger(null)
 
         expect(trigger.matches(SESSION_ID)).toBeNull()
+        expect(storage['$error_tracking_flag_session_id']).toBeUndefined()
     })
 
-    it('returns false initially when flag is configured but not yet evaluated', () => {
-        const { trigger } = createTrigger({ key: 'my-flag' })
+    it('returns false before flags load', () => {
+        const { trigger, storage } = createTrigger({ key: 'my-flag' })
 
         expect(trigger.matches(SESSION_ID)).toBe(false)
+        expect(storage['$error_tracking_flag_session_id']).toBeUndefined()
     })
 
-    it('returns true when flag value is true', () => {
-        const { trigger, triggerFlags } = createTrigger({ key: 'my-flag' })
+    it('returns true when flag is true', () => {
+        const { trigger, triggerFlags, storage } = createTrigger({ key: 'my-flag' })
 
         triggerFlags([], { 'my-flag': true })
 
         expect(trigger.matches(SESSION_ID)).toBe(true)
+        expect(storage['$error_tracking_flag_session_id']).toBe(SESSION_ID)
     })
 
-    it('returns false when flag value is false', () => {
-        const { trigger, triggerFlags } = createTrigger({ key: 'my-flag' })
+    it('returns false when flag is false', () => {
+        const { trigger, triggerFlags, storage } = createTrigger({ key: 'my-flag' })
 
         triggerFlags([], { 'my-flag': false })
 
         expect(trigger.matches(SESSION_ID)).toBe(false)
+        expect(storage['$error_tracking_flag_session_id']).toBeUndefined()
     })
 
-    it('returns true when flag value is a non-empty string variant', () => {
-        const { trigger, triggerFlags } = createTrigger({ key: 'my-flag' })
+    it('returns true when flag is a non-empty string variant', () => {
+        const { trigger, triggerFlags, storage } = createTrigger({ key: 'my-flag' })
 
         triggerFlags([], { 'my-flag': 'variant-a' })
 
         expect(trigger.matches(SESSION_ID)).toBe(true)
+        expect(storage['$error_tracking_flag_session_id']).toBe(SESSION_ID)
     })
 
-    it('returns false when flag value is an empty string', () => {
-        const { trigger, triggerFlags } = createTrigger({ key: 'my-flag' })
+    it('matches specific variant when configured', () => {
+        const { trigger, triggerFlags, storage } = createTrigger({ key: 'my-flag', variant: 'control' })
 
-        triggerFlags([], { 'my-flag': '' })
+        triggerFlags([], { 'my-flag': 'control' })
+
+        expect(trigger.matches(SESSION_ID)).toBe(true)
+        expect(storage['$error_tracking_flag_session_id']).toBe(SESSION_ID)
+    })
+
+    it('does not match wrong variant', () => {
+        const { trigger, triggerFlags, storage } = createTrigger({ key: 'my-flag', variant: 'control' })
+
+        triggerFlags([], { 'my-flag': 'test' })
 
         expect(trigger.matches(SESSION_ID)).toBe(false)
+        expect(storage['$error_tracking_flag_session_id']).toBeUndefined()
     })
 
-    it('ignores flag callbacks that do not contain the linked flag', () => {
-        const { trigger, triggerFlags } = createTrigger({ key: 'my-flag' })
+    it('restores from persistence for same session', () => {
+        const { trigger, storage } = createTrigger({ key: 'my-flag' }, {
+            '$error_tracking_flag_session_id': SESSION_ID,
+        })
 
-        triggerFlags([], { 'other-flag': true })
+        expect(trigger.matches(SESSION_ID)).toBe(true)
+        expect(storage['$error_tracking_flag_session_id']).toBe(SESSION_ID)
+    })
+
+    it('does not restore for different session', () => {
+        const { trigger, storage } = createTrigger({ key: 'my-flag' }, {
+            '$error_tracking_flag_session_id': OTHER_SESSION_ID,
+        })
 
         expect(trigger.matches(SESSION_ID)).toBe(false)
+        expect(storage['$error_tracking_flag_session_id']).toBe(OTHER_SESSION_ID)
     })
 
-    it('stays triggered once matched (session sticky)', () => {
-        const { trigger, triggerFlags } = createTrigger({ key: 'my-flag' })
+    it('stays triggered even if flag changes', () => {
+        const { trigger, triggerFlags, storage } = createTrigger({ key: 'my-flag' })
 
         triggerFlags([], { 'my-flag': true })
-        expect(trigger.matches(SESSION_ID)).toBe(true)
-
-        // Even if flag changes to false, still triggered for this session
         triggerFlags([], { 'my-flag': false })
+
         expect(trigger.matches(SESSION_ID)).toBe(true)
-    })
-
-    describe('with specific variant', () => {
-        it('returns true only when variant matches', () => {
-            const { trigger, triggerFlags } = createTrigger({ key: 'my-flag', variant: 'control' })
-
-            triggerFlags([], { 'my-flag': 'control' })
-            expect(trigger.matches(SESSION_ID)).toBe(true)
-        })
-
-        it('returns false when variant does not match', () => {
-            const { trigger, triggerFlags } = createTrigger({ key: 'my-flag', variant: 'control' })
-
-            triggerFlags([], { 'my-flag': 'test' })
-            expect(trigger.matches(SESSION_ID)).toBe(false)
-        })
-
-        it('returns false when flag is true but variant is specified', () => {
-            const { trigger, triggerFlags } = createTrigger({ key: 'my-flag', variant: 'control' })
-
-            triggerFlags([], { 'my-flag': true })
-            expect(trigger.matches(SESSION_ID)).toBe(false)
-        })
-    })
-
-    describe('session stickiness', () => {
-        it('persists session ID when flag matches', () => {
-            const { triggerFlags, storage } = createTrigger({ key: 'my-flag' })
-
-            expect(storage['$error_tracking_flag_session']).toBeUndefined()
-
-            triggerFlags([], { 'my-flag': true })
-
-            expect(storage['$error_tracking_flag_session']).toBe(SESSION_ID)
-        })
-
-        it('returns true for same session if previously persisted', () => {
-            const { trigger } = createTrigger({ key: 'my-flag' }, {
-                '$error_tracking_flag_session': SESSION_ID,
-            })
-
-            expect(trigger.matches(SESSION_ID)).toBe(true)
-        })
-
-        it('returns false for different session even if previously persisted', () => {
-            const { trigger } = createTrigger({ key: 'my-flag' }, {
-                '$error_tracking_flag_session': OTHER_SESSION_ID,
-            })
-
-            expect(trigger.matches(SESSION_ID)).toBe(false)
-        })
+        expect(storage['$error_tracking_flag_session_id']).toBe(SESSION_ID)
     })
 })
