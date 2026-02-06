@@ -7,7 +7,7 @@ import type { SampleRateTrigger } from '../../triggers/behaviour/sample-rate-tri
 export interface TriggerStatus {
     name: string
     result: boolean | null
-    description: string
+    config: Record<string, unknown>
 }
 
 export interface AutocaptureTriggersStatus {
@@ -16,71 +16,53 @@ export interface AutocaptureTriggersStatus {
     triggers: TriggerStatus[]
 }
 
-function getUrlTriggerDescription(trigger: URLTrigger, result: boolean | null): string {
-    if (result === null) {
-        return 'Not configured (no URL triggers defined)'
+function getUrlTriggerConfig(trigger: URLTrigger): Record<string, unknown> {
+    return {
+        urls: trigger.urlTriggers.map((t) => t.url),
     }
-    if (result) {
-        return 'Matched - URL trigger activated for session'
-    }
-    return `Not matched - waiting for URL: ${trigger.urlTriggers.map((t) => t.url).join(', ')}`
 }
 
-function getEventTriggerDescription(trigger: EventTrigger, result: boolean | null): string {
-    if (result === null) {
-        return 'Not configured (no event triggers defined)'
+function getEventTriggerConfig(trigger: EventTrigger): Record<string, unknown> {
+    return {
+        events: trigger.eventTriggers,
     }
-    if (result) {
-        return 'Matched - event trigger activated for session'
-    }
-    return `Not matched - waiting for events: ${trigger.eventTriggers.join(', ')}`
 }
 
-function getFlagTriggerDescription(trigger: FlagTrigger, result: boolean | null): string {
-    if (result === null) {
-        return 'Not configured (no linked flag defined)'
+function getFlagTriggerConfig(trigger: FlagTrigger): Record<string, unknown> {
+    return {
+        flagKey: trigger.linkedFlag?.key ?? null,
+        variant: trigger.linkedFlag?.variant ?? null,
     }
-    const variantInfo = trigger.linkedFlag?.variant ? ` (variant: ${trigger.linkedFlag.variant})` : ''
-    if (result) {
-        return `Matched - flag "${trigger.linkedFlag?.key}" is enabled${variantInfo}`
-    }
-    const waitingVariantInfo = trigger.linkedFlag?.variant ? ` with variant "${trigger.linkedFlag.variant}"` : ''
-    return `Not matched - waiting for flag "${trigger.linkedFlag?.key}"${waitingVariantInfo}`
 }
 
-function getSampleRateTriggerDescription(trigger: SampleRateTrigger, result: boolean | null): string {
-    if (result === null) {
-        return 'Not configured (no sample rate defined)'
+function getSampleRateTriggerConfig(trigger: SampleRateTrigger): Record<string, unknown> {
+    return {
+        sampleRate: trigger.sampleRate,
     }
-    const ratePercent = (trigger.sampleRate! * 100).toFixed(1)
-    if (result) {
-        return `Matched - session sampled in at ${ratePercent}% rate`
-    }
-    return `Not matched - session sampled out at ${ratePercent}% rate`
 }
 
 export function getTriggerStatus(trigger: Trigger, sessionId: string): TriggerStatus {
     const result = trigger.matches(sessionId)
-    let description: string
+    let config: Record<string, unknown>
 
     switch (trigger.name) {
         case 'url':
-            description = getUrlTriggerDescription(trigger as URLTrigger, result)
+            config = getUrlTriggerConfig(trigger as URLTrigger)
             break
         case 'event':
-            description = getEventTriggerDescription(trigger as EventTrigger, result)
+            config = getEventTriggerConfig(trigger as EventTrigger)
             break
         case 'flag':
-            description = getFlagTriggerDescription(trigger as FlagTrigger, result)
+            config = getFlagTriggerConfig(trigger as FlagTrigger)
             break
-        case 'sample-rate':
-            description = getSampleRateTriggerDescription(trigger as SampleRateTrigger, result)
+        case 'sample':
+            config = getSampleRateTriggerConfig(trigger as SampleRateTrigger)
             break
         default:
-            description = result === null ? 'Not configured' : result ? 'Matched' : 'Not matched'
+            config = {}
     }
 
-    return { name: trigger.name, result, description }
+    return { name: trigger.name, result, config }
 }
 
 export function getTriggersStatus(
