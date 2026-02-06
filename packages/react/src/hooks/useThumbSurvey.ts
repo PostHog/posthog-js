@@ -1,6 +1,6 @@
-import { useState, useCallback, useRef, useMemo, type RefCallback } from 'react'
+import { useState, useCallback, useRef, useMemo, type RefCallback, useEffect } from 'react'
 import { usePostHog } from './usePostHog'
-import { DisplaySurveyType, SurveyPosition } from 'posthog-js'
+import { DisplaySurveyType, SurveyEventName, SurveyEventProperties, SurveyPosition } from 'posthog-js'
 
 export interface UseThumbSurveyOptions {
     /** ID of the target PostHog survey */
@@ -11,6 +11,8 @@ export interface UseThumbSurveyOptions {
     properties?: Record<string, any>
     /** Callback on thumb button click */
     onResponse?: (response: 'up' | 'down') => void
+    /** Disable automatically emitting `survey shown` on hook mount. Defaults to false. */
+    disableAutoShownTracking?: boolean
 }
 
 export interface UseThumbSurveyResult {
@@ -20,6 +22,8 @@ export interface UseThumbSurveyResult {
     response: 'up' | 'down' | null
     /** Ref to attach to the trigger element for positioning the followup survey popup */
     triggerRef: RefCallback<HTMLElement>
+    /** Method to manually trigger a `survey shown` event. Only available when disableAutoShownTracking is true. */
+    trackShown?: () => void
 }
 
 const TRIGGER_ATTR = 'data-ph-thumb-survey-trigger'
@@ -60,6 +64,8 @@ const TRIGGER_ATTR = 'data-ph-thumb-survey-trigger'
  * Notes:
  * - The thumbs up/down response will ALWAYS be recorded, whether your survey is set to collect partial responses or not.
  * - By default, followup questions will be displayed as a pop-up next to the triggerRef. Use options.position to change the position.
+ * - By default, `survey shown` is emitted automatically on hook mount. To prevent this behavior, set `disableAutoShownTracking: true`,
+ *   and manually call `trackShown()` when you want to emit this event.
  *
  * @param options UseThumbSurveyOptions
  * @returns UseThumbSurveyResult
@@ -69,6 +75,7 @@ export function useThumbSurvey({
     displayPosition = SurveyPosition.NextToTrigger,
     properties,
     onResponse,
+    disableAutoShownTracking,
 }: UseThumbSurveyOptions): UseThumbSurveyResult {
     const posthog = usePostHog()
     const [responded, setResponded] = useState<'up' | 'down' | null>(null)
@@ -89,9 +96,29 @@ export function useThumbSurvey({
         [triggerValue]
     )
 
+    const shownRef = useRef(false)
+    const respondedRef = useRef(false)
+
+    const trackShown = useCallback(() => {
+        if (shownRef.current || !posthog) return
+        shownRef.current = true
+        posthog.capture(SurveyEventName.SHOWN, {
+            [SurveyEventProperties.SURVEY_ID]: surveyId,
+            sessionRecordingUrl: posthog.get_session_replay_url?.(),
+            ...properties,
+        })
+    }, [posthog, surveyId, properties])
+
+    useEffect(() => {
+        if (!disableAutoShownTracking) {
+            trackShown()
+        }
+    }, [trackShown, disableAutoShownTracking])
+
     const respond = useCallback(
         (value: 'up' | 'down') => {
-            if (!posthog?.surveys || responded) return
+            if (!posthog?.surveys || respondedRef.current) return
+            respondedRef.current = true
 
             setResponded(value)
             onResponse?.(value)
@@ -104,10 +131,16 @@ export function useThumbSurvey({
                 initialResponses: { 0: value === 'up' ? 1 : 2 },
                 position: displayPosition,
                 selector: `[${TRIGGER_ATTR}="${triggerValue}"]`,
+                skipShownEvent: true,
             })
         },
-        [posthog, surveyId, displayPosition, properties, responded, onResponse, triggerValue]
+        [posthog, surveyId, displayPosition, properties, onResponse, triggerValue]
     )
 
-    return { respond, response: responded, triggerRef }
+    return {
+        respond,
+        response: responded,
+        triggerRef,
+        ...(disableAutoShownTracking && { trackShown }),
+    }
 }

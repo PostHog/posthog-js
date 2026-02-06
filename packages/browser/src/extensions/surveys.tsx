@@ -223,18 +223,19 @@ export class SurveyManager {
 
         const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
         const { shadow } = retrieveSurveyShadow(survey, this._posthog)
+
+        const surveyPopupProps: SurveyPopupProps = {
+            posthog: this._posthog,
+            survey: survey,
+            removeSurveyFromFocus: this._removeSurveyFromFocus,
+            properties: properties,
+            style: positionStyle,
+            isSurveyCompleted: isSurveyCompleted,
+            skipShownEvent: options?.skipShownEvent,
+        }
+
         if (delaySeconds <= 0) {
-            return render(
-                <SurveyPopup
-                    posthog={this._posthog}
-                    survey={survey}
-                    removeSurveyFromFocus={this._removeSurveyFromFocus}
-                    properties={properties}
-                    style={positionStyle}
-                    isSurveyCompleted={isSurveyCompleted}
-                />,
-                shadow
-            )
+            return render(<SurveyPopup {...surveyPopupProps} />, shadow)
         }
         const timeoutId = setTimeout(() => {
             // remove survey to keep `_surveyTimeouts` as a true list of "pending" surveys
@@ -246,12 +247,14 @@ export class SurveyManager {
             // rendering with surveyPopupDelaySeconds = 0 because we're already handling the timeout here
             render(
                 <SurveyPopup
-                    posthog={this._posthog}
-                    survey={{ ...survey, appearance: { ...survey.appearance, surveyPopupDelaySeconds: 0 } }}
-                    removeSurveyFromFocus={this._removeSurveyFromFocus}
-                    properties={properties}
-                    style={positionStyle}
-                    isSurveyCompleted={isSurveyCompleted}
+                    {...surveyPopupProps}
+                    survey={{
+                        ...survey,
+                        appearance: {
+                            ...survey.appearance,
+                            surveyPopupDelaySeconds: 0,
+                        },
+                    }}
                 />,
                 shadow
             )
@@ -932,7 +935,8 @@ export function usePopupVisibility(
     isPreviewMode: boolean,
     removeSurveyFromFocus: (survey: SurveyWithTypeAndAppearance) => void,
     isPopup: boolean,
-    surveyContainerRef?: RefObject<HTMLDivElement>
+    surveyContainerRef?: RefObject<HTMLDivElement>,
+    skipShownEvent?: boolean
 ) {
     const [isPopupVisible, setIsPopupVisible] = useState(
         isPreviewMode || millisecondDelay === 0 || survey.type === SurveyType.ExternalSurvey
@@ -1001,13 +1005,15 @@ export function usePopupVisibility(
             }
             setIsPopupVisible(true)
             window.dispatchEvent(new Event('PHSurveyShown'))
-            posthog.capture(SurveyEventName.SHOWN, {
-                [SurveyEventProperties.SURVEY_NAME]: survey.name,
-                [SurveyEventProperties.SURVEY_ID]: survey.id,
-                [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
-                [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
-                sessionRecordingUrl: posthog.get_session_replay_url?.(),
-            })
+            if (!skipShownEvent) {
+                posthog.capture(SurveyEventName.SHOWN, {
+                    [SurveyEventProperties.SURVEY_NAME]: survey.name,
+                    [SurveyEventProperties.SURVEY_ID]: survey.id,
+                    [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
+                    [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
+                    sessionRecordingUrl: posthog.get_session_replay_url?.(),
+                })
+            }
             localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
         }
 
@@ -1058,6 +1064,8 @@ interface SurveyPopupProps {
     properties?: Properties
     /** if true, survey popup will only render if there is a thank-you message */
     isSurveyCompleted?: boolean
+    /** When true, `survey shown` events will not be emitted automatically */
+    skipShownEvent?: boolean
 }
 
 function getTabPositionStyles(position: SurveyTabPosition = SurveyTabPosition.Right): JSX.CSSProperties {
@@ -1093,6 +1101,7 @@ export function SurveyPopup({
     onCloseConfirmationMessage = () => {},
     properties,
     isSurveyCompleted,
+    skipShownEvent,
 }: SurveyPopupProps) {
     const surveyContainerRef = useRef<HTMLDivElement>(null)
     const isPreviewMode = Number.isInteger(previewPageIndex)
@@ -1107,7 +1116,8 @@ export function SurveyPopup({
         isPreviewMode,
         removeSurveyFromFocus,
         isPopup,
-        surveyContainerRef
+        surveyContainerRef,
+        skipShownEvent
     )
 
     /**
