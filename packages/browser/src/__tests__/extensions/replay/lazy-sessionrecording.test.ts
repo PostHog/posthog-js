@@ -350,6 +350,80 @@ describe('Lazy SessionRecording', () => {
             })
         })
 
+        describe('remote config cache invalidation', () => {
+            const FIVE_MINUTES_IN_MS = 5 * 60 * 1000
+
+            it.each([
+                ['ignores config with no cache_timestamp (legacy)', { enabled: true, endpoint: '/s/' }, false],
+                [
+                    'ignores config with stale cache_timestamp (> 5 minutes old)',
+                    { enabled: true, endpoint: '/s/', cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000 },
+                    false,
+                ],
+                [
+                    'uses config with fresh cache_timestamp (< 5 minutes old)',
+                    { enabled: true, endpoint: '/s/', cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS + 60000 },
+                    true,
+                ],
+                [
+                    'uses config with very recent cache_timestamp',
+                    { enabled: true, endpoint: '/s/', cache_timestamp: Date.now() - 1000 },
+                    true,
+                ],
+            ])('%s', (_name, persistedConfig, shouldUseConfig) => {
+                // stop recording so TTL check is active
+                sessionRecording.stopRecording()
+
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: persistedConfig,
+                })
+
+                const result = sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']
+
+                if (shouldUseConfig) {
+                    expect(result?.enabled).toBe(true)
+                } else {
+                    expect(result).toBeUndefined()
+                    expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBeUndefined()
+                }
+            })
+
+            it('waits for fresh remote config when persisted config is stale', () => {
+                // stop recording so TTL check is active
+                sessionRecording.stopRecording()
+
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: { enabled: true, endpoint: '/s/' },
+                })
+
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']).toBeUndefined()
+
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+                const config = sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']
+                expect(config?.enabled).toBe(true)
+                expect(config?.cache_timestamp).toBeDefined()
+                expect(Date.now() - config!.cache_timestamp!).toBeLessThan(1000)
+            })
+
+            it('trusts stale config once recording has started (long-lived SPA)', () => {
+                expect(sessionRecording['_lazyLoadedSessionRecording'].isStarted).toBe(true)
+
+                // simulate time passing and config becoming stale
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: {
+                        enabled: true,
+                        endpoint: '/s/',
+                        cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000,
+                    },
+                })
+
+                // should still return config because recording has started
+                const config = sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']
+                expect(config?.enabled).toBe(true)
+            })
+        })
+
         describe('isConsoleLogCaptureEnabled', () => {
             it.each([
                 ['enabled when both enabled', true, true, true],
@@ -399,6 +473,7 @@ describe('Lazy SessionRecording', () => {
                 ) => {
                     posthog.persistence?.register({
                         [SESSION_RECORDING_REMOTE_CONFIG]: {
+                            cache_timestamp: Date.now(),
                             canvasRecording: { enabled: serverSide, fps: 4, quality: '0.1' },
                         },
                     })
@@ -430,6 +505,7 @@ describe('Lazy SessionRecording', () => {
                 ) => {
                     posthog.persistence?.register({
                         [SESSION_RECORDING_REMOTE_CONFIG]: {
+                            cache_timestamp: Date.now(),
                             canvasRecording: { enabled: true, fps, quality },
                         },
                     })
@@ -488,6 +564,7 @@ describe('Lazy SessionRecording', () => {
                 ) => {
                     posthog.persistence?.register({
                         [SESSION_RECORDING_REMOTE_CONFIG]: {
+                            cache_timestamp: Date.now(),
                             networkPayloadCapture: { capturePerformance: serverSide },
                         },
                     })
@@ -570,6 +647,7 @@ describe('Lazy SessionRecording', () => {
                 ) => {
                     posthog.persistence?.register({
                         [SESSION_RECORDING_REMOTE_CONFIG]: {
+                            cache_timestamp: Date.now(),
                             masking: serverConfig,
                         },
                     })

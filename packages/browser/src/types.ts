@@ -152,6 +152,11 @@ export type SessionRecordingPersistedConfig = Omit<
     | 'sampleRate'
     | 'minimumDurationMilliseconds'
 > & {
+    /**
+     * Used to determine if the persisted config is still valid or we need to wait for a new one
+     * only accepts undefined since older versions of the library didn't set this.
+     */
+    cache_timestamp?: number
     enabled: boolean
     networkPayloadCapture: SessionRecordingRemoteConfig['networkPayloadCapture'] & {
         capturePerformance: RemoteConfig['capturePerformance']

@@ -696,6 +696,21 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return undefined
         }
         const parsedConfig = isObject(persistedConfig) ? persistedConfig : JSON.parse(persistedConfig)
+
+        // Only check TTL if recording hasn't started yet
+        // Once started, trust the config until a hard page load
+        if (!this.isStarted) {
+            const cacheTimestamp = parsedConfig.cache_timestamp
+            if (!cacheTimestamp || Date.now() - cacheTimestamp > FIVE_MINUTES) {
+                logger.info('persisted remote config for session recording is stale and will be ignored', {
+                    cacheTimestamp,
+                    persistedConfig,
+                })
+                this._instance.persistence?.unregister(SESSION_RECORDING_REMOTE_CONFIG)
+                return undefined
+            }
+        }
+
         return parsedConfig as SessionRecordingPersistedConfig
     }
 
