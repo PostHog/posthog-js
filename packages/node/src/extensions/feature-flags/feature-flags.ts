@@ -126,8 +126,8 @@ class FeatureFlagsPoller {
     key: string,
     distinctId: string,
     groups: Record<string, string> = {},
-    personProperties: Record<string, string> = {},
-    groupProperties: Record<string, Record<string, string>> = {}
+    personProperties: Record<string, any> = {},
+    groupProperties: Record<string, Record<string, any>> = {}
   ): Promise<FeatureFlagValue | undefined> {
     await this.loadFeatureFlags()
 
@@ -166,8 +166,8 @@ class FeatureFlagsPoller {
   async getAllFlagsAndPayloads(
     distinctId: string,
     groups: Record<string, string> = {},
-    personProperties: Record<string, string> = {},
-    groupProperties: Record<string, Record<string, string>> = {},
+    personProperties: Record<string, any> = {},
+    groupProperties: Record<string, Record<string, any>> = {},
     flagKeysToExplicitlyEvaluate?: string[]
   ): Promise<{
     response: Record<string, FeatureFlagValue>
@@ -221,8 +221,8 @@ class FeatureFlagsPoller {
     flag: PostHogFeatureFlag,
     distinctId: string,
     groups: Record<string, string> = {},
-    personProperties: Record<string, string> = {},
-    groupProperties: Record<string, Record<string, string>> = {},
+    personProperties: Record<string, any> = {},
+    groupProperties: Record<string, Record<string, any>> = {},
     matchValue?: FeatureFlagValue,
     evaluationCache?: Record<string, FeatureFlagValue>,
     skipLoadCheck: boolean = false
@@ -265,8 +265,8 @@ class FeatureFlagsPoller {
     flag: PostHogFeatureFlag,
     distinctId: string,
     groups: Record<string, string> = {},
-    personProperties: Record<string, string> = {},
-    groupProperties: Record<string, Record<string, string>> = {},
+    personProperties: Record<string, any> = {},
+    groupProperties: Record<string, Record<string, any>> = {},
     evaluationCache: Record<string, FeatureFlagValue> = {}
   ): Promise<FeatureFlagValue> {
     if (flag.ensure_experience_continuity) {
@@ -316,7 +316,7 @@ class FeatureFlagsPoller {
   private getBucketingValueForFlag(
     flag: PostHogFeatureFlag,
     distinctId: string,
-    properties: Record<string, string>
+    properties: Record<string, any>
   ): string | undefined {
     if (flag.bucketing_identifier === 'device_id') {
       const deviceId = properties?.$device_id
@@ -363,7 +363,7 @@ class FeatureFlagsPoller {
   private async evaluateFlagDependency(
     property: FlagProperty,
     distinctId: string,
-    properties: Record<string, string>,
+    properties: Record<string, any>,
     evaluationCache: Record<string, FeatureFlagValue>
   ): Promise<boolean> {
     const targetFlagKey = property.key
@@ -465,7 +465,7 @@ class FeatureFlagsPoller {
   async matchFeatureFlagProperties(
     flag: PostHogFeatureFlag,
     bucketingValue: string,
-    properties: Record<string, string>,
+    properties: Record<string, any>,
     evaluationCache: Record<string, FeatureFlagValue> = {},
     distinctId: string = bucketingValue
   ): Promise<FeatureFlagValue> {
@@ -515,7 +515,7 @@ class FeatureFlagsPoller {
     flag: PostHogFeatureFlag,
     bucketingValue: string,
     condition: FeatureFlagCondition,
-    properties: Record<string, string>,
+    properties: Record<string, any>,
     evaluationCache: Record<string, FeatureFlagValue> = {},
     distinctId: string = bucketingValue
   ): Promise<boolean> {
