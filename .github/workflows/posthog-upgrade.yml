@@ -53,10 +53,7 @@ jobs:
                   PACKAGE_NAME: ${{ github.event.inputs.package_name }}
                   PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
               run: |
-                  shopt -s globstar
-                  OUTGOING_VERSION=$(jq -r --arg pkg "$PACKAGE_NAME" \
-                    '.dependencies[$pkg] // empty' **/package.json 2>/dev/null | \
-                    sed 's/^[^0-9]*//' | sort | uniq -c | sort -rn | head -1 | awk '{print $2}')
+                  OUTGOING_VERSION=$(grep -oE "${PACKAGE_NAME}@[0-9]+\.[0-9]+\.[0-9]+" pnpm-lock.yaml | head -1 | sed 's/.*@//')
                   echo "outgoing-version=$OUTGOING_VERSION" >> "$GITHUB_OUTPUT"
                   for i in $(seq 1 $RETRY_TIMES); do
                       # Retry loop because of npm being _eventually_ consistent
