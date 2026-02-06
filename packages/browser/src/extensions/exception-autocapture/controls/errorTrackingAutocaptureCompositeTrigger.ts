@@ -34,7 +34,7 @@ export class ErrorTrackingAutocaptureCompositeTrigger {
         const config = remoteConfig.errorTracking?.autoCaptureControls?.web
 
         const persistence = new PersistenceHelper(
-            (key) => (this._posthog.get_property(key) as string) ?? null,
+            (key) => this._posthog.get_property(key),
             (key, value) => this._posthog.persistence?.register({ [key]: value })
         ).withPrefix('error_tracking')
 

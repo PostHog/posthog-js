@@ -1,5 +1,5 @@
 import { EventTrigger } from '../../../../extensions/triggers/behaviour/event-trigger'
-import { PersistenceHelper } from '../../../../extensions/triggers/behaviour/persistence'
+import { PersistenceHelper, TriggerState } from '../../../../extensions/triggers/behaviour/persistence'
 import type { TriggerOptions } from '../../../../extensions/triggers/behaviour/types'
 
 type EventCallback = (event: { event: string }) => void
@@ -13,7 +13,7 @@ const createMockPosthog = (sessionId: string) => {
             if (eventName === 'eventCaptured') {
                 callbacks.push(callback)
             }
-            return () => {}
+            return () => { }
         }),
     }
 
@@ -30,11 +30,14 @@ describe('EventTrigger', () => {
 
     const createTrigger = (
         eventTriggers: string[],
-        persistedData: Record<string, string> = {},
+        persistedDecision?: { sessionId: string; result: TriggerState },
         sessionId: string = SESSION_ID
     ) => {
         const { posthog, fireEvent } = createMockPosthog(sessionId)
-        const storage: Record<string, string> = { ...persistedData }
+        const storage: Record<string, unknown> = {}
+        if (persistedDecision) {
+            storage['$error_tracking_event_decision'] = persistedDecision
+        }
 
         const persistence = new PersistenceHelper(
             (key) => storage[key] ?? null,
@@ -59,7 +62,7 @@ describe('EventTrigger', () => {
         const { trigger, storage } = createTrigger([])
 
         expect(trigger.matches(SESSION_ID)).toBeNull()
-        expect(storage['$error_tracking_event_session_id']).toBeUndefined()
+        expect(storage['$error_tracking_event_decision']).toBeUndefined()
     })
 
     it('returns false when no matching event fired', () => {
@@ -68,7 +71,7 @@ describe('EventTrigger', () => {
         fireEvent('other-event')
 
         expect(trigger.matches(SESSION_ID)).toBe(false)
-        expect(storage['$error_tracking_event_session_id']).toBeUndefined()
+        expect(storage['$error_tracking_event_decision']).toBeUndefined()
     })
 
     it('returns true after matching event fires', () => {
@@ -77,25 +80,36 @@ describe('EventTrigger', () => {
         fireEvent('my-event')
 
         expect(trigger.matches(SESSION_ID)).toBe(true)
-        expect(storage['$error_tracking_event_session_id']).toBe(SESSION_ID)
+        expect(storage['$error_tracking_event_decision']).toEqual({
+            sessionId: SESSION_ID,
+            result: TriggerState.Triggered,
+        })
     })
 
     it('restores from persistence for same session', () => {
         const { trigger, storage } = createTrigger(['my-event'], {
-            '$error_tracking_event_session_id': SESSION_ID,
+            sessionId: SESSION_ID,
+            result: TriggerState.Triggered,
         })
 
         expect(trigger.matches(SESSION_ID)).toBe(true)
-        expect(storage['$error_tracking_event_session_id']).toBe(SESSION_ID)
+        expect(storage['$error_tracking_event_decision']).toEqual({
+            sessionId: SESSION_ID,
+            result: TriggerState.Triggered,
+        })
     })
 
     it('does not restore for different session', () => {
         const { trigger, storage } = createTrigger(['my-event'], {
-            '$error_tracking_event_session_id': OTHER_SESSION_ID,
+            sessionId: OTHER_SESSION_ID,
+            result: TriggerState.Triggered,
         })
 
         expect(trigger.matches(SESSION_ID)).toBe(false)
-        expect(storage['$error_tracking_event_session_id']).toBe(OTHER_SESSION_ID)
+        expect(storage['$error_tracking_event_decision']).toEqual({
+            sessionId: OTHER_SESSION_ID,
+            result: TriggerState.Triggered,
+        })
     })
 
     it('stays triggered after subsequent events', () => {
@@ -105,6 +119,9 @@ describe('EventTrigger', () => {
         fireEvent('other-event')
 
         expect(trigger.matches(SESSION_ID)).toBe(true)
-        expect(storage['$error_tracking_event_session_id']).toBe(SESSION_ID)
+        expect(storage['$error_tracking_event_decision']).toEqual({
+            sessionId: SESSION_ID,
+            result: TriggerState.Triggered,
+        })
     })
 })
