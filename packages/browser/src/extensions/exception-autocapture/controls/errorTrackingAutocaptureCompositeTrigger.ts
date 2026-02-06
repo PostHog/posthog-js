@@ -49,7 +49,7 @@ export class ErrorTrackingAutocaptureCompositeTrigger {
             new URLTrigger(options, config?.urlTriggers ?? []),
             new EventTrigger(options, config?.eventTriggers ?? []),
             new FlagTrigger(options, config?.linkedFeatureFlag ?? null),
-            new SampleRateTrigger(options, config?.sampleRate ?? null, '$error_tracking_sample_decision'),
+            new SampleRateTrigger(options, config?.sampleRate ?? null),
         ]
     }
 

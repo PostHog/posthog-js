@@ -5,7 +5,6 @@ import type { TriggerOptions } from '../../../../extensions/triggers/behaviour/t
 describe('SampleRateTrigger', () => {
     const SESSION_ID = 'session-123'
     const OTHER_SESSION_ID = 'session-456'
-    const PERSISTENCE_KEY = '$test_sample_decision'
 
     const createTrigger = (
         sampleRate: number | null,
@@ -13,31 +12,24 @@ describe('SampleRateTrigger', () => {
     ) => {
         const storage: Record<string, unknown> = {}
         if (persistedDecision) {
-            storage[PERSISTENCE_KEY] = persistedDecision
-        }
-
-        const mockPosthog = {
-            get_property: jest.fn((key: string) => storage[key] ?? null),
-            persistence: {
-                register: jest.fn((props: Record<string, unknown>) => {
-                    Object.assign(storage, props)
-                }),
-            },
+            storage['$error_tracking_sample_decision'] = persistedDecision
         }
 
         const persistence = new PersistenceHelper(
-            () => null,
-            () => {}
+            (key) => storage[key] ?? null,
+            (key, value) => {
+                storage[key] = value
+            }
         ).withPrefix('error_tracking')
 
         const options: TriggerOptions = {
-            posthog: mockPosthog as any,
+            posthog: {} as any,
             window: undefined,
             log: jest.fn(),
             persistence,
         }
 
-        const trigger = new SampleRateTrigger(options, sampleRate, PERSISTENCE_KEY)
+        const trigger = new SampleRateTrigger(options, sampleRate)
 
         return { trigger, storage }
     }
@@ -46,21 +38,21 @@ describe('SampleRateTrigger', () => {
         const { trigger, storage } = createTrigger(null)
 
         expect(trigger.matches(SESSION_ID)).toBeNull()
-        expect(storage[PERSISTENCE_KEY]).toBeUndefined()
+        expect(storage['$error_tracking_sample_decision']).toBeUndefined()
     })
 
     it('returns true and persists when sample rate is 1', () => {
         const { trigger, storage } = createTrigger(1)
 
         expect(trigger.matches(SESSION_ID)).toBe(true)
-        expect(storage[PERSISTENCE_KEY]).toEqual({ sessionId: SESSION_ID, sampled: true })
+        expect(storage['$error_tracking_sample_decision']).toEqual({ sessionId: SESSION_ID, sampled: true })
     })
 
     it('returns false and persists when sample rate is 0', () => {
         const { trigger, storage } = createTrigger(0)
 
         expect(trigger.matches(SESSION_ID)).toBe(false)
-        expect(storage[PERSISTENCE_KEY]).toEqual({ sessionId: SESSION_ID, sampled: false })
+        expect(storage['$error_tracking_sample_decision']).toEqual({ sessionId: SESSION_ID, sampled: false })
     })
 
     it('restores sampled-in from persistence for same session', () => {
@@ -68,7 +60,7 @@ describe('SampleRateTrigger', () => {
 
         // Returns true despite 0% rate because already persisted as sampled-in
         expect(trigger.matches(SESSION_ID)).toBe(true)
-        expect(storage[PERSISTENCE_KEY]).toEqual({ sessionId: SESSION_ID, sampled: true })
+        expect(storage['$error_tracking_sample_decision']).toEqual({ sessionId: SESSION_ID, sampled: true })
     })
 
     it('restores sampled-out from persistence for same session', () => {
@@ -76,7 +68,7 @@ describe('SampleRateTrigger', () => {
 
         // Returns false despite 100% rate because already persisted as sampled-out
         expect(trigger.matches(SESSION_ID)).toBe(false)
-        expect(storage[PERSISTENCE_KEY]).toEqual({ sessionId: SESSION_ID, sampled: false })
+        expect(storage['$error_tracking_sample_decision']).toEqual({ sessionId: SESSION_ID, sampled: false })
     })
 
     it('re-samples for different session', () => {
@@ -84,7 +76,7 @@ describe('SampleRateTrigger', () => {
 
         // Different session, re-samples (and fails with 0% rate)
         expect(trigger.matches(SESSION_ID)).toBe(false)
-        expect(storage[PERSISTENCE_KEY]).toEqual({ sessionId: SESSION_ID, sampled: false })
+        expect(storage['$error_tracking_sample_decision']).toEqual({ sessionId: SESSION_ID, sampled: false })
     })
 
     it('returns same result on repeated calls', () => {

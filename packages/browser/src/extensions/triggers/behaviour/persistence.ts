@@ -19,15 +19,24 @@ export class PersistenceHelper {
         return new PersistenceHelper(this._getProperty, this._setProperty, newPrefix)
     }
 
+    // Generic get/set for custom storage needs
+    get<T>(keySuffix: string): T | null {
+        const key = this._buildKey(keySuffix)
+        return (this._getProperty(key) as T) ?? null
+    }
+
+    set<T>(keySuffix: string, value: T): void {
+        const key = this._buildKey(keySuffix)
+        this._setProperty(key, value)
+    }
+
+    // Convenience methods for simple "triggered" tracking
     isTriggered(sessionId: string): boolean {
-        // Check in-memory cache first
         if (this._triggeredSessionId === sessionId) {
             return true
         }
 
-        // Check persistence
-        const key = this._buildKey()
-        const persistedSessionId = this._getProperty(key)
+        const persistedSessionId = this.get<string>('triggered')
         if (persistedSessionId === sessionId) {
             this._triggeredSessionId = sessionId
             return true
@@ -38,14 +47,13 @@ export class PersistenceHelper {
 
     setTriggered(sessionId: string): void {
         if (this._triggeredSessionId === sessionId) {
-            return // Already triggered, idempotent
+            return
         }
         this._triggeredSessionId = sessionId
-        const key = this._buildKey()
-        this._setProperty(key, sessionId)
+        this.set('triggered', sessionId)
     }
 
-    private _buildKey(): string {
-        return `$${this._prefix}_triggered`
+    private _buildKey(suffix: string): string {
+        return `$${this._prefix}_${suffix}`
     }
 }
