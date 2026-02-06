@@ -448,4 +448,54 @@ describe('PostHogConversations', () => {
             expect(conversations.isAvailable()).toBe(true)
         })
     })
+
+    describe('identity handling', () => {
+        it('should pass PostHog instance to initConversations for identity checks', () => {
+            // Create a PostHog instance where _isIdentified returns true
+            const identifiedPostHog = createMockPostHog({
+                config: createMockConfig({
+                    api_host: 'https://test.posthog.com',
+                    token: 'test-token',
+                    disable_conversations: false,
+                }),
+                persistence: createMockPersistence({
+                    props: {},
+                }),
+                requestRouter: {
+                    endpointFor: jest.fn().mockReturnValue('https://test.posthog.com/api/test'),
+                } as any,
+                consent: {
+                    isOptedOut: jest.fn().mockReturnValue(false),
+                } as any,
+                get_distinct_id: jest.fn().mockReturnValue('identified-user-123'),
+                on: jest.fn().mockReturnValue(jest.fn()),
+                capture: jest.fn(),
+                _isIdentified: jest.fn().mockReturnValue(true),
+            })
+
+            const mockInit = jest.fn().mockReturnValue(mockManager)
+            assignableWindow.__PosthogExtensions__ = {
+                initConversations: mockInit,
+            }
+
+            const identifiedConversations = new PostHogConversations(identifiedPostHog)
+
+            const remoteConfig: Partial<RemoteConfig> = {
+                conversations: {
+                    enabled: true,
+                    token: 'test-token',
+                } as ConversationsRemoteConfig,
+            }
+
+            identifiedConversations.onRemoteConfig(remoteConfig as RemoteConfig)
+
+            // The initConversations is called with the PostHog instance
+            // The ConversationsManager will use posthog._isIdentified() to determine
+            // if the identification form should be shown
+            expect(mockInit).toHaveBeenCalledWith(
+                expect.objectContaining({ enabled: true, token: 'test-token' }),
+                identifiedPostHog
+            )
+        })
+    })
 })

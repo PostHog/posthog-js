@@ -402,7 +402,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             })
         }
 
-        // Listen for identify events to handle distinct_id changes
+        // Listen for identify events to hide identification form when user identifies
         this._setupIdentifyListener()
     }
 
@@ -635,42 +635,16 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /**
-     * Setup listener for identify events to handle distinct_id changes
+     * Setup listener for identify events.
+     * When user calls posthog.identify(), hide the identification form
+     * since we now know who they are.
      */
     private _setupIdentifyListener(): void {
-        // Listen for captured events and detect $identify events
         this._unsubscribeIdentifyListener = this._posthog.on('eventCaptured', (event: any) => {
             if (event.event === '$identify') {
-                const newDistinctId = event.properties?.distinct_id
-                const oldDistinctId = event.properties?.$anon_distinct_id
-
-                if (oldDistinctId && newDistinctId && oldDistinctId !== newDistinctId) {
-                    logger.info('Detected identify event', { oldDistinctId, newDistinctId })
-                    this._handleDistinctIdChange(oldDistinctId, newDistinctId)
-                }
+                // User just identified - hide the identification form if it's showing
+                this._widgetRef?.setUserIdentified()
             }
-        })
-    }
-
-    /**
-     * Handle distinct_id changes when user identifies.
-     * The user continues their conversation seamlessly - widget_session_id stays the same.
-     * No migration needed since tickets are keyed by widget_session_id, not distinct_id.
-     * Backend will update ticket.distinct_id for Person linking on the next message.
-     */
-    private _handleDistinctIdChange(oldDistinctId: string, newDistinctId: string): void {
-        // No migration needed - widget_session_id stays the same
-        // The user keeps access to their ticket because the widget_session_id hasn't changed
-        logger.info('User identified, conversation continues with same widget_session_id', {
-            ticketId: this._currentTicketId,
-            widgetSessionId: this._widgetSessionId,
-            oldDistinctId,
-            newDistinctId,
-        })
-
-        // Track the identity change
-        this._posthog.capture('$conversations_identity_changed', {
-            hadExistingTicket: !!this._currentTicketId,
         })
     }
 
@@ -857,6 +831,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 config={this._config}
                 initialState={initialState}
                 initialUserTraits={initialUserTraits}
+                isUserIdentified={this._posthog._isIdentified()}
                 onSendMessage={this._handleSendMessage}
                 onStateChange={this._handleStateChange}
                 onIdentify={this._handleIdentify}
