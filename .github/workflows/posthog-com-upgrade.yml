@@ -55,8 +55,8 @@ jobs:
               run: |
                   shopt -s globstar nullglob
                   OUTGOING_VERSION=$(jq -r --arg pkg "$PACKAGE_NAME" \
-                    '(.dependencies[$pkg] // .devDependencies[$pkg] // empty) | select(startswith("catalog:") | not)' \
-                    **/package.json 2>/dev/null | sed 's/^[^0-9]*//' | sort | uniq -c | sort -rn | head -1 | awk '{print $2}')
+                    '.dependencies[$pkg] // empty' **/package.json 2>/dev/null | \
+                    sed 's/^[^0-9]*//' | sort | uniq -c | sort -rn | head -1 | awk '{print $2}')
                   echo "outgoing-version=$OUTGOING_VERSION" >> "$GITHUB_OUTPUT"
                   for i in $(seq 1 $RETRY_TIMES); do
                       # Retry loop because of npm being _eventually_ consistent
