@@ -52,7 +52,7 @@ export class ErrorTrackingAutocaptureCompositeTrigger {
         ]
     }
 
-    shouldCapture(): boolean {
+    matches(): boolean {
         const sessionId = this._posthog.get_session_id()
 
         for (const trigger of this._triggers) {

@@ -6,7 +6,7 @@ export class PersistenceHelper {
     private readonly _setProperty: SetProperty
     private readonly _prefix: string
 
-    private _matchedInSession: boolean = false
+    private _matchedInSession: boolean | null = null
 
     constructor(getProperty: GetProperty, setProperty: SetProperty, prefix: string = '') {
         this._getProperty = getProperty
@@ -14,33 +14,32 @@ export class PersistenceHelper {
         this._prefix = prefix
     }
 
-    /**
-     * Creates a new PersistenceHelper with an extended prefix.
-     * Chainable: helper.withPrefix('error_tracking').withPrefix('url')
-     */
+    // chainable: helper.withPrefix('error_tracking').withPrefix('url')
     withPrefix(prefix: string): PersistenceHelper {
         const newPrefix = this._prefix ? `${this._prefix}_${prefix}` : prefix
         return new PersistenceHelper(this._getProperty, this._setProperty, newPrefix)
     }
 
-    /**
-     * Check if the trigger was matched for this session.
-     * Checks in-memory state first, then falls back to persistence.
-     */
     sessionMatchesTrigger(sessionId: string): boolean {
-        if (this._matchedInSession) {
+        if (this._matchedInSession === true) {
             return true
         }
-        const key = this._buildKey()
-        return this._getProperty(key) === sessionId
+
+        if (this._matchedInSession === null) {
+            const key = this._buildKey()
+            const matched = this._getProperty(key) === sessionId
+
+            if (matched) {
+                this._matchedInSession = true
+                return true
+            }
+        }
+
+        return false
     }
 
-    /**
-     * Mark the trigger as matched for the given session.
-     * Sets both in-memory state and persists. Idempotent - does nothing if already matched.
-     */
     matchTriggerInSession(sessionId: string): void {
-        if (this._matchedInSession) {
+        if (this._matchedInSession === true) {
             return
         }
         this._matchedInSession = true

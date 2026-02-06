@@ -8,6 +8,10 @@ export class SampleTrigger implements Trigger {
     private readonly _sampleRate: number | null
     private readonly _persistence: PersistenceHelper
 
+    // Track sampling decision in memory (needed because we don't persist "sampled out")
+    private _sampledSessionId: string | null = null
+    private _sampled: boolean = false
+
     constructor(options: TriggerOptions, sampleRate: number | null) {
         this._sampleRate = sampleRate
         this._persistence = options.persistence.withPrefix('sample')
@@ -18,18 +22,24 @@ export class SampleTrigger implements Trigger {
             return null
         }
 
-        // Check if already sampled for this session (from persistence or in-memory)
+        // Check if already sampled for this session (from persistence)
         if (this._persistence.sessionMatchesTrigger(sessionId)) {
             return true
         }
 
-        // Make sampling decision
-        const sampled = Math.random() < this._sampleRate
+        // Check if we already made a sampling decision for this session (in-memory)
+        if (this._sampledSessionId === sessionId) {
+            return this._sampled
+        }
 
-        if (sampled) {
+        // Make new sampling decision
+        this._sampledSessionId = sessionId
+        this._sampled = Math.random() < this._sampleRate
+
+        if (this._sampled) {
             this._persistence.matchTriggerInSession(sessionId)
         }
 
-        return sampled
+        return this._sampled
     }
 }

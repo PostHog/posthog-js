@@ -53,7 +53,7 @@ export class PostHogExceptions {
     }
 
     shouldAutocapture(): boolean {
-        return this._autocaptureCompositeTrigger.shouldCapture()
+        return this._autocaptureCompositeTrigger.matches()
     }
 
     private get _captureExtensionExceptions() {
