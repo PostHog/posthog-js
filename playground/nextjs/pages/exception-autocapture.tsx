@@ -6,6 +6,11 @@ type Page = 'page-a' | 'page-b'
 const ExceptionAutocapture = () => {
     const posthog = usePostHog()
     const [currentPage, setCurrentPage] = useState<Page>('page-a')
+    const [sessionId, setSessionId] = useState<string>('')
+
+    const refreshSessionId = () => {
+        setSessionId(posthog.get_session_id() ?? 'unknown')
+    }
 
     const handleManualCapture = () => {
         posthog.captureException(new Error('Manual exception capture test'))
@@ -21,6 +26,18 @@ const ExceptionAutocapture = () => {
         posthog.capture('exception_trigger_event')
     }
 
+    const handleResetSession = () => {
+        posthog.reset()
+        refreshSessionId()
+    }
+
+    const handleGetAutocaptureStatus = () => {
+        const status = posthog.exceptions.getAutocaptureStatus()
+        console.log('Autocapture Status:', status)
+        console.table(status.triggers)
+        alert(`Check console for details.\n\nOverall: ${status.overall ? 'CAPTURING' : 'NOT CAPTURING'}`)
+    }
+
     const navigateToPage = (page: Page) => {
         const newUrl = `${window.location.pathname}?page=${page}`
         window.history.pushState({}, '', newUrl)
@@ -30,6 +47,35 @@ const ExceptionAutocapture = () => {
     return (
         <div className="max-w-2xl mx-auto p-6 space-y-8">
             <h1 className="text-2xl font-bold">Exception Autocapture Test</h1>
+
+            <section className="space-y-4 bg-gray-50 p-4 rounded-lg">
+                <h2 className="text-xl font-semibold border-b pb-2">Session Controls</h2>
+                <div className="flex items-center gap-4">
+                    <button
+                        onClick={refreshSessionId}
+                        className="bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg px-4 py-2"
+                    >
+                        Get Session ID
+                    </button>
+                    <button
+                        onClick={handleResetSession}
+                        className="bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg px-4 py-2"
+                    >
+                        Reset Session (Start New)
+                    </button>
+                    <button
+                        onClick={handleGetAutocaptureStatus}
+                        className="bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-lg px-4 py-2"
+                    >
+                        Get Autocapture Status
+                    </button>
+                </div>
+                {sessionId && (
+                    <p className="text-sm text-gray-600">
+                        Current Session ID: <code className="bg-gray-200 px-2 py-1 rounded">{sessionId}</code>
+                    </p>
+                )}
+            </section>
 
             <section className="space-y-4">
                 <h2 className="text-xl font-semibold border-b pb-2">1. Manual Exception Capture</h2>
