@@ -73,7 +73,7 @@ export function getTriggerStatus(trigger: Trigger, sessionId: string): TriggerSt
         case 'flag':
             description = getFlagTriggerDescription(trigger as FlagTrigger, result)
             break
-        case 'sample':
+        case 'sample-rate':
             description = getSampleRateTriggerDescription(trigger as SampleRateTrigger, result)
             break
         default:
