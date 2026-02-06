@@ -1,6 +1,6 @@
-import { SampleTrigger } from '../../../../extensions/exception-autocapture/controls/triggers/sample-trigger'
-import { PersistenceHelper } from '../../../../extensions/exception-autocapture/controls/triggers/persistence'
-import type { TriggerOptions } from '../../../../extensions/exception-autocapture/controls/triggers/types'
+import { SampleTrigger } from '../../../../extensions/triggers/behaviour/sample-trigger'
+import { PersistenceHelper } from '../../../../extensions/triggers/behaviour/persistence'
+import type { TriggerOptions } from '../../../../extensions/triggers/behaviour/types'
 
 describe('SampleTrigger', () => {
     const SESSION_ID = 'session-123'
