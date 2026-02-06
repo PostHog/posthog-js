@@ -53,18 +53,26 @@ jobs:
                   PACKAGE_NAME: ${{ github.event.inputs.package_name }}
                   PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
               run: |
-                  # Find the outgoing version from any package.json in the workspace
+                  # Find all distinct outgoing versions from package.json files in the workspace
                   # (the package may not be in the root package.json, or may use catalog: protocol)
-                  OUTGOING_VERSION=$(
+                  VERSIONS=$(
                     find . -name 'package.json' -not -path '*/node_modules/*' -maxdepth 5 -print0 | \
                     xargs -0 jq -r --arg pkg "$PACKAGE_NAME" \
                       '(.dependencies[$pkg] // .devDependencies[$pkg] // empty) | select(startswith("catalog:") | not)' 2>/dev/null | \
-                    head -1 | \
-                    sed 's/^[^0-9]*//')
-                  if [ -z "$OUTGOING_VERSION" ]; then
-                    echo "::warning::Could not determine outgoing version for $PACKAGE_NAME, compare link will be incomplete"
+                    sed 's/^[^0-9]*//' | \
+                    sort -uV)
+                  # Generate a compare link for each distinct outgoing version
+                  echo "compare-links<<COMPARE_LINKS_EOF" >> "$GITHUB_OUTPUT"
+                  if [ -n "$VERSIONS" ]; then
+                    while IFS= read -r ver; do
+                      if [ -n "$ver" ]; then
+                        echo "https://github.com/PostHog/posthog-js/compare/$PACKAGE_NAME@${ver}...$PACKAGE_NAME@$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+                      fi
+                    done <<< "$VERSIONS"
+                  else
+                    echo "::warning::Could not determine outgoing versions for $PACKAGE_NAME"
                   fi
-                  echo "outgoing-version=$OUTGOING_VERSION" >> "$GITHUB_OUTPUT"
+                  echo "COMPARE_LINKS_EOF" >> "$GITHUB_OUTPUT"
                   for i in $(seq 1 $RETRY_TIMES); do
                       # Retry loop because of npm being _eventually_ consistent
                       if pnpm -r upgrade "$PACKAGE_NAME@$PACKAGE_VERSION"; then
@@ -98,7 +106,9 @@ jobs:
 
                       ${{ github.event.inputs.package_name }} version ${{ github.event.inputs.package_version }} has been released. This updates PostHog.com to use it.
 
-                      https://github.com/PostHog/posthog-js/compare/${{ github.event.inputs.package_name }}@${{ steps.pnpm-upgrade.outputs.outgoing-version }}...${{ github.event.inputs.package_name }}@${{ github.event.inputs.package_version }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${{ github.event.inputs.package_name }}?activeTab=version)
+                      ${{ steps.pnpm-upgrade.outputs.compare-links }}
+
+                      [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${{ github.event.inputs.package_name }}?activeTab=version)
 
             - name: Output pull request result
               shell: bash
