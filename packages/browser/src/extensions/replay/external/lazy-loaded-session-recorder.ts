@@ -359,9 +359,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private get _isSampled(): boolean | null {
         const currentValue = this._instance.get_property(SESSION_RECORDING_IS_SAMPLED)
-        // originally we would store `true` or `false` or nothing,
-        // but that would mean sometimes we would carry on recording on session id change
-        return isBoolean(currentValue) ? currentValue : isString(currentValue) ? currentValue === this.sessionId : null
+        // we store the session id when sampled so that we can detect session id changes
+        // and `false` when not sampled
+        // legacy SDKs stored `true` when sampled, but that is not tied to a session id
+        // so we treat it as null (unknown) and will make a fresh decision
+        if (currentValue === true) {
+            return null
+        }
+        return currentValue === false ? false : isString(currentValue) ? currentValue === this.sessionId : null
     }
 
     private get _sampleRate(): number | null {
