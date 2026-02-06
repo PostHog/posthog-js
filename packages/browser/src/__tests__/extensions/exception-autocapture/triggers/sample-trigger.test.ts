@@ -1,32 +1,39 @@
 import { SampleTrigger } from '../../../../extensions/exception-autocapture/controls/triggers/sample-trigger'
+import { createPersistenceHelperFactory } from '../../../../extensions/exception-autocapture/controls/triggers/persistence'
+import type { TriggerOptions } from '../../../../extensions/exception-autocapture/controls/triggers/types'
 
 describe('SampleTrigger', () => {
     const SESSION_ID = 'session-123'
     const OTHER_SESSION_ID = 'session-456'
 
-    const getTrigger = (sampleRate: number | null, persistedSessionId: string | null = null) => {
-        let storedSessionId: string | null = persistedSessionId
+    const createTrigger = (sampleRate: number | null, persistedData: Record<string, string> = {}) => {
+        const storage: Record<string, string> = { ...persistedData }
 
-        const trigger = new SampleTrigger()
-        trigger.init(sampleRate, {
+        const options: TriggerOptions = {
+            posthog: {} as any,
+            window: undefined,
             log: jest.fn(),
-            getPersistedSessionId: () => storedSessionId,
-            setPersistedSessionId: (sessionId) => {
-                storedSessionId = sessionId
-            },
-        })
+            persistenceHelperFactory: createPersistenceHelperFactory(
+                (key) => storage[key] ?? null,
+                (key, value) => {
+                    storage[key] = value
+                }
+            ),
+        }
 
-        return { trigger, getStoredSessionId: () => storedSessionId }
+        const trigger = new SampleTrigger(options, sampleRate)
+
+        return { trigger, storage, options }
     }
 
     it('returns null when no sample rate is configured', () => {
-        const { trigger } = getTrigger(null)
+        const { trigger } = createTrigger(null)
 
         expect(trigger.matches(SESSION_ID)).toBeNull()
     })
 
     it('always returns true when sample rate is 1', () => {
-        const { trigger } = getTrigger(1)
+        const { trigger } = createTrigger(1)
 
         for (let i = 0; i < 100; i++) {
             expect(trigger.matches(SESSION_ID)).toBe(true)
@@ -34,7 +41,7 @@ describe('SampleTrigger', () => {
     })
 
     it('always returns false when sample rate is 0', () => {
-        const { trigger } = getTrigger(0)
+        const { trigger } = createTrigger(0)
 
         for (let i = 0; i < 100; i++) {
             expect(trigger.matches(SESSION_ID)).toBe(false)
@@ -46,7 +53,7 @@ describe('SampleTrigger', () => {
         let trueCount = 0
 
         for (let i = 0; i < iterations; i++) {
-            const { trigger } = getTrigger(0.5)
+            const { trigger } = createTrigger(0.5)
             if (trigger.matches(`session-${i}`)) {
                 trueCount++
             }
@@ -57,10 +64,10 @@ describe('SampleTrigger', () => {
 
     describe('session stickiness', () => {
         it('returns consistent result for same session', () => {
-            const { trigger } = getTrigger(0.5)
+            const { trigger } = createTrigger(0.5)
 
             const firstResult = trigger.matches(SESSION_ID)
-            
+
             // Same session should always return same result
             for (let i = 0; i < 10; i++) {
                 expect(trigger.matches(SESSION_ID)).toBe(firstResult)
@@ -68,55 +75,39 @@ describe('SampleTrigger', () => {
         })
 
         it('persists session ID when sampled in', () => {
-            const { trigger, getStoredSessionId } = getTrigger(1) // 100% sample rate
+            const { trigger, storage } = createTrigger(1) // 100% sample rate
 
-            expect(getStoredSessionId()).toBeNull()
+            expect(storage['$error_tracking_sample_session']).toBeUndefined()
 
             trigger.matches(SESSION_ID)
 
-            expect(getStoredSessionId()).toBe(SESSION_ID)
+            expect(storage['$error_tracking_sample_session']).toBe(SESSION_ID)
         })
 
         it('does not persist session ID when sampled out', () => {
-            const { trigger, getStoredSessionId } = getTrigger(0) // 0% sample rate
+            const { trigger, storage } = createTrigger(0) // 0% sample rate
 
             trigger.matches(SESSION_ID)
 
-            expect(getStoredSessionId()).toBeNull()
+            expect(storage['$error_tracking_sample_session']).toBeUndefined()
         })
 
         it('returns true for same session if previously persisted', () => {
-            const { trigger } = getTrigger(0, SESSION_ID) // 0% rate but persisted
+            const { trigger } = createTrigger(0, {
+                '$error_tracking_sample_session': SESSION_ID,
+            }) // 0% rate but persisted
 
             // Even with 0% rate, returns true because already persisted
             expect(trigger.matches(SESSION_ID)).toBe(true)
         })
 
         it('re-samples for different session', () => {
-            const { trigger } = getTrigger(0, OTHER_SESSION_ID) // Persisted for different session
+            const { trigger } = createTrigger(0, {
+                '$error_tracking_sample_session': OTHER_SESSION_ID,
+            }) // Persisted for different session
 
             // Different session, so will sample again (and fail with 0% rate)
             expect(trigger.matches(SESSION_ID)).toBe(false)
-        })
-    })
-
-    describe('idempotency', () => {
-        it('can change sample rate on re-init', () => {
-            const trigger = new SampleTrigger()
-
-            trigger.init(1, {
-                log: jest.fn(),
-                getPersistedSessionId: () => null,
-                setPersistedSessionId: jest.fn(),
-            })
-            expect(trigger.matches(SESSION_ID)).toBe(true)
-
-            trigger.init(0, {
-                log: jest.fn(),
-                getPersistedSessionId: () => null,
-                setPersistedSessionId: jest.fn(),
-            })
-            expect(trigger.matches(OTHER_SESSION_ID)).toBe(false)
         })
     })
 })

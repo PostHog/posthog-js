@@ -1,40 +1,21 @@
-import type { PostHog } from '@posthog/types'
-import type { Trigger, LogFn, GetPersistedSessionId, SetPersistedSessionId } from './types'
-
-export interface EventTriggerOptions {
-    readonly posthog: PostHog
-    readonly log: LogFn
-    readonly getPersistedSessionId?: GetPersistedSessionId
-    readonly setPersistedSessionId?: SetPersistedSessionId
-}
+import type { Trigger, TriggerOptions } from './types'
+import type { PersistenceHelper } from './persistence'
 
 export class EventTrigger implements Trigger {
     readonly name = 'event'
 
-    private _posthog: PostHog | null = null
-    private _eventTriggers: string[] = []
+    private readonly _eventTriggers: string[]
+    private readonly _persistence: PersistenceHelper
+
     private _matchedEventInSession: boolean = false
-    private _initialized: boolean = false
-    private _unsubscribe: (() => void) | null = null
-    private _getPersistedSessionId: GetPersistedSessionId | undefined
-    private _setPersistedSessionId: SetPersistedSessionId | undefined
 
-    init(eventTriggers: string[], options: EventTriggerOptions): void {
-        if (this._initialized) {
-            this._teardownEventListener()
-        }
-
-        this._posthog = options.posthog
+    constructor(options: TriggerOptions, eventTriggers: string[]) {
         this._eventTriggers = eventTriggers
-        this._matchedEventInSession = false
-        this._getPersistedSessionId = options.getPersistedSessionId
-        this._setPersistedSessionId = options.setPersistedSessionId
+        this._persistence = options.persistenceHelperFactory.create('event')
 
         if (this._eventTriggers.length > 0) {
-            this._setupEventListener()
+            this._setupEventListener(options)
         }
-
-        this._initialized = true
     }
 
     matches(sessionId: string): boolean | null {
@@ -43,27 +24,21 @@ export class EventTrigger implements Trigger {
         }
 
         // Check if already triggered for this session (from persistence)
-        const persistedSessionId = this._getPersistedSessionId?.()
-        if (persistedSessionId === sessionId) {
+        if (this._persistence.sessionMatchesTrigger(sessionId)) {
             return true
         }
 
         // Check if we matched an event in this session (in-memory)
         if (this._matchedEventInSession) {
-            this._setPersistedSessionId?.(sessionId)
+            this._persistence.matchTriggerInSession(sessionId)
             return true
         }
 
         return false
     }
 
-    private _setupEventListener(): void {
-        const posthog = this._posthog
-        if (!posthog) {
-            return
-        }
-
-        this._unsubscribe = posthog.on('eventCaptured', (event) => {
+    private _setupEventListener(options: TriggerOptions): void {
+        options.posthog.on('eventCaptured', (event) => {
             if (this._matchedEventInSession) {
                 return // Already matched
             }
@@ -76,12 +51,5 @@ export class EventTrigger implements Trigger {
                 this._matchedEventInSession = true
             }
         })
-    }
-
-    private _teardownEventListener(): void {
-        if (this._unsubscribe) {
-            this._unsubscribe()
-            this._unsubscribe = null
-        }
     }
 }

@@ -3,7 +3,8 @@ import type { RemoteConfig } from '../../../types'
 import { window as globalWindow } from '../../../utils/globals'
 import { createLogger } from '../../../utils/logger'
 
-import type { Trigger, LogFn } from './triggers/types'
+import type { Trigger, TriggerOptions, LogFn } from './triggers/types'
+import { createPersistenceHelperFactory } from './triggers/persistence'
 import { URLTrigger } from './triggers/url-trigger'
 import { FlagTrigger } from './triggers/flag-trigger'
 import { SampleTrigger } from './triggers/sample-trigger'
@@ -20,16 +21,9 @@ const log: LogFn = (message, data) => {
     }
 }
 
-// Storage keys for session persistence
-const STORAGE_PREFIX = '$error_tracking_'
-const URL_TRIGGER_SESSION_KEY = `${STORAGE_PREFIX}url_trigger_session`
-const EVENT_TRIGGER_SESSION_KEY = `${STORAGE_PREFIX}event_trigger_session`
-const FLAG_TRIGGER_SESSION_KEY = `${STORAGE_PREFIX}flag_trigger_session`
-const SAMPLE_TRIGGER_SESSION_KEY = `${STORAGE_PREFIX}sample_trigger_session`
-
 export class AutocaptureDecider {
     private readonly _posthog: PostHog
-    private readonly _triggers: Trigger[] = []
+    private _triggers: Trigger[] = []
 
     constructor(posthog: PostHog) {
         this._posthog = posthog
@@ -38,42 +32,22 @@ export class AutocaptureDecider {
     init(remoteConfig: RemoteConfig): void {
         const config = remoteConfig.errorTracking?.autoCaptureControls?.web
 
-        this._triggers.length = 0
-
-        const urlTrigger = new URLTrigger()
-        urlTrigger.init(config?.urlTriggers ?? [], {
+        const options: TriggerOptions = {
+            posthog: this._posthog,
             window: globalWindow,
             log,
-            getPersistedSessionId: () => this._getPersistedSessionId(URL_TRIGGER_SESSION_KEY),
-            setPersistedSessionId: (sessionId) => this._setPersistedSessionId(URL_TRIGGER_SESSION_KEY, sessionId),
-        })
-        this._triggers.push(urlTrigger)
+            persistenceHelperFactory: createPersistenceHelperFactory(
+                (key) => (this._posthog.get_property(key) as string) ?? null,
+                (key, value) => this._posthog.persistence?.register({ [key]: value })
+            ),
+        }
 
-        const eventTrigger = new EventTrigger()
-        eventTrigger.init(config?.eventTriggers ?? [], {
-            posthog: this._posthog,
-            log,
-            getPersistedSessionId: () => this._getPersistedSessionId(EVENT_TRIGGER_SESSION_KEY),
-            setPersistedSessionId: (sessionId) => this._setPersistedSessionId(EVENT_TRIGGER_SESSION_KEY, sessionId),
-        })
-        this._triggers.push(eventTrigger)
-
-        const flagTrigger = new FlagTrigger()
-        flagTrigger.init(config?.linkedFeatureFlag ?? null, {
-            posthog: this._posthog,
-            log,
-            getPersistedSessionId: () => this._getPersistedSessionId(FLAG_TRIGGER_SESSION_KEY),
-            setPersistedSessionId: (sessionId) => this._setPersistedSessionId(FLAG_TRIGGER_SESSION_KEY, sessionId),
-        })
-        this._triggers.push(flagTrigger)
-
-        const sampleTrigger = new SampleTrigger()
-        sampleTrigger.init(config?.sampleRate ?? null, {
-            log,
-            getPersistedSessionId: () => this._getPersistedSessionId(SAMPLE_TRIGGER_SESSION_KEY),
-            setPersistedSessionId: (sessionId) => this._setPersistedSessionId(SAMPLE_TRIGGER_SESSION_KEY, sessionId),
-        })
-        this._triggers.push(sampleTrigger)
+        this._triggers = [
+            new URLTrigger(options, config?.urlTriggers ?? []),
+            new EventTrigger(options, config?.eventTriggers ?? []),
+            new FlagTrigger(options, config?.linkedFeatureFlag ?? null),
+            new SampleTrigger(options, config?.sampleRate ?? null),
+        ]
     }
 
     shouldCapture(): boolean {
@@ -93,13 +67,5 @@ export class AutocaptureDecider {
         }
 
         return true
-    }
-
-    private _getPersistedSessionId(key: string): string | null {
-        return (this._posthog.get_property(key) as string) ?? null
-    }
-
-    private _setPersistedSessionId(key: string, sessionId: string): void {
-        this._posthog.persistence?.register({ [key]: sessionId })
     }
 }

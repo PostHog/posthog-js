@@ -1,11 +1,12 @@
 import { EventTrigger } from '../../../../extensions/exception-autocapture/controls/triggers/event-trigger'
+import { createPersistenceHelperFactory } from '../../../../extensions/exception-autocapture/controls/triggers/persistence'
+import type { TriggerOptions } from '../../../../extensions/exception-autocapture/controls/triggers/types'
 
 type EventCallback = (event: { event: string }) => void
 
 const createMockPosthog = (): {
     posthog: any
     fireEvent: (name: string) => void
-    getSubscriptionCount: () => number
 } => {
     const callbacks: EventCallback[] = []
 
@@ -27,49 +28,48 @@ const createMockPosthog = (): {
         callbacks.forEach((cb) => cb({ event: name }))
     }
 
-    const getSubscriptionCount = () => callbacks.length
-
-    return { posthog, fireEvent, getSubscriptionCount }
+    return { posthog, fireEvent }
 }
 
 describe('EventTrigger', () => {
     const SESSION_ID = 'session-123'
     const OTHER_SESSION_ID = 'session-456'
 
-    const getTrigger = (
-        eventTriggers: string[],
-        persistedSessionId: string | null = null
-    ) => {
-        const { posthog, fireEvent, getSubscriptionCount } = createMockPosthog()
-        let storedSessionId: string | null = persistedSessionId
+    const createTrigger = (eventTriggers: string[], persistedData: Record<string, string> = {}) => {
+        const { posthog, fireEvent } = createMockPosthog()
+        const storage: Record<string, string> = { ...persistedData }
 
-        const trigger = new EventTrigger()
-        trigger.init(eventTriggers, {
+        const options: TriggerOptions = {
             posthog: posthog as any,
+            window: undefined,
             log: jest.fn(),
-            getPersistedSessionId: () => storedSessionId,
-            setPersistedSessionId: (sessionId) => {
-                storedSessionId = sessionId
-            },
-        })
+            persistenceHelperFactory: createPersistenceHelperFactory(
+                (key) => storage[key] ?? null,
+                (key, value) => {
+                    storage[key] = value
+                }
+            ),
+        }
 
-        return { trigger, fireEvent, posthog, getSubscriptionCount, getStoredSessionId: () => storedSessionId }
+        const trigger = new EventTrigger(options, eventTriggers)
+
+        return { trigger, fireEvent, storage, options }
     }
 
     it('returns null when no event triggers are configured', () => {
-        const { trigger } = getTrigger([])
+        const { trigger } = createTrigger([])
 
         expect(trigger.matches(SESSION_ID)).toBeNull()
     })
 
     it('returns false initially when triggers are configured but none fired', () => {
-        const { trigger } = getTrigger(['my-trigger-event'])
+        const { trigger } = createTrigger(['my-trigger-event'])
 
         expect(trigger.matches(SESSION_ID)).toBe(false)
     })
 
     it('returns true after a matching event is captured', () => {
-        const { trigger, fireEvent } = getTrigger(['my-trigger-event'])
+        const { trigger, fireEvent } = createTrigger(['my-trigger-event'])
 
         fireEvent('my-trigger-event')
 
@@ -77,7 +77,7 @@ describe('EventTrigger', () => {
     })
 
     it('ignores non-matching events', () => {
-        const { trigger, fireEvent } = getTrigger(['my-trigger-event'])
+        const { trigger, fireEvent } = createTrigger(['my-trigger-event'])
 
         fireEvent('some-other-event')
 
@@ -85,7 +85,7 @@ describe('EventTrigger', () => {
     })
 
     it('triggers on any matching event from the list', () => {
-        const { trigger, fireEvent } = getTrigger(['event-a', 'event-b', 'event-c'])
+        const { trigger, fireEvent } = createTrigger(['event-a', 'event-b', 'event-c'])
 
         fireEvent('event-b')
 
@@ -93,7 +93,7 @@ describe('EventTrigger', () => {
     })
 
     it('stays triggered once triggered', () => {
-        const { trigger, fireEvent } = getTrigger(['my-trigger-event'])
+        const { trigger, fireEvent } = createTrigger(['my-trigger-event'])
 
         fireEvent('my-trigger-event')
         expect(trigger.matches(SESSION_ID)).toBe(true)
@@ -104,72 +104,30 @@ describe('EventTrigger', () => {
 
     describe('session stickiness', () => {
         it('persists session ID when triggered', () => {
-            const { trigger, fireEvent, getStoredSessionId } = getTrigger(['my-event'])
+            const { trigger, fireEvent, storage } = createTrigger(['my-event'])
 
-            expect(getStoredSessionId()).toBeNull()
+            expect(storage['$error_tracking_event_session']).toBeUndefined()
 
             fireEvent('my-event')
             trigger.matches(SESSION_ID)
 
-            expect(getStoredSessionId()).toBe(SESSION_ID)
+            expect(storage['$error_tracking_event_session']).toBe(SESSION_ID)
         })
 
         it('returns true for same session if previously persisted', () => {
-            const { trigger } = getTrigger(['my-event'], SESSION_ID)
+            const { trigger } = createTrigger(['my-event'], {
+                '$error_tracking_event_session': SESSION_ID,
+            })
 
             expect(trigger.matches(SESSION_ID)).toBe(true)
         })
 
         it('returns false for different session even if previously persisted', () => {
-            const { trigger } = getTrigger(['my-event'], OTHER_SESSION_ID)
+            const { trigger } = createTrigger(['my-event'], {
+                '$error_tracking_event_session': OTHER_SESSION_ID,
+            })
 
             expect(trigger.matches(SESSION_ID)).toBe(false)
-        })
-    })
-
-    describe('idempotency', () => {
-        it('resets state when init is called again', () => {
-            const { posthog, fireEvent } = createMockPosthog()
-            const trigger = new EventTrigger()
-
-            trigger.init(['my-event'], {
-                posthog: posthog as any,
-                log: jest.fn(),
-                getPersistedSessionId: () => null,
-                setPersistedSessionId: jest.fn(),
-            })
-            fireEvent('my-event')
-            expect(trigger.matches(SESSION_ID)).toBe(true)
-
-            // Re-init should reset state
-            trigger.init(['my-event'], {
-                posthog: posthog as any,
-                log: jest.fn(),
-                getPersistedSessionId: () => null,
-                setPersistedSessionId: jest.fn(),
-            })
-            expect(trigger.matches(SESSION_ID)).toBe(false)
-        })
-
-        it('unsubscribes old listener when init is called again', () => {
-            const { posthog, getSubscriptionCount } = createMockPosthog()
-            const trigger = new EventTrigger()
-
-            trigger.init(['my-event'], {
-                posthog: posthog as any,
-                log: jest.fn(),
-                getPersistedSessionId: () => null,
-                setPersistedSessionId: jest.fn(),
-            })
-            expect(getSubscriptionCount()).toBe(1)
-
-            trigger.init(['my-event'], {
-                posthog: posthog as any,
-                log: jest.fn(),
-                getPersistedSessionId: () => null,
-                setPersistedSessionId: jest.fn(),
-            })
-            expect(getSubscriptionCount()).toBe(1)
         })
     })
 })
