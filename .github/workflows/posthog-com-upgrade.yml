@@ -54,13 +54,10 @@ jobs:
                   PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
               run: |
                   shopt -s globstar nullglob
-                  echo "compare-links<<COMPARE_LINKS_EOF" >> "$GITHUB_OUTPUT"
-                  jq -r --arg pkg "$PACKAGE_NAME" \
+                  OUTGOING_VERSION=$(jq -r --arg pkg "$PACKAGE_NAME" \
                     '(.dependencies[$pkg] // .devDependencies[$pkg] // empty) | select(startswith("catalog:") | not)' \
-                    **/package.json 2>/dev/null | \
-                    sed 's/^[^0-9]*//' | sort -uV | grep . | \
-                    sed "s|.*|https://github.com/PostHog/posthog-js/compare/${PACKAGE_NAME}@&...${PACKAGE_NAME}@${PACKAGE_VERSION}|" >> "$GITHUB_OUTPUT"
-                  echo "COMPARE_LINKS_EOF" >> "$GITHUB_OUTPUT"
+                    **/package.json 2>/dev/null | sed 's/^[^0-9]*//' | sort | uniq -c | sort -rn | head -1 | awk '{print $2}')
+                  echo "outgoing-version=$OUTGOING_VERSION" >> "$GITHUB_OUTPUT"
                   for i in $(seq 1 $RETRY_TIMES); do
                       # Retry loop because of npm being _eventually_ consistent
                       if pnpm -r upgrade "$PACKAGE_NAME@$PACKAGE_VERSION"; then
@@ -94,9 +91,7 @@ jobs:
 
                       ${{ github.event.inputs.package_name }} version ${{ github.event.inputs.package_version }} has been released. This updates PostHog.com to use it.
 
-                      ${{ steps.pnpm-upgrade.outputs.compare-links }}
-
-                      [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${{ github.event.inputs.package_name }}?activeTab=version)
+                      https://github.com/PostHog/posthog-js/compare/${{ github.event.inputs.package_name }}@${{ steps.pnpm-upgrade.outputs.outgoing-version }}...${{ github.event.inputs.package_name }}@${{ github.event.inputs.package_version }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${{ github.event.inputs.package_name }}?activeTab=version)
 
             - name: Output pull request result
               shell: bash
