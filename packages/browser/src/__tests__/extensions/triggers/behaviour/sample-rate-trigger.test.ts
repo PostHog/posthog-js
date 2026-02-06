@@ -6,10 +6,7 @@ describe('SampleRateTrigger', () => {
     const SESSION_ID = 'session-123'
     const OTHER_SESSION_ID = 'session-456'
 
-    const createTrigger = (
-        sampleRate: number | null,
-        persistedDecision?: { sessionId: string; sampled: boolean }
-    ) => {
+    const createTrigger = (sampleRate: number | null, persistedDecision?: { sessionId: string; sampled: boolean }) => {
         const storage: Record<string, unknown> = {}
         if (persistedDecision) {
             storage['$error_tracking_sample_decision'] = persistedDecision

@@ -20,6 +20,7 @@ export class FlagTrigger implements Trigger {
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     matches(_sessionId: string): boolean | null {
         if (!this.linkedFlag) {
             return null
