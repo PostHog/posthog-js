@@ -12,6 +12,7 @@ export default defineNitroPlugin((nitroApp) => {
   const debug = posthogCommon.debug as boolean
 
   const client = new PostHog(posthogCommon.publicKey, {
+    disabled: posthogCommon.enabled === false,
     host: posthogCommon.host,
     ...posthogServerConfig,
   })
