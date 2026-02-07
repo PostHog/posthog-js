@@ -191,6 +191,98 @@ describe('PostHog Core', () => {
       expect(mocks.storage.setItem).not.toHaveBeenCalledWith('distinct_id', 'id-1')
     })
 
+    it('should send $anon_distinct_id when identify is called during in-flight preload flags', async () => {
+      // This test verifies the fix for the race condition where identify() calls
+      // triggered during preloadFeatureFlags would drop the $anon_distinct_id.
+      // See: https://github.com/PostHog/posthog-ios/issues/456
+
+      let resolvePreloadRequest: () => void
+      let preloadFlagsBody: any = null
+      let identifyFlagsBody: any = null
+      let flagsCallCount = 0
+
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+        _mocks.fetch.mockImplementation((url) => {
+          if (url.includes('/flags/')) {
+            flagsCallCount++
+            const currentCall = flagsCallCount
+
+            if (currentCall === 1) {
+              // First flags call (preload) - delay to simulate network latency
+              return new Promise((resolve) => {
+                resolvePreloadRequest = () =>
+                  resolve({
+                    status: 200,
+                    text: () => Promise.resolve('ok'),
+                    json: () =>
+                      Promise.resolve({
+                        featureFlags: {},
+                        featureFlagPayloads: {},
+                      }),
+                  })
+              })
+            } else if (currentCall === 2) {
+              // Second flags call (from identify's pending reload)
+              // This should include $anon_distinct_id
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () =>
+                  Promise.resolve({
+                    featureFlags: {},
+                    featureFlagPayloads: {},
+                  }),
+              })
+            }
+          }
+
+          return Promise.resolve({
+            status: 200,
+            text: () => Promise.resolve('ok'),
+            json: () => Promise.resolve({ status: 'ok' }),
+          })
+        })
+      })
+
+      // Start preload (simulates app init with preloadFeatureFlags: true)
+      posthog.reloadFeatureFlags()
+      await waitForPromises()
+
+      // Get the anonymous ID before identify changes it
+      const anonId = posthog.getDistinctId()
+
+      // Now identify while preload is in flight
+      posthog.identify('user-123', { name: 'Test User' })
+      await waitForPromises()
+
+      // At this point, first call is in flight, identify queued a pending reload
+      expect(flagsCallCount).toBe(1)
+
+      // Capture the first request body for comparison
+      preloadFlagsBody = mocks.fetch.mock.calls.find((call: any) => call[0].includes('/flags/'))?.[1]?.body
+      if (preloadFlagsBody) {
+        preloadFlagsBody = JSON.parse(preloadFlagsBody)
+      }
+
+      // Complete the preload request
+      resolvePreloadRequest!()
+      await waitForPromises()
+
+      // The pending reload from identify should now execute
+      expect(flagsCallCount).toBe(2)
+
+      // Find the second flags call and verify it contains $anon_distinct_id
+      const flagsCalls = mocks.fetch.mock.calls.filter((call: any) => call[0].includes('/flags/'))
+      expect(flagsCalls.length).toBe(2)
+
+      identifyFlagsBody = JSON.parse(flagsCalls[1][1].body)
+
+      // The second request (from identify) should include $anon_distinct_id
+      // This is the key assertion - without the fix, this request would have been dropped
+      expect(identifyFlagsBody.$anon_distinct_id).toBe(anonId)
+      expect(identifyFlagsBody.distinct_id).toBe('user-123')
+    })
+
     it('should send $set event when distinct_id is the same but properties are different', async () => {
       // First identify with a new user
       posthog.identify('id-1', { foo: 'bar' })
