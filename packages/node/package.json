@@ -79,6 +79,12 @@
       "import": "./dist/entrypoints/index.node.mjs",
       "require": "./dist/entrypoints/index.node.js"
     },
+    "./edge": {
+      "types": "./dist/entrypoints/index.edge.d.ts",
+      "import": "./dist/entrypoints/index.edge.mjs",
+      "require": "./dist/entrypoints/index.edge.js",
+      "default": "./dist/entrypoints/index.edge.js"
+    },
     "./experimental": {
       "types": "./dist/experimental.d.ts"
     }
