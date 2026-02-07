@@ -33,8 +33,9 @@ export default defineNuxtConfig({
   posthogConfig: {
     host: 'http://localhost:8010', // (optional) Host URL, defaults to https://us.posthog.com
     publicKey: 'public api key', // Your public web snippet key. You can find it in settings
-    clientConfig?: Partial<PostHogConfig> // (optional) It will be passed to the posthog-js client on init in vue
-    serverConfig?: PostHogOptions // (optional) It will be passed to the posthog-node client on init in nitro. Please note that this client instance is intended for error-tracking purposes only
+    enabled?: boolean, // (optional) Set to false to disable PostHog entirely (useful for tests, development, etc.). Defaults to true
+    clientConfig?: Partial<PostHogConfig>, // (optional) It will be passed to the posthog-js client on init in vue
+    serverConfig?: PostHogOptions, // (optional) It will be passed to the posthog-node client on init in nitro. Please note that this client instance is intended for error-tracking purposes only
     sourceMaps: {
       enabled: true, // Enables sourcemaps generation and upload
       envId: '2', // Environment ID, see https://app.posthog.com/settings/environment#variables
@@ -115,6 +116,27 @@ const payload = useFeatureFlagPayload('config-flag')
 All these composables automatically update when feature flags are loaded or changed.
 
 4. On the server side, the PostHog client instance initialized by the plugin is intended exclusively for error tracking. If you require additional PostHog client functionality for other purposes, please instantiate a separate client within your application as needed.
+
+## Disabling PostHog
+
+You can disable PostHog entirely by setting the `enabled` option to `false`. This is useful for testing, development, or staging environments where you don't want to send analytics data:
+
+```typescript
+// nuxt.config.ts
+export default defineNuxtConfig({
+  posthogConfig: {
+    publicKey: 'phc_xxx',
+    enabled: process.env.NODE_ENV !== 'test', // Disable in test environment
+  },
+})
+```
+
+When disabled:
+- `usePostHog()` returns `undefined`
+- All feature flag composables return `undefined`
+- No analytics events are sent
+- Exception autocapture is disabled
+- The PostHog client is not initialized on either client or server side
 
 ## FAQ
 

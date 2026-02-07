@@ -26,6 +26,7 @@ export interface ModuleOptions {
   host: string
   publicKey: string
   debug?: boolean
+  enabled?: boolean
   cliBinaryPath?: string
   clientConfig?: PostHogClientConfig
   serverConfig?: PostHogServerConfig
@@ -36,6 +37,7 @@ export interface PostHogCommon {
   publicKey: string
   host: string
   debug?: boolean
+  enabled?: boolean
 }
 
 export type PostHogServerConfig = PostHogOptions
@@ -52,6 +54,7 @@ export default defineNuxtModule<ModuleOptions>({
   defaults: () => ({
     host: 'https://us.i.posthog.com',
     debug: false,
+    enabled: true,
     clientConfig: {},
     serverConfig: {},
   }),
@@ -67,6 +70,7 @@ export default defineNuxtModule<ModuleOptions>({
         publicKey: options.publicKey,
         host: options.host,
         debug: options.debug,
+        enabled: options.enabled,
       },
       posthogClientConfig: options.clientConfig,
     })
