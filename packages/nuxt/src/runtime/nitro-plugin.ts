@@ -11,12 +11,8 @@ export default defineNitroPlugin((nitroApp) => {
   const posthogServerConfig = runtimeConfig.posthogServerConfig as PostHogServerConfig
   const debug = posthogCommon.debug as boolean
 
-  // Skip initialization if PostHog is explicitly disabled
-  if (posthogCommon.enabled === false) {
-    return
-  }
-
   const client = new PostHog(posthogCommon.publicKey, {
+    disabled: posthogCommon.enabled === false,
     host: posthogCommon.host,
     ...posthogServerConfig,
   })
