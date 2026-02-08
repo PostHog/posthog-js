@@ -85,7 +85,7 @@ plugins.withId('com.android.application') {
                                 def cliPackage = resolvePostHogCliPackagePath(reactRoot)
                                 def args = [cliPackage]
 
-                                args.addAll(["exp", "hermes", "clone",
+                                args.addAll(["--no-fail", "exp", "hermes", "clone",
                                     "--minified-map-path", packagerSourcemapOutput, // The path to a sourcemap
                                     "--composed-map-path", sourcemapOutput          // The path of the composed source map
                                 ])
@@ -107,7 +107,7 @@ plugins.withId('com.android.application') {
                                 def args = [cliPackage]
 
                                 def sourcemapDir = sourcemapOutput.getParent()
-                                args.addAll(["exp", "hermes", "upload",
+                                args.addAll(["--no-fail", "exp", "hermes", "upload",
                                     "--directory", sourcemapDir        // The path to a sourcemap that should be uploaded.
                                 ])
 
