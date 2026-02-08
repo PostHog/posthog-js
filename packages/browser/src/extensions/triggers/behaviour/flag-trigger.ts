@@ -10,13 +10,23 @@ export class FlagTrigger implements Trigger {
     readonly name = 'flag'
     readonly linkedFlag: LinkedFlag | null
 
+    private readonly _options: TriggerOptions
     private _flagMatches: boolean = false
+    private _initialized = false
 
     constructor(options: TriggerOptions, linkedFlag: LinkedFlag | null) {
+        this._options = options
         this.linkedFlag = linkedFlag
+    }
+
+    init(): void {
+        if (this._initialized) {
+            return
+        }
+        this._initialized = true
 
         if (this.linkedFlag) {
-            this._setupFlagListener(options.posthog)
+            this._setupFlagListener(this._options.posthog)
         }
     }
 

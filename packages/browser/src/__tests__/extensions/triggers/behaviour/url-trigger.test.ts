@@ -62,6 +62,7 @@ describe('URLTrigger', () => {
         }
 
         const trigger = new URLTrigger(options, triggers)
+        trigger.init()
 
         const navigateTo = (url: string) => {
             mockWindow.location.href = url
@@ -138,5 +139,39 @@ describe('URLTrigger', () => {
 
         expect(trigger.matches(SESSION_ID)).toBe(true)
         expect(storage['$error_tracking_url_triggered']).toBe(SESSION_ID)
+    })
+
+    it('init is idempotent - calling it multiple times does not duplicate listeners', () => {
+        const mockWindow = createMockWindow('https://example.com/')
+        const mockPosthog = createMockPosthog(SESSION_ID)
+        const storage: Record<string, unknown> = {}
+
+        const persistence = new PersistenceHelper(
+            (key) => storage[key] ?? null,
+            (key, value) => {
+                storage[key] = value
+            }
+        ).withPrefix('error_tracking')
+
+        const options: TriggerOptions = {
+            posthog: mockPosthog as any,
+            window: mockWindow as any,
+            log: jest.fn(),
+            persistence,
+        }
+
+        const trigger = new URLTrigger(options, [{ url: '/trigger', matching: 'regex' }])
+        trigger.init()
+        trigger.init()
+        trigger.init()
+
+        // addEventListener should only have been called once per event type despite multiple init() calls
+        expect(mockWindow.addEventListener).toHaveBeenCalledTimes(2) // popstate + hashchange
+
+        // Navigation should still work correctly
+        mockWindow.location.href = 'https://example.com/trigger'
+        mockWindow.history.pushState()
+
+        expect(trigger.matches(SESSION_ID)).toBe(true)
     })
 })

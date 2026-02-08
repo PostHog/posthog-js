@@ -50,6 +50,7 @@ describe('EventTrigger', () => {
         }
 
         const trigger = new EventTrigger(options, eventTriggers)
+        trigger.init()
 
         return { trigger, fireEvent, storage }
     }
@@ -101,5 +102,35 @@ describe('EventTrigger', () => {
 
         expect(trigger.matches(SESSION_ID)).toBe(true)
         expect(storage['$error_tracking_event_triggered']).toBe(SESSION_ID)
+    })
+
+    it('init is idempotent - calling it multiple times does not duplicate listeners', () => {
+        const { posthog, fireEvent } = createMockPosthog(SESSION_ID)
+        const storage: Record<string, unknown> = {}
+
+        const persistence = new PersistenceHelper(
+            (key) => storage[key] ?? null,
+            (key, value) => {
+                storage[key] = value
+            }
+        ).withPrefix('error_tracking')
+
+        const options: TriggerOptions = {
+            posthog: posthog as any,
+            window: undefined,
+            log: jest.fn(),
+            persistence,
+        }
+
+        const trigger = new EventTrigger(options, ['my-event'])
+        trigger.init()
+        trigger.init()
+        trigger.init()
+
+        // posthog.on should only have been called once despite multiple init() calls
+        expect(posthog.on).toHaveBeenCalledTimes(1)
+
+        fireEvent('my-event')
+        expect(trigger.matches(SESSION_ID)).toBe(true)
     })
 })

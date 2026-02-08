@@ -41,6 +41,7 @@ describe('FlagTrigger', () => {
         }
 
         const trigger = new FlagTrigger(options, linkedFlag)
+        trigger.init()
 
         return { trigger, triggerFlags }
     }
@@ -93,6 +94,33 @@ describe('FlagTrigger', () => {
 
         triggerFlags([], { 'my-flag': false })
         expect(trigger.matches(SESSION_ID)).toBe(false)
+
+        triggerFlags([], { 'my-flag': true })
+        expect(trigger.matches(SESSION_ID)).toBe(true)
+    })
+
+    it('init is idempotent - calling it multiple times does not duplicate listeners', () => {
+        const { posthog, triggerFlags } = createMockPosthog(SESSION_ID)
+
+        const persistence = new PersistenceHelper(
+            () => null,
+            () => {}
+        ).withPrefix('error_tracking')
+
+        const options: TriggerOptions = {
+            posthog: posthog as any,
+            window: undefined,
+            log: jest.fn(),
+            persistence,
+        }
+
+        const trigger = new FlagTrigger(options, { key: 'my-flag' })
+        trigger.init()
+        trigger.init()
+        trigger.init()
+
+        // onFeatureFlags should only have been called once despite multiple init() calls
+        expect(posthog.onFeatureFlags).toHaveBeenCalledTimes(1)
 
         triggerFlags([], { 'my-flag': true })
         expect(trigger.matches(SESSION_ID)).toBe(true)

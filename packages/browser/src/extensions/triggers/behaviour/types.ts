@@ -12,5 +12,6 @@ export interface TriggerOptions {
 
 export interface Trigger {
     readonly name: string
+    init(): void
     matches(sessionId: string): boolean | null
 }

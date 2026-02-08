@@ -6,14 +6,24 @@ export class EventTrigger implements Trigger {
     readonly name = 'event'
     readonly eventTriggers: string[]
 
+    private readonly _options: TriggerOptions
     private readonly _persistence: PersistenceHelper
+    private _initialized = false
 
     constructor(options: TriggerOptions, eventTriggers: string[]) {
+        this._options = options
         this.eventTriggers = eventTriggers
         this._persistence = options.persistence.withPrefix('event')
+    }
+
+    init(): void {
+        if (this._initialized) {
+            return
+        }
+        this._initialized = true
 
         if (this.eventTriggers.length > 0) {
-            this._setupEventListener(options.posthog)
+            this._setupEventListener(this._options.posthog)
         }
     }
 

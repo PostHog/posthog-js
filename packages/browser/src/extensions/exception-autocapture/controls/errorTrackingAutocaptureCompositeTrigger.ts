@@ -51,6 +51,8 @@ export class ErrorTrackingAutocaptureCompositeTrigger {
             new FlagTrigger(options, config?.linkedFeatureFlag ?? null),
             new SampleRateTrigger(options, config?.sampleRate ?? null),
         ]
+
+        this._triggers.forEach((trigger) => trigger.init())
     }
 
     matches(): boolean {

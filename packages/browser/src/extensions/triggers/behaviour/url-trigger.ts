@@ -12,6 +12,7 @@ export class URLTrigger implements Trigger {
     private readonly _window: Window | undefined
     private readonly _persistence: PersistenceHelper
     private readonly _posthog: PostHog
+    private _initialized = false
 
     private _compiledTriggerRegexes: Map<string, RegExp> = new Map()
     private _lastCheckedUrl: string = ''
@@ -21,6 +22,13 @@ export class URLTrigger implements Trigger {
         this.urlTriggers = urlTriggers
         this._persistence = options.persistence.withPrefix('url')
         this._posthog = options.posthog
+    }
+
+    init(): void {
+        if (this._initialized) {
+            return
+        }
+        this._initialized = true
 
         this._compileRegexCaches()
         this._setupUrlMonitoring()

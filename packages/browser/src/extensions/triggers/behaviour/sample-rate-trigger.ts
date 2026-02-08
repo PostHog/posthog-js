@@ -12,6 +12,7 @@ export class SampleRateTrigger implements Trigger {
     readonly sampleRate: number | null
 
     private readonly _persistence: PersistenceHelper
+    private _initialized = false
 
     // In-memory cache of the sampling decision
     private _decision: SamplingDecision | null = null
@@ -19,6 +20,13 @@ export class SampleRateTrigger implements Trigger {
     constructor(options: TriggerOptions, sampleRate: number | null) {
         this.sampleRate = sampleRate
         this._persistence = options.persistence.withPrefix('sample')
+    }
+
+    init(): void {
+        if (this._initialized) {
+            return
+        }
+        this._initialized = true
     }
 
     matches(sessionId: string): boolean | null {
