@@ -700,8 +700,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Only check TTL if recording hasn't started yet
         // Once started, trust the config until a hard page load
         if (!this.isStarted) {
-            const cacheTimestamp = parsedConfig.cache_timestamp
-            if (!cacheTimestamp || Date.now() - cacheTimestamp > FIVE_MINUTES) {
+            // default to now so that older persisted configs without a cache_timestamp
+            // are treated as fresh instead of being cleared on every read
+            // they come from versions of the code that will never set a cache_timestamp
+            const cacheTimestamp = parsedConfig.cache_timestamp ?? Date.now()
+            if (Date.now() - cacheTimestamp > FIVE_MINUTES) {
                 logger.info('persisted remote config for session recording is stale and will be ignored', {
                     cacheTimestamp,
                     persistedConfig,
