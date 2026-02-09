@@ -34,7 +34,7 @@ export class DeadClicksAutocapture {
         readonly isEnabled: (dca: DeadClicksAutocapture) => boolean,
         readonly onCapture?: DeadClicksAutoCaptureConfig['__onCapture']
     ) {
-        this.startIfEnabled()
+        this.startIfEnabledOrStop()
     }
 
     public onRemoteConfig(response: RemoteConfig) {
@@ -43,14 +43,16 @@ export class DeadClicksAutocapture {
                 [DEAD_CLICKS_ENABLED_SERVER_SIDE]: response?.captureDeadClicks,
             })
         }
-        this.startIfEnabled()
+        this.startIfEnabledOrStop()
     }
 
-    public startIfEnabled() {
+    public startIfEnabledOrStop() {
         if (this.isEnabled(this)) {
             this._loadScript(() => {
                 this._start()
             })
+        } else {
+            this.stop()
         }
     }
 
