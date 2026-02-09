@@ -2,10 +2,7 @@ import { PostHog } from '../../posthog-core'
 import { assignableWindow } from '../../utils/globals'
 import { createPosthogInstance } from '../helpers/posthog-instance'
 import { uuidv7 } from '../../uuidv7'
-import {
-    DeadClicksAutocapture,
-    isDeadClicksEnabledForAutocapture,
-} from '../../extensions/dead-clicks-autocapture'
+import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from '../../extensions/dead-clicks-autocapture'
 import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../../constants'
 
 describe('DeadClicksAutocapture', () => {
