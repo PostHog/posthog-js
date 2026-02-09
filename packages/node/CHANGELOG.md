@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.24.13
+
+### Patch Changes
+
+- [#3056](https://github.com/PostHog/posthog-js/pull/3056) [`846a7f2`](https://github.com/PostHog/posthog-js/commit/846a7f23044cb65c458ee31cdbd6e8c93a73d3bf) Thanks [@richardsolomou](https://github.com/richardsolomou)! - feat: Add /edge subpath export for non-standard edge runtimes
+  (2026-02-09)
+
 ## 5.24.12
 
 ### Patch Changes
