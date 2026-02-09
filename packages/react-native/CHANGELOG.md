@@ -1,5 +1,14 @@
 # posthog-react-native
 
+## 4.30.3
+
+### Patch Changes
+
+- [#3028](https://github.com/PostHog/posthog-js/pull/3028) [`e055f9a`](https://github.com/PostHog/posthog-js/commit/e055f9a344d7c11309c56444383f79df335a5c51) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: Queue pending feature flags reload instead of dropping requests when a reload is already in flight
+  (2026-02-09)
+- Updated dependencies [[`e055f9a`](https://github.com/PostHog/posthog-js/commit/e055f9a344d7c11309c56444383f79df335a5c51)]:
+  - @posthog/core@1.20.2
+
 ## 4.30.2
 
 ### Patch Changes
