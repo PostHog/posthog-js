@@ -161,18 +161,23 @@ const defaultsThatVaryByConfig = (
     | 'session_recording'
     | 'external_scripts_inject_target'
     | 'internal_or_test_user_hostname'
-> => ({
-    rageclick: defaults && defaults >= '2025-11-30' ? { content_ignorelist: true } : true,
-    capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
-    session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
-    external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
-    internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
-})
+> => {
+    const d = defaults && defaults !== 'unset' ? defaults : undefined
+    return {
+        rageclick: d && d >= '2025-11-30' ? { content_ignorelist: true } : true,
+        capture_pageview: d && d >= '2025-05-24' ? 'history_change' : true,
+        session_recording: d && d >= '2025-11-30' ? { strictMinimumDuration: true } : {},
+        external_scripts_inject_target: d && d >= '2026-01-30' ? 'head' : 'body',
+        internal_or_test_user_hostname: d && d >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
+    }
+}
 
 // NOTE: Remember to update `types.ts` when changing a default value
 // to guarantee documentation is up to date, make sure to also update our website docs
 // NOTE²: This shouldn't ever change because we try very hard to be backwards-compatible
-export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
+export const defaultConfig = (configDefaults?: ConfigDefaults): PostHogConfig => {
+    const defaults = configDefaults ?? '2026-01-30'
+    return {
     api_host: 'https://us.i.posthog.com',
     flags_api_host: null,
     ui_host: null,
@@ -188,7 +193,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     custom_blocked_useragents: [],
     save_referrer: true,
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
-    defaults: defaults ?? 'unset',
+    defaults,
     __preview_deferred_init_extensions: false, // Opt-in only for now
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookie_expiration: 365,
@@ -252,7 +257,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     __preview_eager_load_replay: false,
 
     ...defaultsThatVaryByConfig(defaults),
-})
+}}
 
 export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
     const renames: Partial<PostHogConfig> = {}

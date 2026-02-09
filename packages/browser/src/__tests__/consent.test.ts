@@ -29,7 +29,15 @@ describe('consentManager', () => {
     const createPostHog = async (config: Partial<PostHogConfig> = {}) => {
         const posthog = await new Promise<PostHog>(
             (resolve) =>
-                defaultPostHog().init('testtoken', { ...config, loaded: (posthog) => resolve(posthog) }, uuidv7())!
+                defaultPostHog().init(
+                    'testtoken',
+                    {
+                        internal_or_test_user_hostname: null,
+                        ...config,
+                        loaded: (posthog) => resolve(posthog),
+                    },
+                    uuidv7()
+                )!
         )
         posthog.debug()
         return posthog

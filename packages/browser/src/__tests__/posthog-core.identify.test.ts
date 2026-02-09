@@ -25,6 +25,7 @@ describe('identify()', () => {
                 api_host: 'https://test.com',
                 before_send: beforeSendMock,
                 disable_surveys: true,
+                internal_or_test_user_hostname: null,
             },
             token
         )

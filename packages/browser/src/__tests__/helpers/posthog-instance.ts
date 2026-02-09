@@ -36,6 +36,9 @@ export const createPosthogInstance = async (
                 disable_surveys: true,
                 disable_surveys_automatic_display: false,
                 disable_conversations: true,
+                // Disable auto test-user detection in tests since JSDOM hostname is 'localhost'
+                // and would otherwise trigger setInternalOrTestUser() on every init
+                internal_or_test_user_hostname: null,
                 before_send: () => {
                     // if we don't return null here, requests will be sent
                     // but can't go anywhere, and we get console output in tests,

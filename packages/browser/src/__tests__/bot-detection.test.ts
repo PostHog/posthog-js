@@ -20,6 +20,7 @@ describe('bot detection and pageview collection', () => {
                     {
                         capture_pageview: false, // Disable auto-capture to avoid race conditions
                         before_send: beforeSendMock,
+                        internal_or_test_user_hostname: null,
                         ...config,
                         loaded: (posthog) => resolve(posthog),
                     },

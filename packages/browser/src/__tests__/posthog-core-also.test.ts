@@ -43,7 +43,7 @@ describe('posthog core', () => {
                 siteApps: [],
             },
         } as any
-        const posthog = defaultPostHog().init(token, config, uuidv7())
+        const posthog = defaultPostHog().init(token, { internal_or_test_user_hostname: null, ...config }, uuidv7())
         return Object.assign(posthog, overrides || {})
     }
 
@@ -469,7 +469,7 @@ describe('posthog core', () => {
                 $process_person_profile: false,
                 $recording_status: 'lazy_loading',
                 $sdk_debug_retry_queue_size: 0,
-                $config_defaults: 'unset',
+                $config_defaults: '2026-01-30',
             })
         })
 
@@ -495,7 +495,7 @@ describe('posthog core', () => {
                 $process_person_profile: false,
                 $recording_status: 'lazy_loading',
                 $sdk_debug_retry_queue_size: 0,
-                $config_defaults: 'unset',
+                $config_defaults: '2026-01-30',
             })
         })
 
@@ -528,7 +528,7 @@ describe('posthog core', () => {
                 token: 'testtoken',
                 event: 'prop',
                 distinct_id: 'abc',
-                $config_defaults: 'unset',
+                $config_defaults: '2026-01-30',
             })
             expect(posthog.sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
         })
@@ -554,6 +554,7 @@ describe('posthog core', () => {
                 {
                     api_host: 'https://custom.posthog.com',
                     sanitize_properties: (props, event_name) => ({ token: props.token, event_name, ...props }),
+                    internal_or_test_user_hostname: null, // disable auto-detection to avoid marking set_once as already sent
                 },
                 overrides
             )
@@ -577,7 +578,7 @@ describe('posthog core', () => {
                 token: 'testtoken',
                 $snapshot_data: {},
                 distinct_id: 'abc',
-                $config_defaults: 'unset',
+                $config_defaults: '2026-01-30',
             })
         })
 

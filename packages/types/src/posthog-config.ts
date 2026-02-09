@@ -995,7 +995,7 @@ export interface PostHogConfig {
      * - `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)
      * - `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)
      *
-     * @default 'unset'
+     * @default '2026-01-30'
      */
     defaults: ConfigDefaults
 

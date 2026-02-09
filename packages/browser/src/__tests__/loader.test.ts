@@ -37,6 +37,7 @@ describe(`Module-based loader in Node env`, () => {
         posthog.init(`test-token`, {
             disable_surveys: true,
             disable_conversations: true,
+            internal_or_test_user_hostname: null,
             debug: true,
             persistence: `localStorage`,
             api_host: `https://test.com`,
