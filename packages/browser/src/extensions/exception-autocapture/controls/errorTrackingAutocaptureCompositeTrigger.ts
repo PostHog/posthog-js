@@ -24,14 +24,14 @@ const log: LogFn = (message, data) => {
 
 export class ErrorTrackingAutocaptureCompositeTrigger {
     private readonly _posthog: PostHog
-    private _triggers: Trigger[] = []
+    private readonly _urlTrigger: URLTrigger
+    private readonly _eventTrigger: EventTrigger
+    private readonly _flagTrigger: FlagTrigger
+    private readonly _sampleRateTrigger: SampleRateTrigger
+    private readonly _triggers: Trigger[]
 
     constructor(posthog: PostHog) {
         this._posthog = posthog
-    }
-
-    init(remoteConfig: RemoteConfig): void {
-        const config = remoteConfig.errorTracking?.autoCaptureControls?.web
 
         const persistence = new PersistenceHelper(
             (key) => this._posthog.get_property(key),
@@ -45,14 +45,21 @@ export class ErrorTrackingAutocaptureCompositeTrigger {
             persistence,
         }
 
-        this._triggers = [
-            new URLTrigger(options, config?.urlTriggers ?? []),
-            new EventTrigger(options, config?.eventTriggers ?? []),
-            new FlagTrigger(options, config?.linkedFeatureFlag ?? null),
-            new SampleRateTrigger(options, config?.sampleRate ?? null),
-        ]
+        this._urlTrigger = new URLTrigger(options)
+        this._eventTrigger = new EventTrigger(options)
+        this._flagTrigger = new FlagTrigger(options)
+        this._sampleRateTrigger = new SampleRateTrigger(options)
 
-        this._triggers.forEach((trigger) => trigger.init())
+        this._triggers = [this._urlTrigger, this._eventTrigger, this._flagTrigger, this._sampleRateTrigger]
+    }
+
+    init(remoteConfig: RemoteConfig): void {
+        const config = remoteConfig.errorTracking?.autoCaptureControls?.web
+
+        this._urlTrigger.init(config?.urlTriggers ?? [])
+        this._eventTrigger.init(config?.eventTriggers ?? [])
+        this._flagTrigger.init(config?.linkedFeatureFlag ?? null)
+        this._sampleRateTrigger.init(config?.sampleRate ?? null)
     }
 
     matches(): boolean {

@@ -8,25 +8,23 @@ export interface LinkedFlag {
 
 export class FlagTrigger implements Trigger {
     readonly name = 'flag'
-    readonly linkedFlag: LinkedFlag | null
+    linkedFlag: LinkedFlag | null = null
 
-    private readonly _options: TriggerOptions
+    private readonly _posthog: PostHog
     private _flagMatches: boolean = false
-    private _initialized = false
+    private _listenerAttached = false
 
-    constructor(options: TriggerOptions, linkedFlag: LinkedFlag | null) {
-        this._options = options
-        this.linkedFlag = linkedFlag
+    constructor(options: TriggerOptions) {
+        this._posthog = options.posthog
     }
 
-    init(): void {
-        if (this._initialized) {
-            return
-        }
-        this._initialized = true
+    init(linkedFlag: LinkedFlag | null): void {
+        this.linkedFlag = linkedFlag
+        this._flagMatches = false
 
-        if (this.linkedFlag) {
-            this._setupFlagListener(this._options.posthog)
+        if (!this._listenerAttached && this.linkedFlag) {
+            this._listenerAttached = true
+            this._setupFlagListener(this._posthog)
         }
     }
 
@@ -40,14 +38,10 @@ export class FlagTrigger implements Trigger {
     }
 
     private _setupFlagListener(posthog: PostHog): void {
-        const linkedFlag = this.linkedFlag
-
-        if (!linkedFlag) {
-            return
-        }
-
         posthog.onFeatureFlags((_flags: string[], variants: Record<string, unknown>) => {
-            if (!variants || !(linkedFlag.key in variants)) {
+            const linkedFlag = this.linkedFlag
+
+            if (!linkedFlag || !variants || !(linkedFlag.key in variants)) {
                 return
             }
 

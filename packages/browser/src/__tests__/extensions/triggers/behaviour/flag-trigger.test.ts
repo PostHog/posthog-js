@@ -40,10 +40,10 @@ describe('FlagTrigger', () => {
             persistence,
         }
 
-        const trigger = new FlagTrigger(options, linkedFlag)
-        trigger.init()
+        const trigger = new FlagTrigger(options)
+        trigger.init(linkedFlag)
 
-        return { trigger, triggerFlags }
+        return { trigger, triggerFlags, posthog }
     }
 
     it('returns null when not configured', () => {
@@ -100,24 +100,11 @@ describe('FlagTrigger', () => {
     })
 
     it('init is idempotent - calling it multiple times does not duplicate listeners', () => {
-        const { posthog, triggerFlags } = createMockPosthog(SESSION_ID)
+        const { trigger, triggerFlags, posthog } = createTrigger({ key: 'my-flag' })
 
-        const persistence = new PersistenceHelper(
-            () => null,
-            () => {}
-        ).withPrefix('error_tracking')
-
-        const options: TriggerOptions = {
-            posthog: posthog as any,
-            window: undefined,
-            log: jest.fn(),
-            persistence,
-        }
-
-        const trigger = new FlagTrigger(options, { key: 'my-flag' })
-        trigger.init()
-        trigger.init()
-        trigger.init()
+        // Call init again with the same config
+        trigger.init({ key: 'my-flag' })
+        trigger.init({ key: 'my-flag' })
 
         // onFeatureFlags should only have been called once despite multiple init() calls
         expect(posthog.onFeatureFlags).toHaveBeenCalledTimes(1)

@@ -61,15 +61,15 @@ describe('URLTrigger', () => {
             persistence,
         }
 
-        const trigger = new URLTrigger(options, triggers)
-        trigger.init()
+        const trigger = new URLTrigger(options)
+        trigger.init(triggers)
 
         const navigateTo = (url: string) => {
             mockWindow.location.href = url
             mockWindow.history.pushState()
         }
 
-        return { trigger, navigateTo, storage }
+        return { trigger, navigateTo, storage, mockWindow }
     }
 
     it('returns null when not configured', () => {
@@ -142,28 +142,12 @@ describe('URLTrigger', () => {
     })
 
     it('init is idempotent - calling it multiple times does not duplicate listeners', () => {
-        const mockWindow = createMockWindow('https://example.com/')
-        const mockPosthog = createMockPosthog(SESSION_ID)
-        const storage: Record<string, unknown> = {}
+        const triggers: UrlTrigger[] = [{ url: '/trigger', matching: 'regex' }]
+        const { trigger, mockWindow } = createTrigger({ triggers })
 
-        const persistence = new PersistenceHelper(
-            (key) => storage[key] ?? null,
-            (key, value) => {
-                storage[key] = value
-            }
-        ).withPrefix('error_tracking')
-
-        const options: TriggerOptions = {
-            posthog: mockPosthog as any,
-            window: mockWindow as any,
-            log: jest.fn(),
-            persistence,
-        }
-
-        const trigger = new URLTrigger(options, [{ url: '/trigger', matching: 'regex' }])
-        trigger.init()
-        trigger.init()
-        trigger.init()
+        // Call init again with the same config
+        trigger.init(triggers)
+        trigger.init(triggers)
 
         // addEventListener should only have been called once per event type despite multiple init() calls
         expect(mockWindow.addEventListener).toHaveBeenCalledTimes(2) // popstate + hashchange

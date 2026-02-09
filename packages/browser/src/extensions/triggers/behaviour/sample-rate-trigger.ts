@@ -9,24 +9,20 @@ interface SamplingDecision {
 
 export class SampleRateTrigger implements Trigger {
     readonly name = 'sample-rate'
-    readonly sampleRate: number | null
+    sampleRate: number | null = null
 
     private readonly _persistence: PersistenceHelper
-    private _initialized = false
 
     // In-memory cache of the sampling decision
     private _decision: SamplingDecision | null = null
 
-    constructor(options: TriggerOptions, sampleRate: number | null) {
-        this.sampleRate = sampleRate
+    constructor(options: TriggerOptions) {
         this._persistence = options.persistence.withPrefix('sample')
     }
 
-    init(): void {
-        if (this._initialized) {
-            return
-        }
-        this._initialized = true
+    init(sampleRate: number | null): void {
+        this.sampleRate = sampleRate
+        this._decision = null
     }
 
     matches(sessionId: string): boolean | null {

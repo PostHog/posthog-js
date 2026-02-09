@@ -49,10 +49,10 @@ describe('EventTrigger', () => {
             persistence,
         }
 
-        const trigger = new EventTrigger(options, eventTriggers)
-        trigger.init()
+        const trigger = new EventTrigger(options)
+        trigger.init(eventTriggers)
 
-        return { trigger, fireEvent, storage }
+        return { trigger, fireEvent, storage, posthog }
     }
 
     it('returns null when not configured', () => {
@@ -105,27 +105,11 @@ describe('EventTrigger', () => {
     })
 
     it('init is idempotent - calling it multiple times does not duplicate listeners', () => {
-        const { posthog, fireEvent } = createMockPosthog(SESSION_ID)
-        const storage: Record<string, unknown> = {}
+        const { trigger, fireEvent, posthog } = createTrigger(['my-event'])
 
-        const persistence = new PersistenceHelper(
-            (key) => storage[key] ?? null,
-            (key, value) => {
-                storage[key] = value
-            }
-        ).withPrefix('error_tracking')
-
-        const options: TriggerOptions = {
-            posthog: posthog as any,
-            window: undefined,
-            log: jest.fn(),
-            persistence,
-        }
-
-        const trigger = new EventTrigger(options, ['my-event'])
-        trigger.init()
-        trigger.init()
-        trigger.init()
+        // Call init again with the same config
+        trigger.init(['my-event'])
+        trigger.init(['my-event'])
 
         // posthog.on should only have been called once despite multiple init() calls
         expect(posthog.on).toHaveBeenCalledTimes(1)

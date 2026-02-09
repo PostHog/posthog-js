@@ -4,26 +4,23 @@ import type { PersistenceHelper } from './persistence'
 
 export class EventTrigger implements Trigger {
     readonly name = 'event'
-    readonly eventTriggers: string[]
+    eventTriggers: string[] = []
 
-    private readonly _options: TriggerOptions
+    private readonly _posthog: PostHog
     private readonly _persistence: PersistenceHelper
-    private _initialized = false
+    private _listenerAttached = false
 
-    constructor(options: TriggerOptions, eventTriggers: string[]) {
-        this._options = options
-        this.eventTriggers = eventTriggers
+    constructor(options: TriggerOptions) {
+        this._posthog = options.posthog
         this._persistence = options.persistence.withPrefix('event')
     }
 
-    init(): void {
-        if (this._initialized) {
-            return
-        }
-        this._initialized = true
+    init(eventTriggers: string[]): void {
+        this.eventTriggers = eventTriggers
 
-        if (this.eventTriggers.length > 0) {
-            this._setupEventListener(this._options.posthog)
+        if (!this._listenerAttached && this.eventTriggers.length > 0) {
+            this._listenerAttached = true
+            this._setupEventListener(this._posthog)
         }
     }
 

@@ -7,31 +7,33 @@ import type { PersistenceHelper } from './persistence'
 
 export class URLTrigger implements Trigger {
     readonly name = 'url'
-    readonly urlTriggers: UrlTrigger[]
+    urlTriggers: UrlTrigger[] = []
 
     private readonly _window: Window | undefined
     private readonly _persistence: PersistenceHelper
     private readonly _posthog: PostHog
-    private _initialized = false
+    private _monitoringSetUp = false
 
     private _compiledTriggerRegexes: Map<string, RegExp> = new Map()
     private _lastCheckedUrl: string = ''
 
-    constructor(options: TriggerOptions, urlTriggers: UrlTrigger[]) {
+    constructor(options: TriggerOptions) {
         this._window = options.window
-        this.urlTriggers = urlTriggers
         this._persistence = options.persistence.withPrefix('url')
         this._posthog = options.posthog
     }
 
-    init(): void {
-        if (this._initialized) {
-            return
-        }
-        this._initialized = true
+    init(urlTriggers: UrlTrigger[]): void {
+        this.urlTriggers = urlTriggers
+        this._lastCheckedUrl = ''
 
         this._compileRegexCaches()
-        this._setupUrlMonitoring()
+
+        if (!this._monitoringSetUp && this.urlTriggers.length > 0) {
+            this._monitoringSetUp = true
+            this._setupUrlMonitoring()
+        }
+
         this._checkCurrentUrl()
     }
 

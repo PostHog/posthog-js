@@ -6,7 +6,7 @@ import { PostHog } from '../../../posthog-core'
 import { FlagVariant, RemoteConfig, SessionRecordingPersistedConfig, UrlTrigger } from '../../../types'
 import { isNullish, isBoolean, isString, isObject } from '@posthog/core'
 import { window } from '../../../utils/globals'
-import { urlMatchesTriggers, compileRegexCache } from '../../../utils/policyMatching'
+import { compileRegexCache, urlMatchesTriggers } from '../../../utils/trigger-matching-helpers'
 
 export const DISABLED = 'disabled'
 export const SAMPLED = 'sampled'
@@ -59,7 +59,7 @@ export interface TriggerStatusMatching {
     stop(): void
 }
 export class OrTriggerMatching implements TriggerStatusMatching {
-    constructor(private readonly _matchers: TriggerStatusMatching[]) {}
+    constructor(private readonly _matchers: TriggerStatusMatching[]) { }
 
     triggerStatus(sessionId: string): TriggerStatus {
         const statuses = this._matchers.map((m) => m.triggerStatus(sessionId))
@@ -78,7 +78,7 @@ export class OrTriggerMatching implements TriggerStatusMatching {
 }
 
 export class AndTriggerMatching implements TriggerStatusMatching {
-    constructor(private readonly _matchers: TriggerStatusMatching[]) {}
+    constructor(private readonly _matchers: TriggerStatusMatching[]) { }
 
     triggerStatus(sessionId: string): TriggerStatus {
         const statuses = new Set<TriggerStatus>()
@@ -128,7 +128,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
 
     urlBlocked: boolean = false
 
-    constructor(private readonly _instance: PostHog) {}
+    constructor(private readonly _instance: PostHog) { }
 
     onConfig(config: ReplayConfigType) {
         this._urlTriggers =
@@ -229,8 +229,8 @@ export class URLTriggerMatching implements TriggerStatusMatching {
 export class LinkedFlagMatching implements TriggerStatusMatching {
     linkedFlag: string | FlagVariant | null = null
     linkedFlagSeen: boolean = false
-    private _flagListenerCleanup: () => void = () => {}
-    constructor(private readonly _instance: PostHog) {}
+    private _flagListenerCleanup: () => void = () => { }
+    constructor(private readonly _instance: PostHog) { }
 
     triggerStatus(): TriggerStatus {
         let result = TRIGGER_PENDING
@@ -294,7 +294,7 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
 export class EventTriggerMatching implements TriggerStatusMatching {
     _eventTriggers: string[] = []
 
-    constructor(private readonly _instance: PostHog) {}
+    constructor(private readonly _instance: PostHog) { }
 
     onConfig(config: ReplayConfigType) {
         this._eventTriggers =
@@ -327,8 +327,8 @@ export class EventTriggerMatching implements TriggerStatusMatching {
             eventTriggerStatus === TRIGGER_ACTIVATED
                 ? TRIGGER_ACTIVATED
                 : eventTriggerStatus === TRIGGER_PENDING
-                  ? TRIGGER_PENDING
-                  : TRIGGER_DISABLED
+                    ? TRIGGER_PENDING
+                    : TRIGGER_DISABLED
         this._instance.register_for_session({
             $sdk_debug_replay_event_trigger_status: result,
         })

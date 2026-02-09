@@ -26,8 +26,8 @@ describe('SampleRateTrigger', () => {
             persistence,
         }
 
-        const trigger = new SampleRateTrigger(options, sampleRate)
-        trigger.init()
+        const trigger = new SampleRateTrigger(options)
+        trigger.init(sampleRate)
 
         return { trigger, storage }
     }
@@ -88,26 +88,11 @@ describe('SampleRateTrigger', () => {
     })
 
     it('init is idempotent - calling it multiple times produces same results', () => {
-        const storage: Record<string, unknown> = {}
+        const { trigger } = createTrigger(1)
 
-        const persistence = new PersistenceHelper(
-            (key) => storage[key] ?? null,
-            (key, value) => {
-                storage[key] = value
-            }
-        ).withPrefix('error_tracking')
-
-        const options: TriggerOptions = {
-            posthog: {} as any,
-            window: undefined,
-            log: jest.fn(),
-            persistence,
-        }
-
-        const trigger = new SampleRateTrigger(options, 1)
-        trigger.init()
-        trigger.init()
-        trigger.init()
+        // Call init again with the same config
+        trigger.init(1)
+        trigger.init(1)
 
         expect(trigger.matches(SESSION_ID)).toBe(true)
     })
