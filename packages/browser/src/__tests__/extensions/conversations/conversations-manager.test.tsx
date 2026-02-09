@@ -134,6 +134,7 @@ describe('ConversationsManager', () => {
             },
             capture: jest.fn(),
             on: jest.fn().mockReturnValue(jest.fn()), // Returns unsubscribe function
+            _isIdentified: jest.fn().mockReturnValue(false), // Default to anonymous user
         } as unknown as PostHog
     })
 
