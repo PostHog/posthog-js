@@ -166,6 +166,12 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$ai_http_status']).toBe(200)
     expect(properties['foo']).toBe('bar')
     expect(typeof properties['$ai_latency']).toBe('number')
+    // Verify raw usage metadata is passed for server-side extraction
+    expect(properties['$ai_usage']).toEqual({
+      promptTokenCount: 15,
+      candidatesTokenCount: 8,
+      totalTokenCount: 23,
+    })
   })
 
   test('streaming content generation', async () => {
@@ -208,6 +214,11 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$ai_http_status']).toBe(200)
     expect(properties['foo']).toBe('bar')
     expect(typeof properties['$ai_latency']).toBe('number')
+    // Verify raw usage metadata is passed for server-side extraction (streaming)
+    expect(properties['$ai_usage']).toEqual({
+      promptTokenCount: 15,
+      candidatesTokenCount: 8,
+    })
   })
 
   test('groups', async () => {
@@ -317,6 +328,28 @@ describe('PostHogGemini - Jest test suite', () => {
 
     expect(vertexClient).toBeInstanceOf(PostHogGemini)
     expect(vertexClient.models).toBeDefined()
+  })
+
+  test('streaming tracks time to first token', async () => {
+    const stream = client.models.generateContentStream({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Write a short poem',
+      posthogDistinctId: 'test-ttft-user',
+    })
+
+    for await (const _chunk of stream) {
+      // Just consume the stream
+    }
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+
+    // Time to first token should be present and be a number
+    expect(typeof properties['$ai_time_to_first_token']).toBe('number')
+    expect(properties['$ai_time_to_first_token']).toBeGreaterThanOrEqual(0)
+    // Time to first token should be less than or equal to total latency
+    expect(properties['$ai_time_to_first_token']).toBeLessThanOrEqual(properties['$ai_latency'])
   })
 
   test('streaming with function calls', async () => {

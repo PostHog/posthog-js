@@ -2,27 +2,36 @@ import { render } from 'preact'
 import { PostHog } from '../../posthog-core'
 import {
     ProductTour,
+    ProductTourBannerConfig,
     ProductTourCallback,
     ProductTourDismissReason,
     ProductTourRenderReason,
+    ProductTourStepButton,
     ShowTourOptions,
 } from '../../posthog-product-tours-types'
 import { SurveyEventName, SurveyEventProperties } from '../../posthog-surveys-types'
 import {
     addProductTourCSSVariablesToElement,
-    findElementBySelector,
+    findStepElement,
     getElementMetadata,
     getProductTourStylesheet,
+    hasElementTarget,
     normalizeUrl,
 } from './product-tours-utils'
 import { ProductTourTooltip } from './components/ProductTourTooltip'
+import { ProductTourBanner } from './components/ProductTourBanner'
 import { createLogger } from '../../utils/logger'
 import { document as _document, window as _window } from '../../utils/globals'
-import { localStore } from '../../storage'
+import { localStore, sessionStore } from '../../storage'
 import { addEventListener } from '../../utils'
 import { isNull, SurveyMatchType } from '@posthog/core'
 import { propertyComparisons } from '../../utils/property-utils'
-import { TOUR_COMPLETED_KEY_PREFIX, TOUR_DISMISSED_KEY_PREFIX } from './constants'
+import {
+    TOUR_SHOWN_KEY_PREFIX,
+    TOUR_COMPLETED_KEY_PREFIX,
+    TOUR_DISMISSED_KEY_PREFIX,
+    ACTIVE_TOUR_SESSION_KEY,
+} from './constants'
 import { doesTourActivateByAction, doesTourActivateByEvent } from '../../utils/product-tour-utils'
 import { TOOLBAR_ID } from '../../constants'
 import { ProductTourEventReceiver } from '../../utils/product-tour-event-receiver'
@@ -119,6 +128,50 @@ function retrieveTourShadow(tour: ProductTour): { shadow: ShadowRoot; isNewlyCre
     }
 }
 
+function retrieveBannerShadow(
+    tour: ProductTour,
+    bannerConfig?: ProductTourBannerConfig
+): { shadow: ShadowRoot; isNewlyCreated: boolean } | null {
+    const containerClass = `${CONTAINER_CLASS}-${tour.id}`
+    const existingDiv = document.querySelector(`.${containerClass}`)
+
+    if (existingDiv && existingDiv.shadowRoot) {
+        return {
+            shadow: existingDiv.shadowRoot,
+            isNewlyCreated: false,
+        }
+    }
+
+    const div = document.createElement('div')
+    div.className = containerClass
+
+    addProductTourCSSVariablesToElement(div, tour.appearance)
+
+    const shadow = div.attachShadow({ mode: 'open' })
+
+    const stylesheet = getProductTourStylesheet()
+    if (stylesheet) {
+        shadow.appendChild(stylesheet)
+    }
+
+    if (bannerConfig?.behavior === 'custom' && bannerConfig.selector) {
+        const customContainer = document.querySelector(bannerConfig.selector)
+        if (customContainer) {
+            customContainer.appendChild(div)
+        } else {
+            logger.warn(`Custom banner container not found: ${bannerConfig.selector}. Banner will not be displayed.`)
+            return null
+        }
+    } else {
+        document.body.insertBefore(div, document.body.firstChild)
+    }
+
+    return {
+        shadow,
+        isNewlyCreated: true,
+    }
+}
+
 function removeTourFromDom(tourId: string): void {
     const containerClass = `${CONTAINER_CLASS}-${tourId}`
     const container = document.querySelector(`.${containerClass}`)
@@ -128,11 +181,14 @@ function removeTourFromDom(tourId: string): void {
     container?.remove()
 }
 
+const PRODUCT_TOUR_TARGETING_FLAG_PREFIX = 'product-tour-targeting-'
+
 export class ProductTourManager {
     private _instance: PostHog
     private _activeTour: ProductTour | null = null
     private _currentStepIndex: number = 0
     private _isPreviewMode: boolean = false
+    private _isResuming: boolean = false
     private _checkInterval: ReturnType<typeof setInterval> | null = null
     private _triggerSelectorListeners: Map<string, TriggerListenerData> = new Map()
     private _pendingTourTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map()
@@ -144,17 +200,79 @@ export class ProductTourManager {
         this._eventReceiver = new ProductTourEventReceiver(instance)
     }
 
+    private _setStepIndex(index: number): void {
+        this._currentStepIndex = index
+        this._saveSessionState()
+    }
+
+    private _saveSessionState(): void {
+        if (!this._activeTour || this._isPreviewMode) {
+            return
+        }
+        sessionStore._set(ACTIVE_TOUR_SESSION_KEY, {
+            tourId: this._activeTour.id,
+            stepIndex: this._currentStepIndex,
+        })
+    }
+
+    private _clearSessionState(): void {
+        sessionStore._remove(ACTIVE_TOUR_SESSION_KEY)
+    }
+
+    private _getSessionState(): { tourId: string; stepIndex: number } | null {
+        const stored = sessionStore._get(ACTIVE_TOUR_SESSION_KEY)
+        if (!stored) {
+            return null
+        }
+        try {
+            return JSON.parse(stored)
+        } catch {
+            return null
+        }
+    }
+
     start(): void {
         if (this._checkInterval) {
             return
         }
 
+        // Check for saved session state before starting the evaluation loop
+        const savedState = this._getSessionState()
+        if (savedState) {
+            this._resumeSavedTour(savedState.tourId, savedState.stepIndex, () => {
+                this._startEvaluationLoop()
+            })
+        } else {
+            this._startEvaluationLoop()
+        }
+    }
+
+    private _startEvaluationLoop(): void {
         this._checkInterval = setInterval(() => {
             this._evaluateAndDisplayTours()
         }, CHECK_INTERVAL_MS)
 
-        this._evaluateAndDisplayTours()
+        this._evaluateAndDisplayTours(true)
         addEventListener(document, 'visibilitychange', this._handleVisibilityChange)
+    }
+
+    private _resumeSavedTour(tourId: string, stepIndex: number, onComplete: () => void): void {
+        this._instance.productTours?.getProductTours((tours) => {
+            const tour = tours.find((t) => t.id === tourId)
+
+            if (!tour) {
+                if (tours.length > 0) {
+                    this._clearSessionState()
+                }
+            } else {
+                this._activeTour = tour
+                this._currentStepIndex = stepIndex
+                this._isResuming = true
+                this._renderCurrentStep()
+            }
+
+            onComplete()
+        })
     }
 
     stop(): void {
@@ -180,7 +298,7 @@ export class ProductTourManager {
         }
     }
 
-    private _evaluateAndDisplayTours(): void {
+    private _evaluateAndDisplayTours(forceReload?: boolean): void {
         if (document?.getElementById(TOOLBAR_ID)) {
             return
         }
@@ -253,7 +371,7 @@ export class ProductTourManager {
                     this._removeTriggerSelectorListener(tour.id)
                 }
             })
-        })
+        }, forceReload)
     }
 
     private _showOrQueueTour(tour: ProductTour, reason: ProductTourRenderReason): void {
@@ -273,93 +391,79 @@ export class ProductTourManager {
             return false
         }
 
+        const displayFrequency = tour.display_frequency ?? 'until_interacted'
+        const shownKey = `${TOUR_SHOWN_KEY_PREFIX}${tour.id}`
         const completedKey = `${TOUR_COMPLETED_KEY_PREFIX}${tour.id}`
         const dismissedKey = `${TOUR_DISMISSED_KEY_PREFIX}${tour.id}`
 
-        if (localStore._get(completedKey) || localStore._get(dismissedKey)) {
-            logger.info(`Tour ${tour.id} already completed or dismissed`)
+        switch (displayFrequency) {
+            case 'show_once':
+                if (localStore._get(shownKey)) {
+                    logger.info(`Tour ${tour.id} already shown (show_once frequency)`)
+                    return false
+                }
+                break
+
+            case 'until_interacted':
+                if (localStore._get(completedKey) || localStore._get(dismissedKey)) {
+                    logger.info(`Tour ${tour.id} already completed or dismissed`)
+                    return false
+                }
+                break
+
+            case 'always':
+            default:
+                break
+        }
+
+        if (!this._isProductToursFeatureFlagEnabled({ flagKey: tour.internal_targeting_flag_key })) {
+            logger.info(`Tour ${tour.id} failed feature flag check: ${tour.internal_targeting_flag_key}`)
             return false
         }
 
-        if (tour.internal_targeting_flag_key) {
-            const flagValue = this._instance.featureFlags?.getFeatureFlag(tour.internal_targeting_flag_key)
-            if (!flagValue) {
-                logger.info(`Tour ${tour.id} failed feature flag check: ${tour.internal_targeting_flag_key}`)
-                return false
-            }
+        const linkedFlagVariant = tour.conditions?.linkedFlagVariant
+        if (
+            !this._isProductToursFeatureFlagEnabled({ flagKey: tour.linked_flag_key, flagVariant: linkedFlagVariant })
+        ) {
+            logger.info(
+                `Tour ${tour.id} failed feature flag check: ${tour.linked_flag_key}, variant: ${linkedFlagVariant}`
+            )
+            return false
         }
 
         return true
     }
 
-    showTour(tour: ProductTour, options?: ShowTourOptions): void {
+    showTour(tour: ProductTour, options?: ShowTourOptions): boolean {
         const renderReason: ProductTourRenderReason = options?.reason ?? 'auto'
 
         this.cancelPendingTour(tour.id)
 
-        // Validate all step selectors before showing the tour
-        // Steps without selectors are modal steps and don't need validation
-        const selectorFailures: Array<{
-            stepIndex: number
-            stepId: string
-            selector: string
-            error: string
-            matchCount: number
-        }> = []
-
-        for (let i = 0; i < tour.steps.length; i++) {
-            const step = tour.steps[i]
-
-            // Skip validation for modal steps (no selector)
-            if (!step.selector) {
-                continue
-            }
-
-            const result = findElementBySelector(step.selector)
-
-            if (result.error === 'not_found' || result.error === 'not_visible') {
-                selectorFailures.push({
-                    stepIndex: i,
-                    stepId: step.id,
-                    selector: step.selector,
-                    error: result.error,
-                    matchCount: result.matchCount,
-                })
-            }
-        }
-
-        if (selectorFailures.length > 0) {
-            // Emit events for each failed selector for debugging/data purposes
-            for (const failure of selectorFailures) {
-                this._captureEvent('product tour step selector failed', {
-                    $product_tour_id: tour.id,
-                    $product_tour_step_id: failure.stepId,
-                    $product_tour_step_order: failure.stepIndex,
-                    $product_tour_step_selector: failure.selector,
-                    $product_tour_error: failure.error,
-                    $product_tour_matches_count: failure.matchCount,
-                    $product_tour_failure_phase: 'validation',
-                })
-            }
-
-            const failedSelectors = selectorFailures.map((f) => `Step ${f.stepIndex}: "${f.selector}" (${f.error})`)
-            logger.warn(
-                `Tour "${tour.name}" (${tour.id}): ${selectorFailures.length} selector(s) failed to match:\n  - ${failedSelectors.join('\n  - ')}${options?.enableStrictValidation === true ? '\n\nenableStrictValidation is true, not displaying tour.' : ''}`
-            )
-            if (options?.enableStrictValidation === true) return
-        }
-
         this._activeTour = tour
-        this._currentStepIndex = 0
+        this._setStepIndex(0)
 
-        this._captureEvent('product tour shown', {
-            $product_tour_id: tour.id,
-            $product_tour_name: tour.name,
-            $product_tour_iteration: tour.current_iteration || 1,
-            $product_tour_render_reason: renderReason,
-        })
+        const rendered = this._renderCurrentStep()
 
-        this._renderCurrentStep()
+        if (rendered) {
+            this._captureEvent('product tour shown', {
+                $product_tour_id: tour.id,
+                $product_tour_name: tour.name,
+                $product_tour_iteration: tour.current_iteration || 1,
+                $product_tour_render_reason: renderReason,
+            })
+
+            if (!this._isPreviewMode) {
+                localStore._set(`${TOUR_SHOWN_KEY_PREFIX}${tour.id}`, true)
+
+                this._instance.capture('$set', {
+                    $set: { [`$product_tour_shown/${tour.id}`]: true },
+                })
+            }
+        } else {
+            this._cleanup()
+        }
+
+        return rendered
     }
 
     showTourById(tourId: string, reason?: ProductTourRenderReason): void {
@@ -400,7 +504,7 @@ export class ProductTourManager {
         })
 
         if (this._currentStepIndex < this._activeTour.steps.length - 1) {
-            this._currentStepIndex++
+            this._setStepIndex(this._currentStepIndex + 1)
             this._renderCurrentStep()
         } else {
             this._completeTour()
@@ -412,7 +516,7 @@ export class ProductTourManager {
             return
         }
 
-        this._currentStepIndex--
+        this._setStepIndex(this._currentStepIndex - 1)
         this._renderCurrentStep()
     }
 
@@ -432,6 +536,10 @@ export class ProductTourManager {
 
         if (!this._isPreviewMode) {
             localStore._set(`${TOUR_DISMISSED_KEY_PREFIX}${this._activeTour.id}`, true)
+
+            this._instance.capture('$set', {
+                $set: { [`$product_tour_dismissed/${this._activeTour.id}`]: true },
+            })
         }
 
         window.dispatchEvent(
@@ -439,6 +547,29 @@ export class ProductTourManager {
         )
 
         this._cleanup()
+    }
+
+    private _handleButtonClick = (button: ProductTourStepButton): void => {
+        switch (button.action) {
+            case 'dismiss':
+                this.dismissTour('user_clicked_skip')
+                break
+            case 'next_step':
+                this.nextStep()
+                break
+            case 'previous_step':
+                this.previousStep()
+                break
+            case 'link':
+                this._completeTour()
+                break
+            case 'trigger_tour':
+                if (button.tourId) {
+                    this._completeTour()
+                    this.showTourById(button.tourId)
+                }
+                break
+        }
     }
 
     private _completeTour(): void {
@@ -466,58 +597,80 @@ export class ProductTourManager {
         this._cleanup()
     }
 
-    private _renderCurrentStep(retryCount: number = 0): void {
+    private _renderCurrentStep(retryCount: number = 0): boolean {
         if (!this._activeTour) {
-            return
+            return false
         }
 
         const step = this._activeTour.steps[this._currentStepIndex]
+        if (!step) {
+            logger.warn(`Step ${this._currentStepIndex} not found in tour ${this._activeTour.id}`)
+            this._cleanup()
+            return false
+        }
+
+        // Banner step - render full-width banner
+        if (step.type === 'banner') {
+            this._captureEvent('product tour step shown', {
+                $product_tour_id: this._activeTour.id,
+                $product_tour_step_id: step.id,
+                $product_tour_step_order: this._currentStepIndex,
+                $product_tour_step_type: 'banner',
+            })
+
+            this._isResuming = false
+            this._renderBanner()
+            return true
+        }
 
         // Survey step - render native survey step component
         if (step.type === 'survey') {
             if (step.survey) {
                 this._renderSurveyStep()
-            } else {
-                logger.warn('Unable to render survey step - survey data not found')
+                return true
             }
 
-            return
+            logger.warn('Unable to render survey step - survey data not found')
+            return false
         }
 
-        // Modal step (no selector) - render without a target element
-        if (step.type === 'modal') {
+        // Screen-positioned step (no element targeting) - render without a target element
+        if (!hasElementTarget(step)) {
             this._captureEvent('product tour step shown', {
                 $product_tour_id: this._activeTour.id,
                 $product_tour_step_id: step.id,
                 $product_tour_step_order: this._currentStepIndex,
-                $product_tour_step_type: 'modal',
+                $product_tour_step_type: step.type,
             })
 
+            this._isResuming = false
             this._renderTooltipWithPreact(null)
-            return
+            return true
         }
 
-        if (!step.selector) {
-            logger.warn('Unable to render element step - no selector defined.')
-            return
-        }
+        const result = findStepElement(step)
 
-        const result = findElementBySelector(step.selector)
+        const inferenceProps = {
+            $use_manual_selector: step.useManualSelector ?? false,
+            $inference_data_present: !!step.inferenceData,
+        }
 
         const previousStep = this._currentStepIndex > 0 ? this._activeTour.steps[this._currentStepIndex - 1] : null
-        const shouldWaitForElement = previousStep?.progressionTrigger === 'click'
+        const shouldWaitForElement = previousStep?.progressionTrigger === 'click' || this._isResuming
 
         // 2s total timeout
         const maxRetries = 20
         const retryTimeout = 100
 
         if (result.error === 'not_found' || result.error === 'not_visible') {
-            // if previous step was click-to-progress, give some time for the next element
+            // if previous step was click-to-progress, or we are resuming a tour,
+            // give some time for the next element
             if (shouldWaitForElement && retryCount < maxRetries) {
                 setTimeout(() => {
                     this._renderCurrentStep(retryCount + 1)
                 }, retryTimeout)
-                return
+
+                return false
             }
 
             const waitDurationMs = retryCount * retryTimeout
@@ -532,14 +685,22 @@ export class ProductTourManager {
                 $product_tour_failure_phase: 'runtime',
                 $product_tour_waited_for_element: shouldWaitForElement,
                 $product_tour_wait_duration_ms: waitDurationMs,
+                ...inferenceProps,
             })
+
+            if (this._currentStepIndex === 0 && !this._isResuming) {
+                logger.warn(
+                    `Tour "${this._activeTour.name}" failed to show: element for first step not found (${result.error})`
+                )
+                return false
+            }
 
             logger.warn(
                 `Tour "${this._activeTour.name}" dismissed: element for step ${this._currentStepIndex} became unavailable (${result.error})` +
                     (shouldWaitForElement ? ` after waiting ${waitDurationMs}ms` : '')
             )
             this.dismissTour('element_unavailable')
-            return
+            return false
         }
 
         if (result.error === 'multiple_matches') {
@@ -551,12 +712,13 @@ export class ProductTourManager {
                 $product_tour_error: result.error,
                 $product_tour_matches_count: result.matchCount,
                 $product_tour_failure_phase: 'runtime',
+                ...inferenceProps,
             })
             // Continue with first match for multiple_matches case
         }
 
         if (!result.element) {
-            return
+            return false
         }
 
         const element = result.element
@@ -572,9 +734,12 @@ export class ProductTourManager {
             $product_tour_step_element_id: metadata.id,
             $product_tour_step_element_classes: metadata.classes,
             $product_tour_step_element_text: metadata.text,
+            ...inferenceProps,
         })
 
+        this._isResuming = false
         this._renderTooltipWithPreact(element)
+        return true
     }
 
     private _renderTooltipWithPreact(
@@ -600,6 +765,45 @@ export class ProductTourManager {
                 onPrevious={this.previousStep}
                 onDismiss={onDismissOverride || this.dismissTour}
                 onSurveySubmit={onSurveySubmit}
+                onButtonClick={this._handleButtonClick}
+            />,
+            shadow
+        )
+    }
+
+    private _renderBanner(): void {
+        if (!this._activeTour) {
+            return
+        }
+
+        const step = this._activeTour.steps[this._currentStepIndex]
+        const result = retrieveBannerShadow(this._activeTour, step.bannerConfig)
+
+        if (!result) {
+            this._captureEvent('product tour banner container selector failed', {
+                $product_tour_id: this._activeTour.id,
+                $product_tour_banner_selector: step?.bannerConfig?.selector,
+            })
+            this.dismissTour('container_unavailable')
+            return
+        }
+
+        const { shadow } = result
+
+        const handleTriggerTour = () => {
+            const tourId = step.bannerConfig?.action?.tourId
+            if (tourId) {
+                this._cleanup()
+                this.showTourById(tourId)
+            }
+        }
+
+        render(
+            <ProductTourBanner
+                step={step}
+                onDismiss={() => this.dismissTour('user_clicked_skip')}
+                onTriggerTour={handleTriggerTour}
+                displayFrequency={this._activeTour.display_frequency}
             />,
             shadow
         )
@@ -675,6 +879,21 @@ export class ProductTourManager {
         logger.info(`Rendered survey step for tour step ${this._currentStepIndex}`)
     }
 
+    private _isProductToursFeatureFlagEnabled({ flagKey, flagVariant }: { flagKey?: string; flagVariant?: string }) {
+        if (!flagKey) {
+            return true
+        }
+        const isFeatureEnabled = !!this._instance.featureFlags.isFeatureEnabled(flagKey, {
+            send_event: !flagKey.startsWith(PRODUCT_TOUR_TARGETING_FLAG_PREFIX),
+        })
+        let flagVariantCheck = true
+        if (flagVariant) {
+            const flagVariantValue = this._instance.featureFlags.getFeatureFlag(flagKey, { send_event: false })
+            flagVariantCheck = flagVariantValue === flagVariant || flagVariant === 'any'
+        }
+        return isFeatureEnabled && flagVariantCheck
+    }
+
     private _cleanup(): void {
         if (this._activeTour) {
             removeTourFromDom(this._activeTour.id)
@@ -683,6 +902,8 @@ export class ProductTourManager {
         this._activeTour = null
         this._currentStepIndex = 0
         this._isPreviewMode = false
+        this._isResuming = false
+        this._clearSessionState()
     }
 
     private _manageTriggerSelectorListener(tour: ProductTour, selector: string): void {
@@ -707,21 +928,34 @@ export class ProductTourManager {
 
         if (!currentElement.hasAttribute(TRIGGER_LISTENER_ATTRIBUTE)) {
             const listener = (event: Event) => {
-                event.stopPropagation()
-
                 if (this._activeTour) {
                     logger.info(`Tour ${tour.id} trigger clicked but another tour is active`)
                     return
                 }
 
-                // manual triggers only check launch status + URL, no other conditions
-                if (!checkTourConditions(tour)) {
-                    logger.warn(`Tour ${tour.id} trigger clicked but failed conditions check`)
+                let currentTour: ProductTour | undefined
+                this._instance.productTours?.getProductTours((tours) => {
+                    currentTour = tours.find((t) => t.id === tour.id)
+                })
+
+                if (!currentTour) {
+                    logger.warn(`Tour ${tour.id} no longer exists. Removing stale listener.`)
+                    this._removeTriggerSelectorListener(tour.id)
+                    return
+                }
+
+                if (!isTourInDateRange(currentTour)) {
+                    logger.warn(`Tour ${tour.id} trigger clicked, but tour is not launched - not showing tour.`)
                     return
                 }
 
                 logger.info(`Tour ${tour.id} triggered by click on ${selector}`)
-                this.showTour(tour, { reason: 'trigger' })
+
+                if (this.showTour(currentTour, { reason: 'trigger' })) {
+                    event.preventDefault()
+                } else {
+                    logger.info(`Tour ${tour.id} failed to show; not intercepting click.`)
+                }
             }
 
             addEventListener(currentElement, 'click', listener)
@@ -768,6 +1002,7 @@ export class ProductTourManager {
     }
 
     resetTour(tourId: string): void {
+        localStore._remove(`${TOUR_SHOWN_KEY_PREFIX}${tourId}`)
         localStore._remove(`${TOUR_COMPLETED_KEY_PREFIX}${tourId}`)
         localStore._remove(`${TOUR_DISMISSED_KEY_PREFIX}${tourId}`)
     }
@@ -780,7 +1015,11 @@ export class ProductTourManager {
         const keysToRemove: string[] = []
         for (let i = 0; i < storage.length; i++) {
             const key = storage.key(i)
-            if (key?.startsWith(TOUR_COMPLETED_KEY_PREFIX) || key?.startsWith(TOUR_DISMISSED_KEY_PREFIX)) {
+            if (
+                key?.startsWith(TOUR_SHOWN_KEY_PREFIX) ||
+                key?.startsWith(TOUR_COMPLETED_KEY_PREFIX) ||
+                key?.startsWith(TOUR_DISMISSED_KEY_PREFIX)
+            ) {
                 keysToRemove.push(key)
             }
         }

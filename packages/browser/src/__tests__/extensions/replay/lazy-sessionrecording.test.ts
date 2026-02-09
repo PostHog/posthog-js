@@ -350,6 +350,80 @@ describe('Lazy SessionRecording', () => {
             })
         })
 
+        describe('remote config cache invalidation', () => {
+            const FIVE_MINUTES_IN_MS = 5 * 60 * 1000
+
+            it.each([
+                ['ignores config with no cache_timestamp (legacy)', { enabled: true, endpoint: '/s/' }, false],
+                [
+                    'ignores config with stale cache_timestamp (> 5 minutes old)',
+                    { enabled: true, endpoint: '/s/', cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000 },
+                    false,
+                ],
+                [
+                    'uses config with fresh cache_timestamp (< 5 minutes old)',
+                    { enabled: true, endpoint: '/s/', cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS + 60000 },
+                    true,
+                ],
+                [
+                    'uses config with very recent cache_timestamp',
+                    { enabled: true, endpoint: '/s/', cache_timestamp: Date.now() - 1000 },
+                    true,
+                ],
+            ])('%s', (_name, persistedConfig, shouldUseConfig) => {
+                // stop recording so TTL check is active
+                sessionRecording.stopRecording()
+
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: persistedConfig,
+                })
+
+                const result = sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']
+
+                if (shouldUseConfig) {
+                    expect(result?.enabled).toBe(true)
+                } else {
+                    expect(result).toBeUndefined()
+                    expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBeUndefined()
+                }
+            })
+
+            it('waits for fresh remote config when persisted config is stale', () => {
+                // stop recording so TTL check is active
+                sessionRecording.stopRecording()
+
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: { enabled: true, endpoint: '/s/' },
+                })
+
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']).toBeUndefined()
+
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+                const config = sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']
+                expect(config?.enabled).toBe(true)
+                expect(config?.cache_timestamp).toBeDefined()
+                expect(Date.now() - config!.cache_timestamp!).toBeLessThan(1000)
+            })
+
+            it('trusts stale config once recording has started (long-lived SPA)', () => {
+                expect(sessionRecording['_lazyLoadedSessionRecording'].isStarted).toBe(true)
+
+                // simulate time passing and config becoming stale
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: {
+                        enabled: true,
+                        endpoint: '/s/',
+                        cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000,
+                    },
+                })
+
+                // should still return config because recording has started
+                const config = sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']
+                expect(config?.enabled).toBe(true)
+            })
+        })
+
         describe('isConsoleLogCaptureEnabled', () => {
             it.each([
                 ['enabled when both enabled', true, true, true],
@@ -399,6 +473,7 @@ describe('Lazy SessionRecording', () => {
                 ) => {
                     posthog.persistence?.register({
                         [SESSION_RECORDING_REMOTE_CONFIG]: {
+                            cache_timestamp: Date.now(),
                             canvasRecording: { enabled: serverSide, fps: 4, quality: '0.1' },
                         },
                     })
@@ -430,6 +505,7 @@ describe('Lazy SessionRecording', () => {
                 ) => {
                     posthog.persistence?.register({
                         [SESSION_RECORDING_REMOTE_CONFIG]: {
+                            cache_timestamp: Date.now(),
                             canvasRecording: { enabled: true, fps, quality },
                         },
                     })
@@ -488,6 +564,7 @@ describe('Lazy SessionRecording', () => {
                 ) => {
                     posthog.persistence?.register({
                         [SESSION_RECORDING_REMOTE_CONFIG]: {
+                            cache_timestamp: Date.now(),
                             networkPayloadCapture: { capturePerformance: serverSide },
                         },
                     })
@@ -570,6 +647,7 @@ describe('Lazy SessionRecording', () => {
                 ) => {
                     posthog.persistence?.register({
                         [SESSION_RECORDING_REMOTE_CONFIG]: {
+                            cache_timestamp: Date.now(),
                             masking: serverConfig,
                         },
                     })
@@ -1102,6 +1180,60 @@ describe('Lazy SessionRecording', () => {
 
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimer']).not.toBe(undefined)
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimer']).not.toBe(startTimer)
+            })
+        })
+
+        describe('full snapshot timestamp tracking', () => {
+            beforeEach(() => {
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                        },
+                    })
+                )
+            })
+
+            it.each([
+                [1, [1000]],
+                [6, [1000, 2000, 3000, 4000, 5000, 6000]],
+                [8, [3000, 4000, 5000, 6000, 7000, 8000]],
+            ])('tracks last 6 full snapshot timestamps when %s snapshots emitted', (count, expectedTimestamps) => {
+                for (let i = 1; i <= count; i++) {
+                    _emit(createFullSnapshot({ timestamp: i * 1000 }))
+                }
+
+                const snapshots = sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimestamps']
+                expect(snapshots).toEqual(expectedTimestamps.map((ts: number) => [sessionId, ts]))
+            })
+
+            it('exposes full snapshot timestamps in sdkDebugProperties', () => {
+                _emit(createFullSnapshot({ timestamp: 1000 }))
+                _emit(createFullSnapshot({ timestamp: 2000 }))
+
+                expect(sessionRecording.sdkDebugProperties.$sdk_debug_replay_full_snapshots).toEqual([
+                    [sessionId, 1000],
+                    [sessionId, 2000],
+                ])
+            })
+
+            it('records the session id at the time of the snapshot', () => {
+                const firstSessionId = sessionId
+
+                _emit(createFullSnapshot({ timestamp: 1000 }))
+                _emit(createFullSnapshot({ timestamp: 2000 }))
+
+                sessionManager.resetSessionId()
+                sessionId = 'rotated-session-id'
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
+                _emit(createFullSnapshot({ timestamp: 3000 }))
+
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimestamps']).toEqual([
+                    [firstSessionId, 1000],
+                    [firstSessionId, 2000],
+                    ['rotated-session-id', 3000],
+                ])
             })
         })
 
@@ -2518,6 +2650,62 @@ describe('Lazy SessionRecording', () => {
             expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(undefined)
             expect(sessionRecording.status).toBe('active')
         })
+
+        describe('legacy boolean true in persistence', () => {
+            it.each([
+                ['0% sample rate', '0.00', 'disabled'],
+                ['100% sample rate', '1.00', 'sampled'],
+            ] as const)(
+                'clears legacy true and makes fresh sampling decision with %s',
+                (_name, sampleRate, expectedStatus) => {
+                    // simulate legacy SDK having stored boolean true
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_IS_SAMPLED]: true,
+                    })
+                    expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(true)
+
+                    sessionRecording.onRemoteConfig(
+                        makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate } })
+                    )
+
+                    // legacy true should be treated as unknown and a fresh decision made
+                    expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).not.toBe(true)
+                    expect(sessionRecording.status).toBe(expectedStatus)
+                }
+            )
+
+            it('legacy true with 0% sample rate does not record even if session has not changed', () => {
+                // simulate legacy SDK having stored boolean true
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_IS_SAMPLED]: true,
+                })
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.00' } })
+                )
+
+                // should be disabled despite legacy true, because 0% sample rate
+                expect(sessionRecording.status).toBe('disabled')
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+                expect(posthog.capture).not.toHaveBeenCalled()
+            })
+
+            it('preserves false from persistence (not legacy, still valid format)', () => {
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_IS_SAMPLED]: false,
+                })
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.50' } })
+                )
+
+                // false is still valid format, should remain disabled
+                expect(sessionRecording.status).toBe('disabled')
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+            })
+        })
     })
 
     describe('masking', () => {
@@ -3062,6 +3250,8 @@ describe('Lazy SessionRecording', () => {
             expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_starting', {
                 previousSessionId: sessionId,
                 previousWindowId: 'windowId',
+                nextSessionId: newSessionId,
+                nextWindowId: newWindowId,
                 changeReason: {
                     noSessionId: false,
                     activityTimeout: true,
@@ -3105,6 +3295,8 @@ describe('Lazy SessionRecording', () => {
             expect(tryAddCustomEvent).toHaveBeenCalledWith('$session_starting', {
                 previousSessionId: sessionId,
                 previousWindowId: 'windowId',
+                nextSessionId: newSessionId,
+                nextWindowId: newWindowId,
                 changeReason: {
                     noSessionId: false,
                     activityTimeout: false,
@@ -3221,6 +3413,144 @@ describe('Lazy SessionRecording', () => {
                     })
                 )
             })
+        })
+
+        it('routes $session_starting and $session_ending events to correct session IDs', () => {
+            const currentSessionId = sessionId
+            const currentWindowId = 'windowId'
+            const newSessionId = 'new-session-id'
+            const newWindowId = 'new-window-id'
+
+            // Spy on posthog.capture to verify session IDs
+            const captureSpy = jest.spyOn(posthog, 'capture')
+            captureSpy.mockClear()
+
+            // Create a $session_ending event with payload containing session IDs
+            const sessionEndingEvent = createCustomSnapshot(
+                {},
+                {
+                    currentSessionId: currentSessionId,
+                    currentWindowId: currentWindowId,
+                    nextSessionId: newSessionId,
+                    nextWindowId: newWindowId,
+                    lastActivityTimestamp: Date.now(),
+                },
+                '$session_ending'
+            )
+
+            // Emit the $session_ending event
+            _emit(sessionEndingEvent)
+
+            // Flush to capture
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Verify $session_ending is routed to currentSessionId (old session)
+            expect(captureSpy).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({
+                    $session_id: currentSessionId,
+                    $window_id: currentWindowId,
+                    $snapshot_data: expect.arrayContaining([
+                        expect.objectContaining({
+                            type: EventType.Custom,
+                            data: expect.objectContaining({ tag: '$session_ending' }),
+                        }),
+                    ]),
+                }),
+                expect.anything()
+            )
+
+            captureSpy.mockClear()
+
+            // Now simulate session ID change on the recorder instance
+            // This would normally happen via stop/start in _onSessionIdCallback
+            sessionRecording['_lazyLoadedSessionRecording']['_sessionId'] = newSessionId
+            sessionRecording['_lazyLoadedSessionRecording']['_windowId'] = newWindowId
+            sessionRecording['_lazyLoadedSessionRecording']['_buffer'] = {
+                size: 0,
+                data: [],
+                sessionId: newSessionId,
+                windowId: newWindowId,
+            }
+
+            // Create a $session_starting event with payload containing session IDs
+            const sessionStartingEvent = createCustomSnapshot(
+                {},
+                {
+                    previousSessionId: currentSessionId,
+                    previousWindowId: currentWindowId,
+                    nextSessionId: newSessionId,
+                    nextWindowId: newWindowId,
+                    lastActivityTimestamp: Date.now(),
+                },
+                '$session_starting'
+            )
+
+            // Emit the $session_starting event
+            _emit(sessionStartingEvent)
+
+            // Flush to capture
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Verify $session_starting is routed to nextSessionId (new session)
+            expect(captureSpy).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({
+                    $session_id: newSessionId,
+                    $window_id: newWindowId,
+                    $snapshot_data: expect.arrayContaining([
+                        expect.objectContaining({
+                            type: EventType.Custom,
+                            data: expect.objectContaining({ tag: '$session_starting' }),
+                        }),
+                    ]),
+                }),
+                expect.anything()
+            )
+        })
+
+        it('uses targetSessionId from event payload to correctly route lifecycle events', () => {
+            const oldSessionId = sessionId
+            const newSessionId = 'new-session-after-change'
+
+            // Ensure recorder is not idle
+            sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = false
+
+            // Emit an event to the old session
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(1)
+
+            // Now simulate the recorder instance having transitioned to the new session
+            // (This happens in _onSessionIdCallback after stop/start)
+            sessionRecording['_lazyLoadedSessionRecording']['_sessionId'] = newSessionId
+            sessionRecording['_lazyLoadedSessionRecording']['_windowId'] = 'new-window-id'
+
+            // Emit a $session_starting event for the NEW session
+            // Even though the buffer still has the old sessionId, this event should be routed to the new session
+            const sessionStartingEvent = createCustomSnapshot(
+                {},
+                {
+                    previousSessionId: oldSessionId,
+                    previousWindowId: 'windowId',
+                    nextSessionId: newSessionId,
+                    nextWindowId: 'new-window-id',
+                    lastActivityTimestamp: Date.now(),
+                },
+                '$session_starting'
+            )
+
+            _emit(sessionStartingEvent)
+
+            // The buffer should now have been flushed because buffer.sessionId (old) !== targetSessionId (new)
+            // and a new buffer should be created with the new session ID
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].sessionId).toBe(newSessionId)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].windowId).toBe('new-window-id')
+
+            // The buffer should only have the new event, not the old one
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(1)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data[0].data.tag).toBe(
+                '$session_starting'
+            )
         })
     })
 

@@ -49,6 +49,7 @@ import {
 } from '@posthog/core'
 import {
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
+    SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_OVERRIDE_SAMPLING,
     SESSION_RECORDING_OVERRIDE_LINKED_FLAG,
@@ -246,8 +247,18 @@ function getSessionEndingPayload(e: eventWithTime): SessionEndingPayload | null 
     return isSessionEndingEvent(e) ? (e.data.payload as SessionEndingPayload) : null
 }
 
+type SessionStartingPayload = {
+    lastActivityTimestamp?: number
+    nextSessionId?: string
+    nextWindowId?: string
+}
+
 function isSessionStartingEvent(e: eventWithTime): e is eventWithTime & customEvent {
     return isCustomEvent(e, '$session_starting')
+}
+
+function getSessionStartingPayload(e: eventWithTime): SessionStartingPayload | null {
+    return isSessionStartingEvent(e) ? (e.data.payload as SessionStartingPayload) : null
 }
 
 function isAllowedWhenIdle(e: eventWithTime): boolean {
@@ -316,6 +327,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // as we make some decisions based on them without referencing LinkedFlag etc
     private _triggerMatching: TriggerStatusMatching = new PendingTriggerMatching()
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
+    private _fullSnapshotTimestamps: Array<[string, number]> = []
 
     private _windowId: string
     private _sessionId: string
@@ -347,9 +359,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private get _isSampled(): boolean | null {
         const currentValue = this._instance.get_property(SESSION_RECORDING_IS_SAMPLED)
-        // originally we would store `true` or `false` or nothing,
-        // but that would mean sometimes we would carry on recording on session id change
-        return isBoolean(currentValue) ? currentValue : isString(currentValue) ? currentValue === this.sessionId : null
+        // we store the session id when sampled so that we can detect session id changes
+        // and `false` when not sampled
+        // legacy SDKs stored `true` when sampled, but that is not tied to a session id
+        // so we treat it as null (unknown) and will make a fresh decision
+        if (currentValue === true) {
+            return null
+        }
+        return currentValue === false ? false : isString(currentValue) ? currentValue === this.sessionId : null
     }
 
     private get _sampleRate(): number | null {
@@ -679,6 +696,21 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return undefined
         }
         const parsedConfig = isObject(persistedConfig) ? persistedConfig : JSON.parse(persistedConfig)
+
+        // Only check TTL if recording hasn't started yet
+        // Once started, trust the config until a hard page load
+        if (!this.isStarted) {
+            const cacheTimestamp = parsedConfig.cache_timestamp
+            if (!cacheTimestamp || Date.now() - cacheTimestamp > FIVE_MINUTES) {
+                logger.info('persisted remote config for session recording is stale and will be ignored', {
+                    cacheTimestamp,
+                    persistedConfig,
+                })
+                this._instance.persistence?.unregister(SESSION_RECORDING_REMOTE_CONFIG)
+                return undefined
+            }
+        }
+
         return parsedConfig as SessionRecordingPersistedConfig
     }
 
@@ -703,6 +735,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         const { sessionId, windowId } = this._sessionManager.checkAndGetSessionAndWindowId()
         this._sessionId = sessionId
         this._windowId = windowId
+
+        // Reset first full snapshot tracking for the new session
+        this._instance.persistence?.unregister(SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP)
 
         if (config?.endpoint) {
             this._endpoint = config?.endpoint
@@ -839,6 +874,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._flushedSizeTracker.reset()
         }
 
+        // Reset first full snapshot timestamp for the new session
+        this._instance.persistence?.unregister(SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP)
+
         this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
 
         this._clearConditionalRecordingPersistence()
@@ -852,6 +890,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._tryAddCustomEvent('$session_starting', {
                 previousSessionId: oldSessionId,
                 previousWindowId: oldWindowId,
+                nextSessionId: sessionId,
+                nextWindowId: windowId,
                 changeReason,
                 // we'll need to correct the time of this if it's captured when idle
                 // so we don't extend reported session time with a debug event
@@ -939,6 +979,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._scheduleFullSnapshot()
             // Full snapshots reset rrweb's node IDs, so clear any logged node tracking
             this._mutationThrottler?.reset()
+
+            // Track the timestamp of the first full snapshot for this session
+            // This helps us detect session rotation issues where incremental snapshots
+            // are sent before the full snapshot
+            this._instance.persistence?.register_once(
+                {
+                    [SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP]: rawEvent.timestamp,
+                },
+                undefined
+            )
         }
 
         // Clear the buffer if waiting for a trigger and only keep data from after the current full snapshot
@@ -962,13 +1012,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Session lifecycle events ($session_ending, $session_starting) carry their target session ID
         // in the payload. We must extract this BEFORE _updateWindowAndSessionIds runs, because that
         // method triggers checkAndGetSessionAndWindowId() which would update this._sessionId.
-        // This is critical for $session_ending which must go to the OLD session, not the new one.
+        // This is critical for $session_ending which must go to the OLD session, not the new one,
+        // and for $session_starting which must go to the NEW session.
         const sessionEndingPayload = getSessionEndingPayload(event)
-        const sessionStarting = isSessionStartingEvent(event)
+        const sessionStartingPayload = getSessionStartingPayload(event)
 
-        if (sessionEndingPayload || sessionStarting) {
+        if (sessionEndingPayload || sessionStartingPayload) {
             // Adjust timestamp from payload to avoid artificially extending session duration
-            const payload = (sessionEndingPayload ?? (event as customEvent).data.payload) as {
+            const payload = (sessionEndingPayload ?? sessionStartingPayload) as {
                 lastActivityTimestamp?: number
             }
             if (payload?.lastActivityTimestamp) {
@@ -978,9 +1029,21 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._updateWindowAndSessionIds(event)
         }
 
-        // $session_ending uses session ID from payload (the old session), others use current session
-        const targetSessionId = sessionEndingPayload?.currentSessionId ?? this._sessionId
-        const targetWindowId = sessionEndingPayload?.currentWindowId ?? this._windowId
+        if (rawEvent.type === EventType.FullSnapshot) {
+            this._fullSnapshotTimestamps.push([this._sessionId, rawEvent.timestamp])
+            if (this._fullSnapshotTimestamps.length > 6) {
+                this._fullSnapshotTimestamps = this._fullSnapshotTimestamps.slice(-6)
+            }
+        }
+
+        // Route lifecycle events using their payload IDs:
+        // - $session_ending uses currentSessionId (the old session it's ending)
+        // - $session_starting uses nextSessionId (the new session it's starting)
+        // - All other events use the current session ID
+        const targetSessionId =
+            sessionEndingPayload?.currentSessionId ?? sessionStartingPayload?.nextSessionId ?? this._sessionId
+        const targetWindowId =
+            sessionEndingPayload?.currentWindowId ?? sessionStartingPayload?.nextWindowId ?? this._windowId
 
         // When in an idle state we keep recording but don't capture the events,
         // we don't want to return early if idle is 'unknown'
@@ -1173,12 +1236,21 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _captureSnapshotBuffered(properties: Properties) {
         const additionalBytes = 2 + (this._buffer?.data.length || 0) // 2 bytes for the array brackets and 1 byte for each comma
+
+        // Extract target session ID from properties to ensure we flush when session changes
+        // This is critical for lifecycle events ($session_ending, $session_starting) which may
+        // have different target session IDs than this._sessionId
+        const targetSessionId = properties.$session_id as string
+
         if (
             !this._isIdle && // we never want to flush when idle
             (this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
-                this._buffer.sessionId !== this._sessionId)
+                this._buffer.sessionId !== targetSessionId)
         ) {
             this._buffer = this._flushBuffer()
+            // After flushing, update buffer to use the new target session/window IDs
+            this._buffer.sessionId = targetSessionId
+            this._buffer.windowId = properties.$window_id as string
         }
 
         this._buffer.size += properties.$snapshot_bytes
@@ -1430,6 +1502,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_current_session_duration: this._sessionDuration,
             $sdk_debug_session_start: sessionStartTimestamp,
             $sdk_debug_replay_flushed_size: this._flushedSizeTracker?.currentTrackedSize,
+            $sdk_debug_replay_full_snapshots: this._fullSnapshotTimestamps,
         }
     }
 

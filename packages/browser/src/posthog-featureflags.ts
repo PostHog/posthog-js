@@ -12,6 +12,7 @@ import {
     RemoteConfigFeatureFlagCallback,
     EarlyAccessFeatureStage,
     FeatureFlagDetail,
+    FeatureFlagResult,
 } from './types'
 import { PostHogPersistence } from './posthog-persistence'
 
@@ -90,9 +91,33 @@ export const parseFlagsResponse = (
     let newFeatureFlagDetails = flagDetails
     if (response.errorsWhileComputingFlags) {
         // if not all flags were computed, we upsert flags instead of replacing them
-        newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
-        newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
-        newFeatureFlagDetails = { ...currentFlagDetails, ...newFeatureFlagDetails }
+        // but filter out flags that failed to evaluate so they don't overwrite cached values
+        if (flagDetails) {
+            const successfulKeys = new Set(Object.keys(flagDetails).filter((key) => !flagDetails[key]?.failed))
+
+            newFeatureFlags = {
+                ...currentFlags,
+                ...Object.fromEntries(Object.entries(newFeatureFlags).filter(([key]) => successfulKeys.has(key))),
+            }
+            newFeatureFlagPayloads = {
+                ...currentFlagPayloads,
+                ...Object.fromEntries(
+                    Object.entries(newFeatureFlagPayloads || {}).filter(([key]) => successfulKeys.has(key))
+                ),
+            }
+            newFeatureFlagDetails = {
+                ...currentFlagDetails,
+                ...Object.fromEntries(
+                    Object.entries(newFeatureFlagDetails || {}).filter(([key]) => successfulKeys.has(key))
+                ),
+            }
+        } else {
+            // v1 responses don't have flagDetails, so we can't filter by failed field
+            // Fall back to the original merge behavior
+            newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
+            newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
+            newFeatureFlagDetails = { ...currentFlagDetails, ...newFeatureFlagDetails }
+        }
     }
 
     persistence &&
@@ -110,7 +135,7 @@ const normalizeFlagsResponse = (response: Partial<FlagsResponse>): Partial<Flags
     const flagDetails = response['flags']
 
     if (flagDetails) {
-        // This is a v=4 request.
+        // This is a /flags?v=2 request.
 
         // Map of flag keys to flag values: Record<string, string | boolean>
         response.featureFlags = Object.fromEntries(
@@ -167,21 +192,36 @@ export class PostHogFeatureFlags {
     private _reloadDebouncer?: any
     private _flagsCalled: boolean = false
     private _flagsLoadedFromRemote: boolean = false
+    private _hasLoggedDeprecationWarning: boolean = false
 
     constructor(private _instance: PostHog) {
         this.featureFlagEventHandlers = []
     }
 
     private _getValidEvaluationEnvironments(): string[] {
-        const envs = this._instance.config.evaluation_environments
+        // Support both evaluation_contexts (new) and evaluation_environments (deprecated)
+        const envs = this._instance.config.evaluation_contexts ?? this._instance.config.evaluation_environments
+
+        // Log deprecation warning if using old field (only once)
+        if (
+            this._instance.config.evaluation_environments &&
+            !this._instance.config.evaluation_contexts &&
+            !this._hasLoggedDeprecationWarning
+        ) {
+            logger.warn(
+                'evaluation_environments is deprecated. Use evaluation_contexts instead. evaluation_environments will be removed in a future version.'
+            )
+            this._hasLoggedDeprecationWarning = true
+        }
+
         if (!envs?.length) {
             return []
         }
 
-        return envs.filter((env) => {
+        return envs.filter((env: string) => {
             const isValid = env && typeof env === 'string' && env.trim().length > 0
             if (!isValid) {
-                logger.error('Invalid evaluation environment found:', env, 'Expected non-empty string')
+                logger.error('Invalid evaluation context found:', env, 'Expected non-empty string')
             }
             return isValid
         })
@@ -354,6 +394,9 @@ export class PostHogFeatureFlags {
             return
         }
 
+        // Emit event so consumers know flags are being reloaded
+        this._instance._internalEventEmitter.emit('featureFlagsReloading', true)
+
         // Debounce multiple calls on the same tick
         this._reloadDebouncer = setTimeout(() => {
             this._callFlagsEndpoint()
@@ -421,9 +464,9 @@ export class PostHogFeatureFlags {
             data.disable_flags = true
         }
 
-        // Add evaluation environments if configured
+        // Add evaluation contexts if configured
         if (this._shouldIncludeEvaluationEnvironments()) {
-            data.evaluation_environments = this._getValidEvaluationEnvironments()
+            data.evaluation_contexts = this._getValidEvaluationEnvironments()
         }
 
         // flags supports loading config data with the `config` query param, but if you're using remote config, you
@@ -513,8 +556,65 @@ export class PostHogFeatureFlags {
             logger.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
-        const flagValue = this.getFlagVariants()[key]
-        const flagReportValue = `${flagValue}`
+        const result = this.getFeatureFlagResult(key, options)
+        return result?.variant ?? result?.enabled
+    }
+
+    /*
+     * Retrieves the details for a feature flag.
+     *
+     * ### Usage:
+     *
+     *     const details = getFeatureFlagDetails("my-flag")
+     *     console.log(details.metadata.version)
+     *     console.log(details.reason)
+     *
+     * @param {String} key Key of the feature flag.
+     */
+    getFeatureFlagDetails(key: string): FeatureFlagDetail | undefined {
+        const details = this.getFlagsWithDetails()
+        return details[key]
+    }
+
+    /**
+     * @deprecated Use `getFeatureFlagResult()` instead which properly tracks the feature flag call.
+     * `getFeatureFlagPayload()` does not emit the `$feature_flag_called` event which may result in
+     * missing analytics. This method will be removed in a future version.
+     */
+    getFeatureFlagPayload(key: string): JsonType {
+        // Don't send event to maintain backwards compatibility - this method never tracked calls
+        const result = this.getFeatureFlagResult(key, { send_event: false })
+        return result?.payload
+    }
+
+    /**
+     * Get a feature flag result including both the flag value and payload, while properly tracking the call.
+     * This method emits the `$feature_flag_called` event by default.
+     *
+     * ### Usage:
+     *
+     *     const result = posthog.getFeatureFlagResult('my-flag')
+     *     if (result?.enabled) {
+     *         console.log('Flag is enabled with payload:', result.payload)
+     *     }
+     *
+     * @param {String} key Key of the feature flag.
+     * @param {Object} [options] Options for the feature flag lookup.
+     * @param {boolean} [options.send_event=true] If false, won't send the $feature_flag_called event.
+     * @returns {FeatureFlagResult | undefined} The feature flag result including key, enabled, variant, and payload.
+     */
+    getFeatureFlagResult(key: string, options: { send_event?: boolean } = {}): FeatureFlagResult | undefined {
+        if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
+            logger.warn('getFeatureFlagResult for key "' + key + '" failed. Feature flags didn\'t load in time.')
+            return undefined
+        }
+
+        const flagVariants = this.getFlagVariants()
+        const flagExists = key in flagVariants
+        const flagValue = flagVariants[key]
+        const payloads = this.getFlagPayloads()
+        const payload = payloads[key]
+        const flagReportValue = String(flagValue)
         const requestId = this._instance.get_property(PERSISTENCE_FEATURE_FLAG_REQUEST_ID) || undefined
         const evaluatedAt = this._instance.get_property(PERSISTENCE_FEATURE_FLAG_EVALUATED_AT) || undefined
         const flagCallReported: Record<string, string[]> = this._instance.get_property(FLAG_CALL_REPORTED) || {}
@@ -529,11 +629,10 @@ export class PostHogFeatureFlags {
                 this._instance.persistence?.register({ [FLAG_CALL_REPORTED]: flagCallReported })
 
                 const flagDetails = this.getFeatureFlagDetails(key)
-
                 const properties: Record<string, any | undefined> = {
                     $feature_flag: key,
                     $feature_flag_response: flagValue,
-                    $feature_flag_payload: this.getFeatureFlagPayload(key) || null,
+                    $feature_flag_payload: payload || null,
                     $feature_flag_request_id: requestId,
                     $feature_flag_evaluated_at: evaluatedAt,
                     $feature_flag_bootstrapped_response: this._instance.config.bootstrap?.featureFlags?.[key] || null,
@@ -572,28 +671,26 @@ export class PostHogFeatureFlags {
                 this._instance.capture('$feature_flag_called', properties)
             }
         }
-        return flagValue
-    }
 
-    /*
-     * Retrieves the details for a feature flag.
-     *
-     * ### Usage:
-     *
-     *     const details = getFeatureFlagDetails("my-flag")
-     *     console.log(details.metadata.version)
-     *     console.log(details.reason)
-     *
-     * @param {String} key Key of the feature flag.
-     */
-    getFeatureFlagDetails(key: string): FeatureFlagDetail | undefined {
-        const details = this.getFlagsWithDetails()
-        return details[key]
-    }
+        if (!flagExists) {
+            return undefined
+        }
 
-    getFeatureFlagPayload(key: string): JsonType {
-        const payloads = this.getFlagPayloads()
-        return payloads[key]
+        let parsedPayload = payload
+        if (!isUndefined(payload)) {
+            try {
+                parsedPayload = JSON.parse(payload as any)
+            } catch {
+                // payload is already parsed or not valid JSON, keep as-is
+            }
+        }
+
+        return {
+            key,
+            enabled: !!flagValue,
+            variant: typeof flagValue === 'string' ? flagValue : undefined,
+            payload: parsedPayload,
+        }
     }
 
     /*
@@ -617,9 +714,9 @@ export class PostHogFeatureFlags {
             token,
         }
 
-        // Add evaluation environments if configured
+        // Add evaluation contexts if configured
         if (this._shouldIncludeEvaluationEnvironments()) {
-            data.evaluation_environments = this._getValidEvaluationEnvironments()
+            data.evaluation_contexts = this._getValidEvaluationEnvironments()
         }
 
         this._instance._send_request({

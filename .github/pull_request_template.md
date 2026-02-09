@@ -23,6 +23,7 @@
 - [ ] @posthog/nuxt
 - [ ] @posthog/rollup-plugin
 - [ ] @posthog/webpack-plugin
+- [ ] @posthog/types
 
 ## Checklist
 

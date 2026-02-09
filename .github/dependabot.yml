@@ -18,7 +18,6 @@ updates:
                   - '@google/genai'
                   - 'openai'
                   - '@ai-sdk/provider'
-                  - 'ai'
                   - '@langchain/core'
                   - 'langchain'
       allow:
@@ -26,7 +25,6 @@ updates:
           - dependency-name: '@google/genai'
           - dependency-name: 'openai'
           - dependency-name: '@ai-sdk/provider'
-          - dependency-name: 'ai'
           - dependency-name: '@langchain/core'
           - dependency-name: 'langchain'
       ignore:

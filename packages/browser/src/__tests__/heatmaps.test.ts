@@ -198,6 +198,7 @@ describe('heatmaps', () => {
     describe('isEnabled()', () => {
         it.each([
             [undefined, false],
+            [null, false],
             [true, true],
             [false, false],
         ])('when stored remote config is %p - heatmaps enabled should be %p', (stored, expected) => {
@@ -210,6 +211,7 @@ describe('heatmaps', () => {
 
         it.each([
             [undefined, false],
+            [null, false],
             [true, true],
             [false, false],
         ])('when local deprecated config is %p - heatmaps enabled should be %p', (deprecatedConfig, expected) => {
@@ -222,6 +224,7 @@ describe('heatmaps', () => {
 
         it.each([
             [undefined, false],
+            [null, false],
             [true, true],
             [false, false],
         ])('when local current config is %p - heatmaps enabled should be %p', (localConfig, expected) => {
@@ -238,6 +241,13 @@ describe('heatmaps', () => {
             [undefined, undefined, true, true],
             [undefined, true, false, true],
             [undefined, false, false, false],
+            // null config values should fall through like undefined
+            [null, undefined, false, false],
+            [null, undefined, true, true],
+            [undefined, null, false, false],
+            [undefined, null, true, true],
+            [null, null, false, false],
+            [null, null, true, true],
             // deprecated client false
             [false, undefined, false, false],
             [false, undefined, true, false],

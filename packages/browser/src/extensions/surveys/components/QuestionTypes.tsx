@@ -18,7 +18,15 @@ import {
     getRequirementsHint,
     SurveyValidationType,
 } from '@posthog/core'
-import { dissatisfiedEmoji, neutralEmoji, satisfiedEmoji, veryDissatisfiedEmoji, verySatisfiedEmoji } from '../icons'
+import {
+    dissatisfiedEmoji,
+    neutralEmoji,
+    satisfiedEmoji,
+    thumbsDownEmoji,
+    thumbsUpEmoji,
+    veryDissatisfiedEmoji,
+    verySatisfiedEmoji,
+} from '../icons'
 import { getDisplayOrderChoices, useSurveyContext } from '../surveys-extension-utils'
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
@@ -217,6 +225,8 @@ export function RatingQuestion({
         return null
     })
 
+    const isThumbSurvey = question.display === 'emoji' && question.scale === 2
+
     const { isPreviewMode } = useSurveyContext()
 
     const handleSubmit = (num: number) => {
@@ -233,8 +243,8 @@ export function RatingQuestion({
                 <div className="rating-section">
                     <div className="rating-options">
                         {question.display === 'emoji' && (
-                            <div className="rating-options-emoji">
-                                {(question.scale === 3 ? threeScaleEmojis : fiveScaleEmojis).map((emoji, idx) => {
+                            <div className={`rating-options-emoji${isThumbSurvey ? ' rating-options-emoji-2' : ''}`}>
+                                {emojiScaleLists[question.scale]?.map((emoji, idx) => {
                                     const active = idx + 1 === rating
                                     return (
                                         <button
@@ -285,10 +295,12 @@ export function RatingQuestion({
                             </div>
                         )}
                     </div>
-                    <div className="rating-text">
-                        <div>{question.lowerBoundLabel}</div>
-                        <div>{question.upperBoundLabel}</div>
-                    </div>
+                    {!isThumbSurvey && (
+                        <div className="rating-text">
+                            <div>{question.lowerBoundLabel}</div>
+                            <div>{question.upperBoundLabel}</div>
+                        </div>
+                    )}
                 </div>
             </div>
             <BottomSection
@@ -538,11 +550,15 @@ export function MultipleChoiceQuestion({
     )
 }
 
-const threeScaleEmojis = [dissatisfiedEmoji, neutralEmoji, satisfiedEmoji]
-const fiveScaleEmojis = [veryDissatisfiedEmoji, dissatisfiedEmoji, neutralEmoji, satisfiedEmoji, verySatisfiedEmoji]
 const fiveScaleNumbers = [1, 2, 3, 4, 5]
 const sevenScaleNumbers = [1, 2, 3, 4, 5, 6, 7]
 const tenScaleNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+const emojiScaleLists: Partial<Record<RatingSurveyQuestion['scale'], JSX.Element[]>> = {
+    2: [thumbsUpEmoji, thumbsDownEmoji],
+    3: [dissatisfiedEmoji, neutralEmoji, satisfiedEmoji],
+    5: [veryDissatisfiedEmoji, dissatisfiedEmoji, neutralEmoji, satisfiedEmoji, verySatisfiedEmoji],
+}
 
 function getScaleNumbers(scale: number): number[] {
     switch (scale) {

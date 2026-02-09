@@ -1,3 +1,15 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
+const path = require('path')
+
+// Dynamically resolve package paths so config doesn't need updating on version bumps.
+// We need explicit CJS paths because Jest doesn't handle ESM well without extra config.
+// require.resolve returns the main entry point, so we navigate relative to that.
+const preactMain = require.resolve('preact') // .../preact/dist/preact.js
+const preactRoot = path.resolve(preactMain, '../..') // .../preact/
+
+const testingLibraryPreactMain = require.resolve('@testing-library/preact') // .../dist/cjs/index.js
+const testingLibraryPreactCjs = path.dirname(testingLibraryPreactMain) // .../dist/cjs/
+
 module.exports = {
     testPathIgnorePatterns: ['/node_modules/', '/cypress/', '/react/', '/test_data/', '/testcafe/'],
     moduleFileExtensions: ['js', 'json', 'ts', 'tsx'],
@@ -8,17 +20,14 @@ module.exports = {
     prettierPath: null,
     moduleNameMapper: {
         '\\.css$': 'identity-obj-proxy',
-        '^preact$': '<rootDir>/../../node_modules/.pnpm/preact@10.19.3/node_modules/preact/dist/preact.js',
-        '^preact/hooks$': '<rootDir>/../../node_modules/.pnpm/preact@10.19.3/node_modules/preact/hooks/dist/hooks.js',
-        '^preact/jsx-runtime$':
-            '<rootDir>/../../node_modules/.pnpm/preact@10.19.3/node_modules/preact/jsx-runtime/dist/jsxRuntime.js',
-        '^preact/test-utils$':
-            '<rootDir>/../../node_modules/.pnpm/preact@10.19.3/node_modules/preact/test-utils/dist/testUtils.js',
-        '^@testing-library/preact$':
-            '<rootDir>/../../node_modules/.pnpm/@testing-library+preact@3.2.4_preact@10.19.3/node_modules/@testing-library/preact/dist/cjs/index.js',
+        '^preact$': path.join(preactRoot, 'dist/preact.js'),
+        '^preact/hooks$': path.join(preactRoot, 'hooks/dist/hooks.js'),
+        '^preact/jsx-runtime$': path.join(preactRoot, 'jsx-runtime/dist/jsxRuntime.js'),
+        '^preact/test-utils$': path.join(preactRoot, 'test-utils/dist/testUtils.js'),
+        '^@testing-library/preact$': path.join(testingLibraryPreactCjs, 'index.js'),
     },
     transform: {
         '^.+\\.(js|jsx|ts|tsx|mjs)$': 'babel-jest',
     },
-    transformIgnorePatterns: ['node_modules/(?!(@testing-library/preact|preact))'],
+    transformIgnorePatterns: ['/node_modules/(?!.*(query-selector-shadow-dom|@testing-library/preact|preact/))'],
 }

@@ -19,6 +19,11 @@ export interface PolymorphicEvent {
 export interface EventHint {
   mechanism?: Partial<Mechanism>
   syntheticException?: Error | null
+  skipFirstLines?: number
+}
+
+export interface PreviouslyCapturedError {
+  __posthog_previously_captured_error?: boolean
 }
 
 export interface ErrorProperties {
@@ -82,6 +87,7 @@ export type ChunkIdMapType = Record<string, string>
 
 export interface ParsingContext {
   chunkIdMap?: ChunkIdMapType
+  skipFirstLines: number
 }
 
 interface Coercer<T, U, C> {

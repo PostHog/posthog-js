@@ -4,7 +4,7 @@
  * See https://github.com/PostHog/posthog-js/issues/698
  */
 
-import type { PropertyMatchType } from './types'
+import type { Properties, PropertyMatchType } from './types'
 import type { SurveyAppearance as CoreSurveyAppearance, SurveyValidationRule } from '@posthog/core'
 
 export enum SurveyEventType {
@@ -109,7 +109,7 @@ export interface LinkSurveyQuestion extends SurveyQuestionBase {
 export interface RatingSurveyQuestion extends SurveyQuestionBase {
     type: SurveyQuestionType.Rating
     display: 'number' | 'emoji'
-    scale: 3 | 5 | 7 | 10
+    scale: 2 | 3 | 5 | 7 | 10
     lowerBoundLabel: string
     upperBoundLabel: string
     skipSubmitButton?: boolean
@@ -172,10 +172,9 @@ export interface SurveyElement {
     order?: number
     group_id?: number
 }
-export interface SurveyRenderReason {
-    visible: boolean
-    disabledReason?: string
-}
+
+// Re-export from @posthog/types to avoid duplication
+export type { SurveyRenderReason } from '@posthog/types'
 
 export enum SurveySchedule {
     Once = 'once',
@@ -286,6 +285,7 @@ export enum SurveyEventProperties {
     SURVEY_QUESTIONS = '$survey_questions',
     SURVEY_COMPLETED = '$survey_completed',
     PRODUCT_TOUR_ID = '$product_tour_id',
+    SURVEY_LAST_SEEN_DATE = '$survey_last_seen_date',
 }
 
 export enum DisplaySurveyType {
@@ -297,10 +297,18 @@ interface DisplaySurveyOptionsBase {
     ignoreConditions: boolean
     ignoreDelay: boolean
     displayType: DisplaySurveyType
+    /** Additional properties to include in all survey events (shown, sent, dismissed) */
+    properties?: Properties
+    /** Pre-filled responses by question index (0-based) */
+    initialResponses?: Record<number, SurveyResponseValue>
 }
 
-interface DisplaySurveyPopoverOptions extends DisplaySurveyOptionsBase {
+export interface DisplaySurveyPopoverOptions extends DisplaySurveyOptionsBase {
     displayType: DisplaySurveyType.Popover
+    /** Override the survey's configured position */
+    position?: SurveyPosition
+    /** CSS selector for the element to position the survey next to (when position is NextToTrigger) */
+    selector?: string
 }
 
 interface DisplaySurveyInlineOptions extends DisplaySurveyOptionsBase {
@@ -326,3 +334,5 @@ export interface SurveyConfig {
      */
     autoSubmitDelay?: number
 }
+
+export type SurveyResponseValue = string | number | string[] | null

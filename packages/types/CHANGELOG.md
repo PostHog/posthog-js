@@ -1,0 +1,158 @@
+# @posthog/types
+
+## 1.343.2
+
+## 1.343.1
+
+## 1.343.0
+
+## 1.342.1
+
+## 1.342.0
+
+## 1.341.2
+
+## 1.341.1
+
+## 1.341.0
+
+## 1.340.0
+
+## 1.339.1
+
+## 1.339.0
+
+### Minor Changes
+
+- [#3006](https://github.com/PostHog/posthog-js/pull/3006) [`b3ec434`](https://github.com/PostHog/posthog-js/commit/b3ec4346e77917121c4fe7bfd966d09850df00f6) Thanks [@robbie-c](https://github.com/robbie-c)! - Add a function isTestUser() and config option test_user_hostname
+  (2026-02-03)
+
+## 1.338.1
+
+## 1.338.0
+
+## 1.337.1
+
+## 1.337.0
+
+### Minor Changes
+
+- [#2996](https://github.com/PostHog/posthog-js/pull/2996) [`7768010`](https://github.com/PostHog/posthog-js/commit/77680105f1e8baf5ed1934d423494793d11ff01a) Thanks [@matheus-vb](https://github.com/matheus-vb)! - Filter out flags marked as failed before merging with cached values, preventing transient backend errors from overwriting previously evaluated flag states
+  (2026-02-03)
+
+## 1.336.4
+
+## 1.336.3
+
+## 1.336.2
+
+## 1.336.1
+
+## 1.336.0
+
+### Minor Changes
+
+- [#2954](https://github.com/PostHog/posthog-js/pull/2954) [`228930a`](https://github.com/PostHog/posthog-js/commit/228930a48b35f67cf12fc8dc155f431ff97b9f05) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Add `FeatureFlagResult` type
+  (2026-01-28)
+
+## 1.335.5
+
+## 1.335.4
+
+## 1.335.3
+
+## 1.335.2
+
+## 1.335.1
+
+## 1.335.0
+
+### Minor Changes
+
+- [#2953](https://github.com/PostHog/posthog-js/pull/2953) [`c8d3fbe`](https://github.com/PostHog/posthog-js/commit/c8d3fbe5e3a4944596d7a34086484affd94d7329) Thanks [@pauldambra](https://github.com/pauldambra)! - allows using web vitals with and without attribution
+  (2026-01-23)
+
+## 1.334.1
+
+## 1.334.0
+
+## 1.333.0
+
+## 1.332.0
+
+## 1.331.3
+
+## 1.331.2
+
+## 1.331.1
+
+## 1.331.0
+
+## 1.330.0
+
+## 1.329.0
+
+## 1.328.0
+
+## 1.327.0
+
+## 1.326.0
+
+## 1.325.0
+
+## 1.324.1
+
+## 1.324.0
+
+## 1.323.0
+
+## 1.322.0
+
+## 1.321.3
+
+## 1.321.2
+
+## 1.321.1
+
+## 1.321.0
+
+## 1.320.0
+
+## 1.319.2
+
+### Patch Changes
+
+- [#2864](https://github.com/PostHog/posthog-js/pull/2864) [`f64ebef`](https://github.com/PostHog/posthog-js/commit/f64ebefe51b39d3c883f536624cc4b680fd2ba87) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - We were missing some public definitions inside `@posthog/types` so let's fix them here. We've also fixed the typing inside the `loaded` callback
+  (2026-01-13)
+
+## 1.319.1
+
+## 1.319.0
+
+## 1.318.2
+
+## 1.318.1
+
+## 1.318.0
+
+### Minor Changes
+
+- [#2870](https://github.com/PostHog/posthog-js/pull/2870) [`b703cbb`](https://github.com/PostHog/posthog-js/commit/b703cbbf2210d622b69492802f611877c04b2e4d) Thanks [@adboio](https://github.com/adboio)! - add missing sessionRecording types
+  (2026-01-09)
+
+## 1.317.1
+
+## 1.317.0
+
+## 1.316.1
+
+## 1.316.0
+
+## 1.315.1
+
+## 1.315.0
+
+### Minor Changes
+
+- [#2839](https://github.com/PostHog/posthog-js/pull/2839) [`83b03fe`](https://github.com/PostHog/posthog-js/commit/83b03feb885d5d7def9afee6b1b915548bcf5278) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Release new @posthog/types library to make it easy for those using the script version of `posthog-js` to properly type `window.posthog`
+  (2026-01-06)

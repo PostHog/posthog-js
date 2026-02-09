@@ -25,7 +25,7 @@ import { isArray, isNullish } from '@posthog/core'
 
 import { detectDeviceType } from '@posthog/core'
 import { propertyComparisons } from '../../utils/property-utils'
-import { PropertyMatchType } from '../../types'
+import { Properties, PropertyMatchType } from '../../types'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -399,6 +399,8 @@ interface SendSurveyEventArgs {
     surveySubmissionId: string
     isSurveyCompleted: boolean
     posthog?: PostHog
+    /** Additional properties to include in the survey event */
+    properties?: Properties
 }
 
 const getSurveyResponseValue = (responses: Record<string, string | number | string[] | null>, questionId?: string) => {
@@ -418,6 +420,7 @@ export const sendSurveyEvent = ({
     surveySubmissionId,
     posthog,
     isSurveyCompleted,
+    properties,
 }: SendSurveyEventArgs) => {
     if (!posthog) {
         logger.error('[survey sent] event not captured, PostHog instance not found.')
@@ -438,6 +441,7 @@ export const sendSurveyEvent = ({
         [SurveyEventProperties.SURVEY_COMPLETED]: isSurveyCompleted,
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         ...responses,
+        ...properties,
         $set: {
             [getSurveyInteractionProperty(survey, 'responded')]: true,
         },
@@ -624,6 +628,8 @@ interface SurveyContextProps {
     isPopup: boolean
     onPreviewSubmit: (res: string | string[] | number | null) => void
     surveySubmissionId: string
+    /** Additional properties to include in all survey events */
+    properties?: Properties
 }
 
 export const SurveyContext = createContext<SurveyContextProps>({
@@ -633,6 +639,7 @@ export const SurveyContext = createContext<SurveyContextProps>({
     isPopup: true,
     onPreviewSubmit: () => {},
     surveySubmissionId: '',
+    properties: undefined,
 })
 
 export const useSurveyContext = () => {
@@ -755,4 +762,40 @@ export const clearInProgressSurveyState = (survey: Pick<Survey, 'id' | 'current_
 export function getSurveyContainerClass(survey: Pick<Survey, 'id'>, asSelector = false): string {
     const className = `PostHogSurvey-${survey.id}`
     return asSelector ? `.${className}` : className
+}
+
+/**
+ * Get CSS position styles for a popover/modal based on SurveyPosition
+ * Used by both surveys and product tours for consistent positioning
+ */
+export function getPopoverPosition(
+    type?: SurveyType,
+    position: SurveyPosition = SurveyPosition.Right,
+    surveyWidgetType?: SurveyWidgetType
+): Record<string, string> {
+    if (type === SurveyType.ExternalSurvey) {
+        return {}
+    }
+
+    switch (position) {
+        case SurveyPosition.TopLeft:
+            return { top: '0', left: '0', transform: 'translate(30px, 30px)' }
+        case SurveyPosition.TopRight:
+            return { top: '0', right: '0', transform: 'translate(-30px, 30px)' }
+        case SurveyPosition.TopCenter:
+            return { top: '0', left: '50%', transform: 'translate(-50%, 30px)' }
+        case SurveyPosition.MiddleLeft:
+            return { top: '50%', left: '0', transform: 'translate(30px, -50%)' }
+        case SurveyPosition.MiddleRight:
+            return { top: '50%', right: '0', transform: 'translate(-30px, -50%)' }
+        case SurveyPosition.MiddleCenter:
+            return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
+        case SurveyPosition.Left:
+            return { left: '30px' }
+        case SurveyPosition.Center:
+            return { left: '50%', transform: 'translateX(-50%)' }
+        default:
+        case SurveyPosition.Right:
+            return { right: type === SurveyType.Widget && surveyWidgetType === SurveyWidgetType.Tab ? '60px' : '30px' }
+    }
 }

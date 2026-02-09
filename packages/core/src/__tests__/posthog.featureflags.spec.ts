@@ -156,13 +156,104 @@ describe('PostHog Feature Flags v4', () => {
       expect(posthog.getFeatureFlags()).toEqual(expectedFeatureFlagResponses)
     })
 
-    it('should only call fetch once if already calling', async () => {
+    it('should queue only one pending reload when called multiple times during in-flight request', async () => {
+      // Multiple calls during an in-flight request should:
+      // 1. Not make multiple immediate calls
+      // 2. Queue a pending reload that executes after the first completes
       expect(mocks.fetch).toHaveBeenCalledTimes(0)
       posthog.reloadFeatureFlagsAsync()
       posthog.reloadFeatureFlagsAsync()
       const flags = await posthog.reloadFeatureFlagsAsync()
-      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      await waitForPromises() // Wait for pending reload to complete
+      // First call + one pending reload = 2 calls
+      expect(mocks.fetch).toHaveBeenCalledTimes(2)
       expect(flags).toEqual(expectedFeatureFlagResponses)
+    })
+
+    it('should execute pending reload after current request completes', async () => {
+      // This test verifies the fix for the race condition where identify() calls
+      // with $anon_distinct_id were dropped when preloadFeatureFlags was in flight.
+      // See: https://github.com/PostHog/posthog-ios/issues/456
+
+      let resolveFirstRequest: () => void
+      let resolveSecondRequest: () => void
+      let fetchCallCount = 0
+
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+        _mocks.fetch.mockImplementation((url) => {
+          if (url.includes('/flags/')) {
+            fetchCallCount++
+            const currentCall = fetchCallCount
+
+            if (currentCall === 1) {
+              // First request - delay to simulate network latency
+              return new Promise((resolve) => {
+                resolveFirstRequest = () =>
+                  resolve({
+                    status: 200,
+                    text: () => Promise.resolve('ok'),
+                    json: () =>
+                      Promise.resolve({
+                        flags: createMockFeatureFlags(),
+                        requestId: 'first-request',
+                        evaluatedAt: 1640995200000,
+                      }),
+                  })
+              })
+            } else {
+              // Second request (pending reload)
+              return new Promise((resolve) => {
+                resolveSecondRequest = () =>
+                  resolve({
+                    status: 200,
+                    text: () => Promise.resolve('ok'),
+                    json: () =>
+                      Promise.resolve({
+                        flags: createMockFeatureFlags(),
+                        requestId: 'second-request',
+                        evaluatedAt: 1640995200001,
+                      }),
+                  })
+              })
+            }
+          }
+
+          return Promise.resolve({
+            status: 200,
+            text: () => Promise.resolve('ok'),
+            json: () => Promise.resolve({ status: 'ok' }),
+          })
+        })
+      })
+
+      // Start first request (simulates preloadFeatureFlags)
+      const firstReload = posthog.reloadFeatureFlagsAsync()
+
+      // Wait a tick to ensure first request is in flight
+      await waitForPromises()
+
+      // Start second request while first is in flight (simulates identify() -> reloadFeatureFlags())
+      const secondReload = posthog.reloadFeatureFlagsAsync()
+
+      // At this point, fetch should have been called once
+      expect(fetchCallCount).toBe(1)
+
+      // Complete the first request
+      resolveFirstRequest!()
+      await firstReload
+      await waitForPromises()
+
+      // After first request completes, the pending reload should be triggered
+      // and fetch should be called again
+      expect(fetchCallCount).toBe(2)
+
+      // Complete the second request
+      resolveSecondRequest!()
+      await secondReload
+      await waitForPromises()
+
+      // Both requests should have completed
+      expect(fetchCallCount).toBe(2)
     })
 
     it('should emit featureflags event when flags are loaded', async () => {
@@ -245,8 +336,9 @@ describe('PostHog Feature Flags v4', () => {
           expect(posthog.isFeatureEnabled('feature-variant')).toEqual(undefined)
           expect(posthog.isFeatureEnabled('feature-missing')).toEqual(undefined)
 
-          expect(posthog.getFeatureFlagPayloads()).toEqual(undefined)
-          expect(posthog.getFeatureFlagPayload('feature-1')).toEqual(undefined)
+          // When errored out, we return cached values (which are empty in this case)
+          expect(posthog.getFeatureFlagPayloads()).toEqual({})
+          expect(posthog.getFeatureFlagPayload('feature-1')).toEqual(null)
         })
       })
 
@@ -385,6 +477,108 @@ describe('PostHog Feature Flags v4', () => {
           expect(posthog.isFeatureEnabled('feature-variant')).toEqual(true)
           expect(posthog.isFeatureEnabled('feature-missing')).toEqual(false)
           expect(posthog.isFeatureEnabled('x-flag')).toEqual(true)
+        })
+      })
+
+      describe('when subsequent flags calls return failed flags with errorsWhileComputingFlags', () => {
+        beforeEach(() => {
+          ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+            _mocks.fetch
+              .mockImplementationOnce((url) => {
+                if (url.includes('/flags/?v=2&config=true')) {
+                  return Promise.resolve({
+                    status: 200,
+                    text: () => Promise.resolve('ok'),
+                    json: () =>
+                      Promise.resolve({
+                        flags: createMockFeatureFlags(),
+                      }),
+                  })
+                }
+                return errorAPIResponse
+              })
+              .mockImplementationOnce((url) => {
+                if (url.includes('/flags/?v=2&config=true')) {
+                  return Promise.resolve({
+                    status: 200,
+                    text: () => Promise.resolve('ok'),
+                    json: () =>
+                      Promise.resolve({
+                        flags: {
+                          'x-flag': {
+                            key: 'x-flag',
+                            enabled: true,
+                            variant: 'x-value',
+                            failed: false,
+                            reason: {
+                              code: 'matched_condition',
+                              description: 'matched condition set 5',
+                              condition_index: 0,
+                            },
+                            metadata: {
+                              id: 5,
+                              version: 1,
+                              description: 'x-flag',
+                              payload: '{"x":"value"}',
+                            },
+                          },
+                          'feature-1': {
+                            key: 'feature-1',
+                            enabled: false,
+                            variant: undefined,
+                            failed: true,
+                            reason: {
+                              code: 'database_error',
+                              description: 'Database connection error during evaluation',
+                              condition_index: undefined,
+                            },
+                            metadata: {
+                              id: 1,
+                              version: 1,
+                              description: 'feature-1',
+                              payload: undefined,
+                            },
+                          },
+                        },
+                        errorsWhileComputingFlags: true,
+                      }),
+                  })
+                }
+
+                return errorAPIResponse
+              })
+              .mockImplementation(() => {
+                return errorAPIResponse
+              })
+          })
+
+          posthog.reloadFeatureFlags()
+        })
+
+        it('should filter out failed flags and preserve their cached values', async () => {
+          expect(posthog.getFeatureFlags()).toEqual({
+            'feature-1': true,
+            'feature-2': true,
+            'json-payload': true,
+            'feature-variant': 'variant',
+          })
+
+          // second call returns feature-1 as failed (should be filtered out)
+          // and x-flag as successful (should be merged in)
+          await posthog.reloadFeatureFlagsAsync()
+
+          // feature-1 should retain its cached value (true), not be overwritten with false
+          expect(posthog.getFeatureFlags()).toEqual({
+            'feature-1': true,
+            'feature-2': true,
+            'json-payload': true,
+            'feature-variant': 'variant',
+            'x-flag': 'x-value',
+          })
+
+          expect(posthog.getFeatureFlag('feature-1')).toEqual(true)
+          expect(posthog.getFeatureFlag('x-flag')).toEqual('x-value')
+          expect(posthog.isFeatureEnabled('feature-1')).toEqual(true)
         })
       })
 
@@ -682,9 +876,14 @@ describe('PostHog Feature Flags v4', () => {
           evaluatedAt: 1640995200000,
         }
         const normalizedFeatureFlags = normalizeFlagsResponse(expectedFeatureFlags as PostHogV2FlagsResponse)
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.FeatureFlagDetails)).toEqual(
-          normalizedFeatureFlags
-        )
+
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.FeatureFlagDetails)).toEqual({
+          flags: normalizedFeatureFlags.flags,
+          requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+          evaluatedAt: 1640995200000,
+          errorsWhileComputingFlags: undefined,
+          quotaLimited: undefined,
+        })
       })
 
       it('should include feature flags in subsequent captures', async () => {
@@ -767,21 +966,23 @@ describe('PostHog Feature Flags v4', () => {
           signal: expect.anything(),
         })
 
-        // Verify all flag methods return undefined when quota limited
-        expect(posthog.getFeatureFlags()).toEqual(undefined)
+        // When quota limited with no prior cached flags, return empty results
+        expect(posthog.getFeatureFlags()).toEqual({})
         expect(posthog.getFeatureFlag('feature-1')).toEqual(undefined)
-        expect(posthog.getFeatureFlagPayloads()).toEqual(undefined)
-        expect(posthog.getFeatureFlagPayload('feature-1')).toEqual(undefined)
+        expect(posthog.getFeatureFlagPayloads()).toEqual({})
+        expect(posthog.getFeatureFlagPayload('feature-1')).toEqual(null)
       })
 
-      it('should emit debug message when quota limited', async () => {
-        const warnSpy = jest.spyOn(console, 'warn')
-        posthog.debug(true)
+      it('should emit featureflags event with quotaLimited when quota limited', async () => {
+        const featureFlagsHandler = jest.fn()
+        posthog.on('featureflags', featureFlagsHandler)
+
         await posthog.reloadFeatureFlagsAsync()
 
-        expect(warnSpy).toHaveBeenCalledWith(
-          '[FEATURE FLAGS] Feature flags quota limit exceeded - unsetting all flags. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
-        )
+        expect(featureFlagsHandler).toHaveBeenCalled()
+        // Verify the flags response includes quotaLimited info
+        const flagDetails = posthog.getFeatureFlagDetails()
+        expect(flagDetails?.quotaLimited).toEqual(['feature_flags'])
       })
     })
   })

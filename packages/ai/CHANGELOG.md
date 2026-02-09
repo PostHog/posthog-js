@@ -1,5 +1,203 @@
 # posthog-ai
 
+## 7.8.7
+
+### Patch Changes
+
+- Updated dependencies [[`e055f9a`](https://github.com/PostHog/posthog-js/commit/e055f9a344d7c11309c56444383f79df335a5c51)]:
+  - @posthog/core@1.20.2
+  - posthog-node@5.24.12
+
+## 7.8.6
+
+### Patch Changes
+
+- Updated dependencies [[`8f75dae`](https://github.com/PostHog/posthog-js/commit/8f75dae39ae2938624ca49e778915a92f2491556)]:
+  - @posthog/core@1.20.1
+  - posthog-node@5.24.11
+
+## 7.8.5
+
+### Patch Changes
+
+- [#3021](https://github.com/PostHog/posthog-js/pull/3021) [`e7ceae5`](https://github.com/PostHog/posthog-js/commit/e7ceae5b5a3a95df84519d99014d587f1d86fd5c) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - fix(llma): small prompt management fixes
+  (2026-02-04)
+
+- [#3030](https://github.com/PostHog/posthog-js/pull/3030) [`98d6274`](https://github.com/PostHog/posthog-js/commit/98d6274a1da337560b2acf4f62eeefba1f8e5fd4) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Changes prompts default URL.
+  (2026-02-04)
+- Updated dependencies [[`bb62809`](https://github.com/PostHog/posthog-js/commit/bb62809917845685ae7e2e6d5adad6be5528356e)]:
+  - @posthog/core@1.20.0
+  - posthog-node@5.24.10
+
+## 7.8.4
+
+### Patch Changes
+
+- Updated dependencies [[`c99e5fe`](https://github.com/PostHog/posthog-js/commit/c99e5feb043870357c8f722eb52542327c3f472b)]:
+  - @posthog/core@1.19.0
+  - posthog-node@5.24.9
+
+## 7.8.3
+
+### Patch Changes
+
+- [#3008](https://github.com/PostHog/posthog-js/pull/3008) [`26adbc8`](https://github.com/PostHog/posthog-js/commit/26adbc8bc9271090cbed667cf81c24c1639b4a1f) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates: - Updated dependency [`@anthropic-ai/sdk@^0.72.1` ↗︎](https://www.npmjs.com/package/@anthropic-ai/sdk/v/0.72.1) (from `^0.71.2`, in `dependencies`) - Updated dependency [`openai@^6.17.0` ↗︎](https://www.npmjs.com/package/openai/v/6.17.0) (from `^6.16.0`, in `dependencies`) (2026-02-03)
+- Updated dependencies [[`7768010`](https://github.com/PostHog/posthog-js/commit/77680105f1e8baf5ed1934d423494793d11ff01a)]:
+  - @posthog/core@1.18.0
+  - posthog-node@5.24.8
+
+## 7.8.2
+
+### Patch Changes
+
+- Updated dependencies [[`727536c`](https://github.com/PostHog/posthog-js/commit/727536cf5f1ab5a8d21fa9d4e2e6b13efc851fca)]:
+  - @posthog/core@1.17.0
+  - posthog-node@5.24.7
+
+## 7.8.1
+
+### Patch Changes
+
+- Updated dependencies [[`cbe84c1`](https://github.com/PostHog/posthog-js/commit/cbe84c1ea8b6dd398569ed401139e9698e08fd64)]:
+  - @posthog/core@1.16.0
+  - posthog-node@5.24.6
+
+## 7.8.0
+
+### Minor Changes
+
+- [#2915](https://github.com/PostHog/posthog-js/pull/2915) [`e105fd0`](https://github.com/PostHog/posthog-js/commit/e105fd06334e6953ed923c15f6b1392cafce0322) Thanks [@richardsolomou](https://github.com/richardsolomou)! - feat(llma): add time to first token reporting
+  (2026-01-29)
+
+## 7.7.0
+
+### Minor Changes
+
+- [#2982](https://github.com/PostHog/posthog-js/pull/2982) [`ce9b4db`](https://github.com/PostHog/posthog-js/commit/ce9b4dbbecfd831f76d974ae74a0b84952c3996f) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Add prompt management functions.
+  (2026-01-28)
+
+## 7.6.1
+
+### Patch Changes
+
+- Updated dependencies [[`8c0c495`](https://github.com/PostHog/posthog-js/commit/8c0c495caaf4cd7f950cbc77fdfc1df499772008)]:
+  - @posthog/core@1.15.0
+  - posthog-node@5.24.4
+
+## 7.6.0
+
+### Minor Changes
+
+- [#2955](https://github.com/PostHog/posthog-js/pull/2955) [`6db4b48`](https://github.com/PostHog/posthog-js/commit/6db4b487c0e14707c14e248c620eced5ef4166e0) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Add `rawUsage` field to capture raw provider usage metadata for backend cost calculations
+  (2026-01-27)
+
+### Patch Changes
+
+- [#2974](https://github.com/PostHog/posthog-js/pull/2974) [`93da719`](https://github.com/PostHog/posthog-js/commit/93da719335372135a5ebefddeb9f6ed571d4ef5d) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates: - Updated dependency [`@google/genai@^1.38.0` ↗︎](https://www.npmjs.com/package/@google/genai/v/1.38.0) (from `^1.34.0`, in `dependencies`) - Updated dependency [`@langchain/core@^1.1.17` ↗︎](https://www.npmjs.com/package/@langchain/core/v/1.1.17) (from `^1.1.8`, in `dependencies`) (2026-01-27)
+
+- [#2977](https://github.com/PostHog/posthog-js/pull/2977) [`5544606`](https://github.com/PostHog/posthog-js/commit/5544606e159bd0589f04a9571b3ce99582b917bf) Thanks [@andrewm4894](https://github.com/andrewm4894)! - fix: sanitize base64 images before formatting in Responses API to prevent 413 payload-too-large errors
+  (2026-01-27)
+- Updated dependencies [[`f51560c`](https://github.com/PostHog/posthog-js/commit/f51560caf78386cef5278f7cf0e9f253b2ec0e50)]:
+  - @posthog/core@1.14.1
+  - posthog-node@5.24.3
+
+## 7.5.4
+
+### Patch Changes
+
+- Updated dependencies [[`933c763`](https://github.com/PostHog/posthog-js/commit/933c7639ae30390ca562a0891d59649711b53522)]:
+  - @posthog/core@1.14.0
+  - posthog-node@5.24.2
+
+## 7.5.3
+
+### Patch Changes
+
+- Updated dependencies [[`8a5a3d5`](https://github.com/PostHog/posthog-js/commit/8a5a3d5693facda62b90b66dead338f7dca19705)]:
+  - @posthog/core@1.13.0
+  - posthog-node@5.24.1
+
+## 7.5.2
+
+### Patch Changes
+
+- Updated dependencies [[`b7fa003`](https://github.com/PostHog/posthog-js/commit/b7fa003ef6ef74bdf4666be0748d89a5a6169054), [`f0cbc0d`](https://github.com/PostHog/posthog-js/commit/f0cbc0d8e4e5efc27d9595676e886d6d3d3892f4)]:
+  - @posthog/core@1.12.0
+  - posthog-node@5.24.0
+
+## 7.5.1
+
+### Patch Changes
+
+- Updated dependencies [[`23770e9`](https://github.com/PostHog/posthog-js/commit/23770e9e2eed1aca5c2bc7a34a6d64dc115b0d11)]:
+  - @posthog/core@1.11.0
+  - posthog-node@5.23.0
+
+## 7.5.0
+
+### Minor Changes
+
+- [#2930](https://github.com/PostHog/posthog-js/pull/2930) [`c9b773a`](https://github.com/PostHog/posthog-js/commit/c9b773aefd25fcc81a60dff02348e8e724b87565) Thanks [@marandaneto](https://github.com/marandaneto)! - chore: Bump node min. ^20.20.0 || >=22.22.0 due to https://nodejs.org/en/blog/vulnerability/january-2026-dos-mitigation-async-hooks
+  (2026-01-19)
+
+### Patch Changes
+
+- Updated dependencies [[`c9b773a`](https://github.com/PostHog/posthog-js/commit/c9b773aefd25fcc81a60dff02348e8e724b87565)]:
+  - posthog-node@5.22.0
+
+## 7.4.3
+
+### Patch Changes
+
+- Updated dependencies [[`d37e570`](https://github.com/PostHog/posthog-js/commit/d37e5709863e869825df57d0854588140c4294b2)]:
+  - @posthog/core@1.10.0
+  - posthog-node@5.21.1
+
+## 7.4.2
+
+### Patch Changes
+
+- [#2852](https://github.com/PostHog/posthog-js/pull/2852) [`308daf0`](https://github.com/PostHog/posthog-js/commit/308daf00035a7e38b2bc5969bf0cbe3ccacae5f6) Thanks [@andrewm4894](https://github.com/andrewm4894)! - fix(vercel): preserve prototype getter properties when wrapping models
+  (2026-01-12)
+
+## 7.4.1
+
+### Patch Changes
+
+- [#2859](https://github.com/PostHog/posthog-js/pull/2859) [`636e25f`](https://github.com/PostHog/posthog-js/commit/636e25f8a54c44094dfb7f771fa0573fb3c531c1) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Fixes cache creation cost for Vercel V3 with Anthropic
+  (2026-01-08)
+
+## 7.4.0
+
+### Minor Changes
+
+- [#2593](https://github.com/PostHog/posthog-js/pull/2593) [`fba9fb2`](https://github.com/PostHog/posthog-js/commit/fba9fb2ea4be2ea396730741b4718b4a2c80d026) Thanks [@daibhin](https://github.com/daibhin)! - track LLMA trace_id on exceptions and exception_id on traces
+  (2026-01-08)
+
+### Patch Changes
+
+- Updated dependencies [[`fba9fb2`](https://github.com/PostHog/posthog-js/commit/fba9fb2ea4be2ea396730741b4718b4a2c80d026), [`c1ed63b`](https://github.com/PostHog/posthog-js/commit/c1ed63b0f03380a5e4bb2463491b3f767f64a514)]:
+  - posthog-node@5.20.0
+  - @posthog/core@1.9.1
+
+## 7.3.2
+
+### Patch Changes
+
+- [#2838](https://github.com/PostHog/posthog-js/pull/2838) [`c64a15d`](https://github.com/PostHog/posthog-js/commit/c64a15da69a059a539acf8b75c3be47200028e0b) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Fixes cache creation cost for Langchain with Anthropic
+  (2026-01-07)
+
+- [#2842](https://github.com/PostHog/posthog-js/pull/2842) [`0f508e9`](https://github.com/PostHog/posthog-js/commit/0f508e91ca8a8622e69728a0c00a79aaaa387e9a) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Fixes an error with certain AI imports when using CJS (`TypeError: Class extends value undefined is not a constructor or null`)
+  (2026-01-07)
+
+## 7.3.1
+
+### Patch Changes
+
+- [#2850](https://github.com/PostHog/posthog-js/pull/2850) [`b5dbf56`](https://github.com/PostHog/posthog-js/commit/b5dbf56a6482025629a573c44cc8518cfde798c7) Thanks [@andrewm4894](https://github.com/andrewm4894)! - fix(gemini): expose all GoogleGenAI constructor parameters in wrapper
+
+  The `MonitoringGeminiConfig` interface now extends `GoogleGenAIOptions` from `@google/genai`, allowing users to pass all available constructor parameters like `googleAuthOptions` and `httpOptions` without TypeScript errors. (2026-01-06)
+
 ## 7.3.0
 
 ### Minor Changes

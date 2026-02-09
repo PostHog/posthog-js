@@ -1,6 +1,7 @@
 import type { Plugin, OutputOptions, OutputAsset, OutputChunk } from 'rollup'
 import { spawnLocal, resolveBinaryPath, LogLevel } from '@posthog/core/process'
 import path from 'node:path'
+import fs from 'node:fs/promises'
 
 export interface PostHogRollupPluginOptions {
     personalApiKey: string
@@ -36,54 +37,85 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
     const posthogOptions = resolveOptions(userOptions)
     return {
         name: 'posthog-rollup-plugin',
+
         outputOptions: {
             order: 'post',
-            handler(options) {
+            handler(options: OutputOptions) {
                 return {
                     ...options,
-                    sourcemap: true,
+                    sourcemap: posthogOptions.sourcemaps.deleteAfterUpload ? 'hidden' : true,
                 }
             },
         },
-        async writeBundle(options: OutputOptions, bundle: { [fileName: string]: OutputAsset | OutputChunk }) {
-            if (!posthogOptions.sourcemaps.enabled) return
-            const args = ['sourcemap', 'process']
-            const cliPath = posthogOptions.cliBinaryPath
-            if (options.dir) {
+
+        writeBundle: {
+            // Write bundle is executed in parallel, make it sequential to ensure correct order
+            sequential: true,
+            async handler(options: OutputOptions, bundle: { [fileName: string]: OutputAsset | OutputChunk }) {
+                if (!posthogOptions.sourcemaps.enabled) return
+                const args = ['sourcemap', 'process']
+                const cliPath = posthogOptions.cliBinaryPath
+                const chunks: { [fileName: string]: OutputChunk } = {}
+                const basePaths = []
+
+                if (options.dir) {
+                    basePaths.push(options.dir)
+                }
+
+                if (options.file) {
+                    basePaths.push(path.dirname(options.file))
+                }
+
                 for (const fileName in bundle) {
                     const chunk = bundle[fileName]
-                    if (chunk.type === 'chunk') {
-                        const chunkPath = path.resolve(options.dir, fileName)
+                    const isJsFile = /\.(js|mjs|cjs)$/.test(fileName)
+                    if (chunk.type === 'chunk' && isJsFile) {
+                        const chunkPath = path.resolve(...basePaths, fileName)
+                        chunks[chunkPath] = chunk
                         args.push('--file', chunkPath)
                     }
                 }
-            } else if (options.file) {
-                const filePath = path.resolve(options.file)
-                args.push('--file', filePath)
-            }
-            if (posthogOptions.sourcemaps.project) {
-                args.push('--project', posthogOptions.sourcemaps.project)
-            }
-            if (posthogOptions.sourcemaps.version) {
-                args.push('--version', posthogOptions.sourcemaps.version)
-            }
-            if (posthogOptions.sourcemaps.deleteAfterUpload) {
-                args.push('--delete-after')
-            }
-            if (posthogOptions.sourcemaps.batchSize) {
-                args.push('--batch-size', posthogOptions.sourcemaps.batchSize.toString())
-            }
-            await spawnLocal(cliPath, args, {
-                env: {
-                    ...process.env,
-                    RUST_LOG: `posthog_cli=${posthogOptions.logLevel}`,
-                    POSTHOG_CLI_HOST: posthogOptions.host,
-                    POSTHOG_CLI_TOKEN: posthogOptions.personalApiKey,
-                    POSTHOG_CLI_ENV_ID: posthogOptions.envId,
-                },
-                stdio: 'inherit',
-                cwd: process.cwd(),
-            })
+
+                if (Object.keys(chunks).length === 0) {
+                    console.log(
+                        'No chunks found, skipping sourcemap processing for this stage. Your build may be multi-stage and this stage may not be relevant'
+                    )
+                    return
+                }
+
+                if (posthogOptions.sourcemaps.project) {
+                    args.push('--project', posthogOptions.sourcemaps.project)
+                }
+                if (posthogOptions.sourcemaps.version) {
+                    args.push('--version', posthogOptions.sourcemaps.version)
+                }
+                if (posthogOptions.sourcemaps.deleteAfterUpload) {
+                    args.push('--delete-after')
+                }
+                if (posthogOptions.sourcemaps.batchSize) {
+                    args.push('--batch-size', posthogOptions.sourcemaps.batchSize.toString())
+                }
+                await spawnLocal(cliPath, args, {
+                    env: {
+                        ...process.env,
+                        RUST_LOG: `posthog_cli=${posthogOptions.logLevel}`,
+                        POSTHOG_CLI_HOST: posthogOptions.host,
+                        POSTHOG_CLI_TOKEN: posthogOptions.personalApiKey,
+                        POSTHOG_CLI_ENV_ID: posthogOptions.envId,
+                    },
+                    stdio: 'inherit',
+                    cwd: process.cwd(),
+                })
+
+                // we need to update code for others plugins to work
+                await Promise.all(
+                    Object.entries(chunks).map(([chunkPath, chunk]) =>
+                        fs.readFile(chunkPath, 'utf8').then((content) => {
+                            chunk.code = content
+                        })
+                    )
+                )
+            },
         },
     } as Plugin
 }
@@ -110,6 +142,8 @@ function resolveOptions(userOptions: PostHogRollupPluginOptions): ResolvedPostHo
             enabled: userSourcemaps.enabled ?? true,
             deleteAfterUpload: userSourcemaps.deleteAfterUpload ?? true,
             batchSize: userSourcemaps.batchSize,
+            project: userSourcemaps.project,
+            version: userSourcemaps.version,
         },
     }
     return posthogOptions

@@ -360,3 +360,60 @@ test.describe('surveys - feedback widget', () => {
 function getLastSurveySentEvent(events: any[]) {
     return events.filter((e) => e.event === 'survey sent').at(-1)
 }
+
+test.describe('surveys - displaySurvey with custom properties', () => {
+    test('includes custom properties in survey sent event', async ({ page, context }) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: 'custom-props-survey',
+                            name: 'Test survey',
+                            type: 'api',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [openTextQuestion],
+                        },
+                    ],
+                },
+            })
+        })
+
+        await start(startOptions, page, context)
+        await surveysAPICall
+
+        await page.evaluate(() => {
+            // @ts-expect-error - posthog is added to window in test setup
+            window.posthog.onSurveysLoaded(() => {
+                // @ts-expect-error - posthog is added to window in test setup
+                window.posthog.displaySurvey('custom-props-survey', {
+                    displayType: 'popover',
+                    ignoreConditions: true,
+                    ignoreDelay: true,
+                    properties: {
+                        $ai_generation_id: 'gen-123',
+                        $ai_trace_id: 'trace-456',
+                        custom_field: 'custom_value',
+                    },
+                })
+            })
+        })
+
+        await page.locator('.PostHogSurvey-custom-props-survey textarea').fill('feedback with custom props')
+        await page.locator('.PostHogSurvey-custom-props-survey .form-submit').click()
+
+        await pollUntilEventCaptured(page, 'survey sent')
+        const surveySentEvent = await page
+            .capturedEvents()
+            .then((events) => events.find((e) => e.event === 'survey sent'))
+
+        expect(surveySentEvent!.properties).toEqual(
+            expect.objectContaining({
+                $survey_id: 'custom-props-survey',
+                $ai_generation_id: 'gen-123',
+                $ai_trace_id: 'trace-456',
+                custom_field: 'custom_value',
+            })
+        )
+    })
+})

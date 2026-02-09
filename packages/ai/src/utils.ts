@@ -1,4 +1,4 @@
-import { PostHog } from 'posthog-node'
+import { EventMessage, PostHog } from 'posthog-node'
 import { Buffer } from 'buffer'
 import OpenAIOrignal from 'openai'
 import AnthropicOriginal from '@anthropic-ai/sdk'
@@ -9,6 +9,8 @@ import type { FormattedMessage, FormattedContent, TokenUsage } from './types'
 import { version } from '../package.json'
 import { v4 as uuidv4 } from 'uuid'
 import { isString } from './typeGuards'
+import { uuidv7, ErrorTracking as CoreErrorTracking } from '@posthog/core'
+import { redactBase64DataUrl } from './sanitization'
 
 type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatCompletionCreateParams
 type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
@@ -282,6 +284,9 @@ export const formatResponseGemini = (response: any): FormattedMessage[] => {
               data = Buffer.from(data).toString('base64')
             }
 
+            // Sanitize base64 data for images and other large inline data
+            data = redactBase64DataUrl(data)
+
             content.push({
               type: 'audio',
               mime_type: mimeType,
@@ -539,6 +544,7 @@ export type SendEventToPosthogParams = {
   input: any
   output: any
   latency: number
+  timeToFirstToken?: number
   baseURL: string
   httpStatus: number
   usage?: TokenUsage
@@ -551,8 +557,8 @@ export type SendEventToPosthogParams = {
     | TranscriptionCreateParams
   ) &
     MonitoringParams
-  isError?: boolean
-  error?: string
+  error?: unknown
+  exceptionId?: string
   tools?: ChatCompletionTool[] | AnthropicTool[] | GeminiTool[] | null
   captureImmediate?: boolean
 }
@@ -615,6 +621,32 @@ function addDefaults(params: MonitoringEventProperties): MonitoringEventProperti
   }
 }
 
+export const sendEventWithErrorToPosthog = async ({
+  client,
+  traceId,
+  error,
+  ...args
+}: Omit<SendEventToPosthogParams, 'error' | 'httpStatus'> &
+  Required<Pick<SendEventToPosthogParams, 'error'>>): Promise<unknown> => {
+  const httpStatus =
+    error && typeof error === 'object' && 'status' in error ? ((error as { status?: number }).status ?? 500) : 500
+
+  const properties = { client, traceId, httpStatus, error: JSON.stringify(error), ...args }
+  const enrichedError = error as CoreErrorTracking.PreviouslyCapturedError
+
+  if (client.options?.enableExceptionAutocapture) {
+    // assign a uuid that can be used to link the trace and exception events
+    const exceptionId = uuidv7()
+    client.captureException(error, undefined, { $ai_trace_id: traceId }, exceptionId)
+    enrichedError.__posthog_previously_captured_error = true
+    properties.exceptionId = exceptionId
+  }
+
+  await sendEventToPosthog(properties)
+
+  return enrichedError
+}
+
 export const sendEventToPosthog = async ({
   client,
   eventType = AIEvent.Generation,
@@ -625,12 +657,13 @@ export const sendEventToPosthog = async ({
   input,
   output,
   latency,
+  timeToFirstToken,
   baseURL,
   params,
   httpStatus = 200,
   usage = {},
-  isError = false,
   error,
+  exceptionId,
   tools,
   captureImmediate = false,
 }: SendEventToPosthogParams): Promise<void> => {
@@ -643,10 +676,11 @@ export const sendEventToPosthog = async ({
   const safeError = sanitizeValues(error)
 
   let errorData = {}
-  if (isError) {
+  if (error) {
     errorData = {
       $ai_is_error: true,
       $ai_error: safeError,
+      $exception_event_id: exceptionId,
     }
   }
   let costOverrideData = {}
@@ -665,6 +699,7 @@ export const sendEventToPosthog = async ({
     ...(usage.cacheReadInputTokens ? { $ai_cache_read_input_tokens: usage.cacheReadInputTokens } : {}),
     ...(usage.cacheCreationInputTokens ? { $ai_cache_creation_input_tokens: usage.cacheCreationInputTokens } : {}),
     ...(usage.webSearchCount ? { $ai_web_search_count: usage.webSearchCount } : {}),
+    ...(usage.rawUsage ? { $ai_usage: usage.rawUsage } : {}),
   }
 
   const properties = {
@@ -680,6 +715,7 @@ export const sendEventToPosthog = async ({
     ...(usage.outputTokens !== undefined ? { $ai_output_tokens: usage.outputTokens } : {}),
     ...additionalTokenValues,
     $ai_latency: latency,
+    ...(timeToFirstToken !== undefined ? { $ai_time_to_first_token: timeToFirstToken } : {}),
     $ai_trace_id: traceId,
     $ai_base_url: baseURL,
     ...params.posthogProperties,
@@ -689,7 +725,7 @@ export const sendEventToPosthog = async ({
     ...costOverrideData,
   }
 
-  const event = {
+  const event: EventMessage = {
     distinctId: distinctId ?? traceId,
     event: eventType,
     properties,
@@ -702,6 +738,8 @@ export const sendEventToPosthog = async ({
   } else {
     client.capture(event)
   }
+
+  return Promise.resolve()
 }
 
 export function formatOpenAIResponsesInput(input: unknown, instructions?: string | null): FormattedMessage[] {

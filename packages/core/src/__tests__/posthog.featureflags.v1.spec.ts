@@ -94,12 +94,17 @@ describe('PostHog Feature Flags v1', () => {
       expect(posthog.getFeatureFlags()).toEqual(createMockFeatureFlags())
     })
 
-    it('should only call fetch once if already calling', async () => {
+    it('should queue only one pending reload when called multiple times during in-flight request', async () => {
+      // Multiple calls during an in-flight request should:
+      // 1. Not make multiple immediate calls
+      // 2. Queue a pending reload that executes after the first completes
       expect(mocks.fetch).toHaveBeenCalledTimes(0)
       posthog.reloadFeatureFlagsAsync()
       posthog.reloadFeatureFlagsAsync()
       const flags = await posthog.reloadFeatureFlagsAsync()
-      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      await waitForPromises() // Wait for pending reload to complete
+      // First call + one pending reload = 2 calls
+      expect(mocks.fetch).toHaveBeenCalledTimes(2)
       expect(flags).toEqual(createMockFeatureFlags())
     })
 
@@ -184,8 +189,9 @@ describe('PostHog Feature Flags v1', () => {
           expect(posthog.isFeatureEnabled('feature-variant')).toEqual(undefined)
           expect(posthog.isFeatureEnabled('feature-missing')).toEqual(undefined)
 
-          expect(posthog.getFeatureFlagPayloads()).toEqual(undefined)
-          expect(posthog.getFeatureFlagPayload('feature-1')).toEqual(undefined)
+          // When errored out, we return cached values (which are empty in this case)
+          expect(posthog.getFeatureFlagPayloads()).toEqual({})
+          expect(posthog.getFeatureFlagPayload('feature-1')).toEqual(null)
         })
       })
 
@@ -513,9 +519,14 @@ describe('PostHog Feature Flags v1', () => {
           featureFlagPayloads: createMockFeatureFlagPayloads(),
         }
         const normalizedFeatureFlags = normalizeFlagsResponse(expectedFeatureFlags as PostHogV1FlagsResponse)
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.FeatureFlagDetails)).toEqual(
-          normalizedFeatureFlags
-        )
+
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.FeatureFlagDetails)).toEqual({
+          flags: normalizedFeatureFlags.flags,
+          requestId: undefined,
+          evaluatedAt: undefined,
+          errorsWhileComputingFlags: undefined,
+          quotaLimited: undefined,
+        })
       })
 
       it('should include feature flags in subsequent captures', async () => {
@@ -596,21 +607,23 @@ describe('PostHog Feature Flags v1', () => {
           signal: expect.anything(),
         })
 
-        // Verify all flag methods return undefined when quota limited
-        expect(posthog.getFeatureFlags()).toEqual(undefined)
+        // When quota limited with no prior cached flags, return empty results
+        expect(posthog.getFeatureFlags()).toEqual({})
         expect(posthog.getFeatureFlag('feature-1')).toEqual(undefined)
-        expect(posthog.getFeatureFlagPayloads()).toEqual(undefined)
-        expect(posthog.getFeatureFlagPayload('feature-1')).toEqual(undefined)
+        expect(posthog.getFeatureFlagPayloads()).toEqual({})
+        expect(posthog.getFeatureFlagPayload('feature-1')).toEqual(null)
       })
 
-      it('should emit debug message when quota limited', async () => {
-        const warnSpy = jest.spyOn(console, 'warn')
-        posthog.debug(true)
+      it('should emit featureflags event with quotaLimited when quota limited', async () => {
+        const featureFlagsHandler = jest.fn()
+        posthog.on('featureflags', featureFlagsHandler)
+
         await posthog.reloadFeatureFlagsAsync()
 
-        expect(warnSpy).toHaveBeenCalledWith(
-          '[FEATURE FLAGS] Feature flags quota limit exceeded - unsetting all flags. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
-        )
+        expect(featureFlagsHandler).toHaveBeenCalled()
+        // Verify the flags response includes quotaLimited info
+        const flagDetails = posthog.getFeatureFlagDetails()
+        expect(flagDetails?.quotaLimited).toEqual(['feature_flags'])
       })
     })
   })

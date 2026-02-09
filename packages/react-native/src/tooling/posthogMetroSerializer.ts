@@ -18,6 +18,7 @@ const DEBUG_ID_COMMENT = '//# chunkId='
  * Adds PostHog Chunk ID polyfill module to the bundle.
  */
 export function unstableBeforeAssetSerializationDebugIdPlugin({
+  graph,
   premodules,
   debugId,
 }: {
@@ -25,6 +26,11 @@ export function unstableBeforeAssetSerializationDebugIdPlugin({
   premodules: Module[]
   debugId?: string
 }): Module[] {
+  // Skip for web platform - sourcemaps are handled differently for web builds
+  if (graph.transformOptions.platform === 'web') {
+    return premodules
+  }
+
   if (!debugId) {
     return premodules
   }

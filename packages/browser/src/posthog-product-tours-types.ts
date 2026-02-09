@@ -1,5 +1,7 @@
 import { PropertyMatchType } from './types'
 import { SurveyActionType, SurveyEventWithFilters } from './posthog-surveys-types'
+import type { InferredSelector } from './extensions/product-tours/element-inference'
+import { SurveyPosition } from '@posthog/core'
 
 export interface JSONContent {
     type?: string
@@ -9,7 +11,34 @@ export interface JSONContent {
     text?: string
 }
 
-export type ProductTourStepType = 'element' | 'modal' | 'survey'
+export type ProductTourStepType = 'element' | 'modal' | 'survey' | 'banner'
+
+export interface ProductTourBannerConfig {
+    behavior: 'sticky' | 'static' | 'custom'
+    selector?: string
+    action?: {
+        type: 'none' | 'link' | 'trigger_tour'
+        link?: string
+        tourId?: string
+    }
+}
+
+/** Button actions available on modal steps */
+export type ProductTourButtonAction = 'dismiss' | 'link' | 'next_step' | 'previous_step' | 'trigger_tour'
+
+export interface ProductTourStepButton {
+    text: string
+    action: ProductTourButtonAction
+    /** URL to open when action is 'link' */
+    link?: string
+    /** Tour ID to trigger when action is 'trigger_tour' */
+    tourId?: string
+}
+
+export interface ProductTourStepButtons {
+    primary?: ProductTourStepButton
+    secondary?: ProductTourStepButton
+}
 
 export type ProductTourSurveyQuestionType = 'open' | 'rating'
 
@@ -32,12 +61,26 @@ export interface ProductTourStep {
     selector?: string
     progressionTrigger: 'button' | 'click'
     content: JSONContent | null
+    /** Pre-rendered HTML content from the editor. If present, SDK should use this instead of rendering from JSONContent. */
+    contentHtml?: string
     /** Inline survey question config - if present, this is a survey step */
     survey?: ProductTourSurveyQuestion
     /** ID of the auto-created survey for this step (set by backend) */
     linkedSurveyId?: string
     /** ID of the survey question (set by backend, used for event tracking) */
     linkedSurveyQuestionId?: string
+    /** Enhanced element data for more reliable lookup at runtime */
+    inferenceData?: InferredSelector
+    /** Use CSS selector instead of inference. Defaults to false (use inference). */
+    useManualSelector?: boolean
+    /** Maximum tooltip width in pixels (defaults to 320px) */
+    maxWidth?: number
+    /** Position for modal/survey steps (defaults to middle_center) */
+    modalPosition?: SurveyPosition
+    /** Button configuration for modal steps */
+    buttons?: ProductTourStepButtons
+    /** Banner configuration (only for banner steps) */
+    bannerConfig?: ProductTourBannerConfig
 }
 
 export interface ProductTourConditions {
@@ -54,6 +97,7 @@ export interface ProductTourConditions {
     actions?: {
         values: SurveyActionType[]
     } | null
+    linkedFlagVariant?: string
 }
 
 export interface ProductTourAppearance {
@@ -67,7 +111,12 @@ export interface ProductTourAppearance {
     boxShadow?: string
     showOverlay?: boolean
     whiteLabel?: boolean
+    /** defaults to true, auto-set to false for announcements/banners */
+    dismissOnClickOutside?: boolean
+    zIndex?: number
 }
+
+export type ProductTourDisplayFrequency = 'show_once' | 'until_interacted' | 'always'
 
 export interface ProductTour {
     id: string
@@ -83,6 +132,7 @@ export interface ProductTour {
     steps: ProductTourStep[]
     internal_targeting_flag_key?: string
     linked_flag_key?: string
+    display_frequency?: ProductTourDisplayFrequency
 }
 
 export type ProductTourCallback = (tours: ProductTour[], context?: { isLoaded: boolean; error?: string }) => void
@@ -94,6 +144,7 @@ export type ProductTourDismissReason =
     | 'user_clicked_outside'
     | 'escape_key'
     | 'element_unavailable'
+    | 'container_unavailable'
 
 export type ProductTourRenderReason = 'auto' | 'api' | 'trigger' | 'event'
 
@@ -108,6 +159,8 @@ export const DEFAULT_PRODUCT_TOUR_APPEARANCE: Required<ProductTourAppearance> = 
     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
     showOverlay: true,
     whiteLabel: false,
+    dismissOnClickOutside: true,
+    zIndex: 2147483646,
 }
 
 export interface ShowTourOptions {

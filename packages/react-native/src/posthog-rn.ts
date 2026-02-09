@@ -177,8 +177,13 @@ export class PostHog extends PostHogCore {
 
     let storagePromise: Promise<void> | undefined
 
+    let theStorage: PostHogCustomStorage | undefined
     if (this._persistence === 'file') {
-      this._storage = new PostHogRNStorage(options?.customStorage ?? buildOptimisiticAsyncStorage())
+      theStorage = options?.customStorage ?? buildOptimisiticAsyncStorage()
+    }
+
+    if (theStorage) {
+      this._storage = new PostHogRNStorage(theStorage)
       storagePromise = this._storage.preloadPromise
     } else {
       this._storage = new PostHogRNSyncMemoryStorage()
@@ -284,6 +289,15 @@ export class PostHog extends PostHogCore {
     return value !== null ? this._storage.setItem(key, value) : this._storage.removeItem(key)
   }
 
+  /**
+   * Waits for any pending storage operations to complete.
+   * This ensures data has been safely written to async storage before
+   * considering events as sent, preventing duplicate events on app crash/restart.
+   */
+  protected async flushStorage(): Promise<void> {
+    await this._storage.waitForPersist()
+  }
+
   fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> {
     return fetch(url, options)
   }
@@ -372,10 +386,18 @@ export class PostHog extends PostHogCore {
    * posthog.reset()
    * ```
    *
+   * @example
+   * ```js
+   * // reset but keep feature flag overrides
+   * posthog.reset([PostHogPersistedProperty.OverrideFeatureFlags])
+   * ```
+   *
+   * @param propertiesToKeep - Optional array of persisted properties to preserve during reset
+   *
    * @public
    */
-  reset(): void {
-    super.reset()
+  reset(propertiesToKeep?: PostHogPersistedProperty[]): void {
+    super.reset(propertiesToKeep)
 
     if (this._setDefaultPersonProperties) {
       // Reset reloads flags asyncrhonously, but doesn't wait for it.
@@ -707,12 +729,8 @@ export class PostHog extends PostHogCore {
    * @param properties The person properties to set for flag evaluation
    * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
-  setPersonPropertiesForFlags(properties: Record<string, string>, reloadFeatureFlags = true): void {
-    super.setPersonPropertiesForFlags(properties)
-
-    if (reloadFeatureFlags) {
-      this.reloadFeatureFlags()
-    }
+  setPersonPropertiesForFlags(properties: Record<string, JsonType>, reloadFeatureFlags = true): void {
+    super.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
   }
 
   /**
@@ -937,12 +955,11 @@ export class PostHog extends PostHogCore {
         }
       })
       if (Object.keys(propsToCache).length > 0) {
-        // `identify` will already reload flags if the distinctId changed,
-        // so we only need to reload if the distinctId is the same. The
-        // reload is async but not awaited, so by synchronously setting the
-        // properties here, we ensure they are set before the reload happens.
-        const shouldReloadFlags = distinctId === previousDistinctId
-        this.setPersonPropertiesForFlags(propsToCache, shouldReloadFlags)
+        // super.identify() already handles reloading flags in all cases:
+        // - When distinctId changes: it calls reloadFeatureFlags() directly
+        // - When distinctId is the same but properties change: it calls setPersonProperties() which reloads flags
+        // So we only need to set the properties here without triggering another reload.
+        this.setPersonPropertiesForFlags(propsToCache, false)
       }
     }
 
@@ -1002,6 +1019,80 @@ export class PostHog extends PostHogCore {
 
   initReactNativeNavigation(options: PostHogAutocaptureOptions): boolean {
     return withReactNativeNavigation(this, options)
+  }
+
+  /**
+   * Creates a person profile for the current user, if they don't already have one.
+   *
+   * This is useful when using `personProfiles: 'identified_only'` mode and you want to
+   * explicitly create a profile for an anonymous user before they identify.
+   *
+   * If `personProfiles` is 'identified_only' and no profile exists, this will create one.
+   * If `personProfiles` is 'never', this will log an error and do nothing.
+   * If `personProfiles` is 'always' or a profile already exists, this is a no-op.
+   *
+   * {@label Identification}
+   *
+   * @example
+   * ```js
+   * // Create a person profile for an anonymous user
+   * posthog.createPersonProfile()
+   * ```
+   *
+   * @public
+   */
+  createPersonProfile(): void {
+    super.createPersonProfile()
+  }
+
+  /**
+   * Sets properties on the person profile associated with the current `distinct_id`.
+   * Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)
+   *
+   * {@label Identification}
+   *
+   * @remarks
+   * Updates user properties that are stored with the person profile in PostHog.
+   * If `personProfiles` is set to `identified_only` and no profile exists, this will create one.
+   *
+   * @example
+   * ```js
+   * // set user properties
+   * posthog.setPersonProperties({
+   *     email: 'user@example.com',
+   *     plan: 'premium'
+   * })
+   * ```
+   *
+   * @example
+   * ```js
+   * // set properties with $set_once
+   * posthog.setPersonProperties(
+   *     { name: 'Max Hedgehog' },  // $set properties
+   *     { initial_url: '/blog' }   // $set_once properties
+   * )
+   * ```
+   *
+   * @example
+   * ```js
+   * // set properties without reloading feature flags
+   * posthog.setPersonProperties({ plan: 'premium' }, undefined, false)
+   * ```
+   *
+   * @public
+   *
+   * @param userPropertiesToSet - Optional: An object of properties to store about the user.
+   *   These properties will overwrite any existing values for the same keys.
+   * @param userPropertiesToSetOnce - Optional: An object of properties to store about the user.
+   *   If a property is previously set, this does not override that value.
+   * @param reloadFeatureFlags - Whether to reload feature flags after setting the properties. Defaults to true.
+   */
+  setPersonProperties(
+    userPropertiesToSet?: { [key: string]: JsonType },
+    userPropertiesToSetOnce?: { [key: string]: JsonType },
+    reloadFeatureFlags = true
+  ): void {
+    super.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce, reloadFeatureFlags)
   }
 
   public async getSurveys(): Promise<SurveyResponse['surveys']> {

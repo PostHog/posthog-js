@@ -55,6 +55,37 @@ export type FlagProperty = {
 
 export type FlagPropertyValue = string | number | (string | number)[] | boolean
 
+/**
+ * Options for overriding feature flags.
+ *
+ * Supports multiple formats:
+ * - `false` - Clear all overrides
+ * - `string[]` - Enable a list of flags (sets them to `true`)
+ * - `Record<string, FeatureFlagValue>` - Set specific flag values/variants
+ * - `FeatureFlagOverrideOptions` - Set both flag values and payloads
+ */
+export type OverrideFeatureFlagsOptions =
+  | false
+  | string[]
+  | Record<string, FeatureFlagValue>
+  | FeatureFlagOverrideOptions
+
+export type FeatureFlagOverrideOptions = {
+  /**
+   * Flag overrides. Can be:
+   * - `false` to clear flag overrides
+   * - `string[]` to enable a list of flags
+   * - `Record<string, FeatureFlagValue>` to set specific values/variants
+   */
+  flags?: false | string[] | Record<string, FeatureFlagValue>
+  /**
+   * Payload overrides for flags.
+   * - `false` to clear payload overrides
+   * - `Record<string, JsonType>` to set specific payloads
+   */
+  payloads?: false | Record<string, JsonType>
+}
+
 export type FeatureFlagCondition = {
   properties: FlagProperty[]
   rollout_percentage?: number
@@ -63,7 +94,7 @@ export type FeatureFlagCondition = {
 
 export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
 
-export type PostHogOptions = PostHogCoreOptions & {
+export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
   persistence?: 'memory'
   personalApiKey?: string
   privacyMode?: boolean
@@ -109,7 +140,7 @@ export type PostHogOptions = PostHogCoreOptions & {
    */
   before_send?: BeforeSendFn | BeforeSendFn[]
   /**
-   * Evaluation environments for feature flags.
+   * Evaluation contexts for feature flags.
    * When set, only feature flags that have at least one matching evaluation tag
    * will be evaluated for this SDK instance. Feature flags with no evaluation tags
    * will always be evaluated.
@@ -117,6 +148,11 @@ export type PostHogOptions = PostHogCoreOptions & {
    * Examples: ['production', 'backend', 'api']
    *
    * @default undefined
+   */
+  evaluationContexts?: readonly string[]
+  /**
+   * Evaluation environments for feature flags.
+   * @deprecated Use evaluationContexts instead. This property will be removed in a future version.
    */
   evaluationEnvironments?: readonly string[]
   /**
@@ -144,6 +180,17 @@ export type PostHogOptions = PostHogCoreOptions & {
    * ```
    */
   __preview_capture_bot_pageviews?: boolean
+  /**
+   * When enabled, all feature flag evaluations will use local evaluation only,
+   * never falling back to server-side evaluation. This prevents unexpected server
+   * requests and associated costs when using local evaluation.
+   *
+   * Flags that cannot be evaluated locally (e.g., those with experience continuity)
+   * will return `undefined` instead of making a server request.
+   *
+   * @default false
+   */
+  strictLocalEvaluation?: boolean
 }
 
 export type PostHogFeatureFlag = {
@@ -189,6 +236,16 @@ export const FeatureFlagError = {
 } as const
 
 export type FeatureFlagErrorType = (typeof FeatureFlagError)[keyof typeof FeatureFlagError] | string
+
+/**
+ * Result of evaluating a feature flag, including its value and payload.
+ */
+export type FeatureFlagResult = {
+  key: string
+  enabled: boolean
+  variant: string | undefined
+  payload: JsonType | undefined
+}
 
 export interface IPostHog {
   /**
@@ -344,6 +401,38 @@ export interface IPostHog {
   ): Promise<JsonType | undefined>
 
   /**
+   * @description Get the result of evaluating a feature flag, including its value and payload.
+   * This is more efficient than calling getFeatureFlag and getFeatureFlagPayload separately when you need both.
+   *
+   * @example
+   * ```ts
+   * const result = await client.getFeatureFlagResult('my-flag', 'user_123')
+   * if (result) {
+   *   console.log('Flag enabled:', result.enabled)
+   *   console.log('Variant:', result.variant)
+   *   console.log('Payload:', result.payload)
+   * }
+   * ```
+   *
+   * @param key - The feature flag key
+   * @param distinctId - The user's distinct ID
+   * @param options - Optional configuration for flag evaluation
+   * @returns Promise that resolves to the flag result or undefined
+   */
+  getFeatureFlagResult(
+    key: string,
+    distinctId: string,
+    options?: {
+      groups?: Record<string, string>
+      personProperties?: Record<string, string>
+      groupProperties?: Record<string, Record<string, string>>
+      onlyEvaluateLocally?: boolean
+      sendFeatureFlagEvents?: boolean
+      disableGeoip?: boolean
+    }
+  ): Promise<FeatureFlagResult | undefined>
+
+  /**
    * @description Sets a groups properties, which allows asking questions like "Who are the most active companies"
    * using my product in PostHog.
    *
@@ -358,6 +447,32 @@ export interface IPostHog {
    * already polled automatically at a regular interval.
    */
   reloadFeatureFlags(): Promise<void>
+
+  /**
+   * @description Override feature flags locally. Useful for testing and local development.
+   * Overridden flags take precedence over both local evaluation and remote evaluation.
+   *
+   * @example
+   * ```ts
+   * // Clear all overrides
+   * posthog.overrideFeatureFlags(false)
+   *
+   * // Enable a list of flags (sets them to true)
+   * posthog.overrideFeatureFlags(['flag-a', 'flag-b'])
+   *
+   * // Set specific flag values/variants
+   * posthog.overrideFeatureFlags({ 'my-flag': 'variant-a', 'other-flag': true })
+   *
+   * // Set both flags and payloads
+   * posthog.overrideFeatureFlags({
+   *   flags: { 'my-flag': 'variant-a' },
+   *   payloads: { 'my-flag': { discount: 20 } }
+   * })
+   * ```
+   *
+   * @param overrides - Flag overrides configuration
+   */
+  overrideFeatureFlags(overrides: OverrideFeatureFlagsOptions): void
 
   /**
    * @description Run a function with specific context that will be applied to all events captured within that context.

@@ -5,7 +5,7 @@ import { PostHog } from './posthog-core'
 import { document, window } from './utils/globals'
 import { getEventTarget, getParentElement } from './autocapture-utils'
 import { HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
-import { isNumber, isUndefined, isEmptyObject, isObject } from '@posthog/core'
+import { isNumber, isNullish, isEmptyObject, isObject } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { isElementInToolbar, isElementNode, isTag } from './utils/element-utils'
 import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensions/dead-clicks-autocapture'
@@ -83,10 +83,10 @@ export class Heatmaps {
     }
 
     public get isEnabled(): boolean {
-        if (!isUndefined(this.instance.config.capture_heatmaps)) {
+        if (!isNullish(this.instance.config.capture_heatmaps)) {
             return this.instance.config.capture_heatmaps !== false
         }
-        if (!isUndefined(this.instance.config.enable_heatmaps)) {
+        if (!isNullish(this.instance.config.enable_heatmaps)) {
             return this.instance.config.enable_heatmaps
         }
         return this._enabledServerSide

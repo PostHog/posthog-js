@@ -62,8 +62,14 @@ export const isNullish = (x: unknown): x is null | undefined => isUndefined(x) |
 
 export const isNumber = (x: unknown): x is number => {
   // eslint-disable-next-line posthog-js/no-direct-number-check
-  return toString.call(x) == '[object Number]'
+  // x !== x is true only for NaN (ES5-compatible NaN check)
+  return toString.call(x) == '[object Number]' && x === x
 }
+
+export const isPositiveNumber = (value: unknown): value is number => {
+  return isNumber(value) && value > 0
+}
+
 export const isBoolean = (x: unknown): x is boolean => {
   // eslint-disable-next-line posthog-js/no-direct-boolean-check
   return toString.call(x) === '[object Boolean]'
@@ -85,14 +91,6 @@ export const isPlainError = (x: unknown): x is Error => {
 
 export const isKnownUnsafeEditableEvent = (x: unknown): x is KnownUnsafeEditableEvent => {
   return includes(knownUnsafeEditableEvent as unknown as string[], x)
-}
-
-export function isInstanceOf(candidate: unknown, base: any): boolean {
-  try {
-    return candidate instanceof base
-  } catch {
-    return false
-  }
 }
 
 export function isPrimitive(value: unknown): boolean {
@@ -126,6 +124,14 @@ export function isEvent(candidate: unknown): candidate is Event {
 
 export function isPlainObject(candidate: unknown): candidate is Record<string, unknown> {
   return isBuiltin(candidate, 'Object')
+}
+
+function isInstanceOf(candidate: unknown, base: any): boolean {
+  try {
+    return candidate instanceof base
+  } catch {
+    return false
+  }
 }
 
 export const yesLikeValues = [true, 'true', 1, '1', 'yes']

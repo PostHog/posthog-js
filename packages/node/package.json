@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.18.0",
+  "version": "5.24.13",
   "description": "PostHog Node.js integration",
   "repository": {
     "type": "git",
@@ -20,7 +20,7 @@
     "generate-references": "pnpm build && pnpm exec api-extractor run --config ./api-extractor.jsonc --local && node scripts/generate-docs.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": "^20.20.0 || >=22.22.0"
   },
   "files": [
     "src",
@@ -78,6 +78,12 @@
       },
       "import": "./dist/entrypoints/index.node.mjs",
       "require": "./dist/entrypoints/index.node.js"
+    },
+    "./edge": {
+      "types": "./dist/entrypoints/index.edge.d.ts",
+      "import": "./dist/entrypoints/index.edge.mjs",
+      "require": "./dist/entrypoints/index.edge.js",
+      "default": "./dist/entrypoints/index.edge.js"
     },
     "./experimental": {
       "types": "./dist/experimental.d.ts"

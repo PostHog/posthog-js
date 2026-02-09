@@ -2,9 +2,10 @@ import { render, JSX } from 'preact'
 
 import { ProductTourStep, ProductTourAppearance } from '../../posthog-product-tours-types'
 import { document as _document } from '../../utils/globals'
+import { ProductTourBanner } from './components/ProductTourBanner'
 import { ProductTourSurveyStepInner } from './components/ProductTourSurveyStepInner'
 import { ProductTourTooltipInner } from './components/ProductTourTooltipInner'
-import { getProductTourStylesheet, addProductTourCSSVariablesToElement } from './product-tours-utils'
+import { getProductTourStylesheet, addProductTourCSSVariablesToElement, hasElementTarget } from './product-tours-utils'
 
 const document = _document as Document
 
@@ -41,11 +42,31 @@ export function renderProductTourPreview({
     shadow.appendChild(renderTarget)
 
     const isSurveyStep = step.type === 'survey'
-    const tooltipClass = isSurveyStep ? 'ph-tour-tooltip ph-tour-survey-step' : 'ph-tour-tooltip'
+    const isBannerStep = step.type === 'banner'
+    const isModal = !hasElementTarget(step)
+    const tooltipClass = `ph-tour-tooltip${isModal ? ' ph-tour-tooltip--modal' : ''}${isSurveyStep ? ' ph-tour-survey-step' : ''}`
+
+    if (isBannerStep) {
+        render(
+            <div class="ph-tour-container">
+                <ProductTourBanner step={step} onDismiss={() => {}} />
+            </div>,
+            renderTarget
+        )
+        return
+    }
 
     render(
         <div class="ph-tour-container">
-            <div class={tooltipClass} style={{ position: 'relative', animation: 'none', ...style }}>
+            <div
+                class={tooltipClass}
+                style={{
+                    position: 'relative',
+                    animation: 'none',
+                    ...(step.maxWidth && { width: `${step.maxWidth}px`, maxWidth: `${step.maxWidth}px` }),
+                    ...style,
+                }}
+            >
                 {isSurveyStep ? (
                     <ProductTourSurveyStepInner
                         step={step}

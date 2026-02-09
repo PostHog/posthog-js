@@ -34,6 +34,7 @@ import {
     SurveyEventProperties,
     SurveyRenderReason,
 } from './posthog-surveys-types'
+import { PostHogLogs } from './posthog-logs'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
@@ -53,7 +54,9 @@ import {
     EarlyAccessFeatureStage,
     EventName,
     ExceptionAutoCaptureConfig,
+    FeatureFlagDetail,
     FeatureFlagsCallback,
+    FeatureFlagResult,
     JsonType,
     OverrideConfig,
     PostHogConfig,
@@ -65,6 +68,7 @@ import {
     SessionIdChangedCallback,
     SnippetArrayItem,
     ToolbarParams,
+    PostHogInterface,
 } from './types'
 import {
     _copyAndTruncateStrings,
@@ -150,10 +154,19 @@ let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 &&
 
 const defaultsThatVaryByConfig = (
     defaults?: ConfigDefaults
-): Pick<PostHogConfig, 'rageclick' | 'capture_pageview' | 'session_recording'> => ({
+): Pick<
+    PostHogConfig,
+    | 'rageclick'
+    | 'capture_pageview'
+    | 'session_recording'
+    | 'external_scripts_inject_target'
+    | 'internal_or_test_user_hostname'
+> => ({
     rageclick: defaults && defaults >= '2025-11-30' ? { content_ignorelist: true } : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
+    external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
+    internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
@@ -168,6 +181,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     cross_subdomain_cookie: isCrossDomainCookie(document?.location),
     persistence: 'localStorage+cookie', // up to 1.92.0 this was 'cookie'. It's easy to migrate as 'localStorage+cookie' will migrate data from cookie storage
     persistence_name: '',
+    cookie_persisted_properties: [],
     loaded: __NOOP,
     save_campaign_params: true,
     custom_campaign_params: [],
@@ -307,7 +321,7 @@ class DeprecatedWebPerformanceObserver {
  *
  * @constructor
  */
-export class PostHog {
+export class PostHog implements PostHogInterface {
     __loaded: boolean
     config: PostHogConfig
     _originalUserConfig?: Partial<PostHogConfig>
@@ -318,6 +332,7 @@ export class PostHog {
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
     conversations: PostHogConversations
+    logs: PostHogLogs
     experiments: WebExperiments
     toolbar: Toolbar
     exceptions: PostHogExceptions
@@ -352,14 +367,14 @@ export class PostHog {
     __request_queue: QueuedRequestWithOptions[]
     _pendingRemoteConfig?: RemoteConfig
     analyticsDefaultEndpoint: string
-    version = Config.LIB_VERSION
+    version: string = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
     _cachedPersonProperties: string | null
 
     SentryIntegration: typeof SentryIntegration
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
 
-    private _internalEventEmitter = new SimpleEventEmitter()
+    _internalEventEmitter = new SimpleEventEmitter()
 
     // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
     /** @deprecated Use `flagsEndpointWasHit` instead.  We migrated to using a new feature flag endpoint and the new method is more semantically accurate */
@@ -395,6 +410,7 @@ export class PostHog {
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
         this.conversations = new PostHogConversations(this)
+        this.logs = new PostHogLogs(this)
         this.experiments = new WebExperiments(this)
         this.exceptions = new PostHogExceptions(this)
         this.rateLimiter = new RateLimiter(this)
@@ -711,6 +727,10 @@ export class PostHog {
         })
 
         initTasks.push(() => {
+            this.logs.loadIfEnabled()
+        })
+
+        initTasks.push(() => {
             this.conversations.loadIfEnabled()
         })
 
@@ -833,6 +853,7 @@ export class PostHog {
         this.autocapture?.onRemoteConfig(config)
         this.heatmaps?.onRemoteConfig(config)
         this.surveys.onRemoteConfig(config)
+        this.logs.onRemoteConfig(config)
         this.conversations.onRemoteConfig(config)
         this.productTours?.onRemoteConfig(config)
         this.webVitalsAutocapture?.onRemoteConfig(config)
@@ -849,6 +870,16 @@ export class PostHog {
         }
 
         this._start_queue_if_opted_in()
+
+        // Check if current hostname matches internal_or_test_user_hostname pattern and mark as test user before any events
+        if (this.config.internal_or_test_user_hostname && location?.hostname) {
+            const hostname = location.hostname
+            const pattern = this.config.internal_or_test_user_hostname
+            const matches = typeof pattern === 'string' ? hostname === pattern : pattern.test(hostname)
+            if (matches) {
+                this.setInternalOrTestUser()
+            }
+        }
 
         // this happens after "loaded" so a user can call identify or any other things before the pageview fires
         if (this.config.capture_pageview) {
@@ -1180,6 +1211,11 @@ export class PostHog {
                     { id: surveyId, current_iteration: surveyIteration },
                     event_name === SurveyEventName.SENT ? 'responded' : 'dismissed'
                 )]: true,
+            }
+        } else if (event_name === SurveyEventName.SHOWN) {
+            data.$set = {
+                ...data.$set,
+                [SurveyEventProperties.SURVEY_LAST_SEEN_DATE]: new Date().toISOString(),
             }
         }
 
@@ -1627,15 +1663,47 @@ export class PostHog {
      *
      * @public
      *
+     * @deprecated Use `getFeatureFlagResult()` instead
+     *
      * @param {Object|String} prop Key of the feature flag.
      */
     getFeatureFlagPayload(key: string): JsonType {
-        const payload = this.featureFlags.getFeatureFlagPayload(key)
-        try {
-            return JSON.parse(payload as any)
-        } catch {
-            return payload
-        }
+        return this.featureFlags.getFeatureFlagPayload(key)
+    }
+
+    /**
+     * Get a feature flag evaluation result including both the flag value and payload.
+     *
+     * By default, this method emits the `$feature_flag_called` event.
+     *
+     * {@label Feature flags}
+     *
+     * @example
+     * ```js
+     * const result = posthog.getFeatureFlagResult('my-flag')
+     * if (result?.enabled) {
+     *     console.log('Flag is enabled with payload:', result.payload)
+     * }
+     * ```
+     *
+     * @example
+     * ```js
+     * // multivariate flag
+     * const result = posthog.getFeatureFlagResult('button-color')
+     * if (result?.variant === 'red') {
+     *     showRedButton(result.payload)
+     * }
+     * ```
+     *
+     * @public
+     *
+     * @param {string} key Key of the feature flag.
+     * @param {Object} [options] Options for the feature flag lookup.
+     * @param {boolean} [options.send_event=true] If false, won't send the $feature_flag_called event.
+     * @returns {FeatureFlagResult | undefined} The feature flag result including key, enabled, variant, and payload.
+     */
+    getFeatureFlagResult(key: string, options?: { send_event?: boolean }): FeatureFlagResult | undefined {
+        return this.featureFlags.getFeatureFlagResult(key, options)
     }
 
     /**
@@ -1686,6 +1754,74 @@ export class PostHog {
      */
     reloadFeatureFlags(): void {
         this.featureFlags.reloadFeatureFlags()
+    }
+
+    /**
+     * Manually update feature flag values without making a network request.
+     *
+     * This is useful when you have feature flag values from an external source
+     * (e.g., server-side evaluation, edge middleware) and want to inject them
+     * into the client SDK.
+     *
+     * {@label Feature flags}
+     *
+     * @example
+     * ```js
+     * // Replace all flags with server-evaluated values
+     * posthog.updateFlags({
+     *   'my-flag': true,
+     *   'my-experiment': 'variant-a'
+     * })
+     *
+     * // Merge with existing flags (update only specified flags)
+     * posthog.updateFlags(
+     *   { 'my-flag': true },
+     *   undefined,
+     *   { merge: true }
+     * )
+     *
+     * // With payloads
+     * posthog.updateFlags(
+     *   { 'my-flag': true },
+     *   { 'my-flag': { some: 'data' } }
+     * )
+     * ```
+     *
+     * @param flags - An object mapping flag keys to their values (boolean or string variant)
+     * @param payloads - Optional object mapping flag keys to their JSON payloads
+     * @param options - Optional settings. Use `{ merge: true }` to merge with existing flags instead of replacing.
+     * @public
+     */
+    updateFlags(
+        flags: Record<string, boolean | string>,
+        payloads?: Record<string, JsonType>,
+        options?: { merge?: boolean }
+    ): void {
+        // If merging, combine with existing flags
+        const existingFlags = options?.merge ? this.featureFlags.getFlagVariants() : {}
+        const existingPayloads = options?.merge ? this.featureFlags.getFlagPayloads() : {}
+        const finalFlags = { ...existingFlags, ...flags }
+        const finalPayloads = { ...existingPayloads, ...payloads }
+
+        // Convert simple flags to v4 format to avoid deprecation warning
+        const flagDetails: Record<string, FeatureFlagDetail> = {}
+        for (const [key, value] of Object.entries(finalFlags)) {
+            const isVariant = typeof value === 'string'
+            flagDetails[key] = {
+                key,
+                enabled: isVariant ? true : Boolean(value),
+                variant: isVariant ? value : undefined,
+                reason: undefined,
+                // id: 0 indicates manually injected flags (not from server evaluation)
+                metadata: !isUndefined(finalPayloads?.[key])
+                    ? { id: 0, version: undefined, description: undefined, payload: finalPayloads[key] }
+                    : undefined,
+            }
+        }
+
+        this.featureFlags.receivedFeatureFlags({
+            flags: flagDetails,
+        })
     }
 
     /**
@@ -1802,6 +1938,10 @@ export class PostHog {
      * listener is registered, the first callback will be the next event
      * _after_ registering a listener
      *
+     * Available events:
+     * - `eventCaptured`: Emitted immediately before trying to send an event
+     * - `featureFlagsReloading`: Emitted when feature flags are being reloaded (e.g. after `identify()`, `group()`, or `reloadFeatureFlags()`)
+     *
      * {@label Capture}
      *
      * @example
@@ -1811,13 +1951,21 @@ export class PostHog {
      * })
      * ```
      *
+     * @example
+     * ```js
+     * // Track when feature flags are reloading to show a loading state
+     * posthog.on('featureFlagsReloading', () => {
+     *   console.log('Feature flags are being reloaded...')
+     * })
+     * ```
+     *
      * @public
      *
      * @param {String} event The event to listen for.
      * @param {Function} cb The callback function to call when the event is emitted.
      * @returns {Function} A function that can be called to unsubscribe the listener.
      */
-    on(event: 'eventCaptured', cb: (...args: any[]) => void): () => void {
+    on(event: 'eventCaptured' | 'featureFlagsReloading', cb: (...args: any[]) => void): () => void {
         return this._internalEventEmitter.on(event, cb)
     }
 
@@ -1827,6 +1975,8 @@ export class PostHog {
      * Note that this is not called only when we fetch feature flags from the server, but also when they change in the browser.
      *
      * {@label Feature flags}
+     *
+     * @public
      *
      * @example
      * ```js
@@ -1873,6 +2023,8 @@ export class PostHog {
      * Can be used, for example, to sync the PostHog session id with a backend session.
      *
      * {@label Identification}
+     *
+     * @public
      *
      * @example
      * ```js
@@ -2009,7 +2161,7 @@ export class PostHog {
      *
      * {@label Surveys}
      *
-     *
+     * @public
      * @deprecated
      *
      * @param surveyId The ID of the survey to check.
@@ -2955,6 +3107,8 @@ export class PostHog {
      *
      * {@label Identification}
      *
+     * @public
+     *
      * @remarks
      * This is based on browser-level `sessionStorage`, NOT the PostHog session.
      * getSessionProperty() can only be called after the PostHog library has finished loading.
@@ -3041,6 +3195,34 @@ export class PostHog {
         }
         // sent a $set event. We don't set any properties here, but attribution props will be added later
         this.setPersonProperties({}, {})
+    }
+
+    /**
+     * Marks the current user as a test user by setting the `$internal_or_test_user` person property to `true`.
+     * This also enables person processing for the current user.
+     *
+     * This is useful for using in a cohort your internal/test filters for your posthog org.
+     * @see https://posthog.com/tutorials/filter-internal-users
+     * Create a cohort with `$internal_or_test_user` IS SET, and set your internal test filters to be NOT IN that cohort.
+     *
+     * {@label Identification}
+     *
+     * @example
+     * ```js
+     * // Manually mark as test user
+     * posthog.setInternalOrTestUser()
+     *
+     * // Or use internal_or_test_user_hostname config for automatic detection
+     * posthog.init('token', { internal_or_test_user_hostname: 'localhost' })
+     * ```
+     *
+     * @public
+     */
+    setInternalOrTestUser(): void {
+        if (!this._requirePersonProcessing('posthog.setInternalOrTestUser')) {
+            return
+        }
+        this.setPersonProperties({ $internal_or_test_user: true })
     }
 
     /**
@@ -3134,7 +3316,9 @@ export class PostHog {
             // we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
             this.reset(true)
             this.sessionManager?.destroy()
+            this.pageViewManager?.destroy()
             this.sessionManager = new SessionIdManager(this)
+            this.pageViewManager = new PageViewManager(this)
             if (this.persistence) {
                 this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
             }
@@ -3205,6 +3389,7 @@ export class PostHog {
                 $device_id: null,
             })
             this.sessionManager?.destroy()
+            this.pageViewManager?.destroy()
             this.sessionManager = undefined
             this.sessionPropsManager = undefined
             this.sessionRecording?.stopRecording()

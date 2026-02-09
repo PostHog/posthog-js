@@ -1,3 +1,5 @@
+import type { JsonType } from '../types'
+
 export function includes(str: string, needle: string): boolean
 export function includes<T>(arr: T[], needle: T): boolean
 export function includes(str: unknown[] | string, needle: unknown): boolean {
@@ -20,4 +22,42 @@ export const stripLeadingDollar = function (s: string): string {
 
 export function isDistinctIdStringLike(value: string): boolean {
   return ['distinct_id', 'distinctid'].includes(value.toLowerCase())
+}
+
+/**
+ * Recursively sorts all keys in an object and its nested objects/arrays.
+ * Used to ensure deterministic JSON serialization regardless of object construction order.
+ */
+function deepSortKeys(value: JsonType): JsonType {
+  if (value === null || typeof value !== 'object') {
+    return value
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(deepSortKeys)
+  }
+
+  return Object.keys(value)
+    .sort()
+    .reduce((acc: { [key: string]: JsonType }, key) => {
+      acc[key] = deepSortKeys(value[key])
+      return acc
+    }, {})
+}
+
+/**
+ * Creates a hash string from distinct_id and person properties.
+ * Used to detect if person properties have changed to avoid duplicate $set events.
+ * Uses sorted keys to ensure consistent ordering regardless of object construction order.
+ */
+export function getPersonPropertiesHash(
+  distinct_id: string,
+  userPropertiesToSet?: { [key: string]: JsonType },
+  userPropertiesToSetOnce?: { [key: string]: JsonType }
+): string {
+  return JSON.stringify({
+    distinct_id,
+    userPropertiesToSet: userPropertiesToSet ? deepSortKeys(userPropertiesToSet) : undefined,
+    userPropertiesToSetOnce: userPropertiesToSetOnce ? deepSortKeys(userPropertiesToSetOnce) : undefined,
+  })
 }

@@ -5,6 +5,7 @@ import {
   Part,
   GenerateContentResponseUsageMetadata,
 } from '@google/genai'
+import type { GoogleGenAIOptions } from '@google/genai'
 import { PostHog } from 'posthog-node'
 import {
   MonitoringParams,
@@ -13,17 +14,13 @@ import {
   formatResponseGemini,
   extractPosthogParams,
   toContentString,
+  sendEventWithErrorToPosthog,
 } from '../utils'
 import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
 import { isString } from '../typeGuards'
 
-interface MonitoringGeminiConfig {
-  apiKey?: string
-  vertexai?: boolean
-  project?: string
-  location?: string
-  apiVersion?: string
+interface MonitoringGeminiConfig extends GoogleGenAIOptions {
   posthog: PostHog
 }
 
@@ -79,6 +76,7 @@ export class WrappedModels {
             0,
           cacheReadInputTokens: metadata?.cachedContentTokenCount ?? 0,
           webSearchCount: calculateGoogleWebSearchCount(response),
+          rawUsage: metadata,
         },
         tools: availableTools,
       })
@@ -86,7 +84,7 @@ export class WrappedModels {
       return response
     } catch (error: unknown) {
       const latency = (Date.now() - startTime) / 1000
-      await sendEventToPosthog({
+      const enrichedError = await sendEventWithErrorToPosthog({
         client: this.phClient,
         ...posthogParams,
         model: geminiParams.model,
@@ -96,15 +94,13 @@ export class WrappedModels {
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         params: params as GenerateContentParameters & MonitoringParams,
-        httpStatus: (error as { status?: number })?.status ?? 500,
         usage: {
           inputTokens: 0,
           outputTokens: 0,
         },
-        isError: true,
-        error: JSON.stringify(error),
+        error: error,
       })
-      throw error
+      throw enrichedError
     }
   }
 
@@ -114,16 +110,22 @@ export class WrappedModels {
     const { providerParams: geminiParams, posthogParams } = extractPosthogParams(params)
     const startTime = Date.now()
     const accumulatedContent: FormattedContent = []
+    let firstTokenTime: number | undefined
     let usage: TokenUsage = {
       inputTokens: 0,
       outputTokens: 0,
       webSearchCount: 0,
+      rawUsage: undefined,
     }
 
     try {
       const stream = await this.client.models.generateContentStream(geminiParams as GenerateContentParameters)
 
       for await (const chunk of stream) {
+        // Track first token time when we get text content
+        if (firstTokenTime === undefined && chunk.text) {
+          firstTokenTime = Date.now()
+        }
         const chunkWebSearchCount = calculateGoogleWebSearchCount(chunk)
         if (chunkWebSearchCount > 0 && chunkWebSearchCount > (usage.webSearchCount ?? 0)) {
           usage.webSearchCount = chunkWebSearchCount
@@ -154,6 +156,9 @@ export class WrappedModels {
               for (const part of candidate.content.parts) {
                 // Type-safe check for functionCall
                 if ('functionCall' in part) {
+                  if (firstTokenTime === undefined) {
+                    firstTokenTime = Date.now()
+                  }
                   const funcCall = (part as Part & { functionCall?: { name?: string; args?: unknown } }).functionCall
                   if (funcCall?.name) {
                     accumulatedContent.push({
@@ -181,12 +186,14 @@ export class WrappedModels {
               0,
             cacheReadInputTokens: metadata.cachedContentTokenCount ?? 0,
             webSearchCount: usage.webSearchCount,
+            rawUsage: metadata,
           }
         }
         yield chunk
       }
 
       const latency = (Date.now() - startTime) / 1000
+      const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
 
       const availableTools = extractAvailableToolCalls('gemini', geminiParams)
 
@@ -201,18 +208,20 @@ export class WrappedModels {
         input: this.formatInputForPostHog(geminiParams),
         output,
         latency,
+        timeToFirstToken,
         baseURL: 'https://generativelanguage.googleapis.com',
         params: params as GenerateContentParameters & MonitoringParams,
         httpStatus: 200,
         usage: {
           ...usage,
           webSearchCount: usage.webSearchCount,
+          rawUsage: usage.rawUsage,
         },
         tools: availableTools,
       })
     } catch (error: unknown) {
       const latency = (Date.now() - startTime) / 1000
-      await sendEventToPosthog({
+      const enrichedError = await sendEventWithErrorToPosthog({
         client: this.phClient,
         ...posthogParams,
         model: geminiParams.model,
@@ -222,15 +231,13 @@ export class WrappedModels {
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         params: params as GenerateContentParameters & MonitoringParams,
-        httpStatus: (error as { status?: number })?.status ?? 500,
         usage: {
           inputTokens: 0,
           outputTokens: 0,
         },
-        isError: true,
-        error: JSON.stringify(error),
+        error: error,
       })
-      throw error
+      throw enrichedError
     }
   }
 

@@ -5,30 +5,44 @@ import { SurveyEventName, SurveyEventProperties } from '../posthog-surveys-types
 import { SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 import { beforeEach } from '@jest/globals'
 
-describe('posthog core', () => {
-    const mockURL = jest.fn()
-    const mockReferrer = jest.fn()
-
-    beforeAll(() => {
-        // Mock getters using Object.defineProperty
-        Object.defineProperty(document, 'URL', {
-            get: mockURL,
-        })
-        Object.defineProperty(document, 'referrer', {
-            get: mockReferrer,
-        })
-        Object.defineProperty(window, 'location', {
-            get: () => ({
+jest.mock('../utils/globals', () => {
+    const orig = jest.requireActual('../utils/globals')
+    const mockURL = jest.fn().mockReturnValue('https://example.com')
+    const mockReferrer = jest.fn().mockReturnValue('https://referrer.com')
+    const mockHostName = jest.fn().mockReturnValue('example.com')
+    return {
+        ...orig,
+        mockURL,
+        mockReferrer,
+        mockHostName,
+        document: {
+            ...orig.document,
+            createElement: (...args: any[]) => orig.document.createElement(...args),
+            get referrer() {
+                return mockReferrer()
+            },
+            get URL() {
+                return mockURL()
+            },
+        },
+        get location() {
+            return {
                 href: mockURL(),
                 toString: () => mockURL(),
-            }),
-            configurable: true,
-        })
-    })
+                hostname: mockHostName(),
+            }
+        },
+    }
+})
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { mockURL, mockReferrer, mockHostName } = require('../utils/globals')
+
+describe('posthog core', () => {
     beforeEach(() => {
         mockReferrer.mockReturnValue('https://referrer.com')
         mockURL.mockReturnValue('https://example.com')
+        mockHostName.mockReturnValue('example.com')
         // otherwise surveys code logs an error and fails the test
         console.error = jest.fn()
     })
@@ -335,6 +349,137 @@ describe('posthog core', () => {
                         '$survey_dismissed/testSurvey1/1': true,
                     },
                 })
+            })
+            it('sending survey shown events should set the last seen survey date property', () => {
+                // arrange
+                const { posthog, beforeSendMock } = setup({ debug: false })
+                const survey = {
+                    id: 'testSurvey1',
+                    current_iteration: 1,
+                }
+
+                // act
+                posthog.capture(SurveyEventName.SHOWN, {
+                    [SurveyEventProperties.SURVEY_ID]: survey.id,
+                    [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
+                })
+
+                // assert
+                const capturedEvent = beforeSendMock.mock.calls[0][0]
+                expect(capturedEvent.$set).toBeDefined()
+                expect(capturedEvent.$set[SurveyEventProperties.SURVEY_LAST_SEEN_DATE]).toBeDefined()
+                // Verify it's a valid ISO date string
+                expect(new Date(capturedEvent.$set[SurveyEventProperties.SURVEY_LAST_SEEN_DATE]).toISOString()).toBe(
+                    capturedEvent.$set[SurveyEventProperties.SURVEY_LAST_SEEN_DATE]
+                )
+            })
+        })
+    })
+
+    describe('setInternalOrTestUser()', () => {
+        const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
+            const beforeSendMock = jest.fn().mockImplementation((e) => e)
+            const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
+            return { posthog, beforeSendMock }
+        }
+
+        it('should set $internal_or_test_user person property to true', () => {
+            const { posthog, beforeSendMock } = setup({ person_profiles: 'always' })
+
+            posthog.setInternalOrTestUser()
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(1)
+            const call = beforeSendMock.mock.calls[0][0]
+            expect(call.event).toEqual('$set')
+            expect(call.properties.$set).toEqual({ $internal_or_test_user: true })
+        })
+
+        it('should enable person processing when called in identified_only mode', () => {
+            const { posthog, beforeSendMock } = setup({ person_profiles: 'identified_only' })
+
+            posthog.capture('event before setInternalOrTestUser')
+            posthog.setInternalOrTestUser()
+            posthog.capture('event after setInternalOrTestUser')
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(3)
+
+            const eventBefore = beforeSendMock.mock.calls[0][0]
+            expect(eventBefore.properties.$process_person_profile).toEqual(false)
+
+            const setInternalOrTestUserEvent = beforeSendMock.mock.calls[1][0]
+            expect(setInternalOrTestUserEvent.event).toEqual('$set')
+            expect(setInternalOrTestUserEvent.properties.$process_person_profile).toEqual(true)
+
+            const eventAfter = beforeSendMock.mock.calls[2][0]
+            expect(eventAfter.properties.$process_person_profile).toEqual(true)
+        })
+
+        it('should not send duplicate events when called multiple times', () => {
+            const { posthog, beforeSendMock } = setup({ person_profiles: 'always' })
+
+            posthog.setInternalOrTestUser()
+            posthog.setInternalOrTestUser()
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(1)
+        })
+
+        describe('internal_or_test_user_hostname config', () => {
+            it('should call setInternalOrTestUser automatically when hostname matches regex', async () => {
+                mockHostName.mockReturnValue('localhost')
+                const { beforeSendMock } = setup({
+                    person_profiles: 'identified_only',
+                    internal_or_test_user_hostname: /^(localhost|127\.0\.0\.1)$/,
+                })
+
+                const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
+                expect(setEvents.length).toEqual(1)
+                expect(setEvents[0][0].properties.$set).toEqual({ $internal_or_test_user: true })
+            })
+
+            it('should work with string exact match', () => {
+                mockHostName.mockReturnValue('localhost')
+                const { beforeSendMock } = setup({
+                    person_profiles: 'identified_only',
+                    internal_or_test_user_hostname: 'localhost',
+                })
+
+                const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
+                expect(setEvents.length).toEqual(1)
+            })
+
+            it('should not match partial strings', () => {
+                mockHostName.mockReturnValue('localhost.example.com')
+                const { beforeSendMock } = setup({
+                    person_profiles: 'identified_only',
+                    internal_or_test_user_hostname: 'localhost',
+                })
+
+                const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
+                expect(setEvents.length).toEqual(0)
+            })
+
+            it('should not call setInternalOrTestUser when hostname does not match', () => {
+                mockHostName.mockReturnValue('production.example.com')
+                const { beforeSendMock } = setup({
+                    person_profiles: 'identified_only',
+                    internal_or_test_user_hostname: /^localhost$/,
+                })
+
+                const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
+                expect(setEvents.length).toEqual(0)
+            })
+
+            it('should allow disabling with null', () => {
+                mockHostName.mockReturnValue('localhost')
+                const { posthog, beforeSendMock } = setup({
+                    person_profiles: 'identified_only',
+                    defaults: '2026-01-30',
+                    internal_or_test_user_hostname: null,
+                })
+
+                expect(posthog.config.internal_or_test_user_hostname).toBeNull()
+                const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
+                expect(setEvents.length).toEqual(0)
             })
         })
     })

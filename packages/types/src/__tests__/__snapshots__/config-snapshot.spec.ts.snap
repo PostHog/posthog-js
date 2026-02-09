@@ -98,6 +98,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "undefined",
     "string"
   ],
+  "cookie_persisted_properties": [
+    "undefined",
+    "readonly string[]"
+  ],
   "loaded": "(posthog_instance: PostHog) => void",
   "save_referrer": [
     "false",
@@ -182,6 +186,16 @@ exports[`config snapshot for PostHogConfig 1`] = `
       ]
     }
   ],
+  "logs": [
+    "undefined",
+    {
+      "captureConsoleLogs": [
+        "undefined",
+        "false",
+        "true"
+      ]
+    }
+  ],
   "disable_conversations": [
     "false",
     "true"
@@ -201,6 +215,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
   "prepare_external_dependency_stylesheet": [
     "undefined",
     "(stylesheet: HTMLStyleElement) => HTMLStyleElement | null"
+  ],
+  "external_scripts_inject_target": [
+    "undefined",
+    "\\"body\\"",
+    "\\"head\\""
   ],
   "enable_recording_console_log": [
     "undefined",
@@ -268,6 +287,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   "properties_string_max_length": "number",
   "defaults": [
+    "\\"2026-01-30\\"",
     "\\"2025-11-30\\"",
     "\\"2025-05-24\\"",
     "\\"unset\\""
@@ -314,7 +334,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     ],
     "maskInputOptions": [
       "undefined",
-      "Partial<{ color: boolean; date: boolean; 'datetime-local': boolean; email: boolean; month: boolean; number: boolean; range: boolean; search: boolean; tel: boolean; text: boolean; time: boolean; url: boolean; week: boolean; textarea: boolean; select: boolean; password: boolean; }>"
+      "Partial<MaskInputOptions>"
     ],
     "maskInputFn": [
       "undefined",
@@ -324,7 +344,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "slimDOMOptions": [
       "undefined",
       "true",
-      "Partial<{ script: boolean; comment: boolean; headFavicon: boolean; headWhitespace: boolean; headMetaDescKeywords: boolean; headMetaSocial: boolean; headMetaRobots: boolean; headMetaHttpEquiv: boolean; headMetaAuthorship: boolean; headMetaVerification: boolean; headTitleMutations: boolean; }>",
+      "Partial<SlimDOMOptions>",
       "\\"all\\""
     ],
     "collectFonts": [
@@ -445,6 +465,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true"
   ],
+  "evaluation_contexts": [
+    "undefined",
+    "readonly string[]"
+  ],
   "evaluation_environments": [
     "undefined",
     "readonly string[]"
@@ -500,6 +524,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "web_vitals_delayed_flush_ms": [
         "undefined",
         "number"
+      ],
+      "web_vitals_attribution": [
+        "undefined",
+        "false",
+        "true"
       ]
     }
   ],
@@ -609,6 +638,12 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "undefined",
     "\\"always\\"",
     "\\"on_reject\\""
+  ],
+  "internal_or_test_user_hostname": [
+    "undefined",
+    "null",
+    "string",
+    "RegExp"
   ],
   "__add_tracing_headers": [
     "undefined",

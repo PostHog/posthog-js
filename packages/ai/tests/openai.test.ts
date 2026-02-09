@@ -447,6 +447,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(properties['$ai_http_status']).toBe(200)
     expect(properties['foo']).toBe('bar')
     expect(typeof properties['$ai_latency']).toBe('number')
+    expect(properties['$ai_usage']).toBeDefined()
   })
 
   conditionalTest('groups', async () => {
@@ -1046,6 +1047,40 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(properties['$ai_error']).toBeDefined()
       // Error is JSON stringified, so check for status code
       expect(properties['$ai_error']).toContain('503')
+    })
+
+    conditionalTest('tracks time to first token in streaming', async () => {
+      // Create a simple streaming response with content
+      mockStreamChunks = createMockStreamChunks({
+        content: 'Hello world',
+        includeUsage: true,
+      })
+
+      const stream = await client.chat.completions.create({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: 'Say hello' }],
+        stream: true,
+        posthogDistinctId: 'test-ttft-user',
+      })
+
+      // Consume the stream
+      for await (const _chunk of stream) {
+        // Just consume
+      }
+
+      // Wait for async capture to complete
+      await flushPromises()
+
+      // Verify PostHog was called with time to first token
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      // Time to first token should be present and be a number
+      expect(typeof properties['$ai_time_to_first_token']).toBe('number')
+      expect(properties['$ai_time_to_first_token']).toBeGreaterThanOrEqual(0)
+      // Time to first token should be less than or equal to total latency
+      expect(properties['$ai_time_to_first_token']).toBeLessThanOrEqual(properties['$ai_latency'])
     })
 
     conditionalTest('handles empty streaming response', async () => {

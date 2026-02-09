@@ -4,7 +4,8 @@ import { filterActiveFeatureFlags, parseFlagsResponse, PostHogFeatureFlags } fro
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { PostHogConfig } from '../types'
-import { createMockPostHog } from './helpers/posthog-instance'
+import { createMockPostHog, createPosthogInstance } from './helpers/posthog-instance'
+import { SimpleEventEmitter } from '../utils/simple-event-emitter'
 
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
@@ -22,6 +23,7 @@ describe('featureflags', () => {
     let mockWarn
 
     beforeEach(() => {
+        const internalEventEmitter = new SimpleEventEmitter()
         instance = {
             config: { ...config },
             get_distinct_id: () => 'blah id',
@@ -43,6 +45,8 @@ describe('featureflags', () => {
             reloadFeatureFlags: () => featureFlags.reloadFeatureFlags(),
             _shouldDisableFlags: () =>
                 instance.config.advanced_disable_flags || instance.config.advanced_disable_decide || false,
+            _internalEventEmitter: internalEventEmitter,
+            on: (event: string, cb: (...args: any[]) => void) => internalEventEmitter.on(event, cb),
         }
 
         featureFlags = new PostHogFeatureFlags(instance)
@@ -255,6 +259,166 @@ describe('featureflags', () => {
 
         // Despite being non-existent, the event will still be captured
         expect(instance.capture).toHaveBeenCalled()
+    })
+
+    describe('getFeatureFlagResult', () => {
+        it('should return the result with flag value and payload for boolean flags', () => {
+            featureFlags._hasLoadedFlags = true
+
+            const result = featureFlags.getFeatureFlagResult('beta-feature')
+
+            expect(result).toEqual({
+                key: 'beta-feature',
+                enabled: true,
+                variant: undefined,
+                payload: { some: 'payload' },
+            })
+            expect(instance.capture).toHaveBeenCalledWith('$feature_flag_called', expect.any(Object))
+        })
+
+        it('should return the result with variant for multivariate flags', () => {
+            featureFlags._hasLoadedFlags = true
+
+            const result = featureFlags.getFeatureFlagResult('multivariate-flag')
+
+            expect(result).toEqual({
+                key: 'multivariate-flag',
+                enabled: true,
+                variant: 'variant-1',
+                payload: undefined,
+            })
+            expect(instance.capture).toHaveBeenCalled()
+        })
+
+        it('should return undefined for non-existent flags', () => {
+            featureFlags._hasLoadedFlags = true
+
+            const result = featureFlags.getFeatureFlagResult('non-existent-flag')
+
+            expect(result).toEqual(undefined)
+        })
+
+        it('should return result with enabled false for disabled flags', () => {
+            featureFlags._hasLoadedFlags = true
+
+            const result = featureFlags.getFeatureFlagResult('disabled-flag')
+
+            expect(result).toEqual({
+                key: 'disabled-flag',
+                enabled: false,
+                variant: undefined,
+                payload: undefined,
+            })
+        })
+
+        it('should respect send_event option', () => {
+            featureFlags._hasLoadedFlags = true
+
+            const result = featureFlags.getFeatureFlagResult('beta-feature', { send_event: false })
+
+            expect(result).toEqual({
+                key: 'beta-feature',
+                enabled: true,
+                variant: undefined,
+                payload: { some: 'payload' },
+            })
+            expect(instance.capture).not.toHaveBeenCalled()
+        })
+
+        it('should return raw string payload when JSON parsing fails', () => {
+            featureFlags._hasLoadedFlags = true
+            instance.persistence.register({
+                $feature_flag_payloads: {
+                    'invalid-json-flag': 'not valid json {{{',
+                },
+                $enabled_feature_flags: {
+                    'invalid-json-flag': true,
+                },
+            })
+
+            const result = featureFlags.getFeatureFlagResult('invalid-json-flag', { send_event: false })
+
+            expect(result).toEqual({
+                key: 'invalid-json-flag',
+                enabled: true,
+                variant: undefined,
+                payload: 'not valid json {{{',
+            })
+        })
+
+        it('should return override result when flag is overridden', () => {
+            instance.__loaded = true
+            featureFlags._hasLoadedFlags = true
+            featureFlags.overrideFeatureFlags({
+                flags: { 'overridden-flag': 'override-variant' },
+                payloads: { 'overridden-flag': { custom: 'payload' } },
+                suppressWarning: true,
+            })
+
+            const result = featureFlags.getFeatureFlagResult('overridden-flag', { send_event: false })
+
+            expect(result).toEqual({
+                key: 'overridden-flag',
+                enabled: true,
+                variant: 'override-variant',
+                payload: { custom: 'payload' },
+            })
+        })
+
+        it('should return disabled result when flag is overridden to false', () => {
+            instance.__loaded = true
+            featureFlags._hasLoadedFlags = true
+            featureFlags.overrideFeatureFlags({
+                flags: { 'disabled-override-flag': false },
+                suppressWarning: true,
+            })
+
+            const result = featureFlags.getFeatureFlagResult('disabled-override-flag', { send_event: false })
+
+            expect(result).toEqual({
+                key: 'disabled-override-flag',
+                enabled: false,
+                variant: undefined,
+                payload: undefined,
+            })
+        })
+
+        it('should return payload even when flag is overridden to false', () => {
+            instance.__loaded = true
+            featureFlags._hasLoadedFlags = true
+            featureFlags.overrideFeatureFlags({
+                flags: { 'disabled-with-payload': false },
+                payloads: { 'disabled-with-payload': { some: 'data' } },
+                suppressWarning: true,
+            })
+
+            const result = featureFlags.getFeatureFlagResult('disabled-with-payload', { send_event: false })
+
+            expect(result).toEqual({
+                key: 'disabled-with-payload',
+                enabled: false,
+                variant: undefined,
+                payload: { some: 'data' },
+            })
+        })
+
+        it('should return disabled result when flag is overridden to undefined', () => {
+            instance.__loaded = true
+            featureFlags._hasLoadedFlags = true
+            featureFlags.overrideFeatureFlags({
+                flags: { 'undefined-override-flag': undefined as any },
+                suppressWarning: true,
+            })
+
+            const result = featureFlags.getFeatureFlagResult('undefined-override-flag', { send_event: false })
+
+            expect(result).toEqual({
+                key: 'undefined-override-flag',
+                enabled: false,
+                variant: undefined,
+                payload: undefined,
+            })
+        })
     })
 
     describe('feature flag overrides', () => {
@@ -752,27 +916,35 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(true)
         })
 
-        it('should call /flags with evaluation_environments when configured', () => {
+        it('should call /flags with evaluation_contexts when configured', () => {
+            instance.config.evaluation_contexts = ['production', 'web']
+            featureFlags.flags()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toEqual(['production', 'web'])
+        })
+
+        it('should not include evaluation_contexts when not configured', () => {
+            featureFlags.flags()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toBe(undefined)
+        })
+
+        it('should not include evaluation_contexts when configured as empty array', () => {
+            instance.config.evaluation_contexts = []
+            featureFlags.flags()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toBe(undefined)
+        })
+
+        it('should support deprecated evaluation_environments field', () => {
             instance.config.evaluation_environments = ['production', 'web']
             featureFlags.flags()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toEqual(['production', 'web'])
-        })
-
-        it('should not include evaluation_environments when not configured', () => {
-            featureFlags.flags()
-
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toBe(undefined)
-        })
-
-        it('should not include evaluation_environments when configured as empty array', () => {
-            instance.config.evaluation_environments = []
-            featureFlags.flags()
-
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toBe(undefined)
+            expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toEqual(['production', 'web'])
         })
     })
 
@@ -867,6 +1039,81 @@ describe('featureflags', () => {
             jest.runAllTimers()
 
             expect(called).toEqual(false)
+        })
+    })
+
+    describe('featureFlagsReloading event', () => {
+        beforeEach(() => {
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 200,
+                    json: {
+                        featureFlags: {
+                            first: 'variant-1',
+                            second: true,
+                        },
+                    },
+                })
+            )
+        })
+
+        it('should emit featureFlagsReloading event when reloadFeatureFlags is called', () => {
+            const loadingCallback = jest.fn()
+            instance.on('featureFlagsReloading', loadingCallback)
+
+            featureFlags.reloadFeatureFlags()
+
+            expect(loadingCallback).toHaveBeenCalledTimes(1)
+            expect(loadingCallback).toHaveBeenCalledWith(true)
+        })
+
+        it('should not emit featureFlagsReloading event if already debouncing', () => {
+            const loadingCallback = jest.fn()
+            instance.on('featureFlagsReloading', loadingCallback)
+
+            featureFlags.reloadFeatureFlags()
+            featureFlags.reloadFeatureFlags()
+            featureFlags.reloadFeatureFlags()
+
+            // Should only emit once because subsequent calls are debounced
+            expect(loadingCallback).toHaveBeenCalledTimes(1)
+        })
+
+        it('should emit featureFlagsReloading before onFeatureFlags callback', () => {
+            const callOrder: string[] = []
+
+            instance.on('featureFlagsReloading', () => {
+                callOrder.push('loading')
+            })
+
+            featureFlags.onFeatureFlags(() => {
+                callOrder.push('loaded')
+            })
+
+            featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            expect(callOrder).toEqual(['loading', 'loaded'])
+        })
+
+        it('should not emit featureFlagsReloading if reloading is disabled', () => {
+            const loadingCallback = jest.fn()
+            instance.on('featureFlagsReloading', loadingCallback)
+
+            featureFlags.setReloadingPaused(true)
+            featureFlags.reloadFeatureFlags()
+
+            expect(loadingCallback).not.toHaveBeenCalled()
+        })
+
+        it('should not emit featureFlagsReloading if feature flags are disabled', () => {
+            const loadingCallback = jest.fn()
+            instance.on('featureFlagsReloading', loadingCallback)
+
+            instance.config.advanced_disable_feature_flags = true
+            featureFlags.reloadFeatureFlags()
+
+            expect(loadingCallback).not.toHaveBeenCalled()
         })
     })
 
@@ -1693,6 +1940,93 @@ describe('featureflags', () => {
         })
     })
 
+    describe('when subsequent /flags?v=2 calls return failed flags with errorsWhileComputingFlags', () => {
+        beforeEach(() => {
+            instance.persistence.register({
+                $feature_flag_payloads: {
+                    'beta-feature': {
+                        some: 'payload',
+                    },
+                    'alpha-feature-2': 200,
+                },
+                $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
+                $enabled_feature_flags: {
+                    'beta-feature': true,
+                    'alpha-feature-2': true,
+                    'multivariate-flag': 'variant-1',
+                    'disabled-flag': false,
+                },
+                $feature_flag_details: {
+                    'beta-feature': {
+                        key: 'beta-feature',
+                        enabled: true,
+                        variant: undefined,
+                        metadata: { payload: { some: 'payload' } },
+                    },
+                    'alpha-feature-2': {
+                        key: 'alpha-feature-2',
+                        enabled: true,
+                        variant: undefined,
+                        metadata: { payload: 200 },
+                    },
+                    'multivariate-flag': {
+                        key: 'multivariate-flag',
+                        enabled: true,
+                        variant: 'variant-1',
+                        metadata: { payload: undefined },
+                    },
+                    'disabled-flag': {
+                        key: 'disabled-flag',
+                        enabled: false,
+                        variant: undefined,
+                        metadata: undefined,
+                    },
+                },
+                $override_feature_flags: false,
+            })
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 200,
+                    json: {
+                        flags: {
+                            'x-flag': {
+                                key: 'x-flag',
+                                enabled: true,
+                                variant: 'x-value',
+                                failed: false,
+                                reason: { code: 'condition_match', description: 'Matched condition set 1' },
+                                metadata: { id: 10, version: 1 },
+                            },
+                            'beta-feature': {
+                                key: 'beta-feature',
+                                enabled: false,
+                                variant: undefined,
+                                failed: true,
+                                reason: { code: 'database_error', description: 'Database connection error' },
+                                metadata: { id: 2, version: 1 },
+                            },
+                        },
+                        errorsWhileComputingFlags: true,
+                    },
+                })
+            )
+        })
+
+        it('should filter out failed flags and preserve their cached values', () => {
+            featureFlags.reloadFeatureFlags()
+
+            jest.runAllTimers()
+
+            expect(featureFlags.getFlagVariants()).toEqual({
+                'alpha-feature-2': true,
+                'beta-feature': true, // preserved from cache, not overwritten by failed evaluation
+                'disabled-flag': false,
+                'multivariate-flag': 'variant-1',
+                'x-flag': 'x-value', // new successful flag merged in
+            })
+        })
+    })
+
     describe('when subsequent /flags?v=1 calls return results without errors', () => {
         beforeEach(() => {
             instance._send_request = jest.fn().mockImplementation(({ callback }) =>
@@ -2387,28 +2721,77 @@ describe('getRemoteConfigPayload', () => {
         featureFlags = new PostHogFeatureFlags(instance)
     })
 
-    it('should include evaluation_environments when configured', () => {
+    it('should include evaluation_contexts when configured', () => {
+        instance.config.evaluation_contexts = ['staging', 'backend']
+
+        const callback = jest.fn()
+        featureFlags.getRemoteConfigPayload('test-flag', callback)
+
+        expect(instance._send_request).toHaveBeenCalledWith(
+            expect.objectContaining({
+                method: 'POST',
+                url: 'flags/flags/?v=2&config=true',
+                data: expect.objectContaining({
+                    distinct_id: 'test-distinct-id',
+                    token: 'test-token',
+                    evaluation_contexts: ['staging', 'backend'],
+                }),
+            })
+        )
+    })
+
+    it('should not include evaluation_contexts when not configured', () => {
+        const callback = jest.fn()
+        featureFlags.getRemoteConfigPayload('test-flag', callback)
+
+        expect(instance._send_request).toHaveBeenCalledWith(
+            expect.objectContaining({
+                method: 'POST',
+                url: 'flags/flags/?v=2&config=true',
+                data: expect.objectContaining({
+                    distinct_id: 'test-distinct-id',
+                    token: 'test-token',
+                }),
+            })
+        )
+
+        // Verify evaluation_contexts is not in the data
+        expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toBeUndefined()
+    })
+
+    it('should not include evaluation_contexts when configured as empty array', () => {
+        instance.config.evaluation_contexts = []
+
+        const callback = jest.fn()
+        featureFlags.getRemoteConfigPayload('test-flag', callback)
+
+        expect(instance._send_request).toHaveBeenCalledWith(
+            expect.objectContaining({
+                method: 'POST',
+                url: 'flags/flags/?v=2&config=true',
+                data: expect.objectContaining({
+                    distinct_id: 'test-distinct-id',
+                    token: 'test-token',
+                }),
+            })
+        )
+
+        // Verify evaluation_contexts is not in the data
+        expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toBeUndefined()
+    })
+
+    it('should support deprecated evaluation_environments field', () => {
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+
         instance.config.evaluation_environments = ['staging', 'backend']
 
         const callback = jest.fn()
         featureFlags.getRemoteConfigPayload('test-flag', callback)
 
-        expect(instance._send_request).toHaveBeenCalledWith(
-            expect.objectContaining({
-                method: 'POST',
-                url: 'flags/flags/?v=2&config=true',
-                data: expect.objectContaining({
-                    distinct_id: 'test-distinct-id',
-                    token: 'test-token',
-                    evaluation_environments: ['staging', 'backend'],
-                }),
-            })
+        expect(warnSpy).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.stringContaining('evaluation_environments is deprecated')
         )
-    })
-
-    it('should not include evaluation_environments when not configured', () => {
-        const callback = jest.fn()
-        featureFlags.getRemoteConfigPayload('test-flag', callback)
 
         expect(instance._send_request).toHaveBeenCalledWith(
             expect.objectContaining({
@@ -2417,33 +2800,12 @@ describe('getRemoteConfigPayload', () => {
                 data: expect.objectContaining({
                     distinct_id: 'test-distinct-id',
                     token: 'test-token',
+                    evaluation_contexts: ['staging', 'backend'],
                 }),
             })
         )
 
-        // Verify evaluation_environments is not in the data
-        expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toBeUndefined()
-    })
-
-    it('should not include evaluation_environments when configured as empty array', () => {
-        instance.config.evaluation_environments = []
-
-        const callback = jest.fn()
-        featureFlags.getRemoteConfigPayload('test-flag', callback)
-
-        expect(instance._send_request).toHaveBeenCalledWith(
-            expect.objectContaining({
-                method: 'POST',
-                url: 'flags/flags/?v=2&config=true',
-                data: expect.objectContaining({
-                    distinct_id: 'test-distinct-id',
-                    token: 'test-token',
-                }),
-            })
-        )
-
-        // Verify evaluation_environments is not in the data
-        expect(instance._send_request.mock.calls[0][0].data.evaluation_environments).toBeUndefined()
+        warnSpy.mockRestore()
     })
 
     describe('flags_api_host configuration', () => {
@@ -2500,5 +2862,224 @@ describe('getRemoteConfigPayload', () => {
                 })
             )
         })
+    })
+})
+
+describe('updateFlags', () => {
+    beforeEach(() => {
+        jest.spyOn(window.console, 'warn').mockImplementation()
+    })
+
+    it('should update feature flags without making a network request', async () => {
+        const posthog = await createPosthogInstance()
+
+        posthog.updateFlags({
+            'test-flag': true,
+            'variant-flag': 'control',
+        })
+
+        expect(posthog.getFeatureFlag('test-flag')).toBe(true)
+        expect(posthog.getFeatureFlag('variant-flag')).toBe('control')
+        expect(posthog.isFeatureEnabled('test-flag')).toBe(true)
+    })
+
+    it('should update feature flags with payloads', async () => {
+        const posthog = await createPosthogInstance()
+
+        posthog.updateFlags({ 'test-flag': true }, { 'test-flag': { some: 'payload' } })
+
+        expect(posthog.getFeatureFlagPayload('test-flag')).toEqual({ some: 'payload' })
+    })
+
+    it('should return flag result with value and payload via getFeatureFlagResult', async () => {
+        const posthog = await createPosthogInstance()
+
+        posthog.updateFlags(
+            { 'boolean-flag': true, 'variant-flag': 'control', 'disabled-flag': false },
+            { 'boolean-flag': { discount: 10 }, 'variant-flag': { version: 'a' } }
+        )
+
+        const booleanResult = posthog.getFeatureFlagResult('boolean-flag', { send_event: false })
+        expect(booleanResult).toEqual({
+            key: 'boolean-flag',
+            enabled: true,
+            variant: undefined,
+            payload: { discount: 10 },
+        })
+
+        const variantResult = posthog.getFeatureFlagResult('variant-flag', { send_event: false })
+        expect(variantResult).toEqual({
+            key: 'variant-flag',
+            enabled: true,
+            variant: 'control',
+            payload: { version: 'a' },
+        })
+
+        const disabledResult = posthog.getFeatureFlagResult('disabled-flag', { send_event: false })
+        expect(disabledResult).toEqual({
+            key: 'disabled-flag',
+            enabled: false,
+            variant: undefined,
+            payload: undefined,
+        })
+
+        const missingResult = posthog.getFeatureFlagResult('non-existent', { send_event: false })
+        expect(missingResult).toBeUndefined()
+    })
+
+    // Note: Falsy payload values (null, 0, false, '') are filtered out by normalizeFlagsResponse
+    // This is consistent with existing SDK behavior for all feature flag payloads
+
+    it('should fire onFeatureFlags callbacks when flags are updated', async () => {
+        const posthog = await createPosthogInstance()
+        const callback = jest.fn()
+        posthog.onFeatureFlags(callback)
+
+        posthog.updateFlags({ 'new-flag': true })
+
+        expect(callback).toHaveBeenCalledWith(['new-flag'], { 'new-flag': true }, { errorsLoading: undefined })
+    })
+
+    it('should replace existing flags by default', async () => {
+        const posthog = await createPosthogInstance()
+
+        // Set initial flags
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': true })
+
+        expect(posthog.getFeatureFlag('flag-a')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(true)
+
+        // Update without merge - should replace
+        posthog.updateFlags({ 'flag-c': true })
+
+        expect(posthog.getFeatureFlag('flag-c')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-a')).toBe(undefined)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(undefined)
+    })
+
+    it('should merge flags when merge option is true', async () => {
+        const posthog = await createPosthogInstance()
+
+        // Set initial flags
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': true })
+
+        expect(posthog.getFeatureFlag('flag-a')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(true)
+
+        // Update with merge - should keep existing flags
+        posthog.updateFlags({ 'flag-c': true }, undefined, { merge: true })
+
+        expect(posthog.getFeatureFlag('flag-a')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(true)
+        expect(posthog.getFeatureFlag('flag-c')).toBe(true)
+    })
+
+    it('should merge payloads when merge option is true', async () => {
+        const posthog = await createPosthogInstance()
+
+        // Set initial flags with payloads
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': true }, { 'flag-a': { data: 'a' }, 'flag-b': { data: 'b' } })
+
+        expect(posthog.getFeatureFlagPayload('flag-a')).toEqual({ data: 'a' })
+        expect(posthog.getFeatureFlagPayload('flag-b')).toEqual({ data: 'b' })
+
+        // Update with merge - should keep existing payloads
+        posthog.updateFlags({ 'flag-c': true }, { 'flag-c': { data: 'c' } }, { merge: true })
+
+        expect(posthog.getFeatureFlagPayload('flag-a')).toEqual({ data: 'a' })
+        expect(posthog.getFeatureFlagPayload('flag-b')).toEqual({ data: 'b' })
+        expect(posthog.getFeatureFlagPayload('flag-c')).toEqual({ data: 'c' })
+    })
+
+    it('should override existing flag values when merging', async () => {
+        const posthog = await createPosthogInstance()
+
+        // Set initial flags
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': 'variant-1' })
+
+        // Update flag-a with merge - should override just flag-a
+        posthog.updateFlags({ 'flag-a': false }, undefined, { merge: true })
+
+        expect(posthog.getFeatureFlag('flag-a')).toBe(false)
+        expect(posthog.getFeatureFlag('flag-b')).toBe('variant-1')
+    })
+
+    it('should mark flags as loaded after update', async () => {
+        const posthog = await createPosthogInstance()
+
+        posthog.updateFlags({ 'test-flag': true })
+
+        expect(posthog.featureFlags._hasLoadedFlags).toBe(true)
+    })
+
+    it('should work with advanced_disable_flags enabled', async () => {
+        const posthog = await createPosthogInstance(undefined, {
+            advanced_disable_flags: true,
+        })
+
+        posthog.updateFlags({ 'test-flag': true })
+
+        expect(posthog.isFeatureEnabled('test-flag')).toBe(true)
+    })
+
+    it('should not make any network requests', async () => {
+        const posthog = await createPosthogInstance()
+        const sendRequestSpy = jest.spyOn(posthog, '_send_request')
+
+        posthog.updateFlags({ 'test-flag': true })
+
+        expect(sendRequestSpy).not.toHaveBeenCalled()
+    })
+
+    it('should handle empty flags object', async () => {
+        const posthog = await createPosthogInstance()
+
+        // Set initial flags
+        posthog.updateFlags({ 'flag-a': true, 'flag-b': 'variant-1' })
+        expect(posthog.getFeatureFlag('flag-a')).toBe(true)
+
+        // Update with empty object - should clear all flags
+        posthog.updateFlags({})
+
+        expect(posthog.getFeatureFlag('flag-a')).toBe(undefined)
+        expect(posthog.getFeatureFlag('flag-b')).toBe(undefined)
+        expect(posthog.featureFlags.getFlags()).toEqual([])
+    })
+
+    it('should persist flags to storage', async () => {
+        const posthog = await createPosthogInstance()
+
+        posthog.updateFlags(
+            { 'persisted-flag': true, 'variant-flag': 'control' },
+            { 'persisted-flag': { data: 'test' } }
+        )
+
+        // Verify persistence was updated with correct data
+        expect(posthog.persistence?.props.$feature_flag_details).toEqual({
+            'persisted-flag': {
+                key: 'persisted-flag',
+                enabled: true,
+                variant: undefined,
+                reason: undefined,
+                metadata: {
+                    id: 0,
+                    version: undefined,
+                    description: undefined,
+                    payload: { data: 'test' },
+                },
+            },
+            'variant-flag': {
+                key: 'variant-flag',
+                enabled: true,
+                variant: 'control',
+                reason: undefined,
+                metadata: undefined,
+            },
+        })
+        expect(posthog.persistence?.props.$enabled_feature_flags).toEqual({
+            'persisted-flag': true,
+            'variant-flag': 'control',
+        })
+        expect(posthog.persistence?.props.$active_feature_flags).toEqual(['persisted-flag', 'variant-flag'])
     })
 })

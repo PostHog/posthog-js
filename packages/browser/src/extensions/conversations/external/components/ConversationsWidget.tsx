@@ -11,6 +11,7 @@ import { getStyles } from './styles'
 import { OpenChatButton } from './OpenChatButton'
 import { SendMessageButton } from './SendMessageButton'
 import { CloseChatButton } from './CloseChatButton'
+import { RichContent } from './RichContent'
 
 const logger = createLogger('[ConversationsWidget]')
 
@@ -18,6 +19,7 @@ interface WidgetProps {
     config: ConversationsRemoteConfig
     initialState?: ConversationsWidgetState
     initialUserTraits?: UserProvidedTraits | null
+    isUserIdentified?: boolean
     onSendMessage: (message: string) => Promise<void>
     onStateChange?: (state: ConversationsWidgetState) => void
     onIdentify?: (traits: UserProvidedTraits) => void
@@ -46,7 +48,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
 
         // Determine if we need to show the identification form
         const userTraits = props.initialUserTraits || null
-        const needsIdentification = this._needsIdentification(props.config, userTraits)
+        const needsIdentification = this._needsIdentification(props.config, userTraits, props.isUserIdentified)
 
         this.state = {
             state: props.initialState || 'closed',
@@ -66,10 +68,20 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
     /**
      * Check if we need to show the identification form
      */
-    private _needsIdentification(config: ConversationsRemoteConfig, traits: UserProvidedTraits | null): boolean {
+    private _needsIdentification(
+        config: ConversationsRemoteConfig,
+        traits: UserProvidedTraits | null,
+        isUserIdentified?: boolean
+    ): boolean {
+        // If user is already identified via PostHog, no form needed
+        // They've called posthog.identify() so we have their identity
+        if (isUserIdentified) {
+            return false
+        }
+
         // If requireEmail is not set, no identification needed
         if (!config.requireEmail) {
-            //return false
+            return false
         }
 
         // If we already have an email, no form needed
@@ -312,6 +324,16 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
     }
 
     /**
+     * Called when user identifies via posthog.identify()
+     * Hides the identification form since we now know who they are
+     */
+    setUserIdentified(): void {
+        if (this.state.showIdentificationForm) {
+            this.setState({ showIdentificationForm: false })
+        }
+    }
+
+    /**
      * Set the unread message count (called by manager)
      */
     setUnreadCount(count: number): void {
@@ -384,7 +406,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         )
     }
 
-    private _renderMessage(message: Message, styles: ReturnType<typeof getStyles>) {
+    private _renderMessage(message: Message, styles: ReturnType<typeof getStyles>, primaryColor: string) {
         const isCustomer = message.author_type === 'customer'
         const messageStyle = {
             ...styles.message,
@@ -398,7 +420,14 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         return (
             <div key={message.id} style={messageStyle}>
                 {!isCustomer && message.author_name && <div style={styles.messageAuthor}>{message.author_name}</div>}
-                <div style={contentStyle}>{message.content}</div>
+                <div style={contentStyle}>
+                    <RichContent
+                        richContent={message.rich_content}
+                        content={message.content}
+                        isCustomer={isCustomer}
+                        primaryColor={primaryColor}
+                    />
+                </div>
                 <div style={styles.messageTime}>{this._formatTime(message.created_at)}</div>
             </div>
         )
@@ -408,14 +437,16 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         const { config } = this.props
         const { state, messages, inputValue, isLoading, error, showIdentificationForm } = this.state
         const primaryColor = config.color || '#5375ff'
+        const widgetPosition = config.widgetPosition || 'bottom_right'
         const placeholderText = config.placeholderText || 'Type your message...'
-        const styles = getStyles(primaryColor)
+        const styles = getStyles(primaryColor, widgetPosition)
 
         // Button only (closed state)
         if (state === 'closed') {
             return (
                 <OpenChatButton
                     primaryColor={primaryColor}
+                    position={widgetPosition}
                     handleToggleOpen={this._handleToggleOpen}
                     unreadCount={this.state.unreadCount}
                 />
@@ -447,23 +478,12 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
                     ) : (
                         <>
                             <div style={styles.messages}>
-                                {messages.map((message) => this._renderMessage(message, styles))}
-                                {isLoading && (
-                                    <div style={{ ...styles.message, ...styles.messageAgent }}>
-                                        <div
-                                            style={{
-                                                ...styles.messageContent,
-                                                ...styles.messageContentAgent,
-                                                ...styles.typing,
-                                            }}
-                                        >
-                                            <span style={styles.typingDot}></span>
-                                            <span style={{ ...styles.typingDot, animationDelay: '0.2s' }}></span>
-                                            <span style={{ ...styles.typingDot, animationDelay: '0.4s' }}></span>
-                                        </div>
-                                    </div>
-                                )}
-                                <div ref={(el) => (this._messagesEndRef = el)} />
+                                {messages.map((message) => this._renderMessage(message, styles, primaryColor))}
+                                <div
+                                    ref={(el) => {
+                                        this._messagesEndRef = el
+                                    }}
+                                />
                             </div>
 
                             {/* Error message */}
@@ -472,7 +492,9 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
                             {/* Input */}
                             <div style={styles.inputContainer}>
                                 <textarea
-                                    ref={(el) => (this._inputRef = el)}
+                                    ref={(el) => {
+                                        this._inputRef = el
+                                    }}
                                     style={styles.input}
                                     placeholder={placeholderText}
                                     value={inputValue}

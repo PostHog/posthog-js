@@ -840,7 +840,11 @@ describe('surveys', () => {
 
             surveys.renderSurvey('in-app-survey', '#test-survey-container')
 
-            expect(mockRenderSurvey).toHaveBeenCalledWith(inAppSurvey, document.querySelector('#test-survey-container'))
+            expect(mockRenderSurvey).toHaveBeenCalledWith(
+                inAppSurvey,
+                document.querySelector('#test-survey-container'),
+                undefined
+            )
             expect(loggerWarnSpy).not.toHaveBeenCalledWith(expect.stringContaining('cannot be rendered in the app'))
         })
 
@@ -1482,7 +1486,7 @@ describe('surveys', () => {
                 {
                     question: 'How happy are you?',
                     type: SurveyQuestionType.Rating,
-                    scale: 2,
+                    scale: 4,
                     branching: {
                         type: SurveyQuestionBranchingType.ResponseBased,
                         responseValues: { negative: 1, neutral: 2, positive: 3 },
@@ -1492,7 +1496,7 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
             ] as unknown as SurveyQuestion[]
-            expect(() => getNextSurveyStep(survey, 0, 1)).toThrow('The scale must be one of: 3, 5, 7, 10')
+            expect(() => getNextSurveyStep(survey, 0, 1)).toThrow('The scale must be one of: 2, 3, 5, 7, 10')
         })
 
         it('should throw an error for a response value out of the valid range', () => {

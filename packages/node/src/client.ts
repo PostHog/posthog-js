@@ -1,28 +1,32 @@
 import { version } from './version'
 
 import {
+  FeatureFlagDetail,
+  FeatureFlagValue,
+  isBlockedUA,
+  isPlainObject,
   JsonType,
+  PostHogCaptureOptions,
   PostHogCoreStateless,
-  PostHogFlagsResponse,
   PostHogFetchOptions,
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
+  PostHogFlagsResponse,
   PostHogPersistedProperty,
-  PostHogCaptureOptions,
-  isPlainObject,
-  isBlockedUA,
 } from '@posthog/core'
 import {
   EventMessage,
   FeatureFlagError,
   FeatureFlagErrorType,
+  FeatureFlagOverrideOptions,
+  FeatureFlagResult,
   GroupIdentifyMessage,
   IdentifyMessage,
   IPostHog,
+  OverrideFeatureFlagsOptions,
   PostHogOptions,
   SendFeatureFlagsOptions,
 } from './types'
-import { FeatureFlagDetail, FeatureFlagValue, getFeatureFlagValue } from '@posthog/core'
 import {
   FeatureFlagsPoller,
   RequiresServerEvaluation,
@@ -49,6 +53,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private maxCacheSize: number
   public readonly options: PostHogOptions
   protected readonly context?: IPostHogContext
+
+  // Feature flag overrides for local testing/development
+  private _flagOverrides?: Record<string, FeatureFlagValue>
+  private _payloadOverrides?: Record<string, JsonType>
 
   distinctIdHasSentFlagCalls: Record<string, string[]>
 
@@ -118,6 +126,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           },
           customHeaders: this.getCustomHeaders(),
           cacheProvider: options.flagDefinitionCacheProvider,
+          strictLocalEvaluation: options.strictLocalEvaluation,
         })
       }
     }
@@ -593,6 +602,232 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * Internal method that handles feature flag evaluation with full details.
+   * Used by getFeatureFlag, getFeatureFlagPayload, and getFeatureFlagResult.
+   *
+   * @param key - The feature flag key
+   * @param distinctId - The user's distinct ID
+   * @param options - Evaluation options (includes sendFeatureFlagEvents, defaults to true)
+   * @param matchValue - Optional match value for payload lookup (used by getFeatureFlagPayload)
+   * @returns Promise that resolves to the flag result or undefined
+   */
+  private async _getFeatureFlagResult(
+    key: string,
+    distinctId: string,
+    options: {
+      groups?: Record<string, string>
+      personProperties?: Record<string, string>
+      groupProperties?: Record<string, Record<string, string>>
+      onlyEvaluateLocally?: boolean
+      sendFeatureFlagEvents?: boolean
+      disableGeoip?: boolean
+    } = {},
+    matchValue?: FeatureFlagValue
+  ): Promise<FeatureFlagResult | undefined> {
+    const sendFeatureFlagEvents = options.sendFeatureFlagEvents ?? true
+    // Check for overrides first - they take precedence over all evaluation
+    if (this._flagOverrides !== undefined && key in this._flagOverrides) {
+      const overrideValue = this._flagOverrides[key]
+      // undefined override simulates "flag doesn't exist"
+      if (overrideValue === undefined) {
+        return undefined
+      }
+      const overridePayload = this._payloadOverrides?.[key]
+      return {
+        key,
+        enabled: overrideValue !== false,
+        variant: typeof overrideValue === 'string' ? overrideValue : undefined,
+        payload: overridePayload,
+      }
+    }
+
+    const { groups, disableGeoip } = options
+    let { onlyEvaluateLocally, personProperties, groupProperties } = options
+
+    const adjustedProperties = this.addLocalPersonAndGroupProperties(
+      distinctId,
+      groups,
+      personProperties,
+      groupProperties
+    )
+
+    personProperties = adjustedProperties.allPersonProperties
+    groupProperties = adjustedProperties.allGroupProperties
+
+    // set defaults
+    if (onlyEvaluateLocally == undefined) {
+      onlyEvaluateLocally = this.options.strictLocalEvaluation ?? false
+    }
+
+    let result: FeatureFlagResult | undefined = undefined
+    let flagWasLocallyEvaluated = false
+    let requestId: string | undefined = undefined
+    let evaluatedAt: number | undefined = undefined
+    let featureFlagError: FeatureFlagErrorType | undefined = undefined
+    // Track metadata for event tracking (not exposed in FeatureFlagResult)
+    let flagId: number | undefined = undefined
+    let flagVersion: number | undefined = undefined
+    let flagReason: string | undefined = undefined
+
+    // Try local evaluation first
+    const localEvaluationEnabled = this.featureFlagsPoller !== undefined
+    if (localEvaluationEnabled) {
+      await this.featureFlagsPoller?.loadFeatureFlags()
+
+      const flag = this.featureFlagsPoller?.featureFlagsByKey[key]
+      if (flag) {
+        try {
+          const localResult = await this.featureFlagsPoller?.computeFlagAndPayloadLocally(
+            flag,
+            distinctId,
+            groups,
+            personProperties,
+            groupProperties,
+            matchValue
+          )
+          if (localResult) {
+            flagWasLocallyEvaluated = true
+            const value = localResult.value
+            flagId = flag.id
+            flagReason = 'Evaluated locally'
+            result = {
+              key,
+              enabled: value !== false,
+              variant: typeof value === 'string' ? value : undefined,
+              payload: localResult.payload ?? undefined,
+            }
+          }
+        } catch (e) {
+          if (e instanceof RequiresServerEvaluation || e instanceof InconclusiveMatchError) {
+            // Fall through to server evaluation
+            this._logger?.info(`${e.name} when computing flag locally: ${key}: ${e.message}`)
+          } else {
+            throw e
+          }
+        }
+      }
+    }
+
+    // Fall back to remote evaluation if needed
+    if (!flagWasLocallyEvaluated && !onlyEvaluateLocally) {
+      const flagsResponse = await super.getFeatureFlagDetailsStateless(
+        distinctId,
+        groups,
+        personProperties,
+        groupProperties,
+        disableGeoip,
+        [key]
+      )
+
+      if (flagsResponse === undefined) {
+        featureFlagError = FeatureFlagError.UNKNOWN_ERROR
+      } else {
+        requestId = flagsResponse.requestId
+        evaluatedAt = flagsResponse.evaluatedAt
+
+        const errors: string[] = []
+
+        if (flagsResponse.errorsWhileComputingFlags) {
+          errors.push(FeatureFlagError.ERRORS_WHILE_COMPUTING)
+        }
+
+        if (flagsResponse.quotaLimited?.includes('feature_flags')) {
+          errors.push(FeatureFlagError.QUOTA_LIMITED)
+        }
+
+        const flagDetail = flagsResponse.flags[key]
+
+        if (flagDetail === undefined) {
+          errors.push(FeatureFlagError.FLAG_MISSING)
+        } else {
+          // Extract metadata for event tracking
+          flagId = flagDetail.metadata?.id
+          flagVersion = flagDetail.metadata?.version
+          flagReason = flagDetail.reason?.description ?? flagDetail.reason?.code
+
+          // Parse payload once from the API response
+          let parsedPayload: JsonType | undefined = undefined
+          if (flagDetail.metadata?.payload !== undefined) {
+            try {
+              parsedPayload = JSON.parse(flagDetail.metadata.payload)
+            } catch {
+              // If parsing fails, return the raw string (matches parsePayload behavior)
+              parsedPayload = flagDetail.metadata.payload
+            }
+          }
+
+          result = {
+            key,
+            enabled: flagDetail.enabled,
+            variant: flagDetail.variant,
+            payload: parsedPayload,
+          }
+        }
+
+        if (errors.length > 0) {
+          featureFlagError = errors.join(',')
+        }
+      }
+    }
+
+    // Send feature flag event if configured
+    if (sendFeatureFlagEvents) {
+      // Compute the response value for event tracking
+      const response = result === undefined ? undefined : result.enabled === false ? false : (result.variant ?? true)
+      const featureFlagReportedKey = `${key}_${response}`
+
+      if (
+        !(distinctId in this.distinctIdHasSentFlagCalls) ||
+        !this.distinctIdHasSentFlagCalls[distinctId].includes(featureFlagReportedKey)
+      ) {
+        if (Object.keys(this.distinctIdHasSentFlagCalls).length >= this.maxCacheSize) {
+          this.distinctIdHasSentFlagCalls = {}
+        }
+        if (Array.isArray(this.distinctIdHasSentFlagCalls[distinctId])) {
+          this.distinctIdHasSentFlagCalls[distinctId].push(featureFlagReportedKey)
+        } else {
+          this.distinctIdHasSentFlagCalls[distinctId] = [featureFlagReportedKey]
+        }
+
+        const properties: Record<string, any> = {
+          $feature_flag: key,
+          $feature_flag_response: response,
+          $feature_flag_id: flagId,
+          $feature_flag_version: flagVersion,
+          $feature_flag_reason: flagReason,
+          locally_evaluated: flagWasLocallyEvaluated,
+          [`$feature/${key}`]: response,
+          $feature_flag_request_id: requestId,
+          $feature_flag_evaluated_at: evaluatedAt,
+        }
+
+        if (featureFlagError) {
+          properties.$feature_flag_error = featureFlagError
+        }
+
+        this.capture({
+          distinctId,
+          event: '$feature_flag_called',
+          properties,
+          groups,
+          disableGeoip,
+        })
+      }
+    }
+
+    // Apply payload override if present (even when there's no flag override)
+    // This ensures consistency with getFeatureFlagPayload behavior
+    if (result !== undefined && this._payloadOverrides !== undefined && key in this._payloadOverrides) {
+      result = {
+        ...result,
+        payload: this._payloadOverrides[key],
+      }
+    }
+
+    return result
+  }
+
+  /**
    * Get the value of a feature flag for a specific user.
    *
    * @example
@@ -645,125 +880,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       disableGeoip?: boolean
     }
   ): Promise<FeatureFlagValue | undefined> {
-    const { groups, disableGeoip } = options || {}
-    let { onlyEvaluateLocally, sendFeatureFlagEvents, personProperties, groupProperties } = options || {}
-
-    const adjustedProperties = this.addLocalPersonAndGroupProperties(
-      distinctId,
-      groups,
-      personProperties,
-      groupProperties
-    )
-
-    personProperties = adjustedProperties.allPersonProperties
-    groupProperties = adjustedProperties.allGroupProperties
-
-    // set defaults
-    if (onlyEvaluateLocally == undefined) {
-      onlyEvaluateLocally = false
+    const result = await this._getFeatureFlagResult(key, distinctId, {
+      ...options,
+      sendFeatureFlagEvents: options?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
+    })
+    if (result === undefined) {
+      return undefined
     }
-    if (sendFeatureFlagEvents == undefined) {
-      sendFeatureFlagEvents = this.options.sendFeatureFlagEvent ?? true
+    if (result.enabled === false) {
+      return false
     }
-
-    let response = await this.featureFlagsPoller?.getFeatureFlag(
-      key,
-      distinctId,
-      groups,
-      personProperties,
-      groupProperties
-    )
-
-    const flagWasLocallyEvaluated = response !== undefined
-    let requestId: string | undefined = undefined
-    let evaluatedAt: number | undefined = undefined
-    let flagDetail: FeatureFlagDetail | undefined = undefined
-    let featureFlagError: FeatureFlagErrorType | undefined = undefined
-
-    if (!flagWasLocallyEvaluated && !onlyEvaluateLocally) {
-      // Call getFeatureFlagDetailsStateless directly to get access to error information
-      const flagsResponse = await super.getFeatureFlagDetailsStateless(
-        distinctId,
-        groups,
-        personProperties,
-        groupProperties,
-        disableGeoip,
-        [key]
-      )
-
-      if (flagsResponse === undefined) {
-        // Request failed (network error, timeout, etc.)
-        featureFlagError = FeatureFlagError.UNKNOWN_ERROR
-      } else {
-        requestId = flagsResponse.requestId
-        evaluatedAt = flagsResponse.evaluatedAt
-
-        // Track errors from the response
-        const errors: string[] = []
-
-        if (flagsResponse.errorsWhileComputingFlags) {
-          errors.push(FeatureFlagError.ERRORS_WHILE_COMPUTING)
-        }
-
-        if (flagsResponse.quotaLimited?.includes('feature_flags')) {
-          errors.push(FeatureFlagError.QUOTA_LIMITED)
-        }
-
-        flagDetail = flagsResponse.flags[key]
-
-        if (flagDetail === undefined) {
-          errors.push(FeatureFlagError.FLAG_MISSING)
-        }
-
-        if (errors.length > 0) {
-          featureFlagError = errors.join(',')
-        }
-
-        response = getFeatureFlagValue(flagDetail)
-      }
-    }
-
-    const featureFlagReportedKey = `${key}_${response}`
-
-    if (
-      sendFeatureFlagEvents &&
-      (!(distinctId in this.distinctIdHasSentFlagCalls) ||
-        !this.distinctIdHasSentFlagCalls[distinctId].includes(featureFlagReportedKey))
-    ) {
-      if (Object.keys(this.distinctIdHasSentFlagCalls).length >= this.maxCacheSize) {
-        this.distinctIdHasSentFlagCalls = {}
-      }
-      if (Array.isArray(this.distinctIdHasSentFlagCalls[distinctId])) {
-        this.distinctIdHasSentFlagCalls[distinctId].push(featureFlagReportedKey)
-      } else {
-        this.distinctIdHasSentFlagCalls[distinctId] = [featureFlagReportedKey]
-      }
-
-      const properties: Record<string, any> = {
-        $feature_flag: key,
-        $feature_flag_response: response,
-        $feature_flag_id: flagDetail?.metadata?.id,
-        $feature_flag_version: flagDetail?.metadata?.version,
-        $feature_flag_reason: flagDetail?.reason?.description ?? flagDetail?.reason?.code,
-        locally_evaluated: flagWasLocallyEvaluated,
-        [`$feature/${key}`]: response,
-        $feature_flag_request_id: requestId,
-        $feature_flag_evaluated_at: evaluatedAt,
-      }
-
-      if (featureFlagError) {
-        properties.$feature_flag_error = featureFlagError
-      }
-
-      this.capture({
-        distinctId,
-        event: '$feature_flag_called',
-        properties,
-        groups,
-        disableGeoip,
-      })
-    }
-    return response
+    return result.variant ?? true
   }
 
   /**
@@ -815,70 +942,78 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       disableGeoip?: boolean
     }
   ): Promise<JsonType | undefined> {
-    const { groups, disableGeoip } = options || {}
-    let { onlyEvaluateLocally, personProperties, groupProperties } = options || {}
+    // Check for payload overrides first - they take precedence over all evaluation
+    // This is checked independently from flag overrides
+    if (this._payloadOverrides !== undefined && key in this._payloadOverrides) {
+      return this._payloadOverrides[key]
+    }
 
-    const adjustedProperties = this.addLocalPersonAndGroupProperties(
+    // sendFeatureFlagEvents is intentionally ignored for payload-only calls.
+    // getFeatureFlagPayload never sends $feature_flag_called events, matching pre-refactoring behavior.
+    // The option is kept in the signature for backwards compatibility (marked @deprecated above).
+    const result = await this._getFeatureFlagResult(
+      key,
       distinctId,
-      groups,
-      personProperties,
-      groupProperties
+      { ...options, sendFeatureFlagEvents: false },
+      matchValue
     )
 
-    personProperties = adjustedProperties.allPersonProperties
-    groupProperties = adjustedProperties.allGroupProperties
-
-    let response = undefined
-
-    const localEvaluationEnabled = this.featureFlagsPoller !== undefined
-    if (localEvaluationEnabled) {
-      // Ensure flags are loaded before checking for the specific flag
-      await this.featureFlagsPoller?.loadFeatureFlags()
-
-      const flag = this.featureFlagsPoller?.featureFlagsByKey[key]
-      if (flag) {
-        try {
-          const result = await this.featureFlagsPoller?.computeFlagAndPayloadLocally(
-            flag,
-            distinctId,
-            groups,
-            personProperties,
-            groupProperties,
-            matchValue
-          )
-          if (result) {
-            matchValue = result.value
-            response = result.payload
-          }
-        } catch (e) {
-          if (e instanceof RequiresServerEvaluation || e instanceof InconclusiveMatchError) {
-            // Fall through to server evaluation
-            this._logger?.info(`${e.name} when computing flag locally: ${flag.key}: ${e.message}`)
-          } else {
-            throw e
-          }
-        }
-      }
+    // Return undefined when API fails or flag not found
+    if (result === undefined) {
+      return undefined
     }
 
-    // set defaults
-    if (onlyEvaluateLocally == undefined) {
-      onlyEvaluateLocally = false
-    }
+    // Return payload if available, null if flag exists but no payload
+    return result.payload ?? null
+  }
 
-    const payloadWasLocallyEvaluated = response !== undefined
-
-    if (!payloadWasLocallyEvaluated && !onlyEvaluateLocally) {
-      response = await super.getFeatureFlagPayloadStateless(
-        key,
-        distinctId,
-        groups,
-        personProperties,
-        groupProperties,
-        disableGeoip
-      )
+  /**
+   * Get the result of evaluating a feature flag, including its value and payload.
+   * This is more efficient than calling getFeatureFlag and getFeatureFlagPayload separately when you need both.
+   *
+   * @example
+   * ```ts
+   * // Get flag result
+   * const result = await client.getFeatureFlagResult('my-flag', 'user_123')
+   * if (result) {
+   *   console.log('Flag enabled:', result.enabled)
+   *   console.log('Variant:', result.variant)
+   *   console.log('Payload:', result.payload)
+   * }
+   * ```
+   *
+   * @example
+   * ```ts
+   * // With groups and properties
+   * const result = await client.getFeatureFlagResult('org-feature', 'user_123', {
+   *   groups: { organization: 'acme-corp' },
+   *   personProperties: { plan: 'enterprise' }
+   * })
+   * ```
+   *
+   * {@label Feature flags}
+   *
+   * @param key - The feature flag key
+   * @param distinctId - The user's distinct ID
+   * @param options - Optional configuration for flag evaluation
+   * @returns Promise that resolves to the flag result or undefined
+   */
+  async getFeatureFlagResult(
+    key: string,
+    distinctId: string,
+    options?: {
+      groups?: Record<string, string>
+      personProperties?: Record<string, string>
+      groupProperties?: Record<string, Record<string, string>>
+      onlyEvaluateLocally?: boolean
+      sendFeatureFlagEvents?: boolean
+      disableGeoip?: boolean
     }
-    return response
+  ): Promise<FeatureFlagResult | undefined> {
+    return this._getFeatureFlagResult(key, distinctId, {
+      ...options,
+      sendFeatureFlagEvents: options?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
+    })
   }
 
   /**
@@ -1084,7 +1219,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     // set defaults
     if (onlyEvaluateLocally == undefined) {
-      onlyEvaluateLocally = false
+      onlyEvaluateLocally = this.options.strictLocalEvaluation ?? false
     }
 
     const localEvaluationResult = await this.featureFlagsPoller?.getAllFlagsAndPayloads(
@@ -1120,6 +1255,20 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       featureFlagPayloads = {
         ...featureFlagPayloads,
         ...(remoteEvaluationResult.payloads || {}),
+      }
+    }
+
+    // Apply overrides last - they take precedence over all evaluation
+    if (this._flagOverrides !== undefined) {
+      featureFlags = {
+        ...featureFlags,
+        ...this._flagOverrides,
+      }
+    }
+    if (this._payloadOverrides !== undefined) {
+      featureFlagPayloads = {
+        ...featureFlagPayloads,
+        ...this._payloadOverrides,
       }
     }
 
@@ -1188,6 +1337,116 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   async reloadFeatureFlags(): Promise<void> {
     await this.featureFlagsPoller?.loadFeatureFlags(true)
+  }
+
+  /**
+   * Override feature flags locally. Useful for testing and local development.
+   * Overridden flags take precedence over both local evaluation and remote evaluation.
+   *
+   * @example
+   * ```ts
+   * // Clear all overrides
+   * client.overrideFeatureFlags(false)
+   *
+   * // Enable a list of flags (sets them to true)
+   * client.overrideFeatureFlags(['flag-a', 'flag-b'])
+   *
+   * // Set specific flag values/variants
+   * client.overrideFeatureFlags({ 'my-flag': 'variant-a', 'other-flag': true })
+   *
+   * // Set both flags and payloads
+   * client.overrideFeatureFlags({
+   *   flags: { 'my-flag': 'variant-a' },
+   *   payloads: { 'my-flag': { discount: 20 } }
+   * })
+   * ```
+   *
+   * {@label Feature flags}
+   *
+   * @param overrides - Flag overrides configuration
+   */
+  overrideFeatureFlags(overrides: OverrideFeatureFlagsOptions): void {
+    const flagArrayToRecord = (flags: string[]) => Object.fromEntries(flags.map((f) => [f, true]))
+
+    if (overrides === false) {
+      this._flagOverrides = undefined
+      this._payloadOverrides = undefined
+      return
+    }
+
+    // Array syntax: ['flag-a', 'flag-b'] -> { 'flag-a': true, 'flag-b': true }
+    if (Array.isArray(overrides)) {
+      this._flagOverrides = flagArrayToRecord(overrides)
+      return
+    }
+
+    if (this._isFeatureFlagOverrideOptions(overrides)) {
+      if ('flags' in overrides) {
+        if (overrides.flags === false) {
+          this._flagOverrides = undefined
+        } else if (Array.isArray(overrides.flags)) {
+          this._flagOverrides = flagArrayToRecord(overrides.flags)
+        } else if (overrides.flags !== undefined) {
+          this._flagOverrides = { ...overrides.flags }
+        }
+      }
+
+      if ('payloads' in overrides) {
+        if (overrides.payloads === false) {
+          this._payloadOverrides = undefined
+        } else if (overrides.payloads !== undefined) {
+          this._payloadOverrides = { ...overrides.payloads }
+        }
+      }
+
+      return
+    }
+
+    // Fallback: treat as Record<string, FeatureFlagValue>
+    this._flagOverrides = { ...overrides }
+  }
+
+  /**
+   * Type guard to check if overrides is a FeatureFlagOverrideOptions object.
+   *
+   * This distinguishes between:
+   * - { flags: { 'flag-a': true } } -> FeatureFlagOverrideOptions (flags is an object/array/false)
+   * - { flags: true } -> Record<string, FeatureFlagValue> (a flag named "flags" with value true)
+   */
+  private _isFeatureFlagOverrideOptions(overrides: unknown): overrides is FeatureFlagOverrideOptions {
+    if (typeof overrides !== 'object' || overrides === null || Array.isArray(overrides)) {
+      return false
+    }
+
+    const obj = overrides as Record<string, unknown>
+
+    // Check if 'flags' key exists and has a valid structure for FeatureFlagOverrideOptions
+    // Valid values: false, string[], or Record<string, FeatureFlagValue> (an object)
+    if ('flags' in obj) {
+      const flagsValue = obj['flags']
+      // If flags is false, an array, or a plain object - it's FeatureFlagOverrideOptions
+      // If flags is a boolean true or a string - it's a flag named "flags" with that value
+      if (
+        flagsValue === false ||
+        Array.isArray(flagsValue) ||
+        (typeof flagsValue === 'object' && flagsValue !== null)
+      ) {
+        return true
+      }
+    }
+
+    // Check if 'payloads' key exists and has a valid structure for FeatureFlagOverrideOptions
+    // Valid values: false or Record<string, JsonType> (an object)
+    if ('payloads' in obj) {
+      const payloadsValue = obj['payloads']
+      // If payloads is false or a plain object - it's FeatureFlagOverrideOptions
+      // If payloads is a string or boolean true - it's a flag named "payloads" with that value
+      if (payloadsValue === false || (typeof payloadsValue === 'object' && payloadsValue !== null)) {
+        return true
+      }
+    }
+
+    return false
   }
 
   protected abstract initializeContext(): IPostHogContext | undefined
@@ -1347,7 +1606,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const flagKeys = sendFeatureFlagsOptions?.flagKeys
 
     // Check if we should only evaluate locally
-    const onlyEvaluateLocally = sendFeatureFlagsOptions?.onlyEvaluateLocally ?? false
+    const onlyEvaluateLocally =
+      sendFeatureFlagsOptions?.onlyEvaluateLocally ?? this.options.strictLocalEvaluation ?? false
 
     // If onlyEvaluateLocally is true, only use local evaluation
     if (onlyEvaluateLocally) {
@@ -1455,13 +1715,20 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param distinctId - Optional user distinct ID
    * @param additionalProperties - Optional additional properties to include
    */
-  captureException(error: unknown, distinctId?: string, additionalProperties?: Record<string | number, any>): void {
-    const syntheticException = new Error('PostHog syntheticException')
-    this.addPendingPromise(
-      ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
-        this.capture(msg)
+  captureException(
+    error: unknown,
+    distinctId?: string,
+    additionalProperties?: Record<string | number, any>,
+    uuid?: EventMessage['uuid']
+  ): void {
+    if (!ErrorTracking.isPreviouslyCapturedError(error)) {
+      const syntheticException = new Error('PostHog syntheticException')
+      this.addPendingPromise(
+        ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
+          this.capture({ ...msg, uuid })
+        )
       )
-    )
+    }
   }
 
   /**
@@ -1504,12 +1771,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     distinctId?: string,
     additionalProperties?: Record<string | number, any>
   ): Promise<void> {
-    const syntheticException = new Error('PostHog syntheticException')
-    this.addPendingPromise(
-      ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
-        this.captureImmediate(msg)
+    if (!ErrorTracking.isPreviouslyCapturedError(error)) {
+      const syntheticException = new Error('PostHog syntheticException')
+      this.addPendingPromise(
+        ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
+          this.captureImmediate(msg)
+        )
       )
-    )
+    }
   }
 
   public async prepareEventMessage(props: EventMessage): Promise<{

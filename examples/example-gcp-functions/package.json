@@ -1,6 +1,9 @@
 {
     "name": "example-gcp-functions",
     "version": "1.0.0",
+    "engines": {
+        "node": ">=22.22"
+    },
     "description": "",
     "main": "index.js",
     "packageManager": "pnpm@10.15.0",

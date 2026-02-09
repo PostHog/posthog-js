@@ -8,7 +8,7 @@ import {
     SurveyCallback,
     SurveyRenderReason,
 } from './posthog-surveys-types'
-import { RemoteConfig } from './types'
+import { Properties, RemoteConfig } from './types'
 import { assignableWindow, document } from './utils/globals'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import {
@@ -336,7 +336,7 @@ export class PostHogSurveys {
         })
     }
 
-    renderSurvey(surveyId: string | Survey, selector: string) {
+    renderSurvey(surveyId: string | Survey, selector: string, properties?: Properties) {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return
@@ -363,12 +363,12 @@ export class PostHogSurveys {
                 logger.info(
                     `Rendering survey ${survey.id} with delay of ${survey.appearance?.surveyPopupDelaySeconds} seconds`
                 )
-                this._surveyManager?.renderSurvey(survey, elem)
+                this._surveyManager?.renderSurvey(survey, elem, properties)
                 logger.info(`Survey ${survey.id} rendered`)
             }, survey.appearance.surveyPopupDelaySeconds * 1000)
             return
         }
-        this._surveyManager.renderSurvey(survey, elem)
+        this._surveyManager.renderSurvey(survey, elem, properties)
     }
 
     displaySurvey(surveyId: string, options: DisplaySurveyOptions) {
@@ -391,6 +391,9 @@ export class PostHogSurveys {
                 },
             }
         }
+        if (options.displayType !== DisplaySurveyType.Popover && options.initialResponses) {
+            logger.warn('initialResponses is only supported for popover surveys. prefill will not be applied.')
+        }
         if (options.ignoreConditions === false) {
             const canRender = this.canRenderSurvey(survey)
             if (!canRender.visible) {
@@ -399,10 +402,10 @@ export class PostHogSurveys {
             }
         }
         if (options.displayType === DisplaySurveyType.Inline) {
-            this.renderSurvey(surveyToDisplay, options.selector)
+            this.renderSurvey(surveyToDisplay, options.selector, options.properties)
             return
         }
-        this._surveyManager.handlePopoverSurvey(surveyToDisplay)
+        this._surveyManager.handlePopoverSurvey(surveyToDisplay, options)
     }
 
     cancelPendingSurvey(surveyId: string): void {

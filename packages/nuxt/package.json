@@ -1,6 +1,6 @@
 {
   "name": "@posthog/nuxt",
-  "version": "1.4.2",
+  "version": "1.5.36",
   "description": "Nuxt module for Posthog 🦔",
   "repository": {
     "type": "git",
@@ -8,6 +8,9 @@
     "directory": "packages/nuxt"
   },
   "license": "MIT",
+  "engines": {
+    "node": "^20.20.0 || >=22.22.0"
+  },
   "type": "module",
   "exports": {
     ".": {

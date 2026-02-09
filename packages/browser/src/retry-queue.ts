@@ -1,6 +1,6 @@
 import { RetriableRequestWithOptions } from './types'
 
-import { isNumber, isUndefined } from '@posthog/core'
+import { isPositiveNumber, isUndefined } from '@posthog/core'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
 import { PostHog } from './posthog-core'
@@ -68,7 +68,7 @@ export class RetryQueue {
     }
 
     retriableRequest({ retriesPerformedSoFar, ...options }: RetriableRequestWithOptions): void {
-        if (isNumber(retriesPerformedSoFar) && retriesPerformedSoFar > 0) {
+        if (isPositiveNumber(retriesPerformedSoFar)) {
             options.url = extendURLParams(options.url, { retry_count: retriesPerformedSoFar })
         }
 

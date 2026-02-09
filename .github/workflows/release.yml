@@ -133,6 +133,46 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ steps.releaser.outputs.token }}
 
+    notify-rejected:
+        name: Notify Slack - Rejected
+        needs: [version-bump, notify-approval-needed]
+        runs-on: ubuntu-latest
+        if: always() && needs.version-bump.result == 'failure' && needs.notify-approval-needed.outputs.slack_ts != ''
+        steps:
+            - name: Check for rejection
+              id: check-rejection
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  RESPONSE=$(gh api /repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/approvals)
+                  REJECTED=$(echo "$RESPONSE" | jq '[.[] | select(.state == "rejected")] | length')
+                  if [ "$REJECTED" -gt 0 ]; then
+                    echo "was_rejected=true" >> "$GITHUB_OUTPUT"
+                    COMMENT=$(echo "$RESPONSE" | jq -r '.[] | select(.state == "rejected") | .comment // empty' | head -1)
+                    if [ -n "$COMMENT" ]; then
+                      {
+                        echo 'message<<EOF'
+                        echo "🚫 Release was rejected: $COMMENT"
+                        echo 'EOF'
+                      } >> "$GITHUB_OUTPUT"
+                    else
+                      echo "message=🚫 Release was rejected." >> "$GITHUB_OUTPUT"
+                    fi
+                  else
+                    echo "was_rejected=false" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Notify Slack - Rejected
+              if: steps.check-rejection.outputs.was_rejected == 'true'
+              continue-on-error: true
+              uses: PostHog/.github/.github/actions/slack-thread-reply@main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '${{ steps.check-rejection.outputs.message }}'
+                  emoji_reaction: 'no_entry_sign'
+
     publish:
         name: Publish packages
         needs: [version-bump, notify-approval-needed]
@@ -158,6 +198,7 @@ jobs:
                     - name: '@posthog/nextjs-config'
                     - name: '@posthog/nuxt'
                     - name: '@posthog/rollup-plugin'
+                    - name: '@posthog/types'
                     - name: '@posthog/webpack-plugin'
 
         steps:
@@ -239,33 +280,39 @@ jobs:
             ############## posthog-js auto-update ##################
             - name: Dispatch posthog upgrade for posthog-js
               if: matrix.package.name == 'posthog-js' && steps.check-package-version.outputs.is-new-version == 'true'
+              env:
+                  PACKAGE_NAME: ${{ matrix.package.name }}
+                  PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
-                  curl -f -X POST \
+                  curl -f -sS -X POST \
                        -H "Accept: application/vnd.github+json" \
-                       -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                       -H "Authorization: Bearer $GITHUB_TOKEN" \
                        https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-upgrade.yml/dispatches \
-                       -d '{
-                         "ref": "main",
-                         "inputs": {
-                           "package_name": "${{ matrix.package.name }}",
-                           "package_version": "${{ steps.check-package-version.outputs.committed-version }}"
-                         }
-                       }'
+                       -d "$(jq -n \
+                         --arg ref "main" \
+                         --arg package_name "$PACKAGE_NAME" \
+                         --arg package_version "$PACKAGE_VERSION" \
+                         '{ref: $ref, inputs: {package_name: $package_name, package_version: $package_version}}' \
+                       )"
 
             - name: Dispatch posthog.com upgrade for ${{ matrix.package.name }}
-              if: matrix.package.name == 'posthog-js' && steps.check-package-version.outputs.is-new-version == 'true'
+              if: matrix.package.name == '@posthog/types' && steps.check-package-version.outputs.is-new-version == 'true'
+              env:
+                  PACKAGE_NAME: ${{ matrix.package.name }}
+                  PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
-                  curl -f -X POST \
+                  curl -f -sS -X POST \
                        -H "Accept: application/vnd.github+json" \
-                       -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                       -H "Authorization: Bearer $GITHUB_TOKEN" \
                        https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-com-upgrade.yml/dispatches \
-                       -d '{
-                         "ref": "main",
-                         "inputs": {
-                           "package_name": "${{ matrix.package.name }}",
-                           "package_version": "${{ steps.check-package-version.outputs.committed-version }}"
-                         }
-                       }'
+                       -d "$(jq -n \
+                         --arg ref "main" \
+                         --arg package_name "$PACKAGE_NAME" \
+                         --arg package_version "$PACKAGE_VERSION" \
+                         '{ref: $ref, inputs: {package_name: $package_name, package_version: $package_version}}' \
+                       )"
 
             ####################################################
             # Notify ourselves in case of a failure here

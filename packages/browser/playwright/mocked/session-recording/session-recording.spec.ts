@@ -235,6 +235,7 @@ test.describe('Session recording - array.js', () => {
             ph?.reset()
         })
 
+        // First request may flush old session buffer
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/ses/*'],
             action: async () => {
@@ -242,16 +243,36 @@ test.describe('Session recording - array.js', () => {
             },
         })
 
+        // Second request gets new session snapshot
+        await page.waitingForNetworkCausedBy({
+            urlPatternsToWaitFor: ['**/ses/*'],
+            action: async () => {
+                await page.locator('[data-cy-input]').type('more activity')
+            },
+        })
+
         const capturedEvents = await page.capturedEvents()
-        expect(capturedEvents.length).toBeGreaterThan(1)
 
-        const firstEventSessionId = capturedEvents[0]['properties']['$session_id']
-        expect(firstEventSessionId).toEqual(startingSessionId)
+        const eventSummaries = capturedEvents.map((e: any) => {
+            const snapshotData = e.properties?.$snapshot_data || []
+            const tags = snapshotData.filter((s: any) => s.type === 5).map((s: any) => s.data?.tag)
+            return {
+                sessionId: e.properties?.$session_id === startingSessionId ? 'starting' : 'new',
+                tags,
+            }
+        })
 
-        const remainingEventSessionIds = capturedEvents.slice(1).map((c) => c['properties']['$session_id'])
-        const newSessionId = remainingEventSessionIds[0]
-        expect(newSessionId).not.toEqual(startingSessionId)
-        expect(remainingEventSessionIds.every((id) => id === newSessionId)).toBe(true)
+        // After reset we get:
+        // 1. Old session buffer flush (network event with old session)
+        // 2. New session snapshot with $session_id_change
+        // Note: no $session_ending/$session_starting since reset is not a rotation (shouldLinkSessions=false)
+        expect(eventSummaries).toMatchObject([
+            { sessionId: 'starting', tags: [] },
+            {
+                sessionId: 'new',
+                tags: ['$remote_config_received', '$session_options', '$posthog_config', '$session_id_change'],
+            },
+        ])
     })
 
     test('rotates sessions after 24 hours', async ({ page }) => {

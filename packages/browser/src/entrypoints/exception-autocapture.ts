@@ -63,11 +63,17 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
     const originalConsoleError = con.error
 
     con.error = function (...args: any[]): void {
-        const event = args.join(' ')
+        let event
+        if (args.length == 1) {
+            event = args[0]
+        } else {
+            event = args.join(' ')
+        }
         const error = args.find((arg) => arg instanceof Error)
         const errorProperties = errorPropertiesBuilder.buildFromUnknown(error || event, {
             mechanism: { handled: false },
             syntheticException: new Error('PostHog syntheticException'),
+            skipFirstLines: 2,
         })
         captureFn(errorProperties)
         return originalConsoleError?.(...args)

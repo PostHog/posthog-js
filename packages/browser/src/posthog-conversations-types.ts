@@ -1,11 +1,24 @@
 /**
+ * Position of the widget on the screen
+ */
+export type WidgetPosition = 'bottom_left' | 'bottom_right' | 'top_left' | 'top_right'
+
+/**
  * Remote configuration for conversations from the PostHog server
  */
 export interface ConversationsRemoteConfig {
     /**
      * Whether conversations are enabled for this team
+     * When true, the conversations API is available (posthog.conversations.*)
      */
     enabled: boolean
+
+    /**
+     * Whether the widget UI (button + chat panel) should be shown
+     * Only takes effect when enabled is true
+     * @default false
+     */
+    widgetEnabled?: boolean
 
     /**
      * Public token for authenticating conversations API requests
@@ -58,12 +71,49 @@ export interface ConversationsRemoteConfig {
      * Empty array or not present means show on all domains.
      */
     domains?: string[]
+
+    /**
+     * Position of the widget on the screen
+     * @default 'bottom_right'
+     */
+    widgetPosition?: WidgetPosition
 }
 
 /**
  * Author types for messages in a conversation
  */
 export type MessageAuthorType = 'customer' | 'AI' | 'human'
+
+/**
+ * TipTap mark types for inline formatting
+ */
+export interface TipTapMark {
+    type: 'bold' | 'italic' | 'underline' | 'strike' | 'code' | 'link'
+    attrs?: {
+        href?: string
+        target?: string
+        [key: string]: unknown
+    }
+}
+
+/**
+ * TipTap node representing content in the document tree
+ */
+export interface TipTapNode {
+    type: string
+    attrs?: Record<string, unknown>
+    content?: TipTapNode[]
+    marks?: TipTapMark[]
+    text?: string
+}
+
+/**
+ * TipTap document - the root node of rich content
+ */
+export interface TipTapDoc {
+    type: 'doc'
+    content?: TipTapNode[]
+}
 
 /**
  * A message in a conversation
@@ -75,9 +125,15 @@ export interface Message {
     id: string
 
     /**
-     * The message content/text
+     * The message content as plain text (fallback)
      */
     content: string
+
+    /**
+     * Rich content in TipTap JSON format (preferred for rendering)
+     * Falls back to `content` if missing or invalid
+     */
+    rich_content?: TipTapDoc
 
     /**
      * Type of the message author
@@ -232,6 +288,26 @@ export interface MarkAsReadResponse {
 }
 
 /**
+ * Options for fetching tickets list
+ */
+export interface GetTicketsOptions {
+    /**
+     * Filter by ticket status (e.g., 'open', 'closed')
+     */
+    status?: string
+
+    /**
+     * Number of tickets to return (default: 20)
+     */
+    limit?: number
+
+    /**
+     * Pagination offset (default: 0)
+     */
+    offset?: number
+}
+
+/**
  * Response from fetching tickets list
  */
 export interface GetTicketsResponse {
@@ -261,4 +337,65 @@ export interface ConversationsTraits {
 export interface UserProvidedTraits {
     name?: string
     email?: string
+}
+
+/**
+ * Session context captured when creating a new ticket
+ */
+export interface SessionContext {
+    /**
+     * URL to the session replay at the time the ticket was created
+     * Includes timestamp to jump to the exact moment
+     */
+    session_replay_url?: string
+
+    /**
+     * Page URL where the ticket was created
+     */
+    current_url?: string
+}
+
+/**
+ * Payload for sending a message via the conversations API
+ */
+export interface SendMessagePayload {
+    /**
+     * Widget session ID for access control
+     */
+    widget_session_id: string
+
+    /**
+     * Distinct ID for linking to PostHog Person
+     */
+    distinct_id: string
+
+    /**
+     * The message content to send
+     */
+    message: string
+
+    /**
+     * User identification traits
+     */
+    traits: {
+        name: string | null
+        email: string | null
+    }
+
+    /**
+     * Ticket ID to send the message to (null to create a new ticket)
+     */
+    ticket_id: string | null
+
+    /**
+     * Session ID captured when creating a new ticket
+     * Stored as a separate queryable DB field
+     */
+    session_id?: string
+
+    /**
+     * Session context captured when creating a new ticket
+     * Stored in a JSONField for flexibility
+     */
+    session_context?: SessionContext
 }
