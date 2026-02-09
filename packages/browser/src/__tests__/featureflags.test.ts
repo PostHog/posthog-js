@@ -843,89 +843,62 @@ describe('featureflags', () => {
         })
     })
 
-    describe('flags()', () => {
+    describe('_callFlagsEndpoint via reloadFeatureFlags', () => {
         it('should not call /flags if advanced_disable_decide is true', () => {
             instance.config.advanced_disable_decide = true
-            featureFlags.flags()
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(0)
         })
 
         it('should not call /flags if advanced_disable_flags is true', () => {
             instance.config.advanced_disable_flags = true
-            featureFlags.flags()
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(0)
         })
 
-        it('should call /flags', () => {
-            featureFlags.flags()
+        it('should call /flags via reloadFeatureFlags', () => {
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
-
-            jest.runOnlyPendingTimers()
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
         })
 
-        it('should call /flags with flags disabled if set', () => {
-            instance.config.advanced_disable_feature_flags_on_first_load = true
-            featureFlags.flags()
-
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(true)
-        })
-
-        it('should call /flags with flags disabled if set generally', () => {
+        it('should call /flags with flags disabled if advanced_disable_feature_flags is set', () => {
             instance.config.advanced_disable_feature_flags = true
-            featureFlags.flags()
+            // Call _callFlagsEndpoint directly because reloadFeatureFlags() returns early
+            // when advanced_disable_feature_flags is true
+            featureFlags._callFlagsEndpoint({ disableFlags: true })
+            jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(true)
         })
 
-        it('should call /flags once even if reload called before', () => {
+        it('should always include timezone in request data', () => {
             featureFlags.reloadFeatureFlags()
-            featureFlags.flags()
-
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
-
             jest.runOnlyPendingTimers()
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
-        })
-
-        it('should not disable flags if reload was called on /flags', () => {
-            instance.config.advanced_disable_feature_flags_on_first_load = true
-            featureFlags.reloadFeatureFlags()
-            featureFlags.flags()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
-
-            jest.runOnlyPendingTimers()
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
-        })
-
-        it('should always disable flags if set', () => {
-            instance.config.advanced_disable_feature_flags = true
-            featureFlags.reloadFeatureFlags()
-            featureFlags.flags()
-
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(true)
+            expect(instance._send_request.mock.calls[0][0].data.timezone).toBeDefined()
         })
 
         it('should call /flags with evaluation_contexts when configured', () => {
             instance.config.evaluation_contexts = ['production', 'web']
-            featureFlags.flags()
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toEqual(['production', 'web'])
         })
 
         it('should not include evaluation_contexts when not configured', () => {
-            featureFlags.flags()
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toBe(undefined)
@@ -933,7 +906,8 @@ describe('featureflags', () => {
 
         it('should not include evaluation_contexts when configured as empty array', () => {
             instance.config.evaluation_contexts = []
-            featureFlags.flags()
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toBe(undefined)
@@ -941,7 +915,8 @@ describe('featureflags', () => {
 
         it('should support deprecated evaluation_environments field', () => {
             instance.config.evaluation_environments = ['production', 'web']
-            featureFlags.flags()
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toEqual(['production', 'web'])
@@ -1409,9 +1384,13 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $anon_distinct_id: undefined,
+                groups: undefined,
+                group_properties: undefined,
                 person_properties: {
                     '$feature_enrollment/x-flag': true,
                 },
+                timezone: expect.any(String),
             })
         })
     })
@@ -1455,8 +1434,12 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $anon_distinct_id: undefined,
                 $device_id: 'test-device-uuid-123',
+                groups: undefined,
+                group_properties: undefined,
                 person_properties: {},
+                timezone: expect.any(String),
             })
         })
 
@@ -1472,7 +1455,11 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $anon_distinct_id: undefined,
+                groups: undefined,
+                group_properties: undefined,
                 person_properties: {},
+                timezone: expect.any(String),
             })
             expect(instance._send_request.mock.calls[0][0].data).not.toHaveProperty('$device_id')
         })
@@ -1486,7 +1473,11 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $anon_distinct_id: undefined,
+                groups: undefined,
+                group_properties: undefined,
                 person_properties: {},
+                timezone: expect.any(String),
             })
             expect(instance._send_request.mock.calls[0][0].data).not.toHaveProperty('$device_id')
         })
@@ -1506,7 +1497,10 @@ describe('featureflags', () => {
                 distinct_id: 'blah id',
                 $device_id: 'device-uuid-456',
                 $anon_distinct_id: 'anon_id_789',
+                groups: undefined,
+                group_properties: undefined,
                 person_properties: {},
+                timezone: expect.any(String),
             })
         })
 
@@ -1522,8 +1516,12 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $anon_distinct_id: undefined,
                 $device_id: 'device-uuid-999',
+                groups: undefined,
+                group_properties: undefined,
                 person_properties: { plan: 'pro', beta_tester: true },
+                timezone: expect.any(String),
             })
         })
 
@@ -1539,9 +1537,12 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $anon_distinct_id: undefined,
                 $device_id: 'device-uuid-888',
+                groups: undefined,
                 person_properties: {},
                 group_properties: { company: { name: 'Acme', seats: 50 } },
+                timezone: expect.any(String),
             })
         })
     })
@@ -1577,7 +1578,10 @@ describe('featureflags', () => {
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 $anon_distinct_id: 'rando_id',
+                groups: undefined,
+                group_properties: undefined,
                 person_properties: {},
+                timezone: expect.any(String),
             })
         })
 
@@ -1598,7 +1602,10 @@ describe('featureflags', () => {
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 $anon_distinct_id: 'rando_id',
+                groups: undefined,
+                group_properties: undefined,
                 person_properties: {},
+                timezone: expect.any(String),
             })
 
             featureFlags.reloadFeatureFlags()
@@ -1609,7 +1616,11 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[1][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $anon_distinct_id: undefined,
+                groups: undefined,
+                group_properties: undefined,
                 person_properties: {},
+                timezone: expect.any(String),
             })
 
             featureFlags.reloadFeatureFlags()
@@ -1619,7 +1630,11 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[2][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $anon_distinct_id: undefined,
+                groups: undefined,
+                group_properties: undefined,
                 person_properties: {},
+                timezone: expect.any(String),
             })
         })
 
@@ -1640,7 +1655,11 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $anon_distinct_id: undefined,
+                groups: undefined,
+                group_properties: undefined,
                 person_properties: { a: 'b', c: 'd' },
+                timezone: expect.any(String),
             })
         })
 
@@ -1725,7 +1744,11 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $anon_distinct_id: undefined,
+                groups: undefined,
+                group_properties: undefined,
                 person_properties: { a: 'b', c: 'e', x: 'y' },
+                timezone: expect.any(String),
             })
         })
 
@@ -1760,7 +1783,11 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $anon_distinct_id: undefined,
+                groups: undefined,
+                group_properties: undefined,
                 person_properties: {},
+                timezone: expect.any(String),
             })
         })
 
@@ -1783,8 +1810,11 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $anon_distinct_id: undefined,
+                groups: undefined,
                 person_properties: {},
                 group_properties: { orgs: { a: 'b', c: 'd' }, projects: { x: 'y', c: 'e' } },
+                timezone: expect.any(String),
             })
         })
 

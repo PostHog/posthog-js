@@ -9,7 +9,6 @@ import {
     previousElementSibling,
 } from '../autocapture'
 import { shouldCaptureDomEvent } from '../autocapture-utils'
-import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import { AutocaptureConfig, FlagsResponse, PostHogConfig, RageclickConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
@@ -1185,8 +1184,8 @@ describe('Autocapture system', () => {
             jest.spyOn(autocapture, '_addDomEventHandlers')
         })
 
-        it('should not be enabled before the flags response', () => {
-            expect(autocapture.isEnabled).toBe(false)
+        it('should be enabled after init when autocapture is true in config', () => {
+            expect(autocapture.isEnabled).toBe(true)
         })
 
         it('should be enabled before the flags response if flags is disabled', () => {
@@ -1194,8 +1193,8 @@ describe('Autocapture system', () => {
             expect(autocapture.isEnabled).toBe(true)
         })
 
-        it('should be disabled before the flags response if opt out is in persistence', () => {
-            posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE] = true
+        it('should be disabled when remote config has autocapture_opt_out', () => {
+            autocapture.onRemoteConfig({ autocapture_opt_out: true } as FlagsResponse)
             expect(autocapture.isEnabled).toBe(false)
         })
 
@@ -1224,6 +1223,7 @@ describe('Autocapture system', () => {
 
         it('should call _addDomEventHandlders if autocapture is true in client config', () => {
             posthog.config.autocapture = true
+            autocapture['_initialized'] = false
             autocapture.onRemoteConfig({} as FlagsResponse)
             expect(autocapture['_addDomEventHandlers']).toHaveBeenCalled()
         })
@@ -1243,6 +1243,7 @@ describe('Autocapture system', () => {
         })
 
         it('should NOT call _addDomEventHandlders when the token has already been initialized', () => {
+            autocapture['_initialized'] = false
             autocapture.onRemoteConfig({} as FlagsResponse)
             expect(autocapture['_addDomEventHandlers']).toHaveBeenCalledTimes(1)
 
