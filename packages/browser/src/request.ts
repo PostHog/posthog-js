@@ -203,7 +203,7 @@ const _fetch = (options: RequestWithOptions) => {
         })
         .catch((error) => {
             logger.error(error)
-            options.callback?.({ statusCode: 0, text: error })
+            options.callback?.({ statusCode: 0, error })
         })
         .finally(() => (aborter ? clearTimeout(aborter.timeout) : null))
 
