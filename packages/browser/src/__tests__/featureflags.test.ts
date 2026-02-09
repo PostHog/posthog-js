@@ -3101,6 +3101,7 @@ describe('$feature_flag_error tracking', () => {
     } as PostHogConfig
 
     beforeEach(() => {
+        const internalEventEmitter = new SimpleEventEmitter()
         instance = {
             config: { ...config },
             get_distinct_id: () => 'blah id',
@@ -3115,6 +3116,8 @@ describe('$feature_flag_error tracking', () => {
             _onRemoteConfig: jest.fn(),
             reloadFeatureFlags: () => featureFlags.reloadFeatureFlags(),
             _shouldDisableFlags: () => false,
+            _internalEventEmitter: internalEventEmitter,
+            on: (event: string, cb: (...args: any[]) => void) => internalEventEmitter.on(event, cb),
         }
 
         featureFlags = new PostHogFeatureFlags(instance)
