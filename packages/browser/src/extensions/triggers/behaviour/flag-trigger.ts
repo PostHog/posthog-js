@@ -12,7 +12,7 @@ export class FlagTrigger implements Trigger {
 
     private readonly _posthog: PostHog
     private _flagMatches: boolean = false
-    private _listenerAttached = false
+    private _unsubscribe: (() => void) | null = null
 
     constructor(options: TriggerOptions) {
         this._posthog = options.posthog
@@ -22,9 +22,11 @@ export class FlagTrigger implements Trigger {
         this.linkedFlag = linkedFlag
         this._flagMatches = false
 
-        if (!this._listenerAttached && this.linkedFlag) {
-            this._listenerAttached = true
-            this._setupFlagListener(this._posthog)
+        this._unsubscribe?.()
+        this._unsubscribe = null
+
+        if (this.linkedFlag) {
+            this._unsubscribe = this._setupFlagListener(this._posthog)
         }
     }
 
@@ -37,8 +39,8 @@ export class FlagTrigger implements Trigger {
         return this._flagMatches
     }
 
-    private _setupFlagListener(posthog: PostHog): void {
-        posthog.onFeatureFlags((_flags: string[], variants: Record<string, unknown>) => {
+    private _setupFlagListener(posthog: PostHog): () => void {
+        return posthog.onFeatureFlags((_flags: string[], variants: Record<string, unknown>) => {
             const linkedFlag = this.linkedFlag
 
             if (!linkedFlag || !variants || !(linkedFlag.key in variants)) {

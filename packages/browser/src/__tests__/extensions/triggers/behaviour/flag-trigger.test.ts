@@ -11,7 +11,12 @@ const createMockPosthog = (sessionId: string) => {
         get_session_id: jest.fn(() => sessionId),
         onFeatureFlags: jest.fn((callback: FlagCallback) => {
             callbacks.push(callback)
-            return () => {}
+            return () => {
+                const index = callbacks.indexOf(callback)
+                if (index >= 0) {
+                    callbacks.splice(index, 1)
+                }
+            }
         }),
     }
 
@@ -19,14 +24,16 @@ const createMockPosthog = (sessionId: string) => {
         callbacks.forEach((cb) => cb(flags, variants))
     }
 
-    return { posthog, triggerFlags }
+    const activeListenerCount = () => callbacks.length
+
+    return { posthog, triggerFlags, activeListenerCount }
 }
 
 describe('FlagTrigger', () => {
     const SESSION_ID = 'session-123'
 
     const createTrigger = (linkedFlag: LinkedFlag | null, sessionId: string = SESSION_ID) => {
-        const { posthog, triggerFlags } = createMockPosthog(sessionId)
+        const { posthog, triggerFlags, activeListenerCount } = createMockPosthog(sessionId)
 
         const persistence = new PersistenceHelper(
             () => null,
@@ -43,7 +50,7 @@ describe('FlagTrigger', () => {
         const trigger = new FlagTrigger(options)
         trigger.init(linkedFlag)
 
-        return { trigger, triggerFlags, posthog }
+        return { trigger, triggerFlags, posthog, activeListenerCount }
     }
 
     it('returns null when not configured', () => {
@@ -99,17 +106,36 @@ describe('FlagTrigger', () => {
         expect(trigger.matches(SESSION_ID)).toBe(true)
     })
 
-    it('init is idempotent - calling it multiple times does not duplicate listeners', () => {
-        const { trigger, triggerFlags, posthog } = createTrigger({ key: 'my-flag' })
+    it('init is idempotent - only one active listener after multiple calls', () => {
+        const { trigger, triggerFlags, activeListenerCount } = createTrigger({ key: 'my-flag' })
 
-        // Call init again with the same config
         trigger.init({ key: 'my-flag' })
         trigger.init({ key: 'my-flag' })
 
-        // onFeatureFlags should only have been called once despite multiple init() calls
-        expect(posthog.onFeatureFlags).toHaveBeenCalledTimes(1)
+        expect(activeListenerCount()).toBe(1)
 
         triggerFlags([], { 'my-flag': true })
+        expect(trigger.matches(SESSION_ID)).toBe(true)
+    })
+
+    it('re-init switches to new flag', () => {
+        const { trigger, triggerFlags } = createTrigger({ key: 'flag-a' })
+
+        triggerFlags([], { 'flag-a': true })
+        expect(trigger.matches(SESSION_ID)).toBe(true)
+
+        // Re-init with different flag
+        trigger.init({ key: 'flag-b' })
+
+        // Old flag value should not carry over
+        expect(trigger.matches(SESSION_ID)).toBe(false)
+
+        // Setting old flag should not affect the trigger (old listener unsubscribed)
+        triggerFlags([], { 'flag-a': true })
+        expect(trigger.matches(SESSION_ID)).toBe(false)
+
+        // Setting new flag should work
+        triggerFlags([], { 'flag-b': true })
         expect(trigger.matches(SESSION_ID)).toBe(true)
     })
 })

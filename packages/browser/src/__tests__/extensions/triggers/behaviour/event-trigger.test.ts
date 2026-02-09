@@ -13,7 +13,12 @@ const createMockPosthog = (sessionId: string) => {
             if (eventName === 'eventCaptured') {
                 callbacks.push(callback)
             }
-            return () => {}
+            return () => {
+                const index = callbacks.indexOf(callback)
+                if (index >= 0) {
+                    callbacks.splice(index, 1)
+                }
+            }
         }),
     }
 
@@ -21,7 +26,9 @@ const createMockPosthog = (sessionId: string) => {
         callbacks.forEach((cb) => cb({ event: name }))
     }
 
-    return { posthog, fireEvent }
+    const activeListenerCount = () => callbacks.length
+
+    return { posthog, fireEvent, activeListenerCount }
 }
 
 describe('EventTrigger', () => {
@@ -29,7 +36,7 @@ describe('EventTrigger', () => {
     const OTHER_SESSION_ID = 'session-456'
 
     const createTrigger = (eventTriggers: string[], persistedSessionId?: string, sessionId: string = SESSION_ID) => {
-        const { posthog, fireEvent } = createMockPosthog(sessionId)
+        const { posthog, fireEvent, activeListenerCount } = createMockPosthog(sessionId)
         const storage: Record<string, unknown> = {}
         if (persistedSessionId) {
             storage['$error_tracking_event_triggered'] = persistedSessionId
@@ -52,7 +59,7 @@ describe('EventTrigger', () => {
         const trigger = new EventTrigger(options)
         trigger.init(eventTriggers)
 
-        return { trigger, fireEvent, storage, posthog }
+        return { trigger, fireEvent, storage, posthog, activeListenerCount }
     }
 
     it('returns null when not configured', () => {
@@ -104,17 +111,30 @@ describe('EventTrigger', () => {
         expect(storage['$error_tracking_event_triggered']).toBe(SESSION_ID)
     })
 
-    it('init is idempotent - calling it multiple times does not duplicate listeners', () => {
-        const { trigger, fireEvent, posthog } = createTrigger(['my-event'])
+    it('init is idempotent - only one active listener after multiple calls', () => {
+        const { trigger, fireEvent, activeListenerCount } = createTrigger(['my-event'])
 
-        // Call init again with the same config
         trigger.init(['my-event'])
         trigger.init(['my-event'])
 
-        // posthog.on should only have been called once despite multiple init() calls
-        expect(posthog.on).toHaveBeenCalledTimes(1)
+        expect(activeListenerCount()).toBe(1)
 
         fireEvent('my-event')
+        expect(trigger.matches(SESSION_ID)).toBe(true)
+    })
+
+    it('re-init switches to new event list', () => {
+        const { trigger, fireEvent } = createTrigger(['event-a'])
+
+        // Re-init with different events before any event fires
+        trigger.init(['event-b'])
+
+        // Old event should not trigger (listener was re-attached for new events)
+        fireEvent('event-a')
+        expect(trigger.matches(SESSION_ID)).toBe(false)
+
+        // New event should trigger
+        fireEvent('event-b')
         expect(trigger.matches(SESSION_ID)).toBe(true)
     })
 })

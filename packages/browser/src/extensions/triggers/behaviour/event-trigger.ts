@@ -8,7 +8,7 @@ export class EventTrigger implements Trigger {
 
     private readonly _posthog: PostHog
     private readonly _persistence: PersistenceHelper
-    private _listenerAttached = false
+    private _unsubscribe: (() => void) | null = null
 
     constructor(options: TriggerOptions) {
         this._posthog = options.posthog
@@ -18,9 +18,11 @@ export class EventTrigger implements Trigger {
     init(eventTriggers: string[]): void {
         this.eventTriggers = eventTriggers
 
-        if (!this._listenerAttached && this.eventTriggers.length > 0) {
-            this._listenerAttached = true
-            this._setupEventListener(this._posthog)
+        this._unsubscribe?.()
+        this._unsubscribe = null
+
+        if (this.eventTriggers.length > 0) {
+            this._unsubscribe = this._setupEventListener(this._posthog)
         }
     }
 
@@ -32,8 +34,8 @@ export class EventTrigger implements Trigger {
         return this._persistence.isTriggered(sessionId)
     }
 
-    private _setupEventListener(posthog: PostHog): void {
-        posthog.on('eventCaptured', (event) => {
+    private _setupEventListener(posthog: PostHog): () => void {
+        return posthog.on('eventCaptured', (event) => {
             if (!event?.event) {
                 return
             }

@@ -90,10 +90,21 @@ describe('SampleRateTrigger', () => {
     it('init is idempotent - calling it multiple times produces same results', () => {
         const { trigger } = createTrigger(1)
 
-        // Call init again with the same config
         trigger.init(1)
         trigger.init(1)
 
         expect(trigger.matches(SESSION_ID)).toBe(true)
+    })
+
+    it('re-init switches to new sample rate for new sessions', () => {
+        const { trigger } = createTrigger(1)
+
+        expect(trigger.matches(SESSION_ID)).toBe(true)
+
+        // Re-init with 0% rate - clears in-memory cache
+        trigger.init(0)
+
+        // New session should be sampled with the new 0% rate
+        expect(trigger.matches(OTHER_SESSION_ID)).toBe(false)
     })
 })
