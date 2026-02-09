@@ -1,5 +1,19 @@
 # posthog-js
 
+## 1.345.0
+
+### Minor Changes
+
+- [#2919](https://github.com/PostHog/posthog-js/pull/2919) [`fe8090c`](https://github.com/PostHog/posthog-js/commit/fe8090c00f0122ed4aad37465f43480c50392506) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add `$feature_flag_error` property to `$feature_flag_called` events
+  (2026-02-09)
+
+### Patch Changes
+
+- [#3066](https://github.com/PostHog/posthog-js/pull/3066) [`90db5d4`](https://github.com/PostHog/posthog-js/commit/90db5d48d7ef0bff0ece31fa9a1047c10b76aa55) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: remote config cache invalidation was too aggressive
+  (2026-02-09)
+- Updated dependencies [[`fe8090c`](https://github.com/PostHog/posthog-js/commit/fe8090c00f0122ed4aad37465f43480c50392506)]:
+    - @posthog/types@1.345.0
+
 ## 1.344.0
 
 ### Minor Changes
