@@ -1,7 +1,7 @@
 import type { PostHog } from '@posthog/types'
 import { UrlTrigger } from '../../../types'
 import { addEventListener } from '../../../utils'
-import { compileRegexCache, urlMatchesTriggers } from '../../../utils/policyMatching'
+import { compileRegexCache, urlMatchesTriggers } from '../../../utils/trigger-matching-helpers'
 import type { Trigger, TriggerOptions } from './types'
 import type { PersistenceHelper } from './persistence'
 
