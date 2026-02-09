@@ -1,5 +1,19 @@
 # posthog-js
 
+## 1.343.0
+
+### Minor Changes
+
+- [#3048](https://github.com/PostHog/posthog-js/pull/3048) [`dd3328f`](https://github.com/PostHog/posthog-js/commit/dd3328f82f56777217e0672f33d04924aff9b69f) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Do not show identification form if user is identified
+  (2026-02-09)
+
+### Patch Changes
+
+- [#3049](https://github.com/PostHog/posthog-js/pull/3049) [`8d9bb16`](https://github.com/PostHog/posthog-js/commit/8d9bb16ea664fbd83529715edf1e330d45832e2d) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: sampled: true in persistence if legacy and should be ignored
+  (2026-02-09)
+- Updated dependencies []:
+    - @posthog/types@1.343.0
+
 ## 1.342.1
 
 ### Patch Changes
