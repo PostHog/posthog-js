@@ -127,6 +127,22 @@ describe('RemoteConfigLoader', () => {
             }
         })
 
+        it('still initializes extensions and loads flags when config fetch fails', () => {
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+                (_ph: PostHog, _name: string, cb: (err?: any) => void) => {
+                    cb()
+                }
+            )
+            posthog._send_request = jest.fn().mockImplementation(({ callback }) => callback?.({ json: undefined }))
+
+            new RemoteConfigLoader(posthog).load()
+
+            // Should still call _onRemoteConfig with empty object so extensions start
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({})
+            // Should still attempt to load flags
+            expect(posthog.featureFlags.ensureFlagsLoaded).toHaveBeenCalled()
+        })
+
         it('does not call ensureFlagsLoaded when advanced_disable_feature_flags_on_first_load is true', () => {
             posthog.config.advanced_disable_feature_flags_on_first_load = true
 

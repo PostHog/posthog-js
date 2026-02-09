@@ -2760,7 +2760,7 @@ describe('getRemoteConfigPayload', () => {
         expect(instance._send_request).toHaveBeenCalledWith(
             expect.objectContaining({
                 method: 'POST',
-                url: 'flags/flags/?v=2&config=true',
+                url: 'flags/flags/?v=2',
                 data: expect.objectContaining({
                     distinct_id: 'test-distinct-id',
                     token: 'test-token',
@@ -2777,7 +2777,7 @@ describe('getRemoteConfigPayload', () => {
         expect(instance._send_request).toHaveBeenCalledWith(
             expect.objectContaining({
                 method: 'POST',
-                url: 'flags/flags/?v=2&config=true',
+                url: 'flags/flags/?v=2',
                 data: expect.objectContaining({
                     distinct_id: 'test-distinct-id',
                     token: 'test-token',
@@ -2798,7 +2798,7 @@ describe('getRemoteConfigPayload', () => {
         expect(instance._send_request).toHaveBeenCalledWith(
             expect.objectContaining({
                 method: 'POST',
-                url: 'flags/flags/?v=2&config=true',
+                url: 'flags/flags/?v=2',
                 data: expect.objectContaining({
                     distinct_id: 'test-distinct-id',
                     token: 'test-token',
@@ -2826,7 +2826,7 @@ describe('getRemoteConfigPayload', () => {
         expect(instance._send_request).toHaveBeenCalledWith(
             expect.objectContaining({
                 method: 'POST',
-                url: 'flags/flags/?v=2&config=true',
+                url: 'flags/flags/?v=2',
                 data: expect.objectContaining({
                     distinct_id: 'test-distinct-id',
                     token: 'test-token',
@@ -2861,7 +2861,7 @@ describe('getRemoteConfigPayload', () => {
             expect(customInstance._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     method: 'POST',
-                    url: 'https://example.com/feature-flags/flags/?v=2&config=true',
+                    url: 'https://example.com/feature-flags/flags/?v=2',
                 })
             )
         })
@@ -2888,7 +2888,7 @@ describe('getRemoteConfigPayload', () => {
             expect(customInstance._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     method: 'POST',
-                    url: 'https://us.i.posthog.com/flags/?v=2&config=true',
+                    url: 'https://us.i.posthog.com/flags/?v=2',
                 })
             )
         })

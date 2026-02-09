@@ -127,6 +127,15 @@ export class NetworkPage {
                 })
             })
         )
+
+        // Mock the remote config endpoint so it doesn't fail against the local test server
+        await this.page.route('**/array/*/config*', async (route) => {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                json: {},
+            })
+        })
     }
 
     expectNoFailed(): void {

@@ -683,7 +683,7 @@ export class PostHogFeatureFlags {
 
         this._instance._send_request({
             method: 'POST',
-            url: this._instance.requestRouter.endpointFor('flags', '/flags/?v=2&config=true'),
+            url: this._instance.requestRouter.endpointFor('flags', '/flags/?v=2'),
             data,
             compression: this._instance.config.disable_compression ? undefined : Compression.Base64,
             timeout: this._instance.config.feature_flag_request_timeout_ms,
