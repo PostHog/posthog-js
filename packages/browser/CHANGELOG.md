@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.343.1
+
+### Patch Changes
+
+- [#3051](https://github.com/PostHog/posthog-js/pull/3051) [`aa712a3`](https://github.com/PostHog/posthog-js/commit/aa712a37265c7f1bb4ac9532fe440f696115c3a2) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: replay remote config cache should be invalidated periodically
+  (2026-02-09)
+- Updated dependencies []:
+    - @posthog/types@1.343.1
+
 ## 1.343.0
 
 ### Minor Changes
