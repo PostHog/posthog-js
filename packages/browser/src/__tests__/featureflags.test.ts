@@ -3170,7 +3170,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.runAllTimers()
+        jest.advanceTimersByTime(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual(['api_error_500'])
     })
@@ -3188,7 +3188,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.runAllTimers()
+        jest.advanceTimersByTime(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.CONNECTION_ERROR])
     })
@@ -3206,7 +3206,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.runAllTimers()
+        jest.advanceTimersByTime(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.TIMEOUT])
     })
@@ -3225,7 +3225,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.runAllTimers()
+        jest.advanceTimersByTime(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.ERRORS_WHILE_COMPUTING])
     })
@@ -3242,7 +3242,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.runAllTimers()
+        jest.advanceTimersByTime(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.QUOTA_LIMITED])
     })
@@ -3257,7 +3257,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.runAllTimers()
+        jest.advanceTimersByTime(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.UNKNOWN_ERROR])
     })
@@ -3268,7 +3268,7 @@ describe('$feature_flag_error tracking', () => {
             .mockImplementation(({ callback }) => callback({ statusCode: status, json: {} }))
 
         featureFlags.reloadFeatureFlags()
-        jest.runAllTimers()
+        jest.advanceTimersByTime(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([`api_error_${status}`])
     })
@@ -3287,7 +3287,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.runAllTimers()
+        jest.advanceTimersByTime(10)
 
         featureFlags.getFeatureFlag('test-flag')
 
@@ -3314,7 +3314,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.runAllTimers()
+        jest.advanceTimersByTime(10)
 
         featureFlags.getFeatureFlag('non-existent-flag')
 
@@ -3340,7 +3340,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.runAllTimers()
+        jest.advanceTimersByTime(10)
 
         // Flag is not in response, and errorsWhileComputingFlags is true
         featureFlags.getFeatureFlag('missing-flag')
@@ -3369,7 +3369,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.runAllTimers()
+        jest.advanceTimersByTime(10)
 
         featureFlags.getFeatureFlag('success-flag')
 
@@ -3391,7 +3391,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.runAllTimers()
+        jest.advanceTimersByTime(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual(['api_error_500'])
 
@@ -3408,7 +3408,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.runAllTimers()
+        jest.advanceTimersByTime(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([])
     })
@@ -3425,7 +3425,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.runAllTimers()
+        jest.advanceTimersByTime(10)
 
         featureFlags.getFeatureFlag('some-flag')
 
@@ -3451,7 +3451,7 @@ describe('$feature_flag_error tracking', () => {
             })
         )
         featureFlags.reloadFeatureFlags()
-        jest.runAllTimers()
+        jest.advanceTimersByTime(10)
 
         // Simulate reload - new FeatureFlags instance with same persistence
         const newFeatureFlags = new PostHogFeatureFlags(instance)
