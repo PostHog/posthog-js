@@ -95,7 +95,7 @@ const generateApiSpecs = (config) => {
     const posthogClass = findPostHogClass(apiPackage, config.parentClass);
     
     const resolvedTypes = types
-        .resolveTypeDefinitions(apiPackage)
+        .resolveTypeDefinitions(apiPackage, config.typeFallbacks)
         .map(type => enhanceTypeWithExample(type, config));
     
     const methods = filterPublicMethods(posthogClass, config.parentClass);

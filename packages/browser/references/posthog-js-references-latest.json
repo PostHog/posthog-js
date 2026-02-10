@@ -2425,9 +2425,17 @@
     {
       "id": "FlagVariant",
       "name": "FlagVariant",
-      "properties": [],
-      "path": "lib/src/types.d.ts",
-      "example": "{\n    flag: string;\n    variant: string;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "flag"
+        },
+        {
+          "type": "string",
+          "name": "variant"
+        }
+      ],
+      "path": "lib/src/types.d.ts"
     },
     {
       "id": "GetMessagesResponse",
@@ -2645,9 +2653,25 @@
     {
       "id": "OverrideConfig",
       "name": "OverrideConfig",
-      "properties": [],
-      "path": "lib/src/types.d.ts",
-      "example": "{\n    sampling: boolean;\n    linked_flag: boolean;\n    url_trigger: boolean;\n    event_trigger: boolean;\n}"
+      "properties": [
+        {
+          "type": "boolean",
+          "name": "sampling"
+        },
+        {
+          "type": "boolean",
+          "name": "linked_flag"
+        },
+        {
+          "type": "boolean",
+          "name": "url_trigger"
+        },
+        {
+          "type": "boolean",
+          "name": "event_trigger"
+        }
+      ],
+      "path": "lib/src/types.d.ts"
     },
     {
       "id": "PersistentStore",
@@ -2683,9 +2707,519 @@
     {
       "id": "PostHogConfig",
       "name": "PostHogConfig",
-      "properties": [],
-      "path": "lib/src/types.d.ts",
-      "example": "Omit<BasePostHogConfig, 'loaded'> & {\n    loaded: (posthog: PostHogInterface) => void;\n}"
+      "properties": [
+        {
+          "description": "URL of your PostHog instance.\n'https://us.i.posthog.com'",
+          "type": "string",
+          "name": "api_host"
+        },
+        {
+          "description": "URL to use for feature flag requests specifically.\nIf not set, feature flag requests will use the URL derived from `api_host`.\nThis is useful when you want to route feature flag requests to a different endpoint than other analytic APIs.\nnull",
+          "type": "string | null | undefined",
+          "name": "flags_api_host"
+        },
+        {
+          "description": "If using a reverse proxy for `api_host` then this should be the actual PostHog app URL (e.g. https://us.posthog.com).\nThis ensures that links to PostHog point to the correct host.\nnull",
+          "type": "string | null",
+          "name": "ui_host"
+        },
+        {
+          "description": "The transport method to use for API requests.\n'fetch'",
+          "type": "\"XHR\" | \"fetch\" | undefined",
+          "name": "api_transport"
+        },
+        {
+          "description": "The token for your PostHog project.\nIt should NOT be provided manually in the config, but rather passed as the first parameter to `posthog.init()`.",
+          "type": "string",
+          "name": "token"
+        },
+        {
+          "description": "The name this instance will be identified by.\nYou don't need to set this most of the time,\nbut can be useful if you have several Posthog instances running at the same time.\n'posthog'",
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "description": "Determines whether PostHog should autocapture events.\nThis setting does not affect capturing pageview events (see `capture_pageview`).\n\nby default autocapture is ignored on elements that match a `ph-no-capture` css class on the element or a parent\ntrue",
+          "type": "boolean | AutocaptureConfig",
+          "name": "autocapture"
+        },
+        {
+          "description": "Determines whether PostHog should capture rage clicks.\n\nby default rageclicks are ignored on elements that match a `ph-no-capture` or `ph-no-rageclick` css class on the element or a parent\ntrue",
+          "type": "boolean | RageclickConfig",
+          "name": "rageclick"
+        },
+        {
+          "description": "Determines if cookie should be set on the top level domain (example.com).\nIf PostHog-js is loaded on a subdomain (test.example.com), and `cross_subdomain_cookie` is set to false,\nit'll set the cookie on the subdomain only (test.example.com).\n\nNOTE: It will be set to `false` if we detect that the domain is a subdomain of a platform that is excluded from cross-subdomain cookie setting.\nThe current list of excluded platforms is `herokuapp.com`, `vercel.app`, and `netlify.app`.\ntrue",
+          "type": "boolean",
+          "name": "cross_subdomain_cookie"
+        },
+        {
+          "description": "Determines how PostHog stores information about the user. See [persistence](https://posthog.com/docs/libraries/js#persistence) for details.\n'localStorage+cookie'",
+          "type": "\"localStorage\" | \"cookie\" | \"memory\" | \"localStorage+cookie\" | \"sessionStorage\"",
+          "name": "persistence"
+        },
+        {
+          "description": "The name for the super properties persistent store\n''",
+          "type": "string",
+          "name": "persistence_name"
+        },
+        {
+          "description": "",
+          "type": "string | undefined",
+          "name": "cookie_name"
+        },
+        {
+          "description": "List of custom property names that should be stored in cookies (in addition to the default ones)\nwhen using 'localStorage+cookie' persistence mode. This allows these properties to be shared\nacross subdomains when cross_subdomain_cookie is enabled.\n[]",
+          "type": "readonly string[] | undefined",
+          "name": "cookie_persisted_properties"
+        },
+        {
+          "description": "Determines whether PostHog should save referrer information.\ntrue",
+          "type": "boolean",
+          "name": "save_referrer"
+        },
+        {
+          "description": "Determines whether PostHog should save marketing parameters.\nThese are `utm_*` paramaters and friends.\ntrue",
+          "type": "boolean",
+          "name": "save_campaign_params"
+        },
+        {
+          "description": "",
+          "type": "boolean | undefined",
+          "name": "store_google"
+        },
+        {
+          "description": "Used to extend the list of campaign parameters that are saved by default.\n[]",
+          "type": "string[]",
+          "name": "custom_campaign_params"
+        },
+        {
+          "description": "Used to extend the list of user agents that are blocked by default.\n[]",
+          "type": "string[]",
+          "name": "custom_blocked_useragents"
+        },
+        {
+          "description": "Determines whether PostHog should be in debug mode.\nYou can enable this to get more detailed logging.\n\nYou can also enable this on your website by appending `?__posthog_debug=true` at the end of your URL\nYou can also call `posthog.debug()` in your code to enable debug mode\nfalse",
+          "type": "boolean",
+          "name": "debug"
+        },
+        {
+          "description": "",
+          "type": "boolean | undefined",
+          "name": "verbose"
+        },
+        {
+          "description": "Determines whether PostHog should capture pageview events automatically.\nCan be:\n- `true`: Capture regular pageviews (default)\n- `false`: Don't capture any pageviews\n- `'history_change'`: Only capture pageviews on history API changes (pushState, replaceState, popstate)\ntrue",
+          "type": "boolean | \"history_change\"",
+          "name": "capture_pageview"
+        },
+        {
+          "description": "Determines whether PostHog should capture pageleave events.\nIf set to `true`, it will capture pageleave events for all pages.\nIf set to `'if_capture_pageview'`, it will only capture pageleave events if `capture_pageview` is also set to `true` or `'history_change'`.\n'if_capture_pageview'",
+          "type": "boolean | \"if_capture_pageview\"",
+          "name": "capture_pageleave"
+        },
+        {
+          "description": "Determines the number of days to store cookies for.\n365",
+          "type": "number",
+          "name": "cookie_expiration"
+        },
+        {
+          "description": "Determines whether PostHog should upgrade old cookies.\nIf set to `true`, the library will check for a cookie from our old js library and import super properties from it, then the old cookie is deleted.\nThis option only works in the initialization, so make sure you set it when you create the library.\nfalse",
+          "type": "boolean",
+          "name": "upgrade"
+        },
+        {
+          "description": "Determines whether PostHog should disable session recording.\nfalse",
+          "type": "boolean",
+          "name": "disable_session_recording"
+        },
+        {
+          "description": "Determines whether PostHog should disable persistence.\nIf set to `true`, the library will not save any data to the browser. It will also delete any data previously saved to the browser.\nfalse",
+          "type": "boolean",
+          "name": "disable_persistence"
+        },
+        {
+          "description": "",
+          "type": "boolean | undefined",
+          "name": "disable_cookie"
+        },
+        {
+          "description": "Determines whether PostHog should disable all surveys functionality.\nfalse",
+          "type": "boolean",
+          "name": "disable_surveys"
+        },
+        {
+          "description": "Determines whether PostHog should disable automatic display of surveys. If this is true, popup or widget surveys will not be shown when display conditions are met.\nfalse",
+          "type": "boolean",
+          "name": "disable_surveys_automatic_display"
+        },
+        {
+          "description": "Determines whether PostHog should disable all product tours functionality.\ntrue (disabled until feature is ready for GA)",
+          "type": "boolean",
+          "name": "disable_product_tours"
+        },
+        {
+          "description": "Survey-specific configuration options.\nundefined",
+          "type": "SurveyConfig | undefined",
+          "name": "surveys"
+        },
+        {
+          "description": "Logs-specific configuration options.\nundefined",
+          "type": "LogsConfig | undefined",
+          "name": "logs"
+        },
+        {
+          "description": "Determines whether PostHog should disable all conversations functionality.\nfalse",
+          "type": "boolean",
+          "name": "disable_conversations"
+        },
+        {
+          "description": "Determines whether PostHog should disable web experiments.\n\nCurrently disabled while we're in BETA. It will be toggled to `true` in a future release.\ntrue",
+          "type": "boolean",
+          "name": "disable_web_experiments"
+        },
+        {
+          "description": "Determines whether PostHog should disable any external dependency loading.\nThis will prevent PostHog from requesting any external scripts such as those needed for Session Replay, Surveys or Site Apps.\nfalse",
+          "type": "boolean",
+          "name": "disable_external_dependency_loading"
+        },
+        {
+          "description": "A function to be called when a script is being loaded.\nThis can be used to modify the script before it is loaded.\nThis is useful for adding a nonce to the script, for example.",
+          "type": "((script: HTMLScriptElement) => HTMLScriptElement | null) | undefined",
+          "name": "prepare_external_dependency_script"
+        },
+        {
+          "description": "A function to be called when a stylesheet is being loaded.\nThis can be used to modify the stylesheet before it is loaded.\nThis is useful for adding a nonce to the stylesheet, for example.",
+          "type": "((stylesheet: HTMLStyleElement) => HTMLStyleElement | null) | undefined",
+          "name": "prepare_external_dependency_stylesheet"
+        },
+        {
+          "description": "Where to inject external dependency scripts (recorder, surveys, etc.) in the DOM.\n- 'body': Injects scripts into document.body (legacy behavior)\n- 'head': Injects scripts into document.head (avoids SSR hydration errors)\n'body' (or 'head' when defaults >= '2026-01-30')",
+          "type": "\"body\" | \"head\" | undefined",
+          "name": "external_scripts_inject_target"
+        },
+        {
+          "description": "Determines whether PostHog should enable recording console logs.\nWhen undefined, it falls back to the remote config setting.\nundefined",
+          "type": "boolean | undefined",
+          "name": "enable_recording_console_log"
+        },
+        {
+          "description": "Determines whether PostHog should use secure cookies.\nIf this is `true`, PostHog cookies will be marked as secure,\nmeaning they will only be transmitted over HTTPS.\nwindow.location.protocol === 'https:'",
+          "type": "boolean",
+          "name": "secure_cookie"
+        },
+        {
+          "description": "Determines if users should be opted out of PostHog tracking by default,\nrequiring additional logic to opt them into capturing by calling `posthog.opt_in_capturing()`.\nfalse",
+          "type": "boolean",
+          "name": "opt_out_capturing_by_default"
+        },
+        {
+          "description": "Determines where we'll save the information about whether users are opted out of capturing.\n'localStorage'",
+          "type": "\"localStorage\" | \"cookie\"",
+          "name": "opt_out_capturing_persistence_type"
+        },
+        {
+          "description": "Determines if users should be opted out of browser data storage by this PostHog instance by default,\nrequiring additional logic to opt them into capturing by calling `posthog.opt_in_capturing()`.\nfalse",
+          "type": "boolean | undefined",
+          "name": "opt_out_persistence_by_default"
+        },
+        {
+          "description": "Determines if users should be opted out of user agent filtering such as googlebot or other bots.\nIf this is set to `true`, PostHog will set `$browser_type` to either `bot` or `browser` for all events,\nbut will process all events as if they were from a browser.\nfalse",
+          "type": "boolean",
+          "name": "opt_out_useragent_filter"
+        },
+        {
+          "description": "",
+          "type": "string | null",
+          "name": "opt_out_capturing_cookie_prefix"
+        },
+        {
+          "description": "Determines the key for the cookie / local storage used to store the information about whether users are opted in/out of capturing.\nWhen `null`, we used a key based on your token.\nnull",
+          "type": "string | null",
+          "name": "consent_persistence_name"
+        },
+        {
+          "description": "Determines if users should be opted in to site apps.\nfalse",
+          "type": "boolean",
+          "name": "opt_in_site_apps"
+        },
+        {
+          "description": "Determines whether PostHog should respect the Do Not Track header when computing\nconsent in `ConsentManager`.\nfalse",
+          "type": "boolean",
+          "name": "respect_dnt"
+        },
+        {
+          "description": "A list of properties that should never be sent with capture calls.\n[]",
+          "type": "string[]",
+          "name": "property_denylist"
+        },
+        {
+          "description": "",
+          "type": "string[] | undefined",
+          "name": "property_blacklist"
+        },
+        {
+          "description": "A list of headers that should be sent with requests to the PostHog API.\n{}",
+          "type": "{ [header_name: string]: string; }",
+          "name": "request_headers"
+        },
+        {
+          "description": "",
+          "type": "{ [header_name: string]: string; } | undefined",
+          "name": "xhr_headers"
+        },
+        {
+          "description": "A function that is called when a request to the PostHog API fails.",
+          "type": "((error: RequestResponse) => void) | undefined",
+          "name": "on_request_error"
+        },
+        {
+          "description": "",
+          "type": "((failedRequest: XMLHttpRequest) => void) | undefined",
+          "name": "on_xhr_error"
+        },
+        {
+          "description": "Determines whether PostHog should batch requests to the PostHog API.\ntrue",
+          "type": "boolean",
+          "name": "request_batching"
+        },
+        {
+          "description": "Determines the maximum length of the properties string that can be sent with capture calls.\n65535",
+          "type": "number",
+          "name": "properties_string_max_length"
+        },
+        {
+          "description": "Configuration defaults for breaking changes. When set to a specific date,\nenables new default behaviors that were introduced on that date.\n\n- `'unset'`: Use legacy default behaviors\n- `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')\n- `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)\n- `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)\n'unset'",
+          "type": "ConfigDefaults",
+          "name": "defaults"
+        },
+        {
+          "description": "Determines the session recording options.\n{}",
+          "type": "SessionRecordingOptions",
+          "name": "session_recording"
+        },
+        {
+          "description": "Determines the error tracking options.\n{}",
+          "type": "ErrorTrackingOptions",
+          "name": "error_tracking"
+        },
+        {
+          "description": "Determines the session idle timeout in seconds.\nAny new event that's happened after this timeout will create a new session.\n30 * 60 -- 30 minutes",
+          "type": "number",
+          "name": "session_idle_timeout_seconds"
+        },
+        {
+          "description": "Prevent autocapture from capturing any attribute names on elements.\nfalse",
+          "type": "boolean",
+          "name": "mask_all_element_attributes"
+        },
+        {
+          "description": "Prevent autocapture from capturing `textContent` on elements.\nfalse",
+          "type": "boolean",
+          "name": "mask_all_text"
+        },
+        {
+          "description": "Mask personal data properties from the current URL.\nThis will mask personal data properties such as advertising IDs (gclid, fbclid, etc.), and you can also add\ncustom properties to mask with `custom_personal_data_properties`.\nfalse",
+          "type": "boolean",
+          "name": "mask_personal_data_properties"
+        },
+        {
+          "description": "Custom list of personal data properties to mask.\n\nE.g. if you added `email` to this list, then any `email` property in the URL will be masked.\nhttps://www.example.com/login?email=john.doe%40example.com => https://www.example.com/login?email=<MASKED>\n[]",
+          "type": "string[]",
+          "name": "custom_personal_data_properties"
+        },
+        {
+          "description": "One of the very first things the PostHog library does when init() is called\nis make a request to the /flags endpoint on PostHog's backend.\nThis endpoint contains information on how to run the PostHog library\nso events are properly received in the backend, and it also contains\nfeature flag evaluation information for the current user.\n\nThis endpoint is required to run most features of this library.\nHowever, if you're not using any of the described features,\nyou may wish to turn off the call completely to avoid an extra request\nand reduce resource usage on both the client and the server.\n\nWARNING: Disabling this will also prevent remote configuration from loading,\nwhich could mean features like web vitals, surveys, and other features configured\nin PostHog settings are disabled unless explicitly enabled via client-side config.\nWhen setting this to true, make sure to explicitly configure any features you\nwant to use (e.g., capture_performance, autocapture, etc.) in your SDK's init config.\nfalse",
+          "type": "boolean | undefined",
+          "name": "advanced_disable_flags"
+        },
+        {
+          "description": "false",
+          "type": "boolean | undefined",
+          "name": "advanced_disable_decide"
+        },
+        {
+          "description": "Will keep /flags running, but without evaluating any feature flags.\nUseful for when you need to load the config data associated with the flags endpoint\n(e.g. /flags?v=2&config=true) without evaluating any feature flags.  Most folks use this\nto save money on feature flag evaluation (by bootstrapping feature flags on the server side).\nfalse",
+          "type": "boolean",
+          "name": "advanced_disable_feature_flags"
+        },
+        {
+          "description": "Stops from firing feature flag requests on first page load.\nOnly requests feature flags when user identity or properties are updated,\nor you manually request for flags to be loaded.\nfalse",
+          "type": "boolean",
+          "name": "advanced_disable_feature_flags_on_first_load"
+        },
+        {
+          "description": "Evaluation contexts for feature flags.\nWhen set, only feature flags that have at least one matching evaluation tag\nwill be evaluated for this SDK instance. Feature flags with no evaluation tags\nwill always be evaluated.\n\nExamples: ['production', 'web', 'checkout']\nundefined",
+          "type": "readonly string[] | undefined",
+          "name": "evaluation_contexts"
+        },
+        {
+          "description": "Evaluation environments for feature flags.",
+          "type": "readonly string[] | undefined",
+          "name": "evaluation_environments"
+        },
+        {
+          "description": "Determines whether PostHog should disable toolbar metrics.\nThis is our internal instrumentation for our toolbar in your website.\nfalse",
+          "type": "boolean",
+          "name": "advanced_disable_toolbar_metrics"
+        },
+        {
+          "description": "Determines whether PostHog should only evaluate feature flags for surveys.\nUseful for when you want to use this library to evaluate feature flags for surveys only but you have additional feature flags\nthat you evaluate on the server side.\nfalse",
+          "type": "boolean",
+          "name": "advanced_only_evaluate_survey_feature_flags"
+        },
+        {
+          "description": "When this is enabled, surveys will always be initialized, regardless of the /flags response or remote config settings.\nThis is useful if you want to use surveys but disable all other flag-dependent functionality.\nUsed internally for displaying external surveys without making a /flags request.\nfalse",
+          "type": "boolean",
+          "name": "advanced_enable_surveys"
+        },
+        {
+          "description": "Sets timeout for fetching feature flags\n3000",
+          "type": "number",
+          "name": "feature_flag_request_timeout_ms"
+        },
+        {
+          "description": "Sets timeout for fetching surveys\n10000",
+          "type": "number",
+          "name": "surveys_request_timeout_ms"
+        },
+        {
+          "description": "Function to get the device ID.\nThis doesn't usually need to be set, but can be useful if you want to use a custom device ID.\n(uuid) => uuid",
+          "type": "(uuid: string) => string",
+          "name": "get_device_id"
+        },
+        {
+          "description": "This function or array of functions - if provided - are called immediately before sending data to the server.\nIt allows you to edit data before it is sent, or choose not to send it all.\nif provided as an array the functions are called in the order they are provided\nany one function returning null means the event will not be sent",
+          "type": "BeforeSendFn | BeforeSendFn[] | undefined",
+          "name": "before_send"
+        },
+        {
+          "description": "",
+          "type": "((properties: Properties, event_name: string) => Properties) | null",
+          "name": "sanitize_properties"
+        },
+        {
+          "description": "",
+          "type": "(eventName: string, eventData: CaptureResult) => void",
+          "name": "_onCapture"
+        },
+        {
+          "description": "Determines whether to capture performance metrics.\nThese include Network Timing and Web Vitals.\n\nWhen `undefined`, fallback to the remote configuration.\nIf `false`, neither network timing nor web vitals will work.\nIf an object, that will override the remote configuration.\nundefined",
+          "type": "boolean | PerformanceCaptureConfig | undefined",
+          "name": "capture_performance"
+        },
+        {
+          "description": "Determines whether to disable compression when sending events to the server.\nWARNING: Should only be used for testing. Could negatively impact performance.\nfalse",
+          "type": "boolean",
+          "name": "disable_compression"
+        },
+        {
+          "description": "An object containing the `distinctID`, `isIdentifiedID`, and `featureFlags` keys,\nwhere `distinctID` is a string, and `featureFlags` is an object of key-value pairs.\n\nSince there is a delay between initializing PostHog and fetching feature flags,\nfeature flags are not always available immediately.\nThis makes them unusable if you want to do something like redirecting a user\nto a different page based on a feature flag.\n\nYou can, therefore, fetch the feature flags in your server and pre-fill them here,\nallowing PostHog to know the feature flag values immediately.\n\nAfter the SDK fetches feature flags from PostHog, it will use those flag values instead of bootstrapped ones.\n{}",
+          "type": "BootstrapConfig",
+          "name": "bootstrap"
+        },
+        {
+          "description": "The segment analytics object.",
+          "type": "SegmentAnalytics | undefined",
+          "name": "segment"
+        },
+        {
+          "description": "Determines whether to capture heatmaps.\nundefined",
+          "type": "boolean | HeatmapConfig | undefined",
+          "name": "capture_heatmaps"
+        },
+        {
+          "description": "",
+          "type": "boolean | undefined",
+          "name": "enable_heatmaps"
+        },
+        {
+          "description": "Determines whether to capture dead clicks.\nundefined",
+          "type": "boolean | DeadClicksAutoCaptureConfig | undefined",
+          "name": "capture_dead_clicks"
+        },
+        {
+          "description": "Determines whether to capture exceptions.\nundefined",
+          "type": "boolean | ExceptionAutoCaptureConfig | undefined",
+          "name": "capture_exceptions"
+        },
+        {
+          "description": "Determines whether to disable scroll properties.\nThese allow you to keep track of how far down someone scrolled in your website.\nfalse",
+          "type": "boolean | undefined",
+          "name": "disable_scroll_properties"
+        },
+        {
+          "description": "Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`\nIt will use `window.document.documentElement` if not specified.",
+          "type": "string | string[] | undefined",
+          "name": "scroll_root_selector"
+        },
+        {
+          "description": "You can control whether events from PostHog-js have person processing enabled with the `person_profiles` config setting.\nThere are three options:\n- `person_profiles: 'always'` - we will process persons data for all events\n- `person_profiles: 'never'` - we won't process persons for any event. This means that anonymous users will not be merged once they sign up or login, so you lose the ability to create funnels that track users from anonymous to identified. All events (including `$identify`) will be sent with `$process_person_profile: False`.\n- `person_profiles: 'identified_only'` _(default)_ - we will only process persons when you call `posthog.identify`, `posthog.alias`, `posthog.setPersonProperties`, `posthog.group`, `posthog.setPersonPropertiesForFlags` or `posthog.setGroupPropertiesForFlags` Anonymous users won't get person profiles.\n'identified_only'",
+          "type": "\"always\" | \"never\" | \"identified_only\" | undefined",
+          "name": "person_profiles"
+        },
+        {
+          "description": "",
+          "type": "\"always\" | \"never\" | \"identified_only\" | undefined",
+          "name": "process_person"
+        },
+        {
+          "description": "Client side rate limiting",
+          "type": "{ events_per_second?: number | undefined; events_burst_limit?: number | undefined; } | undefined",
+          "name": "rate_limiting"
+        },
+        {
+          "description": "Used when sending data via `fetch`, use with care.\nThis is intentionally meant to be used with NextJS `fetch`\n\nIncorrect `cache` usage may cause out-of-date data for feature flags, actions tracking, etc.\nSee https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options",
+          "type": "{ cache?: RequestCache | undefined; next_options?: NextOptions | undefined; } | undefined",
+          "name": "fetch_options"
+        },
+        {
+          "description": "Used to change the behavior of the request queue.\nThis is an advanced feature and should be used with caution.",
+          "type": "RequestQueueConfig | undefined",
+          "name": "request_queue_config"
+        },
+        {
+          "description": "Used to set-up external integrations with PostHog data - such as session replays, distinct id, etc.",
+          "type": "Record<ExternalIntegrationKind, boolean> | undefined",
+          "name": "integrations"
+        },
+        {
+          "description": "Enables cookieless mode. In this mode, PostHog will not set any cookies, or use session or local storage. User\nidentity is handled by generating a privacy-preserving hash on PostHog's servers.\n- 'always' - enable cookieless mode immediately on startup, use this if you do not intend to show a cookie banner\n- 'on_reject' - enable cookieless mode only if the user rejects cookies, use this if you want to show a cookie banner. If the user accepts cookies, cookieless mode will not be used, and PostHog will use cookies and local storage as usual.\n\nNote that you MUST enable cookieless mode in your PostHog project's settings, otherwise all your cookieless events will be ignored. We plan to remove this requirement in the future.",
+          "type": "\"always\" | \"on_reject\" | undefined",
+          "name": "cookieless_mode"
+        },
+        {
+          "description": "A hostname pattern to match test environments. When the current hostname matches,\n`setInternalOrTestUser()` is called automatically on startup, enabling person processing\nand setting `$internal_or_test_user: true`.\n\nCan be a string (exact match) or RegExp (pattern match).\nSet to `null` to explicitly disable (useful when using `defaults: '2026-01-30'`).\nundefined (when defaults is before '2026-01-30')",
+          "type": "string | RegExp | null | undefined",
+          "name": "internal_or_test_user_hostname"
+        },
+        {
+          "description": "",
+          "type": "string | undefined",
+          "name": "api_method"
+        },
+        {
+          "description": "",
+          "type": "string | undefined",
+          "name": "inapp_protocol"
+        },
+        {
+          "description": "",
+          "type": "boolean | undefined",
+          "name": "inapp_link_new_window"
+        },
+        {
+          "description": "",
+          "type": "boolean",
+          "name": "ip"
+        },
+        {
+          "description": "",
+          "type": "(posthog: PostHogInterface) => void",
+          "name": "loaded"
+        }
+      ],
+      "path": "lib/src/types.d.ts"
     },
     {
       "id": "PostHogInterface",
@@ -3082,9 +3616,13 @@
     {
       "id": "PropertyFilters",
       "name": "PropertyFilters",
-      "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
-      "example": "{\n    [propertyName: string]: {\n        values: string[];\n        operator: PropertyOperator;\n    };\n}"
+      "properties": [
+        {
+          "type": "string]: {\n        values: string[];\n        operator: PropertyOperator;",
+          "name": "[propertyName"
+        }
+      ],
+      "path": "lib/src/posthog-surveys-types.d.ts"
     },
     {
       "id": "PropertyMatchType",
@@ -3419,16 +3957,166 @@
     {
       "id": "SessionRecordingPersistedConfig",
       "name": "SessionRecordingPersistedConfig",
-      "properties": [],
-      "path": "lib/src/types.d.ts",
-      "example": "Omit<SessionRecordingRemoteConfig, 'recordCanvas' | 'canvasFps' | 'canvasQuality' | 'networkPayloadCapture' | 'sampleRate' | 'minimumDurationMilliseconds'> & {\n    cache_timestamp?: number;\n    enabled: boolean;\n    networkPayloadCapture: SessionRecordingRemoteConfig['networkPayloadCapture'] & {\n        capturePerformance: RemoteConfig['capturePerformance'];\n    };\n    canvasRecording: {\n        enabled: SessionRecordingRemoteConfig['recordCanvas'];\n        fps: SessionRecordingRemoteConfig['canvasFps'];\n        quality: SessionRecordingRemoteConfig['canvasQuality'];\n    };\n    sampleRate: number | null;\n    minimumDurationMilliseconds: number | null | undefined;\n}"
+      "properties": [
+        {
+          "description": "",
+          "type": "string | undefined",
+          "name": "endpoint"
+        },
+        {
+          "description": "",
+          "type": "boolean | undefined",
+          "name": "consoleLogRecordingEnabled"
+        },
+        {
+          "description": "",
+          "type": "string | FlagVariant | null | undefined",
+          "name": "linkedFlag"
+        },
+        {
+          "description": "",
+          "type": "Pick<SessionRecordingOptions, \"maskAllInputs\" | \"maskTextSelector\" | \"blockSelector\"> | undefined",
+          "name": "masking"
+        },
+        {
+          "description": "",
+          "type": "SessionRecordingUrlTrigger[] | undefined",
+          "name": "urlTriggers"
+        },
+        {
+          "description": "",
+          "type": "{ script?: string | undefined; } | undefined",
+          "name": "scriptConfig"
+        },
+        {
+          "description": "",
+          "type": "SessionRecordingUrlTrigger[] | undefined",
+          "name": "urlBlocklist"
+        },
+        {
+          "description": "",
+          "type": "string[] | undefined",
+          "name": "eventTriggers"
+        },
+        {
+          "description": "Controls how event, url, sampling, and linked flag triggers are combined\n\n`any` means that if any of the triggers match, the session will be recorded\n`all` means that all the triggers must match for the session to be recorded\n\noriginally it was (event || url) && (sampling || linked flag)\nwhich nobody wanted, now the default is all",
+          "type": "\"any\" | \"all\" | undefined",
+          "name": "triggerMatchType"
+        },
+        {
+          "description": "Used to determine if the persisted config is still valid or we need to wait for a new one\nonly accepts undefined since older versions of the library didn't set this.",
+          "type": "number | undefined",
+          "name": "cache_timestamp"
+        },
+        {
+          "description": "",
+          "type": "boolean",
+          "name": "enabled"
+        },
+        {
+          "description": "",
+          "type": "Pick<NetworkRecordOptions, \"recordBody\" | \"recordHeaders\"> & { capturePerformance: boolean | PerformanceCaptureConfig | undefined; }",
+          "name": "networkPayloadCapture"
+        },
+        {
+          "description": "",
+          "type": "{ enabled: boolean | null | undefined; fps: number | null | undefined; quality: string | null | undefined; }",
+          "name": "canvasRecording"
+        },
+        {
+          "description": "",
+          "type": "number | null",
+          "name": "sampleRate"
+        },
+        {
+          "description": "",
+          "type": "number | null | undefined",
+          "name": "minimumDurationMilliseconds"
+        }
+      ],
+      "path": "lib/src/types.d.ts"
     },
     {
       "id": "SessionRecordingRemoteConfig",
       "name": "SessionRecordingRemoteConfig",
-      "properties": [],
-      "path": "lib/src/types.d.ts",
-      "example": "SessionRecordingCanvasOptions & {\n    endpoint?: string;\n    consoleLogRecordingEnabled?: boolean;\n    sampleRate?: string | null;\n    minimumDurationMilliseconds?: number;\n    linkedFlag?: string | FlagVariant | null;\n    networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>;\n    masking?: Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>;\n    urlTriggers?: SessionRecordingUrlTrigger[];\n    scriptConfig?: {\n        script?: string | undefined;\n    };\n    urlBlocklist?: SessionRecordingUrlTrigger[];\n    eventTriggers?: string[];\n    triggerMatchType?: 'any' | 'all';\n}"
+      "properties": [
+        {
+          "description": "If set, records the canvas\nfalse",
+          "type": "boolean | null | undefined",
+          "name": "recordCanvas"
+        },
+        {
+          "description": "If set, records the canvas at the given FPS\nCan be set in the remote configuration\nLimited between 0 and 12\nWhen canvas recording is enabled, if this is not set locally, then remote config sets this as 4\nnull-ish",
+          "type": "number | null | undefined",
+          "name": "canvasFps"
+        },
+        {
+          "description": "If set, records the canvas at the given quality\nCan be set in the remote configuration\nMust be a string that is a valid decimal between 0 and 1\nWhen canvas recording is enabled, if this is not set locally, then remote config sets this as \"0.4\"\nnull-ish",
+          "type": "string | null | undefined",
+          "name": "canvasQuality"
+        },
+        {
+          "description": "",
+          "type": "string | undefined",
+          "name": "endpoint"
+        },
+        {
+          "description": "",
+          "type": "boolean | undefined",
+          "name": "consoleLogRecordingEnabled"
+        },
+        {
+          "description": "",
+          "type": "string | null | undefined",
+          "name": "sampleRate"
+        },
+        {
+          "description": "",
+          "type": "number | undefined",
+          "name": "minimumDurationMilliseconds"
+        },
+        {
+          "description": "",
+          "type": "string | FlagVariant | null | undefined",
+          "name": "linkedFlag"
+        },
+        {
+          "description": "",
+          "type": "Pick<NetworkRecordOptions, \"recordBody\" | \"recordHeaders\"> | undefined",
+          "name": "networkPayloadCapture"
+        },
+        {
+          "description": "",
+          "type": "Pick<SessionRecordingOptions, \"maskAllInputs\" | \"maskTextSelector\" | \"blockSelector\"> | undefined",
+          "name": "masking"
+        },
+        {
+          "description": "",
+          "type": "SessionRecordingUrlTrigger[] | undefined",
+          "name": "urlTriggers"
+        },
+        {
+          "description": "",
+          "type": "{ script?: string | undefined; } | undefined",
+          "name": "scriptConfig"
+        },
+        {
+          "description": "",
+          "type": "SessionRecordingUrlTrigger[] | undefined",
+          "name": "urlBlocklist"
+        },
+        {
+          "description": "",
+          "type": "string[] | undefined",
+          "name": "eventTriggers"
+        },
+        {
+          "description": "Controls how event, url, sampling, and linked flag triggers are combined\n\n`any` means that if any of the triggers match, the session will be recorded\n`all` means that all the triggers must match for the session to be recorded\n\noriginally it was (event || url) && (sampling || linked flag)\nwhich nobody wanted, now the default is all",
+          "type": "\"any\" | \"all\" | undefined",
+          "name": "triggerMatchType"
+        }
+      ],
+      "path": "lib/src/types.d.ts"
     },
     {
       "id": "SessionRecordingUrlTrigger",
@@ -3470,9 +4158,29 @@
     {
       "id": "SiteApp",
       "name": "SiteApp",
-      "properties": [],
-      "path": "lib/src/types.d.ts",
-      "example": "{\n    id: string;\n    loaded: boolean;\n    errored: boolean;\n    processedBuffer: boolean;\n    processEvent?: (globals: SiteAppGlobals) => void;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "id"
+        },
+        {
+          "type": "boolean",
+          "name": "loaded"
+        },
+        {
+          "type": "boolean",
+          "name": "errored"
+        },
+        {
+          "type": "boolean",
+          "name": "processedBuffer"
+        },
+        {
+          "type": "(globals: SiteAppGlobals) => void; | undefined",
+          "name": "processEvent"
+        }
+      ],
+      "path": "lib/src/types.d.ts"
     },
     {
       "id": "SiteAppGlobals",
@@ -3484,9 +4192,17 @@
     {
       "id": "SiteAppLoader",
       "name": "SiteAppLoader",
-      "properties": [],
-      "path": "lib/src/types.d.ts",
-      "example": "{\n    id: string;\n    init: (config: {\n        posthog: PostHog;\n        callback: (success: boolean) => void;\n    }) => {\n        processEvent?: (globals: SiteAppGlobals) => void;\n    };\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "id"
+        },
+        {
+          "type": "(config: {\n        posthog: PostHog;\n        callback: (success: boolean) => void;\n    ) = {\n        processEvent?: (globals: SiteAppGlobals) = void;\n    ;",
+          "name": "init"
+        }
+      ],
+      "path": "lib/src/types.d.ts"
     },
     {
       "id": "SnippetArrayItem",

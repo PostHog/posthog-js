@@ -5,14 +5,14 @@ const documentation = require('./documentation');
 // TypeDefinition structure: { name, id, params?, path?, example? }
 // TypeToken structure: { kind, text, canonicalReference? }
 
-function resolveTypeDefinitions(apiPackage) {
+function resolveTypeDefinitions(apiPackage, typeFallbacks) {
     const allMembers = getAllTypeMembers(apiPackage);
     const typeDefinitions = allMembers.map((member) => createInitialTypeDef(member, apiPackage));
-    
+
     const resolvedTypeDefinitions = resolveObjectTypes(
-        resolveUnionTypes(typeDefinitions)
+        resolveUnionTypes(typeDefinitions, typeFallbacks)
     );
-    
+
     // Transform to final format expected by parser
     return resolvedTypeDefinitions.map((type) => {
         const result = {
@@ -22,13 +22,13 @@ function resolveTypeDefinitions(apiPackage) {
                 description, type: paramType, name
             }))
         };
-        
+
         if (type.path) result.path = type.path;
         if (type.example) result.example = type.example;
         if (type.detailedType && !type.params?.length && !type.example) {
             result.detailedType = type.detailedType;
         }
-        
+
         return result;
     });
 }
@@ -94,6 +94,15 @@ function processTypeAliasMember(member, typeDef, apiPackage) {
         return;
     }
 
+    // Intersection types with external references (e.g., Omit<ExternalType, 'key'> & { ... })
+    // should be marked for resolution, not treated as literal unions.
+    // These types contain string literals (like 'key' in Omit) that would be
+    // incorrectly extracted by extractLiteralValues.
+    if (isExternalIntersectionType(detailedType)) {
+        typeDef._needsResolution = { member, detailedType };
+        return;
+    }
+
     const literalValues = extractLiteralValues(member, apiPackage);
     if (literalValues.length > 0) {
         // For string literal unions, create an example instead of properties
@@ -108,31 +117,53 @@ function processTypeAliasMember(member, typeDef, apiPackage) {
     }
 }
 
+// Detect types that are intersections referencing external packages
+// e.g., Omit<BasePostHogConfig, 'loaded'> & { loaded: ... }
+function isExternalIntersectionType(detailedType) {
+    const { signature, tokens } = detailedType;
+    if (!signature.includes('&')) return false;
+
+    // Check if any reference token points to an external package
+    return tokens.some(token =>
+        token.kind === 'Reference' &&
+        token.canonicalReference &&
+        token.canonicalReference.toString().includes('!')  &&
+        !token.canonicalReference.toString().startsWith('!')
+    );
+}
+
 // Extract callback signature from type alias
 function extractCallbackSignature(detailedType, member) {
     const signature = detailedType.signature;
-    
+
+    // Don't treat intersection types or object types as callbacks.
+    // Types like `Omit<X, K> & { loaded: () => void }` contain `=>` syntax
+    // but are object types, not function types.
+    if (signature.includes('&') || /^\s*\{/.test(signature) || /Omit\s*</.test(signature)) {
+        return null;
+    }
+
     // Check if this is a function type by looking for function patterns
-    const isFunctionPattern = signature.includes('=>') || 
-                             signature.includes(': ') || 
+    const isFunctionPattern = signature.includes('=>') ||
+                             signature.includes(': ') ||
                              utils.isCallbackType(member.name) ||
                              member.name.includes('Callback');
-    
+
     if (!isFunctionPattern) {
         return null;
     }
-    
+
     // Extract function signature from the tokens
     const functionSignature = extractFunctionFromTokens(detailedType.tokens);
     if (functionSignature) {
         return functionSignature;
     }
-    
+
     // For known callback patterns, extract the full signature
     if (signature.includes('=>')) {
         return signature.trim();
     }
-    
+
     // Fallback to generic callback for simple function types
     return '() => {}';
 }
@@ -257,7 +288,7 @@ function extractFromEnum(referencedType) {
         }));
 }
 
-function resolveUnionTypes(typeDefinitions) {
+function resolveUnionTypes(typeDefinitions, typeFallbacks) {
     return typeDefinitions.map(typeDef => {
         const resolution = typeDef._needsResolution;
         if (!resolution) {
@@ -265,11 +296,15 @@ function resolveUnionTypes(typeDefinitions) {
         }
 
         const gatheredValues = gatherValuesFromReferencedTypes(resolution.member, typeDefinitions);
-        
+
         // Create new object without mutation
         const newTypeDef = { ...typeDef };
         if (gatheredValues.length > 0) {
             newTypeDef.params = gatheredValues;
+        } else if (typeFallbacks && typeFallbacks[typeDef.name]) {
+            // Use TypeScript compiler-resolved properties as fallback
+            // for types that reference external packages (e.g., Omit<ExternalType, 'key'> & { ... })
+            newTypeDef.params = typeFallbacks[typeDef.name];
         } else {
             newTypeDef.example = generateTypeExample(resolution.detailedType.signature);
             newTypeDef.params = [];
