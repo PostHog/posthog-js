@@ -550,6 +550,23 @@ export class ProductTourManager {
     }
 
     private _handleButtonClick = (button: ProductTourStepButton): void => {
+        if (this._activeTour) {
+            const currentStep = this._activeTour.steps[this._currentStepIndex]
+            if (currentStep) {
+                this._captureEvent('product tour button clicked', {
+                    $product_tour_id: this._activeTour.id,
+                    $product_tour_name: this._activeTour.name,
+                    $product_tour_iteration: this._activeTour.current_iteration || 1,
+                    $product_tour_step_id: currentStep.id,
+                    $product_tour_step_order: this._currentStepIndex,
+                    $product_tour_button_text: button.text,
+                    $product_tour_button_action: button.action,
+                    ...(button.link && { $product_tour_button_link: button.link }),
+                    ...(button.tourId && { $product_tour_button_tour_id: button.tourId }),
+                })
+            }
+        }
+
         switch (button.action) {
             case 'dismiss':
                 this.dismissTour('user_clicked_skip')
