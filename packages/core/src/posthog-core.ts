@@ -9,7 +9,7 @@ import type {
   PostHogRemoteConfig,
   FeatureFlagValue,
   FeatureFlagResult,
-  GetFeatureFlagResultOptions,
+  FeatureFlagResultOptions,
   PostHogV2FlagsResponse,
   PostHogV1FlagsResponse,
   PostHogFeatureFlagDetails,
@@ -811,7 +811,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return getPayloadsFromFlags(details.flags)
   }
 
-  getFeatureFlagResult(key: string, options?: GetFeatureFlagResultOptions): FeatureFlagResult | undefined {
+  getFeatureFlagResult(key: string, options?: FeatureFlagResultOptions): FeatureFlagResult | undefined {
     return this._getFeatureFlagResult(key, options)
   }
 

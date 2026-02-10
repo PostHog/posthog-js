@@ -239,7 +239,7 @@ export type FeatureFlagResult = {
   readonly payload?: JsonType
 }
 
-export type GetFeatureFlagResultOptions = {
+export type FeatureFlagResultOptions = {
   /** Whether to send a $feature_flag_called event. Defaults to true. */
   sendEvent?: boolean
 }
