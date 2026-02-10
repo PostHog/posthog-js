@@ -309,6 +309,8 @@ export interface DisplaySurveyPopoverOptions extends DisplaySurveyOptionsBase {
     position?: SurveyPosition
     /** CSS selector for the element to position the survey next to (when position is NextToTrigger) */
     selector?: string
+    /** When true, `survey shown` events will not be emitted automatically */
+    skipShownEvent?: boolean
 }
 
 interface DisplaySurveyInlineOptions extends DisplaySurveyOptionsBase {
