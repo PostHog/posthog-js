@@ -49,6 +49,10 @@ export class Toolbar {
         localStorage: Storage | undefined = undefined,
         history: History | undefined = undefined
     ): boolean {
+        // don't load the toolbar on the toolbar :)
+        if (this.instance.config.name && this.instance.config.name === 'ph_toolbar_internal') {
+            return false
+        }
         if (!window || !document) {
             return false
         }

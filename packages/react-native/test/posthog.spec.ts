@@ -707,6 +707,7 @@ describe('PostHog React Native', () => {
             $device_type: 'Mobile',
             $os_name: 'iOS',
           },
+          preloadFeatureFlags: false,
         })
         await posthog.ready()
         ;(globalThis as any).window.fetch.mockClear()

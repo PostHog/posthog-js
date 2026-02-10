@@ -2,7 +2,7 @@
   "id": "posthog-node",
   "hogRef": "0.3",
   "info": {
-    "version": "5.24.14",
+    "version": "5.24.13",
     "id": "posthog-node",
     "title": "PostHog Node.js SDK",
     "description": "PostHog Node.js SDK allows you to capture events and send them to PostHog from your Node.js applications.",

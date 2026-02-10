@@ -2,7 +2,7 @@
   "id": "posthog-react-native",
   "hogRef": "0.3",
   "info": {
-    "version": "4.31.1",
+    "version": "4.31.0",
     "id": "posthog-react-native",
     "title": "PostHog React Native SDK",
     "description": "PostHog React Native SDK allows you to capture events and send them to PostHog from your React Native applications.",
@@ -3237,18 +3237,6 @@
       "properties": [],
       "path": "../core/src/types.ts",
       "example": "{\n    [type: string]: string | number;\n}"
-    },
-    {
-      "id": "PostHogMaskViewProps",
-      "name": "PostHogMaskViewProps",
-      "properties": [
-        {
-          "description": "The child components to mask from PostHog capture",
-          "type": "React.ReactNode",
-          "name": "children"
-        }
-      ],
-      "path": "dist/PostHogMaskView.d.ts"
     },
     {
       "id": "PostHogNavigationRef",

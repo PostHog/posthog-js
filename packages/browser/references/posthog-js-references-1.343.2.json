@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "1.345.2",
+    "version": "1.343.2",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -2315,11 +2315,6 @@
           "description": "CSS selector for the element to position the survey next to (when position is NextToTrigger)",
           "type": "string",
           "name": "selector"
-        },
-        {
-          "description": "When true, `survey shown` events will not be emitted automatically",
-          "type": "boolean",
-          "name": "skipShownEvent"
         }
       ],
       "path": "lib/src/posthog-surveys-types.d.ts"
@@ -3260,7 +3255,7 @@
       "name": "RequestWithOptions",
       "properties": [
         {
-          "type": "(response: RequestResponse) => void",
+          "type": "(response: import('@posthog/types').RequestResponse) => void",
           "name": "callback"
         },
         {

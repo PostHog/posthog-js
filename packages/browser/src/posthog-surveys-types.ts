@@ -5,7 +5,7 @@
  */
 
 import type { Properties, PropertyMatchType } from './types'
-import type { SurveyAppearance as CoreSurveyAppearance } from '@posthog/core'
+import type { SurveyAppearance as CoreSurveyAppearance, SurveyValidationRule } from '@posthog/core'
 
 export enum SurveyEventType {
     Activation = 'events',
@@ -94,6 +94,7 @@ interface SurveyQuestionBase {
     optional?: boolean
     buttonText?: string
     branching?: NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching
+    validation?: SurveyValidationRule[]
 }
 
 export interface BasicSurveyQuestion extends SurveyQuestionBase {
@@ -308,6 +309,8 @@ export interface DisplaySurveyPopoverOptions extends DisplaySurveyOptionsBase {
     position?: SurveyPosition
     /** CSS selector for the element to position the survey next to (when position is NextToTrigger) */
     selector?: string
+    /** When true, `survey shown` events will not be emitted automatically */
+    skipShownEvent?: boolean
 }
 
 interface DisplaySurveyInlineOptions extends DisplaySurveyOptionsBase {

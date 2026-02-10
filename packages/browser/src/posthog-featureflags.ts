@@ -19,6 +19,7 @@ import { PostHogPersistence } from './posthog-persistence'
 import {
     PERSISTENCE_EARLY_ACCESS_FEATURES,
     PERSISTENCE_FEATURE_FLAG_DETAILS,
+    PERSISTENCE_FEATURE_FLAG_ERRORS,
     ENABLED_FEATURE_FLAGS,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
@@ -31,6 +32,23 @@ import { getTimezone } from './utils/event-utils'
 
 const logger = createLogger('[FeatureFlags]')
 const forceDebugLogger = createLogger('[FeatureFlags]', { debugEnabled: true })
+
+/**
+ * Error type constants for the $feature_flag_error property.
+ *
+ * These values are sent in analytics events to track flag evaluation failures.
+ * They should not be changed without considering impact on existing dashboards
+ * and queries that filter on these values.
+ */
+export const FeatureFlagError = {
+    ERRORS_WHILE_COMPUTING: 'errors_while_computing_flags',
+    FLAG_MISSING: 'flag_missing',
+    QUOTA_LIMITED: 'quota_limited',
+    TIMEOUT: 'timeout',
+    CONNECTION_ERROR: 'connection_error',
+    UNKNOWN_ERROR: 'unknown_error',
+    apiError: (status: number | string) => `api_error_${status}`,
+} as const
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
@@ -483,7 +501,33 @@ export class PostHogFeatureFlags {
 
                 this._flagsLoadedFromRemote = !errorsLoading
 
-                if (response.json && response.json.quotaLimited?.includes(QuotaLimitedResource.FeatureFlags)) {
+                const flagErrors: string[] = []
+                if (response.error) {
+                    if (response.error instanceof Error) {
+                        flagErrors.push(
+                            response.error.name === 'AbortError'
+                                ? FeatureFlagError.TIMEOUT
+                                : FeatureFlagError.CONNECTION_ERROR
+                        )
+                    } else {
+                        flagErrors.push(FeatureFlagError.UNKNOWN_ERROR)
+                    }
+                } else if (response.statusCode !== 200) {
+                    flagErrors.push(FeatureFlagError.apiError(response.statusCode))
+                }
+                if (response.json?.errorsWhileComputingFlags) {
+                    flagErrors.push(FeatureFlagError.ERRORS_WHILE_COMPUTING)
+                }
+                const isQuotaLimited = !!response.json?.quotaLimited?.includes(QuotaLimitedResource.FeatureFlags)
+                if (isQuotaLimited) {
+                    flagErrors.push(FeatureFlagError.QUOTA_LIMITED)
+                }
+
+                this._instance.persistence?.register({
+                    [PERSISTENCE_FEATURE_FLAG_ERRORS]: flagErrors,
+                })
+
+                if (isQuotaLimited) {
                     // log a warning and then early return
                     logger.warn(
                         'You have hit your feature flags quota limit, and will not be able to load feature flags until the quota is reset.  Please visit https://posthog.com/docs/billing/limits-alerts to learn more.'
@@ -591,6 +635,11 @@ export class PostHogFeatureFlags {
                 this._instance.persistence?.register({ [FLAG_CALL_REPORTED]: flagCallReported })
 
                 const flagDetails = this.getFeatureFlagDetails(key)
+                const errors: string[] = [...(this._instance.get_property(PERSISTENCE_FEATURE_FLAG_ERRORS) ?? [])]
+                if (isUndefined(flagValue)) {
+                    errors.push(FeatureFlagError.FLAG_MISSING)
+                }
+
                 const properties: Record<string, any | undefined> = {
                     $feature_flag: key,
                     $feature_flag_response: flagValue,
@@ -628,6 +677,10 @@ export class PostHogFeatureFlags {
 
                 if (flagDetails?.metadata?.original_payload) {
                     properties.$feature_flag_original_payload = flagDetails?.metadata?.original_payload
+                }
+
+                if (errors.length) {
+                    properties.$feature_flag_error = errors.join(',')
                 }
 
                 this._instance.capture('$feature_flag_called', properties)

@@ -1,6 +1,11 @@
 /*eslint @typescript-eslint/no-empty-function: "off" */
 
-import { filterActiveFeatureFlags, parseFlagsResponse, PostHogFeatureFlags } from '../posthog-featureflags'
+import {
+    filterActiveFeatureFlags,
+    parseFlagsResponse,
+    PostHogFeatureFlags,
+    FeatureFlagError,
+} from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { PostHogConfig } from '../types'
@@ -3111,5 +3116,355 @@ describe('updateFlags', () => {
             'variant-flag': 'control',
         })
         expect(posthog.persistence?.props.$active_feature_flags).toEqual(['persisted-flag', 'variant-flag'])
+    })
+})
+
+describe('$feature_flag_error tracking', () => {
+    let instance: any
+    let featureFlags: PostHogFeatureFlags
+    let mockWarn: jest.SpyInstance
+
+    const config = {
+        token: 'random fake token',
+        persistence: 'memory',
+        api_host: 'https://app.posthog.com',
+    } as PostHogConfig
+
+    beforeEach(() => {
+        const internalEventEmitter = new SimpleEventEmitter()
+        instance = {
+            config: { ...config },
+            get_distinct_id: () => 'blah id',
+            getGroups: () => {},
+            persistence: new PostHogPersistence(config),
+            requestRouter: new RequestRouter({ config } as any),
+            register: (props: any) => instance.persistence.register(props),
+            unregister: (key: string) => instance.persistence.unregister(key),
+            get_property: (key: string) => instance.persistence.props[key],
+            capture: jest.fn(),
+            _send_request: jest.fn(),
+            _onRemoteConfig: jest.fn(),
+            reloadFeatureFlags: () => featureFlags.reloadFeatureFlags(),
+            _shouldDisableFlags: () => false,
+            _internalEventEmitter: internalEventEmitter,
+            on: (event: string, cb: (...args: any[]) => void) => internalEventEmitter.on(event, cb),
+        }
+
+        featureFlags = new PostHogFeatureFlags(instance)
+        mockWarn = jest.spyOn(window.console, 'warn').mockImplementation()
+        instance.persistence.unregister('$flag_call_reported')
+        instance.persistence.unregister('$feature_flag_errors')
+    })
+
+    afterEach(() => {
+        mockWarn.mockRestore()
+        jest.clearAllMocks()
+    })
+
+    it('should set $feature_flag_error to api_error_{status} on server error', () => {
+        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            callback({
+                statusCode: 500,
+                json: {},
+            })
+        )
+
+        featureFlags.reloadFeatureFlags()
+        jest.runAllTimers()
+
+        expect(instance.persistence.props.$feature_flag_errors).toEqual(['api_error_500'])
+    })
+
+    it('should set $feature_flag_error to connection_error on network failure', () => {
+        const networkError = new Error('Network request failed')
+        networkError.name = 'TypeError'
+
+        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            callback({
+                statusCode: 0,
+                error: networkError,
+                json: null,
+            })
+        )
+
+        featureFlags.reloadFeatureFlags()
+        jest.runAllTimers()
+
+        expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.CONNECTION_ERROR])
+    })
+
+    it('should set $feature_flag_error to timeout when request times out (AbortError)', () => {
+        const abortError = new Error('Aborted')
+        abortError.name = 'AbortError'
+
+        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            callback({
+                statusCode: 0,
+                error: abortError,
+                json: null,
+            })
+        )
+
+        featureFlags.reloadFeatureFlags()
+        jest.runAllTimers()
+
+        expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.TIMEOUT])
+    })
+
+    it('should set $feature_flag_error to errors_while_computing_flags when errorsWhileComputingFlags is true', () => {
+        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            callback({
+                statusCode: 200,
+                json: {
+                    flags: {
+                        'test-flag': { key: 'test-flag', enabled: true },
+                    },
+                    errorsWhileComputingFlags: true,
+                },
+            })
+        )
+
+        featureFlags.reloadFeatureFlags()
+        jest.runAllTimers()
+
+        expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.ERRORS_WHILE_COMPUTING])
+    })
+
+    it('should set $feature_flag_error to quota_limited when quota limited', () => {
+        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            callback({
+                statusCode: 200,
+                json: {
+                    flags: {},
+                    quotaLimited: ['feature_flags'],
+                },
+            })
+        )
+
+        featureFlags.reloadFeatureFlags()
+        jest.runAllTimers()
+
+        expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.QUOTA_LIMITED])
+    })
+
+    it('should set $feature_flag_error to unknown_error when error is not an Error instance', () => {
+        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            callback({
+                statusCode: 0,
+                error: 'String error message',
+                json: null,
+            })
+        )
+
+        featureFlags.reloadFeatureFlags()
+        jest.runAllTimers()
+
+        expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.UNKNOWN_ERROR])
+    })
+
+    it.each([401, 403, 404, 502, 503])('should set $feature_flag_error to api_error_%i for status %i', (status) => {
+        instance._send_request = jest
+            .fn()
+            .mockImplementation(({ callback }) => callback({ statusCode: status, json: {} }))
+
+        featureFlags.reloadFeatureFlags()
+        jest.runAllTimers()
+
+        expect(instance.persistence.props.$feature_flag_errors).toEqual([`api_error_${status}`])
+    })
+
+    it('should include $feature_flag_error in $feature_flag_called event capture', () => {
+        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            callback({
+                statusCode: 200,
+                json: {
+                    flags: {
+                        'test-flag': { key: 'test-flag', enabled: true },
+                    },
+                    errorsWhileComputingFlags: true,
+                },
+            })
+        )
+
+        featureFlags.reloadFeatureFlags()
+        jest.runAllTimers()
+
+        featureFlags.getFeatureFlag('test-flag')
+
+        expect(instance.capture).toHaveBeenCalledWith(
+            '$feature_flag_called',
+            expect.objectContaining({
+                $feature_flag: 'test-flag',
+                $feature_flag_response: true,
+                $feature_flag_error: FeatureFlagError.ERRORS_WHILE_COMPUTING,
+            })
+        )
+    })
+
+    it('should set $feature_flag_error to flag_missing when flag is not in response', () => {
+        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            callback({
+                statusCode: 200,
+                json: {
+                    flags: {
+                        'other-flag': { key: 'other-flag', enabled: true },
+                    },
+                },
+            })
+        )
+
+        featureFlags.reloadFeatureFlags()
+        jest.runAllTimers()
+
+        featureFlags.getFeatureFlag('non-existent-flag')
+
+        expect(instance.capture).toHaveBeenCalledWith(
+            '$feature_flag_called',
+            expect.objectContaining({
+                $feature_flag: 'non-existent-flag',
+                $feature_flag_response: undefined,
+                $feature_flag_error: FeatureFlagError.FLAG_MISSING,
+            })
+        )
+    })
+
+    it('should join multiple errors with commas', () => {
+        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            callback({
+                statusCode: 200,
+                json: {
+                    flags: {},
+                    errorsWhileComputingFlags: true,
+                },
+            })
+        )
+
+        featureFlags.reloadFeatureFlags()
+        jest.runAllTimers()
+
+        // Flag is not in response, and errorsWhileComputingFlags is true
+        featureFlags.getFeatureFlag('missing-flag')
+
+        expect(instance.capture).toHaveBeenCalledWith(
+            '$feature_flag_called',
+            expect.objectContaining({
+                $feature_flag: 'missing-flag',
+                $feature_flag_response: undefined,
+                $feature_flag_error: `${FeatureFlagError.ERRORS_WHILE_COMPUTING},${FeatureFlagError.FLAG_MISSING}`,
+            })
+        )
+    })
+
+    it('should not include $feature_flag_error when there are no errors', () => {
+        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            callback({
+                statusCode: 200,
+                json: {
+                    flags: {
+                        'success-flag': { key: 'success-flag', enabled: true },
+                    },
+                    errorsWhileComputingFlags: false,
+                },
+            })
+        )
+
+        featureFlags.reloadFeatureFlags()
+        jest.runAllTimers()
+
+        featureFlags.getFeatureFlag('success-flag')
+
+        expect(instance.capture).toHaveBeenCalledWith(
+            '$feature_flag_called',
+            expect.not.objectContaining({
+                $feature_flag_error: expect.anything(),
+            })
+        )
+    })
+
+    it('should clear errors on successful subsequent request', () => {
+        // First request with error
+        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            callback({
+                statusCode: 500,
+                json: {},
+            })
+        )
+
+        featureFlags.reloadFeatureFlags()
+        jest.runAllTimers()
+
+        expect(instance.persistence.props.$feature_flag_errors).toEqual(['api_error_500'])
+
+        // Second successful request
+        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            callback({
+                statusCode: 200,
+                json: {
+                    flags: {
+                        'success-flag': { key: 'success-flag', enabled: true },
+                    },
+                },
+            })
+        )
+
+        featureFlags.reloadFeatureFlags()
+        jest.runAllTimers()
+
+        expect(instance.persistence.props.$feature_flag_errors).toEqual([])
+    })
+
+    it('should track quota_limited and flag_missing together', () => {
+        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            callback({
+                statusCode: 200,
+                json: {
+                    flags: {},
+                    quotaLimited: ['feature_flags'],
+                },
+            })
+        )
+
+        featureFlags.reloadFeatureFlags()
+        jest.runAllTimers()
+
+        featureFlags.getFeatureFlag('some-flag')
+
+        expect(instance.capture).toHaveBeenCalledWith(
+            '$feature_flag_called',
+            expect.objectContaining({
+                $feature_flag: 'some-flag',
+                $feature_flag_response: undefined,
+                $feature_flag_error: `${FeatureFlagError.QUOTA_LIMITED},${FeatureFlagError.FLAG_MISSING}`,
+            })
+        )
+    })
+
+    it('should include persisted errors in $feature_flag_called event after reload', () => {
+        // Setup: flags loaded with errors_while_computing
+        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            callback({
+                statusCode: 200,
+                json: {
+                    flags: { 'test-flag': { key: 'test-flag', enabled: true } },
+                    errorsWhileComputingFlags: true,
+                },
+            })
+        )
+        featureFlags.reloadFeatureFlags()
+        jest.runAllTimers()
+
+        // Simulate reload - new FeatureFlags instance with same persistence
+        const newFeatureFlags = new PostHogFeatureFlags(instance)
+
+        // Getting flag should include persisted error
+        newFeatureFlags.getFeatureFlag('test-flag')
+
+        expect(instance.capture).toHaveBeenCalledWith(
+            '$feature_flag_called',
+            expect.objectContaining({
+                $feature_flag: 'test-flag',
+                $feature_flag_error: FeatureFlagError.ERRORS_WHILE_COMPUTING,
+            })
+        )
     })
 })

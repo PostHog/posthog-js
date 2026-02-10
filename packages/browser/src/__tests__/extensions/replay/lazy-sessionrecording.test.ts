@@ -354,7 +354,6 @@ describe('Lazy SessionRecording', () => {
             const FIVE_MINUTES_IN_MS = 5 * 60 * 1000
 
             it.each([
-                ['ignores config with no cache_timestamp (legacy)', { enabled: true, endpoint: '/s/' }, false],
                 [
                     'ignores config with stale cache_timestamp (> 5 minutes old)',
                     { enabled: true, endpoint: '/s/', cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000 },
@@ -388,22 +387,16 @@ describe('Lazy SessionRecording', () => {
                 }
             })
 
-            it('waits for fresh remote config when persisted config is stale', () => {
-                // stop recording so TTL check is active
+            it('treats legacy config without cache_timestamp as fresh', () => {
                 sessionRecording.stopRecording()
 
                 posthog.persistence?.register({
                     [SESSION_RECORDING_REMOTE_CONFIG]: { enabled: true, endpoint: '/s/' },
                 })
 
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']).toBeUndefined()
-
-                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-
-                const config = sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']
-                expect(config?.enabled).toBe(true)
-                expect(config?.cache_timestamp).toBeDefined()
-                expect(Date.now() - config!.cache_timestamp!).toBeLessThan(1000)
+                const result = sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']
+                expect(result?.enabled).toBe(true)
+                expect(result?.endpoint).toBe('/s/')
             })
 
             it('trusts stale config once recording has started (long-lived SPA)', () => {

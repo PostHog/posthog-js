@@ -229,6 +229,21 @@ export type PostHogRemoteConfig = {
 
 export type FeatureFlagValue = string | boolean
 
+/**
+ * Result of evaluating a feature flag, including both the flag value and its payload.
+ */
+export type FeatureFlagResult = {
+  readonly key: string
+  readonly enabled: boolean
+  readonly variant?: string
+  readonly payload?: JsonType
+}
+
+export type FeatureFlagResultOptions = {
+  /** Whether to send a $feature_flag_called event. Defaults to true. */
+  sendEvent?: boolean
+}
+
 export type PostHogFlagsResponse = Omit<PostHogRemoteConfig, 'hasFeatureFlags'> & {
   featureFlags: {
     [key: string]: FeatureFlagValue
@@ -460,6 +475,18 @@ export enum SurveyQuestionDescriptionContentType {
   Text = 'text',
 }
 
+// Survey validation types
+export enum SurveyValidationType {
+  MinLength = 'min_length',
+  MaxLength = 'max_length',
+}
+
+export interface SurveyValidationRule {
+  type: SurveyValidationType
+  value?: number
+  errorMessage?: string
+}
+
 type SurveyQuestionBase = {
   question: string
   id: string
@@ -469,6 +496,7 @@ type SurveyQuestionBase = {
   buttonText?: string
   originalQuestionIndex: number
   branching?: NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching
+  validation?: SurveyValidationRule[]
 }
 
 export type BasicSurveyQuestion = SurveyQuestionBase & {

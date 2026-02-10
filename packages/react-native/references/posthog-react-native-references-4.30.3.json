@@ -2,7 +2,7 @@
   "id": "posthog-react-native",
   "hogRef": "0.3",
   "info": {
-    "version": "4.31.1",
+    "version": "4.30.3",
     "id": "posthog-react-native",
     "title": "PostHog React Native SDK",
     "description": "PostHog React Native SDK allows you to capture events and send them to PostHog from your React Native applications.",
@@ -3239,18 +3239,6 @@
       "example": "{\n    [type: string]: string | number;\n}"
     },
     {
-      "id": "PostHogMaskViewProps",
-      "name": "PostHogMaskViewProps",
-      "properties": [
-        {
-          "description": "The child components to mask from PostHog capture",
-          "type": "React.ReactNode",
-          "name": "children"
-        }
-      ],
-      "path": "dist/PostHogMaskView.d.ts"
-    },
-    {
       "id": "PostHogNavigationRef",
       "name": "PostHogNavigationRef",
       "properties": [],
@@ -3648,7 +3636,7 @@
       "name": "SurveyQuestionBase",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "{\n    question: string;\n    id: string;\n    description?: string;\n    descriptionContentType?: SurveyQuestionDescriptionContentType;\n    optional?: boolean;\n    buttonText?: string;\n    originalQuestionIndex: number;\n    branching?: NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching;\n    validation?: SurveyValidationRule[];\n}"
+      "example": "{\n    question: string;\n    id: string;\n    description?: string;\n    descriptionContentType?: SurveyQuestionDescriptionContentType;\n    optional?: boolean;\n    buttonText?: string;\n    originalQuestionIndex: number;\n    branching?: NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching;\n}"
     },
     {
       "id": "SurveyQuestionBranchingType",
@@ -3775,40 +3763,6 @@
         {
           "type": "\"widget\"",
           "name": "Widget"
-        }
-      ],
-      "path": "../core/src/types.ts"
-    },
-    {
-      "id": "SurveyValidationRule",
-      "name": "SurveyValidationRule",
-      "properties": [
-        {
-          "type": "string",
-          "name": "errorMessage"
-        },
-        {
-          "type": "SurveyValidationType",
-          "name": "type"
-        },
-        {
-          "type": "number",
-          "name": "value"
-        }
-      ],
-      "path": "../core/src/types.ts"
-    },
-    {
-      "id": "SurveyValidationType",
-      "name": "SurveyValidationType",
-      "properties": [
-        {
-          "type": "\"max_length\"",
-          "name": "MaxLength"
-        },
-        {
-          "type": "\"min_length\"",
-          "name": "MinLength"
         }
       ],
       "path": "../core/src/types.ts"
