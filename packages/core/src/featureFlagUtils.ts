@@ -183,10 +183,10 @@ export const updateFlagValue = (flag: FeatureFlagDetail, value: FeatureFlagValue
   }
 }
 
-function getEnabledFromValue(value: FeatureFlagValue): boolean {
+export function getEnabledFromValue(value: FeatureFlagValue): boolean {
   return typeof value === 'string' ? true : value
 }
 
-function getVariantFromValue(value: FeatureFlagValue): string | undefined {
+export function getVariantFromValue(value: FeatureFlagValue): string | undefined {
   return typeof value === 'string' ? value : undefined
 }

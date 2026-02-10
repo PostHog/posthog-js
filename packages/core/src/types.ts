@@ -229,6 +229,21 @@ export type PostHogRemoteConfig = {
 
 export type FeatureFlagValue = string | boolean
 
+/**
+ * Result of evaluating a feature flag, including both the flag value and its payload.
+ */
+export type FeatureFlagResult = {
+  readonly key: string
+  readonly enabled: boolean
+  readonly variant?: string
+  readonly payload?: JsonType
+}
+
+export type FeatureFlagResultOptions = {
+  /** Whether to send a $feature_flag_called event. Defaults to true. */
+  sendEvent?: boolean
+}
+
 export type PostHogFlagsResponse = Omit<PostHogRemoteConfig, 'hasFeatureFlags'> & {
   featureFlags: {
     [key: string]: FeatureFlagValue
