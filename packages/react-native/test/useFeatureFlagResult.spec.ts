@@ -21,6 +21,10 @@ describe('useFeatureFlagResult', () => {
     mockPostHog = createMockPostHog()
   })
 
+  afterEach(() => {
+    jest.resetAllMocks()
+  })
+
   const wrapper = ({ children }: { children: React.ReactNode }) =>
     React.createElement(PostHogContext.Provider, { value: { client: mockPostHog } }, children)
 
@@ -114,5 +118,22 @@ describe('useFeatureFlagResult', () => {
     expect(result.current).toEqual({ key: 'flag', enabled: true })
     expect(customClient.getFeatureFlagResult).toHaveBeenCalledWith('flag')
     expect(mockPostHog.getFeatureFlagResult).not.toHaveBeenCalled()
+  })
+
+  it('should throw when no client is provided via context or prop', () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {})
+    expect(() => renderHook(() => useFeatureFlagResult('test-flag'))).toThrow(
+      'useFeatureFlagResult requires a PostHog client provided as an argument or via context.'
+    )
+  })
+
+  it('should work with prop client when no context provider exists', () => {
+    const propClient = createMockPostHog()
+    ;(propClient.getFeatureFlagResult as jest.Mock).mockReturnValue({ key: 'flag', enabled: true })
+
+    const { result } = renderHook(() => useFeatureFlagResult('flag', propClient))
+
+    expect(result.current).toEqual({ key: 'flag', enabled: true })
+    expect(propClient.getFeatureFlagResult).toHaveBeenCalledWith('flag')
   })
 })
