@@ -1,5 +1,14 @@
 # @posthog/react
 
+## 1.7.1
+
+### Patch Changes
+
+- [#3034](https://github.com/PostHog/posthog-js/pull/3034) [`de43d70`](https://github.com/PostHog/posthog-js/commit/de43d70e5d94f74cf58745695968eee09fbc64b6) Thanks [@adboio](https://github.com/adboio)! - add survey shown tracking to useThumbSurvey + option to disable shown tracking in displaySurvey
+  (2026-02-10)
+- Updated dependencies [[`de43d70`](https://github.com/PostHog/posthog-js/commit/de43d70e5d94f74cf58745695968eee09fbc64b6)]:
+    - posthog-js@1.345.1
+
 ## 1.7.0
 
 ### Minor Changes
