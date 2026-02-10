@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.345.2
+
+### Patch Changes
+
+- [#3067](https://github.com/PostHog/posthog-js/pull/3067) [`4580975`](https://github.com/PostHog/posthog-js/commit/4580975b499069a60567e2844cfb0d8970ca641d) Thanks [@adboio](https://github.com/adboio)! - add "product tour button clicked" events
+  (2026-02-10)
+- Updated dependencies []:
+    - @posthog/types@1.345.2
+
 ## 1.345.1
 
 ### Patch Changes
