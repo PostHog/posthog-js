@@ -90,6 +90,16 @@ export class NetworkPage {
                 body: JSON.stringify(flagsResponse),
             })
         })
+
+        // Mock the remote config endpoint to return the same config data.
+        // RemoteConfig is now the sole config loading mechanism.
+        await this.page.route(/\/array\/[^/]+\/config(\?|$)/, async (route) => {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify(flagsResponse),
+            })
+        })
     }
 
     async mockSurveys(surveysResponse: any[]) {
@@ -127,15 +137,6 @@ export class NetworkPage {
                 })
             })
         )
-
-        // Mock the remote config endpoint so it doesn't fail against the local test server
-        await this.page.route('**/array/*/config*', async (route) => {
-            await route.fulfill({
-                status: 200,
-                contentType: 'application/json',
-                json: {},
-            })
-        })
     }
 
     expectNoFailed(): void {
