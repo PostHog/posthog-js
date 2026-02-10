@@ -2,7 +2,7 @@ import { PostHog } from '../../posthog-core'
 import { assignableWindow } from '../../utils/globals'
 import { createPosthogInstance } from '../helpers/posthog-instance'
 import { uuidv7 } from '../../uuidv7'
-import { DeadClicksAutocapture } from '../../extensions/dead-clicks-autocapture'
+import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from '../../extensions/dead-clicks-autocapture'
 import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../../constants'
 
 describe('DeadClicksAutocapture', () => {
@@ -51,7 +51,7 @@ describe('DeadClicksAutocapture', () => {
         mockLoader.mockClear()
 
         const instance = await createPosthogInstance(uuidv7(), { capture_dead_clicks: true })
-        new DeadClicksAutocapture(instance, () => true).startIfEnabled()
+        new DeadClicksAutocapture(instance, () => true).startIfEnabledOrStop()
 
         expect(mockLoader).toHaveBeenCalledWith(instance, 'dead-clicks-autocapture', expect.any(Function))
     })
@@ -69,6 +69,30 @@ describe('DeadClicksAutocapture', () => {
 
         expect(mockLazyStop).toHaveBeenCalled()
         expect(instance.deadClicksAutocapture.lazyLoadedDeadClicksAutocapture).toBeUndefined()
+    })
+
+    it('should stop dead clicks when remote config disables a previously enabled setting', async () => {
+        const instance = await createPosthogInstance(uuidv7(), {
+            api_host: 'https://test.com',
+            token: 'testtoken',
+            autocapture: true,
+        })
+
+        instance.persistence?.register({
+            [DEAD_CLICKS_ENABLED_SERVER_SIDE]: true,
+        })
+
+        const dca = new DeadClicksAutocapture(instance, isDeadClicksEnabledForAutocapture)
+
+        expect(dca.lazyLoadedDeadClicksAutocapture).toBeDefined()
+        expect(mockStart).toHaveBeenCalled()
+
+        const mockStop = dca.lazyLoadedDeadClicksAutocapture?.stop as jest.Mock
+
+        dca.onRemoteConfig({ captureDeadClicks: false } as any)
+
+        expect(mockStop).toHaveBeenCalled()
+        expect(dca.lazyLoadedDeadClicksAutocapture).toBeUndefined()
     })
 
     describe('config', () => {

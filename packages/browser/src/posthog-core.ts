@@ -755,7 +755,7 @@ export class PostHog implements PostHogInterface {
 
         initTasks.push(() => {
             this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
-            this.deadClicksAutocapture.startIfEnabled()
+            this.deadClicksAutocapture.startIfEnabledOrStop()
         })
 
         // Replay any pending remote config that arrived before extensions were ready
@@ -2860,6 +2860,7 @@ export class PostHog implements PostHogInterface {
             this.autocapture?.startIfEnabled()
             this.heatmaps?.startIfEnabled()
             this.exceptionObserver?.startIfEnabledOrStop()
+            this.deadClicksAutocapture?.startIfEnabledOrStop()
             this.surveys.loadIfEnabled()
             this._sync_opt_out_with_persistence()
             this.externalIntegrations?.startIfEnabledOrStop()
