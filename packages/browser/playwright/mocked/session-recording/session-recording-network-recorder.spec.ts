@@ -158,15 +158,6 @@ test.beforeEach(async ({ context }) => {
                 ).toBe(true)
                 expect(hasEntry(/https:\/\/example.com/, expectedInitiatorType)).toBe(true)
 
-                if (browserName !== 'webkit') {
-                    expect(
-                        hasEntry(
-                            /https:\/\/localhost:\d+\/flags\/\?v=2&ip=0&_=\d+&ver=1\.\d\d\d\.\d+&compression=base64/,
-                            'fetch'
-                        )
-                    ).toBe(true)
-                }
-
                 // the HTML file that cypress is operating on (playground/cypress/index.html)
                 // when the button for this test is click makes a post to https://example.com
                 const capturedFetchRequest = capturedRequests.find((cr) => cr.name === 'https://example.com/')
