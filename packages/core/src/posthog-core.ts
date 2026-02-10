@@ -895,7 +895,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       //         _getFeatureFlagResult existed. Preserved for backward compatibility.
       switch (options.missingFlagBehavior) {
         case 'getFeatureFlagPayload':
-          return storedDetails ? { key, enabled: false, payload: null } : undefined
+          return details ? { key, enabled: false, payload: null } : undefined
         case 'getFeatureFlag':
           return details && Object.keys(details.flags).length ? { key, enabled: false, payload: null } : undefined
         case undefined:

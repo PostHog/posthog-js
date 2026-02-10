@@ -954,6 +954,23 @@ describe('PostHog Feature Flags v4', () => {
           expect(freshPosthog.getFeatureFlagResult('feature-1')).toEqual(undefined)
         })
 
+        it('should return correct results when only legacy v1 persisted data exists', () => {
+          const [legacyPosthog] = createTestClient('TEST_API_KEY', { flushAt: 1 }, undefined, {
+            [PostHogPersistedProperty.FeatureFlags]: { 'feature-1': true },
+            [PostHogPersistedProperty.FeatureFlagPayloads]: { 'feature-1': '{"color":"blue"}' },
+          })
+
+          expect(legacyPosthog.getFeatureFlagResult('feature-1')).toEqual({
+            key: 'feature-1',
+            enabled: true,
+            variant: undefined,
+            payload: { color: 'blue' },
+          })
+
+          // Missing flag when flags are loaded should return null, not undefined
+          expect(legacyPosthog.getFeatureFlagPayload('missing-flag')).toEqual(null)
+        })
+
         it('should send $feature_flag_called event on first call', async () => {
           posthog.getFeatureFlagResult('feature-1')
           await waitForPromises()
