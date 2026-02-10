@@ -29,6 +29,33 @@ describe('config', () => {
                 expect(networkOptions.recordBody).toBe(false)
             })
 
+            it('client can force disable performance with boolean false', () => {
+                const posthogConfig = defaultConfig()
+                posthogConfig.capture_performance = false
+                const networkOptions = buildNetworkRequestOptions(posthogConfig, {
+                    recordPerformance: true,
+                })
+                expect(networkOptions.recordPerformance).toBe(false)
+            })
+
+            it('client can force disable performance with object network_timing: false', () => {
+                const posthogConfig = defaultConfig()
+                posthogConfig.capture_performance = { network_timing: false }
+                const networkOptions = buildNetworkRequestOptions(posthogConfig, {
+                    recordPerformance: true,
+                })
+                expect(networkOptions.recordPerformance).toBe(false)
+            })
+
+            it('client object with web_vitals only does not disable performance', () => {
+                const posthogConfig = defaultConfig()
+                posthogConfig.capture_performance = { web_vitals: true }
+                const networkOptions = buildNetworkRequestOptions(posthogConfig, {
+                    recordPerformance: true,
+                })
+                expect(networkOptions.recordPerformance).toBe(true)
+            })
+
             it('should cope with no headers when even if no other config is set', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
                 const cleaned = networkOptions.maskRequestFn!({

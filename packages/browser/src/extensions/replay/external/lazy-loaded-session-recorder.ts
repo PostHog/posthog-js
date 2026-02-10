@@ -482,9 +482,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         const clientConfigForPerformanceCapture = isObject(this._instance.config.capture_performance)
             ? this._instance.config.capture_performance.network_timing
             : this._instance.config.capture_performance
+        const serverConfigForPerformanceCapture = isObject(networkPayloadCapture_server_side?.capturePerformance)
+            ? networkPayloadCapture_server_side.capturePerformance.network_timing
+            : networkPayloadCapture_server_side?.capturePerformance
         const networkTimingEnabled = !!(isBoolean(clientConfigForPerformanceCapture)
             ? clientConfigForPerformanceCapture
-            : networkPayloadCapture_server_side?.capturePerformance)
+            : serverConfigForPerformanceCapture)
 
         return headersEnabled || bodyEnabled || networkTimingEnabled
             ? { recordHeaders: headersEnabled, recordBody: bodyEnabled, recordPerformance: networkTimingEnabled }

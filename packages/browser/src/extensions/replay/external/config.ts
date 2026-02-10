@@ -1,5 +1,5 @@
 import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig } from '../../../types'
-import { isFunction, isNullish, isString, isUndefined } from '@posthog/core'
+import { isFunction, isNullish, isObject, isString, isUndefined } from '@posthog/core'
 import { convertToURL } from '../../../utils/request-utils'
 import { logger } from '../../../utils/logger'
 import { shouldCaptureValue } from '../../../autocapture-utils'
@@ -225,7 +225,10 @@ export const buildNetworkRequestOptions = (
     const canRecordBody =
         instanceConfig.session_recording.recordBody === false ? false : remoteNetworkOptions.recordBody
     const canRecordPerformance =
-        instanceConfig.capture_performance === false ? false : remoteNetworkOptions.recordPerformance
+        instanceConfig.capture_performance === false ||
+        (isObject(instanceConfig.capture_performance) && instanceConfig.capture_performance.network_timing === false)
+            ? false
+            : remoteNetworkOptions.recordPerformance
 
     const payloadLimiter = limitPayloadSize(config)
 

@@ -547,11 +547,41 @@ describe('Lazy SessionRecording', () => {
                 ],
                 ['uses server side setting (disabled) if client side setting is not set', false, undefined, undefined],
                 ['uses server side setting (enabled) if client side setting is not set', true, undefined, true],
+                [
+                    'disabled when server sends object with network_timing: false',
+                    { network_timing: false, web_vitals: true },
+                    undefined,
+                    undefined,
+                ],
+                [
+                    'enabled when server sends object with network_timing: true',
+                    { network_timing: true, web_vitals: true },
+                    undefined,
+                    true,
+                ],
+                [
+                    'disabled when server sends object with only web_vitals',
+                    { web_vitals: true },
+                    undefined,
+                    undefined,
+                ],
+                [
+                    'client true overrides server object with network_timing: false',
+                    { network_timing: false },
+                    true,
+                    true,
+                ],
+                [
+                    'client false overrides server object with network_timing: true',
+                    { network_timing: true },
+                    false,
+                    undefined,
+                ],
             ])(
                 '%s',
                 (
                     _name: string,
-                    serverSide: boolean | undefined,
+                    serverSide: boolean | PerformanceCaptureConfig | undefined,
                     clientSide: boolean | PerformanceCaptureConfig | undefined,
                     expected: boolean | undefined
                 ) => {
