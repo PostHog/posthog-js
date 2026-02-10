@@ -139,14 +139,15 @@ test.beforeEach(async ({ context }) => {
                         ? [
                               [/http:\/\/localhost:\d+\/playground\/cypress\//, 'navigation'],
                               [/https:\/\/localhost:\d+\/static\/array.js/, 'script'],
-                              // webkit isn't capturing this failed request in the pre-wrapped fetch performance observer records
+                              // webkit isn't capturing the config.js script request in the pre-wrapped fetch performance observer records
                               // [/https:\/\/localhost:\d+\/array\/test%20token\/config.js/, 'script'],
+                              // RemoteConfig loads config JSON first, then flags are loaded separately
                               [
-                                  /https:\/\/localhost:\d+\/flags\/\?v=2&ip=0&_=\d+&ver=1\.\d\d\d\.\d+&compression=base64/,
+                                  /https:\/\/localhost:\d+\/array\/test%20token\/config\?ip=0&_=\d+&ver=1\.\d\d\d\.\d+/,
                                   'fetch',
                               ],
-                              // webkit isn't capturing this failed request in the pre-wrapped fetch performance observer records
-                              // [/https:\/\/localhost:\d+\/array\/test%20token\/config\?ip=0&_=\d+&ver=1\.\d\d\d\.\d+/, 'fetch'],
+                              // webkit isn't capturing the flags fetch in the pre-wrapped fetch performance observer records
+                              // [/https:\/\/localhost:\d+\/flags\/\?v=2&ip=0&_=\d+&ver=1\.\d\d\d\.\d+&compression=base64/, 'fetch'],
                               [/https:\/\/localhost:\d+\/static\/(lazy-)?recorder.js\?v=1\.\d\d\d\.\d+/, 'script'],
                               [/https:\/\/example.com/, expectedInitiatorType],
                               // webkit is duplicating this, it is picked up in the initial performance observer records
@@ -162,12 +163,13 @@ test.beforeEach(async ({ context }) => {
                               [/http:\/\/localhost:\d+\/playground\/cypress\//, 'navigation'],
                               [/https:\/\/localhost:\d+\/static\/array.js/, 'script'],
                               [/https:\/\/localhost:\d+\/array\/test%20token\/config.js/, 'script'],
+                              // RemoteConfig loads config JSON first, then flags are loaded separately
                               [
-                                  /https:\/\/localhost:\d+\/flags\/\?v=2&ip=0&_=\d+&ver=1\.\d\d\d\.\d+&compression=base64/,
+                                  /https:\/\/localhost:\d+\/array\/test%20token\/config\?ip=0&_=\d+&ver=1\.\d\d\d\.\d+/,
                                   'fetch',
                               ],
                               [
-                                  /https:\/\/localhost:\d+\/array\/test%20token\/config\?ip=0&_=\d+&ver=1\.\d\d\d\.\d+/,
+                                  /https:\/\/localhost:\d+\/flags\/\?v=2&ip=0&_=\d+&ver=1\.\d\d\d\.\d+&compression=base64/,
                                   'fetch',
                               ],
                               [/https:\/\/localhost:\d+\/static\/(lazy-)?recorder.js\?v=1\.\d\d\d\.\d+/, 'script'],
