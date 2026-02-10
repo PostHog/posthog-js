@@ -1,4 +1,4 @@
-import { PostHog } from '../posthog-rn'
+import type { PostHog } from '../posthog-rn'
 import React from 'react'
 import { PostHogContext } from '../PostHogContext'
 

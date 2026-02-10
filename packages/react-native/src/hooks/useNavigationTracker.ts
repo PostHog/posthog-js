@@ -2,7 +2,7 @@ import { useCallback, useEffect } from 'react'
 import { OptionalReactNativeNavigation } from '../optional/OptionalReactNativeNavigation'
 import type { PostHog } from '../posthog-rn'
 import { PostHogAutocaptureNavigationTrackerOptions } from '../types'
-import { usePostHog } from './usePostHog'
+import { useOptionalPostHog, validatePostHogClient } from './useOptionalPostHog'
 import { PostHogNavigationRef } from '../types'
 
 function _useNavigationTrackerDisabled(): void {
@@ -14,8 +14,9 @@ function _useNavigationTracker(
   navigationRef?: PostHogNavigationRef,
   client?: PostHog
 ): void {
-  const contextClient = usePostHog()
-  const posthog = client || contextClient
+  const contextClient = useOptionalPostHog()
+  const posthog = client ?? contextClient
+  validatePostHogClient(posthog, 'useNavigationTracker')
 
   if (!OptionalReactNativeNavigation) {
     // NOTE: This is taken care of by the export, but we keep this here for TS

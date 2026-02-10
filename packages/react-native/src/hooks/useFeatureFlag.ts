@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { usePostHog } from './usePostHog'
+import { useOptionalPostHog, validatePostHogClient } from './useOptionalPostHog'
 import { JsonType, FeatureFlagValue } from '@posthog/core'
 import { PostHog } from '../posthog-rn'
 
 export function useFeatureFlag(flag: string, client?: PostHog): FeatureFlagValue | undefined {
-  const contextClient = usePostHog()
-  const posthog = client || contextClient
+  const contextClient = useOptionalPostHog()
+  const posthog = client ?? contextClient
+  validatePostHogClient(posthog, 'useFeatureFlag')
 
   const [featureFlag, setFeatureFlag] = useState<FeatureFlagValue | undefined>(posthog.getFeatureFlag(flag))
 
@@ -22,8 +23,10 @@ export function useFeatureFlag(flag: string, client?: PostHog): FeatureFlagValue
 export type FeatureFlagWithPayload = [FeatureFlagValue | undefined, JsonType | undefined]
 
 export function useFeatureFlagWithPayload(flag: string, client?: PostHog): FeatureFlagWithPayload {
-  const contextClient = usePostHog()
-  const posthog = client || contextClient
+  const contextClient = useOptionalPostHog()
+  const posthog = client ?? contextClient
+  validatePostHogClient(posthog, 'useFeatureFlagWithPayload')
+
   const [featureFlag, setFeatureFlag] = useState<FeatureFlagWithPayload>([undefined, undefined])
 
   useEffect(() => {
