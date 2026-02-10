@@ -19,7 +19,7 @@ export const useOptionalPostHog = (): PostHog | undefined => {
 export function validatePostHogClient(client?: PostHog, caller?: string): asserts client is PostHog {
   if (!client) {
     throw new Error(
-      `${caller ? caller + ' requires' : 'This hook requires'} a PostHog client provided as an argument or via context. See https://posthog.com/docs/libraries/react-native#usefeatureflag`
+      `${caller ? caller + ' requires' : 'This hook requires'} a PostHog client provided as an argument or via context. See https://posthog.com/docs/libraries/react-native?#with-the-posthogprovider`
     )
   }
 }
