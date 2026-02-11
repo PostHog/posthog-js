@@ -19,7 +19,7 @@
 
 The official [PostHog](https://posthog.com) component for [Convex](https://convex.dev). Capture events, identify users, manage groups, and evaluate feature flags — all from your mutations and actions.
 
-Found a bug? Feature request? [File it here](https://github.com/PostHog/posthog-convex/issues).
+Found a bug? Feature request? [File it here](https://github.com/PostHog/posthog-js/issues).
 
 ## 🚀 Quick Start
 
