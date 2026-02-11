@@ -43,7 +43,7 @@
     "node": "^20.20.0 || >=22.22.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.72.1",
+    "@anthropic-ai/sdk": "^0.74.0",
     "@google/genai": "^1.40.0",
     "@langchain/core": "^1.1.17",
     "@posthog/core": "workspace:*",
