@@ -3,6 +3,9 @@ import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globa
 import { initConvexTest } from './setup.test.js'
 import { api } from './_generated/api.js'
 
+// CI can be slow with ESM + convex-test startup; default 5s is occasionally too tight.
+jest.setTimeout(15000)
+
 // Collect all fetch calls for assertion
 let fetchCalls: Array<{ url: string; body: unknown }> = []
 const originalFetch = global.fetch
@@ -88,7 +91,6 @@ describe('capture', () => {
       event: 'button_clicked',
     })
     expect(result).toEqual({ success: true })
-
     jest.runAllTimers()
     await t.finishInProgressScheduledFunctions()
 
@@ -111,7 +113,6 @@ describe('capture', () => {
       properties: { plan: 'pro', amount: 99 },
       groups: { company: 'acme' },
     })
-
     jest.runAllTimers()
     await t.finishInProgressScheduledFunctions()
 
@@ -131,7 +132,6 @@ describe('capture', () => {
       event: 'test',
       properties: { foo: 'bar' },
     })
-
     jest.runAllTimers()
     await t.finishInProgressScheduledFunctions()
 
@@ -149,7 +149,6 @@ describe('capture', () => {
       event: 'test',
       disableGeoip: true,
     })
-
     jest.runAllTimers()
     await t.finishInProgressScheduledFunctions()
 
@@ -166,7 +165,6 @@ describe('capture', () => {
       event: 'test',
       uuid: 'custom-uuid-abc',
     })
-
     jest.runAllTimers()
     await t.finishInProgressScheduledFunctions()
 
@@ -183,7 +181,6 @@ describe('capture', () => {
       event: 'test',
       timestamp: '2024-06-15T12:00:00Z',
     })
-
     jest.runAllTimers()
     await t.finishInProgressScheduledFunctions()
 
@@ -213,7 +210,6 @@ describe('identify', () => {
       distinctId: 'user-123',
     })
     expect(result).toEqual({ success: true })
-
     jest.runAllTimers()
     await t.finishInProgressScheduledFunctions()
 
@@ -234,7 +230,6 @@ describe('identify', () => {
         email: 'test@example.com',
       },
     })
-
     jest.runAllTimers()
     await t.finishInProgressScheduledFunctions()
 
@@ -254,7 +249,6 @@ describe('identify', () => {
       distinctId: 'user-123',
       disableGeoip: true,
     })
-
     jest.runAllTimers()
     await t.finishInProgressScheduledFunctions()
 
@@ -285,7 +279,6 @@ describe('groupIdentify', () => {
       groupKey: 'acme',
     })
     expect(result).toEqual({ success: true })
-
     jest.runAllTimers()
     await t.finishInProgressScheduledFunctions()
 
@@ -306,7 +299,6 @@ describe('groupIdentify', () => {
       groupKey: 'acme',
       properties: { industry: 'Technology', size: 100 },
     })
-
     jest.runAllTimers()
     await t.finishInProgressScheduledFunctions()
 
@@ -325,7 +317,6 @@ describe('groupIdentify', () => {
       groupKey: 'acme',
       distinctId: 'override-user',
     })
-
     jest.runAllTimers()
     await t.finishInProgressScheduledFunctions()
 
@@ -355,7 +346,6 @@ describe('alias', () => {
       alias: 'anon-456',
     })
     expect(result).toEqual({ success: true })
-
     jest.runAllTimers()
     await t.finishInProgressScheduledFunctions()
 
@@ -376,7 +366,6 @@ describe('alias', () => {
       alias: 'anon-456',
       disableGeoip: true,
     })
-
     jest.runAllTimers()
     await t.finishInProgressScheduledFunctions()
 
@@ -407,7 +396,6 @@ describe('captureException', () => {
       errorType: 'error',
     })
     expect(result).toEqual({ success: true })
-
     jest.runAllTimers()
     await t.finishInProgressScheduledFunctions()
 
@@ -431,7 +419,6 @@ describe('captureException', () => {
       errorMessage: 'string error',
       errorType: 'string',
     })
-
     jest.runAllTimers()
     await t.finishInProgressScheduledFunctions()
 
@@ -450,7 +437,6 @@ describe('captureException', () => {
       errorMessage: 'obj error',
       errorType: 'object',
     })
-
     jest.runAllTimers()
     await t.finishInProgressScheduledFunctions()
 
@@ -469,7 +455,6 @@ describe('captureException', () => {
       errorMessage: 'test',
       additionalProperties: { page: '/checkout', step: 3 },
     })
-
     jest.runAllTimers()
     await t.finishInProgressScheduledFunctions()
 
@@ -486,7 +471,6 @@ describe('captureException', () => {
       errorMessage: 'test',
       distinctId: 'specific-user',
     })
-
     jest.runAllTimers()
     await t.finishInProgressScheduledFunctions()
 
