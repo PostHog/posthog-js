@@ -48,6 +48,8 @@
         "_capturePageview",
         "_captureSnapshot",
         "_captureSnapshotBuffered",
+        "_captureStepSelectorFailed",
+        "_captureStepShown",
         "_checkAction",
         "_checkClickTimer",
         "_checkClicks",
