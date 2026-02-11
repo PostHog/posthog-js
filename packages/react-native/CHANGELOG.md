@@ -1,5 +1,24 @@
 # posthog-react-native
 
+## 4.32.0
+
+### Minor Changes
+
+- [#3045](https://github.com/PostHog/posthog-js/pull/3045) [`0acf16f`](https://github.com/PostHog/posthog-js/commit/0acf16fcbf8c32d5f28b86b6fa200271ad0b647e) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Add `getFeatureFlagResult` to PostHogCore
+  (2026-02-10)
+
+### Patch Changes
+
+- Updated dependencies [[`0acf16f`](https://github.com/PostHog/posthog-js/commit/0acf16fcbf8c32d5f28b86b6fa200271ad0b647e)]:
+  - @posthog/core@1.22.0
+
+## 4.31.1
+
+### Patch Changes
+
+- [#3070](https://github.com/PostHog/posthog-js/pull/3070) [`eca98ac`](https://github.com/PostHog/posthog-js/commit/eca98ac8da99210b69f67474189ca8720c76062b) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: export PostHogMaskView
+  (2026-02-10)
+
 ## 4.31.0
 
 ### Minor Changes

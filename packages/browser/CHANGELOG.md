@@ -1,5 +1,24 @@
 # posthog-js
 
+## 1.345.4
+
+### Patch Changes
+
+- [#3074](https://github.com/PostHog/posthog-js/pull/3074) [`4e7fda9`](https://github.com/PostHog/posthog-js/commit/4e7fda93be4fe2afbbe9d11dd9b1b6517a37573d) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: session replay respects the network_timing remote config
+  (2026-02-11)
+- Updated dependencies []:
+    - @posthog/types@1.345.4
+
+## 1.345.3
+
+### Patch Changes
+
+- [#3064](https://github.com/PostHog/posthog-js/pull/3064) [`50ebdfb`](https://github.com/PostHog/posthog-js/commit/50ebdfb26306bdaaeaa081fb4b3722030e3c4378) Thanks [@jordanm-posthog](https://github.com/jordanm-posthog)! - Fixed an issue where Dead Clicks could continue being captured after being disabled via remote config.
+  (2026-02-10)
+- Updated dependencies [[`0acf16f`](https://github.com/PostHog/posthog-js/commit/0acf16fcbf8c32d5f28b86b6fa200271ad0b647e)]:
+    - @posthog/core@1.22.0
+    - @posthog/types@1.345.3
+
 ## 1.345.2
 
 ### Patch Changes

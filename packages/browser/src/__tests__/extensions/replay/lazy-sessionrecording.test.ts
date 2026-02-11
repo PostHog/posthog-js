@@ -547,11 +547,43 @@ describe('Lazy SessionRecording', () => {
                 ],
                 ['uses server side setting (disabled) if client side setting is not set', false, undefined, undefined],
                 ['uses server side setting (enabled) if client side setting is not set', true, undefined, true],
+                // server side returns an object with network_timing
+                [
+                    'uses server side object config with network_timing enabled',
+                    { network_timing: true },
+                    undefined,
+                    true,
+                ],
+                [
+                    'uses server side object config with network_timing disabled',
+                    { network_timing: false },
+                    undefined,
+                    undefined,
+                ],
+                [
+                    'does not enable network timing when server returns object with only web_vitals enabled',
+                    { web_vitals: true, network_timing: false },
+                    undefined,
+                    undefined,
+                ],
+                [
+                    'does not enable network timing when server returns object with only web_vitals and no network_timing',
+                    { web_vitals: true },
+                    undefined,
+                    undefined,
+                ],
+                [
+                    'enables network timing when server returns object with both enabled',
+                    { web_vitals: true, network_timing: true },
+                    undefined,
+                    true,
+                ],
+                ['client side overrides server side object config', { network_timing: true }, false, undefined],
             ])(
                 '%s',
                 (
                     _name: string,
-                    serverSide: boolean | undefined,
+                    serverSide: boolean | PerformanceCaptureConfig | undefined,
                     clientSide: boolean | PerformanceCaptureConfig | undefined,
                     expected: boolean | undefined
                 ) => {

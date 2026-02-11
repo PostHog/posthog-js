@@ -2,7 +2,7 @@
   "id": "posthog-react-native",
   "hogRef": "0.3",
   "info": {
-    "version": "4.32.0",
+    "version": "4.31.1",
     "id": "posthog-react-native",
     "title": "PostHog React Native SDK",
     "description": "PostHog React Native SDK allows you to capture events and send them to PostHog from your React Native applications.",
@@ -1352,40 +1352,6 @@
           "returnType": {
             "id": "PostHogFlagsResponse['featureFlagPayloads'] | undefined",
             "name": "PostHogFlagsResponse['featureFlagPayloads'] | undefined"
-          },
-          "path": "dist/posthog-rn.d.ts"
-        },
-        {
-          "category": "",
-          "details": null,
-          "id": "getFeatureFlagResult",
-          "showDocs": true,
-          "title": "getFeatureFlagResult",
-          "examples": [
-            {
-              "id": "getfeatureflagresult",
-              "name": "Generated example for getFeatureFlagResult",
-              "code": "// Generated example for getFeatureFlagResult\nposthog.getFeatureFlagResult();"
-            }
-          ],
-          "releaseTag": "public",
-          "params": [
-            {
-              "description": "",
-              "isOptional": false,
-              "type": "string",
-              "name": "key"
-            },
-            {
-              "description": "",
-              "isOptional": true,
-              "type": "FeatureFlagResultOptions",
-              "name": "options"
-            }
-          ],
-          "returnType": {
-            "id": "FeatureFlagResult | undefined",
-            "name": "FeatureFlagResult | undefined"
           },
           "path": "dist/posthog-rn.d.ts"
         },
@@ -3035,20 +3001,6 @@
       "properties": [],
       "path": "../core/src/types.ts",
       "example": "{\n    type: 'timeout' | 'connection_error' | 'api_error' | 'unknown_error';\n    statusCode?: number;\n}"
-    },
-    {
-      "id": "FeatureFlagResult",
-      "name": "FeatureFlagResult",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    readonly key: string;\n    readonly enabled: boolean;\n    readonly variant?: string;\n    readonly payload?: JsonType;\n}"
-    },
-    {
-      "id": "FeatureFlagResultOptions",
-      "name": "FeatureFlagResultOptions",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    sendEvent?: boolean;\n}"
     },
     {
       "id": "FeatureFlagValue",

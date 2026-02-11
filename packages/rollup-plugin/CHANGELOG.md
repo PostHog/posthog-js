@@ -1,5 +1,12 @@
 # @posthog/rollup-plugin
 
+## 1.2.10
+
+### Patch Changes
+
+- Updated dependencies [[`0acf16f`](https://github.com/PostHog/posthog-js/commit/0acf16fcbf8c32d5f28b86b6fa200271ad0b647e)]:
+    - @posthog/core@1.22.0
+
 ## 1.2.9
 
 ### Patch Changes
