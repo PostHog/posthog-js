@@ -21,8 +21,8 @@ export default withPostHogConfig(nextConfig, {
   sourcemaps: {
     // (optional)
     enabled: true, // (optional) Enable sourcemaps generation and upload, default to true on production builds
-    project: 'my-application', // (optional) Project name, defaults to repository name
-    version: '1.0.0', // (optional) Release version, defaults to current git commit
+    releaseName: 'my-application', // (optional) Release name, defaults to repository name
+    releaseVersion: '1.0.0', // (optional) Release version, defaults to current git commit
     deleteAfterUpload: true, // (optional) Delete sourcemaps after upload, defaults to true
   },
 })

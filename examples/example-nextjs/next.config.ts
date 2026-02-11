@@ -14,8 +14,8 @@ export default withPostHogConfig(nextConfig, {
     cliBinaryPath: process.env.POSTHOG_CLI_PATH, // Optional
     logLevel: 'debug',
     sourcemaps: {
-        project: 'example-nextjs',
-        version: packageJson.version,
+        releaseName: 'example-nextjs',
+        releaseVersion: packageJson.version,
         deleteAfterUpload: true,
         batchSize: 50, // Optional. Default to 50
     },

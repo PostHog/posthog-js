@@ -31,8 +31,8 @@ const config: webpack.Configuration = {
             cliBinaryPath: process.env.POSTHOG_CLI_PATH,
             sourcemaps: {
                 enabled: true,
-                project: packageJson.name,
-                version: packageJson.version,
+                releaseName: packageJson.name,
+                releaseVersion: packageJson.version,
                 deleteAfterUpload: true,
             },
         }),

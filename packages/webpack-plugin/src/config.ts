@@ -12,8 +12,12 @@ export interface PluginConfig {
     cliBinaryPath?: string
     sourcemaps?: {
         enabled?: boolean
+        /** @deprecated Use releaseName instead */
         project?: string
+        releaseName?: string
+        /** @deprecated Use releaseVersion instead */
         version?: string
+        releaseVersion?: string
         deleteAfterUpload?: boolean
         batchSize?: number
     }
@@ -26,8 +30,8 @@ export interface ResolvedPluginConfig extends Omit<PluginConfig, 'envId' | 'proj
     cliBinaryPath: string
     sourcemaps: {
         enabled: boolean
-        project?: string
-        version?: string
+        releaseName?: string
+        releaseVersion?: string
         deleteAfterUpload: boolean
         batchSize?: number
     }
@@ -58,8 +62,8 @@ export function resolveConfig(options: PluginConfig): ResolvedPluginConfig {
         cliBinaryPath,
         sourcemaps: {
             enabled: sourcemaps.enabled ?? process.env.NODE_ENV === 'production',
-            project: sourcemaps.project,
-            version: sourcemaps.version,
+            releaseName: sourcemaps.releaseName ?? sourcemaps.project,
+            releaseVersion: sourcemaps.releaseVersion ?? sourcemaps.version,
             deleteAfterUpload: sourcemaps.deleteAfterUpload ?? true,
             batchSize: sourcemaps.batchSize,
         },

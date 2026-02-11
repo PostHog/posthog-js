@@ -15,10 +15,10 @@ export default defineNuxtConfig({
     },
     sourcemaps: {
       enabled: true,
-      version: '3',
+      releaseVersion: '3',
       logLevel: 'debug',
       projectId: process.env.POSTHOG_PROJECT_ID!,
-      project: 'my-project',
+      releaseName: 'my-project',
       personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY!,
     },
   },

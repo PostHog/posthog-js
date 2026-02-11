@@ -70,12 +70,12 @@ export class PosthogWebpackPlugin {
             })
         )
 
-        if (config.sourcemaps.project) {
-            args.push('--project', config.sourcemaps.project)
+        if (config.sourcemaps.releaseName) {
+            args.push('--release-name', config.sourcemaps.releaseName)
         }
 
-        if (config.sourcemaps.version) {
-            args.push('--version', config.sourcemaps.version)
+        if (config.sourcemaps.releaseVersion) {
+            args.push('--release-version', config.sourcemaps.releaseVersion)
         }
 
         if (config.sourcemaps.deleteAfterUpload) {

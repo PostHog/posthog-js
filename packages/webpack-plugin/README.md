@@ -25,8 +25,8 @@ export default {
             projectId: process.env.POSTHOG_PROJECT_ID,
             sourcemaps: {
                 enabled: true,
-                project: 'my-app',
-                version: '1.0.0',
+                releaseName: 'my-app',
+                releaseVersion: '1.0.0',
             },
         }),
     ],
@@ -44,8 +44,8 @@ export default {
 | `logLevel`                     | `'debug' \| 'info' \| 'warn' \| 'error' \| 'silent'` | No       | `'info'`                   | Logging verbosity                           |
 | `cliBinaryPath`                | `string`                                             | No       | Auto-detected              | Path to the PostHog CLI binary              |
 | `sourcemaps.enabled`           | `boolean`                                            | No       | `true` in production       | Enable source map processing                |
-| `sourcemaps.project`           | `string`                                             | No       | -                          | Project name for source map grouping        |
-| `sourcemaps.version`           | `string`                                             | No       | -                          | Version identifier for the release          |
+| `sourcemaps.releaseName`       | `string`                                             | No       | -                          | Release name for source map grouping        |
+| `sourcemaps.releaseVersion`    | `string`                                             | No       | -                          | Version identifier for the release          |
 | `sourcemaps.deleteAfterUpload` | `boolean`                                            | No       | `true`                     | Delete source maps after upload             |
 | `sourcemaps.batchSize`         | `number`                                             | No       | -                          | Number of source maps to upload in parallel |
 
@@ -72,8 +72,8 @@ const config: webpack.Configuration = {
             logLevel: 'error',
             sourcemaps: {
                 enabled: true,
-                project: packageJson.name,
-                version: packageJson.version,
+                releaseName: packageJson.name,
+                releaseVersion: packageJson.version,
                 deleteAfterUpload: true,
             },
         }),

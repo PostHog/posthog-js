@@ -18,12 +18,12 @@ export async function processSourceMaps(posthogOptions: ResolvedPluginConfig, di
   cliOptions.push('sourcemap', 'process')
   cliOptions.push('--directory', directory)
 
-  if (posthogOptions.sourcemaps.project) {
-    cliOptions.push('--project', posthogOptions.sourcemaps.project)
+  if (posthogOptions.sourcemaps.releaseName) {
+    cliOptions.push('--release-name', posthogOptions.sourcemaps.releaseName)
   }
 
-  if (posthogOptions.sourcemaps.version) {
-    cliOptions.push('--version', posthogOptions.sourcemaps.version)
+  if (posthogOptions.sourcemaps.releaseVersion) {
+    cliOptions.push('--release-version', posthogOptions.sourcemaps.releaseVersion)
   }
 
   if (posthogOptions.sourcemaps.deleteAfterUpload) {

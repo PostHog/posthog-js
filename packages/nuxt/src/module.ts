@@ -17,8 +17,12 @@ interface SourcemapsConfig {
   /** @deprecated Use projectId instead */
   envId?: string
   projectId?: string
+  /** @deprecated Use releaseVersion instead */
   version?: string
+  releaseVersion?: string
+  /** @deprecated Use releaseName instead */
   project?: string
+  releaseName?: string
   logLevel?: LogLevel
   deleteAfterUpload?: boolean
   batchSize?: number
@@ -168,12 +172,14 @@ export default defineNuxtModule<ModuleOptions>({
 function getInjectArgs(directory: string, sourcemapsConfig: SourcemapsConfig) {
   const processOptions: string[] = ['sourcemap', 'inject', '--ignore', '**/node_modules/**', '--directory', directory]
 
-  if (sourcemapsConfig.project) {
-    processOptions.push('--project', sourcemapsConfig.project)
+  const releaseName = sourcemapsConfig.releaseName ?? sourcemapsConfig.project
+  if (releaseName) {
+    processOptions.push('--release-name', releaseName)
   }
 
-  if (sourcemapsConfig.version) {
-    processOptions.push('--version', sourcemapsConfig.version)
+  const releaseVersion = sourcemapsConfig.releaseVersion ?? sourcemapsConfig.version
+  if (releaseVersion) {
+    processOptions.push('--release-version', releaseVersion)
   }
 
   return processOptions

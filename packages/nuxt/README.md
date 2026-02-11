@@ -38,8 +38,8 @@ export default defineNuxtConfig({
     sourcemaps: {
       enabled: true, // Enables sourcemaps generation and upload
       projectId: '2', // Project ID, see https://app.posthog.com/settings/project#variables
-      project: 'my-application', // (optional) Project name, defaults to git repository name
-      version: '1.0.0', // (optional) Release version, defaults to current git commit
+      releaseName: 'my-application', // (optional) Release name, defaults to git repository name
+      releaseVersion: '1.0.0', // (optional) Release version, defaults to current git commit
       personalApiKey: 'personal api key', // Your personal API key. You can generate it in settings -> Personal API keys
     },
   },

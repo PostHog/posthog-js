@@ -13,8 +13,12 @@ export interface PostHogRollupPluginOptions {
     logLevel?: LogLevel
     sourcemaps?: {
         enabled?: boolean
+        /** @deprecated Use releaseName instead */
         project?: string
+        releaseName?: string
+        /** @deprecated Use releaseVersion instead */
         version?: string
+        releaseVersion?: string
         deleteAfterUpload?: boolean
         batchSize?: number
     }
@@ -28,8 +32,8 @@ interface ResolvedPostHogRollupPluginOptions {
     logLevel: LogLevel
     sourcemaps: {
         enabled: boolean
-        project?: string
-        version?: string
+        releaseName?: string
+        releaseVersion?: string
         deleteAfterUpload: boolean
         batchSize?: number
     }
@@ -85,11 +89,11 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                     return
                 }
 
-                if (posthogOptions.sourcemaps.project) {
-                    args.push('--project', posthogOptions.sourcemaps.project)
+                if (posthogOptions.sourcemaps.releaseName) {
+                    args.push('--release-name', posthogOptions.sourcemaps.releaseName)
                 }
-                if (posthogOptions.sourcemaps.version) {
-                    args.push('--version', posthogOptions.sourcemaps.version)
+                if (posthogOptions.sourcemaps.releaseVersion) {
+                    args.push('--release-version', posthogOptions.sourcemaps.releaseVersion)
                 }
                 if (posthogOptions.sourcemaps.deleteAfterUpload) {
                     args.push('--delete-after')
@@ -145,8 +149,8 @@ function resolveOptions(userOptions: PostHogRollupPluginOptions): ResolvedPostHo
             enabled: userSourcemaps.enabled ?? true,
             deleteAfterUpload: userSourcemaps.deleteAfterUpload ?? true,
             batchSize: userSourcemaps.batchSize,
-            project: userSourcemaps.project,
-            version: userSourcemaps.version,
+            releaseName: userSourcemaps.releaseName ?? userSourcemaps.project,
+            releaseVersion: userSourcemaps.releaseVersion ?? userSourcemaps.version,
         },
     }
     return posthogOptions
