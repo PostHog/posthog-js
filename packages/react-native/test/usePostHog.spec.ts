@@ -20,8 +20,14 @@ describe('usePostHog', () => {
     expect(result.current).toBe(mockPostHog)
   })
 
-  it('should throw when used outside a PostHogProvider', () => {
-    jest.spyOn(console, 'error').mockImplementation(() => {})
-    expect(() => renderHook(() => usePostHog())).toThrow('usePostHog must be used within a PostHogProvider')
+  it('should log error when used outside a PostHogProvider', () => {
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    renderHook(() => usePostHog())
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('usePostHog was called without a PostHog client')
+    )
+    consoleErrorSpy.mockRestore()
   })
 })
