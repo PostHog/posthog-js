@@ -67,6 +67,7 @@ export const INITIAL_CAMPAIGN_PARAMS = '$initial_campaign_params'
 /** @deprecated Delete this when INITIAL_PERSON_INFO has been around for long enough to ignore backwards compat */
 export const INITIAL_REFERRER_INFO = '$initial_referrer_info'
 export const INITIAL_PERSON_INFO = '$initial_person_info'
+export const IDENTITY_VERIFICATION_SIGNATURE = '$identity_verification_signature'
 export const ENABLE_PERSON_PROCESSING = '$epp'
 export const TOOLBAR_ID = '__POSTHOG_TOOLBAR__'
 export const TOOLBAR_CONTAINER_CLASS = 'toolbar-global-fade-container'
@@ -104,6 +105,7 @@ export const PERSISTENCE_RESERVED_PROPERTIES = [
     INITIAL_CAMPAIGN_PARAMS,
     INITIAL_REFERRER_INFO,
     ENABLE_PERSON_PROCESSING,
+    IDENTITY_VERIFICATION_SIGNATURE,
     INITIAL_PERSON_INFO,
     // Conversations keys (defined in lazy-loaded extension)
     '$conversations_widget_session_id',

@@ -1,6 +1,6 @@
 import { PostHog } from './posthog-core'
 import { ProductTour, ProductTourCallback } from './posthog-product-tours-types'
-import { PRODUCT_TOURS_ENABLED_SERVER_SIDE } from './constants'
+import { IDENTITY_VERIFICATION_SIGNATURE, PRODUCT_TOURS_ENABLED_SERVER_SIDE } from './constants'
 import { RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
 import { isArray, isNullish } from '@posthog/core'
@@ -93,11 +93,14 @@ export class PostHogProductTours {
             }
         }
 
+        let path = `/api/product_tours/?token=${this._instance.config.token}&distinct_id=${encodeURIComponent(this._instance.get_distinct_id())}`
+        const signature = this._instance.get_property(IDENTITY_VERIFICATION_SIGNATURE)
+        if (signature) {
+            path += `&iv_signature=${encodeURIComponent(signature)}`
+        }
+
         this._instance._send_request({
-            url: this._instance.requestRouter.endpointFor(
-                'api',
-                `/api/product_tours/?token=${this._instance.config.token}`
-            ),
+            url: this._instance.requestRouter.endpointFor('api', path),
             method: 'GET',
             callback: (response) => {
                 const statusCode = response.statusCode

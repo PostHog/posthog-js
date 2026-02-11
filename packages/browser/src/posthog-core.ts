@@ -7,6 +7,7 @@ import {
     COOKIELESS_SENTINEL_VALUE,
     ENABLE_PERSON_PROCESSING,
     FLAG_CALL_REPORTED,
+    IDENTITY_VERIFICATION_SIGNATURE,
     PEOPLE_DISTINCT_ID_KEY,
     SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
@@ -2239,8 +2240,15 @@ export class PostHog implements PostHogInterface {
      * @param {Object} [userPropertiesToSet] Optional: An associative array of properties to store about the user. Note: For feature flag evaluations, if the same key is present in the userPropertiesToSetOnce,
      *  it will be overwritten by the value in userPropertiesToSet.
      * @param {Object} [userPropertiesToSetOnce] Optional: An associative array of properties to store about the user. If property is previously set, this does not override that value.
+     * @param {Object} [options] Optional: Additional options for the identify call.
+     * @param {string} [options.identityVerification] An HMAC-SHA256 hex signature for identity verification. Equivalent to calling `setIdentityVerification()`.
      */
-    identify(new_distinct_id?: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void {
+    identify(
+        new_distinct_id?: string,
+        userPropertiesToSet?: Properties,
+        userPropertiesToSetOnce?: Properties,
+        options?: { identityVerification?: string }
+    ): void {
         if (!this.__loaded || !this.persistence) {
             return logger.uninitializedWarning('posthog.identify')
         }
@@ -2274,6 +2282,10 @@ export class PostHog implements PostHogInterface {
             return
         }
 
+        if (options?.identityVerification) {
+            this.setIdentityVerification(options.identityVerification)
+        }
+
         const previous_distinct_id = this.get_distinct_id()
         this.register({ $user_id: new_distinct_id })
 
@@ -2294,6 +2306,12 @@ export class PostHog implements PostHogInterface {
         if (new_distinct_id !== previous_distinct_id && new_distinct_id !== this.get_property(ALIAS_ID_KEY)) {
             this.unregister(ALIAS_ID_KEY)
             this.register({ distinct_id: new_distinct_id })
+        }
+
+        // Clear stale identity verification signature when distinct_id changes
+        // (the HMAC is bound to the old distinct_id and is no longer valid)
+        if (new_distinct_id !== previous_distinct_id && !options?.identityVerification) {
+            this.setIdentityVerification(null)
         }
 
         const isKnownAnonymous = (this.persistence.get_property(USER_STATE) || 'anonymous') === 'anonymous'
@@ -2340,6 +2358,7 @@ export class PostHog implements PostHogInterface {
             this.reloadFeatureFlags()
             // also clear any stored flag calls
             this.unregister(FLAG_CALL_REPORTED)
+            this.productTours?.clearCache()
         }
     }
 
@@ -3224,6 +3243,22 @@ export class PostHog implements PostHogInterface {
             return
         }
         this.setPersonProperties({ $internal_or_test_user: true })
+    }
+
+    /**
+     * Set or clear the identity verification signature (HMAC-SHA256).
+     *
+     * When set, the signature is included in certain requests to verify the
+     * caller is authorized to access person data for the current distinct ID.
+     *
+     * @param signature - The HMAC-SHA256 hex signature, or null to clear
+     */
+    setIdentityVerification(signature: string | null): void {
+        if (signature) {
+            this.register({ [IDENTITY_VERIFICATION_SIGNATURE]: signature })
+        } else {
+            this.unregister(IDENTITY_VERIFICATION_SIGNATURE)
+        }
     }
 
     /**

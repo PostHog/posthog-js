@@ -1,4 +1,4 @@
-import { USER_STATE } from '../constants'
+import { IDENTITY_VERIFICATION_SIGNATURE, USER_STATE } from '../constants'
 import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
@@ -304,6 +304,52 @@ describe('identify()', () => {
             instance.identify('a-new-id')
 
             expect(instance.unregister).toHaveBeenCalledWith('$flag_call_reported')
+        })
+    })
+
+    describe('setIdentityVerification', () => {
+        it('stores signature when called with a string', () => {
+            instance.setIdentityVerification('my-hmac-sig')
+
+            expect(instance.register).toHaveBeenCalledWith({
+                [IDENTITY_VERIFICATION_SIGNATURE]: 'my-hmac-sig',
+            })
+        })
+
+        it('clears signature when called with null', () => {
+            instance.setIdentityVerification(null)
+
+            expect(instance.unregister).toHaveBeenCalledWith(IDENTITY_VERIFICATION_SIGNATURE)
+        })
+    })
+
+    describe('identity verification via options param', () => {
+        it('stores signature in persistence when provided in options', () => {
+            instance.identify('a-new-id', undefined, undefined, {
+                identityVerification: 'test-hmac-signature',
+            })
+
+            expect(instance.register).toHaveBeenCalledWith({
+                [IDENTITY_VERIFICATION_SIGNATURE]: 'test-hmac-signature',
+            })
+        })
+
+        it('does not clear existing signature when options not provided', () => {
+            // First set a signature
+            instance.identify('first-id', undefined, undefined, {
+                identityVerification: 'test-hmac-signature',
+            })
+
+            // Reset mocks to track subsequent calls
+            ;(instance.register as jest.Mock).mockClear()
+            ;(instance.unregister as jest.Mock).mockClear()
+
+            // Identify again without the option
+            instance.persistence!.props['distinct_id'] = 'first-id'
+            instance.identify('first-id', { email: 'test@test.com' })
+
+            // Should not have called unregister with the signature key
+            expect(instance.unregister).not.toHaveBeenCalledWith(IDENTITY_VERIFICATION_SIGNATURE)
         })
     })
 

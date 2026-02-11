@@ -107,8 +107,14 @@ export interface PostHog {
      * @param new_distinct_id - The new distinct ID for the user
      * @param userPropertiesToSet - Properties to set on the user (using $set)
      * @param userPropertiesToSetOnce - Properties to set once on the user (using $set_once)
+     * @param options - Additional options (e.g., identity verification signature)
      */
-    identify(new_distinct_id?: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void
+    identify(
+        new_distinct_id?: string,
+        userPropertiesToSet?: Properties,
+        userPropertiesToSetOnce?: Properties,
+        options?: { identityVerification?: string }
+    ): void
 
     /**
      * Set properties on the current user.
@@ -144,6 +150,16 @@ export interface PostHog {
      * Create a person profile for the current user.
      */
     createPersonProfile(): void
+
+    /**
+     * Set or clear the identity verification signature (HMAC-SHA256).
+     *
+     * When set, the signature is included in certain requests to verify the
+     * caller is authorized to access person data for the current distinct ID.
+     *
+     * @param signature - The HMAC-SHA256 hex signature, or null to clear
+     */
+    setIdentityVerification(signature: string | null): void
 
     /**
      * Marks the current user as a test user by setting the `$internal_or_test_user` person property to `true`.
