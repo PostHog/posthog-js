@@ -35,7 +35,7 @@ export default defineNuxtConfig({
     publicKey: 'public api key', // Your public web snippet key. You can find it in settings
     clientConfig?: Partial<PostHogConfig> // (optional) It will be passed to the posthog-js client on init in vue
     serverConfig?: PostHogOptions // (optional) It will be passed to the posthog-node client on init in nitro. Please note that this client instance is intended for error-tracking purposes only
-    sourceMaps: {
+    sourcemaps: {
       enabled: true, // Enables sourcemaps generation and upload
       projectId: '2', // Project ID, see https://app.posthog.com/settings/project#variables
       project: 'my-application', // (optional) Project name, defaults to git repository name
