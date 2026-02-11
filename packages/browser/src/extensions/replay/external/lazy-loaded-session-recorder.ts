@@ -63,6 +63,7 @@ import { PostHog } from '../../../posthog-core'
 import {
     CaptureResult,
     NetworkRecordOptions,
+    PerformanceCaptureConfig,
     Properties,
     SessionIdChangedCallback,
     SessionRecordingOptions,
@@ -84,6 +85,14 @@ const ONE_KB = 1024
 
 const ONE_MINUTE = 1000 * 60
 const FIVE_MINUTES = ONE_MINUTE * 5
+
+/**
+ * Extracts the network_timing value from a capturePerformance config.
+ * Returns `true`/`false` if explicitly set, or `undefined` if not specified.
+ */
+function networkTimingFromConfig(config: boolean | PerformanceCaptureConfig | undefined): boolean | undefined {
+    return isObject(config) ? config.network_timing : config
+}
 
 export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
 export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some wiggle room)
@@ -479,15 +488,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             networkPayloadCapture_client_side?.recordHeaders || networkPayloadCapture_server_side?.recordHeaders
         const bodyEnabled =
             networkPayloadCapture_client_side?.recordBody || networkPayloadCapture_server_side?.recordBody
-        const clientConfigForPerformanceCapture = isObject(this._instance.config.capture_performance)
-            ? this._instance.config.capture_performance.network_timing
-            : this._instance.config.capture_performance
-        const serverConfigForPerformanceCapture = isObject(networkPayloadCapture_server_side?.capturePerformance)
-            ? networkPayloadCapture_server_side.capturePerformance.network_timing
-            : networkPayloadCapture_server_side?.capturePerformance
-        const networkTimingEnabled = !!(isBoolean(clientConfigForPerformanceCapture)
-            ? clientConfigForPerformanceCapture
-            : serverConfigForPerformanceCapture)
+        const clientNetworkTiming = networkTimingFromConfig(this._instance.config.capture_performance)
+        const serverNetworkTiming = networkTimingFromConfig(networkPayloadCapture_server_side?.capturePerformance)
+        const networkTimingEnabled = !!(isBoolean(clientNetworkTiming) ? clientNetworkTiming : serverNetworkTiming)
 
         return headersEnabled || bodyEnabled || networkTimingEnabled
             ? { recordHeaders: headersEnabled, recordBody: bodyEnabled, recordPerformance: networkTimingEnabled }
