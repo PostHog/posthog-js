@@ -26,6 +26,7 @@ import { isArray, isNullish } from '@posthog/core'
 import { detectDeviceType } from '@posthog/core'
 import { propertyComparisons } from '../../utils/property-utils'
 import { Properties, PropertyMatchType } from '../../types'
+import { Z_INDEX_SURVEYS } from '../../constants'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -66,7 +67,7 @@ export const defaultSurveyAppearance = {
     widgetType: SurveyWidgetType.Tab,
     widgetLabel: 'Feedback',
     widgetColor: 'black',
-    zIndex: '2147483647',
+    zIndex: String(Z_INDEX_SURVEYS),
     disabledButtonOpacity: '0.6',
     maxWidth: '300px',
     textSubtleColor: '#939393',

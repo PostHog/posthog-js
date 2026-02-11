@@ -17,7 +17,7 @@
     --ph-tour-box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     --ph-tour-max-width: 320px;
     --ph-tour-padding: 16px;
-    --ph-tour-z-index: 2147483646;
+    --ph-tour-z-index: 2147483646; /* Z_INDEX_TOURS from constants.ts */
 
     --ph-tour-overlay-color: rgba(0, 0, 0, 0.5);
     --ph-tour-spotlight-padding: 8px;
