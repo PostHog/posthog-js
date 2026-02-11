@@ -1,6 +1,9 @@
 # the recorder file can have unexpected impact on users' sites
 packages/browser/src/entrypoints/recorder.ts           @PostHog/team-replay
 
+# Network recorder
+packages/browser/src/extensions/replay/external/network-plugin.ts @pauldambra
+
 # Surveys
 packages/browser/src/extensions/surveys/               @PostHog/team-surveys
 packages/browser/src/extensions/surveys.tsx            @PostHog/team-surveys
