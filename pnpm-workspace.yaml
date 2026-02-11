@@ -13,7 +13,7 @@ catalog:
   "@babel/preset-env": ^7.27.1
   "@babel/preset-react": ^7.27.1
   "@babel/preset-typescript": ^7.27.1
-  "@posthog/cli": ~0.5.28
+  "@posthog/cli": ~0.5.29
   "@rslib/core": 0.10.6
   "@testing-library/dom": ^10.4.1
   "@testing-library/jest-dom": ^6.9.1

@@ -128,8 +128,8 @@ export default defineNuxtModule<ModuleOptions>({
         ...process.env,
         RUST_LOG: `posthog_cli=${logLevel}`,
         POSTHOG_CLI_HOST: options.host,
-        POSTHOG_CLI_ENV_ID: projectId,
-        POSTHOG_CLI_TOKEN: sourcemapsConfig.personalApiKey,
+        POSTHOG_CLI_PROJECT_ID: projectId,
+        POSTHOG_CLI_API_KEY: sourcemapsConfig.personalApiKey,
       }
       return (args: string[]) => {
         return spawnLocal(cliBinaryPath, args, {

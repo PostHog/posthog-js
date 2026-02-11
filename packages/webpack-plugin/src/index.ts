@@ -92,8 +92,8 @@ export class PosthogWebpackPlugin {
                 RUST_LOG: `posthog_cli=${config.logLevel}`,
                 ...process.env,
                 POSTHOG_CLI_HOST: config.host,
-                POSTHOG_CLI_TOKEN: config.personalApiKey,
-                POSTHOG_CLI_ENV_ID: config.projectId,
+                POSTHOG_CLI_API_KEY: config.personalApiKey,
+                POSTHOG_CLI_PROJECT_ID: config.projectId,
             },
             stdio: 'inherit',
         })
