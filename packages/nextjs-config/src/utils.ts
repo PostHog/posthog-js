@@ -41,7 +41,7 @@ export async function processSourceMaps(posthogOptions: ResolvedPluginConfig, di
     RUST_LOG: logLevel,
     POSTHOG_CLI_HOST: posthogOptions.host,
     POSTHOG_CLI_TOKEN: posthogOptions.personalApiKey,
-    POSTHOG_CLI_ENV_ID: posthogOptions.envId,
+    POSTHOG_CLI_ENV_ID: posthogOptions.projectId,
   }
   await callPosthogCli(posthogOptions.cliBinaryPath, cliOptions, envVars)
 }

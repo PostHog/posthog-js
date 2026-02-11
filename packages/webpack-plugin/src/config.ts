@@ -4,7 +4,9 @@ type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent'
 
 export interface PluginConfig {
     personalApiKey: string
-    envId: string
+    /** @deprecated Use projectId instead */
+    envId?: string
+    projectId?: string
     host?: string
     logLevel?: LogLevel
     cliBinaryPath?: string
@@ -17,7 +19,8 @@ export interface PluginConfig {
     }
 }
 
-export interface ResolvedPluginConfig extends PluginConfig {
+export interface ResolvedPluginConfig extends Omit<PluginConfig, 'envId' | 'projectId'> {
+    projectId: string
     host: string
     logLevel: LogLevel
     cliBinaryPath: string
@@ -31,6 +34,11 @@ export interface ResolvedPluginConfig extends PluginConfig {
 }
 
 export function resolveConfig(options: PluginConfig): ResolvedPluginConfig {
+    const projectId = options.projectId ?? options.envId
+    if (!projectId) {
+        throw new Error('projectId is required (envId is deprecated)')
+    }
+
     const host = options.host ?? 'https://us.i.posthog.com'
     const logLevel = options.logLevel ?? 'info'
     const cliBinaryPath =
@@ -44,7 +52,7 @@ export function resolveConfig(options: PluginConfig): ResolvedPluginConfig {
 
     return {
         personalApiKey: options.personalApiKey,
-        envId: options.envId,
+        projectId,
         host,
         logLevel,
         cliBinaryPath,

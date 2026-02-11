@@ -18,8 +18,8 @@ export class PosthogWebpackPlugin {
             `Personal API key not provided. If you are using turbo, make sure to add env variables to your turbo config`
         )
         assertValue(
-            this.resolvedConfig.envId,
-            `Environment ID not provided. If you are using turbo, make sure to add env variables to your turbo config`
+            this.resolvedConfig.projectId,
+            `projectId (or deprecated envId) not provided. If you are using turbo, make sure to add env variables to your turbo config`
         )
     }
 
@@ -93,7 +93,7 @@ export class PosthogWebpackPlugin {
                 ...process.env,
                 POSTHOG_CLI_HOST: config.host,
                 POSTHOG_CLI_TOKEN: config.personalApiKey,
-                POSTHOG_CLI_ENV_ID: config.envId,
+                POSTHOG_CLI_ENV_ID: config.projectId,
             },
             stdio: 'inherit',
         })

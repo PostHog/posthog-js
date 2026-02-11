@@ -26,7 +26,7 @@ export default {
     plugins: [
         posthog({
             personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY,
-            envId: process.env.POSTHOG_PROJECT_ID,
+            projectId: process.env.POSTHOG_PROJECT_ID,
             sourcemaps: {
                 enabled: true,
                 project: 'my-app',
@@ -42,7 +42,8 @@ export default {
 | Option                         | Type                                                 | Required | Default                    | Description                                 |
 | ------------------------------ | ---------------------------------------------------- | -------- | -------------------------- | ------------------------------------------- |
 | `personalApiKey`               | `string`                                             | Yes      | -                          | Your PostHog personal API key               |
-| `envId`                        | `string`                                             | Yes      | -                          | Your PostHog project/environment ID         |
+| `projectId`                    | `string`                                             | Yes      | -                          | Your PostHog project/environment ID         |
+| `envId`                        | `string`                                             | No       | -                          | Deprecated alias for `projectId`            |
 | `host`                         | `string`                                             | No       | `https://us.i.posthog.com` | PostHog instance host                       |
 | `logLevel`                     | `'debug' \| 'info' \| 'warn' \| 'error' \| 'silent'` | No       | `'info'`                   | Logging verbosity                           |
 | `cliBinaryPath`                | `string`                                             | No       | Auto-detected              | Path to the PostHog CLI binary              |
@@ -69,7 +70,7 @@ export default {
     plugins: [
         posthog({
             personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY,
-            envId: process.env.POSTHOG_PROJECT_ID,
+            projectId: process.env.POSTHOG_PROJECT_ID,
             host: process.env.POSTHOG_API_HOST,
             logLevel: 'info',
             sourcemaps: {

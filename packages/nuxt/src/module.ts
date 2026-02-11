@@ -14,7 +14,9 @@ type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 interface SourcemapsConfig {
   enabled: boolean
   personalApiKey: string
-  envId: string
+  /** @deprecated Use projectId instead */
+  envId?: string
+  projectId?: string
   version?: string
   project?: string
   logLevel?: LogLevel
@@ -117,11 +119,12 @@ export default defineNuxtModule<ModuleOptions>({
           cwd: resolvedDirname,
         })
       const logLevel = sourcemapsConfig.logLevel || 'info'
+      const projectId = sourcemapsConfig.projectId ?? sourcemapsConfig.envId
       const cliEnv = {
         ...process.env,
         RUST_LOG: `posthog_cli=${logLevel}`,
         POSTHOG_CLI_HOST: options.host,
-        POSTHOG_CLI_ENV_ID: sourcemapsConfig.envId,
+        POSTHOG_CLI_ENV_ID: projectId,
         POSTHOG_CLI_TOKEN: sourcemapsConfig.personalApiKey,
       }
       return (args: string[]) => {
