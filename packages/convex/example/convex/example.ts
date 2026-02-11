@@ -1,6 +1,6 @@
-import { posthog } from "./posthog.js";
-import { action, mutation } from "./_generated/server.js";
-import { v } from "convex/values";
+import { posthog } from './posthog.js'
+import { action, mutation } from './_generated/server.js'
+import { v } from 'convex/values'
 
 // --- Fire-and-forget methods (mutations) ---
 // When the identify callback is configured, distinctId is resolved automatically
@@ -28,10 +28,10 @@ export const testCapture = mutation({
       timestamp: args.timestamp ? new Date(args.timestamp) : undefined,
       uuid: args.uuid || undefined,
       disableGeoip: args.disableGeoip,
-    });
-    return { success: true };
+    })
+    return { success: true }
   },
-});
+})
 
 export const testIdentify = mutation({
   args: {
@@ -44,10 +44,10 @@ export const testIdentify = mutation({
       distinctId: args.distinctId,
       properties: args.properties,
       disableGeoip: args.disableGeoip,
-    });
-    return { success: true };
+    })
+    return { success: true }
   },
-});
+})
 
 export const testGroupIdentify = mutation({
   args: {
@@ -64,10 +64,10 @@ export const testGroupIdentify = mutation({
       properties: args.properties,
       distinctId: args.distinctId || undefined,
       disableGeoip: args.disableGeoip,
-    });
-    return { success: true };
+    })
+    return { success: true }
   },
-});
+})
 
 export const testAlias = mutation({
   args: {
@@ -80,42 +80,40 @@ export const testAlias = mutation({
       distinctId: args.distinctId,
       alias: args.alias,
       disableGeoip: args.disableGeoip,
-    });
-    return { success: true };
+    })
+    return { success: true }
   },
-});
+})
 
 export const testCaptureException = mutation({
   args: {
     errorMessage: v.string(),
-    errorType: v.optional(
-      v.union(v.literal("error"), v.literal("string"), v.literal("object")),
-    ),
+    errorType: v.optional(v.union(v.literal('error'), v.literal('string'), v.literal('object'))),
     distinctId: v.optional(v.string()),
     additionalProperties: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
-    let error: unknown;
-    switch (args.errorType ?? "error") {
-      case "error":
-        error = new Error(args.errorMessage);
-        break;
-      case "string":
-        error = args.errorMessage;
-        break;
-      case "object":
-        error = { message: args.errorMessage };
-        break;
+    let error: unknown
+    switch (args.errorType ?? 'error') {
+      case 'error':
+        error = new Error(args.errorMessage)
+        break
+      case 'string':
+        error = args.errorMessage
+        break
+      case 'object':
+        error = { message: args.errorMessage }
+        break
     }
 
     await posthog.captureException(ctx, {
       error,
       distinctId: args.distinctId || undefined,
       additionalProperties: args.additionalProperties,
-    });
-    return { success: true };
+    })
+    return { success: true }
   },
-});
+})
 
 // --- Feature flag methods (actions) ---
 
@@ -127,26 +125,22 @@ const featureFlagArgs = {
   groupProperties: v.optional(v.any()),
   sendFeatureFlagEvents: v.optional(v.boolean()),
   disableGeoip: v.optional(v.boolean()),
-};
+}
 
 function featureFlagOptions(args: {
-  groups?: unknown;
-  personProperties?: unknown;
-  groupProperties?: unknown;
-  sendFeatureFlagEvents?: boolean;
-  disableGeoip?: boolean;
+  groups?: unknown
+  personProperties?: unknown
+  groupProperties?: unknown
+  sendFeatureFlagEvents?: boolean
+  disableGeoip?: boolean
 }) {
   return {
     groups: args.groups as Record<string, string> | undefined,
-    personProperties: args.personProperties as
-      | Record<string, string>
-      | undefined,
-    groupProperties: args.groupProperties as
-      | Record<string, Record<string, string>>
-      | undefined,
+    personProperties: args.personProperties as Record<string, string> | undefined,
+    groupProperties: args.groupProperties as Record<string, Record<string, string>> | undefined,
     sendFeatureFlagEvents: args.sendFeatureFlagEvents,
     disableGeoip: args.disableGeoip,
-  };
+  }
 }
 
 export const testGetFeatureFlag = action({
@@ -156,10 +150,10 @@ export const testGetFeatureFlag = action({
       key: args.flagKey,
       distinctId: args.distinctId,
       ...featureFlagOptions(args),
-    });
-    return { flagKey: args.flagKey, value };
+    })
+    return { flagKey: args.flagKey, value }
   },
-});
+})
 
 export const testIsFeatureEnabled = action({
   args: featureFlagArgs,
@@ -168,10 +162,10 @@ export const testIsFeatureEnabled = action({
       key: args.flagKey,
       distinctId: args.distinctId,
       ...featureFlagOptions(args),
-    });
-    return { flagKey: args.flagKey, enabled };
+    })
+    return { flagKey: args.flagKey, enabled }
   },
-});
+})
 
 export const testGetFeatureFlagPayload = action({
   args: {
@@ -184,10 +178,10 @@ export const testGetFeatureFlagPayload = action({
       distinctId: args.distinctId,
       matchValue: args.matchValue,
       ...featureFlagOptions(args),
-    });
-    return { flagKey: args.flagKey, payload };
+    })
+    return { flagKey: args.flagKey, payload }
   },
-});
+})
 
 export const testGetFeatureFlagResult = action({
   args: featureFlagArgs,
@@ -196,10 +190,10 @@ export const testGetFeatureFlagResult = action({
       key: args.flagKey,
       distinctId: args.distinctId,
       ...featureFlagOptions(args),
-    });
-    return { flagKey: args.flagKey, result };
+    })
+    return { flagKey: args.flagKey, result }
   },
-});
+})
 
 export const testGetAllFlags = action({
   args: {
@@ -214,18 +208,14 @@ export const testGetAllFlags = action({
     const flags = await posthog.getAllFlags(ctx, {
       distinctId: args.distinctId,
       groups: args.groups as Record<string, string> | undefined,
-      personProperties: args.personProperties as
-        | Record<string, string>
-        | undefined,
-      groupProperties: args.groupProperties as
-        | Record<string, Record<string, string>>
-        | undefined,
+      personProperties: args.personProperties as Record<string, string> | undefined,
+      groupProperties: args.groupProperties as Record<string, Record<string, string>> | undefined,
       disableGeoip: args.disableGeoip,
       flagKeys: args.flagKeys,
-    });
-    return { flags };
+    })
+    return { flags }
   },
-});
+})
 
 export const testGetAllFlagsAndPayloads = action({
   args: {
@@ -240,15 +230,11 @@ export const testGetAllFlagsAndPayloads = action({
     const result = await posthog.getAllFlagsAndPayloads(ctx, {
       distinctId: args.distinctId,
       groups: args.groups as Record<string, string> | undefined,
-      personProperties: args.personProperties as
-        | Record<string, string>
-        | undefined,
-      groupProperties: args.groupProperties as
-        | Record<string, Record<string, string>>
-        | undefined,
+      personProperties: args.personProperties as Record<string, string> | undefined,
+      groupProperties: args.groupProperties as Record<string, Record<string, string>> | undefined,
       disableGeoip: args.disableGeoip,
       flagKeys: args.flagKeys,
-    });
-    return result;
+    })
+    return result
   },
-});
+})

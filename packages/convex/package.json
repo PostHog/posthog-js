@@ -19,7 +19,6 @@
     "posthog",
     "analytics"
   ],
-  "type": "module",
   "scripts": {
     "dev": "run-p -r 'dev:*'",
     "dev:backend": "convex dev --typecheck-components",
@@ -28,13 +27,15 @@
     "predev": "path-exists .env.local dist || (pnpm build && convex dev --once)",
     "build": "tsc --project ./tsconfig.build.json",
     "build:codegen": "npx convex codegen --component-dir ./src/component && pnpm build",
-    "build:clean": "rm -rf dist *.tsbuildinfo && pnpm build:codegen",
+    "clean": "rm -rf dist *.tsbuildinfo && pnpm build:codegen",
     "typecheck": "tsc --noEmit && tsc -p example && tsc -p example/convex",
-    "lint": "eslint .",
+    "lint": "eslint src example",
+    "lint:fix": "eslint src example --fix",
     "all": "run-p -r 'dev:*' 'test:watch'",
     "test:unit": "NODE_OPTIONS=--experimental-vm-modules jest",
-    "test:integration": "vitest run --typecheck",
-    "prepublishOnly": "pnpm build"
+    "test:integration": "jest run --typecheck",
+    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "files": [
     "dist",
@@ -71,8 +72,6 @@
   "devDependencies": {
     "@convex-dev/eslint-plugin": "^1.1.1",
     "@edge-runtime/vm": "^5.0.0",
-    "@eslint/eslintrc": "^3.3.3",
-    "@eslint/js": "9.39.2",
     "@jest/globals": "^29.7.0",
     "@types/node": "^24.10.12",
     "@types/react": "catalog:",
@@ -81,21 +80,14 @@
     "convex": "1.31.7",
     "convex-test": "0.0.41",
     "cpy-cli": "^6.0.0",
-    "eslint": "9.39.2",
-    "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "eslint-plugin-react-refresh": "^0.5.0",
     "globals": "^17.3.0",
     "npm-run-all2": "8.0.4",
     "path-exists-cli": "2.0.0",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "typescript": "catalog:",
-    "typescript-eslint": "8.54.0",
     "jest": "catalog:",
     "ts-jest": "catalog:",
-    "vite": "7.3.1",
-    "vitest": "4.0.18"
+    "vite": "7.3.1"
   },
   "peerDependencies": {
     "convex": "^1.31.7"

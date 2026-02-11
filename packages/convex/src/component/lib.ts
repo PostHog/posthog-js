@@ -1,10 +1,10 @@
-import type { FeatureFlagValue, JsonType } from "@posthog/core";
-import { PostHog } from "posthog-node/edge";
-import { action } from "./_generated/server.js";
-import { v } from "convex/values";
+import type { FeatureFlagValue, JsonType } from '@posthog/core'
+import { PostHog } from 'posthog-node/edge'
+import { action } from './_generated/server.js'
+import { v } from 'convex/values'
 
 function createClient(apiKey: string, host: string) {
-  return new PostHog(apiKey, { host, flushAt: 1, flushInterval: 0 });
+  return new PostHog(apiKey, { host, flushAt: 1, flushInterval: 0 })
 }
 
 export const capture = action({
@@ -21,7 +21,7 @@ export const capture = action({
     disableGeoip: v.optional(v.boolean()),
   },
   handler: async (_ctx, args) => {
-    const client = createClient(args.apiKey, args.host);
+    const client = createClient(args.apiKey, args.host)
     client.capture({
       distinctId: args.distinctId,
       event: args.event,
@@ -31,10 +31,10 @@ export const capture = action({
       timestamp: args.timestamp ? new Date(args.timestamp) : undefined,
       uuid: args.uuid,
       disableGeoip: args.disableGeoip,
-    });
-    await client.shutdown();
+    })
+    await client.shutdown()
   },
-});
+})
 
 export const identify = action({
   args: {
@@ -45,15 +45,15 @@ export const identify = action({
     disableGeoip: v.optional(v.boolean()),
   },
   handler: async (_ctx, args) => {
-    const client = createClient(args.apiKey, args.host);
+    const client = createClient(args.apiKey, args.host)
     client.identify({
       distinctId: args.distinctId,
       properties: args.properties,
       disableGeoip: args.disableGeoip,
-    });
-    await client.shutdown();
+    })
+    await client.shutdown()
   },
-});
+})
 
 export const groupIdentify = action({
   args: {
@@ -66,17 +66,17 @@ export const groupIdentify = action({
     disableGeoip: v.optional(v.boolean()),
   },
   handler: async (_ctx, args) => {
-    const client = createClient(args.apiKey, args.host);
+    const client = createClient(args.apiKey, args.host)
     client.groupIdentify({
       groupType: args.groupType,
       groupKey: args.groupKey,
       properties: args.properties,
       distinctId: args.distinctId,
       disableGeoip: args.disableGeoip,
-    });
-    await client.shutdown();
+    })
+    await client.shutdown()
   },
-});
+})
 
 export const alias = action({
   args: {
@@ -87,15 +87,15 @@ export const alias = action({
     disableGeoip: v.optional(v.boolean()),
   },
   handler: async (_ctx, args) => {
-    const client = createClient(args.apiKey, args.host);
+    const client = createClient(args.apiKey, args.host)
     client.alias({
       distinctId: args.distinctId,
       alias: args.alias,
       disableGeoip: args.disableGeoip,
-    });
-    await client.shutdown();
+    })
+    await client.shutdown()
   },
-});
+})
 
 export const captureException = action({
   args: {
@@ -108,14 +108,14 @@ export const captureException = action({
     additionalProperties: v.optional(v.any()),
   },
   handler: async (_ctx, args) => {
-    const client = createClient(args.apiKey, args.host);
-    const error = new Error(args.errorMessage);
-    if (args.errorName) error.name = args.errorName;
-    if (args.errorStack) error.stack = args.errorStack;
-    client.captureException(error, args.distinctId, args.additionalProperties);
-    await client.shutdown();
+    const client = createClient(args.apiKey, args.host)
+    const error = new Error(args.errorMessage)
+    if (args.errorName) error.name = args.errorName
+    if (args.errorStack) error.stack = args.errorStack
+    client.captureException(error, args.distinctId, args.additionalProperties)
+    await client.shutdown()
   },
-});
+})
 
 // Feature flag actions — these return values and must be called via ctx.runAction
 
@@ -129,14 +129,14 @@ const featureFlagArgs = {
   groupProperties: v.optional(v.any()),
   sendFeatureFlagEvents: v.optional(v.boolean()),
   disableGeoip: v.optional(v.boolean()),
-};
+}
 
 function featureFlagOptions(args: {
-  groups?: Record<string, string>;
-  personProperties?: Record<string, string>;
-  groupProperties?: Record<string, Record<string, string>>;
-  sendFeatureFlagEvents?: boolean;
-  disableGeoip?: boolean;
+  groups?: Record<string, string>
+  personProperties?: Record<string, string>
+  groupProperties?: Record<string, Record<string, string>>
+  sendFeatureFlagEvents?: boolean
+  disableGeoip?: boolean
 }) {
   return {
     groups: args.groups,
@@ -144,36 +144,28 @@ function featureFlagOptions(args: {
     groupProperties: args.groupProperties,
     sendFeatureFlagEvents: args.sendFeatureFlagEvents,
     disableGeoip: args.disableGeoip,
-  };
+  }
 }
 
 export const getFeatureFlag = action({
   args: featureFlagArgs,
   handler: async (_ctx, args): Promise<FeatureFlagValue | null> => {
-    const client = createClient(args.apiKey, args.host);
-    const result = await client.getFeatureFlag(
-      args.key,
-      args.distinctId,
-      featureFlagOptions(args),
-    );
-    await client.shutdown();
-    return result ?? null;
+    const client = createClient(args.apiKey, args.host)
+    const result = await client.getFeatureFlag(args.key, args.distinctId, featureFlagOptions(args))
+    await client.shutdown()
+    return result ?? null
   },
-});
+})
 
 export const isFeatureEnabled = action({
   args: featureFlagArgs,
   handler: async (_ctx, args) => {
-    const client = createClient(args.apiKey, args.host);
-    const result = await client.isFeatureEnabled(
-      args.key,
-      args.distinctId,
-      featureFlagOptions(args),
-    );
-    await client.shutdown();
-    return result ?? null;
+    const client = createClient(args.apiKey, args.host)
+    const result = await client.isFeatureEnabled(args.key, args.distinctId, featureFlagOptions(args))
+    await client.shutdown()
+    return result ?? null
   },
-});
+})
 
 export const getFeatureFlagPayload = action({
   args: {
@@ -181,45 +173,41 @@ export const getFeatureFlagPayload = action({
     matchValue: v.optional(v.union(v.string(), v.boolean())),
   },
   handler: async (_ctx, args): Promise<JsonType> => {
-    const client = createClient(args.apiKey, args.host);
+    const client = createClient(args.apiKey, args.host)
     const result = await client.getFeatureFlagPayload(
       args.key,
       args.distinctId,
       args.matchValue,
-      featureFlagOptions(args),
-    );
-    await client.shutdown();
-    return result ?? null;
+      featureFlagOptions(args)
+    )
+    await client.shutdown()
+    return result ?? null
   },
-});
+})
 
 export const getFeatureFlagResult = action({
   args: featureFlagArgs,
   handler: async (
     _ctx,
-    args,
+    args
   ): Promise<{
-    key: string;
-    enabled: boolean;
-    variant: string | null;
-    payload: JsonType | null;
+    key: string
+    enabled: boolean
+    variant: string | null
+    payload: JsonType | null
   } | null> => {
-    const client = createClient(args.apiKey, args.host);
-    const result = await client.getFeatureFlagResult(
-      args.key,
-      args.distinctId,
-      featureFlagOptions(args),
-    );
-    await client.shutdown();
-    if (!result) return null;
+    const client = createClient(args.apiKey, args.host)
+    const result = await client.getFeatureFlagResult(args.key, args.distinctId, featureFlagOptions(args))
+    await client.shutdown()
+    if (!result) return null
     return {
       key: result.key,
       enabled: result.enabled,
       variant: result.variant ?? null,
       payload: result.payload ?? null,
-    };
+    }
   },
-});
+})
 
 const allFlagsArgs = {
   apiKey: v.string(),
@@ -230,45 +218,42 @@ const allFlagsArgs = {
   groupProperties: v.optional(v.any()),
   disableGeoip: v.optional(v.boolean()),
   flagKeys: v.optional(v.array(v.string())),
-};
+}
 
 export const getAllFlags = action({
   args: allFlagsArgs,
-  handler: async (
-    _ctx,
-    args,
-  ): Promise<Record<string, FeatureFlagValue>> => {
-    const client = createClient(args.apiKey, args.host);
+  handler: async (_ctx, args): Promise<Record<string, FeatureFlagValue>> => {
+    const client = createClient(args.apiKey, args.host)
     const result = await client.getAllFlags(args.distinctId, {
       groups: args.groups,
       personProperties: args.personProperties,
       groupProperties: args.groupProperties,
       disableGeoip: args.disableGeoip,
       flagKeys: args.flagKeys,
-    });
-    await client.shutdown();
-    return result;
+    })
+    await client.shutdown()
+    return result
   },
-});
+})
 
 export const getAllFlagsAndPayloads = action({
   args: allFlagsArgs,
   handler: async (
     _ctx,
-    args,
+    args
   ): Promise<{
-    featureFlags?: Record<string, FeatureFlagValue>;
-    featureFlagPayloads?: Record<string, JsonType>;
+    featureFlags?: Record<string, FeatureFlagValue>
+    featureFlagPayloads?: Record<string, JsonType>
   }> => {
-    const client = createClient(args.apiKey, args.host);
+    const client = createClient(args.apiKey, args.host)
     const result = await client.getAllFlagsAndPayloads(args.distinctId, {
       groups: args.groups,
       personProperties: args.personProperties,
       groupProperties: args.groupProperties,
       disableGeoip: args.disableGeoip,
       flagKeys: args.flagKeys,
-    });
-    await client.shutdown();
-    return result;
+    })
+    await client.shutdown()
+    return result
   },
-});
+})

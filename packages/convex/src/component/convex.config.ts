@@ -1,3 +1,3 @@
-import { defineComponent } from "convex/server";
+import { defineComponent } from 'convex/server'
 
-export default defineComponent("posthog");
+export default defineComponent('posthog')
