@@ -12,11 +12,12 @@ const path = require('path')
 
 function matchGlob(pattern, filePath) {
   // Convert glob pattern to regex
-  // Handle **/ separately: it matches zero or more directory segments
-  const regexStr = pattern
-    .replace(/\./g, '\\.')
-    .replace(/\*\*\//g, '(?:.*/)?')
-    .replace(/\*/g, '[^/]*')
+  // First escape all regex metacharacters, then translate glob tokens.
+  const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const regexStr = escaped
+    // Handle **/ separately: it matches zero or more directory segments
+    .replace(/\\\*\\\*\//g, '(?:.*/)?')
+    .replace(/\\\*/g, '[^/]*')
   return new RegExp('^' + regexStr + '$').test(filePath)
 }
 
