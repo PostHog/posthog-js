@@ -40,8 +40,8 @@ export function trackConsole(level: string, tracker: ExceptionHook): void {
 
   const originalMethod = con[level]
   con[level] = function (...args: any[]): void {
-    const message = args.join(' ')
     const error = args.find((arg) => arg instanceof Error)
+    const message = args.join(' ')
     const syntheticException = new Error('Synthetic PostHog Error')
     tracker(error ?? message, false, syntheticException)
     return originalMethod?.(...args)

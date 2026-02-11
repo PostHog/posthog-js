@@ -31,42 +31,6 @@ export const __POSTHOG_ERROR_MESSAGES = {
     '[PostHog][PostHogErrorBoundary] Invalid fallback prop, provide a valid React element or a function that returns a valid React element.',
 }
 
-/**
- * PostHogErrorBoundary is a React Error Boundary component that automatically
- * captures exceptions with PostHog when they occur in its child component tree.
- *
- * @example
- * ```jsx
- * import { PostHogErrorBoundary } from 'posthog-react-native'
- *
- * function App() {
- *   return (
- *     <PostHogProvider apiKey="<ph_project_api_key>">
- *       <PostHogErrorBoundary fallback={<Text>Something went wrong</Text>}>
- *         <MyComponent />
- *       </PostHogErrorBoundary>
- *     </PostHogProvider>
- *   )
- * }
- * ```
- *
- * @example
- * ```jsx
- * // With a fallback component that receives error details
- * <PostHogErrorBoundary
- *   fallback={({ error, componentStack }) => (
- *     <View>
- *       <Text>Error: {error.message}</Text>
- *     </View>
- *   )}
- *   additionalProperties={{ screen: 'home' }}
- * >
- *   <MyComponent />
- * </PostHogErrorBoundary>
- * ```
- *
- * @public
- */
 export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryProps, PostHogErrorBoundaryState> {
   static contextType = PostHogContext
   context!: React.ContextType<typeof PostHogContext>
@@ -104,8 +68,8 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
 
     const element = isFunction(fallback)
       ? (React.createElement(fallback, {
-            error: state.error,
-            componentStack: state.componentStack,
+          error: state.error,
+          componentStack: state.componentStack,
         }) as React.ReactNode)
       : fallback
 
