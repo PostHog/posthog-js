@@ -8,10 +8,6 @@ export * from './hooks/useFeatureFlag'
 export * from './hooks/usePostHog'
 export * from './PostHogMaskView'
 export * from './PostHogProvider'
-export {
-  PostHogErrorBoundary,
-  PostHogErrorBoundaryProps,
-  PostHogErrorBoundaryFallbackProps,
-} from './PostHogErrorBoundary'
+export * from './PostHogErrorBoundary'
 export * from './types'
 export * from './surveys'

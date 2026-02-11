@@ -879,8 +879,8 @@ packages:
     engines: {node: '>=14'}
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-NNk01nHfWGc6D8yJLRM85AxZ0/CgYJmJKKMLqC/zHpDGMKQN1BNKYHgcswey2//Cj1vK9pCspRtuywL6UPE3nA==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.7.1
+    resolution: {integrity: sha512-iNC53tOGhUAUrhbU8gOYRBK9Czb4XUOnGiE0se/YCmQAJ4o8NtyGlY9KrOK7V1hQij+J02Cq0Kr3cDNFVi45yQ==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.22.0
 
   '@radix-ui/react-compose-refs@1.1.2':
     resolution: {integrity: sha512-z4eqJvfiNnFMHIIvXP3CY57y2WJs5g2v3X0zm9mEJkrkNv4rDxu+sg9Jh8EkXyeqBkB7SOcboo9dMVqhyrACIg==}
@@ -2276,11 +2276,12 @@ packages:
 
   glob@10.4.5:
     resolution: {integrity: sha512-7Bv8RF0k6xjo7d4A/PxYLbUCfb6c+Vpd2/mB2yRDlew7Jb5hEXiCD9ibfO7wpk8i4sevK6DFny9h7EYbM3/sHg==}
+    deprecated: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
     hasBin: true
 
   glob@7.2.3:
     resolution: {integrity: sha512-nFR0zLpU2YCaRxwoCJvL6UvCH2JFyFVIvwTLsIf21AuHlMskA1hhTdk+LlYJtOlYt9v6dvszD2BGRqBL+iQK9Q==}
-    deprecated: Glob versions prior to v9 are no longer supported
+    deprecated: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 
   globals@14.0.0:
     resolution: {integrity: sha512-oahGvuMGQlPw/ivIYBjVSrWAfWLBeku5tpPE2fOPLi+WHffIWbuh2tCjhyQhTBPMf5E9jDEH4FOmTYgYwbKwtQ==}
@@ -3139,8 +3140,8 @@ packages:
       react-native: '*'
 
   posthog-react-native@file:../../target/posthog-react-native.tgz:
-    resolution: {integrity: sha512-kkeSVgJQSEpUbjBj/a3MdGBOPSxfh8/sc9evlY8tDboDNxCydPTv/3dnZw0x9mdsYUIEoRyKZruPxtl0qOAKrQ==, tarball: file:../../target/posthog-react-native.tgz}
-    version: 4.14.4
+    resolution: {integrity: sha512-C65NwTvYVoKxuwozdZIND9w9Mg19uzWWIZC8BGmuk45lhGjMk+Q3TJm3wfuxW7pxaQhe3qrOONFW/FcLVhjg8g==, tarball: file:../../target/posthog-react-native.tgz}
+    version: 4.32.0
     peerDependencies:
       '@react-native-async-storage/async-storage': '>=1.0.0'
       '@react-navigation/native': '>= 5.0.0'
@@ -3712,6 +3713,7 @@ packages:
   tar@7.5.1:
     resolution: {integrity: sha512-nlGpxf+hv0v7GkWBK2V9spgactGOp0qvfWRxUMjqHyzrt3SgwE48DIv/FhqPHJYLHpgW1opq3nERbz5Anq7n1g==}
     engines: {node: '>=18'}
+    deprecated: Old versions of tar are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 
   temp-dir@2.0.0:
     resolution: {integrity: sha512-aoBAniQmmwtcKp/7BzsH8Cxzv8OL736p7v1ihGb5e9DJ9kTwGWHrQrVB5+lfVDzfGrdRzXch+ig7LHaY1JTOrg==}
