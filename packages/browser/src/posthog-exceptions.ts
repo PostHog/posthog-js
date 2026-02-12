@@ -1,4 +1,6 @@
 import { ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS, ERROR_TRACKING_SUPPRESSION_RULES } from './constants'
+import { ErrorTrackingAutocaptureCompositeTrigger } from './extensions/exception-autocapture/controls/errorTrackingAutocaptureCompositeTrigger'
+import type { AutocaptureTriggersStatus } from './extensions/exception-autocapture/controls/triggerStatusReporter'
 import { PostHog } from './posthog-core'
 import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
@@ -26,10 +28,12 @@ export class PostHogExceptions {
     private readonly _instance: PostHog
     private _suppressionRules: ErrorTrackingSuppressionRule[] = []
     private _errorPropertiesBuilder: ErrorTracking.ErrorPropertiesBuilder = buildErrorPropertiesBuilder()
+    private _autocaptureCompositeTrigger: ErrorTrackingAutocaptureCompositeTrigger
 
     constructor(instance: PostHog) {
         this._instance = instance
         this._suppressionRules = this._instance.persistence?.get_property(ERROR_TRACKING_SUPPRESSION_RULES) ?? []
+        this._autocaptureCompositeTrigger = new ErrorTrackingAutocaptureCompositeTrigger(instance)
     }
 
     onRemoteConfig(response: RemoteConfig) {
@@ -45,6 +49,26 @@ export class PostHogExceptions {
                 [ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS]: captureExtensionExceptions,
             })
         }
+
+        this._autocaptureCompositeTrigger.init(response)
+    }
+
+    shouldAutocapture(): boolean {
+        return this._autocaptureCompositeTrigger.matches()
+    }
+
+    /**
+     * Returns the current status of all autocapture triggers.
+     * Useful for debugging why exceptions are or aren't being captured.
+     *
+     * @example
+     * ```js
+     * // In browser console:
+     * posthog.exceptions.getAutocaptureStatus()
+     * ```
+     */
+    getAutocaptureStatus(): AutocaptureTriggersStatus {
+        return this._autocaptureCompositeTrigger.getStatus()
     }
 
     private get _captureExtensionExceptions() {

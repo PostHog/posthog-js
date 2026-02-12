@@ -1,0 +1,140 @@
+import { EventTrigger } from '../../../../extensions/triggers/behaviour/event-trigger'
+import { PersistenceHelper } from '../../../../extensions/triggers/behaviour/persistence'
+import type { TriggerOptions } from '../../../../extensions/triggers/behaviour/types'
+
+type EventCallback = (event: { event: string }) => void
+
+const createMockPosthog = (sessionId: string) => {
+    const callbacks: EventCallback[] = []
+
+    const posthog = {
+        get_session_id: jest.fn(() => sessionId),
+        on: jest.fn((eventName: string, callback: EventCallback) => {
+            if (eventName === 'eventCaptured') {
+                callbacks.push(callback)
+            }
+            return () => {
+                const index = callbacks.indexOf(callback)
+                if (index >= 0) {
+                    callbacks.splice(index, 1)
+                }
+            }
+        }),
+    }
+
+    const fireEvent = (name: string) => {
+        callbacks.forEach((cb) => cb({ event: name }))
+    }
+
+    const activeListenerCount = () => callbacks.length
+
+    return { posthog, fireEvent, activeListenerCount }
+}
+
+describe('EventTrigger', () => {
+    const SESSION_ID = 'session-123'
+    const OTHER_SESSION_ID = 'session-456'
+
+    const createTrigger = (eventTriggers: string[], persistedSessionId?: string, sessionId: string = SESSION_ID) => {
+        const { posthog, fireEvent, activeListenerCount } = createMockPosthog(sessionId)
+        const storage: Record<string, unknown> = {}
+        if (persistedSessionId) {
+            storage['$error_tracking_event_triggered'] = persistedSessionId
+        }
+
+        const persistence = new PersistenceHelper(
+            (key) => storage[key] ?? null,
+            (key, value) => {
+                storage[key] = value
+            }
+        ).withPrefix('error_tracking')
+
+        const options: TriggerOptions = {
+            posthog: posthog as any,
+            window: undefined,
+            log: jest.fn(),
+            persistence,
+        }
+
+        const trigger = new EventTrigger(options)
+        trigger.init(eventTriggers)
+
+        return { trigger, fireEvent, storage, posthog, activeListenerCount }
+    }
+
+    it('returns null when not configured', () => {
+        const { trigger, storage } = createTrigger([])
+
+        expect(trigger.matches(SESSION_ID)).toBeNull()
+        expect(storage['$error_tracking_event_triggered']).toBeUndefined()
+    })
+
+    it('returns false when no matching event fired', () => {
+        const { trigger, fireEvent, storage } = createTrigger(['my-event'])
+
+        fireEvent('other-event')
+
+        expect(trigger.matches(SESSION_ID)).toBe(false)
+        expect(storage['$error_tracking_event_triggered']).toBeUndefined()
+    })
+
+    it('returns true after matching event fires', () => {
+        const { trigger, fireEvent, storage } = createTrigger(['my-event'])
+
+        fireEvent('my-event')
+
+        expect(trigger.matches(SESSION_ID)).toBe(true)
+        expect(storage['$error_tracking_event_triggered']).toBe(SESSION_ID)
+    })
+
+    it('restores from persistence for same session', () => {
+        const { trigger, storage } = createTrigger(['my-event'], SESSION_ID)
+
+        expect(trigger.matches(SESSION_ID)).toBe(true)
+        expect(storage['$error_tracking_event_triggered']).toBe(SESSION_ID)
+    })
+
+    it('does not restore for different session', () => {
+        const { trigger, storage } = createTrigger(['my-event'], OTHER_SESSION_ID)
+
+        expect(trigger.matches(SESSION_ID)).toBe(false)
+        expect(storage['$error_tracking_event_triggered']).toBe(OTHER_SESSION_ID)
+    })
+
+    it('stays triggered after subsequent events', () => {
+        const { trigger, fireEvent, storage } = createTrigger(['my-event'])
+
+        fireEvent('my-event')
+        fireEvent('other-event')
+
+        expect(trigger.matches(SESSION_ID)).toBe(true)
+        expect(storage['$error_tracking_event_triggered']).toBe(SESSION_ID)
+    })
+
+    it('init is idempotent - only one active listener after multiple calls', () => {
+        const { trigger, fireEvent, activeListenerCount } = createTrigger(['my-event'])
+
+        trigger.init(['my-event'])
+        trigger.init(['my-event'])
+
+        expect(activeListenerCount()).toBe(1)
+
+        fireEvent('my-event')
+        expect(trigger.matches(SESSION_ID)).toBe(true)
+    })
+
+    it('re-init switches to new event list', () => {
+        const { trigger, fireEvent } = createTrigger(['event-a'])
+
+        // Re-init with different events before any event fires
+        trigger.init(['event-b'])
+
+        // Old event should not trigger (listener was re-attached for new events)
+        fireEvent('event-a')
+        expect(trigger.matches(SESSION_ID)).toBe(false)
+
+        // New event should trigger
+        fireEvent('event-b')
+        expect(trigger.matches(SESSION_ID)).toBe(true)
+    })
+})

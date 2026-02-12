@@ -3,7 +3,7 @@ import {
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
 } from '../../../constants'
 import { PostHog } from '../../../posthog-core'
-import { FlagVariant, RemoteConfig, SessionRecordingPersistedConfig, SessionRecordingUrlTrigger } from '../../../types'
+import { FlagVariant, RemoteConfig, SessionRecordingPersistedConfig, UrlTrigger } from '../../../types'
 import { isNullish, isBoolean, isString, isObject } from '@posthog/core'
 import { window } from '../../../utils/globals'
 import { logger } from '../../../utils/logger'
@@ -56,7 +56,7 @@ type ReplayConfigType = RemoteConfig | SessionRecordingPersistedConfig
 
 function sessionRecordingUrlTriggerMatches(
     url: string,
-    triggers: SessionRecordingUrlTrigger[],
+    triggers: UrlTrigger[],
     compiledRegexCache?: Map<string, RegExp>
 ) {
     return triggers.some((trigger) => {
@@ -135,8 +135,8 @@ const isEagerLoadedConfig = (x: ReplayConfigType): x is RemoteConfig => {
 }
 
 export class URLTriggerMatching implements TriggerStatusMatching {
-    _urlTriggers: SessionRecordingUrlTrigger[] = []
-    _urlBlocklist: SessionRecordingUrlTrigger[] = []
+    _urlTriggers: UrlTrigger[] = []
+    _urlBlocklist: UrlTrigger[] = []
 
     private _compiledTriggerRegexes: Map<string, RegExp> = new Map()
     private _compiledBlocklistRegexes: Map<string, RegExp> = new Map()
