@@ -19,7 +19,7 @@ export class PersistenceHelper {
         return new PersistenceHelper(this._getProperty, this._setProperty, newPrefix)
     }
 
-    // Generic get/set for custom storage 
+    // Generic get/set for custom storage
     get<T>(keySuffix: string): T | null {
         const key = this._buildKey(keySuffix)
         return (this._getProperty(key) as T) ?? null
