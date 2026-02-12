@@ -33,6 +33,10 @@ export class PostHogExceptions {
     }
 
     onRemoteConfig(response: RemoteConfig) {
+        if (!('errorTracking' in response)) {
+            return
+        }
+
         const suppressionRules = response.errorTracking?.suppressionRules ?? []
         const captureExtensionExceptions = response.errorTracking?.captureExtensionExceptions
 

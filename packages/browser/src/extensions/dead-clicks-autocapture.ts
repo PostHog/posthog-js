@@ -38,9 +38,13 @@ export class DeadClicksAutocapture {
     }
 
     public onRemoteConfig(response: RemoteConfig) {
+        if (!('captureDeadClicks' in response)) {
+            return
+        }
+
         if (this.instance.persistence) {
             this.instance.persistence.register({
-                [DEAD_CLICKS_ENABLED_SERVER_SIDE]: response?.captureDeadClicks,
+                [DEAD_CLICKS_ENABLED_SERVER_SIDE]: response.captureDeadClicks,
             })
         }
         this.startIfEnabled()

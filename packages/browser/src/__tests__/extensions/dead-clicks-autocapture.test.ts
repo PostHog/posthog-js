@@ -4,6 +4,7 @@ import { createPosthogInstance } from '../helpers/posthog-instance'
 import { uuidv7 } from '../../uuidv7'
 import { DeadClicksAutocapture } from '../../extensions/dead-clicks-autocapture'
 import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../../constants'
+import { RemoteConfig } from '../../types'
 
 describe('DeadClicksAutocapture', () => {
     let mockStart: jest.Mock
@@ -103,5 +104,42 @@ describe('DeadClicksAutocapture', () => {
                 expect(instance.deadClicksAutocapture.isEnabled(instance.deadClicksAutocapture)).toBe(expected)
             }
         )
+    })
+
+    describe('onRemoteConfig', () => {
+        let instance: PostHog
+
+        beforeEach(async () => {
+            instance = await createPosthogInstance(uuidv7(), {
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                autocapture: true,
+            })
+        })
+
+        it('does not overwrite persistence when called with empty config', () => {
+            // Set up existing persisted value
+            instance.persistence?.register({
+                [DEAD_CLICKS_ENABLED_SERVER_SIDE]: true,
+            })
+
+            // Call with empty config (simulating config fetch failure)
+            instance.deadClicksAutocapture.onRemoteConfig({} as RemoteConfig)
+
+            // Should NOT have overwritten the existing value
+            expect(instance.persistence?.props[DEAD_CLICKS_ENABLED_SERVER_SIDE]).toBe(true)
+        })
+
+        it('updates persistence when captureDeadClicks key is present', () => {
+            instance.persistence?.register({
+                [DEAD_CLICKS_ENABLED_SERVER_SIDE]: true,
+            })
+
+            instance.deadClicksAutocapture.onRemoteConfig({
+                captureDeadClicks: false,
+            } as RemoteConfig)
+
+            expect(instance.persistence?.props[DEAD_CLICKS_ENABLED_SERVER_SIDE]).toBe(false)
+        })
     })
 })
