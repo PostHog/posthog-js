@@ -26,7 +26,7 @@ Found a bug? Feature request? [File it here](https://github.com/PostHog/posthog-
 Install the package:
 
 ```sh
-npm install @posthog/convex
+pnpm add @posthog/convex
 ```
 
 Register the component in your `convex/convex.config.ts`:
