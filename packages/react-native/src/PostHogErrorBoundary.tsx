@@ -26,11 +26,6 @@ const INITIAL_STATE: PostHogErrorBoundaryState = {
 
 const isFunction = (f: any): f is (...args: any[]) => any => typeof f === 'function'
 
-export const __POSTHOG_ERROR_MESSAGES = {
-  INVALID_FALLBACK:
-    '[PostHog][PostHogErrorBoundary] Invalid fallback prop, provide a valid React element or a function that returns a valid React element.',
-}
-
 export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryProps, PostHogErrorBoundaryState> {
   static contextType = PostHogContext
   context!: React.ContextType<typeof PostHogContext>
@@ -49,7 +44,7 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
       currentProperties = additionalProperties
     }
     const { client } = this.context
-    client.captureException(error, currentProperties)
+    client?.captureException(error, currentProperties)
 
     const { componentStack } = errorInfo
     this.setState({
@@ -76,8 +71,7 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
     if (React.isValidElement(element)) {
       return element as React.ReactElement
     }
-    //eslint-disable-next-line no-console
-    console.warn(__POSTHOG_ERROR_MESSAGES.INVALID_FALLBACK)
+
     return <></>
   }
 }
