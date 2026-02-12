@@ -372,6 +372,44 @@ describe('web vitals', () => {
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
     })
 
+    it('should not enable web vitals when capture_performance is boolean true (network_timing only)', async () => {
+        posthog = await createPosthogInstance(uuidv7(), {
+            before_send: beforeSendMock,
+            capture_performance: true,
+        })
+
+        expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
+    })
+
+    it('should fall back to server-side when capture_performance is boolean true', async () => {
+        posthog = await createPosthogInstance(uuidv7(), {
+            before_send: beforeSendMock,
+            capture_performance: true,
+        })
+
+        posthog.webVitalsAutocapture!.onRemoteConfig({
+            capturePerformance: {
+                web_vitals: true,
+            },
+        } as RemoteConfig)
+
+        expect(posthog.webVitalsAutocapture!.isEnabled).toBe(true)
+    })
+
+    it('should not enable web vitals when server returns capturePerformance with only network_timing', async () => {
+        posthog = await createPosthogInstance(uuidv7(), {
+            before_send: beforeSendMock,
+        })
+
+        posthog.webVitalsAutocapture!.onRemoteConfig({
+            capturePerformance: {
+                network_timing: true,
+            },
+        } as RemoteConfig)
+
+        expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
+    })
+
     it('should not run on file:// protocol', async () => {
         mockLocation.mockReturnValue({
             protocol: 'file:',

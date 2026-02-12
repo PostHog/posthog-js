@@ -76,10 +76,12 @@ export class WebVitalsAutocapture {
         }
 
         // Otherwise, check config
+        // Note: boolean `true` historically means `{ network_timing: true }` only,
+        // so it should NOT enable web vitals. Only boolean `false` should disable everything.
         const clientConfig = isObject(this._instance.config.capture_performance)
             ? this._instance.config.capture_performance.web_vitals
-            : isBoolean(this._instance.config.capture_performance)
-              ? this._instance.config.capture_performance
+            : this._instance.config.capture_performance === false
+              ? false
               : undefined
         return isBoolean(clientConfig) ? clientConfig : this._enabledServerSide
     }
