@@ -1,5 +1,5 @@
 ---
-'posthog-js': patch
+'posthog-js': minor
 ---
 
 enable tours by default
