@@ -4,33 +4,45 @@ type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent'
 
 export interface PluginConfig {
     personalApiKey: string
-    envId: string
+    /** @deprecated Use projectId instead */
+    envId?: string
+    projectId?: string
     host?: string
     logLevel?: LogLevel
     cliBinaryPath?: string
     sourcemaps?: {
         enabled?: boolean
+        /** @deprecated Use releaseName instead */
         project?: string
+        releaseName?: string
+        /** @deprecated Use releaseVersion instead */
         version?: string
+        releaseVersion?: string
         deleteAfterUpload?: boolean
         batchSize?: number
     }
 }
 
-export interface ResolvedPluginConfig extends PluginConfig {
+export interface ResolvedPluginConfig extends Omit<PluginConfig, 'envId' | 'projectId'> {
+    projectId: string
     host: string
     logLevel: LogLevel
     cliBinaryPath: string
     sourcemaps: {
         enabled: boolean
-        project?: string
-        version?: string
+        releaseName?: string
+        releaseVersion?: string
         deleteAfterUpload: boolean
         batchSize?: number
     }
 }
 
 export function resolveConfig(options: PluginConfig): ResolvedPluginConfig {
+    const projectId = options.projectId ?? options.envId
+    if (!projectId) {
+        throw new Error('projectId is required (envId is deprecated)')
+    }
+
     const host = options.host ?? 'https://us.i.posthog.com'
     const logLevel = options.logLevel ?? 'info'
     const cliBinaryPath =
@@ -44,14 +56,14 @@ export function resolveConfig(options: PluginConfig): ResolvedPluginConfig {
 
     return {
         personalApiKey: options.personalApiKey,
-        envId: options.envId,
+        projectId,
         host,
         logLevel,
         cliBinaryPath,
         sourcemaps: {
             enabled: sourcemaps.enabled ?? process.env.NODE_ENV === 'production',
-            project: sourcemaps.project,
-            version: sourcemaps.version,
+            releaseName: sourcemaps.releaseName ?? sourcemaps.project,
+            releaseVersion: sourcemaps.releaseVersion ?? sourcemaps.version,
             deleteAfterUpload: sourcemaps.deleteAfterUpload ?? true,
             batchSize: sourcemaps.batchSize,
         },

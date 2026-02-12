@@ -22,11 +22,11 @@ export default {
     plugins: [
         new PosthogWebpackPlugin({
             personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY,
-            envId: process.env.POSTHOG_PROJECT_ID,
+            projectId: process.env.POSTHOG_PROJECT_ID,
             sourcemaps: {
                 enabled: true,
-                project: 'my-app',
-                version: '1.0.0',
+                releaseName: 'my-app',
+                releaseVersion: '1.0.0',
             },
         }),
     ],
@@ -38,13 +38,14 @@ export default {
 | Option                         | Type                                                 | Required | Default                    | Description                                 |
 | ------------------------------ | ---------------------------------------------------- | -------- | -------------------------- | ------------------------------------------- |
 | `personalApiKey`               | `string`                                             | Yes      | -                          | Your PostHog personal API key               |
-| `envId`                        | `string`                                             | Yes      | -                          | Your PostHog project/environment ID         |
+| `projectId`                    | `string`                                             | Yes      | -                          | Your PostHog project/environment ID         |
+| `envId`                        | `string`                                             | No       | -                          | Deprecated alias for `projectId`            |
 | `host`                         | `string`                                             | No       | `https://us.i.posthog.com` | PostHog instance host                       |
 | `logLevel`                     | `'debug' \| 'info' \| 'warn' \| 'error' \| 'silent'` | No       | `'info'`                   | Logging verbosity                           |
 | `cliBinaryPath`                | `string`                                             | No       | Auto-detected              | Path to the PostHog CLI binary              |
 | `sourcemaps.enabled`           | `boolean`                                            | No       | `true` in production       | Enable source map processing                |
-| `sourcemaps.project`           | `string`                                             | No       | -                          | Project name for source map grouping        |
-| `sourcemaps.version`           | `string`                                             | No       | -                          | Version identifier for the release          |
+| `sourcemaps.releaseName`       | `string`                                             | No       | -                          | Release name for source map grouping        |
+| `sourcemaps.releaseVersion`    | `string`                                             | No       | -                          | Version identifier for the release          |
 | `sourcemaps.deleteAfterUpload` | `boolean`                                            | No       | `true`                     | Delete source maps after upload             |
 | `sourcemaps.batchSize`         | `number`                                             | No       | -                          | Number of source maps to upload in parallel |
 
@@ -66,13 +67,13 @@ const config: webpack.Configuration = {
     plugins: [
         new PosthogWebpackPlugin({
             personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY,
-            envId: process.env.POSTHOG_PROJECT_ID,
+            projectId: process.env.POSTHOG_PROJECT_ID,
             host: process.env.POSTHOG_API_HOST,
             logLevel: 'error',
             sourcemaps: {
                 enabled: true,
-                project: packageJson.name,
-                version: packageJson.version,
+                releaseName: packageJson.name,
+                releaseVersion: packageJson.version,
                 deleteAfterUpload: true,
             },
         }),

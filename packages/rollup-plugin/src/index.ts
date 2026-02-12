@@ -5,14 +5,20 @@ import fs from 'node:fs/promises'
 
 export interface PostHogRollupPluginOptions {
     personalApiKey: string
-    envId: string
+    /** @deprecated Use projectId instead */
+    envId?: string
+    projectId?: string
     host?: string
     cliBinaryPath?: string
     logLevel?: LogLevel
     sourcemaps?: {
         enabled?: boolean
+        /** @deprecated Use releaseName instead */
         project?: string
+        releaseName?: string
+        /** @deprecated Use releaseVersion instead */
         version?: string
+        releaseVersion?: string
         deleteAfterUpload?: boolean
         batchSize?: number
     }
@@ -20,14 +26,14 @@ export interface PostHogRollupPluginOptions {
 
 interface ResolvedPostHogRollupPluginOptions {
     personalApiKey: string
-    envId: string
+    projectId: string
     host: string
     cliBinaryPath: string
     logLevel: LogLevel
     sourcemaps: {
         enabled: boolean
-        project?: string
-        version?: string
+        releaseName?: string
+        releaseVersion?: string
         deleteAfterUpload: boolean
         batchSize?: number
     }
@@ -83,11 +89,11 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                     return
                 }
 
-                if (posthogOptions.sourcemaps.project) {
-                    args.push('--project', posthogOptions.sourcemaps.project)
+                if (posthogOptions.sourcemaps.releaseName) {
+                    args.push('--release-name', posthogOptions.sourcemaps.releaseName)
                 }
-                if (posthogOptions.sourcemaps.version) {
-                    args.push('--version', posthogOptions.sourcemaps.version)
+                if (posthogOptions.sourcemaps.releaseVersion) {
+                    args.push('--release-version', posthogOptions.sourcemaps.releaseVersion)
                 }
                 if (posthogOptions.sourcemaps.deleteAfterUpload) {
                     args.push('--delete-after')
@@ -100,8 +106,8 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                         ...process.env,
                         RUST_LOG: `posthog_cli=${posthogOptions.logLevel}`,
                         POSTHOG_CLI_HOST: posthogOptions.host,
-                        POSTHOG_CLI_TOKEN: posthogOptions.personalApiKey,
-                        POSTHOG_CLI_ENV_ID: posthogOptions.envId,
+                        POSTHOG_CLI_API_KEY: posthogOptions.personalApiKey,
+                        POSTHOG_CLI_PROJECT_ID: posthogOptions.projectId,
                     },
                     stdio: 'inherit',
                     cwd: process.cwd(),
@@ -121,8 +127,9 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
 }
 
 function resolveOptions(userOptions: PostHogRollupPluginOptions): ResolvedPostHogRollupPluginOptions {
-    if (!userOptions.envId) {
-        throw new Error('envId is required')
+    const projectId = userOptions.projectId ?? userOptions.envId
+    if (!projectId) {
+        throw new Error('projectId is required (envId is deprecated)')
     } else if (!userOptions.personalApiKey) {
         throw new Error('personalApiKey is required')
     }
@@ -130,7 +137,7 @@ function resolveOptions(userOptions: PostHogRollupPluginOptions): ResolvedPostHo
     const posthogOptions: ResolvedPostHogRollupPluginOptions = {
         host: userOptions.host || 'https://us.i.posthog.com',
         personalApiKey: userOptions.personalApiKey,
-        envId: userOptions.envId,
+        projectId,
         cliBinaryPath:
             userOptions.cliBinaryPath ??
             resolveBinaryPath('posthog-cli', {
@@ -142,8 +149,8 @@ function resolveOptions(userOptions: PostHogRollupPluginOptions): ResolvedPostHo
             enabled: userSourcemaps.enabled ?? true,
             deleteAfterUpload: userSourcemaps.deleteAfterUpload ?? true,
             batchSize: userSourcemaps.batchSize,
-            project: userSourcemaps.project,
-            version: userSourcemaps.version,
+            releaseName: userSourcemaps.releaseName ?? userSourcemaps.project,
+            releaseVersion: userSourcemaps.releaseVersion ?? userSourcemaps.version,
         },
     }
     return posthogOptions
