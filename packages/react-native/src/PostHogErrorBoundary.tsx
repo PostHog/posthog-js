@@ -28,7 +28,7 @@ const isFunction = (f: any): f is (...args: any[]) => any => typeof f === 'funct
 
 export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryProps, PostHogErrorBoundaryState> {
   static contextType = PostHogContext
-  declare context: React.ContextType<typeof PostHogContext>
+  context!: React.ContextType<typeof PostHogContext>
 
   constructor(props: PostHogErrorBoundaryProps) {
     super(props)
