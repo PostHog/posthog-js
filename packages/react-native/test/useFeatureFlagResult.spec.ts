@@ -120,10 +120,11 @@ describe('useFeatureFlagResult', () => {
     expect(mockPostHog.getFeatureFlagResult).not.toHaveBeenCalled()
   })
 
-  it('should throw when no client is provided via context or prop', () => {
-    jest.spyOn(console, 'error').mockImplementation(() => {})
-    expect(() => renderHook(() => useFeatureFlagResult('test-flag'))).toThrow(
-      'useFeatureFlagResult requires a PostHog client provided as an argument or via context.'
+  it('should log an error when no client is provided via context or prop', () => {
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    renderHook(() => useFeatureFlagResult('flag'))
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('useFeatureFlagResult was called without a PostHog client')
     )
   })
 
