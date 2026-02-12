@@ -1,3 +1,4 @@
+import { JsonType } from '@posthog/core'
 import { Platform } from 'react-native'
 
 type ReactNativeGlobal = {
@@ -52,7 +53,7 @@ export const isHermes = () => !!GLOBAL_OBJ.HermesInternal
  * @param defaultValue Value to return when the field is absent/undefined (defaults to `true` — don't block locally enabled capture)
  */
 export function getRemoteConfigBool(
-  field: boolean | { [key: string]: unknown } | undefined,
+  field: boolean | { [key: string]: JsonType } | undefined,
   key: string,
   defaultValue: boolean = true
 ): boolean {
