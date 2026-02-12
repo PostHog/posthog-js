@@ -11,7 +11,7 @@ export function trackUnhandledRejections(tracker: ExceptionHook): void {
     GLOBAL_OBJ.HermesInternal.enablePromiseRejectionTracker({
       allRejections: true,
       onUnhandled: (_, error: unknown) => tracker(error as Error, false),
-      onHandled: () => {},
+      onHandled: () => { },
     })
   } else if (isWeb()) {
     addWebUnhandledRejectionListener(tracker)
@@ -40,8 +40,8 @@ export function trackConsole(level: string, tracker: ExceptionHook): void {
 
   const originalMethod = con[level]
   con[level] = function (...args: any[]): void {
-    const error = args.find((arg) => arg instanceof Error)
     const message = args.join(' ')
+    const error = args.find((arg) => arg instanceof Error)
     const syntheticException = new Error('Synthetic PostHog Error')
     tracker(error ?? message, false, syntheticException)
     return originalMethod?.(...args)
