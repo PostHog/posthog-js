@@ -1024,6 +1024,54 @@ describe('calculatePrefillStartIndex', () => {
             expect(result.skippedResponses).toEqual({ '$survey_response_q-end': 'No' })
         })
 
+        it('should not infinite loop when branching creates a cycle between prefilled questions', () => {
+            // This test verifies the fix for a bug where `const iterations = 0` (never incremented)
+            // caused an infinite loop when branching logic created a cycle between prefilled questions.
+            const questionA: SurveyQuestion = {
+                type: SurveyQuestionType.SingleChoice,
+                id: 'q-a',
+                question: 'Question A',
+                choices: ['Go to B'],
+                skipSubmitButton: true,
+                branching: {
+                    type: SurveyQuestionBranchingType.SpecificQuestion,
+                    index: 1, // Always go to question B
+                },
+            }
+
+            const questionB: SurveyQuestion = {
+                type: SurveyQuestionType.SingleChoice,
+                id: 'q-b',
+                question: 'Question B',
+                choices: ['Go to A'],
+                skipSubmitButton: true,
+                branching: {
+                    type: SurveyQuestionBranchingType.SpecificQuestion,
+                    index: 0, // Always go back to question A (cycle!)
+                },
+            }
+
+            const finalQuestion: SurveyQuestion = {
+                type: SurveyQuestionType.Open,
+                id: 'q-final',
+                question: 'Final',
+            }
+
+            const questions = [questionA, questionB, finalQuestion]
+            const prefilledIndices = [0, 1]
+            const responses = {
+                '$survey_response_q-a': 'Go to B',
+                '$survey_response_q-b': 'Go to A',
+            }
+
+            // Should terminate (not infinite loop) and return the currentIndex at the point
+            // where MAX_ITERATIONS is reached
+            const result = calculatePrefillStartIndex(createSurvey(questions), prefilledIndices, responses)
+            // The loop should bail out after MAX_ITERATIONS (questions.length + 1 = 4)
+            // rather than looping forever
+            expect(result.startQuestionIndex).toBeLessThanOrEqual(questions.length)
+        })
+
         it('should handle specific question branching', () => {
             const questionWithSpecificBranching: SurveyQuestion = {
                 type: SurveyQuestionType.Rating,

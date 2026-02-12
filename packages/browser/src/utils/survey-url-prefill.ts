@@ -157,7 +157,7 @@ export function calculatePrefillStartIndex(
     const skippedResponses: Record<string, any> = {}
 
     const MAX_ITERATIONS = survey.questions.length + 1
-    const iterations = 0
+    let iterations = 0
     while (currentIndex < survey.questions.length && iterations < MAX_ITERATIONS) {
         // Stop if current question is not prefilled
         if (!prefilledIndices.includes(currentIndex)) {
@@ -191,6 +191,7 @@ export function calculatePrefillStartIndex(
 
         // Move to the next question (respecting branching)
         currentIndex = nextStep
+        iterations++
     }
 
     return { startQuestionIndex: currentIndex, skippedResponses }
