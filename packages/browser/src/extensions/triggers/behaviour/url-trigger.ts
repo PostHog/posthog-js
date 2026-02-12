@@ -1,9 +1,38 @@
 import type { PostHog } from '@posthog/types'
 import { UrlTrigger } from '../../../types'
 import { addEventListener } from '../../../utils'
-import { compileRegexCache, urlMatchesTriggers } from '../../../utils/trigger-matching-helpers'
+import { logger } from '../../../utils/logger'
 import type { Trigger, TriggerOptions } from './types'
 import type { PersistenceHelper } from './persistence'
+
+function urlMatchesTriggers(url: string, triggers: UrlTrigger[], compiledRegexCache?: Map<string, RegExp>): boolean {
+    return triggers.some((trigger) => {
+        switch (trigger.matching) {
+            case 'regex': {
+                const regex = compiledRegexCache?.get(trigger.url) ?? new RegExp(trigger.url)
+                return regex.test(url)
+            }
+            default:
+                return false
+        }
+    })
+}
+
+function compileRegexCache(triggers: UrlTrigger[], logPrefix?: string): Map<string, RegExp> {
+    const cache = new Map<string, RegExp>()
+
+    for (const trigger of triggers) {
+        if (trigger.matching === 'regex' && !cache.has(trigger.url)) {
+            try {
+                cache.set(trigger.url, new RegExp(trigger.url))
+            } catch (e) {
+                logger.error(`${logPrefix ? logPrefix + ' ' : ''}Invalid regex pattern:`, trigger.url, e)
+            }
+        }
+    }
+
+    return cache
+}
 
 export class URLTrigger implements Trigger {
     readonly name = 'url'
