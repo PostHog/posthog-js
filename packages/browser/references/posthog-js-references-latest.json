@@ -2685,7 +2685,7 @@
       "name": "PostHogConfig",
       "properties": [],
       "path": "lib/src/types.d.ts",
-      "example": "Omit<BasePostHogConfig, 'loaded'> & {\n    loaded: (posthog: PostHogInterface) => void;\n}"
+      "example": "Omit<BasePostHogConfig, 'loaded'> & {\n    loaded: (posthog: PostHogInterface) => void;\n    __extensionClasses?: {\n        historyAutocapture?: Extension<HistoryAutocapture>;\n        tracingHeaders?: Extension<TracingHeaders>;\n        siteApps?: Extension<SiteApps>;\n        sessionRecording?: Extension<SessionRecording>;\n        autocapture?: Extension<Autocapture>;\n        productTours?: Extension<PostHogProductTours>;\n        heatmaps?: Extension<Heatmaps>;\n        webVitalsAutocapture?: Extension<WebVitalsAutocapture>;\n        exceptionObserver?: Extension<ExceptionObserver>;\n        deadClicksAutocapture?: Extension<DeadClicksAutocapture>;\n    };\n}"
     },
     {
       "id": "PostHogInterface",

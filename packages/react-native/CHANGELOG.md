@@ -1,5 +1,17 @@
 # posthog-react-native
 
+## 4.33.0
+
+### Minor Changes
+
+- [#3065](https://github.com/PostHog/posthog-js/pull/3065) [`34ee954`](https://github.com/PostHog/posthog-js/commit/34ee95404fdae8c97f3263a600392caac5b982a8) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Add `useFeatureFlagResult` hook
+  (2026-02-12)
+
+### Patch Changes
+
+- [#3071](https://github.com/PostHog/posthog-js/pull/3071) [`d1d62d4`](https://github.com/PostHog/posthog-js/commit/d1d62d4e4a3653f0b93abcbd9f33567ed60e3547) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: `PostHogContext` is correctly typed
+  (2026-02-12)
+
 ## 4.32.0
 
 ### Minor Changes

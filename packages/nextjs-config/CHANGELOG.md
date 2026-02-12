@@ -1,5 +1,14 @@
 # @posthog/nextjs-config
 
+## 1.8.16
+
+### Patch Changes
+
+- [#3076](https://github.com/PostHog/posthog-js/pull/3076) [`91234bb`](https://github.com/PostHog/posthog-js/commit/91234bb015ff18b1a95f08448053e7b75730ed81) Thanks [@hpouillot](https://github.com/hpouillot)! - rename sourcemaps config variables with `releaseName`, `releaseVersion`, `projectId`
+  (2026-02-12)
+- Updated dependencies [[`91234bb`](https://github.com/PostHog/posthog-js/commit/91234bb015ff18b1a95f08448053e7b75730ed81)]:
+  - @posthog/webpack-plugin@1.2.22
+
 ## 1.8.15
 
 ### Patch Changes
