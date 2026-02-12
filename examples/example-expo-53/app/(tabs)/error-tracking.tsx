@@ -48,10 +48,7 @@ export default function ErrorTrackingScreen() {
                 <ThemedText>
                     Wrap components with PostHogErrorBoundary to automatically capture render errors.
                 </ThemedText>
-                <PostHogErrorBoundary
-                    fallback={ErrorFallback}
-                    additionalProperties={{ screen: 'error-tracking' }}
-                >
+                <PostHogErrorBoundary fallback={ErrorFallback} additionalProperties={{ screen: 'error-tracking' }}>
                     <BuggyComponent shouldThrow={shouldThrow} />
                 </PostHogErrorBoundary>
                 <Button onPress={() => setShouldThrow(true)} title="Trigger render crash" />
