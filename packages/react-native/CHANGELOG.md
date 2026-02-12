@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.34.0
+
+### Minor Changes
+
+- [#3084](https://github.com/PostHog/posthog-js/pull/3084) [`e2ac0e8`](https://github.com/PostHog/posthog-js/commit/e2ac0e856821a0b7e2e25c1142c602c4c138cbdd) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - add error boundary
+  (2026-02-12)
+
 ## 4.33.0
 
 ### Minor Changes
