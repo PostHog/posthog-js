@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 7.8.11
+
+### Patch Changes
+
+- [#3083](https://github.com/PostHog/posthog-js/pull/3083) [`3cff372`](https://github.com/PostHog/posthog-js/commit/3cff372a08138d3a6e36f1e354239e68bf52501c) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Remove static Buffer imports for edge runtime compatibility
+  (2026-02-12)
+
 ## 7.8.10
 
 ### Patch Changes
