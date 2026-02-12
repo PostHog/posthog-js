@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.346.0
+
+### Minor Changes
+
+- [#3082](https://github.com/PostHog/posthog-js/pull/3082) [`0d730bd`](https://github.com/PostHog/posthog-js/commit/0d730bd8d6786bf9dc5a818caaa47e378531bd0c) Thanks [@adboio](https://github.com/adboio)! - enable tours by default
+  (2026-02-12)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.346.0
+
 ## 1.345.5
 
 ### Patch Changes
