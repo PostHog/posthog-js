@@ -11,7 +11,7 @@ export function trackUnhandledRejections(tracker: ExceptionHook): void {
     GLOBAL_OBJ.HermesInternal.enablePromiseRejectionTracker({
       allRejections: true,
       onUnhandled: (_, error: unknown) => tracker(error as Error, false),
-      onHandled: () => { },
+      onHandled: () => {},
     })
   } else if (isWeb()) {
     addWebUnhandledRejectionListener(tracker)
