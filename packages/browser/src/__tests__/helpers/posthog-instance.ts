@@ -1,5 +1,4 @@
 // The library depends on having the module initialized before it can be used.
-import '../../entrypoints/default-extensions'
 
 import { PostHog, init_as_module } from '../../posthog-core'
 import { PostHogConfig } from '../../types'
