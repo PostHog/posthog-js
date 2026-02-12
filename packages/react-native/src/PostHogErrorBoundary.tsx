@@ -28,11 +28,15 @@ const isFunction = (f: any): f is (...args: any[]) => any => typeof f === 'funct
 
 export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryProps, PostHogErrorBoundaryState> {
   static contextType = PostHogContext
-  context!: React.ContextType<typeof PostHogContext>
+  declare context: React.ContextType<typeof PostHogContext>
 
   constructor(props: PostHogErrorBoundaryProps) {
     super(props)
     this.state = INITIAL_STATE
+  }
+
+  static getDerivedStateFromError(error: unknown): Partial<PostHogErrorBoundaryState> {
+    return { error }
   }
 
   componentDidCatch(error: unknown, errorInfo: React.ErrorInfo): void {
@@ -57,14 +61,14 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
     const { children, fallback } = this.props
     const state = this.state
 
-    if (state.componentStack == null) {
+    if (state.error == null) {
       return isFunction(children) ? children() : children
     }
 
     const element = isFunction(fallback)
       ? (React.createElement(fallback, {
           error: state.error,
-          componentStack: state.componentStack,
+          componentStack: state.componentStack ?? '',
         }) as React.ReactNode)
       : fallback
 
