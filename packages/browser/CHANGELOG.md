@@ -1,5 +1,19 @@
 # posthog-js
 
+## 1.347.0
+
+### Minor Changes
+
+- [#3087](https://github.com/PostHog/posthog-js/pull/3087) [`512d578`](https://github.com/PostHog/posthog-js/commit/512d5785488a4fb507ef1edf2a5b1788e8c17e86) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: Revert tree shaking configuration
+  (2026-02-12)
+
+### Patch Changes
+
+- [#3079](https://github.com/PostHog/posthog-js/pull/3079) [`9c078ac`](https://github.com/PostHog/posthog-js/commit/9c078ac771d09ad2e9df3c796cc4be01d949a806) Thanks [@adboio](https://github.com/adboio)! - update z-index hierarchy for tours > surveys > conversations
+  (2026-02-12)
+- Updated dependencies []:
+    - @posthog/types@1.347.0
+
 ## 1.346.0
 
 ### Minor Changes
