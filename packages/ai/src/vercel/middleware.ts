@@ -22,7 +22,6 @@ import {
   calculateWebSearchCount,
   sendEventWithErrorToPosthog,
 } from '../utils'
-import { Buffer } from 'buffer'
 import { redactBase64DataUrl } from '../sanitization'
 import { isString } from '../typeGuards'
 
@@ -171,11 +170,12 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
 
   try {
     // Trim the inputs array until its JSON size fits within MAX_OUTPUT_SIZE
+    const encoder = new TextEncoder()
     let serialized = JSON.stringify(inputs)
     let removedCount = 0
     // We need to keep track of the initial size of the inputs array because we're going to be mutating it
     const initialSize = inputs.length
-    for (let i = 0; i < initialSize && Buffer.byteLength(serialized, 'utf8') > MAX_OUTPUT_SIZE; i++) {
+    for (let i = 0; i < initialSize && encoder.encode(serialized).byteLength > MAX_OUTPUT_SIZE; i++) {
       inputs.shift()
       removedCount++
       serialized = JSON.stringify(inputs)
