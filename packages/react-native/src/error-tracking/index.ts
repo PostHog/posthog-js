@@ -1,7 +1,7 @@
 import type { PostHog } from '../posthog-rn'
 import { JsonType, Logger, PostHogEventProperties, ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { trackConsole, trackUncaughtExceptions, trackUnhandledRejections } from './utils'
-import { isHermes } from '../utils'
+import { getRemoteConfigBool, isHermes } from '../utils'
 
 type LogLevel = 'debug' | 'log' | 'info' | 'warn' | 'error'
 
@@ -89,21 +89,12 @@ export class ErrorTracking {
       return
     }
 
-    if (typeof errorTracking === 'boolean') {
-      // boolean false means disabled
-      this._autocaptureEnabled = errorTracking
-    } else if (typeof errorTracking === 'object') {
-      // Map — check autocaptureExceptions key
-      this._autocaptureEnabled = (errorTracking as { autocaptureExceptions?: boolean }).autocaptureExceptions ?? false
-    } else {
-      this._autocaptureEnabled = false
-    }
+    // Default to false: if remote config is present but the key is missing, disable autocapture
+    this._autocaptureEnabled = getRemoteConfigBool(errorTracking, 'autocaptureExceptions', false)
 
-    if (this._autocaptureEnabled) {
-      this.logger.info('Error tracking autocapture enabled by remote config.')
-    } else {
-      this.logger.info('Error tracking autocapture disabled by remote config.')
-    }
+    this.logger.info(
+      `Error tracking autocapture ${this._autocaptureEnabled ? 'enabled' : 'disabled'} by remote config.`
+    )
   }
 
   captureException(input: unknown, additionalProperties: PostHogEventProperties, hint: CoreErrorTracking.EventHint) {

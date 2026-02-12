@@ -25,6 +25,7 @@ import {
   PostHogCustomStorage,
   PostHogSessionReplayConfig,
 } from './types'
+import { getRemoteConfigBool } from './utils'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativeSessionReplay } from './optional/OptionalSessionReplay'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
@@ -269,7 +270,7 @@ export class PostHog extends PostHogCore {
 
       void this.persistAppVersion()
 
-      void this.startSessionReplay(options)
+      void this.startSessionReplay(options, cachedRemoteConfig ?? undefined)
     }
 
     // For async storage, we wait for the storage to be ready before we start the SDK
@@ -1259,7 +1260,10 @@ export class PostHog extends PostHogCore {
     }
   }
 
-  private async startSessionReplay(options?: PostHogOptions): Promise<void> {
+  private async startSessionReplay(
+    options?: PostHogOptions,
+    cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>
+  ): Promise<void> {
     this._enableSessionReplay = options?.enableSessionReplay
     if (!this._isEnableSessionReplay()) {
       this._logger.info('Session replay is not enabled.')
@@ -1288,36 +1292,14 @@ export class PostHog extends PostHogCore {
       throttleDelayMs = Math.max(iOSdebouncerDelayMs, androidDebouncerDelayMs)
     }
 
-    // Read cached remote config to gate captureLog and captureNetworkTelemetry.
+    // Gate captureLog and captureNetworkTelemetry using cached remote config.
     // The effective state is: localEnabled AND remoteEnabled.
-    // If remote config hasn't loaded yet (no cached value), default to true (don't block locally enabled capture).
-    const cachedRemoteConfig = this.getPersistedProperty<Omit<PostHogRemoteConfig, 'surveys'>>(
-      PostHogPersistedProperty.RemoteConfig
+    // If remote config hasn't loaded yet (no cached value), defaults to true (don't block locally enabled capture).
+    const remoteConsoleLogEnabled = getRemoteConfigBool(
+      cachedRemoteConfig?.sessionRecording,
+      'consoleLogRecordingEnabled'
     )
-
-    // Gate captureLog on sessionRecording.consoleLogRecordingEnabled from cached remote config
-    let remoteConsoleLogEnabled = true // default to true if not yet loaded
-    const cachedSessionRecording = cachedRemoteConfig?.sessionRecording
-    if (typeof cachedSessionRecording === 'object' && cachedSessionRecording !== null) {
-      const consoleLogRecordingEnabled = cachedSessionRecording['consoleLogRecordingEnabled']
-      if (typeof consoleLogRecordingEnabled === 'boolean') {
-        remoteConsoleLogEnabled = consoleLogRecordingEnabled
-      }
-    } else if (typeof cachedSessionRecording === 'boolean' && cachedSessionRecording === false) {
-      remoteConsoleLogEnabled = false
-    }
-
-    // Gate captureNetworkTelemetry on capturePerformance.network_timing from cached remote config
-    let remoteNetworkTimingEnabled = true // default to true if not yet loaded
-    const cachedCapturePerformance = cachedRemoteConfig?.capturePerformance
-    if (typeof cachedCapturePerformance === 'object' && cachedCapturePerformance !== null) {
-      const networkTiming = (cachedCapturePerformance as { network_timing?: boolean }).network_timing
-      if (typeof networkTiming === 'boolean') {
-        remoteNetworkTimingEnabled = networkTiming
-      }
-    } else if (typeof cachedCapturePerformance === 'boolean' && cachedCapturePerformance === false) {
-      remoteNetworkTimingEnabled = false
-    }
+    const remoteNetworkTimingEnabled = getRemoteConfigBool(cachedRemoteConfig?.capturePerformance, 'network_timing')
 
     const captureLog = localCaptureLog && remoteConsoleLogEnabled
     const captureNetworkTelemetry = localCaptureNetworkTelemetry && remoteNetworkTimingEnabled
