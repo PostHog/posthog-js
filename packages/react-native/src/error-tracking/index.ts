@@ -68,17 +68,6 @@ export class ErrorTracking {
   }
 
   /**
-   * Returns whether autocapture is locally configured (user opted in via local config).
-   */
-  get isLocalAutocaptureEnabled(): boolean {
-    return (
-      this.options.autocapture.uncaughtExceptions ||
-      this.options.autocapture.unhandledRejections ||
-      this.options.autocapture.console.length > 0
-    )
-  }
-
-  /**
    * Called when remote config is loaded.
    * If errorTracking.autocaptureExceptions is explicitly false, autocapture is disabled.
    * If it's true or undefined (not yet loaded / not present), autocapture follows local config.
