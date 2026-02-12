@@ -17,6 +17,7 @@ import type { SessionRecording } from './extensions/replay/session-recording'
 import type { Heatmaps } from './heatmaps'
 import type { PostHogProductTours } from './posthog-product-tours'
 import type { SiteApps } from './site-apps'
+import type { PostHogSurveys } from './posthog-surveys'
 
 type Extension<T> = new (...args: any[]) => T
 
@@ -141,6 +142,7 @@ export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
         webVitalsAutocapture?: Extension<WebVitalsAutocapture>
         exceptionObserver?: Extension<ExceptionObserver>
         deadClicksAutocapture?: Extension<DeadClicksAutocapture>
+        surveys?: Extension<PostHogSurveys>
     }
 }
 

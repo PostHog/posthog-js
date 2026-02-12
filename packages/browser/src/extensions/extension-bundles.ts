@@ -32,6 +32,7 @@ import { Heatmaps } from '../heatmaps'
 import { PostHogProductTours } from '../posthog-product-tours'
 import { SiteApps } from '../site-apps'
 import { PostHogConfig } from '../types'
+import { PostHogSurveys } from '../posthog-surveys'
 
 type ExtensionClasses = NonNullable<PostHogConfig['__extensionClasses']>
 
@@ -69,12 +70,18 @@ export const TracingExtensions = {
     tracingHeaders: TracingHeaders,
 } as const satisfies ExtensionClasses
 
+/** In-app surveys. */
+export const SurveysExtensions = {
+    surveys: PostHogSurveys,
+} as const satisfies ExtensionClasses
+
 /** All extensions — equivalent to the default `posthog-js` bundle. */
 export const AllExtensions = {
-    ...ReplayExtensions,
     ...AnalyticsExtensions,
     ...ErrorTrackingExtensions,
     ...ProductToursExtensions,
+    ...ReplayExtensions,
     ...SiteAppsExtensions,
+    ...SurveysExtensions,
     ...TracingExtensions,
 } as const satisfies ExtensionClasses

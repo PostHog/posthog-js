@@ -18,14 +18,13 @@ import { PageViewManager } from './page-view'
 import { PostHogExceptions } from './posthog-exceptions'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
-import { PostHogSurveys } from './posthog-surveys'
 import { PostHogConversations } from './extensions/conversations/posthog-conversations'
 import {
-    DisplaySurveyOptions,
-    SurveyCallback,
+    type DisplaySurveyOptions,
+    type SurveyCallback,
     SurveyEventName,
     SurveyEventProperties,
-    SurveyRenderReason,
+    type SurveyRenderReason,
 } from './posthog-surveys-types'
 import { PostHogLogs } from './posthog-logs'
 import { RateLimiter } from './rate-limiter'
@@ -102,6 +101,7 @@ import {
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
+import type { PostHogSurveys } from './posthog-surveys'
 import type { Autocapture } from './autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
 import type { ExceptionObserver } from './extensions/exception-autocapture'
@@ -332,7 +332,7 @@ export class PostHog implements PostHogInterface {
     scrollManager: ScrollManager
     pageViewManager: PageViewManager
     featureFlags: PostHogFeatureFlags
-    surveys: PostHogSurveys
+    surveys?: PostHogSurveys
     conversations: PostHogConversations
     logs: PostHogLogs
     experiments: WebExperiments
@@ -410,7 +410,6 @@ export class PostHog implements PostHogInterface {
         this.toolbar = new Toolbar(this)
         this.scrollManager = new ScrollManager(this)
         this.pageViewManager = new PageViewManager(this)
-        this.surveys = new PostHogSurveys(this)
         this.conversations = new PostHogConversations(this)
         this.logs = new PostHogLogs(this)
         this.experiments = new WebExperiments(this)
@@ -693,8 +692,12 @@ export class PostHog implements PostHogInterface {
 
         const ext = { ...PostHog.__defaultExtensionClasses, ...this.config.__extensionClasses }
 
+        if (ext.surveys) {
+            this.surveys = new ext.surveys(this)
+        }
+
         if (ext.historyAutocapture) {
-            this.historyAutocapture = new ext.historyAutocapture(this) as HistoryAutocapture
+            this.historyAutocapture = new ext.historyAutocapture(this)
             this.historyAutocapture.startIfEnabled()
         }
 
@@ -709,14 +712,14 @@ export class PostHog implements PostHogInterface {
 
         if (ext.siteApps) {
             initTasks.push(() => {
-                this.siteApps = new ext.siteApps!(this) as SiteApps
+                this.siteApps = new ext.siteApps!(this)
                 this.siteApps?.init()
             })
         }
 
         if (!startInCookielessMode && ext.sessionRecording) {
             initTasks.push(() => {
-                this.sessionRecording = new ext.sessionRecording!(this) as SessionRecording
+                this.sessionRecording = new ext.sessionRecording!(this)
                 this.sessionRecording.startIfEnabledOrStop()
             })
         }
@@ -729,13 +732,16 @@ export class PostHog implements PostHogInterface {
 
         if (ext.autocapture) {
             initTasks.push(() => {
-                this.autocapture = new ext.autocapture!(this) as Autocapture
+                this.autocapture = new ext.autocapture!(this)
                 this.autocapture.startIfEnabled()
             })
         }
 
         initTasks.push(() => {
-            this.surveys.loadIfEnabled()
+            if (ext.surveys) {
+                this.surveys = new ext.surveys(this)
+                this.surveys?.loadIfEnabled()
+            }
         })
 
         initTasks.push(() => {
@@ -748,7 +754,7 @@ export class PostHog implements PostHogInterface {
 
         if (ext.productTours) {
             initTasks.push(() => {
-                this.productTours = new ext.productTours!(this) as PostHogProductTours
+                this.productTours = new ext.productTours!(this)
                 this.productTours.loadIfEnabled()
             })
         }
@@ -762,13 +768,13 @@ export class PostHog implements PostHogInterface {
 
         if (ext.webVitalsAutocapture) {
             initTasks.push(() => {
-                this.webVitalsAutocapture = new ext.webVitalsAutocapture!(this) as WebVitalsAutocapture
+                this.webVitalsAutocapture = new ext.webVitalsAutocapture!(this)
             })
         }
 
         if (ext.exceptionObserver) {
             initTasks.push(() => {
-                this.exceptionObserver = new ext.exceptionObserver!(this) as ExceptionObserver
+                this.exceptionObserver = new ext.exceptionObserver!(this)
                 this.exceptionObserver.startIfEnabledOrStop()
             })
         }
@@ -877,7 +883,7 @@ export class PostHog implements PostHogInterface {
         this.sessionRecording?.onRemoteConfig(config)
         this.autocapture?.onRemoteConfig(config)
         this.heatmaps?.onRemoteConfig(config)
-        this.surveys.onRemoteConfig(config)
+        this.surveys?.onRemoteConfig(config)
         this.logs.onRemoteConfig(config)
         this.conversations.onRemoteConfig(config)
         this.productTours?.onRemoteConfig(config)
@@ -939,7 +945,7 @@ export class PostHog implements PostHogInterface {
     }
 
     _handle_unload(): void {
-        this.surveys.handlePageUnload()
+        this.surveys?.handlePageUnload()
 
         if (!this.config.request_batching) {
             if (this._shouldCapturePageleave()) {
@@ -2038,7 +2044,7 @@ export class PostHog implements PostHogInterface {
      * @returns {Function} A function that can be called to unsubscribe the listener.
      */
     onSurveysLoaded(callback: SurveyCallback): () => void {
-        return this.surveys.onSurveysLoaded(callback)
+        return this.surveys?.onSurveysLoaded(callback) ?? (() => {})
     }
 
     /**
@@ -2083,7 +2089,9 @@ export class PostHog implements PostHogInterface {
      * @param {Boolean} [forceReload] Optional boolean to force an API call for updated surveys
      */
     getSurveys(callback: SurveyCallback, forceReload = false): void {
-        this.surveys.getSurveys(callback, forceReload)
+        this.surveys
+            ? this.surveys.getSurveys(callback, forceReload)
+            : callback([], { isLoaded: false, error: 'Surveys module not available' })
     }
 
     /**
@@ -2104,7 +2112,9 @@ export class PostHog implements PostHogInterface {
      * @param {Boolean} [forceReload] Whether to force a reload of the surveys.
      */
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false): void {
-        this.surveys.getActiveMatchingSurveys(callback, forceReload)
+        this.surveys
+            ? this.surveys.getActiveMatchingSurveys(callback, forceReload)
+            : callback([], { isLoaded: false, error: 'Surveys module not available' })
     }
 
     /**
@@ -2130,7 +2140,7 @@ export class PostHog implements PostHogInterface {
      * @param {String} selector The selector of the HTML element to render the survey on.
      */
     renderSurvey(surveyId: string, selector: string): void {
-        this.surveys.renderSurvey(surveyId, selector)
+        this.surveys?.renderSurvey(surveyId, selector)
     }
 
     /**
@@ -2167,7 +2177,7 @@ export class PostHog implements PostHogInterface {
      * {@label Surveys}
      */
     displaySurvey(surveyId: string, options: DisplaySurveyOptions = DEFAULT_DISPLAY_SURVEY_OPTIONS): void {
-        this.surveys.displaySurvey(surveyId, options)
+        this.surveys?.displaySurvey(surveyId, options)
     }
 
     /**
@@ -2176,7 +2186,7 @@ export class PostHog implements PostHogInterface {
      * {@label Surveys}
      */
     cancelPendingSurvey(surveyId: string): void {
-        this.surveys.cancelPendingSurvey(surveyId)
+        this.surveys?.cancelPendingSurvey(surveyId)
     }
 
     /**
@@ -2193,7 +2203,12 @@ export class PostHog implements PostHogInterface {
      * @returns A SurveyRenderReason object indicating if the survey can be rendered.
      */
     canRenderSurvey(surveyId: string): SurveyRenderReason | null {
-        return this.surveys.canRenderSurvey(surveyId)
+        return (
+            this.surveys?.canRenderSurvey(surveyId) ?? {
+                visible: false,
+                disabledReason: 'Surveys module not available',
+            }
+        )
     }
 
     /**
@@ -2221,7 +2236,10 @@ export class PostHog implements PostHogInterface {
      * @returns A SurveyRenderReason object indicating if the survey can be rendered.
      */
     canRenderSurveyAsync(surveyId: string, forceReload = false): Promise<SurveyRenderReason> {
-        return this.surveys.canRenderSurveyAsync(surveyId, forceReload)
+        return (
+            this.surveys?.canRenderSurveyAsync(surveyId, forceReload) ??
+            Promise.resolve({ visible: false, disabledReason: 'Surveys module not available' })
+        )
     }
 
     /**
@@ -2639,7 +2657,7 @@ export class PostHog implements PostHogInterface {
         this.consent.reset()
         this.persistence?.clear()
         this.sessionPersistence?.clear()
-        this.surveys.reset()
+        this.surveys?.reset()
         this.featureFlags.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
@@ -2886,7 +2904,7 @@ export class PostHog implements PostHogInterface {
             this.heatmaps?.startIfEnabled()
             this.exceptionObserver?.startIfEnabledOrStop()
             this.deadClicksAutocapture?.startIfEnabledOrStop()
-            this.surveys.loadIfEnabled()
+            this.surveys?.loadIfEnabled()
             this._sync_opt_out_with_persistence()
             this.externalIntegrations?.startIfEnabledOrStop()
         }
@@ -3368,7 +3386,7 @@ export class PostHog implements PostHogInterface {
 
         // Reinitialize surveys if we're in cookieless mode and just opted in
         if (this.config.cookieless_mode == 'on_reject') {
-            this.surveys.loadIfEnabled()
+            this.surveys?.loadIfEnabled()
         }
 
         // Don't capture if captureEventName is null or false
