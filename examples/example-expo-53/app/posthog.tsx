@@ -21,7 +21,7 @@ export const posthog = new PostHog(process.env.EXPO_PUBLIC_POSTHOG_PROJECT_API_K
         autocapture: {
             uncaughtExceptions: true,
             unhandledRejections: true,
-            console: false,
+            console: ['error', 'warn'],
         },
     },
     // persistence: 'memory',
