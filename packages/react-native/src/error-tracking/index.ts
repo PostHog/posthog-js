@@ -34,6 +34,14 @@ export class ErrorTracking {
   private logger: Logger
   private options: ResolvedErrorTrackingOptions
 
+  /**
+   * Controls whether autocaptured exceptions are actually sent.
+   * When remote config disables error tracking, this is set to false
+   * so that installed handlers become no-ops.
+   * Defaults to true (don't block locally enabled capture before remote config loads).
+   */
+  private _autocaptureEnabled: boolean = true
+
   constructor(
     private instance: PostHog,
     options: ErrorTrackingOptions = {},
@@ -57,6 +65,45 @@ export class ErrorTracking {
     this.logger = logger.createLogger('[ErrorTracking]')
     this.options = this.resolveOptions(options)
     this.autocapture(this.options.autocapture)
+  }
+
+  /**
+   * Returns whether autocapture is locally configured (user opted in via local config).
+   */
+  get isLocalAutocaptureEnabled(): boolean {
+    return (
+      this.options.autocapture.uncaughtExceptions ||
+      this.options.autocapture.unhandledRejections ||
+      this.options.autocapture.console.length > 0
+    )
+  }
+
+  /**
+   * Called when remote config is loaded.
+   * If errorTracking.autocaptureExceptions is explicitly false, autocapture is disabled.
+   * If it's true or undefined (not yet loaded / not present), autocapture follows local config.
+   */
+  onRemoteConfig(errorTracking: boolean | Record<string, any> | undefined): void {
+    if (errorTracking === undefined || errorTracking === null) {
+      // Remote config doesn't include errorTracking — don't change anything
+      return
+    }
+
+    if (typeof errorTracking === 'boolean') {
+      // boolean false means disabled
+      this._autocaptureEnabled = errorTracking
+    } else if (typeof errorTracking === 'object') {
+      // Map — check autocaptureExceptions key
+      this._autocaptureEnabled = (errorTracking as { autocaptureExceptions?: boolean }).autocaptureExceptions ?? false
+    } else {
+      this._autocaptureEnabled = false
+    }
+
+    if (this._autocaptureEnabled) {
+      this.logger.info('Error tracking autocapture enabled by remote config.')
+    } else {
+      this.logger.info('Error tracking autocapture disabled by remote config.')
+    }
   }
 
   captureException(input: unknown, additionalProperties: PostHogEventProperties, hint: CoreErrorTracking.EventHint) {
@@ -102,6 +149,11 @@ export class ErrorTracking {
 
   private autocaptureUncaughtErrors() {
     const onUncaughtException = (error: unknown, isFatal: boolean) => {
+      // Gate on remote config — if remotely disabled, don't capture
+      if (!this._autocaptureEnabled) {
+        return
+      }
+
       const hint: CoreErrorTracking.EventHint = {
         mechanism: {
           type: 'onuncaughtexception',
@@ -131,6 +183,11 @@ export class ErrorTracking {
 
   private autocaptureUnhandledRejections() {
     const onUnhandledRejection = (error: unknown) => {
+      // Gate on remote config — if remotely disabled, don't capture
+      if (!this._autocaptureEnabled) {
+        return
+      }
+
       const hint: CoreErrorTracking.EventHint = {
         mechanism: {
           type: 'onunhandledrejection',
@@ -149,6 +206,11 @@ export class ErrorTracking {
 
   private autocaptureConsole(levels: LogLevel[]) {
     const onConsole = (level: LogLevel) => (error: unknown, isFatal: boolean, syntheticException?: Error) => {
+      // Gate on remote config — if remotely disabled, don't capture
+      if (!this._autocaptureEnabled) {
+        return
+      }
+
       const hint: CoreErrorTracking.EventHint = {
         mechanism: {
           type: 'onconsole',
