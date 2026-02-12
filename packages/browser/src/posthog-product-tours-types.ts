@@ -2,6 +2,7 @@ import { PropertyMatchType } from './types'
 import { SurveyActionType, SurveyEventWithFilters } from './posthog-surveys-types'
 import type { InferredSelector } from './extensions/product-tours/element-inference'
 import { SurveyPosition } from '@posthog/core'
+import { Z_INDEX_TOURS } from './constants'
 
 export interface JSONContent {
     type?: string
@@ -160,7 +161,7 @@ export const DEFAULT_PRODUCT_TOUR_APPEARANCE: Required<ProductTourAppearance> = 
     showOverlay: true,
     whiteLabel: false,
     dismissOnClickOutside: true,
-    zIndex: 2147483646,
+    zIndex: Z_INDEX_TOURS,
 }
 
 export interface ShowTourOptions {

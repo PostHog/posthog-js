@@ -1,6 +1,7 @@
 // Inline styles following PostHog design system
 
 import type { WidgetPosition } from '../../../../posthog-conversations-types'
+import { Z_INDEX_CONVERSATIONS } from '../../../../constants'
 
 /**
  * Calculate contrasting text color (black or white) based on background brightness
@@ -28,7 +29,7 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             position: 'fixed' as const,
             ...(isTop ? { top: '20px' } : { bottom: '20px' }),
             ...(isLeft ? { left: '20px' } : { right: '20px' }),
-            zIndex: 2147483647,
+            zIndex: Z_INDEX_CONVERSATIONS,
             fontFamily:
                 '-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif',
         },
