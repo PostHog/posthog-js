@@ -2,7 +2,7 @@ import { useCallback, useEffect } from 'react'
 import { OptionalReactNativeNavigation } from '../optional/OptionalReactNativeNavigation'
 import type { PostHog } from '../posthog-rn'
 import { PostHogAutocaptureNavigationTrackerOptions } from '../types'
-import { usePostHog } from './usePostHog'
+import { useOverridablePostHog } from './utils'
 import { PostHogNavigationRef } from '../types'
 
 function _useNavigationTrackerDisabled(): void {
@@ -14,8 +14,7 @@ function _useNavigationTracker(
   navigationRef?: PostHogNavigationRef,
   client?: PostHog
 ): void {
-  const contextClient = usePostHog()
-  const posthog = client || contextClient
+  const posthog = useOverridablePostHog(client, 'useNavigationTracker')
 
   if (!OptionalReactNativeNavigation) {
     // NOTE: This is taken care of by the export, but we keep this here for TS
@@ -48,7 +47,7 @@ function _useNavigationTracker(
 
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const trackRoute = useCallback((): void => {
-    if (!navigation) {
+    if (!navigation || !posthog) {
       return
     }
 
