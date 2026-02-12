@@ -1,5 +1,5 @@
 import type { PostHog } from '../posthog-rn'
-import { Logger, PostHogEventProperties, ErrorTracking as CoreErrorTracking } from '@posthog/core'
+import { JsonType, Logger, PostHogEventProperties, ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { trackConsole, trackUncaughtExceptions, trackUnhandledRejections } from './utils'
 import { isHermes } from '../utils'
 
@@ -83,8 +83,8 @@ export class ErrorTracking {
    * If errorTracking.autocaptureExceptions is explicitly false, autocapture is disabled.
    * If it's true or undefined (not yet loaded / not present), autocapture follows local config.
    */
-  onRemoteConfig(errorTracking: boolean | Record<string, any> | undefined): void {
-    if (errorTracking === undefined || errorTracking === null) {
+  onRemoteConfig(errorTracking: boolean | { [key: string]: JsonType } | undefined): void {
+    if (errorTracking == null) {
       // Remote config doesn't include errorTracking — don't change anything
       return
     }

@@ -293,33 +293,15 @@ export class PostHog extends PostHogCore {
 
   /**
    * Called when remote config has been loaded (from either the remote config endpoint or the flags endpoint).
-   * Gates error tracking autocapture and logs the session replay remote config state.
+   * Gates error tracking autocapture based on the remote config response.
+   *
+   * Session replay config (consoleLogRecordingEnabled, capturePerformance.network_timing) is already
+   * cached via PostHogPersistedProperty.RemoteConfig and applied at startup in startSessionReplay().
    *
    * @internal
    */
   protected onRemoteConfig(response: PostHogRemoteConfig): void {
-    // Gate error tracking autocapture on remote config
     this._errorTracking.onRemoteConfig(response.errorTracking)
-
-    // Log session replay remote config for debugging
-    const sessionRecording = response.sessionRecording
-    if (typeof sessionRecording === 'object' && sessionRecording !== null) {
-      const consoleLogRecordingEnabled = sessionRecording['consoleLogRecordingEnabled']
-      if (consoleLogRecordingEnabled !== undefined) {
-        this._logger.info(`Remote config consoleLogRecordingEnabled: ${consoleLogRecordingEnabled}`)
-      }
-    }
-
-    // Log capture performance remote config for debugging
-    const capturePerformance = response.capturePerformance
-    if (typeof capturePerformance === 'object' && capturePerformance !== null) {
-      const networkTiming = (capturePerformance as { network_timing?: boolean }).network_timing
-      if (networkTiming !== undefined) {
-        this._logger.info(`Remote config capturePerformance.network_timing: ${networkTiming}`)
-      }
-    } else if (typeof capturePerformance === 'boolean') {
-      this._logger.info(`Remote config capturePerformance: ${capturePerformance}`)
-    }
   }
 
   getPersistedProperty<T>(key: PostHogPersistedProperty): T | undefined {
