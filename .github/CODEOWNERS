@@ -2,7 +2,7 @@
 packages/browser/src/entrypoints/recorder.ts           @PostHog/team-replay
 
 # Network recorder
-packages/browser/src/extensions/replay/external/network-plugin.ts @pauldambra
+packages/browser/src/extensions/replay/external/network-plugin.ts @PostHog/team-client-libraries
 
 # Surveys
 packages/browser/src/extensions/surveys/               @PostHog/team-surveys
