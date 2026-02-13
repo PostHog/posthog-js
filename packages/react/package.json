@@ -40,7 +40,9 @@
         }
     },
     "devDependencies": {
+        "@babel/preset-env": "catalog:",
         "@babel/preset-react": "catalog:",
+        "@babel/preset-typescript": "catalog:",
         "@posthog-tooling/rollup-utils": "workspace:*",
         "@rollup/plugin-inject": "^4.0.2",
         "@rollup/plugin-replace": "^2.3.4",

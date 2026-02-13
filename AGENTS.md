@@ -30,6 +30,7 @@ The repository contains the following SDK packages in `./packages/`:
 | `browser/`       | `posthog-js`             | Main browser SDK for capturing events and usage |
 | `web/`           | `posthog-js-lite`        | Lightweight browser SDK                         |
 | `ai/`            | `@posthog/ai`            | AI integrations for Node.js                     |
+| `convex/`        | `@posthog/convex`        | Convex.dev component                            |
 | `node/`          | `posthog-node`           | Node.js backend SDK (requires Node >= 20)       |
 | `react/`         | `@posthog/react`         | React components and hooks                      |
 | `react-native/`  | `posthog-react-native`   | React Native mobile SDK                         |

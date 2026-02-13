@@ -29,6 +29,8 @@
     "@posthog/core": "workspace:*"
   },
   "devDependencies": {
+    "@babel/preset-env": "catalog:",
+    "@babel/preset-typescript": "catalog:",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@posthog-tooling/rollup-utils": "workspace:*",
     "@types/jest": "catalog:",

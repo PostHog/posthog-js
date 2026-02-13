@@ -195,6 +195,7 @@ jobs:
                     - name: '@posthog/core'
                     - name: '@posthog/react'
                     - name: '@posthog/ai'
+                    - name: '@posthog/convex'
                     - name: '@posthog/nextjs-config'
                     - name: '@posthog/nuxt'
                     - name: '@posthog/rollup-plugin'

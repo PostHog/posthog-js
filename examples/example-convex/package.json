@@ -1,0 +1,26 @@
+{
+    "name": "example-convex",
+    "version": "0.1.0",
+    "private": true,
+    "packageManager": "pnpm@10.23.0",
+    "scripts": {
+        "dev": "run-p -r 'dev:*'",
+        "dev:backend": "convex dev --typecheck-components",
+        "dev:frontend": "vite --clearScreen false",
+        "typecheck": "tsc --noEmit && tsc -p convex"
+    },
+    "dependencies": {
+        "@posthog/convex": "*",
+        "convex": "^1.31.7",
+        "react": "^19.2.1",
+        "react-dom": "^19.2.1"
+    },
+    "devDependencies": {
+        "@types/react": "^19",
+        "@types/react-dom": "^19",
+        "@vitejs/plugin-react": "^5.1.3",
+        "npm-run-all2": "8.0.4",
+        "typescript": "^5",
+        "vite": "^7.3.1"
+    }
+}

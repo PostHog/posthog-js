@@ -23,6 +23,8 @@
   },
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.8",
+    "@babel/preset-env": "catalog:",
+    "@babel/preset-typescript": "catalog:",
     "@posthog-tooling/rollup-utils": "workspace:*",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@types/jest": "catalog:",
