@@ -798,11 +798,23 @@ export class ProductTourManager {
 
         const { shadow } = result
 
-        const handleTriggerTour = () => {
-            const tourId = step.bannerConfig?.action?.tourId
-            if (tourId) {
+        const action = step.bannerConfig?.action
+
+        const handleActionClick = () => {
+            this._captureEvent(ProductTourEventName.BANNER_ACTION_CLICKED, {
+                [ProductTourEventProperties.TOUR_ID]: this._activeTour!.id,
+                [ProductTourEventProperties.TOUR_NAME]: this._activeTour!.name,
+                [ProductTourEventProperties.TOUR_ITERATION]: this._activeTour!.current_iteration || 1,
+                [ProductTourEventProperties.TOUR_STEP_ID]: step.id,
+                [ProductTourEventProperties.TOUR_STEP_ORDER]: this._currentStepIndex,
+                [ProductTourEventProperties.TOUR_BUTTON_ACTION]: action?.type,
+                ...(action?.link && { [ProductTourEventProperties.TOUR_BUTTON_LINK]: action.link }),
+                ...(action?.tourId && { [ProductTourEventProperties.TOUR_BUTTON_TOUR_ID]: action.tourId }),
+            })
+
+            if (action?.type === 'trigger_tour' && action.tourId) {
                 this._cleanup()
-                this.showTourById(tourId)
+                this.showTourById(action.tourId)
             }
         }
 
@@ -810,7 +822,7 @@ export class ProductTourManager {
             <ProductTourBanner
                 step={step}
                 onDismiss={() => this.dismissTour('user_clicked_skip')}
-                onTriggerTour={handleTriggerTour}
+                onActionClick={handleActionClick}
                 displayFrequency={this._activeTour.display_frequency}
             />,
             shadow
