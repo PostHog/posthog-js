@@ -142,8 +142,12 @@ const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
     attempt: 1,
 })
 
+function getRRWeb() {
+    return assignableWindow?.__PosthogExtensions__?.rrweb
+}
+
 function getRRWebRecord(): rrwebRecordType | undefined {
-    return assignableWindow?.__PosthogExtensions__?.rrweb?.record
+    return getRRWeb()?.record
 }
 
 export type compressedFullSnapshotEvent = {
@@ -889,7 +893,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._instance.persistence?.unregister(SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP)
 
         this._maxDepthExceeded = false
-        assignableWindow.__PosthogExtensions__?.rrweb?.resetMaxDepthState?.()
+        getRRWeb()?.resetMaxDepthState?.()
 
         this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
 
@@ -1088,7 +1092,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $window_id: targetWindowId,
         }
 
-        if (event.type === EventType.FullSnapshot && assignableWindow.__PosthogExtensions__?.rrweb?.wasMaxDepthReached?.()) {
+        if (event.type === EventType.FullSnapshot && getRRWeb()?.wasMaxDepthReached?.()) {
             this._maxDepthExceeded = true
         }
 
