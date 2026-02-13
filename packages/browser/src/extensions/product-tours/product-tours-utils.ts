@@ -208,6 +208,11 @@ export function addProductTourCSSVariablesToElement(element: HTMLElement, appear
     style.setProperty('--ph-tour-overlay-color', merged.showOverlay ? 'rgba(0, 0, 0, 0.5)' : 'transparent')
     style.setProperty('--ph-tour-z-index', String(merged.zIndex))
 
+    // Banner-specific customization
+    style.setProperty('--ph-tour-banner-padding-x', `${merged.bannerPaddingX}px`)
+    style.setProperty('--ph-tour-banner-padding-y', `${merged.bannerPaddingY}px`)
+    style.setProperty('--ph-tour-dismiss-button-size', `${merged.dismissButtonSize}px`)
+
     // Internal styling variables (not customizable)
     style.setProperty('--ph-tour-button-secondary-color', 'transparent')
     style.setProperty('--ph-tour-button-secondary-text-color', merged.textColor)

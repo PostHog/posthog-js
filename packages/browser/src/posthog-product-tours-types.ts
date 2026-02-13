@@ -115,6 +115,12 @@ export interface ProductTourAppearance {
     /** defaults to true, auto-set to false for announcements/banners */
     dismissOnClickOutside?: boolean
     zIndex?: number
+    /** Horizontal padding for banner steps in pixels (defaults to 16) */
+    bannerPaddingX?: number
+    /** Vertical padding for banner steps in pixels (defaults to 12) */
+    bannerPaddingY?: number
+    /** Dismiss button size in pixels (defaults to 24) */
+    dismissButtonSize?: number
 }
 
 export type ProductTourDisplayFrequency = 'show_once' | 'until_interacted' | 'always'
@@ -162,6 +168,9 @@ export const DEFAULT_PRODUCT_TOUR_APPEARANCE: Required<ProductTourAppearance> = 
     whiteLabel: false,
     dismissOnClickOutside: true,
     zIndex: Z_INDEX_TOURS,
+    bannerPaddingX: 16,
+    bannerPaddingY: 12,
+    dismissButtonSize: 24,
 }
 
 export interface ShowTourOptions {

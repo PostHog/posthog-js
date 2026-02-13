@@ -24,6 +24,10 @@
     --ph-tour-spotlight-border-radius: 4px;
 
     --ph-tour-arrow-size: 8px;
+
+    --ph-tour-banner-padding-x: 16px;
+    --ph-tour-banner-padding-y: 12px;
+    --ph-tour-dismiss-button-size: 24px;
 }
 
 .ph-tour-container * {
@@ -130,11 +134,12 @@
     margin-bottom: 8px;
 }
 
-.ph-tour-content h1 {
+/* Use :not() to ensure inline font-size styles from rich text editors (like tiptap) are respected */
+.ph-tour-content h1:not([style*="font-size"]) {
     font-size: 18px;
 }
 
-.ph-tour-content h2 {
+.ph-tour-content h2:not([style*="font-size"]) {
     font-size: 16px;
 }
 
@@ -160,8 +165,11 @@
     margin-bottom: 8px;
 }
 
-.ph-tour-content h3 {
+.ph-tour-content h3:not([style*="font-size"]) {
     font-size: 14px;
+}
+
+.ph-tour-content h3 {
     font-weight: 600;
     margin-bottom: 8px;
 }
@@ -181,9 +189,12 @@
 .ph-tour-content code {
     padding: 2px 6px;
     font-family: 'SF Mono', Monaco, Consolas, monospace;
-    font-size: 0.875em;
     background: rgba(0, 0, 0, 0.06);
     border-radius: 4px;
+}
+
+.ph-tour-content code:not([style*="font-size"]) {
+    font-size: 0.875em;
 }
 
 /* Code blocks */
@@ -192,10 +203,13 @@
     margin-bottom: 8px;
     overflow-x: auto;
     font-family: 'SF Mono', Monaco, Consolas, monospace;
-    font-size: 13px;
     line-height: 1.5;
     background: rgba(0, 0, 0, 0.04);
     border-radius: 6px;
+}
+
+.ph-tour-content pre:not([style*="font-size"]) {
+    font-size: 13px;
 }
 
 .ph-tour-content pre code {
@@ -372,8 +386,8 @@
     position: absolute;
     top: 8px;
     right: 8px;
-    width: 24px;
-    height: 24px;
+    width: var(--ph-tour-dismiss-button-size);
+    height: var(--ph-tour-dismiss-button-size);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -564,7 +578,7 @@
     align-items: center;
     justify-content: center;
     gap: 16px;
-    padding: 12px 16px;
+    padding: var(--ph-tour-banner-padding-y) var(--ph-tour-banner-padding-x);
     background: var(--ph-tour-background-color);
     border-bottom: 1px solid var(--ph-tour-border-color);
     box-shadow: var(--ph-tour-box-shadow);
@@ -611,8 +625,8 @@ a.ph-tour-banner {
 
 .ph-tour-banner-dismiss {
     flex-shrink: 0;
-    width: 24px;
-    height: 24px;
+    width: var(--ph-tour-dismiss-button-size);
+    height: var(--ph-tour-dismiss-button-size);
     display: flex;
     align-items: center;
     justify-content: center;
