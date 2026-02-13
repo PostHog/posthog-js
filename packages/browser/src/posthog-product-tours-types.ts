@@ -134,6 +134,7 @@ export interface ProductTour {
     internal_targeting_flag_key?: string
     linked_flag_key?: string
     display_frequency?: ProductTourDisplayFrequency
+    disable_image_preload?: boolean
 }
 
 export type ProductTourCallback = (tours: ProductTour[], context?: { isLoaded: boolean; error?: string }) => void

@@ -15,6 +15,7 @@ import {
     findStepElement,
     getElementMetadata,
     getProductTourStylesheet,
+    getStepImageUrls,
     hasElementTarget,
     normalizeUrl,
 } from './product-tours-utils'
@@ -194,10 +195,24 @@ export class ProductTourManager {
     private _pendingTourTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map()
     private _eventReceiver: ProductTourEventReceiver
     private _registeredEventTourIds: Set<string> = new Set()
+    private _preloadedImageUrls: Set<string> = new Set()
 
     constructor(instance: PostHog) {
         this._instance = instance
         this._eventReceiver = new ProductTourEventReceiver(instance)
+    }
+
+    private _preloadTourImages(tours: ProductTour[]): void {
+        const urls = tours
+            .filter((tour) => !tour.disable_image_preload)
+            .flatMap((tour) => tour.steps.flatMap(getStepImageUrls))
+
+        for (const url of urls) {
+            if (!this._preloadedImageUrls.has(url)) {
+                this._preloadedImageUrls.add(url)
+                new Image().src = url
+            }
+        }
     }
 
     private _setStepIndex(index: number): void {
@@ -310,6 +325,8 @@ export class ProductTourManager {
                 this._removeAllTriggerListeners()
                 return
             }
+
+            this._preloadTourImages(tours)
 
             const activeTriggerTourIds = new Set<string>()
 

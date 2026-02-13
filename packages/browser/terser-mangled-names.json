@@ -346,6 +346,8 @@
         "_poller",
         "_popstateListener",
         "_prefillHandledSurveys",
+        "_preloadTourImages",
+        "_preloadedImageUrls",
         "_prepareFeatureFlagsForCallbacks",
         "_previousPageViewProperties",
         "_primary_window_exists_storage_key",
