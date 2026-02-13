@@ -1,4 +1,5 @@
 import type { recordOptions, rrwebRecord as rrwebRecordType } from '../types/rrweb'
+import { wasMaxDepthReached } from '@posthog/rrweb-snapshot'
 import {
     type customEvent,
     EventType,
@@ -329,6 +330,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      */
     private _queuedRRWebEvents: QueuedRRWebEvent[] = []
     private _isIdle: boolean | 'unknown' = 'unknown'
+    private _maxDepthExceeded = false
 
     private _linkedFlagMatching: LinkedFlagMatching
     private _urlTriggerMatching: URLTriggerMatching
@@ -1084,6 +1086,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $window_id: targetWindowId,
         }
 
+        if (event.type === EventType.FullSnapshot && wasMaxDepthReached()) {
+            this._maxDepthExceeded = true
+        }
+
         if (this.status === DISABLED) {
             this._clearBuffer()
             return
@@ -1183,6 +1189,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     $window_id: snapshotBuffer.windowId,
                     $lib: 'web',
                     $lib_version: Config.LIB_VERSION,
+                    $snapshot_max_depth_exceeded: this._maxDepthExceeded,
                 })
             })
         }

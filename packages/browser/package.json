@@ -80,6 +80,7 @@
         "@posthog-tooling/rollup-utils": "workspace:*",
         "@posthog/rrweb-plugin-console-record": "^0.0.40",
         "@posthog/rrweb-record": "^0.0.40",
+        "@posthog/rrweb-snapshot": "^0.0.40",
         "@posthog/rrweb-types": "^0.0.40",
         "@rollup/plugin-babel": "^6.0.4",
         "@rollup/plugin-commonjs": "^28.0.6",
