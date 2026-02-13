@@ -309,9 +309,6 @@ importers:
       '@posthog/rrweb-record':
         specifier: ^0.0.41
         version: 0.0.41
-      '@posthog/rrweb-snapshot':
-        specifier: ^0.0.41
-        version: 0.0.41
       '@posthog/rrweb-types':
         specifier: ^0.0.41
         version: 0.0.41

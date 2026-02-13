@@ -1653,6 +1653,27 @@ describe('Lazy SessionRecording', () => {
             )
         })
 
+        it('resets $snapshot_max_depth_exceeded on session change', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded'] = true
+
+            // simulate session id change callback
+            sessionRecording['_lazyLoadedSessionRecording']['_onSessionIdCallback'](
+                'new-session-id',
+                'new-window-id',
+                { activityTimeout: true }
+            )
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded']).toBe(false)
+        })
+
         it('buffers emitted events', () => {
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.onRemoteConfig(

@@ -44,7 +44,6 @@ minimumReleaseAgeExclude:
   - "@posthog/rrweb-types@0.0.41"
   - "@posthog/rrweb-utils@0.0.41"
   - "@posthog/rrweb@0.0.41"
-  - "@posthog/rrweb-snapshot@0.0.41"
   - "@posthog/rrdom@0.0.41"
   - "@posthog/rrdom@0.0.40"
   - "@posthog/cli"
