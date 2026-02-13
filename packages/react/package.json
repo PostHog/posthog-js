@@ -27,7 +27,8 @@
     "files": [
         "dist",
         "src",
-        "surveys"
+        "surveys",
+        "product-tours"
     ],
     "peerDependencies": {
         "@types/react": ">=16.8.0",

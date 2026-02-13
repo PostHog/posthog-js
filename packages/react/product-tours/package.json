@@ -1,0 +1,7 @@
+{
+    "name": "@posthog/react-product-tours",
+    "private": true,
+    "main": "../dist/umd/product-tours/index.js",
+    "module": "../dist/esm/product-tours/index.js",
+    "types": "../dist/types/product-tours/index.d.ts"
+}

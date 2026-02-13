@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo, type RefCallback, useEffect } from 'react'
-import { usePostHog } from './usePostHog'
+import { usePostHog } from '../../../hooks/usePostHog'
 import { DisplaySurveyType, SurveyEventName, SurveyEventProperties, SurveyPosition } from 'posthog-js'
 
 export interface UseThumbSurveyOptions {
