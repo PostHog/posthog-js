@@ -77,7 +77,7 @@ jobs:
 
                       ${{ github.event.inputs.package_name }} version ${{ github.event.inputs.package_version }} has been released. This updates PostHog to use it.
 
-                      https://github.com/PostHog/posthog-js/compare/${{ github.event.inputs.package_name }}@${{ steps.pnpm-upgrade.outputs.outgoing-version }}...${{ github.event.inputs.package_name }}@${{ github.event.inputs.package_version }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${{ github.event.inputs.package_name }}?activeTab=version)
+                      [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${{ github.event.inputs.package_name }}?activeTab=version)
 
             - name: Output pull request result
               shell: bash
