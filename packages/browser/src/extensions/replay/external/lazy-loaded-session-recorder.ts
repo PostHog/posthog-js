@@ -95,6 +95,7 @@ function networkTimingFromConfig(config: boolean | PerformanceCaptureConfig | un
 }
 
 export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
+export const RECORDING_REMOTE_CONFIG_TTL_MS = FIVE_MINUTES
 export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
@@ -710,7 +711,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // are treated as fresh instead of being cleared on every read
             // they come from versions of the code that will never set a cache_timestamp
             const cacheTimestamp = parsedConfig.cache_timestamp ?? Date.now()
-            if (Date.now() - cacheTimestamp > FIVE_MINUTES) {
+            if (Date.now() - cacheTimestamp > RECORDING_REMOTE_CONFIG_TTL_MS) {
                 logger.info('persisted remote config for session recording is stale and will be ignored', {
                     cacheTimestamp,
                     persistedConfig,

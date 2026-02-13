@@ -53,6 +53,13 @@ import {
 
 jest.mock('../../../config', () => ({ LIB_VERSION: '0.0.1' }))
 
+const mockRemoteConfigLoad = jest.fn()
+jest.mock('../../../remote-config', () => ({
+    RemoteConfigLoader: jest.fn().mockImplementation(() => ({
+        load: mockRemoteConfigLoad,
+    })),
+}))
+
 const EMPTY_BUFFER = {
     data: [],
     sessionId: null,
@@ -211,6 +218,7 @@ describe('Lazy SessionRecording', () => {
     }
 
     beforeEach(() => {
+        mockRemoteConfigLoad.mockClear()
         removePageviewCaptureHookMock = jest.fn()
         sessionId = 'sessionId' + uuidv7()
 
@@ -3768,6 +3776,67 @@ describe('Lazy SessionRecording', () => {
                 }),
                 expect.anything()
             )
+        })
+    })
+
+    describe('stale config retry on script loaded', () => {
+        const FIVE_MINUTES_IN_MS = 5 * 60 * 1000
+
+        beforeEach(() => {
+            addRRwebToWindow()
+        })
+
+        it('requests fresh config when persisted config is stale', () => {
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: {
+                    enabled: true,
+                    endpoint: '/s/',
+                    cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000,
+                },
+            })
+
+            sessionRecording.startIfEnabledOrStop()
+
+            expect(mockRemoteConfigLoad).toHaveBeenCalledTimes(1)
+            expect(sessionRecording.started).toBe(false)
+        })
+
+        it('does not request fresh config more than once', () => {
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: {
+                    enabled: true,
+                    endpoint: '/s/',
+                    cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000,
+                },
+            })
+
+            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.startIfEnabledOrStop()
+
+            expect(mockRemoteConfigLoad).toHaveBeenCalledTimes(1)
+        })
+
+        it('starts recording after fresh config arrives', () => {
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: {
+                    enabled: true,
+                    endpoint: '/s/',
+                    cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000,
+                },
+            })
+
+            sessionRecording.startIfEnabledOrStop()
+            expect(sessionRecording.started).toBe(false)
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(sessionRecording.started).toBe(true)
         })
     })
 })
