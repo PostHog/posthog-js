@@ -36,7 +36,7 @@ import { PostHogConfig } from '../types'
 type ExtensionClasses = NonNullable<PostHogConfig['__extensionClasses']>
 
 /** Session replay and related extensions. */
-export const ReplayExtensions = {
+export const SessionReplayExtensions = {
     sessionRecording: SessionRecording,
 } as const satisfies ExtensionClasses
 
@@ -71,7 +71,7 @@ export const TracingExtensions = {
 
 /** All extensions — equivalent to the default `posthog-js` bundle. */
 export const AllExtensions = {
-    ...ReplayExtensions,
+    ...SessionReplayExtensions,
     ...AnalyticsExtensions,
     ...ErrorTrackingExtensions,
     ...ProductToursExtensions,
