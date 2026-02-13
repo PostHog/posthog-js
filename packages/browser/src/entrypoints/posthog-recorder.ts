@@ -6,7 +6,12 @@ import { LazyLoadedSessionRecording } from '../extensions/replay/external/lazy-l
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
 assignableWindow.__PosthogExtensions__.rrwebPlugins = { getRecordConsolePlugin, getRecordNetworkPlugin }
-assignableWindow.__PosthogExtensions__.rrweb = { record: rrwebRecord, version: 'v2', wasMaxDepthReached, resetMaxDepthState }
+assignableWindow.__PosthogExtensions__.rrweb = {
+    record: rrwebRecord,
+    version: 'v2',
+    wasMaxDepthReached,
+    resetMaxDepthState,
+}
 assignableWindow.__PosthogExtensions__.initSessionRecording = (ph) => new LazyLoadedSessionRecording(ph)
 
 // we used to put all of these items directly on window, and now we put it on __PosthogExtensions__
