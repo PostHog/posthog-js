@@ -197,6 +197,7 @@ export enum ProductTourEventName {
     BUTTON_CLICKED = 'product tour button clicked',
     STEP_SELECTOR_FAILED = 'product tour step selector failed',
     BANNER_CONTAINER_SELECTOR_FAILED = 'product tour banner container selector failed',
+    BANNER_ACTION_CLICKED = 'product tour banner action clicked',
 }
 
 export enum ProductTourEventProperties {

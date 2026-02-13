@@ -183,6 +183,7 @@
         "_getValidEvaluationEnvironments",
         "_getWindowId",
         "_handleBackToTickets",
+        "_handleBannerActionClick",
         "_handleButtonClick",
         "_handleClose",
         "_handleFormEmailChange",
