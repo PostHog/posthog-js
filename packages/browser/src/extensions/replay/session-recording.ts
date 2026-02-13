@@ -19,11 +19,12 @@ import {
     window,
 } from '../../utils/globals'
 import { DISABLED, LAZY_LOADING, SessionRecordingStatus, TriggerType } from './external/triggerMatching'
+import type { Extension } from '../types'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
 
-export class SessionRecording {
+export class SessionRecording implements Extension {
     _forceAllowLocalhostNetworkCapture: boolean = false
 
     private _receivedFlags: boolean = false
@@ -60,6 +61,10 @@ export class SessionRecording {
         if (this._instance.config.cookieless_mode === 'always') {
             throw new Error(LOGGER_PREFIX + ' cannot be used with cookieless_mode="always"')
         }
+    }
+
+    initialize() {
+        this.startIfEnabledOrStop()
     }
 
     private get _isRecordingEnabled() {

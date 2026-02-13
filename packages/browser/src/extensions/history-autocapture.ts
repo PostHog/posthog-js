@@ -3,6 +3,7 @@ import { window } from '../utils/globals'
 import { addEventListener } from '../utils'
 import { logger } from '../utils/logger'
 import { patch } from './replay/rrweb-plugins/patch'
+import type { Extension } from './types'
 
 /**
  * This class is used to capture pageview events when the user navigates using the history API (pushState, replaceState)
@@ -11,7 +12,7 @@ import { patch } from './replay/rrweb-plugins/patch'
  * The behavior is controlled by the `capture_pageview` configuration option:
  * - When set to `'history_change'`, this class will capture pageviews on history API changes
  */
-export class HistoryAutocapture {
+export class HistoryAutocapture implements Extension {
     private _instance: PostHog
     private _popstateListener: (() => void) | undefined
     private _lastPathname: string
@@ -19,6 +20,10 @@ export class HistoryAutocapture {
     constructor(instance: PostHog) {
         this._instance = instance
         this._lastPathname = window?.location?.pathname || ''
+    }
+
+    initialize() {
+        this.startIfEnabled()
     }
 
     public get isEnabled(): boolean {

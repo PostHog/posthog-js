@@ -6,10 +6,11 @@ import { createLogger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import { isUndefined, BucketedRateLimiter, isObject } from '@posthog/core'
 import { ErrorTracking } from '@posthog/core'
+import type { Extension } from '../types'
 
 const logger = createLogger('[ExceptionAutocapture]')
 
-export class ExceptionObserver {
+export class ExceptionObserver implements Extension {
     private _instance: PostHog
     private _rateLimiter: BucketedRateLimiter<string>
     private _remoteEnabled: boolean | undefined
@@ -33,6 +34,10 @@ export class ExceptionObserver {
         })
 
         this._config = this._requiredConfig()
+        this.startIfEnabledOrStop()
+    }
+
+    initialize() {
         this.startIfEnabledOrStop()
     }
 
@@ -157,6 +162,6 @@ export class ExceptionObserver {
             return
         }
 
-        this._instance.exceptions.sendExceptionEvent(errorProperties)
+        this._instance.exceptions?.sendExceptionEvent(errorProperties)
     }
 }

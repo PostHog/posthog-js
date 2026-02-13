@@ -378,6 +378,8 @@ export class PostHog implements PostHogInterface {
 
     _internalEventEmitter = new SimpleEventEmitter()
 
+    private readonly extensions: Extension[] = []
+
     // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
     /** @deprecated Use `flagsEndpointWasHit` instead.  We migrated to using a new feature flag endpoint and the new method is more semantically accurate */
     public get decideEndpointWasHit(): boolean {
@@ -689,103 +691,57 @@ export class PostHog implements PostHogInterface {
         // we don't support IE11 anymore, so performance.now is safe
         // eslint-disable-next-line compat/compat
         const initStartTime = performance.now()
-
         const ext = { ...PostHog.__defaultExtensionClasses, ...this.config.__extensionClasses }
-
-        if (ext.surveys) {
-            this.surveys = new ext.surveys(this)
-        }
-
-        if (ext.historyAutocapture) {
-            this.historyAutocapture = new ext.historyAutocapture(this)
-            this.historyAutocapture.startIfEnabled()
-        }
-
-        // Build queue of extension initialization tasks
         const initTasks: Array<() => void> = []
 
+        // Due to name mangling, we can't easily iterate and assign these extensions
+        // The assignment needs to also be mangled. Thus, the loop is unrolled.
+        if (ext.historyAutocapture) {
+            this.extensions.push((this.historyAutocapture = new ext.historyAutocapture(this)))
+        }
         if (ext.tracingHeaders) {
-            initTasks.push(() => {
-                new ext.tracingHeaders!(this).startIfEnabledOrStop()
-            })
+            this.extensions.push(new ext.tracingHeaders(this))
         }
-
         if (ext.siteApps) {
-            initTasks.push(() => {
-                this.siteApps = new ext.siteApps!(this)
-                this.siteApps?.init()
-            })
+            this.extensions.push((this.siteApps = new ext.siteApps(this)))
+        }
+        if (ext.sessionRecording && !startInCookielessMode) {
+            this.extensions.push((this.sessionRecording = new ext.sessionRecording(this)))
+        }
+        if (ext.autocapture) {
+            this.extensions.push((this.autocapture = new ext.autocapture(this)))
+        }
+        if (ext.productTours) {
+            this.extensions.push((this.productTours = new ext.productTours(this)))
+        }
+        if (ext.heatmaps) {
+            this.extensions.push((this.heatmaps = new ext.heatmaps(this)))
+        }
+        if (ext.webVitalsAutocapture) {
+            this.extensions.push((this.webVitalsAutocapture = new ext.webVitalsAutocapture(this)))
+        }
+        if (ext.exceptionObserver) {
+            this.extensions.push((this.exceptionObserver = new ext.exceptionObserver(this)))
+        }
+        if (ext.deadClicksAutocapture) {
+            this.extensions.push(
+                (this.deadClicksAutocapture = new ext.deadClicksAutocapture(this, isDeadClicksEnabledForAutocapture))
+            )
+        }
+        if (ext.surveys) {
+            this.extensions.push((this.surveys = new ext.surveys(this)))
         }
 
-        if (!startInCookielessMode && ext.sessionRecording) {
+        this.extensions.forEach((extension) => {
+            if (!extension.initialize) return
             initTasks.push(() => {
-                this.sessionRecording = new ext.sessionRecording!(this)
-                this.sessionRecording.startIfEnabledOrStop()
+                extension.initialize?.()
             })
-        }
+        })
 
         if (!this.config.disable_scroll_properties) {
             initTasks.push(() => {
                 this.scrollManager.startMeasuringScrollPosition()
-            })
-        }
-
-        if (ext.autocapture) {
-            initTasks.push(() => {
-                this.autocapture = new ext.autocapture!(this)
-                this.autocapture.startIfEnabled()
-            })
-        }
-
-        initTasks.push(() => {
-            if (ext.surveys) {
-                this.surveys = new ext.surveys(this)
-                this.surveys?.loadIfEnabled()
-            }
-        })
-
-        initTasks.push(() => {
-            this.logs.loadIfEnabled()
-        })
-
-        initTasks.push(() => {
-            this.conversations.loadIfEnabled()
-        })
-
-        if (ext.productTours) {
-            initTasks.push(() => {
-                this.productTours = new ext.productTours!(this)
-                this.productTours.loadIfEnabled()
-            })
-        }
-
-        if (ext.heatmaps) {
-            initTasks.push(() => {
-                this.heatmaps = new ext.heatmaps!(this) as Heatmaps
-                this.heatmaps.startIfEnabled()
-            })
-        }
-
-        if (ext.webVitalsAutocapture) {
-            initTasks.push(() => {
-                this.webVitalsAutocapture = new ext.webVitalsAutocapture!(this)
-            })
-        }
-
-        if (ext.exceptionObserver) {
-            initTasks.push(() => {
-                this.exceptionObserver = new ext.exceptionObserver!(this)
-                this.exceptionObserver.startIfEnabledOrStop()
-            })
-        }
-
-        if (ext.deadClicksAutocapture) {
-            initTasks.push(() => {
-                this.deadClicksAutocapture = new ext.deadClicksAutocapture!(
-                    this,
-                    isDeadClicksEnabledForAutocapture
-                ) as DeadClicksAutocapture
-                this.deadClicksAutocapture.startIfEnabledOrStop()
             })
         }
 
@@ -879,18 +835,10 @@ export class PostHog implements PostHogInterface {
             person_profiles: this._initialPersonProfilesConfig ? this._initialPersonProfilesConfig : 'identified_only',
         })
 
-        this.siteApps?.onRemoteConfig(config)
-        this.sessionRecording?.onRemoteConfig(config)
-        this.autocapture?.onRemoteConfig(config)
-        this.heatmaps?.onRemoteConfig(config)
-        this.surveys?.onRemoteConfig(config)
         this.logs.onRemoteConfig(config)
         this.conversations.onRemoteConfig(config)
-        this.productTours?.onRemoteConfig(config)
-        this.webVitalsAutocapture?.onRemoteConfig(config)
-        this.exceptionObserver?.onRemoteConfig(config)
         this.exceptions.onRemoteConfig(config)
-        this.deadClicksAutocapture?.onRemoteConfig(config)
+        this.extensions.forEach((ext) => ext.onRemoteConfig?.(config))
     }
 
     _loaded(): void {
