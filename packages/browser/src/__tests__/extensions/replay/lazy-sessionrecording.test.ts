@@ -1038,7 +1038,6 @@ describe('Lazy SessionRecording', () => {
                         $window_id: expect.any(String),
                         $lib: 'web',
                         $lib_version: '0.0.1',
-
                     },
                     {
                         _batchKey: 'recordings',
@@ -1139,7 +1138,6 @@ describe('Lazy SessionRecording', () => {
                         $window_id: expect.any(String),
                         $lib: 'web',
                         $lib_version: '0.0.1',
-
                     },
                     {
                         _batchKey: 'recordings',
@@ -1168,7 +1166,6 @@ describe('Lazy SessionRecording', () => {
                         $window_id: expect.any(String),
                         $lib: 'web',
                         $lib_version: '0.0.1',
-
                     },
                     {
                         _batchKey: 'recordings',
@@ -1391,7 +1388,6 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
-
                     },
                     captureOptions
                 )
@@ -1423,7 +1419,6 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
-
                     },
                     captureOptions
                 )
@@ -1456,7 +1451,6 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
-
                     },
                     captureOptions
                 )
@@ -1478,7 +1472,6 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
-
                     },
                     captureOptions
                 )
@@ -1505,7 +1498,6 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
-
                     },
                     captureOptions
                 )
@@ -1531,7 +1523,6 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
-
                     },
                     captureOptions
                 )
@@ -1619,7 +1610,6 @@ describe('Lazy SessionRecording', () => {
                     $window_id: 'windowId',
                     $lib: 'web',
                     $lib_version: '0.0.1',
-
                 },
                 {
                     _url: 'https://test.com/s/',
@@ -1698,7 +1688,6 @@ describe('Lazy SessionRecording', () => {
                     ],
                     $lib: 'web',
                     $lib_version: '0.0.1',
-
                 },
                 {
                     _url: 'https://test.com/s/',
@@ -1804,7 +1793,6 @@ describe('Lazy SessionRecording', () => {
                     $snapshot_bytes: 39,
                     $lib: 'web',
                     $lib_version: '0.0.1',
-
                 },
                 {
                     _url: 'https://test.com/s/',
