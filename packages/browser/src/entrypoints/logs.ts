@@ -5,7 +5,7 @@ import { resourceFromAttributes } from '@opentelemetry/resources'
 
 import { assignableWindow } from '../utils/globals'
 import { PostHog } from '../posthog-core'
-import { isObject } from '@posthog/core'
+import { isNull, isObject } from '@posthog/core'
 
 const setupOpenTelemetry = (posthog: PostHog) => {
     let attributes: Record<string, string> = {
@@ -52,15 +52,22 @@ const flattenObject = (
     prefix = '',
     result = {} as Record<string, any>,
     keys_limit = LOG_ATTRIBUTES_LIMIT,
-    size_limit = LOG_BODY_SIZE_LIMIT
+    size_limit = LOG_BODY_SIZE_LIMIT,
+    seen = new WeakSet()
 ) => {
+    if (seen.has(obj)) {
+        result[prefix || 'circular'] = '[Circular]'
+        return result
+    }
+    seen.add(obj)
+
     for (const key in obj) {
         if (Object.prototype.hasOwnProperty.call(obj, key)) {
             const value = obj[key]
             const newKey = prefix ? `${prefix}.${key}` : key
 
             if (isObject(value)) {
-                flattenObject(value, newKey, result, keys_limit, size_limit)
+                flattenObject(value, newKey, result, keys_limit, size_limit, seen)
             } else {
                 keys_limit -= 1
                 size_limit -= value.toString().length
@@ -100,22 +107,31 @@ const initializeLogs = (posthog: PostHog) => {
     }
 
     for (const level of ['debug', 'log', 'warn', 'error', 'info'] as ('debug' | 'log' | 'warn' | 'error' | 'info')[]) {
-        const errorReplacer = (_: any, value: any) => {
-            if (value instanceof Error) {
-                return {
-                    ...value,
-                    name: value.name,
-                    message: value.message,
-                    stack: value.stack,
+        const createReplacer = () => {
+            const seen = new WeakSet()
+            return (_: any, value: any) => {
+                if (value instanceof Error) {
+                    return {
+                        ...value,
+                        name: value.name,
+                        message: value.message,
+                        stack: value.stack,
+                    }
                 }
+                if (typeof value === 'object' && !isNull(value)) {
+                    if (seen.has(value)) {
+                        return '[Circular]'
+                    }
+                    seen.add(value)
+                }
+                return value
             }
-            return value
         }
         const logWrapper =
             (originalConsoleLog: any) =>
             (...args: any[]) => {
                 if (args.length > 0) {
-                    let body = args.map((a) => JSON.stringify(a, errorReplacer)).join(' ')
+                    let body = args.map((a) => JSON.stringify(a, createReplacer())).join(' ')
                     if (body.length > LOG_BODY_SIZE_LIMIT) {
                         body = body.slice(0, LOG_BODY_SIZE_LIMIT) + '...'
                         attributes.body_truncated = 'true'
