@@ -14,7 +14,6 @@ import { isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-auto
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
 import { PageViewManager } from './page-view'
-import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import {
     type DisplaySurveyOptions,
@@ -41,7 +40,6 @@ import {
     EarlyAccessFeatureStage,
     EventName,
     ExceptionAutoCaptureConfig,
-    FeatureFlagDetail,
     FeatureFlagsCallback,
     FeatureFlagResult,
     JsonType,
@@ -110,6 +108,9 @@ import type { PostHogProductTours } from './posthog-product-tours'
 import type { SiteApps } from './site-apps'
 import type { SessionRecording } from './extensions/replay/session-recording'
 import type { Extension } from './extensions/types'
+import type { Toolbar } from './extensions/toolbar'
+import type { PostHogFeatureFlags } from './posthog-featureflags'
+import type { WebExperiments } from './web-experiments'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -330,7 +331,7 @@ export class PostHog implements PostHogInterface {
     rateLimiter: RateLimiter
     scrollManager: ScrollManager
     pageViewManager: PageViewManager
-    _featureFlags: PostHogFeatureFlags
+    _featureFlags?: PostHogFeatureFlags
     surveys?: PostHogSurveys
     conversations?: PostHogConversations
     logs?: PostHogLogs
@@ -730,6 +731,9 @@ export class PostHog implements PostHogInterface {
         }
         if (ext.conversations) {
             this.extensions.push((this.conversations = new ext.conversations(this)))
+        }
+        if (ext.featureFlags) {
+            this.extensions.push((this._featureFlags = new ext.featureFlags(this)))
         }
         if (ext.logs) {
             this.extensions.push((this.logs = new ext.logs(this)))
