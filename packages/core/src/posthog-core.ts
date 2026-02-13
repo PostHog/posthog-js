@@ -548,6 +548,20 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return this._flagsAsync(sendAnonDistinctId, fetchConfig)
   }
 
+  /**
+   * Called when remote config has been loaded (from either the remote config endpoint or the flags endpoint).
+   * Override in subclasses to react to remote config changes (e.g., gating error tracking, session replay features).
+   *
+   * The full response is passed so consumers can read whatever fields they need.
+   * This is called exactly once per remote config load cycle.
+   *
+   * @param _response The remote config or flags response containing config fields
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected onRemoteConfig(_response: PostHogRemoteConfig): void {
+    // Override in subclasses
+  }
+
   private cacheSessionReplay(source: string, response?: PostHogRemoteConfig): void {
     const sessionReplay = response?.sessionRecording
     if (sessionReplay) {
@@ -610,17 +624,30 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             this.cacheSessionReplay('remote config', response)
 
             // we only dont load flags if the remote config has no feature flags
+            let willLoadFlags = false
             if (response.hasFeatureFlags === false) {
               // resetting flags to empty object
               this.setKnownFeatureFlagDetails({ flags: {} })
 
               this._logger.warn('Remote config has no feature flags, will not load feature flags.')
             } else if (this.preloadFeatureFlags !== false) {
+              willLoadFlags = true
               this.reloadFeatureFlags()
             }
 
             if (!response.supportedCompression?.includes(Compression.GZipJS)) {
               this.disableCompression = true
+            }
+
+            // Notify onRemoteConfig only if flags won't be loaded.
+            // When flags will be loaded, _flagsAsync will call onRemoteConfig instead
+            // (with fetchConfig=true), ensuring it fires exactly once.
+            if (!willLoadFlags) {
+              try {
+                this.onRemoteConfig(response)
+              } catch (e) {
+                this._logger.error('Error in onRemoteConfig callback:', e)
+              }
             }
 
             remoteConfig = response
@@ -716,6 +743,18 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           // Mark that we hit the /flags endpoint so we can capture this in the $feature_flag_called event
           this.setPersistedProperty(PostHogPersistedProperty.FlagsEndpointWasHit, true)
           this.cacheSessionReplay('flags', res)
+
+          // Notify onRemoteConfig when the flags response includes config data.
+          // fetchConfig=true means the response contains remote config fields (errorTracking, capturePerformance, etc.).
+          // When called from _remoteConfigAsync -> reloadFeatureFlags, fetchConfig defaults to true,
+          // so this fires once. _remoteConfigAsync skips its own onRemoteConfig call in that case.
+          if (fetchConfig) {
+            try {
+              this.onRemoteConfig(res)
+            } catch (e) {
+              this._logger.error('Error in onRemoteConfig callback:', e)
+            }
+          }
         }
         return res
       })

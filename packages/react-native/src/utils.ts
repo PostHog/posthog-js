@@ -1,3 +1,4 @@
+import { JsonType } from '@posthog/core'
 import { Platform } from 'react-native'
 
 type ReactNativeGlobal = {
@@ -40,3 +41,31 @@ export function isWindows(): boolean {
 }
 
 export const isHermes = () => !!GLOBAL_OBJ.HermesInternal
+
+/**
+ * Reads a boolean value from a remote config field.
+ *
+ * Remote config fields follow a pattern: they are either a boolean (false = disabled),
+ * an object with specific keys, or absent/undefined.
+ *
+ * @param field The remote config field (e.g., `response.errorTracking`, `response.capturePerformance`)
+ * @param key The key to read from the object form (e.g., `'autocaptureExceptions'`, `'network_timing'`)
+ * @param defaultValue Value to return when the field is absent/undefined (defaults to `true` — don't block locally enabled capture)
+ */
+export function getRemoteConfigBool(
+  field: boolean | { [key: string]: JsonType } | undefined,
+  key: string,
+  defaultValue: boolean = true
+): boolean {
+  if (field == null) {
+    return defaultValue
+  }
+  if (typeof field === 'boolean') {
+    return field
+  }
+  if (typeof field === 'object') {
+    const value = field[key]
+    return typeof value === 'boolean' ? value : defaultValue
+  }
+  return defaultValue
+}
