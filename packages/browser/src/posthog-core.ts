@@ -111,6 +111,7 @@ import type { Heatmaps } from './heatmaps'
 import type { PostHogProductTours } from './posthog-product-tours'
 import type { SiteApps } from './site-apps'
 import type { SessionRecording } from './extensions/replay/session-recording'
+import type { Extension } from './extensions/types'
 
 /*
 SIMPLE STYLE GUIDE:
