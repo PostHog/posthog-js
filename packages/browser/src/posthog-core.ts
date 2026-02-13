@@ -1996,7 +1996,11 @@ export class PostHog implements PostHogInterface {
      * @returns {Function} A function that can be called to unsubscribe the listener.
      */
     onSurveysLoaded(callback: SurveyCallback): () => void {
-        return this.surveys?.onSurveysLoaded(callback) ?? (() => {})
+        if (!this.surveys) {
+            callback([], { isLoaded: false, error: 'Surveys module not available' })
+            return () => {}
+        }
+        return this.surveys.onSurveysLoaded(callback)
     }
 
     /**
