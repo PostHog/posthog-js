@@ -1665,11 +1665,9 @@ describe('Lazy SessionRecording', () => {
             sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded'] = true
 
             // simulate session id change callback
-            sessionRecording['_lazyLoadedSessionRecording']['_onSessionIdCallback'](
-                'new-session-id',
-                'new-window-id',
-                { activityTimeout: true }
-            )
+            sessionRecording['_lazyLoadedSessionRecording']['_onSessionIdCallback']('new-session-id', 'new-window-id', {
+                activityTimeout: true,
+            })
 
             expect(sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded']).toBe(false)
         })
