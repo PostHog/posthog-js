@@ -33,6 +33,12 @@ import { PostHogProductTours } from '../posthog-product-tours'
 import { SiteApps } from '../site-apps'
 import { PostHogConfig } from '../types'
 import { PostHogSurveys } from '../posthog-surveys'
+import { Toolbar } from './toolbar'
+import { PostHogFeatureFlags } from '../posthog-featureflags'
+import { PostHogExceptions } from '../posthog-exceptions'
+import { WebExperiments } from '../web-experiments'
+import { PostHogConversations } from './conversations/posthog-conversations'
+import { PostHogLogs } from '../posthog-logs'
 
 type ExtensionClasses = NonNullable<PostHogConfig['__extensionClasses']>
 
@@ -75,6 +81,11 @@ export const SurveysExtensions = {
     surveys: PostHogSurveys,
 } as const satisfies ExtensionClasses
 
+/** PostHog toolbar for visual element inspection and action setup. */
+export const ToolbarExtensions = {
+    toolbar: Toolbar,
+} as const satisfies ExtensionClasses
+
 /** All extensions — equivalent to the default `posthog-js` bundle. */
 export const AllExtensions = {
     ...AnalyticsExtensions,
@@ -84,4 +95,10 @@ export const AllExtensions = {
     ...SiteAppsExtensions,
     ...SurveysExtensions,
     ...TracingExtensions,
+    ...ToolbarExtensions,
+    featureFlags: PostHogFeatureFlags,
+    exceptions: PostHogExceptions,
+    experiments: WebExperiments,
+    conversations: PostHogConversations,
+    logs: PostHogLogs,
 } as const satisfies ExtensionClasses
