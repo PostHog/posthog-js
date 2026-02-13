@@ -1038,7 +1038,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: expect.any(String),
                         $lib: 'web',
                         $lib_version: '0.0.1',
-                        $snapshot_max_depth_exceeded: false,
+
                     },
                     {
                         _batchKey: 'recordings',
@@ -1139,7 +1139,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: expect.any(String),
                         $lib: 'web',
                         $lib_version: '0.0.1',
-                        $snapshot_max_depth_exceeded: false,
+
                     },
                     {
                         _batchKey: 'recordings',
@@ -1168,7 +1168,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: expect.any(String),
                         $lib: 'web',
                         $lib_version: '0.0.1',
-                        $snapshot_max_depth_exceeded: false,
+
                     },
                     {
                         _batchKey: 'recordings',
@@ -1391,7 +1391,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
-                        $snapshot_max_depth_exceeded: false,
+
                     },
                     captureOptions
                 )
@@ -1423,7 +1423,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
-                        $snapshot_max_depth_exceeded: false,
+
                     },
                     captureOptions
                 )
@@ -1456,7 +1456,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
-                        $snapshot_max_depth_exceeded: false,
+
                     },
                     captureOptions
                 )
@@ -1478,7 +1478,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
-                        $snapshot_max_depth_exceeded: false,
+
                     },
                     captureOptions
                 )
@@ -1505,7 +1505,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
-                        $snapshot_max_depth_exceeded: false,
+
                     },
                     captureOptions
                 )
@@ -1531,7 +1531,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
-                        $snapshot_max_depth_exceeded: false,
+
                     },
                     captureOptions
                 )
@@ -1619,7 +1619,7 @@ describe('Lazy SessionRecording', () => {
                     $window_id: 'windowId',
                     $lib: 'web',
                     $lib_version: '0.0.1',
-                    $snapshot_max_depth_exceeded: false,
+
                 },
                 {
                     _url: 'https://test.com/s/',
@@ -1641,16 +1641,9 @@ describe('Lazy SessionRecording', () => {
 
             sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded'] = true
 
-            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
-            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
-
-            expect(posthog.capture).toHaveBeenCalledWith(
-                '$snapshot',
-                expect.objectContaining({
-                    $snapshot_max_depth_exceeded: true,
-                }),
-                expect.any(Object)
-            )
+            expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
+                $snapshot_max_depth_exceeded: true,
+            })
         })
 
         it('resets $snapshot_max_depth_exceeded on session change', () => {
@@ -1705,7 +1698,7 @@ describe('Lazy SessionRecording', () => {
                     ],
                     $lib: 'web',
                     $lib_version: '0.0.1',
-                    $snapshot_max_depth_exceeded: false,
+
                 },
                 {
                     _url: 'https://test.com/s/',
@@ -1811,7 +1804,7 @@ describe('Lazy SessionRecording', () => {
                     $snapshot_bytes: 39,
                     $lib: 'web',
                     $lib_version: '0.0.1',
-                    $snapshot_max_depth_exceeded: false,
+
                 },
                 {
                     _url: 'https://test.com/s/',

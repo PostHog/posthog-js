@@ -1192,7 +1192,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     $window_id: snapshotBuffer.windowId,
                     $lib: 'web',
                     $lib_version: Config.LIB_VERSION,
-                    $snapshot_max_depth_exceeded: this._maxDepthExceeded,
                 })
             })
         }
@@ -1523,6 +1522,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_session_start: sessionStartTimestamp,
             $sdk_debug_replay_flushed_size: this._flushedSizeTracker?.currentTrackedSize,
             $sdk_debug_replay_full_snapshots: this._fullSnapshotTimestamps,
+            $snapshot_max_depth_exceeded: this._maxDepthExceeded,
         }
     }
 
