@@ -195,6 +195,29 @@ describe('heatmaps', () => {
         expect(beforeSendMock.mock.calls).toEqual([])
     })
 
+    describe('onRemoteConfig', () => {
+        it('does not overwrite persistence when called with empty config', () => {
+            // Set up existing persisted value
+            posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: true })
+            const heatmaps = new Heatmaps(posthog)
+
+            // Call with empty config (simulating config fetch failure)
+            heatmaps.onRemoteConfig({} as FlagsResponse)
+
+            // Should NOT have overwritten the existing value
+            expect(posthog.persistence!.props[HEATMAPS_ENABLED_SERVER_SIDE]).toBe(true)
+        })
+
+        it('updates persistence when heatmaps key is present', () => {
+            posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: true })
+            const heatmaps = new Heatmaps(posthog)
+
+            heatmaps.onRemoteConfig({ heatmaps: false } as FlagsResponse)
+
+            expect(posthog.persistence!.props[HEATMAPS_ENABLED_SERVER_SIDE]).toBe(false)
+        })
+    })
+
     describe('isEnabled()', () => {
         it.each([
             [undefined, false],

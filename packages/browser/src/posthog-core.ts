@@ -366,6 +366,7 @@ export class PostHog implements PostHogInterface {
     compression?: Compression
     __request_queue: QueuedRequestWithOptions[]
     _pendingRemoteConfig?: RemoteConfig
+    _remoteConfigLoader?: RemoteConfigLoader
     analyticsDefaultEndpoint: string
     version: string = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
@@ -525,6 +526,8 @@ export class PostHog implements PostHogInterface {
 
         if (config.person_profiles) {
             this._initialPersonProfilesConfig = config.person_profiles
+        } else if (config.process_person) {
+            this._initialPersonProfilesConfig = config.process_person
         }
 
         this.set_config(
@@ -892,8 +895,8 @@ export class PostHog implements PostHogInterface {
             }, 1)
         }
 
-        new RemoteConfigLoader(this).load()
-        this.featureFlags.flags()
+        this._remoteConfigLoader = new RemoteConfigLoader(this)
+        this._remoteConfigLoader.load()
     }
 
     _start_queue_if_opted_in(): void {
@@ -2615,6 +2618,9 @@ export class PostHog implements PostHogInterface {
         this.persistence?.clear()
         this.sessionPersistence?.clear()
         this.surveys.reset()
+        // Stop the refresh interval before resetting flags — featureFlags.reset() clears
+        // the debouncer, so if the order were reversed a pending refresh could fire after reset.
+        this._remoteConfigLoader?.stop()
         this.featureFlags.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()

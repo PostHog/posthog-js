@@ -92,6 +92,10 @@ export class WebVitalsAutocapture {
     }
 
     public onRemoteConfig(response: RemoteConfig) {
+        if (!('capturePerformance' in response)) {
+            return
+        }
+
         const webVitalsOptIn = isObject(response.capturePerformance) && !!response.capturePerformance.web_vitals
 
         const allowedMetrics = isObject(response.capturePerformance)

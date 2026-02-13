@@ -1,19 +1,29 @@
 import { expect, test } from './utils/posthog-playwright-test-base'
 import { gotoPage } from './utils/setup'
 
+const configResponse = {
+    featureFlags: {},
+    featureFlagPayloads: {},
+    sessionRecording: {
+        endpoint: '/ses/',
+    },
+}
+
 test.describe('SSR hydration compatibility', () => {
     test('does not cause hydration errors when scripts are loaded', async ({ page, context }) => {
+        void context.route(/\/array\/[^/]+\/config(\?|$)/, (route) => {
+            route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify(configResponse),
+            })
+        })
+
         await context.route('**/flags/*', (route) => {
             route.fulfill({
                 status: 200,
                 contentType: 'application/json',
-                body: JSON.stringify({
-                    featureFlags: {},
-                    featureFlagPayloads: {},
-                    sessionRecording: {
-                        endpoint: '/ses/',
-                    },
-                }),
+                body: JSON.stringify(configResponse),
             })
         })
 
@@ -38,17 +48,19 @@ test.describe('SSR hydration compatibility', () => {
     })
 
     test('appends scripts to head, leaving body untouched for SSR hydration', async ({ page, context }) => {
+        void context.route(/\/array\/[^/]+\/config(\?|$)/, (route) => {
+            route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify(configResponse),
+            })
+        })
+
         await context.route('**/flags/*', (route) => {
             route.fulfill({
                 status: 200,
                 contentType: 'application/json',
-                body: JSON.stringify({
-                    featureFlags: {},
-                    featureFlagPayloads: {},
-                    sessionRecording: {
-                        endpoint: '/ses/',
-                    },
-                }),
+                body: JSON.stringify(configResponse),
             })
         })
 

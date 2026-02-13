@@ -45,6 +45,10 @@ describe('loaded() with flags', () => {
     })
 
     describe('flag reloading', () => {
+        // With RemoteConfig, flags are loaded via ensureFlagsLoaded() -> reloadFeatureFlags()
+        // which debounces with a 5ms timeout. group() calls also go through reloadFeatureFlags().
+        // The debouncer batches these into a single _callFlagsEndpoint call.
+
         it('only calls flags once whilst loading', async () => {
             instance = await createPosthog({
                 loaded: (ph) => {
@@ -52,16 +56,18 @@ describe('loaded() with flags', () => {
                 },
             })
 
+            // Advance past the 5ms debounce timer from reloadFeatureFlags
+            jest.advanceTimersByTime(10)
+
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
             expect(instance._send_request.mock.calls[0][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/flags/?v=2&config=true',
+                url: 'https://us.i.posthog.com/flags/?v=2',
                 data: {
                     groups: { org: 'bazinga' },
                 },
             })
-            jest.runOnlyPendingTimers() // Once for callback
-            jest.runOnlyPendingTimers() // Once for potential debounce
+            jest.advanceTimersByTime(10) // Ensure no additional debounce
             expect(instance._send_request).toHaveBeenCalledTimes(1)
         })
 
@@ -74,24 +80,28 @@ describe('loaded() with flags', () => {
                     }, 100)
                 },
             })
+
+            // Advance past the 5ms debounce timer
+            jest.advanceTimersByTime(10)
+
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(1)
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
             expect(instance._send_request.mock.calls[0][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/flags/?v=2&config=true',
+                url: 'https://us.i.posthog.com/flags/?v=2',
                 data: {
                     groups: { org: 'bazinga' },
                 },
             })
 
-            jest.runOnlyPendingTimers() // Once for callback
-            jest.runOnlyPendingTimers() // Once for potential debounce
+            jest.advanceTimersByTime(100) // Fire the setTimeout for group change
+            jest.advanceTimersByTime(10) // Fire the debounce for the second group call
 
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(2)
             expect(instance._send_request).toHaveBeenCalledTimes(2)
 
             expect(instance._send_request.mock.calls[1][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/flags/?v=2&config=true',
+                url: 'https://us.i.posthog.com/flags/?v=2',
                 data: {
                     groups: { org: 'bazinga2' },
                 },
@@ -106,16 +116,19 @@ describe('loaded() with flags', () => {
                 },
             })
 
+            // Advance past the 5ms debounce timer
+            jest.advanceTimersByTime(10)
+
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/flags/?v=2&config=true&only_evaluate_survey_feature_flags=true',
+                url: 'https://us.i.posthog.com/flags/?v=2&only_evaluate_survey_feature_flags=true',
                 data: {
                     groups: { org: 'bazinga' },
                 },
             })
         })
 
-        it('does call flags with a request for flags if called directly (via groups) even if disabled for first load', async () => {
+        it('does not load flags on init when advanced_disable_feature_flags_on_first_load is true, but group() still triggers reload', async () => {
             instance = await createPosthog({
                 advanced_disable_feature_flags_on_first_load: true,
                 loaded: (ph) => {
@@ -125,14 +138,16 @@ describe('loaded() with flags', () => {
 
             expect(instance.config.advanced_disable_feature_flags_on_first_load).toBe(true)
 
+            // Advance past the 5ms debounce timer — the group() call still triggers reloadFeatureFlags
+            jest.advanceTimersByTime(10)
+
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(1)
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
+            // The group() triggered reload doesn't set disable_flags
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toEqual(undefined)
 
-            jest.runOnlyPendingTimers() // Once for callback
-            jest.runOnlyPendingTimers() // Once for potential debounce
-
+            jest.advanceTimersByTime(10) // Ensure no additional calls
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(1)
             expect(instance._send_request).toHaveBeenCalledTimes(1)
         })
@@ -181,7 +196,7 @@ describe('loaded() with flags', () => {
             const receivedFeatureFlagsSpy = jest.spyOn(instance.featureFlags, 'receivedFeatureFlags')
 
             instance.featureFlags._callFlagsEndpoint()
-            jest.runOnlyPendingTimers()
+            jest.advanceTimersByTime(10)
 
             if (expectedCall) {
                 expect(receivedFeatureFlagsSpy).toHaveBeenCalledWith(expectedArgs, false)

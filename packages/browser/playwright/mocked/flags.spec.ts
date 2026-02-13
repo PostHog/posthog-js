@@ -69,6 +69,7 @@ test.describe('flags', () => {
             token: 'test token',
             distinct_id: 'new-id',
             $device_id: flagsPayload.$device_id,
+            timezone: flagsPayload.timezone,
             person_properties: {
                 $initial__kx: null,
                 $initial_current_url: 'http://localhost:2345/playground/cypress/index.html',

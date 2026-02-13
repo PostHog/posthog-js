@@ -322,6 +322,9 @@ describe('cookieless', () => {
                 cookieless_mode: 'on_reject',
                 request_batching: true,
             })
+            // Flags are loaded via RemoteConfig -> ensureFlagsLoaded -> reloadFeatureFlags,
+            // which debounces for 5ms before calling the flags endpoint
+            jest.advanceTimersByTime(10)
             expect(mockedFetch).toBeCalledTimes(1) // flags
             expect(mockedFetch.mock.calls[0][0]).toContain('/flags/')
 
@@ -331,7 +334,7 @@ describe('cookieless', () => {
             expect(JSON.parse(mockedFetch.mock.calls[2][1].body).event).toEqual('$pageview')
 
             posthog.capture('custom event')
-            jest.runOnlyPendingTimers() // allows the batch queue to flush
+            jest.advanceTimersByTime(5000) // flush the batch queue (3s interval) without triggering 5-min remote config refresh
             expect(mockedFetch).toBeCalledTimes(4) // flags + opt in + pageview + custom event
             expect(JSON.parse(mockedFetch.mock.calls[3][1].body)[0].event).toEqual('custom event')
         })

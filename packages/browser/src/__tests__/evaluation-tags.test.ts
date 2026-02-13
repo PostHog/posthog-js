@@ -20,7 +20,7 @@ describe('Evaluation Tags/Contexts', () => {
             get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
             getGroups: jest.fn().mockReturnValue({}),
             requestRouter: {
-                endpointFor: jest.fn().mockReturnValue('/flags/?v=2&config=true'),
+                endpointFor: jest.fn().mockReturnValue('/flags/?v=2'),
             },
             _send_request: jest.fn(),
             _shouldDisableFlags: jest.fn().mockReturnValue(false),

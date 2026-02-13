@@ -111,6 +111,10 @@ export class Heatmaps {
     }
 
     public onRemoteConfig(response: RemoteConfig) {
+        if (!('heatmaps' in response)) {
+            return
+        }
+
         const optIn = !!response['heatmaps']
 
         if (this.instance.persistence) {

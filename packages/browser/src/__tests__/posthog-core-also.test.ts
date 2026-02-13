@@ -1209,7 +1209,9 @@ describe('posthog core', () => {
                 advanced_disable_decide: true,
             })
             expect(posthog._shouldDisableFlags()).toBe(false)
-            expect(warnSpy).not.toHaveBeenCalled()
+            expect(warnSpy).not.toHaveBeenCalledWith(
+                expect.stringContaining("Config field 'advanced_disable_decide' is deprecated")
+            )
         })
 
         it('returns false when neither field is set', () => {
@@ -1240,6 +1242,14 @@ describe('posthog core', () => {
         })
 
         describe('/flags', () => {
+            beforeEach(() => {
+                jest.useFakeTimers()
+            })
+
+            afterEach(() => {
+                jest.useRealTimers()
+            })
+
             it('is called by default', async () => {
                 const sendRequestMock = jest.fn()
                 await createPosthogInstance(uuidv7(), {
@@ -1248,20 +1258,25 @@ describe('posthog core', () => {
                     },
                 })
 
+                // Advance past the 5ms debounce timer from reloadFeatureFlags
+                jest.advanceTimersByTime(10)
+
                 expect(sendRequestMock.mock.calls[0][0]).toMatchObject({
-                    url: 'http://localhost/flags/?v=2&config=true',
+                    url: 'http://localhost/flags/?v=2',
                 })
             })
 
             it('does not call flags if disabled', async () => {
                 const sendRequestMock = jest.fn()
-                const instance = await createPosthogInstance(uuidv7(), {
+                await createPosthogInstance(uuidv7(), {
                     advanced_disable_flags: true,
                     loaded: (ph) => {
                         ph._send_request = sendRequestMock
                     },
                 })
-                expect(instance._send_request).not.toHaveBeenCalled()
+
+                jest.advanceTimersByTime(10)
+                expect(sendRequestMock).not.toHaveBeenCalled()
             })
         })
     })
