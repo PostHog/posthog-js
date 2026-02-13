@@ -201,6 +201,8 @@ describe('Lazy SessionRecording', () => {
                 return () => {}
             }),
             version: 'fake',
+            wasMaxDepthReached: jest.fn(() => false),
+            resetMaxDepthState: jest.fn(),
         }
         assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = jest.fn(() => {
             // we pretend to be rrweb and call emit
@@ -1629,8 +1631,10 @@ describe('Lazy SessionRecording', () => {
                 })
             )
 
-            sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded'] = true
+            assignableWindow.__PosthogExtensions__.rrweb.wasMaxDepthReached.mockReturnValue(true)
+            _emit(createFullSnapshot())
 
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded']).toBe(true)
             expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
                 $snapshot_max_depth_exceeded: true,
             })
@@ -1653,6 +1657,7 @@ describe('Lazy SessionRecording', () => {
             })
 
             expect(sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded']).toBe(false)
+            expect(assignableWindow.__PosthogExtensions__.rrweb.resetMaxDepthState).toHaveBeenCalled()
         })
 
         it('buffers emitted events', () => {

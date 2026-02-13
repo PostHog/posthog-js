@@ -1,5 +1,4 @@
 import type { recordOptions, rrwebRecord as rrwebRecordType } from '../types/rrweb'
-import { wasMaxDepthReached, resetMaxDepthState } from '@posthog/rrweb-record'
 import {
     type customEvent,
     EventType,
@@ -890,7 +889,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._instance.persistence?.unregister(SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP)
 
         this._maxDepthExceeded = false
-        resetMaxDepthState()
+        assignableWindow.__PosthogExtensions__?.rrweb?.resetMaxDepthState?.()
 
         this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
 
@@ -1089,7 +1088,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $window_id: targetWindowId,
         }
 
-        if (event.type === EventType.FullSnapshot && wasMaxDepthReached()) {
+        if (event.type === EventType.FullSnapshot && assignableWindow.__PosthogExtensions__?.rrweb?.wasMaxDepthReached?.()) {
             this._maxDepthExceeded = true
         }
 
