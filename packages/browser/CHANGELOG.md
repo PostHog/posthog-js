@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.347.1
+
+### Patch Changes
+
+- [#3090](https://github.com/PostHog/posthog-js/pull/3090) [`312b785`](https://github.com/PostHog/posthog-js/commit/312b78520c68d02efd7b2f22ca3ed4c30911b045) Thanks [@adboio](https://github.com/adboio)! - enable product tour image preload
+  (2026-02-13)
+- Updated dependencies []:
+    - @posthog/types@1.347.1
+
 ## 1.347.0
 
 ### Minor Changes
