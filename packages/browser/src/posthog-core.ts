@@ -1,4 +1,3 @@
-import { Autocapture } from './autocapture'
 import Config from './config'
 import { ConsentManager, ConsentStatus } from './consent'
 import {
@@ -11,20 +10,14 @@ import {
     SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
 } from './constants'
-import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
-import { ExceptionObserver } from './extensions/exception-autocapture'
-import { HistoryAutocapture } from './extensions/history-autocapture'
+import { isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
 import { Toolbar } from './extensions/toolbar'
-import { TracingHeaders } from './extensions/tracing-headers'
-import { WebVitalsAutocapture } from './extensions/web-vitals'
-import { Heatmaps } from './heatmaps'
 import { PageViewManager } from './page-view'
 import { PostHogExceptions } from './posthog-exceptions'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
-import { PostHogProductTours } from './posthog-product-tours'
 import { PostHogSurveys } from './posthog-surveys'
 import { PostHogConversations } from './extensions/conversations/posthog-conversations'
 import {
@@ -43,7 +36,6 @@ import { RetryQueue } from './retry-queue'
 import { ScrollManager } from './scroll-manager'
 import { SessionPropsManager } from './session-props'
 import { SessionIdManager } from './sessionid'
-import { SiteApps } from './site-apps'
 import { localStore } from './storage'
 import {
     CaptureOptions,
@@ -110,7 +102,15 @@ import {
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
-import { SessionRecording } from './extensions/replay/session-recording'
+import type { Autocapture } from './autocapture'
+import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
+import type { ExceptionObserver } from './extensions/exception-autocapture'
+import type { HistoryAutocapture } from './extensions/history-autocapture'
+import type { WebVitalsAutocapture } from './extensions/web-vitals'
+import type { Heatmaps } from './heatmaps'
+import type { PostHogProductTours } from './posthog-product-tours'
+import type { SiteApps } from './site-apps'
+import type { SessionRecording } from './extensions/replay/session-recording'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -322,6 +322,8 @@ class DeprecatedWebPerformanceObserver {
  * @constructor
  */
 export class PostHog implements PostHogInterface {
+    static __defaultExtensionClasses: PostHogConfig['__extensionClasses'] = {}
+
     __loaded: boolean
     config: PostHogConfig
     _originalUserConfig?: Partial<PostHogConfig>
@@ -689,24 +691,32 @@ export class PostHog implements PostHogInterface {
         // eslint-disable-next-line compat/compat
         const initStartTime = performance.now()
 
-        this.historyAutocapture = new HistoryAutocapture(this)
-        this.historyAutocapture.startIfEnabled()
+        const ext = { ...PostHog.__defaultExtensionClasses, ...this.config.__extensionClasses }
+
+        if (ext.historyAutocapture) {
+            this.historyAutocapture = new ext.historyAutocapture(this) as HistoryAutocapture
+            this.historyAutocapture.startIfEnabled()
+        }
 
         // Build queue of extension initialization tasks
         const initTasks: Array<() => void> = []
 
-        initTasks.push(() => {
-            new TracingHeaders(this).startIfEnabledOrStop()
-        })
-
-        initTasks.push(() => {
-            this.siteApps = new SiteApps(this)
-            this.siteApps?.init()
-        })
-
-        if (!startInCookielessMode) {
+        if (ext.tracingHeaders) {
             initTasks.push(() => {
-                this.sessionRecording = new SessionRecording(this)
+                new ext.tracingHeaders!(this).startIfEnabledOrStop()
+            })
+        }
+
+        if (ext.siteApps) {
+            initTasks.push(() => {
+                this.siteApps = new ext.siteApps!(this) as SiteApps
+                this.siteApps?.init()
+            })
+        }
+
+        if (!startInCookielessMode && ext.sessionRecording) {
+            initTasks.push(() => {
+                this.sessionRecording = new ext.sessionRecording!(this) as SessionRecording
                 this.sessionRecording.startIfEnabledOrStop()
             })
         }
@@ -717,10 +727,12 @@ export class PostHog implements PostHogInterface {
             })
         }
 
-        initTasks.push(() => {
-            this.autocapture = new Autocapture(this)
-            this.autocapture.startIfEnabled()
-        })
+        if (ext.autocapture) {
+            initTasks.push(() => {
+                this.autocapture = new ext.autocapture!(this) as Autocapture
+                this.autocapture.startIfEnabled()
+            })
+        }
 
         initTasks.push(() => {
             this.surveys.loadIfEnabled()
@@ -734,29 +746,42 @@ export class PostHog implements PostHogInterface {
             this.conversations.loadIfEnabled()
         })
 
-        initTasks.push(() => {
-            this.productTours = new PostHogProductTours(this)
-            this.productTours.loadIfEnabled()
-        })
+        if (ext.productTours) {
+            initTasks.push(() => {
+                this.productTours = new ext.productTours!(this) as PostHogProductTours
+                this.productTours.loadIfEnabled()
+            })
+        }
 
-        initTasks.push(() => {
-            this.heatmaps = new Heatmaps(this)
-            this.heatmaps.startIfEnabled()
-        })
+        if (ext.heatmaps) {
+            initTasks.push(() => {
+                this.heatmaps = new ext.heatmaps!(this) as Heatmaps
+                this.heatmaps.startIfEnabled()
+            })
+        }
 
-        initTasks.push(() => {
-            this.webVitalsAutocapture = new WebVitalsAutocapture(this)
-        })
+        if (ext.webVitalsAutocapture) {
+            initTasks.push(() => {
+                this.webVitalsAutocapture = new ext.webVitalsAutocapture!(this) as WebVitalsAutocapture
+            })
+        }
 
-        initTasks.push(() => {
-            this.exceptionObserver = new ExceptionObserver(this)
-            this.exceptionObserver.startIfEnabledOrStop()
-        })
+        if (ext.exceptionObserver) {
+            initTasks.push(() => {
+                this.exceptionObserver = new ext.exceptionObserver!(this) as ExceptionObserver
+                this.exceptionObserver.startIfEnabledOrStop()
+            })
+        }
 
-        initTasks.push(() => {
-            this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
-            this.deadClicksAutocapture.startIfEnabledOrStop()
-        })
+        if (ext.deadClicksAutocapture) {
+            initTasks.push(() => {
+                this.deadClicksAutocapture = new ext.deadClicksAutocapture!(
+                    this,
+                    isDeadClicksEnabledForAutocapture
+                ) as DeadClicksAutocapture
+                this.deadClicksAutocapture.startIfEnabledOrStop()
+            })
+        }
 
         // Replay any pending remote config that arrived before extensions were ready
         initTasks.push(() => {
@@ -3323,8 +3348,12 @@ export class PostHog implements PostHogInterface {
             if (this.persistence) {
                 this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
             }
-            this.sessionRecording = new SessionRecording(this)
-            this.sessionRecording.startIfEnabledOrStop()
+            const SessionRecordingClass =
+                this.config.__extensionClasses?.sessionRecording ?? PostHog.__defaultExtensionClasses?.sessionRecording
+            if (SessionRecordingClass) {
+                this.sessionRecording = new SessionRecordingClass(this) as SessionRecording
+                this.sessionRecording.startIfEnabledOrStop()
+            }
         }
 
         this.consent.optInOut(true)
