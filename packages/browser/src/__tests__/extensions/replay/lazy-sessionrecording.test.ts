@@ -1038,6 +1038,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: expect.any(String),
                         $lib: 'web',
                         $lib_version: '0.0.1',
+                        $snapshot_max_depth_exceeded: false,
                     },
                     {
                         _batchKey: 'recordings',
@@ -1138,6 +1139,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: expect.any(String),
                         $lib: 'web',
                         $lib_version: '0.0.1',
+                        $snapshot_max_depth_exceeded: false,
                     },
                     {
                         _batchKey: 'recordings',
@@ -1166,6 +1168,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: expect.any(String),
                         $lib: 'web',
                         $lib_version: '0.0.1',
+                        $snapshot_max_depth_exceeded: false,
                     },
                     {
                         _batchKey: 'recordings',
@@ -1388,6 +1391,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
+                        $snapshot_max_depth_exceeded: false,
                     },
                     captureOptions
                 )
@@ -1419,6 +1423,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
+                        $snapshot_max_depth_exceeded: false,
                     },
                     captureOptions
                 )
@@ -1451,6 +1456,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
+                        $snapshot_max_depth_exceeded: false,
                     },
                     captureOptions
                 )
@@ -1472,6 +1478,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
+                        $snapshot_max_depth_exceeded: false,
                     },
                     captureOptions
                 )
@@ -1498,6 +1505,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
+                        $snapshot_max_depth_exceeded: false,
                     },
                     captureOptions
                 )
@@ -1523,6 +1531,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
+                        $snapshot_max_depth_exceeded: false,
                     },
                     captureOptions
                 )
@@ -1610,6 +1619,7 @@ describe('Lazy SessionRecording', () => {
                     $window_id: 'windowId',
                     $lib: 'web',
                     $lib_version: '0.0.1',
+                    $snapshot_max_depth_exceeded: false,
                 },
                 {
                     _url: 'https://test.com/s/',
@@ -1653,6 +1663,7 @@ describe('Lazy SessionRecording', () => {
                     ],
                     $lib: 'web',
                     $lib_version: '0.0.1',
+                    $snapshot_max_depth_exceeded: false,
                 },
                 {
                     _url: 'https://test.com/s/',
@@ -1758,6 +1769,7 @@ describe('Lazy SessionRecording', () => {
                     $snapshot_bytes: 39,
                     $lib: 'web',
                     $lib_version: '0.0.1',
+                    $snapshot_max_depth_exceeded: false,
                 },
                 {
                     _url: 'https://test.com/s/',
