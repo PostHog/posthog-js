@@ -1630,6 +1630,29 @@ describe('Lazy SessionRecording', () => {
             )
         })
 
+        it('sets $snapshot_max_depth_exceeded when depth limit is hit', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded'] = true
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({
+                    $snapshot_max_depth_exceeded: true,
+                }),
+                expect.any(Object)
+            )
+        })
+
         it('buffers emitted events', () => {
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.onRemoteConfig(
