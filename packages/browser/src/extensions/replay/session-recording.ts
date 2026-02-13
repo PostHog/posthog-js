@@ -7,6 +7,7 @@ import {
     SESSION_RECORDING_REMOTE_CONFIG,
 } from '../../constants'
 import { PostHog } from '../../posthog-core'
+import { RemoteConfigLoader } from '../../remote-config'
 import { Properties, RemoteConfig, SessionRecordingPersistedConfig, SessionStartReason } from '../../types'
 import { type eventWithTime } from './types/rrweb-types'
 
@@ -18,6 +19,7 @@ import {
     PostHogExtensionKind,
     window,
 } from '../../utils/globals'
+import { RECORDING_REMOTE_CONFIG_TTL_MS } from './external/lazy-loaded-session-recorder'
 import { DISABLED, LAZY_LOADING, SessionRecordingStatus, TriggerType } from './external/triggerMatching'
 
 const LOGGER_PREFIX = '[SessionRecording]'
@@ -27,6 +29,7 @@ export class SessionRecording {
     _forceAllowLocalhostNetworkCapture: boolean = false
 
     private _receivedFlags: boolean = false
+    private _hasRequestedConfigRefresh: boolean = false
 
     private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
@@ -199,6 +202,7 @@ export class SessionRecording {
             return
         }
 
+        this._hasRequestedConfigRefresh = false
         this._persistRemoteConfig(response)
         this._receivedFlags = true
         this.startIfEnabledOrStop()
@@ -219,6 +223,16 @@ export class SessionRecording {
         return (remoteConfig?.scriptConfig?.script as PostHogExtensionKind) || 'lazy-recorder'
     }
 
+    private _isRemoteConfigFresh(): boolean {
+        const persistedConfig = this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+        if (!persistedConfig) {
+            return false
+        }
+        const config = typeof persistedConfig === 'object' ? persistedConfig : JSON.parse(persistedConfig)
+        const cacheTimestamp = config.cache_timestamp ?? Date.now()
+        return Date.now() - cacheTimestamp <= RECORDING_REMOTE_CONFIG_TTL_MS
+    }
+
     private _onScriptLoaded(startReason?: SessionStartReason) {
         if (!assignableWindow.__PosthogExtensions__?.initSessionRecording) {
             throw Error('Called on script loaded before session recording is available')
@@ -230,6 +244,15 @@ export class SessionRecording {
             )
             ;(this._lazyLoadedSessionRecording as any)._forceAllowLocalhostNetworkCapture =
                 this._forceAllowLocalhostNetworkCapture
+        }
+
+        if (!this._isRemoteConfigFresh()) {
+            if (!this._hasRequestedConfigRefresh) {
+                this._hasRequestedConfigRefresh = true
+                logger.info('persisted remote config is stale, requesting fresh config before starting')
+                new RemoteConfigLoader(this._instance).load()
+            }
+            return
         }
 
         this._lazyLoadedSessionRecording.start(startReason)
