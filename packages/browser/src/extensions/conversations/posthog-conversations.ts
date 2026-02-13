@@ -12,12 +12,13 @@ import { RemoteConfig } from '../../types'
 import { assignableWindow, LazyLoadedConversationsInterface } from '../../utils/globals'
 import { createLogger } from '../../utils/logger'
 import { isNullish, isUndefined, isBoolean, isNull } from '@posthog/core'
+import { Extension } from '../types'
 
 const logger = createLogger('[Conversations]')
 
 export type ConversationsManager = LazyLoadedConversationsInterface
 
-export class PostHogConversations {
+export class PostHogConversations implements Extension {
     // This is set to undefined until the remote config is loaded
     // then it's set to true if conversations are enabled
     // or false if conversations are disabled in the project settings
@@ -27,6 +28,10 @@ export class PostHogConversations {
     private _remoteConfig: ConversationsRemoteConfig | null = null
 
     constructor(private _instance: PostHog) {}
+
+    initialize() {
+        this.loadIfEnabled()
+    }
 
     onRemoteConfig(response: RemoteConfig) {
         // Don't load conversations if disabled via config

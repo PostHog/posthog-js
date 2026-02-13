@@ -13,12 +13,9 @@ import {
 import { isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
-import { Toolbar } from './extensions/toolbar'
 import { PageViewManager } from './page-view'
-import { PostHogExceptions } from './posthog-exceptions'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
-import { PostHogConversations } from './extensions/conversations/posthog-conversations'
 import {
     type DisplaySurveyOptions,
     type SurveyCallback,
@@ -26,7 +23,6 @@ import {
     SurveyEventProperties,
     type SurveyRenderReason,
 } from './posthog-surveys-types'
-import { PostHogLogs } from './posthog-logs'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
@@ -99,7 +95,6 @@ import {
     isBoolean,
 } from '@posthog/core'
 import { uuidv7 } from './uuidv7'
-import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
 import type { PostHogSurveys } from './posthog-surveys'
 import type { Autocapture } from './autocapture'
@@ -108,6 +103,9 @@ import type { ExceptionObserver } from './extensions/exception-autocapture'
 import type { HistoryAutocapture } from './extensions/history-autocapture'
 import type { WebVitalsAutocapture } from './extensions/web-vitals'
 import type { Heatmaps } from './heatmaps'
+import type { PostHogConversations } from './extensions/conversations/posthog-conversations'
+import type { PostHogExceptions } from './posthog-exceptions'
+import type { PostHogLogs } from './posthog-logs'
 import type { PostHogProductTours } from './posthog-product-tours'
 import type { SiteApps } from './site-apps'
 import type { SessionRecording } from './extensions/replay/session-recording'
@@ -334,11 +332,11 @@ export class PostHog implements PostHogInterface {
     pageViewManager: PageViewManager
     featureFlags: PostHogFeatureFlags
     surveys?: PostHogSurveys
-    conversations: PostHogConversations
-    logs: PostHogLogs
-    experiments: WebExperiments
-    toolbar: Toolbar
-    exceptions: PostHogExceptions
+    conversations?: PostHogConversations
+    logs?: PostHogLogs
+    experiments?: WebExperiments
+    toolbar?: Toolbar
+    exceptions?: PostHogExceptions
     consent: ConsentManager
 
     // These are instance-specific state created after initialisation
@@ -410,13 +408,8 @@ export class PostHog implements PostHogInterface {
         this._initialPersonProfilesConfig = null
         this._cachedPersonProperties = null
         this.featureFlags = new PostHogFeatureFlags(this)
-        this.toolbar = new Toolbar(this)
         this.scrollManager = new ScrollManager(this)
         this.pageViewManager = new PageViewManager(this)
-        this.conversations = new PostHogConversations(this)
-        this.logs = new PostHogLogs(this)
-        this.experiments = new WebExperiments(this)
-        this.exceptions = new PostHogExceptions(this)
         this.rateLimiter = new RateLimiter(this)
         this.requestRouter = new RequestRouter(this)
         this.consent = new ConsentManager(this)
@@ -665,8 +658,6 @@ export class PostHog implements PostHogInterface {
             passive: false,
         })
 
-        this.toolbar.maybeLoadToolbar()
-
         // We want to avoid promises for IE11 compatibility, so we use callbacks here
         if (config.segment) {
             setupSegmentIntegration(this, () => this._loaded())
@@ -697,6 +688,9 @@ export class PostHog implements PostHogInterface {
 
         // Due to name mangling, we can't easily iterate and assign these extensions
         // The assignment needs to also be mangled. Thus, the loop is unrolled.
+        if (ext.exceptions) {
+            this.extensions.push((this.exceptions = new ext.exceptions(this)))
+        }
         if (ext.historyAutocapture) {
             this.extensions.push((this.historyAutocapture = new ext.historyAutocapture(this)))
         }
@@ -731,6 +725,18 @@ export class PostHog implements PostHogInterface {
         }
         if (ext.surveys) {
             this.extensions.push((this.surveys = new ext.surveys(this)))
+        }
+        if (ext.toolbar) {
+            this.extensions.push((this.toolbar = new ext.toolbar(this)))
+        }
+        if (ext.experiments) {
+            this.extensions.push((this.experiments = new ext.experiments(this)))
+        }
+        if (ext.conversations) {
+            this.extensions.push((this.conversations = new ext.conversations(this)))
+        }
+        if (ext.logs) {
+            this.extensions.push((this.logs = new ext.logs(this)))
         }
 
         this.extensions.forEach((extension) => {
@@ -836,9 +842,6 @@ export class PostHog implements PostHogInterface {
             person_profiles: this._initialPersonProfilesConfig ? this._initialPersonProfilesConfig : 'identified_only',
         })
 
-        this.logs.onRemoteConfig(config)
-        this.conversations.onRemoteConfig(config)
-        this.exceptions.onRemoteConfig(config)
         this.extensions.forEach((ext) => ext.onRemoteConfig?.(config))
     }
 
@@ -2995,6 +2998,8 @@ export class PostHog implements PostHogInterface {
      * @returns {CaptureResult} The result of the capture
      */
     captureException(error: unknown, additionalProperties?: Properties): CaptureResult | undefined {
+        if (!this.exceptions) return
+
         const syntheticException = new Error('PostHog syntheticException')
         const errorToProperties = this.exceptions.buildProperties(error, {
             handled: true,
@@ -3065,7 +3070,7 @@ export class PostHog implements PostHogInterface {
      */
 
     loadToolbar(params: ToolbarParams): boolean {
-        return this.toolbar.loadToolbar(params)
+        return this.toolbar?.loadToolbar(params) ?? false
     }
 
     /**
