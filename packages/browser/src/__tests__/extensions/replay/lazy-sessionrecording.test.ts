@@ -201,6 +201,8 @@ describe('Lazy SessionRecording', () => {
                 return () => {}
             }),
             version: 'fake',
+            wasMaxDepthReached: jest.fn(() => false),
+            resetMaxDepthState: jest.fn(),
         }
         assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = jest.fn(() => {
             // we pretend to be rrweb and call emit
@@ -1618,6 +1620,44 @@ describe('Lazy SessionRecording', () => {
                     skip_client_rate_limiting: true,
                 }
             )
+        })
+
+        it('sets $snapshot_max_depth_exceeded when depth limit is hit', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            assignableWindow.__PosthogExtensions__.rrweb.wasMaxDepthReached.mockReturnValue(true)
+            _emit(createFullSnapshot())
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded']).toBe(true)
+            expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
+                $snapshot_max_depth_exceeded: true,
+            })
+        })
+
+        it('resets $snapshot_max_depth_exceeded on session change', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded'] = true
+
+            // simulate session id change callback
+            sessionRecording['_lazyLoadedSessionRecording']['_onSessionIdCallback']('new-session-id', 'new-window-id', {
+                activityTimeout: true,
+            })
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded']).toBe(false)
+            expect(assignableWindow.__PosthogExtensions__.rrweb.resetMaxDepthState).toHaveBeenCalled()
         })
 
         it('buffers emitted events', () => {

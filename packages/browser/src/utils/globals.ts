@@ -228,7 +228,7 @@ interface PostHogExtensions {
         wrapUnhandledRejection: (captureFn: (props: ErrorTracking.ErrorProperties) => void) => () => void
         wrapConsoleError: (captureFn: (props: ErrorTracking.ErrorProperties) => void) => () => void
     }
-    rrweb?: { record: any; version: string }
+    rrweb?: { record: any; version: string; wasMaxDepthReached?: () => boolean; resetMaxDepthState?: () => void }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
     generateSurveys?: (posthog: PostHog, isSurveysEnabled: boolean) => any | undefined
     generateProductTours?: (posthog: PostHog, isEnabled: boolean) => any | undefined

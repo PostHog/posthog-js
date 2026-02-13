@@ -142,8 +142,12 @@ const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
     attempt: 1,
 })
 
+function getRRWeb() {
+    return assignableWindow?.__PosthogExtensions__?.rrweb
+}
+
 function getRRWebRecord(): rrwebRecordType | undefined {
-    return assignableWindow?.__PosthogExtensions__?.rrweb?.record
+    return getRRWeb()?.record
 }
 
 export type compressedFullSnapshotEvent = {
@@ -329,6 +333,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      */
     private _queuedRRWebEvents: QueuedRRWebEvent[] = []
     private _isIdle: boolean | 'unknown' = 'unknown'
+    private _maxDepthExceeded = false
 
     private _linkedFlagMatching: LinkedFlagMatching
     private _urlTriggerMatching: URLTriggerMatching
@@ -887,6 +892,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Reset first full snapshot timestamp for the new session
         this._instance.persistence?.unregister(SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP)
 
+        this._maxDepthExceeded = false
+        getRRWeb()?.resetMaxDepthState?.()
+
         this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
 
         this._clearConditionalRecordingPersistence()
@@ -1082,6 +1090,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $snapshot_data: eventToSend,
             $session_id: targetSessionId,
             $window_id: targetWindowId,
+        }
+
+        if (event.type === EventType.FullSnapshot && getRRWeb()?.wasMaxDepthReached?.()) {
+            this._maxDepthExceeded = true
         }
 
         if (this.status === DISABLED) {
@@ -1513,6 +1525,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_session_start: sessionStartTimestamp,
             $sdk_debug_replay_flushed_size: this._flushedSizeTracker?.currentTrackedSize,
             $sdk_debug_replay_full_snapshots: this._fullSnapshotTimestamps,
+            $snapshot_max_depth_exceeded: this._maxDepthExceeded,
         }
     }
 

@@ -285,6 +285,7 @@
         "_matchesSuppressionRule",
         "_matchesTestVariant",
         "_maxAllowedValue",
+        "_maxDepthExceeded",
         "_maxExportBatchSize",
         "_maxQueueSize",
         "_maybeStartTimer",
