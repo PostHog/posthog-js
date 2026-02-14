@@ -1,5 +1,5 @@
 import { PRODUCT_TOURS_ACTIVATED } from '../constants'
-import { ProductTour } from '../posthog-product-tours-types'
+import { ProductTour, ProductTourEventName } from '../posthog-product-tours-types'
 import { PostHog } from '../posthog-core'
 import { EventReceiver } from './event-receiver'
 import { createLogger } from './logger'
@@ -18,7 +18,7 @@ export class ProductTourEventReceiver extends EventReceiver<ProductTour> {
     }
 
     protected _getShownEventName(): string {
-        return 'product tour shown'
+        return ProductTourEventName.SHOWN
     }
 
     protected _getItems(callback: (items: ProductTour[]) => void): void {
