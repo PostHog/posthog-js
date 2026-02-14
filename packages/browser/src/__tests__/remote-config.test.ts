@@ -212,16 +212,14 @@ describe('RemoteConfigLoader', () => {
             }
         })
 
-        it('pauses the refresh interval when the tab is hidden', () => {
+        it('skips refresh when the tab is hidden', () => {
             const loader = new RemoteConfigLoader(posthog)
             loader.load()
 
-            // Simulate hiding the tab partway through an interval
-            jest.advanceTimersByTime(2 * 60 * 1000)
+            // Simulate hiding the tab before the interval fires
             Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
-            document.dispatchEvent(new Event('visibilitychange'))
 
-            // Even after the full interval elapses, no refresh while hidden
+            // Interval fires while hidden — should be a no-op
             jest.advanceTimersByTime(5 * 60 * 1000)
             expect(posthog.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
 
@@ -229,42 +227,23 @@ describe('RemoteConfigLoader', () => {
             Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
         })
 
-        it('refreshes immediately on re-focus when enough time has elapsed', () => {
+        it('refreshes when tab becomes visible and interval fires', () => {
             const loader = new RemoteConfigLoader(posthog)
             loader.load()
 
             // Simulate hiding the tab
             Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
-            document.dispatchEvent(new Event('visibilitychange'))
 
-            // Advance past the refresh interval while hidden
-            jest.advanceTimersByTime(6 * 60 * 1000)
+            // Interval fires while hidden — no refresh
+            jest.advanceTimersByTime(5 * 60 * 1000)
             expect(posthog.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
 
-            // Come back — should refresh immediately since we're past the interval
+            // Tab becomes visible
             Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
-            document.dispatchEvent(new Event('visibilitychange'))
 
+            // Next interval fires while visible — should refresh
+            jest.advanceTimersByTime(5 * 60 * 1000)
             expect(posthog.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(1)
-
-            loader.stop()
-        })
-
-        it('does not refresh immediately on re-focus when interval has not elapsed', () => {
-            const loader = new RemoteConfigLoader(posthog)
-            loader.load()
-
-            // Hide then quickly re-show (less than REFRESH_INTERVAL)
-            Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
-            document.dispatchEvent(new Event('visibilitychange'))
-
-            jest.advanceTimersByTime(1 * 60 * 1000) // Only 1 minute
-
-            Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
-            document.dispatchEvent(new Event('visibilitychange'))
-
-            // Should NOT have refreshed — not enough time elapsed
-            expect(posthog.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
 
             loader.stop()
         })

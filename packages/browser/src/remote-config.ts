@@ -2,19 +2,17 @@ import { PostHog } from './posthog-core'
 import { RemoteConfig } from './types'
 
 import { createLogger } from './utils/logger'
-import { assignableWindow } from './utils/globals'
-import { document } from './utils/globals'
-import { addEventListener } from './utils'
+import { assignableWindow, document } from './utils/globals'
 
 const logger = createLogger('[RemoteConfig]')
 
-// 5 minutes in milliseconds
+// Refresh interval for feature flags in long-running sessions.
+// 5 minutes balances freshness with server load - flags typically don't change
+// frequently, and most sessions are shorter than this anyway.
 const REFRESH_INTERVAL = 5 * 60 * 1000
 
 export class RemoteConfigLoader {
     private _refreshInterval: ReturnType<typeof setInterval> | undefined
-    private _onVisibilityChangeHandler: (() => void) | undefined
-    private _lastRefreshTimestamp: number | undefined
 
     constructor(private readonly _instance: PostHog) {}
 
@@ -83,10 +81,6 @@ export class RemoteConfigLoader {
             clearInterval(this._refreshInterval)
             this._refreshInterval = undefined
         }
-        if (this._onVisibilityChangeHandler && document) {
-            document?.removeEventListener?.('visibilitychange', this._onVisibilityChangeHandler)
-            this._onVisibilityChangeHandler = undefined
-        }
     }
 
     /**
@@ -96,50 +90,21 @@ export class RemoteConfigLoader {
      * is a no-op when flags are disabled. This avoids an unnecessary network round-trip.
      */
     refresh(): void {
-        if (this._instance._shouldDisableFlags()) {
+        if (this._instance._shouldDisableFlags() || document?.visibilityState === 'hidden') {
             return
         }
 
-        this._lastRefreshTimestamp = Date.now()
-        // reloadFeatureFlags() debounces internally, so rapid calls from tab
-        // switching or overlapping intervals are safe.
         this._instance.featureFlags.reloadFeatureFlags()
     }
 
     private _startRefreshInterval(): void {
-        if (this._refreshInterval || this._onVisibilityChangeHandler) {
+        if (this._refreshInterval) {
             return
         }
 
-        this._lastRefreshTimestamp = Date.now()
-
-        this._onVisibilityChangeHandler = () => {
-            if (this._refreshInterval) {
-                clearInterval(this._refreshInterval)
-                this._refreshInterval = undefined
-            }
-
-            if (document?.visibilityState !== 'hidden') {
-                // If the tab was backgrounded long enough that we missed a refresh,
-                // fire one immediately so returning users get fresh flags.
-                const elapsed = Date.now() - (this._lastRefreshTimestamp ?? 0)
-                if (elapsed >= REFRESH_INTERVAL) {
-                    this.refresh()
-                }
-
-                this._refreshInterval = setInterval(() => {
-                    this.refresh()
-                }, REFRESH_INTERVAL)
-            }
-        }
-
-        // Start interval if page is currently visible
-        this._onVisibilityChangeHandler()
-
-        // Listen for visibility changes to pause/resume
-        if (document) {
-            addEventListener(document, 'visibilitychange', this._onVisibilityChangeHandler)
-        }
+        this._refreshInterval = setInterval(() => {
+            this.refresh()
+        }, REFRESH_INTERVAL)
     }
 
     private _onRemoteConfig(config?: RemoteConfig): void {
