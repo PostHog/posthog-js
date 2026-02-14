@@ -22,6 +22,9 @@ export interface ProductTourBannerConfig {
         link?: string
         tourId?: string
     }
+    animation?: {
+        duration?: number
+    }
 }
 
 /** Button actions available on modal steps */
