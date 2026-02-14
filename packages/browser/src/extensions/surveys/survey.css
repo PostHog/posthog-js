@@ -521,6 +521,43 @@
     }
 }
 
+/* Star Rating */
+.rating-options-star {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+}
+
+.ratings-star {
+    background-color: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s ease-out;
+
+    &:hover {
+        transform: scale(1.15);
+    }
+
+    & svg {
+        width: 32px;
+        height: 32px;
+        fill: var(--ph-survey-border-color);
+        transition: fill 0.15s ease-out;
+    }
+
+    &.rating-active svg {
+        fill: #FFB400;
+    }
+
+    &:hover svg {
+        fill: #FFB400;
+    }
+}
+
 /* Rating Text Labels */
 .rating-text {
     display: flex;

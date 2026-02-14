@@ -108,7 +108,7 @@ export interface LinkSurveyQuestion extends SurveyQuestionBase {
 
 export interface RatingSurveyQuestion extends SurveyQuestionBase {
     type: SurveyQuestionType.Rating
-    display: 'number' | 'emoji'
+    display: 'number' | 'emoji' | 'star'
     scale: 2 | 3 | 5 | 7 | 10
     lowerBoundLabel: string
     upperBoundLabel: string
