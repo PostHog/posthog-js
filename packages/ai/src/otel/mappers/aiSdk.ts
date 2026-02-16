@@ -205,7 +205,8 @@ function mapOutputPart(part: Record<string, unknown>): Record<string, unknown> |
 
   if (partType === 'image') {
     const mediaType = toMimeType(part.mediaType ?? part.mimeType ?? part.contentType ?? 'image/unknown')
-    const data = part.data ?? part.base64 ?? part.bytes ?? part.url ?? part.uri ?? (part as any).image ?? (part as any).image_url
+    const data =
+      part.data ?? part.base64 ?? part.bytes ?? part.url ?? part.uri ?? (part as any).image ?? (part as any).image_url
     if (data !== undefined) {
       return {
         type: 'file',

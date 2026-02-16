@@ -1,10 +1,5 @@
 import { PostHog } from 'posthog-node'
-import {
-  captureSpan,
-  createPostHogSpanProcessor,
-  PostHogSpanProcessor,
-  PostHogSpanMapper,
-} from '../src/otel'
+import { captureSpan, createPostHogSpanProcessor, PostHogSpanProcessor, PostHogSpanMapper } from '../src/otel'
 import { flushPromises } from './test-utils'
 
 const mockSpanContext = (traceId: string) => ({
@@ -810,5 +805,4 @@ describe('OTEL span mapping', () => {
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(0)
   })
-
 })
