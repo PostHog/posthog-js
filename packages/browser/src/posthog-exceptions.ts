@@ -57,7 +57,6 @@ export class PostHogExceptions {
         return this._autocaptureCompositeTrigger.matches()
     }
 
-
     getAutocaptureTriggersStatus(): AutocaptureTriggersStatus {
         return this._autocaptureCompositeTrigger.getStatus()
     }

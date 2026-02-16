@@ -30,7 +30,7 @@ export class PersistenceHelper {
         this._setProperty(key, value)
     }
 
-    clearWithSufix(keySuffix: string): void {
+    clearWithSuffix(keySuffix: string): void {
         const key = this._buildKey(keySuffix)
         this._setProperty(key, null)
     }
@@ -60,7 +60,7 @@ export class PersistenceHelper {
 
     clear(): void {
         this._triggeredSessionId = null
-        this.clearWithSufix('triggered')
+        this.clearWithSuffix('triggered')
     }
 
     private _buildKey(suffix: string): string {

@@ -27,7 +27,7 @@ export class SampleRateTrigger implements Trigger {
 
     clearPersistedState(): void {
         this._decision = null
-        this._persistence.clearWithSufix('decision')
+        this._persistence.clearWithSuffix('decision')
     }
 
     matches(sessionId: string): boolean | null {

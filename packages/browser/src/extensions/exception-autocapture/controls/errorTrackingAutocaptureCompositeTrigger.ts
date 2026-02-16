@@ -61,7 +61,7 @@ export class ErrorTrackingAutocaptureCompositeTrigger {
         const configHash = simpleHash(JSON.stringify(config ?? {}))
         const storedHash = this._persistence.get<number>('autocapture_triggers_config_hash')
 
-        if (storedHash !== null && storedHash !== configHash) {
+        if (isNull(storedHash) || storedHash !== configHash) {
             logger.info('Autocapture triggers config changed, invalidating persisted triggers state')
             for (const trigger of this._triggers) {
                 trigger.clearPersistedState()
