@@ -1,0 +1,82 @@
+{
+  "name": "@posthog/convex",
+  "description": "Send analytics events to PostHog from your Convex backend.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/convex"
+  },
+  "homepage": "https://github.com/PostHog/posthog-js/tree/main/packages/convex#readme",
+  "bugs": {
+    "url": "https://github.com/PostHog/posthog-js/issues"
+  },
+  "author": "PostHog Inc.",
+  "version": "0.0.0",
+  "license": "MIT",
+  "keywords": [
+    "convex",
+    "component",
+    "posthog",
+    "analytics"
+  ],
+  "scripts": {
+    "build": "tsc --project ./tsconfig.build.json",
+    "build:codegen": "npx convex codegen --component-dir ./src/component && pnpm build",
+    "clean": "rm -rf dist *.tsbuildinfo && pnpm build:codegen",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "test:unit": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "test:integration": "jest run --typecheck",
+    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/client/index.d.ts",
+      "default": "./dist/client/index.js"
+    },
+    "./test": "./src/test.ts",
+    "./_generated/component.js": {
+      "types": "./dist/component/_generated/component.d.ts"
+    },
+    "./_generated/component": {
+      "types": "./dist/component/_generated/component.d.ts"
+    },
+    "./convex.config.js": {
+      "types": "./dist/component/convex.config.d.ts",
+      "default": "./dist/component/convex.config.js"
+    },
+    "./convex.config": {
+      "types": "./dist/component/convex.config.d.ts",
+      "default": "./dist/component/convex.config.js"
+    }
+  },
+  "types": "./dist/client/index.d.ts",
+  "module": "./dist/client/index.js",
+  "dependencies": {
+    "@posthog/core": "workspace:*",
+    "posthog-node": "workspace:*"
+  },
+  "devDependencies": {
+    "@convex-dev/eslint-plugin": "^1.1.1",
+    "@edge-runtime/vm": "^5.0.0",
+    "@jest/globals": "^29.7.0",
+    "@types/node": "^24.10.12",
+    "convex": "1.31.7",
+    "convex-test": "0.0.41",
+    "globals": "^17.3.0",
+    "jest": "catalog:",
+    "ts-jest": "catalog:",
+    "typescript": "catalog:",
+    "vite": "7.3.1"
+  },
+  "peerDependencies": {
+    "convex": "^1.31.7"
+  }
+}
