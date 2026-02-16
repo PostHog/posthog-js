@@ -38,9 +38,12 @@ import { uuidv7 } from './vendor/uuidv7'
 import { isEmptyObject, isNullish, isPlainError, getPersonPropertiesHash, isObject } from './utils'
 
 // Stores the parameters for a pending feature flags reload request
-interface PendingFlagsRequest {
-  sendAnonDistinctId: boolean
-  fetchConfig: boolean
+interface FlagsAsyncOptions {
+  sendAnonDistinctId?: boolean
+  fetchConfig?: boolean
+}
+
+interface PendingFlagsRequest extends FlagsAsyncOptions {
   resolve: (value: PostHogFeatureFlagsResponse | undefined) => void
   reject: (reason?: unknown) => void
 }
@@ -527,10 +530,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   /***
    *** FEATURE FLAGS
    ***/
-  protected async flagsAsync(
-    sendAnonDistinctId: boolean = true,
-    fetchConfig: boolean = false
-  ): Promise<PostHogFeatureFlagsResponse | undefined> {
+  protected async flagsAsync(options?: FlagsAsyncOptions): Promise<PostHogFeatureFlagsResponse | undefined> {
+    const sendAnonDistinctId = options?.sendAnonDistinctId ?? true
+    const fetchConfig = options?.fetchConfig ?? false
     await this._initPromise
     if (this._flagsResponsePromise) {
       // Queue the reload request instead of dropping it
@@ -545,7 +547,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         this._pendingFlagsRequest = { sendAnonDistinctId, fetchConfig, resolve, reject }
       })
     }
-    return this._flagsAsync(sendAnonDistinctId, fetchConfig)
+    return this._flagsAsync({ sendAnonDistinctId, fetchConfig })
   }
 
   /**
@@ -632,7 +634,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
               this._logger.warn('Remote config has no feature flags, will not load feature flags.')
             } else if (this.preloadFeatureFlags !== false) {
               willLoadFlags = true
-              this.flagsAsync(true, true)
+              this.flagsAsync({ sendAnonDistinctId: true, fetchConfig: true })
             }
 
             if (!response.supportedCompression?.includes(Compression.GZipJS)) {
@@ -662,10 +664,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return this._remoteConfigResponsePromise
   }
 
-  private async _flagsAsync(
-    sendAnonDistinctId: boolean = true,
-    fetchConfig: boolean = false
-  ): Promise<PostHogFeatureFlagsResponse | undefined> {
+  private async _flagsAsync(options?: FlagsAsyncOptions): Promise<PostHogFeatureFlagsResponse | undefined> {
+    const sendAnonDistinctId = options?.sendAnonDistinctId ?? true
+    const fetchConfig = options?.fetchConfig ?? false
     this._flagsResponsePromise = this._initPromise
       .then(async () => {
         const distinctId = this.getDistinctId()
@@ -755,7 +756,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
           // Notify onRemoteConfig when the flags response includes config data.
           // fetchConfig=true means the response contains remote config fields (errorTracking, capturePerformance, etc.).
-          // Only _remoteConfigAsync passes fetchConfig=true (via flagsAsync(true, true)).
+          // Only _remoteConfigAsync passes fetchConfig=true (via flagsAsync({ fetchConfig: true })).
           // User-triggered reloadFeatureFlags/reloadFeatureFlagsAsync use fetchConfig=false (default),
           // so they won't re-trigger onRemoteConfig or reinstall/uninstall integrations.
           if (fetchConfig) {
@@ -777,7 +778,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           this._pendingFlagsRequest = undefined
           this._logger.info('Executing pending feature flags reload.')
           // Execute the pending request and resolve its promise with the result
-          this.flagsAsync(pendingRequest.sendAnonDistinctId, pendingRequest.fetchConfig)
+          this.flagsAsync({ sendAnonDistinctId: pendingRequest.sendAnonDistinctId, fetchConfig: pendingRequest.fetchConfig })
             .then(pendingRequest.resolve)
             .catch(pendingRequest.reject)
         }
@@ -1037,7 +1038,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   // Used when we want to trigger the reload but we don't care about the result
   reloadFeatureFlags(options?: { cb?: (err?: Error, flags?: PostHogFlagsResponse['featureFlags']) => void }): void {
-    this.flagsAsync(true)
+    this.flagsAsync({ sendAnonDistinctId: true })
       .then((res) => {
         options?.cb?.(undefined, res?.featureFlags)
       })
@@ -1056,7 +1057,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   async reloadFeatureFlagsAsync(
     sendAnonDistinctId?: boolean
   ): Promise<PostHogFlagsResponse['featureFlags'] | undefined> {
-    return (await this.flagsAsync(sendAnonDistinctId ?? true))?.featureFlags
+    return (await this.flagsAsync({ sendAnonDistinctId: sendAnonDistinctId ?? true }))?.featureFlags
   }
 
   onFeatureFlags(cb: (flags: PostHogFlagsResponse['featureFlags']) => void): () => void {

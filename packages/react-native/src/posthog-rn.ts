@@ -1211,7 +1211,7 @@ export class PostHog extends PostHogCore {
    */
   private async _flagsAsyncWithSurveys(): Promise<void> {
     try {
-      const flagsResponse = await this.flagsAsync(true, true)
+      const flagsResponse = await this.flagsAsync({ sendAnonDistinctId: true, fetchConfig: true })
 
       // Only handle surveys from flags if remote config is disabled and surveys are enabled
       // When remote config is enabled, surveys will come from there instead
@@ -1297,9 +1297,10 @@ export class PostHog extends PostHogCore {
     // If remote config hasn't loaded yet (no cached value), defaults to true (don't block locally enabled capture).
     const remoteConsoleLogEnabled = getRemoteConfigBool(
       cachedRemoteConfig?.sessionRecording,
-      'consoleLogRecordingEnabled'
+      'consoleLogRecordingEnabled',
+      true
     )
-    const remoteNetworkTimingEnabled = getRemoteConfigBool(cachedRemoteConfig?.capturePerformance, 'network_timing')
+    const remoteNetworkTimingEnabled = getRemoteConfigBool(cachedRemoteConfig?.capturePerformance, 'network_timing', true)
 
     const captureLog = localCaptureLog && remoteConsoleLogEnabled
     const captureNetworkTelemetry = localCaptureNetworkTelemetry && remoteNetworkTimingEnabled
