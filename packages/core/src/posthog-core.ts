@@ -41,6 +41,7 @@ import { isEmptyObject, isNullish, isPlainError, getPersonPropertiesHash, isObje
 interface FlagsAsyncOptions {
   sendAnonDistinctId?: boolean
   fetchConfig?: boolean
+  triggerOnRemoteConfig?: boolean
 }
 
 interface PendingFlagsRequest extends FlagsAsyncOptions {
@@ -531,8 +532,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    *** FEATURE FLAGS
    ***/
   protected async flagsAsync(options?: FlagsAsyncOptions): Promise<PostHogFeatureFlagsResponse | undefined> {
-    const sendAnonDistinctId = options?.sendAnonDistinctId ?? true
-    const fetchConfig = options?.fetchConfig ?? false
+    const { sendAnonDistinctId = true, fetchConfig = false, triggerOnRemoteConfig = false } = options ?? {}
     await this._initPromise
     if (this._flagsResponsePromise) {
       // Queue the reload request instead of dropping it
@@ -544,10 +544,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       }
       // Return a promise that resolves when the pending request completes
       return new Promise((resolve, reject) => {
-        this._pendingFlagsRequest = { sendAnonDistinctId, fetchConfig, resolve, reject }
+        this._pendingFlagsRequest = { sendAnonDistinctId, fetchConfig, triggerOnRemoteConfig, resolve, reject }
       })
     }
-    return this._flagsAsync({ sendAnonDistinctId, fetchConfig })
+    return this._flagsAsync({ sendAnonDistinctId, fetchConfig, triggerOnRemoteConfig })
   }
 
   /**
@@ -562,6 +562,23 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   protected onRemoteConfig(_response: PostHogRemoteConfig): void {
     // Override in subclasses
+  }
+
+  /**
+   * Conditionally triggers onRemoteConfig if requested.
+   * Only _remoteConfigAsync passes triggerOnRemoteConfig=true to apply remote config values
+   * (errorTracking, capturePerformance, etc.) on initial load.
+   * User-triggered reloadFeatureFlags/reloadFeatureFlagsAsync don't set this,
+   * so they won't re-trigger onRemoteConfig or reinstall/uninstall integrations.
+   */
+  private maybeNotifyRemoteConfig(shouldTrigger: boolean, response: PostHogRemoteConfig): void {
+    if (shouldTrigger) {
+      try {
+        this.onRemoteConfig(response)
+      } catch (e) {
+        this._logger.error('Error in onRemoteConfig callback:', e)
+      }
+    }
   }
 
   private cacheSessionReplay(source: string, response?: PostHogRemoteConfig): void {
@@ -634,7 +651,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
               this._logger.warn('Remote config has no feature flags, will not load feature flags.')
             } else if (this.preloadFeatureFlags !== false) {
               willLoadFlags = true
-              this.flagsAsync({ sendAnonDistinctId: true, fetchConfig: true })
+              this.flagsAsync({ sendAnonDistinctId: true, fetchConfig: true, triggerOnRemoteConfig: true })
             }
 
             if (!response.supportedCompression?.includes(Compression.GZipJS)) {
@@ -643,14 +660,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
             // Notify onRemoteConfig only if flags won't be loaded.
             // When flags will be loaded, _flagsAsync will call onRemoteConfig instead
-            // (with fetchConfig=true), ensuring it fires exactly once.
-            if (!willLoadFlags) {
-              try {
-                this.onRemoteConfig(response)
-              } catch (e) {
-                this._logger.error('Error in onRemoteConfig callback:', e)
-              }
-            }
+            // (via triggerOnRemoteConfig=true), ensuring it fires exactly once.
+            this.maybeNotifyRemoteConfig(!willLoadFlags, response)
 
             remoteConfig = response
           }
@@ -667,6 +678,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   private async _flagsAsync(options?: FlagsAsyncOptions): Promise<PostHogFeatureFlagsResponse | undefined> {
     const sendAnonDistinctId = options?.sendAnonDistinctId ?? true
     const fetchConfig = options?.fetchConfig ?? false
+    const triggerOnRemoteConfig = options?.triggerOnRemoteConfig ?? false
     this._flagsResponsePromise = this._initPromise
       .then(async () => {
         const distinctId = this.getDistinctId()
@@ -708,15 +720,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           this._logger.warn(
             '[FEATURE FLAGS] Feature flags quota limit exceeded. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
           )
-          // Even though flags are quota limited, we still need to trigger onRemoteConfig
-          // so that remote config values (errorTracking, capturePerformance, etc.) are applied.
-          if (fetchConfig) {
-            try {
-              this.onRemoteConfig(res)
-            } catch (e) {
-              this._logger.error('Error in onRemoteConfig callback:', e)
-            }
-          }
+          this.maybeNotifyRemoteConfig(triggerOnRemoteConfig, res)
           return res
         }
         if (res?.featureFlags) {
@@ -754,18 +758,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           this.setPersistedProperty(PostHogPersistedProperty.FlagsEndpointWasHit, true)
           this.cacheSessionReplay('flags', res)
 
-          // Notify onRemoteConfig when the flags response includes config data.
-          // fetchConfig=true means the response contains remote config fields (errorTracking, capturePerformance, etc.).
-          // Only _remoteConfigAsync passes fetchConfig=true (via flagsAsync({ fetchConfig: true })).
-          // User-triggered reloadFeatureFlags/reloadFeatureFlagsAsync use fetchConfig=false (default),
-          // so they won't re-trigger onRemoteConfig or reinstall/uninstall integrations.
-          if (fetchConfig) {
-            try {
-              this.onRemoteConfig(res)
-            } catch (e) {
-              this._logger.error('Error in onRemoteConfig callback:', e)
-            }
-          }
+          this.maybeNotifyRemoteConfig(triggerOnRemoteConfig, res)
         }
         return res
       })
@@ -778,7 +771,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           this._pendingFlagsRequest = undefined
           this._logger.info('Executing pending feature flags reload.')
           // Execute the pending request and resolve its promise with the result
-          this.flagsAsync({ sendAnonDistinctId: pendingRequest.sendAnonDistinctId, fetchConfig: pendingRequest.fetchConfig })
+          this.flagsAsync({
+              sendAnonDistinctId: pendingRequest.sendAnonDistinctId,
+              fetchConfig: pendingRequest.fetchConfig,
+              triggerOnRemoteConfig: pendingRequest.triggerOnRemoteConfig,
+            })
             .then(pendingRequest.resolve)
             .catch(pendingRequest.reject)
         }
