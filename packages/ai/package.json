@@ -46,10 +46,10 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
-    "@google/genai": "^1.40.0",
-    "@langchain/core": "^1.1.17",
+    "@google/genai": "^1.41.0",
+    "@langchain/core": "^1.1.24",
     "@posthog/core": "workspace:*",
-    "langchain": "^1.2.3",
+    "langchain": "^1.2.24",
     "openai": "^6.17.0",
     "uuid": "^11.1.0",
     "zod": "^4.1.13"
