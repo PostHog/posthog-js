@@ -772,10 +772,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           this._logger.info('Executing pending feature flags reload.')
           // Execute the pending request and resolve its promise with the result
           this.flagsAsync({
-              sendAnonDistinctId: pendingRequest.sendAnonDistinctId,
-              fetchConfig: pendingRequest.fetchConfig,
-              triggerOnRemoteConfig: pendingRequest.triggerOnRemoteConfig,
-            })
+            sendAnonDistinctId: pendingRequest.sendAnonDistinctId,
+            fetchConfig: pendingRequest.fetchConfig,
+            triggerOnRemoteConfig: pendingRequest.triggerOnRemoteConfig,
+          })
             .then(pendingRequest.resolve)
             .catch(pendingRequest.reject)
         }
