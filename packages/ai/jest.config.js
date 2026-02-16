@@ -4,4 +4,5 @@ module.exports = {
   coverageDirectory: 'coverage',
   silent: true,
   verbose: false,
+  transformIgnorePatterns: ['/node_modules/(?!.*(p-retry|is-network-error)/)'],
 }
