@@ -74,6 +74,10 @@ export class URLTrigger implements Trigger {
         return this._persistence.isTriggered(sessionId)
     }
 
+    clearPersistedState(): void {
+        this._persistence.clear()
+    }
+
     private _compileRegexCaches(): void {
         this._compiledTriggerRegexes = compileRegexCache(this.urlTriggers, 'URL trigger')
     }

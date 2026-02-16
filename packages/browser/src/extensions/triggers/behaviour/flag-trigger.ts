@@ -30,6 +30,10 @@ export class FlagTrigger implements Trigger {
         }
     }
 
+    clearPersistedState(): void {
+        // FlagTrigger has no persisted state — decisions are purely in-memory
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     matches(_sessionId: string): boolean | null {
         if (!this.linkedFlag) {

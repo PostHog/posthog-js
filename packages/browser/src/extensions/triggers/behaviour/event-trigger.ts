@@ -34,6 +34,10 @@ export class EventTrigger implements Trigger {
         return this._persistence.isTriggered(sessionId)
     }
 
+    clearPersistedState(): void {
+        this._persistence.clear()
+    }
+
     private _setupEventListener(posthog: PostHog): () => void {
         return posthog.on('eventCaptured', (event) => {
             if (!event?.event) {

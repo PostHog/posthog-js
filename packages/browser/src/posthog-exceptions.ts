@@ -53,21 +53,12 @@ export class PostHogExceptions {
         this._autocaptureCompositeTrigger.init(response)
     }
 
-    shouldAutocapture(): boolean {
+    triggersMatch(): boolean {
         return this._autocaptureCompositeTrigger.matches()
     }
 
-    /**
-     * Returns the current status of all autocapture triggers.
-     * Useful for debugging why exceptions are or aren't being captured.
-     *
-     * @example
-     * ```js
-     * // In browser console:
-     * posthog.exceptions.getAutocaptureStatus()
-     * ```
-     */
-    getAutocaptureStatus(): AutocaptureTriggersStatus {
+
+    getAutocaptureTriggersStatus(): AutocaptureTriggersStatus {
         return this._autocaptureCompositeTrigger.getStatus()
     }
 

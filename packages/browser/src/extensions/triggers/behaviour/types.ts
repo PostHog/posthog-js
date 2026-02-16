@@ -10,4 +10,5 @@ export interface TriggerOptions {
 export interface Trigger {
     readonly name: string
     matches(sessionId: string): boolean | null
+    clearPersistedState(): void
 }

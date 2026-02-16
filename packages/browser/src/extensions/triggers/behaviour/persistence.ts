@@ -30,6 +30,11 @@ export class PersistenceHelper {
         this._setProperty(key, value)
     }
 
+    clearWithSufix(keySuffix: string): void {
+        const key = this._buildKey(keySuffix)
+        this._setProperty(key, null)
+    }
+
     // Convenience methods for simple "triggered" tracking
     isTriggered(sessionId: string): boolean {
         if (this._triggeredSessionId === sessionId) {
@@ -51,6 +56,11 @@ export class PersistenceHelper {
         }
         this._triggeredSessionId = sessionId
         this.set('triggered', sessionId)
+    }
+
+    clear(): void {
+        this._triggeredSessionId = null
+        this.clearWithSufix('triggered')
     }
 
     private _buildKey(suffix: string): string {

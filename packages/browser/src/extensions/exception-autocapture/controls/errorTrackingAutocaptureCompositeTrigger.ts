@@ -1,5 +1,5 @@
 import type { PostHog } from '../../../posthog-core'
-import type { RemoteConfig } from '../../../types'
+import type { ErrorTrackingAutoCaptureControls, RemoteConfig } from '../../../types'
 import { window as globalWindow } from '../../../utils/globals'
 import { createLogger } from '../../../utils/logger'
 
@@ -9,13 +9,15 @@ import { URLTrigger } from '../../triggers/behaviour/url-trigger'
 import { FlagTrigger } from '../../triggers/behaviour/flag-trigger'
 import { SampleRateTrigger } from '../../triggers/behaviour/sample-rate-trigger'
 import { EventTrigger } from '../../triggers/behaviour/event-trigger'
+import { simpleHash } from '../../sampling'
 import { isNull } from '@posthog/core'
 import { getTriggersStatus, AutocaptureTriggersStatus } from './triggerStatusReporter'
 
-const logger = createLogger('[Error Tracking Autocapture]')
+const logger = createLogger('[Error Tracking Autocapture Composite Trigger]')
 
 export class ErrorTrackingAutocaptureCompositeTrigger {
     private readonly _posthog: PostHog
+    private readonly _persistence: PersistenceHelper
     private readonly _urlTrigger: URLTrigger
     private readonly _eventTrigger: EventTrigger
     private readonly _flagTrigger: FlagTrigger
@@ -25,7 +27,7 @@ export class ErrorTrackingAutocaptureCompositeTrigger {
     constructor(posthog: PostHog) {
         this._posthog = posthog
 
-        const persistence = new PersistenceHelper(
+        this._persistence = new PersistenceHelper(
             (key) => this._posthog.get_property(key),
             (key, value) => this._posthog.persistence?.register({ [key]: value })
         ).withPrefix('error_tracking')
@@ -33,7 +35,7 @@ export class ErrorTrackingAutocaptureCompositeTrigger {
         const options: TriggerOptions = {
             posthog: this._posthog,
             window: globalWindow,
-            persistence,
+            persistence: this._persistence,
         }
 
         this._urlTrigger = new URLTrigger(options)
@@ -47,10 +49,26 @@ export class ErrorTrackingAutocaptureCompositeTrigger {
     init(remoteConfig: RemoteConfig): void {
         const config = remoteConfig.errorTracking?.errorTrackingAutocaptureTriggers
 
+        this._invalidateOnSettingsChange(config)
+
         this._urlTrigger.init(config?.urlTriggers ?? [])
         this._eventTrigger.init(config?.eventTriggers ?? [])
         this._flagTrigger.init(config?.linkedFeatureFlag ?? null)
         this._sampleRateTrigger.init(config?.sampleRate ?? null)
+    }
+
+    private _invalidateOnSettingsChange(config: ErrorTrackingAutoCaptureControls | undefined): void {
+        const configHash = simpleHash(JSON.stringify(config ?? {}))
+        const storedHash = this._persistence.get<number>('autocapture_triggers_config_hash')
+
+        if (storedHash !== null && storedHash !== configHash) {
+            logger.info('Autocapture triggers config changed, invalidating persisted triggers state')
+            for (const trigger of this._triggers) {
+                trigger.clearPersistedState()
+            }
+        }
+
+        this._persistence.set('autocapture_triggers_config_hash', configHash)
     }
 
     matches(): boolean {
@@ -64,7 +82,6 @@ export class ErrorTrackingAutocaptureCompositeTrigger {
             }
 
             if (!result) {
-                logger.info(`Blocked by ${trigger.name}`)
                 return false
             }
         }
