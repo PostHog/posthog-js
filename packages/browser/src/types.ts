@@ -252,9 +252,7 @@ export interface RemoteConfig {
         autocaptureExceptions?: boolean
         captureExtensionExceptions?: boolean
         suppressionRules?: ErrorTrackingSuppressionRule[]
-        autoCaptureControls?: {
-            [library: string]: ErrorTrackingAutoCaptureControls
-        }
+        errorTrackingAutocaptureTriggers?: ErrorTrackingAutoCaptureControls
     }
 
     /**
@@ -447,9 +445,10 @@ export interface UrlTrigger {
     matching: 'regex'
 }
 
+/** @deprecated Use UrlTrigger instead */
+export type SessionRecordingUrlTrigger = UrlTrigger
+
 export interface ErrorTrackingAutoCaptureControls {
-    id?: string | null
-    library: string
     matchType: 'any' | 'all'
     sampleRate?: number | null
     linkedFeatureFlag?: {
@@ -458,7 +457,6 @@ export interface ErrorTrackingAutoCaptureControls {
     } | null
     eventTriggers?: string[]
     urlTriggers?: UrlTrigger[]
-    urlBlocklist?: UrlTrigger[]
 }
 
 export type PropertyMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'

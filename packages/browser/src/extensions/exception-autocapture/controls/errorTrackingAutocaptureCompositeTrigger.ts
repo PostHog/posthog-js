@@ -3,7 +3,7 @@ import type { RemoteConfig } from '../../../types'
 import { window as globalWindow } from '../../../utils/globals'
 import { createLogger } from '../../../utils/logger'
 
-import type { Trigger, TriggerOptions, LogFn } from '../../triggers/behaviour/types'
+import type { Trigger, TriggerOptions } from '../../triggers/behaviour/types'
 import { PersistenceHelper } from '../../triggers/behaviour/persistence'
 import { URLTrigger } from '../../triggers/behaviour/url-trigger'
 import { FlagTrigger } from '../../triggers/behaviour/flag-trigger'
@@ -13,14 +13,6 @@ import { isNull } from '@posthog/core'
 import { getTriggersStatus, AutocaptureTriggersStatus } from './triggerStatusReporter'
 
 const logger = createLogger('[Error Tracking Autocapture]')
-
-const log: LogFn = (message, data) => {
-    if (data) {
-        logger.info(message, data)
-    } else {
-        logger.info(message)
-    }
-}
 
 export class ErrorTrackingAutocaptureCompositeTrigger {
     private readonly _posthog: PostHog
@@ -41,7 +33,6 @@ export class ErrorTrackingAutocaptureCompositeTrigger {
         const options: TriggerOptions = {
             posthog: this._posthog,
             window: globalWindow,
-            log,
             persistence,
         }
 
@@ -54,7 +45,7 @@ export class ErrorTrackingAutocaptureCompositeTrigger {
     }
 
     init(remoteConfig: RemoteConfig): void {
-        const config = remoteConfig.errorTracking?.autoCaptureControls?.web
+        const config = remoteConfig.errorTracking?.errorTrackingAutocaptureTriggers
 
         this._urlTrigger.init(config?.urlTriggers ?? [])
         this._eventTrigger.init(config?.eventTriggers ?? [])
