@@ -31,13 +31,6 @@ const ExceptionAutocapture = () => {
         refreshSessionId()
     }
 
-    const handleGetAutocaptureStatus = () => {
-        const status = posthog.exceptions.getAutocaptureStatus()
-        console.log('Autocapture Status:', status)
-        console.table(status.triggers)
-        alert(`Check console for details.\n\nOverall: ${status.overall ? 'CAPTURING' : 'NOT CAPTURING'}`)
-    }
-
     const navigateToPage = (page: Page) => {
         const newUrl = `${window.location.pathname}?page=${page}`
         window.history.pushState({}, '', newUrl)
@@ -62,12 +55,6 @@ const ExceptionAutocapture = () => {
                         className="bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg px-4 py-2"
                     >
                         Reset Session (Start New)
-                    </button>
-                    <button
-                        onClick={handleGetAutocaptureStatus}
-                        className="bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-lg px-4 py-2"
-                    >
-                        Get Autocapture Status
                     </button>
                 </div>
                 {sessionId && (
