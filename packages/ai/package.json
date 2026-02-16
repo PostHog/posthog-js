@@ -23,6 +23,8 @@
   },
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.8",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-trace-base": "^2.2.0",
     "@babel/preset-env": "catalog:",
     "@babel/preset-typescript": "catalog:",
     "@posthog-tooling/rollup-utils": "workspace:*",
@@ -55,10 +57,18 @@
     "zod": "^4.1.13"
   },
   "peerDependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-trace-base": "^2.2.0",
     "@ai-sdk/provider": "^2.0.0 || ^3.0.0",
     "posthog-node": "^5.0.0"
   },
   "peerDependenciesMeta": {
+    "@opentelemetry/api": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-trace-base": {
+      "optional": true
+    },
     "@ai-sdk/provider": {
       "optional": true
     }
@@ -91,6 +101,11 @@
       "require": "./dist/vercel/index.cjs",
       "import": "./dist/vercel/index.mjs",
       "types": "./dist/vercel/index.d.ts"
+    },
+    "./otel": {
+      "require": "./dist/otel/index.cjs",
+      "import": "./dist/otel/index.mjs",
+      "types": "./dist/otel/index.d.ts"
     },
     "./langchain": {
       "require": "./dist/langchain/index.cjs",

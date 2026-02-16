@@ -33,7 +33,7 @@ configs.push({
 })
 
 // Add submodule builds for posthog-ai
-const providers = ['anthropic', 'openai', 'vercel', 'langchain', 'gemini']
+const providers = ['anthropic', 'openai', 'vercel', 'langchain', 'gemini', 'otel']
 
 providers.forEach((provider) => {
   configs.push({
