@@ -32,8 +32,8 @@ describe('PostHog onRemoteConfig', () => {
     await posthog.shutdown()
   })
 
-  describe('via flags endpoint (fetchConfig=true)', () => {
-    it('fires onRemoteConfig with the flags response when fetchConfig is true', async () => {
+  describe('user-triggered reloadFeatureFlags', () => {
+    it('does not fire onRemoteConfig on user-triggered reloadFeatureFlagsAsync', async () => {
       const flagsResponse = {
         flags: {},
         featureFlags: {},
@@ -71,55 +71,9 @@ describe('PostHog onRemoteConfig', () => {
       await posthog.reloadFeatureFlagsAsync()
       await waitForPromises()
 
-      expect(posthog.onRemoteConfigCalls).toHaveLength(1)
-      expect(posthog.onRemoteConfigCalls[0]).toMatchObject({
-        errorTracking: { autocaptureExceptions: true },
-        capturePerformance: { network_timing: true, web_vitals: false },
-      })
-    })
-
-    it('includes errorTracking=false in the response', async () => {
-      const flagsResponse = {
-        flags: {},
-        featureFlags: {},
-        featureFlagPayloads: {},
-        requestId: 'req-2',
-        errorTracking: false,
-        capturePerformance: false,
-      }
-
-      ;[posthog, mocks] = createTestClientWithRemoteConfig(
-        'TEST_API_KEY',
-        {
-          flushAt: 1,
-          preloadFeatureFlags: false,
-        },
-        (_mocks) => {
-          _mocks.fetch.mockImplementation((url) => {
-            if (url.includes('/flags/')) {
-              return Promise.resolve({
-                status: 200,
-                text: () => Promise.resolve('ok'),
-                json: () => Promise.resolve(flagsResponse),
-              })
-            }
-            return Promise.resolve({
-              status: 200,
-              text: () => Promise.resolve('ok'),
-              json: () => Promise.resolve({ status: 'ok' }),
-            })
-          })
-        }
-      )
-
-      await posthog.reloadFeatureFlagsAsync()
-      await waitForPromises()
-
-      expect(posthog.onRemoteConfigCalls).toHaveLength(1)
-      expect(posthog.onRemoteConfigCalls[0]).toMatchObject({
-        errorTracking: false,
-        capturePerformance: false,
-      })
+      // User-triggered reloadFeatureFlagsAsync should NOT fire onRemoteConfig
+      // Only the initial load via _remoteConfigAsync should trigger it
+      expect(posthog.onRemoteConfigCalls).toHaveLength(0)
     })
 
     it('does not fire onRemoteConfig when flags request fails', async () => {

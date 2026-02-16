@@ -529,7 +529,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    ***/
   protected async flagsAsync(
     sendAnonDistinctId: boolean = true,
-    fetchConfig: boolean = true
+    fetchConfig: boolean = false
   ): Promise<PostHogFeatureFlagsResponse | undefined> {
     await this._initPromise
     if (this._flagsResponsePromise) {
@@ -632,7 +632,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
               this._logger.warn('Remote config has no feature flags, will not load feature flags.')
             } else if (this.preloadFeatureFlags !== false) {
               willLoadFlags = true
-              this.reloadFeatureFlags()
+              this.flagsAsync(true, true)
             }
 
             if (!response.supportedCompression?.includes(Compression.GZipJS)) {
@@ -664,7 +664,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   private async _flagsAsync(
     sendAnonDistinctId: boolean = true,
-    fetchConfig: boolean = true
+    fetchConfig: boolean = false
   ): Promise<PostHogFeatureFlagsResponse | undefined> {
     this._flagsResponsePromise = this._initPromise
       .then(async () => {
@@ -707,6 +707,15 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           this._logger.warn(
             '[FEATURE FLAGS] Feature flags quota limit exceeded. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
           )
+          // Even though flags are quota limited, we still need to trigger onRemoteConfig
+          // so that remote config values (errorTracking, capturePerformance, etc.) are applied.
+          if (fetchConfig) {
+            try {
+              this.onRemoteConfig(res)
+            } catch (e) {
+              this._logger.error('Error in onRemoteConfig callback:', e)
+            }
+          }
           return res
         }
         if (res?.featureFlags) {
@@ -746,8 +755,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
           // Notify onRemoteConfig when the flags response includes config data.
           // fetchConfig=true means the response contains remote config fields (errorTracking, capturePerformance, etc.).
-          // When called from _remoteConfigAsync -> reloadFeatureFlags, fetchConfig defaults to true,
-          // so this fires once. _remoteConfigAsync skips its own onRemoteConfig call in that case.
+          // Only _remoteConfigAsync passes fetchConfig=true (via flagsAsync(true, true)).
+          // User-triggered reloadFeatureFlags/reloadFeatureFlagsAsync use fetchConfig=false (default),
+          // so they won't re-trigger onRemoteConfig or reinstall/uninstall integrations.
           if (fetchConfig) {
             try {
               this.onRemoteConfig(res)
