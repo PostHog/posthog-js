@@ -15,7 +15,7 @@ export class PostHogSpanProcessor implements SpanProcessor {
   }
 
   onEnd(span: ReadableSpan): void {
-    void captureSpan(span, this.phClient, this.options).catch((error) => {
+    captureSpan(span, this.phClient, this.options).catch((error) => {
       console.error('Failed to capture telemetry span', error)
     })
   }
