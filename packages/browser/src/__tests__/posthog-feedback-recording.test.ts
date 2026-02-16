@@ -1,5 +1,4 @@
-import { PostHogFeedbackRecording } from '../posthog-feedback-recording'
-import { generateFeedbackRecording } from '../extensions/feedback-recording'
+import { FeedbackRecording } from '../extensions/feedback-recording'
 import * as FeedbackUI from '../extensions/feedback-recording/components/FeedbackRecordingUI'
 import { PostHog } from '../posthog-core'
 import { RemoteConfig } from '../types'
@@ -14,9 +13,9 @@ jest.mock('../extensions/feedback-recording/audio-recorder', () => ({
     AudioRecorder: jest.fn().mockImplementation(() => mockAudioRecorder),
 }))
 
-describe('PostHogFeedbackRecording', () => {
+describe('FeedbackRecording', () => {
     let instance: PostHog
-    let manager: PostHogFeedbackRecording
+    let recorder: FeedbackRecording
     let loadScriptMock: jest.Mock
 
     beforeEach(() => {
@@ -32,7 +31,10 @@ describe('PostHogFeedbackRecording', () => {
         loadScriptMock = jest.fn()
         loadScriptMock.mockImplementation((_ph, _path, callback) => {
             assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
-            assignableWindow.__PosthogExtensions__.generateFeedbackRecording = generateFeedbackRecording
+            assignableWindow.__PosthogExtensions__.initFeedbackRecording = jest.fn((ph) => {
+                const { default: LazyLoadedFeedbackRecording } = jest.requireActual('../entrypoints/feedback-recording')
+                return new LazyLoadedFeedbackRecording(ph)
+            })
             callback()
         })
 
@@ -59,15 +61,15 @@ describe('PostHogFeedbackRecording', () => {
             sessionRecording: {} as any,
         })
 
-        manager = new PostHogFeedbackRecording(instance)
+        recorder = new FeedbackRecording(instance)
 
         // Enable feedback recording via remote config for most tests
-        manager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
+        recorder.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
     })
 
     afterEach(() => {
         if (assignableWindow.__PosthogExtensions__) {
-            delete assignableWindow.__PosthogExtensions__.generateFeedbackRecording
+            delete assignableWindow.__PosthogExtensions__.initFeedbackRecording
         }
 
         jest.clearAllTimers()
@@ -76,49 +78,49 @@ describe('PostHogFeedbackRecording', () => {
     })
 
     it('should initialize with PostHog instance', () => {
-        expect(manager).toBeInstanceOf(PostHogFeedbackRecording)
-        expect(manager.getCurrentFeedbackRecordingId()).toBeNull()
-        expect(manager.isFeedbackRecordingActive()).toBe(false)
+        expect(recorder).toBeInstanceOf(FeedbackRecording)
+        expect(recorder.getCurrentFeedbackRecordingId()).toBeNull()
+        expect(recorder.isFeedbackRecordingActive()).toBe(false)
     })
 
     describe('onRemoteConfig', () => {
         it('should not enable feedback recording if disabled via config', () => {
             instance.config._experimental_disable_feedback_recording = true
-            const newManager = new PostHogFeedbackRecording(instance)
+            const newRecorder = new FeedbackRecording(instance)
 
-            newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
+            newRecorder.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
 
             // Even though server says enabled, config disables it
             // We can verify by trying to launch - it should not work
-            expect(newManager.isFeedbackRecordingActive()).toBe(false)
+            expect(newRecorder.isFeedbackRecordingActive()).toBe(false)
         })
 
         it('should enable feedback recording when server returns true', () => {
             instance.config._experimental_disable_feedback_recording = false
-            const newManager = new PostHogFeedbackRecording(instance)
+            const newRecorder = new FeedbackRecording(instance)
 
-            newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
+            newRecorder.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
 
-            // Manager should now allow launching
-            expect(newManager.isFeedbackRecordingActive()).toBe(false) // Not active yet, but enabled
+            // Recorder should now allow launching
+            expect(newRecorder.isFeedbackRecordingActive()).toBe(false) // Not active yet, but enabled
         })
 
         it('should not enable feedback recording when server returns false', () => {
             instance.config._experimental_disable_feedback_recording = false
-            const newManager = new PostHogFeedbackRecording(instance)
+            const newRecorder = new FeedbackRecording(instance)
 
-            newManager.onRemoteConfig({ feedbackRecording: false } as RemoteConfig)
+            newRecorder.onRemoteConfig({ feedbackRecording: false } as RemoteConfig)
 
-            expect(newManager.isFeedbackRecordingActive()).toBe(false)
+            expect(newRecorder.isFeedbackRecordingActive()).toBe(false)
         })
 
         it('should not enable feedback recording when server returns undefined', () => {
             instance.config._experimental_disable_feedback_recording = false
-            const newManager = new PostHogFeedbackRecording(instance)
+            const newRecorder = new FeedbackRecording(instance)
 
-            newManager.onRemoteConfig({} as RemoteConfig)
+            newRecorder.onRemoteConfig({} as RemoteConfig)
 
-            expect(newManager.isFeedbackRecordingActive()).toBe(false)
+            expect(newRecorder.isFeedbackRecordingActive()).toBe(false)
         })
     })
 
@@ -129,30 +131,30 @@ describe('PostHogFeedbackRecording', () => {
 
         it('should not launch UI when disabled via config', async () => {
             instance.config._experimental_disable_feedback_recording = true
-            const newManager = new PostHogFeedbackRecording(instance)
-            newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
+            const newRecorder = new FeedbackRecording(instance)
+            newRecorder.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
 
-            await newManager.launchFeedbackRecordingUI(jest.fn())
+            await newRecorder.launchFeedbackRecordingUI(jest.fn())
 
             expect(FeedbackUI.renderFeedbackRecordingUI).not.toHaveBeenCalled()
         })
 
         it('should not launch UI when remote config not loaded yet', async () => {
             instance.config._experimental_disable_feedback_recording = false
-            const newManager = new PostHogFeedbackRecording(instance)
+            const newRecorder = new FeedbackRecording(instance)
             // Don't call onRemoteConfig - simulating remote config not loaded yet
 
-            await newManager.launchFeedbackRecordingUI(jest.fn())
+            await newRecorder.launchFeedbackRecordingUI(jest.fn())
 
             expect(FeedbackUI.renderFeedbackRecordingUI).not.toHaveBeenCalled()
         })
 
         it('should not launch UI when not enabled server-side', async () => {
             instance.config._experimental_disable_feedback_recording = false
-            const newManager = new PostHogFeedbackRecording(instance)
-            newManager.onRemoteConfig({ feedbackRecording: false } as RemoteConfig)
+            const newRecorder = new FeedbackRecording(instance)
+            newRecorder.onRemoteConfig({ feedbackRecording: false } as RemoteConfig)
 
-            await newManager.launchFeedbackRecordingUI(jest.fn())
+            await newRecorder.launchFeedbackRecordingUI(jest.fn())
 
             expect(FeedbackUI.renderFeedbackRecordingUI).not.toHaveBeenCalled()
         })
@@ -160,10 +162,10 @@ describe('PostHogFeedbackRecording', () => {
         it('should not launch UI when session recording is disabled', async () => {
             instance.config._experimental_disable_feedback_recording = false
             instance.config.disable_session_recording = true
-            const newManager = new PostHogFeedbackRecording(instance)
-            newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
+            const newRecorder = new FeedbackRecording(instance)
+            newRecorder.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
 
-            await newManager.launchFeedbackRecordingUI(jest.fn())
+            await newRecorder.launchFeedbackRecordingUI(jest.fn())
 
             expect(FeedbackUI.renderFeedbackRecordingUI).not.toHaveBeenCalled()
         })
@@ -172,10 +174,10 @@ describe('PostHogFeedbackRecording', () => {
             instance.config._experimental_disable_feedback_recording = false
             instance.config.disable_session_recording = false
             ;(instance as any).sessionRecording = undefined
-            const newManager = new PostHogFeedbackRecording(instance)
-            newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
+            const newRecorder = new FeedbackRecording(instance)
+            newRecorder.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
 
-            await newManager.launchFeedbackRecordingUI(jest.fn())
+            await newRecorder.launchFeedbackRecordingUI(jest.fn())
 
             expect(FeedbackUI.renderFeedbackRecordingUI).not.toHaveBeenCalled()
         })
@@ -183,10 +185,10 @@ describe('PostHogFeedbackRecording', () => {
         it('should launch UI when enabled in both config and server-side', async () => {
             instance.config._experimental_disable_feedback_recording = false
             instance.config.disable_session_recording = false
-            const newManager = new PostHogFeedbackRecording(instance)
-            newManager.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
+            const newRecorder = new FeedbackRecording(instance)
+            newRecorder.onRemoteConfig({ feedbackRecording: true } as RemoteConfig)
 
-            await newManager.launchFeedbackRecordingUI(jest.fn())
+            await newRecorder.launchFeedbackRecordingUI(jest.fn())
 
             expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalled()
         })
@@ -198,19 +200,19 @@ describe('PostHogFeedbackRecording', () => {
         })
 
         it('should handle loading state correctly', async () => {
-            expect(assignableWindow.__PosthogExtensions__?.generateFeedbackRecording).toBeUndefined()
+            expect(assignableWindow.__PosthogExtensions__?.initFeedbackRecording).toBeUndefined()
 
-            await manager.launchFeedbackRecordingUI(jest.fn())
+            await recorder.launchFeedbackRecordingUI(jest.fn())
 
-            expect(assignableWindow.__PosthogExtensions__?.generateFeedbackRecording).toBeDefined()
+            expect(assignableWindow.__PosthogExtensions__?.initFeedbackRecording).toBeDefined()
             expect(loadScriptMock).toHaveBeenCalledTimes(1)
             expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalled()
 
             // Clean up UI active state so second launch can proceed
-            manager.cleanup()
+            recorder.cleanup()
 
             // if called again, should not load again
-            await manager.launchFeedbackRecordingUI(jest.fn())
+            await recorder.launchFeedbackRecordingUI(jest.fn())
             expect(loadScriptMock).toHaveBeenCalledTimes(1)
             expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledTimes(2)
         })
@@ -223,15 +225,15 @@ describe('PostHogFeedbackRecording', () => {
             }
 
             const callback = jest.fn()
-            await manager.launchFeedbackRecordingUI(callback)
+            await recorder.launchFeedbackRecordingUI(callback)
 
             // UI should not be rendered when loading fails
             expect(FeedbackUI.renderFeedbackRecordingUI).not.toHaveBeenCalled()
         })
 
         it('should handle concurrent loading attempts', async () => {
-            const promise1 = manager.launchFeedbackRecordingUI(jest.fn())
-            const promise2 = manager.launchFeedbackRecordingUI(jest.fn())
+            const promise1 = recorder.launchFeedbackRecordingUI(jest.fn())
+            const promise2 = recorder.launchFeedbackRecordingUI(jest.fn())
 
             await Promise.all([promise1, promise2])
 
@@ -245,15 +247,15 @@ describe('PostHogFeedbackRecording', () => {
         })
 
         it('should prevent multiple simultaneous UIs from being launched', async () => {
-            await manager.launchFeedbackRecordingUI(jest.fn())
+            await recorder.launchFeedbackRecordingUI(jest.fn())
 
-            await manager.launchFeedbackRecordingUI(jest.fn())
+            await recorder.launchFeedbackRecordingUI(jest.fn())
 
             expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledTimes(1)
         })
 
         it('should not launch UI when recording is already in progress', async () => {
-            await manager.launchFeedbackRecordingUI(jest.fn())
+            await recorder.launchFeedbackRecordingUI(jest.fn())
 
             // Start a recording to make it active
             const handleStartRecording = (
@@ -261,10 +263,10 @@ describe('PostHogFeedbackRecording', () => {
             ).mock.lastCall![0].handleStartRecording
             await handleStartRecording()
 
-            expect(manager.isFeedbackRecordingActive()).toBe(true)
+            expect(recorder.isFeedbackRecordingActive()).toBe(true)
 
             // Second launch should be ignored
-            await manager.launchFeedbackRecordingUI(jest.fn())
+            await recorder.launchFeedbackRecordingUI(jest.fn())
 
             expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledTimes(1)
         })
@@ -272,7 +274,7 @@ describe('PostHogFeedbackRecording', () => {
         it('should allow launching UI again after recording completes', async () => {
             jest.spyOn(instance, 'sessionRecordingStarted').mockReturnValue(false)
 
-            await manager.launchFeedbackRecordingUI(jest.fn())
+            await recorder.launchFeedbackRecordingUI(jest.fn())
 
             const handleStartRecording = (
                 FeedbackUI.renderFeedbackRecordingUI as jest.MockedFunction<typeof FeedbackUI.renderFeedbackRecordingUI>
@@ -284,30 +286,30 @@ describe('PostHogFeedbackRecording', () => {
             const feedbackId = await handleStartRecording()
             await stopCallback(feedbackId)
 
-            await manager.launchFeedbackRecordingUI(jest.fn())
+            await recorder.launchFeedbackRecordingUI(jest.fn())
 
             expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledTimes(2)
         })
 
         it('should allow launching UI again after cancellation', async () => {
-            await manager.launchFeedbackRecordingUI(jest.fn())
+            await recorder.launchFeedbackRecordingUI(jest.fn())
 
             const onCancel = (
                 FeedbackUI.renderFeedbackRecordingUI as jest.MockedFunction<typeof FeedbackUI.renderFeedbackRecordingUI>
             ).mock.lastCall![0].onCancel
             onCancel?.()
 
-            await manager.launchFeedbackRecordingUI(jest.fn())
+            await recorder.launchFeedbackRecordingUI(jest.fn())
 
             expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledTimes(2)
         })
 
         it('should allow launching UI again after cleanup', async () => {
-            await manager.launchFeedbackRecordingUI(jest.fn())
+            await recorder.launchFeedbackRecordingUI(jest.fn())
 
-            manager.cleanup()
+            recorder.cleanup()
 
-            await manager.launchFeedbackRecordingUI(jest.fn())
+            await recorder.launchFeedbackRecordingUI(jest.fn())
 
             expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledTimes(2)
         })

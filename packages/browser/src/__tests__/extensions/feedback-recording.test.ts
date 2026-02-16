@@ -1,7 +1,8 @@
-import { FeedbackRecordingManager, generateFeedbackRecording } from '../../extensions/feedback-recording'
+import LazyLoadedFeedbackRecording from '../../entrypoints/feedback-recording'
 import * as FeedbackUI from '../../extensions/feedback-recording/components/FeedbackRecordingUI'
 import { PostHog } from '../../posthog-core'
 import { createMockPostHog } from '../helpers/posthog-instance'
+import { assignableWindow } from '../../utils/globals'
 import '@testing-library/jest-dom'
 
 jest.mock('../../extensions/feedback-recording/components/FeedbackRecordingUI')
@@ -12,9 +13,9 @@ jest.mock('../../extensions/feedback-recording/audio-recorder', () => ({
     AudioRecorder: jest.fn().mockImplementation(() => mockAudioRecorder),
 }))
 
-describe('FeedbackRecordingManager', () => {
+describe('LazyLoadedFeedbackRecording', () => {
     let instance: PostHog
-    let manager: FeedbackRecordingManager
+    let recorder: LazyLoadedFeedbackRecording
     let originalFileReader: typeof FileReader
 
     beforeEach(() => {
@@ -45,7 +46,7 @@ describe('FeedbackRecordingManager', () => {
             } as any,
         })
 
-        manager = new FeedbackRecordingManager(instance)
+        recorder = new LazyLoadedFeedbackRecording(instance)
     })
 
     afterEach(() => {
@@ -56,16 +57,16 @@ describe('FeedbackRecordingManager', () => {
     })
 
     it('should initialize with PostHog instance', () => {
-        expect(manager).toBeInstanceOf(FeedbackRecordingManager)
-        expect(manager.getCurrentFeedbackRecordingId()).toBeNull()
-        expect(manager.isFeedbackRecordingActive()).toBe(false)
+        expect(recorder).toBeInstanceOf(LazyLoadedFeedbackRecording)
+        expect(recorder.getCurrentFeedbackRecordingId()).toBeNull()
+        expect(recorder.isFeedbackRecordingActive()).toBe(false)
     })
 
     describe('launchFeedbackRecordingUI', () => {
         it('should render UI with correct props', () => {
             const onRecordingEnded = jest.fn()
             const onCancel = jest.fn()
-            manager.launchFeedbackRecordingUI(onRecordingEnded, onCancel)
+            recorder.launchFeedbackRecordingUI(onRecordingEnded, onCancel)
 
             expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledTimes(1)
             expect(FeedbackUI.renderFeedbackRecordingUI).toHaveBeenCalledWith(
@@ -77,7 +78,7 @@ describe('FeedbackRecordingManager', () => {
                 })
             )
 
-            expect(manager.isFeedbackRecordingActive()).toBe(false)
+            expect(recorder.isFeedbackRecordingActive()).toBe(false)
             expect(onRecordingEnded).not.toHaveBeenCalled()
         })
 
@@ -94,7 +95,7 @@ describe('FeedbackRecordingManager', () => {
 
                 onRecordingEnded = jest.fn()
                 onCancel = jest.fn()
-                manager.launchFeedbackRecordingUI(onRecordingEnded, onCancel)
+                recorder.launchFeedbackRecordingUI(onRecordingEnded, onCancel)
 
                 handleStartRecording = (
                     FeedbackUI.renderFeedbackRecordingUI as jest.MockedFunction<
@@ -118,8 +119,8 @@ describe('FeedbackRecordingManager', () => {
                     feedbackId = await handleStartRecording()
 
                     expect(mockAudioRecorder.startRecording).toHaveBeenCalledTimes(1)
-                    expect(manager.isFeedbackRecordingActive()).toBe(true)
-                    expect(manager.getCurrentFeedbackRecordingId()).toBe(feedbackId)
+                    expect(recorder.isFeedbackRecordingActive()).toBe(true)
+                    expect(recorder.getCurrentFeedbackRecordingId()).toBe(feedbackId)
                 })
 
                 it('captures an event when recording starts', async () => {
@@ -135,7 +136,7 @@ describe('FeedbackRecordingManager', () => {
 
                     feedbackId = await handleStartRecording()
 
-                    expect(manager.isFeedbackRecordingActive()).toBe(true)
+                    expect(recorder.isFeedbackRecordingActive()).toBe(true)
                     expect(instance.startSessionRecording).toHaveBeenCalledWith(true)
                     expect(instance.capture).toHaveBeenCalledWith('$user_feedback_recording_started', {
                         $feedback_recording_id: feedbackId,
@@ -170,8 +171,8 @@ describe('FeedbackRecordingManager', () => {
 
                     expect(mockAudioRecorder.stopRecording).toHaveBeenCalledTimes(1)
                     expect(onRecordingEnded).toHaveBeenCalledTimes(1)
-                    expect(manager.isFeedbackRecordingActive()).toBe(false)
-                    expect(manager.getCurrentFeedbackRecordingId()).toBeNull()
+                    expect(recorder.isFeedbackRecordingActive()).toBe(false)
+                    expect(recorder.getCurrentFeedbackRecordingId()).toBeNull()
                 })
 
                 it('captures an event when recording stops', async () => {
@@ -232,7 +233,7 @@ describe('FeedbackRecordingManager', () => {
 
                     expect(instance._send_request).not.toHaveBeenCalled()
                     expect(onRecordingEnded).toHaveBeenCalledTimes(1)
-                    expect(manager.isFeedbackRecordingActive()).toBe(false)
+                    expect(recorder.isFeedbackRecordingActive()).toBe(false)
                 })
 
                 it('does not upload when audio blob is too large', async () => {
@@ -300,13 +301,13 @@ describe('FeedbackRecordingManager', () => {
             describe('cancel', () => {
                 it('should reset state and call onCancel callback', async () => {
                     feedbackId = await handleStartRecording()
-                    expect(manager.isFeedbackRecordingActive()).toBe(true)
+                    expect(recorder.isFeedbackRecordingActive()).toBe(true)
 
                     cancelCallback()
 
                     expect(onCancel).toHaveBeenCalledTimes(1)
-                    expect(manager.isFeedbackRecordingActive()).toBe(false)
-                    expect(manager.getCurrentFeedbackRecordingId()).toBeNull()
+                    expect(recorder.isFeedbackRecordingActive()).toBe(false)
+                    expect(recorder.getCurrentFeedbackRecordingId()).toBeNull()
                 })
             })
 
@@ -316,7 +317,7 @@ describe('FeedbackRecordingManager', () => {
 
                     mockAudioRecorder.isRecording.mockReturnValue(true)
 
-                    manager.cleanup()
+                    recorder.cleanup()
 
                     expect(mockAudioRecorder.cancelRecording).toHaveBeenCalled()
                 })
@@ -324,12 +325,12 @@ describe('FeedbackRecordingManager', () => {
                 it('should clear feedback recording state', async () => {
                     feedbackId = await handleStartRecording()
 
-                    expect(manager.isFeedbackRecordingActive()).toBe(true)
+                    expect(recorder.isFeedbackRecordingActive()).toBe(true)
 
-                    manager.cleanup()
+                    recorder.cleanup()
 
-                    expect(manager.isFeedbackRecordingActive()).toBe(false)
-                    expect(manager.getCurrentFeedbackRecordingId()).toBeNull()
+                    expect(recorder.isFeedbackRecordingActive()).toBe(false)
+                    expect(recorder.getCurrentFeedbackRecordingId()).toBeNull()
                 })
 
                 it('stops session recording when stopping if we started it', async () => {
@@ -337,7 +338,7 @@ describe('FeedbackRecordingManager', () => {
 
                     feedbackId = await handleStartRecording()
 
-                    manager.cleanup()
+                    recorder.cleanup()
 
                     expect(instance.stopSessionRecording).toHaveBeenCalled()
                 })
@@ -347,7 +348,7 @@ describe('FeedbackRecordingManager', () => {
 
                     feedbackId = await handleStartRecording()
 
-                    manager.cleanup()
+                    recorder.cleanup()
 
                     expect(instance.stopSessionRecording).not.toHaveBeenCalled()
                 })
@@ -355,11 +356,15 @@ describe('FeedbackRecordingManager', () => {
         })
     })
 
-    describe('generateFeedbackRecording', () => {
-        it('should create a new FeedbackRecordingManager instance', () => {
-            const result = generateFeedbackRecording(instance)
+    describe('initFeedbackRecording', () => {
+        it('should register initFeedbackRecording on __PosthogExtensions__', () => {
+            expect(assignableWindow.__PosthogExtensions__?.initFeedbackRecording).toBeDefined()
+        })
 
-            expect(result).toBeInstanceOf(FeedbackRecordingManager)
+        it('should create a new LazyLoadedFeedbackRecording instance', () => {
+            const result = assignableWindow.__PosthogExtensions__?.initFeedbackRecording?.(instance)
+
+            expect(result).toBeInstanceOf(LazyLoadedFeedbackRecording)
         })
     })
 })

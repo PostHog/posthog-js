@@ -1,172 +1,146 @@
-import { isNull } from '@posthog/core'
+import { isUndefined } from '@posthog/core'
 import { PostHog } from '../posthog-core'
-import { renderFeedbackRecordingUI } from './feedback-recording/components/FeedbackRecordingUI'
-import { removeFeedbackRecordingUIFromDOM } from './feedback-recording/feedback-recording-utils'
-import { AudioRecorder } from './feedback-recording/audio-recorder'
+import { assignableWindow, LazyLoadedFeedbackRecordingInterface } from '../utils/globals'
 import { createLogger } from '../utils/logger'
-import { uuidv7 } from '../uuidv7'
-import { RequestResponse, UserFeedbackRecordingResult } from '../types'
+import { RemoteConfig, UserFeedbackRecordingResult } from '../types'
 
-const logger = createLogger('[PostHog FeedbackManager]')
+const logger = createLogger('[FeedbackRecording]')
 
-const MAX_AUDIO_SIZE = 10 * 1024 * 1024 // 10MB limit to match backend
+export class FeedbackRecording {
+    private _isLoaded: boolean = false
+    private _isLoading: boolean = false
+    private _isUIActive: boolean = false
+    private _isFeedbackRecordingEnabled?: boolean = undefined
+    private _lazyLoadedFeedbackRecording: LazyLoadedFeedbackRecordingInterface | null = null
 
-export class FeedbackRecordingManager {
-    private _posthog: PostHog
-    private _audioRecorder: AudioRecorder
-    private _feedbackRecordingId: string | null = null
-    private _didStartSessionRecording: boolean = false
-
-    constructor(posthog: PostHog) {
-        this._posthog = posthog
-        this._audioRecorder = new AudioRecorder()
+    constructor(private _instance: PostHog) {
+        this._isLoaded = !!assignableWindow?.__PosthogExtensions__?.initFeedbackRecording
     }
 
-    launchFeedbackRecordingUI(
-        onRecordingEnded: (result: UserFeedbackRecordingResult) => void,
-        onCancel: () => void
-    ): void {
-        renderFeedbackRecordingUI({
-            posthogInstance: this._posthog,
-            handleStartRecording: () => this._startRecording(),
-            onRecordingEnded: async (feedbackId: string) => {
-                await this._stopRecording(feedbackId, onRecordingEnded)
-            },
-            onCancel: () => {
-                this._resetState()
-                logger.info('Feedback recording UI cancelled')
-                onCancel()
-            },
-        })
-    }
-
-    cleanup(): void {
-        if (this._audioRecorder.isRecording()) {
-            this._audioRecorder.cancelRecording()
-        }
-
-        if (this._didStartSessionRecording) {
-            this._posthog.stopSessionRecording()
-            logger.info('Stopped session recording during cleanup')
-        }
-
-        removeFeedbackRecordingUIFromDOM()
-        this._resetState()
-    }
-
-    getCurrentFeedbackRecordingId(): string | null {
-        return this._feedbackRecordingId
-    }
-
-    isFeedbackRecordingActive(): boolean {
-        return !isNull(this._feedbackRecordingId)
-    }
-
-    private async _startRecording(): Promise<string> {
-        const feedbackId = uuidv7()
-        this._feedbackRecordingId = feedbackId
-
-        this._posthog.capture('$user_feedback_recording_started', {
-            $feedback_recording_id: feedbackId,
-        })
-
-        try {
-            await this._audioRecorder.startRecording()
-        } catch (error) {
-            logger.warn('Failed to start audio recording:', error)
-        }
-
-        const wasSessionRecordingActive = this._posthog.sessionRecordingStarted()
-        if (!wasSessionRecordingActive) {
-            this._posthog.startSessionRecording(true)
-            this._didStartSessionRecording = true
-            logger.info('Started session recording for feedback')
-        } else {
-            this._didStartSessionRecording = false
-            logger.info('Session recording already active, reusing existing recording')
-        }
-
-        return feedbackId
-    }
-
-    private _handleStopped(feedbackRecordingId: string): UserFeedbackRecordingResult {
-        this._posthog.capture('$user_feedback_recording_stopped', {
-            $feedback_recording_id: feedbackRecordingId,
-        })
-
-        return { feedback_id: feedbackRecordingId, session_id: this._posthog.get_session_id() }
-    }
-
-    private _uploadAudioBlob(feedbackId: string, audioBlob: Blob): void {
-        if (audioBlob.size > MAX_AUDIO_SIZE) {
-            logger.error(`Audio blob too large: ${audioBlob.size} bytes (max: ${MAX_AUDIO_SIZE})`)
+    onRemoteConfig(response: RemoteConfig): void {
+        if (this._instance.config._experimental_disable_feedback_recording) {
             return
         }
 
-        const reader = new FileReader()
-        reader.onload = () => {
-            if (typeof reader.result !== 'string') {
-                logger.error('FileReader result is not a string')
+        this._isFeedbackRecordingEnabled = !!response.feedbackRecording
+    }
+
+    getCurrentFeedbackRecordingId(): string | null {
+        return this._lazyLoadedFeedbackRecording?.getCurrentFeedbackRecordingId() ?? null
+    }
+
+    isFeedbackRecordingActive(): boolean {
+        return this._lazyLoadedFeedbackRecording?.isFeedbackRecordingActive() ?? false
+    }
+
+    public cleanup(): void {
+        if (this._lazyLoadedFeedbackRecording) {
+            this._lazyLoadedFeedbackRecording.cleanup()
+        }
+
+        this._isUIActive = false
+
+        logger.info('Feedback recording cleaned up')
+    }
+
+    async launchFeedbackRecordingUI(onRecordingEnded?: (result: UserFeedbackRecordingResult) => void): Promise<void> {
+        if (this._instance.config._experimental_disable_feedback_recording) {
+            logger.info('Feedback recording is disabled via config.')
+            return
+        }
+
+        if (isUndefined(this._isFeedbackRecordingEnabled)) {
+            logger.info('Feedback recording remote config not loaded yet.')
+            return
+        }
+
+        if (!this._isFeedbackRecordingEnabled) {
+            logger.info('Feedback recording is not enabled for this project.')
+            return
+        }
+
+        if (this._instance.config.disable_session_recording || !this._instance.sessionRecording) {
+            logger.info('Feedback recording requires session recording to be enabled and loaded.')
+            return
+        }
+
+        if (this._isUIActive) {
+            logger.warn('Feedback recording UI is already active. Request to launch a new UI will be ignored.')
+            return
+        }
+
+        if (this._lazyLoadedFeedbackRecording?.isFeedbackRecordingActive()) {
+            logger.warn('Feedback recording is already in progress. Request to start a new recording will be ignored.')
+            return
+        }
+
+        if (!this._isLoaded) {
+            if (this._isLoading) {
+                logger.info('Feedback recording is already loading...')
                 return
             }
-            const base64Data = reader.result.split(',')[1] // Remove data:audio/webm;base64, prefix
 
-            const url = this._posthog.requestRouter.endpointFor('api', `/api/feedback/audio`)
+            await this._loadScript()
 
-            this._posthog._send_request({
-                method: 'POST',
-                url,
-                data: {
-                    token: this._posthog.config.token,
-                    feedback_id: feedbackId,
-                    audio_data: base64Data,
-                    audio_mime_type: audioBlob.type,
-                    audio_size: audioBlob.size,
-                },
-                callback: (response: RequestResponse) => {
-                    if (response.statusCode === 200) {
-                        logger.info(`Audio upload successful for feedback ${feedbackId}`)
-                    } else {
-                        logger.error(`Audio upload failed for feedback ${feedbackId}:`, response.text)
-                    }
-                },
+            if (!this._isLoaded) {
+                logger.error('Failed to load feedback recording')
+                return
+            }
+        }
+
+        if (!this._lazyLoadedFeedbackRecording) {
+            const init = assignableWindow.__PosthogExtensions__?.initFeedbackRecording
+            if (init) {
+                this._lazyLoadedFeedbackRecording = init(this._instance)
+            }
+        }
+
+        if (!this._lazyLoadedFeedbackRecording) {
+            logger.error('Failed to initialize feedback recording extension')
+            return
+        }
+
+        this._isUIActive = true
+        this._lazyLoadedFeedbackRecording.launchFeedbackRecordingUI(
+            (result) => {
+                this._isUIActive = false
+                ;(onRecordingEnded || (() => {}))(result)
+            },
+            () => {
+                this._isUIActive = false
+                logger.info('Feedback recording UI cancelled')
+            }
+        )
+    }
+
+    private _loadScript(): Promise<void> {
+        if (assignableWindow.__PosthogExtensions__?.initFeedbackRecording) {
+            this._isLoaded = true
+            return Promise.resolve()
+        }
+
+        const loadExternalDependency = assignableWindow.__PosthogExtensions__?.loadExternalDependency
+
+        if (!loadExternalDependency) {
+            logger.error('PostHog loadExternalDependency extension not found')
+            return Promise.resolve()
+        }
+
+        this._isLoading = true
+
+        // eslint-disable-next-line compat/compat
+        return new Promise((resolve) => {
+            loadExternalDependency(this._instance, 'feedback-recording', (err) => {
+                this._isLoading = false
+                if (err || !assignableWindow.__PosthogExtensions__?.initFeedbackRecording) {
+                    logger.error('Could not load feedback recording script', err)
+                    this._isLoaded = false
+                } else {
+                    logger.info('Feedback recording loaded successfully')
+                    this._isLoaded = true
+                }
+                resolve()
             })
-        }
-        reader.onerror = () => {
-            logger.error(`Failed to read audio blob for feedback ${feedbackId}:`, reader.error)
-        }
-        reader.readAsDataURL(audioBlob)
+        })
     }
-
-    private async _stopRecording(
-        feedbackId: string,
-        onRecordingEnded: (result: UserFeedbackRecordingResult) => void
-    ): Promise<void> {
-        if (this._didStartSessionRecording) {
-            this._posthog.stopSessionRecording()
-            logger.info('Stopped session recording after feedback recording ended')
-        }
-
-        const recordingResult = await this._audioRecorder.stopRecording()
-
-        if (recordingResult?.blob) {
-            logger.info(`Audio recording completed, blob size: ${recordingResult.blob.size} bytes`)
-            this._uploadAudioBlob(feedbackId, recordingResult.blob)
-        }
-
-        removeFeedbackRecordingUIFromDOM()
-        onRecordingEnded(this._handleStopped(feedbackId))
-
-        this._resetState()
-    }
-
-    private _resetState(): void {
-        this._feedbackRecordingId = null
-        this._didStartSessionRecording = false
-    }
-}
-
-// Extension generator function for the extension system
-export function generateFeedbackRecording(instance: PostHog): FeedbackRecordingManager {
-    return new FeedbackRecordingManager(instance)
 }

@@ -6,7 +6,7 @@ import { document as _document } from '../../../utils/globals'
 import { StartFeedbackRecordingUI } from './StartFeedbackRecordingUI'
 import { removeFeedbackRecordingUIFromDOM, retrieveFeedbackRecordingUIShadow } from '../feedback-recording-utils'
 
-const logger = createLogger('[PostHog FeedbackManager]')
+const logger = createLogger('[PostHog FeedbackRecordingUI]')
 
 const document = _document as Document
 
