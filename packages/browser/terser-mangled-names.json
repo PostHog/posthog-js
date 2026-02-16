@@ -125,7 +125,6 @@
         "_eventTriggerStatus",
         "_eventTriggers",
         "_events",
-        "_experimental_disable_feedback_recording",
         "_expire_days",
         "_export",
         "_exportTimeoutMillis",

@@ -142,6 +142,7 @@ const plugins = (es5, noExternal) => [
                               '_batchKey',
                               '_noTruncate',
                               '_onCapture',
+                              '_experimental_disable_feedback_recording',
 
                               // used in surveys, however, this shouldn't be needed
                               // TODO: figure out how to remove them
