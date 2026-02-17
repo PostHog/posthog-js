@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.349.0
+
+### Minor Changes
+
+- [#3105](https://github.com/PostHog/posthog-js/pull/3105) [`f707ec9`](https://github.com/PostHog/posthog-js/commit/f707ec95e4b718bffe48e3e6be9afbc855b39f8f) Thanks [@adboio](https://github.com/adboio)! - add support for product tours localization
+  (2026-02-17)
+
+### Patch Changes
+
+- Updated dependencies [[`f707ec9`](https://github.com/PostHog/posthog-js/commit/f707ec95e4b718bffe48e3e6be9afbc855b39f8f)]:
+    - @posthog/types@1.349.0
+
 ## 1.348.0
 
 ### Minor Changes
