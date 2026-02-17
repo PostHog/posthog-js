@@ -27,6 +27,7 @@ import {
     SurveyEventProperties,
     SurveyRenderReason,
 } from './posthog-surveys-types'
+import { ProductTourEventName, ProductTourEventProperties } from './posthog-product-tours-types'
 import { PostHogLogs } from './posthog-logs'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
@@ -1278,6 +1279,16 @@ export class PostHog implements PostHogInterface {
             data.$set = {
                 ...data.$set,
                 [SurveyEventProperties.SURVEY_LAST_SEEN_DATE]: new Date().toISOString(),
+            }
+        }
+
+        if (event_name === ProductTourEventName.SHOWN) {
+            const tourType = properties?.[ProductTourEventProperties.TOUR_TYPE]
+            if (tourType) {
+                data.$set = {
+                    ...data.$set,
+                    [`${ProductTourEventProperties.TOUR_LAST_SEEN_DATE}/${tourType}`]: new Date().toISOString(),
+                }
             }
         }
 

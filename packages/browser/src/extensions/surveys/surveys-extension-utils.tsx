@@ -32,7 +32,7 @@ const window = _window as Window & typeof globalThis
 const document = _document as Document
 import surveyStyles from './survey.css'
 import { useContext } from 'preact/hooks'
-import { doesDeviceTypeMatch } from '../utils/matcher-utils'
+import { doesDeviceTypeMatch, hasPeriodPassed } from '../utils/matcher-utils'
 
 export function getFontFamily(fontFamily?: string): string {
     if (fontFamily === 'inherit') {
@@ -612,14 +612,7 @@ const LAST_SEEN_SURVEY_DATE_KEY = 'lastSeenSurveyDate'
 
 export const hasWaitPeriodPassed = (waitPeriodInDays: number | undefined): boolean => {
     const lastSeenSurveyDate = localStorage.getItem(LAST_SEEN_SURVEY_DATE_KEY)
-    if (!waitPeriodInDays || !lastSeenSurveyDate) {
-        return true
-    }
-
-    const today = new Date()
-    const diff = Math.abs(today.getTime() - new Date(lastSeenSurveyDate).getTime())
-    const diffDaysFromToday = Math.ceil(diff / (1000 * 3600 * 24))
-    return diffDaysFromToday > waitPeriodInDays
+    return hasPeriodPassed(waitPeriodInDays, lastSeenSurveyDate)
 }
 
 interface SurveyContextProps {

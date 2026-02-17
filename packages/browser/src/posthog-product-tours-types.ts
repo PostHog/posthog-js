@@ -105,6 +105,14 @@ export interface ProductTourStepTranslation {
     >
 }
 
+/** maps to main repo EffectiveProductTourType */
+export type ProductTourType = 'tour' | 'announcement' | 'banner'
+
+export interface ProductTourWaitPeriod {
+    days: number
+    types: ProductTourType[]
+}
+
 export interface ProductTourConditions {
     url?: string
     urlMatchType?: PropertyMatchType
@@ -121,6 +129,7 @@ export interface ProductTourConditions {
     } | null
     linkedFlagVariant?: string
     deviceTypes?: string[]
+    seenTourWaitPeriod?: ProductTourWaitPeriod
 }
 
 export interface ProductTourAppearance {
@@ -145,7 +154,7 @@ export interface ProductTour {
     id: string
     name: string
     description?: string
-    type: 'product_tour'
+    tour_type: ProductTourType // inferred in API based on tour content
     auto_launch?: boolean
     start_date: string | null
     end_date: string | null
@@ -233,4 +242,6 @@ export enum ProductTourEventProperties {
     TOUR_LINKED_SURVEY_ID = '$product_tour_linked_survey_id',
     USE_MANUAL_SELECTOR = '$use_manual_selector',
     INFERENCE_DATA_PRESENT = '$inference_data_present',
+    TOUR_LAST_SEEN_DATE = '$product_tour_last_seen_date',
+    TOUR_TYPE = '$product_tour_type',
 }
