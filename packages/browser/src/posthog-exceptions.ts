@@ -91,6 +91,7 @@ export class PostHogExceptions {
         return this._instance.capture('$exception', properties, {
             _noTruncate: true,
             _batchKey: 'exceptionEvent',
+            _isExceptionCaptureCall: true,
         })
     }
 

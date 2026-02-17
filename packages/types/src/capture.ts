@@ -96,6 +96,13 @@ export interface CaptureOptions {
      * If set, overrides the current timestamp
      */
     timestamp?: Date
+
+    /**
+     * Internal flag set by captureException() / sendExceptionEvent() to indicate this $exception
+     * event originated from the proper exception capture path. Used to warn users who call
+     * capture('$exception') directly.
+     */
+    _isExceptionCaptureCall?: boolean
 }
 
 export type BeforeSendFn = (cr: CaptureResult | null) => CaptureResult | null

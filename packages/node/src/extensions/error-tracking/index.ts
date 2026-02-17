@@ -64,6 +64,7 @@ export default class ErrorTracking {
         ...exceptionProperties,
         ...properties,
       },
+      _isExceptionCaptureCall: true,
     }
   }
 

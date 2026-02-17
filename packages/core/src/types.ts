@@ -165,6 +165,12 @@ export type PostHogCaptureOptions = {
   /** If provided overrides the auto-generated timestamp */
   timestamp?: Date
   disableGeoip?: boolean
+  /**
+   * Internal flag set by captureException() to indicate this $exception
+   * event originated from the proper exception capture path. Used to warn users who call
+   * capture('$exception') directly.
+   */
+  _isExceptionCaptureCall?: boolean
 }
 
 export type PostHogFetchResponse = {

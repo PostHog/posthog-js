@@ -1142,6 +1142,12 @@ export class PostHog implements PostHogInterface {
             delete properties?.$current_url
         }
 
+        if (event_name === '$exception' && !options?._isExceptionCaptureCall) {
+            logger.warn(
+                'Capturing a `$exception` event via `posthog.capture()` is unreliable because it does not attach required metadata. Use `posthog.captureException()` instead, which attaches this metadata by default.'
+            )
+        }
+
         // update persistence
         this.sessionPersistence.update_search_keyword()
 
