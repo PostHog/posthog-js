@@ -37,6 +37,7 @@ export default function Home() {
                     >
                         Capture promise rejection automatically
                     </button>
+                    <button onClick={() => posthog.capture('$exception')}>Capture exception via capture()</button>
                     <button onClick={() => captureServerError()}>Create server exception!</button>
                     <button
                         onClick={() =>
