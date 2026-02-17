@@ -21,11 +21,12 @@ describe('Prompts', () => {
     deleted: false,
   }
 
-  const createMockPostHog = (options: { personalApiKey?: string; host?: string } = {}) => {
+  const createMockPostHog = (options: { personalApiKey?: string; projectApiKey?: string; host?: string } = {}) => {
     return {
       options: {
         personalApiKey: 'personalApiKey' in options ? options.personalApiKey : 'phx_test_key',
       },
+      apiKey: 'projectApiKey' in options ? options.projectApiKey : 'phc_test_key',
       host: options.host ?? 'https://us.posthog.com',
     } as any
   }
@@ -57,7 +58,7 @@ describe('Prompts', () => {
 
       expect(result).toBe(mockPromptResponse.prompt)
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://us.posthog.com/api/environments/@current/llm_prompts/name/test-prompt/',
+        'https://us.posthog.com/api/environments/@current/llm_prompts/name/test-prompt/?token=phc_test_key',
         {
           method: 'GET',
           headers: {
@@ -216,6 +217,15 @@ describe('Prompts', () => {
       )
     })
 
+    it('should throw when no projectApiKey is configured', async () => {
+      const posthog = createMockPostHog({ projectApiKey: undefined })
+      const prompts = new Prompts({ posthog })
+
+      await expect(prompts.get('test-prompt')).rejects.toThrow(
+        '[PostHog Prompts] projectApiKey is required to fetch prompts'
+      )
+    })
+
     it('should throw when API returns invalid response format', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -238,13 +248,13 @@ describe('Prompts', () => {
         json: () => Promise.resolve(mockPromptResponse),
       })
 
-      const posthog = createMockPostHog({ host: 'https://eu.i.posthog.com' })
+      const posthog = createMockPostHog({ host: 'https://eu.posthog.com' })
       const prompts = new Prompts({ posthog })
 
       await prompts.get('test-prompt')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://eu.i.posthog.com/api/environments/@current/llm_prompts/name/test-prompt/',
+        'https://eu.posthog.com/api/environments/@current/llm_prompts/name/test-prompt/?token=phc_test_key',
         expect.any(Object)
       )
     })
@@ -325,7 +335,7 @@ describe('Prompts', () => {
       await prompts.get('prompt with spaces/and/slashes')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://us.posthog.com/api/environments/@current/llm_prompts/name/prompt%20with%20spaces%2Fand%2Fslashes/',
+        'https://us.posthog.com/api/environments/@current/llm_prompts/name/prompt%20with%20spaces%2Fand%2Fslashes/?token=phc_test_key',
         expect.any(Object)
       )
     })
@@ -339,13 +349,14 @@ describe('Prompts', () => {
 
       const prompts = new Prompts({
         personalApiKey: 'phx_direct_key',
+        projectApiKey: 'phc_direct_key',
       })
 
       const result = await prompts.get('test-prompt')
 
       expect(result).toBe(mockPromptResponse.prompt)
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://us.posthog.com/api/environments/@current/llm_prompts/name/test-prompt/',
+        'https://us.posthog.com/api/environments/@current/llm_prompts/name/test-prompt/?token=phc_direct_key',
         {
           method: 'GET',
           headers: {
@@ -364,13 +375,14 @@ describe('Prompts', () => {
 
       const prompts = new Prompts({
         personalApiKey: 'phx_direct_key',
-        host: 'https://eu.i.posthog.com',
+        projectApiKey: 'phc_direct_key',
+        host: 'https://eu.posthog.com',
       })
 
       await prompts.get('test-prompt')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://eu.i.posthog.com/api/environments/@current/llm_prompts/name/test-prompt/',
+        'https://eu.posthog.com/api/environments/@current/llm_prompts/name/test-prompt/?token=phc_direct_key',
         expect.any(Object)
       )
     })
@@ -384,6 +396,7 @@ describe('Prompts', () => {
 
       const prompts = new Prompts({
         personalApiKey: 'phx_direct_key',
+        projectApiKey: 'phc_direct_key',
         defaultCacheTtlSeconds: 60,
       })
 
@@ -484,7 +497,7 @@ describe('Prompts', () => {
     })
 
     it('should work with direct options initialization', () => {
-      const prompts = new Prompts({ personalApiKey: 'phx_test_key' })
+      const prompts = new Prompts({ personalApiKey: 'phx_test_key', projectApiKey: 'phc_test_key' })
 
       const result = prompts.compile('Hello, {{name}}!', { name: 'World' })
 
@@ -492,7 +505,7 @@ describe('Prompts', () => {
     })
 
     it('should handle variables with hyphens', () => {
-      const prompts = new Prompts({ personalApiKey: 'phx_test_key' })
+      const prompts = new Prompts({ personalApiKey: 'phx_test_key', projectApiKey: 'phc_test_key' })
 
       const result = prompts.compile('User ID: {{user-id}}', { 'user-id': '12345' })
 
@@ -500,7 +513,7 @@ describe('Prompts', () => {
     })
 
     it('should handle variables with dots', () => {
-      const prompts = new Prompts({ personalApiKey: 'phx_test_key' })
+      const prompts = new Prompts({ personalApiKey: 'phx_test_key', projectApiKey: 'phc_test_key' })
 
       const result = prompts.compile('Company: {{company.name}}', { 'company.name': 'Acme' })
 
