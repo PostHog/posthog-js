@@ -654,11 +654,6 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "undefined",
     "string[]"
   ],
-  "__preview_remote_config": [
-    "undefined",
-    "false",
-    "true"
-  ],
   "__preview_flags_v2": [
     "undefined",
     "false",

@@ -138,6 +138,9 @@ test.describe('Session recording - array.js', () => {
         // first make sure the page is booted and recording
         await ensureActivitySendsSnapshots(page, ['$remote_config_received', '$session_options', '$posthog_config'])
         await page.resetCapturedEvents()
+        // Allow any pending async operations (e.g. flags loading, buffer flushes) to settle
+        // before starting the timing-sensitive mouse move sequence
+        await page.waitForTimeout(200)
 
         const responsePromise = page.waitForResponse('**/ses/*')
         await page.mouse.move(200, 300)

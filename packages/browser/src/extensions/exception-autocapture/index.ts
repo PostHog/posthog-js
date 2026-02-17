@@ -127,6 +127,10 @@ export class ExceptionObserver {
     }
 
     onRemoteConfig(response: RemoteConfig) {
+        if (!('autocaptureExceptions' in response)) {
+            return
+        }
+
         const autocaptureExceptionsResponse = response.autocaptureExceptions
 
         // store this in-memory in case persistence is disabled

@@ -1411,12 +1411,6 @@ export interface PostHogConfig {
 
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * Enables the new RemoteConfig approach to loading config instead of /flags?v=2&config=true
-     * */
-    __preview_remote_config?: boolean
-
-    /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
      * Whether to use the new /flags/ endpoint
      * */
     __preview_flags_v2?: boolean

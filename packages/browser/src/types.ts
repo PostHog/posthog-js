@@ -333,8 +333,7 @@ export interface RemoteConfig {
 }
 
 /**
- * Flags returns feature flags and their payloads, and optionally returns everything else from the remote config
- * assuming it's called with `config=true`
+ * Flags returns feature flags and their payloads
  */
 export interface FlagsResponse extends RemoteConfig {
     featureFlags: Record<string, string | boolean>
