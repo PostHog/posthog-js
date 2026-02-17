@@ -851,6 +851,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
         this._widgetRef = null
         this._isWidgetRendered = false
+        this._initializeWidgetPromise = null
 
         // Reset timestamp so show() will re-fetch all messages
         this._lastMessageTimestamp = null

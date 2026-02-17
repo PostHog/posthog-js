@@ -156,7 +156,12 @@ describe('ConversationsManager', () => {
     })
 
     // Helper to flush promises (needed because widget initialization is async)
-    const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0))
+    const flushPromises = async () => {
+        await act(async () => {
+            await Promise.resolve()
+            jest.runAllTimers()
+        })
+    }
 
     describe('initialization', () => {
         it('should initialize and render the widget when widgetEnabled is true', async () => {
