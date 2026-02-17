@@ -136,6 +136,11 @@ type OnlyValidKeys<T, Shape> = T extends Shape ? (Exclude<keyof T, keyof Shape> 
 
 const instances: Record<string, PostHog> = {}
 
+// Tracks re-entrant calls to _execute_array. Used to detect when a third-party
+// Proxy (e.g., TikTok's in-app browser) wraps window.posthog and converts method
+// calls into push() calls, which would otherwise cause infinite recursion.
+let _executeArrayDepth = 0
+
 // some globals for comparisons
 const __NOOP = () => {}
 
@@ -999,50 +1004,59 @@ export class PostHog implements PostHogInterface {
      * @param {Array} array
      */
     _execute_array(array: SnippetArrayItem[]): void {
-        let fn_name
-        const alias_calls: SnippetArrayItem[] = []
-        const other_calls: SnippetArrayItem[] = []
-        const capturing_calls: SnippetArrayItem[] = []
-        eachArray(array, (item) => {
-            if (item) {
-                fn_name = item[0]
-                if (isArray(fn_name)) {
-                    capturing_calls.push(item) // chained call e.g. posthog.get_group().set()
-                } else if (isFunction(item)) {
-                    ;(item as any).call(this)
-                } else if (isArray(item) && fn_name === 'alias') {
-                    alias_calls.push(item)
-                } else if (isArray(item) && fn_name.indexOf('capture') !== -1 && isFunction((this as any)[fn_name])) {
-                    capturing_calls.push(item)
-                } else {
-                    other_calls.push(item)
-                }
-            }
-        })
-
-        const execute = function (calls: SnippetArrayItem[], thisArg: any) {
-            eachArray(
-                calls,
-                function (item) {
-                    if (isArray(item[0])) {
-                        // chained call
-                        let caller = thisArg
-                        each(item, function (call) {
-                            caller = caller[call[0]].apply(caller, call.slice(1))
-                        })
+        _executeArrayDepth++
+        try {
+            let fn_name
+            const alias_calls: SnippetArrayItem[] = []
+            const other_calls: SnippetArrayItem[] = []
+            const capturing_calls: SnippetArrayItem[] = []
+            eachArray(array, (item) => {
+                if (item) {
+                    fn_name = item[0]
+                    if (isArray(fn_name)) {
+                        capturing_calls.push(item) // chained call e.g. posthog.get_group().set()
+                    } else if (isFunction(item)) {
+                        ;(item as any).call(this)
+                    } else if (isArray(item) && fn_name === 'alias') {
+                        alias_calls.push(item)
+                    } else if (
+                        isArray(item) &&
+                        fn_name.indexOf('capture') !== -1 &&
+                        isFunction((this as any)[fn_name])
+                    ) {
+                        capturing_calls.push(item)
                     } else {
-                        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                        // @ts-ignore
-                        this[item[0]].apply(this, item.slice(1))
+                        other_calls.push(item)
                     }
-                },
-                thisArg
-            )
-        }
+                }
+            })
 
-        execute(alias_calls, this)
-        execute(other_calls, this)
-        execute(capturing_calls, this)
+            const execute = function (calls: SnippetArrayItem[], thisArg: any) {
+                eachArray(
+                    calls,
+                    function (item) {
+                        if (isArray(item[0])) {
+                            // chained call
+                            let caller = thisArg
+                            each(item, function (call) {
+                                caller = caller[call[0]].apply(caller, call.slice(1))
+                            })
+                        } else {
+                            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                            // @ts-ignore
+                            this[item[0]].apply(this, item.slice(1))
+                        }
+                    },
+                    thisArg
+                )
+            }
+
+            execute(alias_calls, this)
+            execute(other_calls, this)
+            execute(capturing_calls, this)
+        } finally {
+            _executeArrayDepth--
+        }
     }
 
     _hasBootstrappedFeatureFlags(): boolean {
@@ -1067,6 +1081,19 @@ export class PostHog implements PostHogInterface {
      * @param {Array} item A [function_name, args...] array to be executed
      */
     push(item: SnippetArrayItem): void {
+        if (_executeArrayDepth > 0 && isArray(item) && isString(item[0])) {
+            // push() is being called while _execute_array is already running.
+            // This happens when a third-party Proxy (e.g., TikTok's in-app browser)
+            // wraps window.posthog and converts method calls into push() calls,
+            // creating an infinite loop: _execute_array -> this[method] -> Proxy ->
+            // push -> _execute_array -> ...
+            // Dispatch directly from the prototype to break the cycle.
+            const fn = (PostHog.prototype as any)[item[0]]
+            if (isFunction(fn)) {
+                fn.apply(this, item.slice(1))
+            }
+            return
+        }
         this._execute_array([item])
     }
 
