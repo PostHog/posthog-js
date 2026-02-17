@@ -398,7 +398,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
     if (props.event === '$exception' && !props._originatedFromCaptureException) {
       this._logger.warn(
-        'Capturing a `$exception` event via `posthog.captureImmediate(\'$exception\')` is unreliable because it does not attach required metadata. Use `posthog.captureExceptionImmediate(error)` instead, which attaches this metadata by default.'
+        "Capturing a `$exception` event via `posthog.captureImmediate('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureExceptionImmediate(error)` instead, which attaches this metadata by default."
       )
     }
     return this.addPendingPromise(
