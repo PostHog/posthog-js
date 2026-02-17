@@ -116,8 +116,8 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
     }
 
     componentDidMount() {
-        // Add greeting message if no messages exist
-        if (this.state.messages.length === 0 && this.props.config.greetingText) {
+        // Add greeting message if no messages exist and we're in message view
+        if (this.state.view === 'messages' && this.state.messages.length === 0 && this.props.config.greetingText) {
             this._addGreetingMessage()
         }
     }
