@@ -54,6 +54,8 @@ export interface ProductTourSurveyQuestion {
     lowerBoundLabel?: string
     /** Label for high end of rating scale (e.g., "Very likely") */
     upperBoundLabel?: string
+    submitButtonText?: string
+    backButtonText?: string
 }
 
 export interface ProductTourStep {
