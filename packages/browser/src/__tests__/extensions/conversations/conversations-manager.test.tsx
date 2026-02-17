@@ -360,6 +360,8 @@ describe('ConversationsManager', () => {
         beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
             await flushPromises()
+            // Clear mocks after initialization (which calls getTickets)
+            jest.clearAllMocks()
         })
 
         it('should send a message through the API', async () => {
