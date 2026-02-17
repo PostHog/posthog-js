@@ -1,6 +1,7 @@
 import DOMPurify from 'dompurify'
 
 import {
+    JSONContent,
     ProductTourAppearance,
     ProductTourSelectorError,
     ProductTourStep,
@@ -281,6 +282,20 @@ function escapeHtml(text: string): string {
     const div = document.createElement('div')
     div.textContent = text
     return div.innerHTML
+}
+
+export function getStepImageUrls(step: ProductTourStep): string[] {
+    const urls: string[] = []
+    function walk(node: JSONContent) {
+        if (node.type === 'image' && node.attrs?.src) {
+            urls.push(node.attrs.src)
+        }
+        node.content?.forEach(walk)
+    }
+    if (step.content) {
+        walk(step.content)
+    }
+    return urls
 }
 
 export function getStepHtml(step: ProductTourStep): string {

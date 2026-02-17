@@ -1,5 +1,36 @@
 # posthog-react-native
 
+## 4.34.0
+
+### Minor Changes
+
+- [#3084](https://github.com/PostHog/posthog-js/pull/3084) [`e2ac0e8`](https://github.com/PostHog/posthog-js/commit/e2ac0e856821a0b7e2e25c1142c602c4c138cbdd) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - add error boundary
+  (2026-02-12)
+
+## 4.33.0
+
+### Minor Changes
+
+- [#3065](https://github.com/PostHog/posthog-js/pull/3065) [`34ee954`](https://github.com/PostHog/posthog-js/commit/34ee95404fdae8c97f3263a600392caac5b982a8) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Add `useFeatureFlagResult` hook
+  (2026-02-12)
+
+### Patch Changes
+
+- [#3071](https://github.com/PostHog/posthog-js/pull/3071) [`d1d62d4`](https://github.com/PostHog/posthog-js/commit/d1d62d4e4a3653f0b93abcbd9f33567ed60e3547) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: `PostHogContext` is correctly typed
+  (2026-02-12)
+
+## 4.32.0
+
+### Minor Changes
+
+- [#3045](https://github.com/PostHog/posthog-js/pull/3045) [`0acf16f`](https://github.com/PostHog/posthog-js/commit/0acf16fcbf8c32d5f28b86b6fa200271ad0b647e) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Add `getFeatureFlagResult` to PostHogCore
+  (2026-02-10)
+
+### Patch Changes
+
+- Updated dependencies [[`0acf16f`](https://github.com/PostHog/posthog-js/commit/0acf16fcbf8c32d5f28b86b6fa200271ad0b647e)]:
+  - @posthog/core@1.22.0
+
 ## 4.31.1
 
 ### Patch Changes

@@ -1,5 +1,80 @@
 # posthog-js
 
+## 1.347.2
+
+### Patch Changes
+
+- [#3094](https://github.com/PostHog/posthog-js/pull/3094) [`0d30218`](https://github.com/PostHog/posthog-js/commit/0d30218b3087f27104408e873a3421e3ba27633d) Thanks [@TueHaulund](https://github.com/TueHaulund)! - feat(replay): add $snapshot_max_depth_exceeded debug property and bump rrweb to 0.0.42 with DOM depth limit
+  (2026-02-13)
+
+- [#3093](https://github.com/PostHog/posthog-js/pull/3093) [`f19b7f2`](https://github.com/PostHog/posthog-js/commit/f19b7f2df37d24b81f57477497f21196006b72e7) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix(replay): retry session recording start when persisted remote config is stale
+  (2026-02-13)
+- Updated dependencies []:
+    - @posthog/types@1.347.2
+
+## 1.347.1
+
+### Patch Changes
+
+- [#3090](https://github.com/PostHog/posthog-js/pull/3090) [`312b785`](https://github.com/PostHog/posthog-js/commit/312b78520c68d02efd7b2f22ca3ed4c30911b045) Thanks [@adboio](https://github.com/adboio)! - enable product tour image preload
+  (2026-02-13)
+- Updated dependencies []:
+    - @posthog/types@1.347.1
+
+## 1.347.0
+
+### Minor Changes
+
+- [#3087](https://github.com/PostHog/posthog-js/pull/3087) [`512d578`](https://github.com/PostHog/posthog-js/commit/512d5785488a4fb507ef1edf2a5b1788e8c17e86) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: Revert tree shaking configuration
+  (2026-02-12)
+
+### Patch Changes
+
+- [#3079](https://github.com/PostHog/posthog-js/pull/3079) [`9c078ac`](https://github.com/PostHog/posthog-js/commit/9c078ac771d09ad2e9df3c796cc4be01d949a806) Thanks [@adboio](https://github.com/adboio)! - update z-index hierarchy for tours > surveys > conversations
+  (2026-02-12)
+- Updated dependencies []:
+    - @posthog/types@1.347.0
+
+## 1.346.0
+
+### Minor Changes
+
+- [#3082](https://github.com/PostHog/posthog-js/pull/3082) [`0d730bd`](https://github.com/PostHog/posthog-js/commit/0d730bd8d6786bf9dc5a818caaa47e378531bd0c) Thanks [@adboio](https://github.com/adboio)! - enable tours by default
+  (2026-02-12)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.346.0
+
+## 1.345.5
+
+### Patch Changes
+
+- [#3060](https://github.com/PostHog/posthog-js/pull/3060) [`7437982`](https://github.com/PostHog/posthog-js/commit/7437982efa2c7a7a9ede563ddd97beba5c70d650) Thanks [@pauldambra](https://github.com/pauldambra)! - Add missing `featureFlags` property and `OverrideFeatureFlagsOptions` type to `PostHog` interface, restore `set_config` to the loaded callback type, and add `featureFlagsReloading` to `on()` event types
+  (2026-02-11)
+- Updated dependencies [[`7437982`](https://github.com/PostHog/posthog-js/commit/7437982efa2c7a7a9ede563ddd97beba5c70d650)]:
+    - @posthog/types@1.345.5
+
+## 1.345.4
+
+### Patch Changes
+
+- [#3074](https://github.com/PostHog/posthog-js/pull/3074) [`4e7fda9`](https://github.com/PostHog/posthog-js/commit/4e7fda93be4fe2afbbe9d11dd9b1b6517a37573d) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: session replay respects the network_timing remote config
+  (2026-02-11)
+- Updated dependencies []:
+    - @posthog/types@1.345.4
+
+## 1.345.3
+
+### Patch Changes
+
+- [#3064](https://github.com/PostHog/posthog-js/pull/3064) [`50ebdfb`](https://github.com/PostHog/posthog-js/commit/50ebdfb26306bdaaeaa081fb4b3722030e3c4378) Thanks [@jordanm-posthog](https://github.com/jordanm-posthog)! - Fixed an issue where Dead Clicks could continue being captured after being disabled via remote config.
+  (2026-02-10)
+- Updated dependencies [[`0acf16f`](https://github.com/PostHog/posthog-js/commit/0acf16fcbf8c32d5f28b86b6fa200271ad0b647e)]:
+    - @posthog/core@1.22.0
+    - @posthog/types@1.345.3
+
 ## 1.345.2
 
 ### Patch Changes

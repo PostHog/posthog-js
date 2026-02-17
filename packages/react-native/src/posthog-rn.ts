@@ -9,6 +9,7 @@ import {
   PostHogFetchOptions,
   PostHogFetchResponse,
   PostHogPersistedProperty,
+  PostHogRemoteConfig,
   Survey,
   SurveyResponse,
   logFlushError,
@@ -24,6 +25,7 @@ import {
   PostHogCustomStorage,
   PostHogSessionReplayConfig,
 } from './types'
+import { getRemoteConfigBool } from './utils'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativeSessionReplay } from './optional/OptionalSessionReplay'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
@@ -213,6 +215,15 @@ export class PostHog extends PostHogCore {
 
       this._isInitialized = true
 
+      // Preload error tracking state from cached remote config.
+      // This gates error tracking autocapture before the fresh remote config is fetched.
+      const cachedRemoteConfig = this.getPersistedProperty<Omit<PostHogRemoteConfig, 'surveys'>>(
+        PostHogPersistedProperty.RemoteConfig
+      )
+      if (cachedRemoteConfig) {
+        this._errorTracking.onRemoteConfig(cachedRemoteConfig.errorTracking)
+      }
+
       if (this._disableRemoteConfig === false) {
         this.reloadRemoteConfigAsync()
           .then((response) => {
@@ -259,7 +270,7 @@ export class PostHog extends PostHogCore {
 
       void this.persistAppVersion()
 
-      void this.startSessionReplay(options)
+      void this.startSessionReplay(options, cachedRemoteConfig ?? undefined)
     }
 
     // For async storage, we wait for the storage to be ready before we start the SDK
@@ -279,6 +290,19 @@ export class PostHog extends PostHogCore {
    */
   public async ready(): Promise<void> {
     await this._initPromise
+  }
+
+  /**
+   * Called when remote config has been loaded (from either the remote config endpoint or the flags endpoint).
+   * Gates error tracking autocapture based on the remote config response.
+   *
+   * Session replay config (consoleLogRecordingEnabled, capturePerformance.network_timing) is already
+   * cached via PostHogPersistedProperty.RemoteConfig and applied at startup in startSessionReplay().
+   *
+   * @internal
+   */
+  protected onRemoteConfig(response: PostHogRemoteConfig): void {
+    this._errorTracking.onRemoteConfig(response.errorTracking)
   }
 
   getPersistedProperty<T>(key: PostHogPersistedProperty): T | undefined {
@@ -1187,7 +1211,11 @@ export class PostHog extends PostHogCore {
    */
   private async _flagsAsyncWithSurveys(): Promise<void> {
     try {
-      const flagsResponse = await this.flagsAsync(true, true)
+      const flagsResponse = await this.flagsAsync({
+        sendAnonDistinctId: true,
+        fetchConfig: true,
+        triggerOnRemoteConfig: true,
+      })
 
       // Only handle surveys from flags if remote config is disabled and surveys are enabled
       // When remote config is enabled, surveys will come from there instead
@@ -1236,7 +1264,10 @@ export class PostHog extends PostHogCore {
     }
   }
 
-  private async startSessionReplay(options?: PostHogOptions): Promise<void> {
+  private async startSessionReplay(
+    options?: PostHogOptions,
+    cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>
+  ): Promise<void> {
     this._enableSessionReplay = options?.enableSessionReplay
     if (!this._isEnableSessionReplay()) {
       this._logger.info('Session replay is not enabled.')
@@ -1249,8 +1280,8 @@ export class PostHog extends PostHogCore {
       maskAllTextInputs = true,
       maskAllImages = true,
       maskAllSandboxedViews = true,
-      captureLog = true,
-      captureNetworkTelemetry = true,
+      captureLog: localCaptureLog = true,
+      captureNetworkTelemetry: localCaptureNetworkTelemetry = true,
       iOSdebouncerDelayMs = defaultThrottleDelayMs,
       androidDebouncerDelayMs = defaultThrottleDelayMs,
     } = options?.sessionReplayConfig ?? {}
@@ -1263,6 +1294,30 @@ export class PostHog extends PostHogCore {
       (iOSdebouncerDelayMs !== defaultThrottleDelayMs || androidDebouncerDelayMs !== defaultThrottleDelayMs)
     ) {
       throttleDelayMs = Math.max(iOSdebouncerDelayMs, androidDebouncerDelayMs)
+    }
+
+    // Gate captureLog and captureNetworkTelemetry using cached remote config.
+    // The effective state is: localEnabled AND remoteEnabled.
+    // If remote config hasn't loaded yet (no cached value), defaults to true (don't block locally enabled capture).
+    const remoteConsoleLogEnabled = getRemoteConfigBool(
+      cachedRemoteConfig?.sessionRecording,
+      'consoleLogRecordingEnabled',
+      true
+    )
+    const remoteNetworkTimingEnabled = getRemoteConfigBool(
+      cachedRemoteConfig?.capturePerformance,
+      'network_timing',
+      true
+    )
+
+    const captureLog = localCaptureLog && remoteConsoleLogEnabled
+    const captureNetworkTelemetry = localCaptureNetworkTelemetry && remoteNetworkTimingEnabled
+
+    if (localCaptureLog && !remoteConsoleLogEnabled) {
+      this._logger.info('captureLog disabled by remote config (consoleLogRecordingEnabled=false).')
+    }
+    if (localCaptureNetworkTelemetry && !remoteNetworkTimingEnabled) {
+      this._logger.info('captureNetworkTelemetry disabled by remote config (capturePerformance.network_timing=false).')
     }
 
     const sdkReplayConfig = {

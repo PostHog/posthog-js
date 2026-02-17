@@ -199,7 +199,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_surveys: false,
     disable_surveys_automatic_display: false,
     disable_conversations: false,
-    disable_product_tours: true,
+    disable_product_tours: false,
     disable_external_dependency_loading: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
@@ -758,7 +758,7 @@ export class PostHog implements PostHogInterface {
 
         initTasks.push(() => {
             this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
-            this.deadClicksAutocapture.startIfEnabled()
+            this.deadClicksAutocapture.startIfEnabledOrStop()
         })
 
         // Replay any pending remote config that arrived before extensions were ready
@@ -2866,6 +2866,7 @@ export class PostHog implements PostHogInterface {
             this.autocapture?.startIfEnabled()
             this.heatmaps?.startIfEnabled()
             this.exceptionObserver?.startIfEnabledOrStop()
+            this.deadClicksAutocapture?.startIfEnabledOrStop()
             this.surveys.loadIfEnabled()
             this._sync_opt_out_with_persistence()
             this.externalIntegrations?.startIfEnabledOrStop()

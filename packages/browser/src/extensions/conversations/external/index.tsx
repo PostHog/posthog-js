@@ -11,11 +11,12 @@ import {
     MarkAsReadResponse,
     GetTicketsOptions,
     GetTicketsResponse,
+    Ticket,
 } from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'
 import { ConversationsManager as ConversationsManagerInterface } from '../posthog-conversations'
 import { ConversationsPersistence } from './persistence'
-import { ConversationsWidget } from './components/ConversationsWidget'
+import { ConversationsWidget, WidgetView } from './components/ConversationsWidget'
 import { createLogger } from '../../../utils/logger'
 import { document, window } from '../../../utils/globals'
 import { formDataToQuery } from '../../../utils/request-utils'
@@ -88,6 +89,11 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private _isWidgetEnabled: boolean
     private _isDomainAllowed: boolean
     private _isWidgetRendered: boolean = false
+    private _initializeWidgetPromise: Promise<void> | null = null
+    // View state management for ticket list vs message view
+    private _currentView: WidgetView = 'messages'
+    private _tickets: Ticket[] = []
+    private _hasMultipleTickets: boolean = false
 
     constructor(
         config: ConversationsRemoteConfig,
@@ -408,12 +414,20 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
     /**
      * Initialize and render the widget UI
+     * Uses a promise guard to prevent race conditions from concurrent calls
      */
-    private _initializeWidget(): void {
+    private _initializeWidget(): Promise<void> {
         if (this._isWidgetRendered) {
-            return // Already rendered
+            return Promise.resolve()
         }
+        if (this._initializeWidgetPromise) {
+            return this._initializeWidgetPromise
+        }
+        this._initializeWidgetPromise = this._doInitializeWidget()
+        return this._initializeWidgetPromise
+    }
 
+    private async _doInitializeWidget(): Promise<void> {
         const savedState = this._persistence.loadWidgetState()
         let initialState: ConversationsWidgetState = 'closed'
         if (savedState === 'open') {
@@ -423,24 +437,29 @@ export class ConversationsManager implements ConversationsManagerInterface {
         // Get initial user traits (from PostHog person properties or saved)
         const initialUserTraits = this._getInitialUserTraits()
 
-        // Render the widget
-        this._renderWidget(initialState, initialUserTraits)
+        // Determine initial view based on ticket count
+        const { view: initialView, tickets } = await this._determineInitialView()
+        this._currentView = initialView
+
+        // Render the widget with initial view
+        this._renderWidget(initialState, initialUserTraits, initialView, tickets)
         this._isWidgetRendered = true
 
         // Track widget initialization
         this._posthog.capture('$conversations_widget_loaded', {
             hasExistingTicket: !!this._currentTicketId,
             initialState: initialState,
+            initialView: initialView,
+            ticketCount: tickets.length,
             hasUserTraits: !!initialUserTraits,
         })
 
-        // Set up polling and load messages only when widget is rendered
-        // If we have a ticket, load its messages
-        if (this._currentTicketId) {
+        // Load messages if in message view and have a ticket
+        if (initialView === 'messages' && this._currentTicketId) {
             this._loadMessages()
         }
 
-        // Start polling for messages to keep widget UI updated
+        // Start polling based on current view
         this._startPolling()
     }
 
@@ -507,20 +526,21 @@ export class ConversationsManager implements ConversationsManagerInterface {
      * Handle widget state changes
      */
     private _handleStateChange = (state: ConversationsWidgetState): void => {
-        logger.info('Widget state changed', { state })
+        logger.info('Widget state changed', { state, view: this._currentView })
 
         // Track state changes
         this._posthog.capture('$conversations_widget_state_changed', {
             state: state,
+            view: this._currentView,
             ticketId: this._currentTicketId,
         })
 
         // Save state to localStorage
         this._persistence.saveWidgetState(state)
 
-        // Mark messages as read when widget opens
+        // Mark messages as read when widget opens (only if in message view with a ticket)
         if (state === 'open') {
-            if (this._unreadCount > 0 && this._currentTicketId) {
+            if (this._currentView === 'messages' && this._unreadCount > 0 && this._currentTicketId) {
                 this._markMessagesAsRead()
             }
         }
@@ -605,7 +625,157 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /**
-     * Start polling for new messages
+     * Poll for tickets list
+     */
+    private _pollTickets = async (): Promise<void> => {
+        if (this._isPolling) {
+            return
+        }
+
+        this._isPolling = true
+        try {
+            await this._loadTickets()
+        } finally {
+            this._isPolling = false
+        }
+    }
+
+    /**
+     * Load tickets list from API
+     */
+    private async _loadTickets(): Promise<void> {
+        try {
+            const response = await this.getTickets()
+            this._tickets = response.results
+            this._hasMultipleTickets = response.results.length > 1
+            this._widgetRef?.updateTickets(response.results)
+
+            // Calculate total unread across all tickets
+            const totalUnread = response.results.reduce((sum, t) => sum + (t.unread_count || 0), 0)
+            this._unreadCount = totalUnread
+            this._widgetRef?.setUnreadCount(totalUnread)
+
+            logger.info('Tickets loaded', { count: response.results.length, totalUnread })
+        } catch (error) {
+            logger.error('Failed to load tickets', error)
+        }
+    }
+
+    /**
+     * Main poll function that polls based on current view
+     */
+    private _poll = async (): Promise<void> => {
+        if (this._currentView === 'tickets') {
+            await this._pollTickets()
+        } else {
+            await this._pollMessages()
+        }
+    }
+
+    /**
+     * Handle view changes from the widget
+     */
+    private _handleViewChange = (view: WidgetView): void => {
+        logger.info('View changed', { from: this._currentView, to: view })
+        this._currentView = view
+    }
+
+    /**
+     * Handle ticket selection from the list
+     */
+    private _handleSelectTicket = async (ticketId: string): Promise<void> => {
+        // Switch to this ticket
+        this._switchToTicketIfNeeded(ticketId)
+
+        // Clear messages and reset timestamp
+        this._lastMessageTimestamp = null
+        this._widgetRef?.clearMessages()
+
+        // Switch view to messages
+        this._currentView = 'messages'
+        this._widgetRef?.setView('messages')
+
+        // Load messages for the selected ticket
+        await this._loadMessages()
+
+        // Mark as read if widget is open
+        if (this._isWidgetOpen() && this._unreadCount > 0) {
+            this._markMessagesAsRead()
+        }
+    }
+
+    /**
+     * Handle new conversation request
+     */
+    private _handleNewConversation = (): void => {
+        logger.info('New conversation requested')
+
+        // Clear current ticket
+        this._currentTicketId = null
+        this._persistence.clearTicketId()
+
+        // Reset timestamp
+        this._lastMessageTimestamp = null
+
+        // Switch view to messages
+        this._currentView = 'messages'
+        this._widgetRef?.setView('messages')
+
+        // Clear messages and add greeting
+        this._widgetRef?.clearMessages(true)
+    }
+
+    /**
+     * Handle back to tickets request
+     */
+    private _handleBackToTickets = async (): Promise<void> => {
+        logger.info('Back to tickets requested')
+
+        // Switch view to tickets
+        this._currentView = 'tickets'
+        this._widgetRef?.setView('tickets')
+
+        // Load tickets
+        this._widgetRef?.setTicketsLoading(true)
+        await this._loadTickets()
+
+        // Track back to tickets
+        this._posthog.capture('$conversations_back_to_tickets')
+    }
+
+    /**
+     * Determine initial view based on ticket count
+     */
+    private async _determineInitialView(): Promise<{ view: WidgetView; tickets: Ticket[] }> {
+        try {
+            const response = await this.getTickets()
+            this._tickets = response.results
+            this._hasMultipleTickets = response.results.length > 1
+
+            // Calculate total unread
+            const totalUnread = response.results.reduce((sum, t) => sum + (t.unread_count || 0), 0)
+            this._unreadCount = totalUnread
+
+            // If 2+ tickets, show ticket list; otherwise show messages
+            if (response.results.length >= 2) {
+                return { view: 'tickets', tickets: response.results }
+            }
+
+            // If exactly 1 ticket, set it as current
+            if (response.results.length === 1) {
+                this._currentTicketId = response.results[0].id
+                this._persistence.saveTicketId(response.results[0].id)
+            }
+
+            return { view: 'messages', tickets: response.results }
+        } catch (error) {
+            logger.error('Failed to determine initial view', error)
+            return { view: 'messages', tickets: [] }
+        }
+    }
+
+    /**
+     * Start polling based on current view
      */
     private _startPolling(): void {
         if (this._pollIntervalId) {
@@ -613,14 +783,14 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
 
         // Poll immediately
-        this._pollMessages()
+        this._poll()
 
         // Set up interval
         this._pollIntervalId = window?.setInterval(() => {
-            this._pollMessages()
+            this._poll()
         }, POLL_INTERVAL_MS) as unknown as number
 
-        logger.info('Started polling for messages')
+        logger.info('Started polling', { view: this._currentView })
     }
 
     /**
@@ -681,6 +851,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
         this._widgetRef = null
         this._isWidgetRendered = false
+        this._initializeWidgetPromise = null
 
         // Reset timestamp so show() will re-fetch all messages
         this._lastMessageTimestamp = null
@@ -803,7 +974,12 @@ export class ConversationsManager implements ConversationsManagerInterface {
     /**
      * Render the widget to the DOM
      */
-    private _renderWidget(initialState: ConversationsWidgetState, initialUserTraits: UserProvidedTraits | null): void {
+    private _renderWidget(
+        initialState: ConversationsWidgetState,
+        initialUserTraits: UserProvidedTraits | null,
+        initialView: WidgetView = 'messages',
+        initialTickets: Ticket[] = []
+    ): void {
         if (!document) {
             logger.info('Conversations widget not rendered: Document not available')
             return
@@ -832,9 +1008,16 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 initialState={initialState}
                 initialUserTraits={initialUserTraits}
                 isUserIdentified={this._posthog._isIdentified()}
+                initialView={initialView}
+                initialTickets={initialTickets}
+                hasMultipleTickets={this._hasMultipleTickets}
                 onSendMessage={this._handleSendMessage}
                 onStateChange={this._handleStateChange}
                 onIdentify={this._handleIdentify}
+                onSelectTicket={this._handleSelectTicket}
+                onNewConversation={this._handleNewConversation}
+                onBackToTickets={this._handleBackToTickets}
+                onViewChange={this._handleViewChange}
             />,
             container
         )

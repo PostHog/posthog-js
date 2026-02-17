@@ -167,7 +167,7 @@ export class Heatmaps {
             isDeadClicksEnabledForHeatmaps,
             this._onDeadClick.bind(this)
         )
-        this._deadClicksCapture.startIfEnabled()
+        this._deadClicksCapture.startIfEnabledOrStop()
 
         this._onVisibilityChange_handler = this._onVisibilityChange.bind(this)
         addEventListener(document, 'visibilitychange', this._onVisibilityChange_handler)

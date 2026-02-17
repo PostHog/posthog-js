@@ -33,6 +33,10 @@ export type {
     EarlyAccessFeatureStage,
     EarlyAccessFeatureCallback,
     EarlyAccessFeatureResponse,
+    FeatureFlagOverrides,
+    FeatureFlagPayloadOverrides,
+    FeatureFlagOverrideOptions,
+    OverrideFeatureFlagsOptions,
 } from './feature-flags'
 
 // Request types

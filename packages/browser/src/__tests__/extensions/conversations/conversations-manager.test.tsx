@@ -72,6 +72,11 @@ describe('ConversationsManager', () => {
         unread_count: 0,
     })
 
+    const createMockGetTicketsResponse = () => ({
+        results: [],
+        has_more: false,
+    })
+
     beforeEach(() => {
         // Clear DOM and mocks
         document.body.innerHTML = ''
@@ -114,6 +119,11 @@ describe('ConversationsManager', () => {
                         statusCode: 200,
                         json: createMockGetMessagesResponse(),
                     })
+                } else if (url.includes('/widget/tickets') && method === 'GET') {
+                    options.callback({
+                        statusCode: 200,
+                        json: createMockGetTicketsResponse(),
+                    })
                 }
             }),
             requestRouter: {
@@ -145,9 +155,18 @@ describe('ConversationsManager', () => {
         }
     })
 
+    // Helper to flush promises (needed because widget initialization is async)
+    const flushPromises = async () => {
+        await act(async () => {
+            await Promise.resolve()
+            jest.runAllTimers()
+        })
+    }
+
     describe('initialization', () => {
-        it('should initialize and render the widget when widgetEnabled is true', () => {
+        it('should initialize and render the widget when widgetEnabled is true', async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
 
             const container = document.getElementById('ph-conversations-widget-container')
             expect(container).toBeInTheDocument()
@@ -177,8 +196,9 @@ describe('ConversationsManager', () => {
             )
         })
 
-        it('should capture $conversations_widget_loaded event when widget is rendered', () => {
+        it('should capture $conversations_widget_loaded event when widget is rendered', async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
 
             expect(mockPosthog.capture).toHaveBeenCalledWith(
                 '$conversations_widget_loaded',
@@ -215,8 +235,9 @@ describe('ConversationsManager', () => {
     })
 
     describe('show and hide', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
         })
 
         it('should render widget to DOM when show() is called', () => {
@@ -237,7 +258,7 @@ describe('ConversationsManager', () => {
             expect(manager.isVisible()).toBe(false)
         })
 
-        it('should re-render widget when show() is called after hide()', () => {
+        it('should re-render widget when show() is called after hide()', async () => {
             act(() => {
                 manager.hide()
             })
@@ -246,12 +267,13 @@ describe('ConversationsManager', () => {
             act(() => {
                 manager.show()
             })
+            await flushPromises()
 
             expect(document.getElementById('ph-conversations-widget-container')).toBeInTheDocument()
             expect(manager.isVisible()).toBe(true)
         })
 
-        it('should respect saved widget state when re-rendering', () => {
+        it('should respect saved widget state when re-rendering', async () => {
             // Widget starts closed by default
             // The persistence mock returns 'closed' for loadWidgetState
             // so re-rendering should keep it closed
@@ -262,6 +284,7 @@ describe('ConversationsManager', () => {
             act(() => {
                 manager.show()
             })
+            await flushPromises()
 
             // Widget should be rendered but in closed state (not forced open)
             expect(manager.isVisible()).toBe(true)
@@ -269,8 +292,9 @@ describe('ConversationsManager', () => {
     })
 
     describe('isVisible', () => {
-        it('should return true when widget is rendered', () => {
+        it('should return true when widget is rendered', async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
 
             expect(manager.isVisible()).toBe(true)
         })
@@ -287,7 +311,7 @@ describe('ConversationsManager', () => {
     })
 
     describe('show() with widgetEnabled: false', () => {
-        it('should render the widget when show() is called even if widgetEnabled was false', () => {
+        it('should render the widget when show() is called even if widgetEnabled was false', async () => {
             const configWithWidgetDisabled = {
                 ...mockConfig,
                 widgetEnabled: false,
@@ -302,13 +326,14 @@ describe('ConversationsManager', () => {
             act(() => {
                 manager.show()
             })
+            await flushPromises()
 
             // Now widget should be rendered
             expect(document.getElementById('ph-conversations-widget-container')).toBeInTheDocument()
             expect(manager.isVisible()).toBe(true)
         })
 
-        it('should capture $conversations_widget_loaded when show() triggers widget rendering', () => {
+        it('should capture $conversations_widget_loaded when show() triggers widget rendering', async () => {
             const configWithWidgetDisabled = {
                 ...mockConfig,
                 widgetEnabled: false,
@@ -320,6 +345,7 @@ describe('ConversationsManager', () => {
             act(() => {
                 manager.show()
             })
+            await flushPromises()
 
             expect(mockPosthog.capture).toHaveBeenCalledWith(
                 '$conversations_widget_loaded',
@@ -331,8 +357,11 @@ describe('ConversationsManager', () => {
     })
 
     describe('sendMessage', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+            // Clear mocks after initialization (which calls getTickets)
+            jest.clearAllMocks()
         })
 
         it('should send a message through the API', async () => {
@@ -542,6 +571,7 @@ describe('ConversationsManager', () => {
     describe('message polling', () => {
         beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
             // Send a message to create a ticket
             await act(async () => {
                 await manager.sendMessage('Hello!')
@@ -588,8 +618,9 @@ describe('ConversationsManager', () => {
     })
 
     describe('identify handling', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
         })
 
         it('should set up identify listener', () => {
@@ -602,8 +633,9 @@ describe('ConversationsManager', () => {
     })
 
     describe('destroy', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
         })
 
         // Note: This test is skipped because Jest fake timers interact poorly with
@@ -634,8 +666,9 @@ describe('ConversationsManager', () => {
     })
 
     describe('API integration', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
         })
 
         describe('sendMessage API', () => {
@@ -783,8 +816,9 @@ describe('ConversationsManager', () => {
     })
 
     describe('persistence integration', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
         })
 
         it('should save ticket ID after sending message', async () => {
@@ -795,7 +829,7 @@ describe('ConversationsManager', () => {
             expect(manager['_currentTicketId']).toBe('ticket-123')
         })
 
-        it('should load saved widget state when re-rendered after hide', () => {
+        it('should load saved widget state when re-rendered after hide', async () => {
             // Hide the widget
             act(() => {
                 manager.hide()
@@ -806,6 +840,7 @@ describe('ConversationsManager', () => {
             act(() => {
                 manager.show()
             })
+            await flushPromises()
             expect(manager.isVisible()).toBe(true)
             // Widget state is loaded from persistence in _initializeWidget
             // The persistence mock returns 'closed' for loadWidgetState

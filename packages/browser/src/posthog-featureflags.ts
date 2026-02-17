@@ -13,6 +13,7 @@ import {
     EarlyAccessFeatureStage,
     FeatureFlagDetail,
     FeatureFlagResult,
+    OverrideFeatureFlagsOptions,
 } from './types'
 import { PostHogPersistence } from './posthog-persistence'
 
@@ -173,26 +174,6 @@ const normalizeFlagsResponse = (response: Partial<FlagsResponse>): Partial<Flags
     }
     return response
 }
-
-type FeatureFlagOverrides = {
-    [flagName: string]: string | boolean
-}
-
-type FeatureFlagPayloadOverrides = {
-    [flagName: string]: JsonType
-}
-
-type FeatureFlagOverrideOptions = {
-    flags?: boolean | string[] | FeatureFlagOverrides
-    payloads?: FeatureFlagPayloadOverrides
-    suppressWarning?: boolean
-}
-
-type OverrideFeatureFlagsOptions =
-    | boolean // clear all overrides
-    | string[] // enable list of flags
-    | FeatureFlagOverrides // set variants directly
-    | FeatureFlagOverrideOptions
 
 export enum QuotaLimitedResource {
     FeatureFlags = 'feature_flags',

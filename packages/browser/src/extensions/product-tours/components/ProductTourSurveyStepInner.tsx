@@ -220,7 +220,7 @@ export function ProductTourSurveyStepInner({
                             onClick={onPrevious}
                             style={cursorStyle}
                         >
-                            Back
+                            {survey.backButtonText || 'Back'}
                         </button>
                     )}
                     {isOpenText && (
@@ -229,7 +229,7 @@ export function ProductTourSurveyStepInner({
                             onClick={handleTextSubmit}
                             style={cursorStyle}
                         >
-                            Submit
+                            {survey.submitButtonText || 'Submit'}
                         </button>
                     )}
                 </div>

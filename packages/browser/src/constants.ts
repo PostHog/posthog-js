@@ -113,3 +113,8 @@ export const PERSISTENCE_RESERVED_PROPERTIES = [
 ]
 
 export const SURVEYS_REQUEST_TIMEOUT_MS = 10000
+
+/* Z-INDEX HIERARCHY: tours > surveys > support */
+export const Z_INDEX_TOURS = 2147483646
+export const Z_INDEX_SURVEYS = 2147483645
+export const Z_INDEX_CONVERSATIONS = 2147483644

@@ -1,5 +1,63 @@
 # @posthog/nuxt
 
+## 1.5.48
+
+### Patch Changes
+
+- Updated dependencies [[`0d30218`](https://github.com/PostHog/posthog-js/commit/0d30218b3087f27104408e873a3421e3ba27633d), [`f19b7f2`](https://github.com/PostHog/posthog-js/commit/f19b7f2df37d24b81f57477497f21196006b72e7)]:
+  - posthog-js@1.347.2
+
+## 1.5.47
+
+### Patch Changes
+
+- Updated dependencies [[`312b785`](https://github.com/PostHog/posthog-js/commit/312b78520c68d02efd7b2f22ca3ed4c30911b045)]:
+  - posthog-js@1.347.1
+
+## 1.5.46
+
+### Patch Changes
+
+- Updated dependencies [[`9c078ac`](https://github.com/PostHog/posthog-js/commit/9c078ac771d09ad2e9df3c796cc4be01d949a806), [`512d578`](https://github.com/PostHog/posthog-js/commit/512d5785488a4fb507ef1edf2a5b1788e8c17e86)]:
+  - posthog-js@1.347.0
+
+## 1.5.45
+
+### Patch Changes
+
+- Updated dependencies [[`0d730bd`](https://github.com/PostHog/posthog-js/commit/0d730bd8d6786bf9dc5a818caaa47e378531bd0c)]:
+  - posthog-js@1.346.0
+
+## 1.5.44
+
+### Patch Changes
+
+- [#3076](https://github.com/PostHog/posthog-js/pull/3076) [`91234bb`](https://github.com/PostHog/posthog-js/commit/91234bb015ff18b1a95f08448053e7b75730ed81) Thanks [@hpouillot](https://github.com/hpouillot)! - rename sourcemaps config variables with `releaseName`, `releaseVersion`, `projectId`
+  (2026-02-12)
+
+## 1.5.43
+
+### Patch Changes
+
+- Updated dependencies [[`7437982`](https://github.com/PostHog/posthog-js/commit/7437982efa2c7a7a9ede563ddd97beba5c70d650)]:
+  - posthog-js@1.345.5
+
+## 1.5.42
+
+### Patch Changes
+
+- Updated dependencies [[`4e7fda9`](https://github.com/PostHog/posthog-js/commit/4e7fda93be4fe2afbbe9d11dd9b1b6517a37573d)]:
+  - posthog-js@1.345.4
+
+## 1.5.41
+
+### Patch Changes
+
+- Updated dependencies [[`0acf16f`](https://github.com/PostHog/posthog-js/commit/0acf16fcbf8c32d5f28b86b6fa200271ad0b647e), [`50ebdfb`](https://github.com/PostHog/posthog-js/commit/50ebdfb26306bdaaeaa081fb4b3722030e3c4378)]:
+  - @posthog/core@1.22.0
+  - posthog-js@1.345.3
+  - posthog-node@5.24.15
+
 ## 1.5.40
 
 ### Patch Changes
