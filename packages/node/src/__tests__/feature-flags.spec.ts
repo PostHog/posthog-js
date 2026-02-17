@@ -135,7 +135,7 @@ describe('local evaluation', () => {
     expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
   })
 
-  it('returns false when bucketing_identifier is device_id and $device_id is missing', async () => {
+  it('falls back to server when bucketing_identifier is device_id and $device_id is missing', async () => {
     const flags = {
       flags: [
         {
@@ -161,7 +161,195 @@ describe('local evaluation', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    expect(await posthog.getFeatureFlag('device-id-flag', 'some-distinct-id')).toEqual(false)
+    expect(await posthog.getFeatureFlag('device-id-flag', 'some-distinct-id')).toEqual('flags-fallback-value')
+    expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+    expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
+  it('does not fallback to server for missing $device_id when onlyEvaluateLocally is true', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Device Flag',
+          key: 'device-id-flag',
+          bucketing_identifier: 'device_id',
+          active: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+    }
+
+    mockedFetch.mockImplementation(
+      apiImplementation({ localFlags: flags, decideFlags: { 'device-id-flag': 'flags-fallback-value' } })
+    )
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getFeatureFlag('device-id-flag', 'some-distinct-id', { onlyEvaluateLocally: true })).toEqual(
+      undefined
+    )
+    expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
+  it('getFeatureFlagResult falls back to server when bucketing_identifier is device_id and $device_id is missing', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Device Flag',
+          key: 'device-id-flag',
+          bucketing_identifier: 'device_id',
+          active: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+    }
+
+    mockedFetch.mockImplementation(
+      apiImplementation({
+        localFlags: flags,
+        decideFlags: { 'device-id-flag': 'flags-fallback-value' },
+        flagsPayloads: { 'device-id-flag': 'fallback-payload' },
+      })
+    )
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    const result = await posthog.getFeatureFlagResult('device-id-flag', 'some-distinct-id')
+    expect(result).toMatchObject({
+      key: 'device-id-flag',
+      enabled: true,
+      variant: 'flags-fallback-value',
+      payload: 'fallback-payload',
+    })
+    expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+    expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
+  it('getFeatureFlagResult does not fallback to server for missing $device_id when onlyEvaluateLocally is true', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Device Flag',
+          key: 'device-id-flag',
+          bucketing_identifier: 'device_id',
+          active: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+    }
+
+    mockedFetch.mockImplementation(
+      apiImplementation({
+        localFlags: flags,
+        decideFlags: { 'device-id-flag': 'flags-fallback-value' },
+        flagsPayloads: { 'device-id-flag': 'fallback-payload' },
+      })
+    )
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    const result = await posthog.getFeatureFlagResult('device-id-flag', 'some-distinct-id', {
+      onlyEvaluateLocally: true,
+    })
+    expect(result).toBeUndefined()
+    expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
+  it('getFeatureFlagPayload falls back to server when bucketing_identifier is device_id and $device_id is missing', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Device Flag',
+          key: 'device-id-flag',
+          bucketing_identifier: 'device_id',
+          active: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+            payloads: { true: 'local-payload' },
+          },
+        },
+      ],
+    }
+
+    mockedFetch.mockImplementation(
+      apiImplementation({
+        localFlags: flags,
+        decideFlags: { 'device-id-flag': 'flags-fallback-value' },
+        flagsPayloads: { 'device-id-flag': 'fallback-payload' },
+      })
+    )
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    const payload = await posthog.getFeatureFlagPayload('device-id-flag', 'some-distinct-id')
+    expect(payload).toEqual('fallback-payload')
+    expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+    expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
+  it('getFeatureFlagPayload does not fallback to server for missing $device_id when onlyEvaluateLocally is true', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Device Flag',
+          key: 'device-id-flag',
+          bucketing_identifier: 'device_id',
+          active: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+            payloads: { true: 'local-payload' },
+          },
+        },
+      ],
+    }
+
+    mockedFetch.mockImplementation(
+      apiImplementation({
+        localFlags: flags,
+        decideFlags: { 'device-id-flag': 'flags-fallback-value' },
+        flagsPayloads: { 'device-id-flag': 'fallback-payload' },
+      })
+    )
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    const payload = await posthog.getFeatureFlagPayload('device-id-flag', 'some-distinct-id', undefined, {
+      onlyEvaluateLocally: true,
+    })
+    expect(payload).toBeUndefined()
     expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
