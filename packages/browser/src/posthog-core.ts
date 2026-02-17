@@ -1144,7 +1144,7 @@ export class PostHog implements PostHogInterface {
 
         if (event_name === '$exception' && !options?._originatedFromCaptureException) {
             logger.warn(
-                'Using a `posthog.capture('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureException()` instead, which attaches required metadata by automatically.'
+                'Using a `posthog.capture('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureException()` instead, which attaches required metadata automatically.'
             )
         }
 
