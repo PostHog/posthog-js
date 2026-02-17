@@ -160,6 +160,7 @@
         "_getActivatedKey",
         "_getBufferDuration",
         "_getContextManager",
+        "_getCurrentStep",
         "_getDelegate",
         "_getDelegateLogger",
         "_getDnt",

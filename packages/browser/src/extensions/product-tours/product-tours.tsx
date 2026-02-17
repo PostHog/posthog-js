@@ -8,6 +8,7 @@ import {
     ProductTourEventName,
     ProductTourEventProperties,
     ProductTourRenderReason,
+    ProductTourStep,
     ProductTourStepButton,
     ShowTourOptions,
 } from '../../posthog-product-tours-types'
@@ -21,6 +22,7 @@ import {
     getStepImageUrls,
     hasElementTarget,
     normalizeUrl,
+    resolveStepTranslation,
 } from './product-tours-utils'
 import { ProductTourTooltip } from './components/ProductTourTooltip'
 import { ProductTourBanner } from './components/ProductTourBanner'
@@ -39,6 +41,7 @@ import {
 import { doesTourActivateByAction, doesTourActivateByEvent } from '../../utils/product-tour-utils'
 import { TOOLBAR_ID } from '../../constants'
 import { ProductTourEventReceiver } from '../../utils/product-tour-event-receiver'
+import { getBrowserLanguage } from '../../utils/event-utils'
 
 const logger = createLogger('[Product Tours]')
 
@@ -216,6 +219,18 @@ export class ProductTourManager {
                 new Image().src = url
             }
         }
+    }
+
+    private _getCurrentStep(): ProductTourStep | null {
+        if (!this._activeTour) {
+            return null
+        }
+        const rawStep = this._activeTour.steps[this._currentStepIndex]
+        if (!rawStep) {
+            return null
+        }
+        const language = this._instance.config.override_display_language ?? getBrowserLanguage()
+        return resolveStepTranslation(rawStep, language ?? null)
     }
 
     private _setStepIndex(index: number): void {
@@ -639,7 +654,7 @@ export class ProductTourManager {
             return false
         }
 
-        const step = this._activeTour.steps[this._currentStepIndex]
+        const step = this._getCurrentStep()
         if (!step) {
             logger.warn(`Step ${this._currentStepIndex} not found in tour ${this._activeTour.id}`)
             this._cleanup()
@@ -759,7 +774,11 @@ export class ProductTourManager {
             return
         }
 
-        const step = this._activeTour.steps[this._currentStepIndex]
+        const step = this._getCurrentStep()
+        if (!step) {
+            return
+        }
+
         const { shadow } = retrieveTourShadow(this._activeTour)
 
         render(
@@ -784,7 +803,11 @@ export class ProductTourManager {
             return
         }
 
-        const step = this._activeTour.steps[this._currentStepIndex]
+        const step = this._getCurrentStep()
+        if (!step) {
+            return
+        }
+
         const result = retrieveBannerShadow(this._activeTour, step.bannerConfig)
 
         if (!result) {
@@ -823,7 +846,11 @@ export class ProductTourManager {
         }
 
         const tourId = this._activeTour.id
-        const step = this._activeTour.steps[this._currentStepIndex]
+        const step = this._getCurrentStep()
+        if (!step) {
+            return
+        }
+
         const surveyId = step.linkedSurveyId
         const questionId = step.linkedSurveyQuestionId
         const questionText = step.survey?.questionText || ''

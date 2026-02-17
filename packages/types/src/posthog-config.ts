@@ -1390,6 +1390,16 @@ export interface PostHogConfig {
      */
     internal_or_test_user_hostname?: string | RegExp | null
 
+    /**
+     * Display language override for Product Tours.
+     *
+     * Must be a valid BCP 47 language code.
+     *
+     * In the future this will be used for Surveys and other products that
+     * deliver in-app experiences to end-users.
+     */
+    override_display_language?: string | null
+
     // ------- PREVIEW CONFIGS -------
 
     /**
