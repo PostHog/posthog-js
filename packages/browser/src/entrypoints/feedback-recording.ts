@@ -35,7 +35,6 @@ class LazyLoadedFeedbackRecording implements LazyLoadedFeedbackRecordingInterfac
             },
             onCancel: () => {
                 this._resetState()
-                logger.info('Feedback recording UI cancelled')
                 onCancel()
             },
         })

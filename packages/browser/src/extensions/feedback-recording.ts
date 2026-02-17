@@ -36,6 +36,7 @@ export class FeedbackRecording {
     public cleanup(): void {
         if (this._lazyLoadedFeedbackRecording) {
             this._lazyLoadedFeedbackRecording.cleanup()
+            this._lazyLoadedFeedbackRecording = null
         }
 
         this._isUIActive = false
