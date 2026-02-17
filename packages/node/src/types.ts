@@ -34,7 +34,7 @@ export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
    * event originated from the proper exception capture path. Used to warn users who call
    * capture() with '$exception' directly.
    */
-  _isExceptionCaptureCall?: boolean
+  _originatedFromCaptureException?: boolean
 }
 
 export type GroupIdentifyMessage = {

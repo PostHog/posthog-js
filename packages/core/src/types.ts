@@ -170,7 +170,7 @@ export type PostHogCaptureOptions = {
    * event originated from the proper exception capture path. Used to warn users who call
    * capture('$exception') directly.
    */
-  _isExceptionCaptureCall?: boolean
+  _originatedFromCaptureException?: boolean
 }
 
 export type PostHogFetchResponse = {

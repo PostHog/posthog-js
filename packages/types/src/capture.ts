@@ -102,7 +102,7 @@ export interface CaptureOptions {
      * event originated from the proper exception capture path. Used to warn users who call
      * capture('$exception') directly.
      */
-    _isExceptionCaptureCall?: boolean
+    _originatedFromCaptureException?: boolean
 }
 
 export type BeforeSendFn = (cr: CaptureResult | null) => CaptureResult | null
