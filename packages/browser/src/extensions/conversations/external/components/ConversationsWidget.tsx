@@ -5,6 +5,7 @@ import {
     Message,
     ConversationsWidgetState,
     UserProvidedTraits,
+    Ticket,
 } from '../../../../posthog-conversations-types'
 import { createLogger } from '../../../../utils/logger'
 import { getStyles } from './styles'
@@ -12,22 +13,39 @@ import { OpenChatButton } from './OpenChatButton'
 import { SendMessageButton } from './SendMessageButton'
 import { CloseChatButton } from './CloseChatButton'
 import { RichContent } from './RichContent'
+import { TicketListView } from './TicketListView'
+import { formatRelativeTime } from './utils'
 
 const logger = createLogger('[ConversationsWidget]')
+
+/**
+ * Type for the current view in the widget
+ */
+export type WidgetView = 'tickets' | 'messages'
 
 interface WidgetProps {
     config: ConversationsRemoteConfig
     initialState?: ConversationsWidgetState
     initialUserTraits?: UserProvidedTraits | null
     isUserIdentified?: boolean
+    initialView?: WidgetView
+    initialTickets?: Ticket[]
+    hasMultipleTickets?: boolean
     onSendMessage: (message: string) => Promise<void>
     onStateChange?: (state: ConversationsWidgetState) => void
     onIdentify?: (traits: UserProvidedTraits) => void
+    onSelectTicket?: (ticketId: string) => void
+    onNewConversation?: () => void
+    onBackToTickets?: () => void
+    onViewChange?: (view: WidgetView) => void
 }
 
 interface WidgetState {
     state: ConversationsWidgetState
+    view: WidgetView
     messages: Message[]
+    tickets: Ticket[]
+    ticketsLoading: boolean
     inputValue: string
     isLoading: boolean
     error: string | null
@@ -52,7 +70,10 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
 
         this.state = {
             state: props.initialState || 'closed',
+            view: props.initialView || 'messages',
             messages: [],
+            tickets: props.initialTickets || [],
+            ticketsLoading: false,
             inputValue: '',
             isLoading: false,
             error: null,
@@ -149,6 +170,24 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
 
     private _handleClose = () => {
         this.setState({ state: 'closed' })
+    }
+
+    private _handleSelectTicket = (ticketId: string) => {
+        if (this.props.onSelectTicket) {
+            this.props.onSelectTicket(ticketId)
+        }
+    }
+
+    private _handleNewConversation = () => {
+        if (this.props.onNewConversation) {
+            this.props.onNewConversation()
+        }
+    }
+
+    private _handleBackToTickets = () => {
+        if (this.props.onBackToTickets) {
+            this.props.onBackToTickets()
+        }
     }
 
     private _handleInputChange = (e: Event) => {
@@ -260,23 +299,6 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         }
     }
 
-    private _formatTime(isoString: string): string {
-        const date = new Date(isoString)
-        const now = new Date()
-        const diffMs = now.getTime() - date.getTime()
-        const diffMins = Math.floor(diffMs / 60000)
-
-        if (diffMins < 1) {
-            return 'Just now'
-        } else if (diffMins < 60) {
-            return `${diffMins}m ago`
-        } else if (diffMins < 1440) {
-            return `${Math.floor(diffMins / 60)}h ago`
-        } else {
-            return date.toLocaleDateString()
-        }
-    }
-
     /**
      * Public method to add messages from outside
      */
@@ -338,6 +360,49 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
      */
     setUnreadCount(count: number): void {
         this.setState({ unreadCount: count })
+    }
+
+    /**
+     * Update the tickets list (called by manager during polling)
+     */
+    updateTickets(tickets: Ticket[]): void {
+        this.setState({ tickets, ticketsLoading: false })
+    }
+
+    /**
+     * Set the current view (tickets list or messages)
+     */
+    setView(view: WidgetView): void {
+        this.setState({ view })
+        if (this.props.onViewChange) {
+            this.props.onViewChange(view)
+        }
+    }
+
+    /**
+     * Get the current view
+     */
+    getView(): WidgetView {
+        return this.state.view
+    }
+
+    /**
+     * Set tickets loading state
+     */
+    setTicketsLoading(loading: boolean): void {
+        this.setState({ ticketsLoading: loading })
+    }
+
+    /**
+     * Clear messages (used when switching tickets or starting new conversation)
+     * @param addGreeting - If true, adds the greeting message after clearing
+     */
+    clearMessages(addGreeting: boolean = false): void {
+        this.setState({ messages: [] }, () => {
+            if (addGreeting && this.props.config.greetingText) {
+                this._addGreetingMessage()
+            }
+        })
     }
 
     private _renderIdentificationForm(styles: ReturnType<typeof getStyles>) {
@@ -428,14 +493,80 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
                         primaryColor={primaryColor}
                     />
                 </div>
-                <div style={styles.messageTime}>{this._formatTime(message.created_at)}</div>
+                <div style={styles.messageTime}>{formatRelativeTime(message.created_at)}</div>
             </div>
         )
     }
 
+    private _renderBackButton(styles: ReturnType<typeof getStyles>) {
+        return (
+            <button style={styles.backButton} onClick={this._handleBackToTickets} aria-label="Back to conversations">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="15 18 9 12 15 6" />
+                </svg>
+            </button>
+        )
+    }
+
+    private _renderTicketList(styles: ReturnType<typeof getStyles>) {
+        const { tickets, ticketsLoading } = this.state
+
+        return (
+            <TicketListView
+                tickets={tickets}
+                isLoading={ticketsLoading}
+                styles={styles}
+                onSelectTicket={this._handleSelectTicket}
+                onNewConversation={this._handleNewConversation}
+            />
+        )
+    }
+
+    private _renderMessages(styles: ReturnType<typeof getStyles>, primaryColor: string, placeholderText: string) {
+        const { messages, inputValue, isLoading, error } = this.state
+
+        return (
+            <>
+                <div style={styles.messages}>
+                    {messages.map((message) => this._renderMessage(message, styles, primaryColor))}
+                    <div
+                        ref={(el) => {
+                            this._messagesEndRef = el
+                        }}
+                    />
+                </div>
+
+                {/* Error message */}
+                {error && <div style={styles.error}>{error}</div>}
+
+                {/* Input */}
+                <div style={styles.inputContainer}>
+                    <textarea
+                        ref={(el) => {
+                            this._inputRef = el
+                        }}
+                        style={styles.input}
+                        placeholder={placeholderText}
+                        value={inputValue}
+                        onInput={this._handleInputChange}
+                        onKeyPress={this._handleKeyPress}
+                        rows={1}
+                        disabled={isLoading}
+                    />
+                    <SendMessageButton
+                        primaryColor={primaryColor}
+                        inputValue={inputValue}
+                        isLoading={isLoading}
+                        handleSendMessage={this._handleSendMessage}
+                    />
+                </div>
+            </>
+        )
+    }
+
     render() {
-        const { config } = this.props
-        const { state, messages, inputValue, isLoading, error, showIdentificationForm } = this.state
+        const { config, hasMultipleTickets } = this.props
+        const { state, view, showIdentificationForm } = this.state
         const primaryColor = config.color || '#5375ff'
         const widgetPosition = config.widgetPosition || 'bottom_right'
         const placeholderText = config.placeholderText || 'Type your message...'
@@ -459,59 +590,34 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
             ...styles.windowOpen,
         }
 
+        // Determine header title based on view
+        const headerTitle = view === 'tickets' ? 'Conversations' : 'Support Chat'
+
+        // Show back button in message view when there are multiple tickets
+        const showBackButton = view === 'messages' && hasMultipleTickets
+
         return (
             <div style={styles.widget}>
                 <div style={windowStyle}>
                     {/* Header */}
                     <div style={styles.header}>
-                        <div style={styles.headerTitle}>
-                            <span>Support Chat</span>
+                        <div style={showBackButton ? styles.headerWithBack : styles.headerTitle}>
+                            {showBackButton && this._renderBackButton(styles)}
+                            <span style={styles.headerTitle}>{headerTitle}</span>
                         </div>
                         <div style={styles.headerActions}>
                             <CloseChatButton primaryColor={primaryColor} handleClose={this._handleClose} />
                         </div>
                     </div>
 
-                    {/* Show identification form if needed, otherwise show chat */}
-                    {showIdentificationForm ? (
-                        this._renderIdentificationForm(styles)
-                    ) : (
-                        <>
-                            <div style={styles.messages}>
-                                {messages.map((message) => this._renderMessage(message, styles, primaryColor))}
-                                <div
-                                    ref={(el) => {
-                                        this._messagesEndRef = el
-                                    }}
-                                />
-                            </div>
-
-                            {/* Error message */}
-                            {error && <div style={styles.error}>{error}</div>}
-
-                            {/* Input */}
-                            <div style={styles.inputContainer}>
-                                <textarea
-                                    ref={(el) => {
-                                        this._inputRef = el
-                                    }}
-                                    style={styles.input}
-                                    placeholder={placeholderText}
-                                    value={inputValue}
-                                    onInput={this._handleInputChange}
-                                    onKeyPress={this._handleKeyPress}
-                                    rows={1}
-                                    disabled={isLoading}
-                                />
-                                <SendMessageButton
-                                    primaryColor={primaryColor}
-                                    inputValue={inputValue}
-                                    isLoading={isLoading}
-                                    handleSendMessage={this._handleSendMessage}
-                                />
-                            </div>
-                        </>
-                    )}
+                    {/* Show identification form if needed */}
+                    {showIdentificationForm
+                        ? this._renderIdentificationForm(styles)
+                        : view === 'tickets'
+                          ? // Ticket list view
+                            this._renderTicketList(styles)
+                          : // Messages view
+                            this._renderMessages(styles, primaryColor, placeholderText)}
                 </div>
             </div>
         )
