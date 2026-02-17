@@ -55,6 +55,7 @@ interface WidgetState {
     formEmailError: string | null
     userTraits: UserProvidedTraits | null
     unreadCount: number
+    hasMultipleTickets: boolean
 }
 
 export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
@@ -83,6 +84,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
             formEmailError: null,
             userTraits,
             unreadCount: 0,
+            hasMultipleTickets: props.hasMultipleTickets || false,
         }
     }
 
@@ -366,7 +368,11 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
      * Update the tickets list (called by manager during polling)
      */
     updateTickets(tickets: Ticket[]): void {
-        this.setState({ tickets, ticketsLoading: false })
+        this.setState({
+            tickets,
+            ticketsLoading: false,
+            hasMultipleTickets: tickets.length > 1,
+        })
     }
 
     /**
@@ -565,7 +571,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
     }
 
     render() {
-        const { config, hasMultipleTickets } = this.props
+        const { config } = this.props
         const { state, view, showIdentificationForm } = this.state
         const primaryColor = config.color || '#5375ff'
         const widgetPosition = config.widgetPosition || 'bottom_right'
@@ -594,7 +600,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         const headerTitle = view === 'tickets' ? 'Conversations' : 'Support Chat'
 
         // Show back button in message view when there are multiple tickets
-        const showBackButton = view === 'messages' && hasMultipleTickets
+        const showBackButton = view === 'messages' && this.state.hasMultipleTickets
 
         return (
             <div style={styles.widget}>

@@ -89,6 +89,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private _isWidgetEnabled: boolean
     private _isDomainAllowed: boolean
     private _isWidgetRendered: boolean = false
+    private _initializeWidgetPromise: Promise<void> | null = null
     // View state management for ticket list vs message view
     private _currentView: WidgetView = 'messages'
     private _tickets: Ticket[] = []
@@ -413,12 +414,20 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
     /**
      * Initialize and render the widget UI
+     * Uses a promise guard to prevent race conditions from concurrent calls
      */
-    private async _initializeWidget(): Promise<void> {
+    private _initializeWidget(): Promise<void> {
         if (this._isWidgetRendered) {
-            return // Already rendered
+            return Promise.resolve()
         }
+        if (this._initializeWidgetPromise) {
+            return this._initializeWidgetPromise
+        }
+        this._initializeWidgetPromise = this._doInitializeWidget()
+        return this._initializeWidgetPromise
+    }
 
+    private async _doInitializeWidget(): Promise<void> {
         const savedState = this._persistence.loadWidgetState()
         let initialState: ConversationsWidgetState = 'closed'
         if (savedState === 'open') {
@@ -703,7 +712,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         // Clear current ticket
         this._currentTicketId = null
-        this._persistence.saveTicketId(null as unknown as string)
+        this._persistence.clearTicketId()
 
         // Reset timestamp
         this._lastMessageTimestamp = null
