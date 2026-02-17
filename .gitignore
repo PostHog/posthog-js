@@ -46,3 +46,6 @@ target
 next-env.d.ts
 
 CLAUDE.md
+
+# Ignore Ralph's local configuration directory
+.ralph/
