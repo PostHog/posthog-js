@@ -85,6 +85,7 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
         },
         windowOpen: {
             width: '400px',
+            maxWidth: 'calc(100vw - 40px)',
             height: '600px',
             maxHeight: 'calc(100vh - 100px)',
         },
