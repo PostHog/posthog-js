@@ -1,5 +1,23 @@
 # posthog-js
 
+## 1.348.0
+
+### Minor Changes
+
+- [#3108](https://github.com/PostHog/posthog-js/pull/3108) [`c4ca045`](https://github.com/PostHog/posthog-js/commit/c4ca0450e6bbd39e7e90c442776ba0cf0b848ce4) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Support multiple tickets
+  (2026-02-17)
+
+### Patch Changes
+
+- [#3104](https://github.com/PostHog/posthog-js/pull/3104) [`b11c3c5`](https://github.com/PostHog/posthog-js/commit/b11c3c58fe14121cda89bc48aeabf817ae44a8d0) Thanks [@adboio](https://github.com/adboio)! - support customizable survey step button texts in product tours
+  (2026-02-17)
+
+- [#3081](https://github.com/PostHog/posthog-js/pull/3081) [`d36a6ed`](https://github.com/PostHog/posthog-js/commit/d36a6ed75c68742b07863fed0e7a64ad3f842c8d) Thanks [@adboio](https://github.com/adboio)! - move tour event names to constants
+  (2026-02-17)
+- Updated dependencies [[`e962f01`](https://github.com/PostHog/posthog-js/commit/e962f01c80476b9325f0bbb4ca591820cfb9f338)]:
+    - @posthog/core@1.23.0
+    - @posthog/types@1.348.0
+
 ## 1.347.2
 
 ### Patch Changes

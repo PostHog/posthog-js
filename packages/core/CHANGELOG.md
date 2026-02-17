@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.23.0
+
+### Minor Changes
+
+- [#3086](https://github.com/PostHog/posthog-js/pull/3086) [`e962f01`](https://github.com/PostHog/posthog-js/commit/e962f01c80476b9325f0bbb4ca591820cfb9f338) Thanks [@marandaneto](https://github.com/marandaneto)! - feat: support remote config for error tracking, session replay capture performance and capture logs
+  (2026-02-17)
+
 ## 1.22.0
 
 ### Minor Changes

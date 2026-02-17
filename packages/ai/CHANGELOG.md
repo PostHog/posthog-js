@@ -1,5 +1,15 @@
 # posthog-ai
 
+## 7.8.12
+
+### Patch Changes
+
+- [#3102](https://github.com/PostHog/posthog-js/pull/3102) [`f505865`](https://github.com/PostHog/posthog-js/commit/f505865d6000228458f5cb2d63296c228f4d0cd6) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Bind prompt fetches to both credentials by requiring `projectApiKey` and adding `token=<projectApiKey>` to prompt API reads.
+  (2026-02-17)
+- Updated dependencies [[`e962f01`](https://github.com/PostHog/posthog-js/commit/e962f01c80476b9325f0bbb4ca591820cfb9f338)]:
+  - @posthog/core@1.23.0
+  - posthog-node@5.24.16
+
 ## 7.8.11
 
 ### Patch Changes
