@@ -313,9 +313,7 @@ class FeatureFlagsPoller {
     } else {
       const bucketingValue = this.getBucketingValueForFlag(flag, distinctId, personProperties)
       if (bucketingValue === undefined) {
-        throw new InconclusiveMatchError(
-          `Can't compute feature flag: ${flag.key} without $device_id`
-        )
+        throw new InconclusiveMatchError(`Can't compute feature flag: ${flag.key} without $device_id`)
       }
       return await this.matchFeatureFlagProperties(
         flag,
