@@ -137,7 +137,7 @@ type OnlyValidKeys<T, Shape> = T extends Shape ? (Exclude<keyof T, keyof Shape> 
 const instances: Record<string, PostHog> = {}
 
 // some globals for comparisons
-const __NOOP = () => { }
+const __NOOP = () => {}
 
 const PRIMARY_INSTANCE_NAME = 'posthog'
 
@@ -481,8 +481,8 @@ export class PostHog implements PostHogInterface {
             namedPosthog._init(token, config, name)
             instances[name] = namedPosthog
 
-                // Add as a property to the primary instance (this isn't type-safe but it is how it was always done)
-                ; (instances[PRIMARY_INSTANCE_NAME] as any)[name] = namedPosthog
+            // Add as a property to the primary instance (this isn't type-safe but it is how it was always done)
+            ;(instances[PRIMARY_INSTANCE_NAME] as any)[name] = namedPosthog
 
             return namedPosthog
         }
@@ -836,8 +836,8 @@ export class PostHog implements PostHogInterface {
             this.compression = includes(config['supportedCompression'], Compression.GZipJS)
                 ? Compression.GZipJS
                 : includes(config['supportedCompression'], Compression.Base64)
-                    ? Compression.Base64
-                    : undefined
+                  ? Compression.Base64
+                  : undefined
         }
 
         if (config.analytics?.endpoint) {
@@ -1009,7 +1009,7 @@ export class PostHog implements PostHogInterface {
                 if (isArray(fn_name)) {
                     capturing_calls.push(item) // chained call e.g. posthog.get_group().set()
                 } else if (isFunction(item)) {
-                    ; (item as any).call(this)
+                    ;(item as any).call(this)
                 } else if (isArray(item) && fn_name === 'alias') {
                     alias_calls.push(item)
                 } else if (isArray(item) && fn_name.indexOf('capture') !== -1 && isFunction((this as any)[fn_name])) {
@@ -1394,9 +1394,9 @@ export class PostHog implements PostHogInterface {
         } else {
             logger.error(
                 'Invalid value for property_denylist config: ' +
-                this.config.property_denylist +
-                ' or property_blacklist config: ' +
-                this.config.property_blacklist
+                    this.config.property_denylist +
+                    ' or property_blacklist config: ' +
+                    this.config.property_blacklist
             )
         }
 
@@ -2041,7 +2041,7 @@ export class PostHog implements PostHogInterface {
      * @returns {Function} A function that can be called to unsubscribe the listener. E.g. Used by `useEffect` when the component unmounts.
      */
     onSessionId(callback: SessionIdChangedCallback): () => void {
-        return this.sessionManager?.onSessionId(callback) ?? (() => { })
+        return this.sessionManager?.onSessionId(callback) ?? (() => {})
     }
 
     /**
@@ -3618,7 +3618,7 @@ export class PostHog implements PostHogInterface {
         if (this.config.advanced_disable_decide === true) {
             logger.warn(
                 "Config field 'advanced_disable_decide' is deprecated. Please use 'advanced_disable_flags' instead. " +
-                'The old field will be removed in a future major version.'
+                    'The old field will be removed in a future major version.'
             )
             return true
         }
@@ -3719,7 +3719,7 @@ const add_dom_loaded_handler = function () {
         if ((dom_loaded_handler as any).done) {
             return
         }
-        ; (dom_loaded_handler as any).done = true
+        ;(dom_loaded_handler as any).done = true
 
         ENQUEUE_REQUESTS = false
 
