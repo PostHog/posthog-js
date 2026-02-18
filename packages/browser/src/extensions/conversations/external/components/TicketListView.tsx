@@ -84,7 +84,12 @@ export const TicketListView: FunctionComponent<TicketListViewProps> = ({
                         return dateB - dateA // Descending order (newest first)
                     })
                     .map((ticket) => (
-                        <TicketListItem key={ticket.id} ticket={ticket} styles={styles} onClick={onSelectTicket} />
+                        <TicketListItem
+                            key={`${ticket.id}-${ticket.last_message_at || ticket.created_at}-${ticket.unread_count}`}
+                            ticket={ticket}
+                            styles={styles}
+                            onClick={onSelectTicket}
+                        />
                     ))}
             </div>
 
