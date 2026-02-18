@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.351.1
+
+### Patch Changes
+
+- [#3112](https://github.com/PostHog/posthog-js/pull/3112) [`c0b911d`](https://github.com/PostHog/posthog-js/commit/c0b911da06333e4fbc153c7ccaec5552127cc78b) Thanks [@adboio](https://github.com/adboio)! - prevent infinite recursion bug with 3rd party proxy on posthog
+  (2026-02-18)
+- Updated dependencies []:
+    - @posthog/types@1.351.1
+
 ## 1.351.0
 
 ### Minor Changes
