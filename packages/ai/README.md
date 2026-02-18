@@ -1,6 +1,6 @@
 # PostHog Node AI
 
-Initial Typescript SDK for LLM Observability
+TypeScript SDK for LLM observability with PostHog.
 
 [SEE FULL DOCS](https://posthog.com/docs/ai-engineering/observability)
 
@@ -10,7 +10,7 @@ Initial Typescript SDK for LLM Observability
 npm install @posthog/ai
 ```
 
-## Usage
+## Direct Provider Usage
 
 ```typescript
 import { OpenAI } from '@posthog/ai'
@@ -38,6 +38,61 @@ console.log(completion.choices[0].message.content)
 // YOU HAVE TO HAVE THIS OR THE CLIENT MAY NOT SEND EVENTS
 await phClient.shutdown()
 ```
+
+## OTEL + AI SDK (`experimental_telemetry`)
+
+Use this when working with Vercel AI SDK telemetry. `@posthog/ai` exposes an OTEL `SpanProcessor` that maps spans to PostHog AI events and sends them through `posthog-node`.
+
+```typescript
+import { NodeSDK } from '@opentelemetry/sdk-node'
+import { PostHog } from 'posthog-node'
+import { generateText } from 'ai'
+import { openai } from '@ai-sdk/openai'
+import { PostHogSpanProcessor } from '@posthog/ai/otel'
+
+const phClient = new PostHog('<YOUR_PROJECT_API_KEY>', { host: 'https://us.i.posthog.com' })
+
+const sdk = new NodeSDK({
+  spanProcessors: [
+    new PostHogSpanProcessor(phClient),
+  ],
+})
+
+sdk.start()
+
+await generateText({
+  model: openai('gpt-5.1'),
+  prompt: 'Write a short haiku about debugging',
+  experimental_telemetry: {
+    isEnabled: true,
+    functionId: 'my-awesome-function',
+    metadata: {
+      conversation_id: 'abc123',
+      plan: 'pro',
+    },
+  },
+})
+
+await phClient.shutdown()
+```
+
+### Custom Mappers
+
+The OTEL processor supports adapter mappers for different span formats:
+
+- `aiSdkSpanMapper` is the default mapper.
+- You can pass custom `mappers` in `PostHogSpanProcessor` options to support additional span schemas.
+
+### Per-call Metadata (Recommended)
+
+For dynamic properties, pass values in `experimental_telemetry.metadata` on each AI SDK call.
+These are captured from `ai.telemetry.metadata.*` and forwarded as PostHog event properties.
+Use processor options (`posthogProperties`) only for global defaults.
+
+## Notes
+
+- The OTEL route currently maps supported spans into PostHog AI events (manual capture path).
+- Existing wrapper-based tracing (for example `withTracing`) still works and is unchanged.
 
 LLM Observability [docs](https://posthog.com/docs/ai-engineering/observability)
 
