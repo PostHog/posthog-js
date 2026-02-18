@@ -5,6 +5,8 @@ import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-base'
 import type { PostHogTelemetryOptions } from './types'
 
 export class PostHogSpanProcessor implements SpanProcessor {
+  private readonly pendingCaptures = new Set<Promise<void>>()
+
   constructor(
     private readonly phClient: PostHog,
     private readonly options: PostHogTelemetryOptions = {}
@@ -15,17 +17,25 @@ export class PostHogSpanProcessor implements SpanProcessor {
   }
 
   onEnd(span: ReadableSpan): void {
-    captureSpan(span, this.phClient, this.options).catch((error) => {
-      console.error('Failed to capture telemetry span', error)
-    })
+    const capturePromise = captureSpan(span, this.phClient, this.options)
+      .catch((error) => {
+        console.error('Failed to capture telemetry span', error)
+      })
+      .finally(() => {
+        this.pendingCaptures.delete(capturePromise)
+      })
+
+    this.pendingCaptures.add(capturePromise)
   }
 
   async shutdown(): Promise<void> {
-    return Promise.resolve()
+    await this.forceFlush()
   }
 
   async forceFlush(): Promise<void> {
-    return Promise.resolve()
+    while (this.pendingCaptures.size > 0) {
+      await Promise.allSettled([...this.pendingCaptures])
+    }
   }
 }
 
