@@ -1679,8 +1679,9 @@ export class PostHog implements PostHogInterface {
      *
      * @param {Object|String} prop Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
+     *                        If {fresh: true}, we won't return cached values from localStorage - only values loaded from the server.
      */
-    getFeatureFlag(key: string, options?: { send_event?: boolean }): boolean | string | undefined {
+    getFeatureFlag(key: string, options?: { send_event?: boolean; fresh?: boolean }): boolean | string | undefined {
         return this.featureFlags.getFeatureFlag(key, options)
     }
 
@@ -1736,9 +1737,13 @@ export class PostHog implements PostHogInterface {
      * @param {string} key Key of the feature flag.
      * @param {Object} [options] Options for the feature flag lookup.
      * @param {boolean} [options.send_event=true] If false, won't send the $feature_flag_called event.
+     * @param {boolean} [options.fresh=false] If true, won't return cached values from localStorage - only values loaded from the server.
      * @returns {FeatureFlagResult | undefined} The feature flag result including key, enabled, variant, and payload.
      */
-    getFeatureFlagResult(key: string, options?: { send_event?: boolean }): FeatureFlagResult | undefined {
+    getFeatureFlagResult(
+        key: string,
+        options?: { send_event?: boolean; fresh?: boolean }
+    ): FeatureFlagResult | undefined {
         return this.featureFlags.getFeatureFlagResult(key, options)
     }
 
@@ -1771,8 +1776,9 @@ export class PostHog implements PostHogInterface {
      *
      * @param {Object|String} prop Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
+     *                        If {fresh: true}, we won't return cached values from localStorage - only values loaded from the server.
      */
-    isFeatureEnabled(key: string, options?: { send_event: boolean }): boolean | undefined {
+    isFeatureEnabled(key: string, options?: { send_event?: boolean; fresh?: boolean }): boolean | undefined {
         return this.featureFlags.isFeatureEnabled(key, options)
     }
 
