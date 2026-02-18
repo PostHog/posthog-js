@@ -18,7 +18,7 @@ jobs:
                   FILTERED_BODY=$( \
                       sed -r -e \
                       '/^(\.\.\.)|(\*)|(##? )|(- \[)/d' \
-                      <<< $RAW_BODY \
+                      <<< "$RAW_BODY" \
                   )
                   echo "::debug::Filtered PR body to $FILTERED_BODY"
                   if [[ -z "${FILTERED_BODY//[[:space:]]/}" ]]; then
@@ -27,12 +27,14 @@ jobs:
                       echo "is-shame-worthy=false" >> "$GITHUB_OUTPUT"
                   fi
               env:
-                  RAW_BODY: ${{ github.event.pull_request.body }}
+                  RAW_BODY: ${{ toJSON(github.event.pull_request.body) }}
 
             - name: Shame if PR has no description
               if: steps.is-shame-worthy.outputs.is-shame-worthy == 'true'
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  PR_AUTHOR: ${{ toJSON(github.actor) }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
               run: |
-                  SHAME_BODY="Hey @${{ github.actor }}! 👋\nThis pull request seems to contain no description. Please add useful context, rationale, and/or any other information that will help make sense of this change now and in the distant Mars-based future."
-                  gh pr comment ${{ github.event.pull_request.number }} --body "$SHAME_BODY"
+                  SHAME_BODY="Hey @${PR_AUTHOR}! 👋\nThis pull request seems to contain no description. Please add useful context, rationale, and/or any other information that will help make sense of this change now and in the distant Mars-based future."
+                  gh pr comment "$PR_NUMBER" --body "$SHAME_BODY"
