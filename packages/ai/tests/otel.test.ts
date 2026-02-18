@@ -1,5 +1,6 @@
 import { PostHog } from 'posthog-node'
 import { captureSpan, createPostHogSpanProcessor, PostHogSpanProcessor, PostHogSpanMapper } from '../src/otel'
+import * as captureModule from '../src/otel/capture'
 import { flushPromises } from './test-utils'
 
 const mockSpanContext = (traceId: string) => ({
@@ -44,6 +45,7 @@ describe('OTEL span mapping', () => {
           'ai.settings.maxOutputTokens': 200,
           'ai.telemetry.metadata.conversation_id': 'conv_123',
         },
+        instrumentationScope: { name: 'ai', version: '6.1.0' },
         duration: [1, 500000000],
         status: { code: 1 },
         spanContext: () => mockSpanContext('otel-trace-123'),
@@ -71,6 +73,61 @@ describe('OTEL span mapping', () => {
       })
     )
     expect(properties.conversation_id).toBe('conv_123')
+  })
+
+  it('does not send framework version when SDK version is unavailable', async () => {
+    await captureSpan(
+      {
+        attributes: {
+          'ai.operationId': 'ai.generateText.doGenerate',
+          'ai.model.id': 'gpt-4o-mini',
+          'ai.model.provider': 'openai',
+          'ai.prompt.messages': JSON.stringify([{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }]),
+          'ai.response.text': 'Hi there!',
+          'ai.usage.promptTokens': 12,
+          'ai.usage.completionTokens': 8,
+        },
+        duration: [1, 500000000],
+        status: { code: 1 },
+        spanContext: () => mockSpanContext('otel-trace-no-sdk-version'),
+      } as any,
+      mockPostHogClient,
+      {
+        posthogDistinctId: 'user_123',
+      }
+    )
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0].properties.$ai_framework_version).toBeUndefined()
+  })
+
+  it('maps framework version from ai request user-agent when instrumentation scope is missing', async () => {
+    await captureSpan(
+      {
+        attributes: {
+          'ai.operationId': 'ai.generateText.doGenerate',
+          'ai.model.id': 'gpt-4o-mini',
+          'ai.model.provider': 'openai',
+          'ai.request.headers.user-agent': 'ai/6.0.90',
+          'ai.prompt.messages': JSON.stringify([{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }]),
+          'ai.response.text': 'Hi there!',
+          'ai.usage.promptTokens': 12,
+          'ai.usage.completionTokens': 8,
+        },
+        duration: [1, 500000000],
+        status: { code: 1 },
+        spanContext: () => mockSpanContext('otel-trace-user-agent-version'),
+      } as any,
+      mockPostHogClient,
+      {
+        posthogDistinctId: 'user_123',
+      }
+    )
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0].properties.$ai_framework_version).toBe('6')
   })
 
   it('maps stream span TTFT from ai.response.msToFirstChunk', async () => {
@@ -164,6 +221,78 @@ describe('OTEL span mapping', () => {
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
     const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
     expect(captureCall[0].properties.$ai_trace_id).toBe('accepted-trace')
+  })
+
+  it('span processor forceFlush waits for in-flight captures to settle', async () => {
+    let resolveCapture: (() => void) | undefined
+    const captureSpy = jest.spyOn(captureModule, 'captureSpan').mockImplementation(() => {
+      return new Promise<void>((resolve) => {
+        resolveCapture = resolve
+      })
+    })
+
+    const spanProcessor = createPostHogSpanProcessor(mockPostHogClient, {
+      posthogDistinctId: 'processor-user',
+    })
+
+    spanProcessor.onEnd({
+      attributes: {
+        'ai.operationId': 'ai.generateText.doGenerate',
+        'ai.model.id': 'gpt-4o-mini',
+      },
+      duration: [0, 120000000],
+      status: { code: 1 },
+      spanContext: () => mockSpanContext('flush-trace'),
+    } as any)
+
+    let flushed = false
+    const flushPromise = spanProcessor.forceFlush().then(() => {
+      flushed = true
+    })
+
+    await flushPromises()
+    expect(flushed).toBe(false)
+
+    resolveCapture?.()
+    await flushPromise
+    expect(flushed).toBe(true)
+    captureSpy.mockRestore()
+  })
+
+  it('span processor shutdown waits for in-flight captures to settle', async () => {
+    let resolveCapture: (() => void) | undefined
+    const captureSpy = jest.spyOn(captureModule, 'captureSpan').mockImplementation(() => {
+      return new Promise<void>((resolve) => {
+        resolveCapture = resolve
+      })
+    })
+
+    const spanProcessor = createPostHogSpanProcessor(mockPostHogClient, {
+      posthogDistinctId: 'processor-user',
+    })
+
+    spanProcessor.onEnd({
+      attributes: {
+        'ai.operationId': 'ai.generateText.doGenerate',
+        'ai.model.id': 'gpt-4o-mini',
+      },
+      duration: [0, 120000000],
+      status: { code: 1 },
+      spanContext: () => mockSpanContext('shutdown-trace'),
+    } as any)
+
+    let shutdownComplete = false
+    const shutdownPromise = spanProcessor.shutdown().then(() => {
+      shutdownComplete = true
+    })
+
+    await flushPromises()
+    expect(shutdownComplete).toBe(false)
+
+    resolveCapture?.()
+    await shutdownPromise
+    expect(shutdownComplete).toBe(true)
+    captureSpy.mockRestore()
   })
 
   it('creates a PostHog span processor', async () => {

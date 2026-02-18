@@ -6,6 +6,15 @@ import type { PostHogSpanMapper, PostHogSpanMapperResult, UsageData } from '../t
 const OTEL_STATUS_ERROR = 2
 const AI_TELEMETRY_METADATA_PREFIX = 'ai.telemetry.metadata.'
 
+type InstrumentationInfo = {
+  version?: unknown
+}
+
+type ReadableSpanWithInstrumentation = ReadableSpan & {
+  instrumentationScope?: InstrumentationInfo
+  instrumentationLibrary?: InstrumentationInfo
+}
+
 function parseJsonValue<T>(value: unknown): T | null {
   if (value === undefined || value === null) {
     return null
@@ -677,6 +686,25 @@ function extractProviderMetadata(attributes: Record<string, unknown>): unknown {
   return parseJsonValue(rawProviderMetadata) || {}
 }
 
+function getAiSdkFrameworkVersion(span: ReadableSpan): string | undefined {
+  const instrumentedSpan = span as ReadableSpanWithInstrumentation
+  const attributes = span.attributes || {}
+  const instrumentationScopeVersion =
+    toStringValue(instrumentedSpan.instrumentationScope?.version) ||
+    toStringValue(instrumentedSpan.instrumentationLibrary?.version)
+  const aiUserAgent = toStringValue(attributes['ai.request.headers.user-agent'])
+  const userAgentVersionMatch = aiUserAgent?.match(/\bai\/(\d+(?:\.\d+)*)\b/i)
+  const userAgentVersion = userAgentVersionMatch?.[1]
+
+  const rawVersion = instrumentationScopeVersion || userAgentVersion
+  if (!rawVersion) {
+    return undefined
+  }
+
+  const majorVersionMatch = rawVersion.match(/^v?(\d+)/i)
+  return majorVersionMatch ? majorVersionMatch[1] : rawVersion
+}
+
 function buildPosthogProperties(attributes: Record<string, unknown>, operationId: string): Record<string, unknown> {
   const telemetryMetadata = extractAiSdkTelemetryMetadata(attributes)
   const finishReasons = toStringArray(parseJsonValue(attributes['gen_ai.response.finish_reasons']))
@@ -686,7 +714,6 @@ function buildPosthogProperties(attributes: Record<string, unknown>, operationId
   return {
     ...telemetryMetadata,
     $ai_framework: 'vercel',
-    $ai_framework_version: '6',
     ai_operation_id: operationId,
     ...(finishReason ? { ai_finish_reason: finishReason } : {}),
     ...(toStringValue(attributes['ai.response.model']) ? { ai_response_model: attributes['ai.response.model'] } : {}),
@@ -747,6 +774,7 @@ function buildAiSdkMapperResult(span: ReadableSpan): PostHogSpanMapperResult | n
   const tools = parsePromptTools(attributes)
   const httpStatus = toNumber(attributes['http.response.status_code']) || 200
   const eventType = isDoEmbedSpan(operationId) ? AIEvent.Embedding : AIEvent.Generation
+  const frameworkVersion = getAiSdkFrameworkVersion(span)
 
   const error =
     span.status?.code === OTEL_STATUS_ERROR ? span.status.message || 'AI SDK span recorded error status' : undefined
@@ -763,7 +791,10 @@ function buildAiSdkMapperResult(span: ReadableSpan): PostHogSpanMapperResult | n
     usage,
     tools,
     modelParams,
-    posthogProperties: buildPosthogProperties(attributes, operationId),
+    posthogProperties: {
+      ...buildPosthogProperties(attributes, operationId),
+      ...(frameworkVersion ? { $ai_framework_version: frameworkVersion } : {}),
+    },
     error,
   }
 }
