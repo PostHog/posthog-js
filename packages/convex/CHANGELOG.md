@@ -1,5 +1,15 @@
 # @posthog/convex
 
+## 0.1.1
+
+### Patch Changes
+
+- [#3111](https://github.com/PostHog/posthog-js/pull/3111) [`cb4351a`](https://github.com/PostHog/posthog-js/commit/cb4351aa0764c70721246983cd7bd4246d4b958b) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Initial release of @posthog/convex - PostHog analytics integration for Convex
+  (2026-02-18)
+- Updated dependencies [[`9dbc05e`](https://github.com/PostHog/posthog-js/commit/9dbc05ed65ddc8c37c9262b9aebfc51d0c748971)]:
+  - @posthog/core@1.23.1
+  - posthog-node@5.24.17
+
 ## 0.1.0
 
 ### Minor Changes

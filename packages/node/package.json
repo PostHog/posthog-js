@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.24.16",
+  "version": "5.24.17",
   "description": "PostHog Node.js integration",
   "repository": {
     "type": "git",
