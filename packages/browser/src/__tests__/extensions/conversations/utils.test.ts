@@ -151,24 +151,29 @@ describe('conversations utils', () => {
 
         describe('HTML tags', () => {
             it('should remove HTML tags', () => {
-                expect(stripMarkdown('Text with <strong>HTML</strong> tags')).toBe('Text with strongHTML/strong tags')
+                expect(stripMarkdown('Text with <strong>HTML</strong> tags')).toBe('Text with HTML tags')
             })
 
             it('should remove self-closing tags', () => {
-                expect(stripMarkdown('Line<br/>break')).toBe('Linebr/break')
+                expect(stripMarkdown('Line<br/>break')).toBe('Linebreak')
             })
 
             it('should remove tags with attributes', () => {
-                expect(stripMarkdown('<a href="url">Link</a>')).toBe('a href="url"Link/a')
+                expect(stripMarkdown('<a href="url">Link</a>')).toBe('Link')
             })
 
             it('should remove incomplete/partial tags for security', () => {
                 expect(stripMarkdown('<script')).toBe('script')
-                expect(stripMarkdown('text<script>alert(1)')).toBe('textscriptalert(1)')
+                expect(stripMarkdown('text<script>alert(1)')).toBe('textalert(1)')
             })
 
             it('should remove lone angle brackets', () => {
-                expect(stripMarkdown('a < b > c')).toBe('a  b  c')
+                // '< b >' is treated as a tag and removed entirely
+                expect(stripMarkdown('a < b > c')).toBe('a  c')
+                // Lone < without matching > is stripped
+                expect(stripMarkdown('a < b')).toBe('a  b')
+                // Lone > without matching < is stripped
+                expect(stripMarkdown('a > b')).toBe('a  b')
             })
         })
 

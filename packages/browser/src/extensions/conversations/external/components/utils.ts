@@ -76,7 +76,8 @@ export function stripMarkdown(text: string | undefined): string {
             .replace(/_([^_]+)_/g, '$1')
             // Remove strikethrough
             .replace(/~~([^~]+)~~/g, '$1')
-            // Remove HTML angle brackets entirely to prevent partial tags
+            // Remove HTML tags entirely, then strip any remaining angle brackets for security
+            .replace(/<[^>]*>/g, '')
             .replace(/[<>]/g, '')
             // Collapse multiple newlines
             .replace(/\n{2,}/g, '\n')
