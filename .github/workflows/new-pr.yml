@@ -18,7 +18,7 @@ jobs:
                   FILTERED_BODY=$( \
                       sed -r -e \
                       '/^(\.\.\.)|(\*)|(##? )|(- \[)/d' \
-                      <<< "$RAW_BODY" \
+                      <<< $RAW_BODY \
                   )
                   echo "::debug::Filtered PR body to $FILTERED_BODY"
                   if [[ -z "${FILTERED_BODY//[[:space:]]/}" ]]; then
