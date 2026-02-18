@@ -40,3 +40,47 @@ export function truncateText(text: string | undefined, maxLength: number): strin
     }
     return text.substring(0, maxLength - 3) + '...'
 }
+
+/**
+ * Strip markdown formatting from text for plain text display
+ * Lightweight regex-based approach without external dependencies
+ */
+export function stripMarkdown(text: string | undefined): string {
+    if (!text) {
+        return ''
+    }
+
+    return (
+        text
+            // Remove code blocks first (before other processing)
+            .replace(/```[\s\S]*?```/g, '')
+            // Remove inline code
+            .replace(/`([^`]+)`/g, '$1')
+            // Remove images
+            .replace(/!\[([^\]]*)\]\([^)]+\)/g, '')
+            // Convert links to just text
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+            // Remove headers
+            .replace(/^#{1,6}\s+/gm, '')
+            // Remove bold/italic (order matters: ** before *)
+            .replace(/\*\*([^*]+)\*\*/g, '$1')
+            .replace(/\*([^*]+)\*/g, '$1')
+            .replace(/__([^_]+)__/g, '$1')
+            .replace(/_([^_]+)_/g, '$1')
+            // Remove strikethrough
+            .replace(/~~([^~]+)~~/g, '$1')
+            // Remove blockquotes
+            .replace(/^>\s*/gm, '')
+            // Remove horizontal rules
+            .replace(/^[-*_]{3,}\s*$/gm, '')
+            // Remove list markers
+            .replace(/^[\s]*[-*+]\s+/gm, '')
+            .replace(/^[\s]*\d+\.\s+/gm, '')
+            // Remove HTML tags
+            .replace(/<[^>]+>/g, '')
+            // Collapse multiple newlines
+            .replace(/\n{2,}/g, '\n')
+            // Trim whitespace
+            .trim()
+    )
+}

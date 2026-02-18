@@ -2,7 +2,7 @@
 import { h, FunctionComponent } from 'preact'
 import { Ticket, TicketStatus } from '../../../../posthog-conversations-types'
 import { getStyles } from './styles'
-import { formatRelativeTime, truncateText } from './utils'
+import { formatRelativeTime, truncateText, stripMarkdown } from './utils'
 
 interface TicketListItemProps {
     ticket: Ticket
@@ -54,7 +54,7 @@ export const TicketListItem: FunctionComponent<TicketListItemProps> = ({ ticket,
             <div style={styles.ticketItemContent}>
                 <div style={styles.ticketItemHeader}>
                     <span style={hasUnread ? styles.ticketPreviewUnread : styles.ticketPreview}>
-                        {truncateText(ticket.last_message, 60)}
+                        {truncateText(stripMarkdown(ticket.last_message), 60)}
                     </span>
                     {hasUnread && <span style={styles.ticketUnreadBadge}>{ticket.unread_count}</span>}
                 </div>
