@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 7.9.0
+
+### Minor Changes
+
+- [#3103](https://github.com/PostHog/posthog-js/pull/3103) [`526520a`](https://github.com/PostHog/posthog-js/commit/526520a6f1b09bdc847e3156807e11be0fdf052d) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Added AI SDK OTEL span processing pipeline
+  (2026-02-18)
+
 ## 7.8.13
 
 ### Patch Changes
