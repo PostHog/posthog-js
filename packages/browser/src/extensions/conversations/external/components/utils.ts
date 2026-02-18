@@ -62,6 +62,13 @@ export function stripMarkdown(text: string | undefined): string {
             .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
             // Remove headers
             .replace(/^#{1,6}\s+/gm, '')
+            // Remove blockquotes
+            .replace(/^>\s*/gm, '')
+            // Remove horizontal rules (must be before list markers to avoid conflicts)
+            .replace(/^[-*_]{3,}\s*$/gm, '')
+            // Remove list markers (must be before bold/italic to avoid conflicts with *)
+            .replace(/^[\s]*[-*+]\s+/gm, '')
+            .replace(/^[\s]*\d+\.\s+/gm, '')
             // Remove bold/italic (order matters: ** before *)
             .replace(/\*\*([^*]+)\*\*/g, '$1')
             .replace(/\*([^*]+)\*/g, '$1')
@@ -69,15 +76,8 @@ export function stripMarkdown(text: string | undefined): string {
             .replace(/_([^_]+)_/g, '$1')
             // Remove strikethrough
             .replace(/~~([^~]+)~~/g, '$1')
-            // Remove blockquotes
-            .replace(/^>\s*/gm, '')
-            // Remove horizontal rules
-            .replace(/^[-*_]{3,}\s*$/gm, '')
-            // Remove list markers
-            .replace(/^[\s]*[-*+]\s+/gm, '')
-            .replace(/^[\s]*\d+\.\s+/gm, '')
-            // Remove HTML tags
-            .replace(/<[^>]+>/g, '')
+            // Remove HTML angle brackets entirely to prevent partial tags
+            .replace(/[<>]/g, '')
             // Collapse multiple newlines
             .replace(/\n{2,}/g, '\n')
             // Trim whitespace
