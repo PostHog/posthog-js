@@ -29,6 +29,12 @@ export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
   sendFeatureFlags?: boolean | SendFeatureFlagsOptions
   timestamp?: Date
   uuid?: string
+  /**
+   * Internal flag set by captureException() to indicate this $exception
+   * event originated from the proper exception capture path. Used to warn users who call
+   * capture() with '$exception' directly.
+   */
+  _originatedFromCaptureException?: boolean
 }
 
 export type GroupIdentifyMessage = {

@@ -339,6 +339,7 @@
         "_onlineListener",
         "_options",
         "_originalUserConfig",
+        "_originatedFromCaptureException",
         "_override_warning",
         "_pageHideListener",
         "_pageViewFallBack",

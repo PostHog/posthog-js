@@ -346,6 +346,12 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   capture(event: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
+    if (event === '$exception' && !options?._originatedFromCaptureException) {
+      this._logger.warn(
+        "Using `posthog.capture('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureException(error)` instead, which attaches required metadata automatically."
+      )
+    }
+
     this.wrap(() => {
       const distinctId = this.getDistinctId()
 
@@ -1131,7 +1137,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       ...additionalProperties,
     }
 
-    this.capture('$exception', properties)
+    this.capture('$exception', properties, { _originatedFromCaptureException: true })
   }
 
   /**
