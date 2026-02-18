@@ -42,6 +42,7 @@ import { doesTourActivateByAction, doesTourActivateByEvent } from '../../utils/p
 import { TOOLBAR_ID } from '../../constants'
 import { ProductTourEventReceiver } from '../../utils/product-tour-event-receiver'
 import { getBrowserLanguage } from '../../utils/event-utils'
+import { doesDeviceTypeMatch } from '../utils/matcher-utils'
 
 const logger = createLogger('[Product Tours]')
 
@@ -91,7 +92,7 @@ function isTourInDateRange(tour: ProductTour): boolean {
 }
 
 function checkTourConditions(tour: ProductTour): boolean {
-    return isTourInDateRange(tour) && doesTourUrlMatch(tour)
+    return isTourInDateRange(tour) && doesTourUrlMatch(tour) && doesDeviceTypeMatch(tour.conditions?.deviceTypes)
 }
 
 const CONTAINER_CLASS = 'ph-product-tour-container'

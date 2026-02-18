@@ -117,6 +117,7 @@ export interface ProductTourConditions {
         values: SurveyActionType[]
     } | null
     linkedFlagVariant?: string
+    deviceTypes?: string[]
 }
 
 export interface ProductTourAppearance {
