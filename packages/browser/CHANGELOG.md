@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.351.2
+
+### Patch Changes
+
+- [#3096](https://github.com/PostHog/posthog-js/pull/3096) [`d964a31`](https://github.com/PostHog/posthog-js/commit/d964a31414cbf5358e22af1e383ba44e1801ccdb) Thanks [@adboio](https://github.com/adboio)! - add banner click tracking for tours
+  (2026-02-19)
+- Updated dependencies []:
+    - @posthog/types@1.351.2
+
 ## 1.351.1
 
 ### Patch Changes
