@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.351.3
+
+### Patch Changes
+
+- [#3098](https://github.com/PostHog/posthog-js/pull/3098) [`1a53e8c`](https://github.com/PostHog/posthog-js/commit/1a53e8c7042575905e9fd9efa7b336c51f110e60) Thanks [@adboio](https://github.com/adboio)! - add animation option for tour banners
+  (2026-02-19)
+- Updated dependencies []:
+    - @posthog/types@1.351.3
+
 ## 1.351.2
 
 ### Patch Changes
