@@ -28,6 +28,7 @@ export type {
     FeatureFlagMetadata,
     EvaluationReason,
     FeatureFlagResult,
+    FeatureFlagOptions,
     RemoteConfigFeatureFlagCallback,
     EarlyAccessFeature,
     EarlyAccessFeatureStage,

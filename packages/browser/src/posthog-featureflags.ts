@@ -13,6 +13,7 @@ import {
     EarlyAccessFeatureStage,
     FeatureFlagDetail,
     FeatureFlagResult,
+    FeatureFlagOptions,
     OverrideFeatureFlagsOptions,
 } from './types'
 import { PostHogPersistence } from './posthog-persistence'
@@ -550,7 +551,7 @@ export class PostHogFeatureFlags {
      *                  such as after disabling a flag. Returns undefined until the /flags endpoint responds.
      * @returns {boolean | string | undefined} The flag value, or undefined if not found or not yet loaded.
      */
-    getFeatureFlag(key: string, options: { send_event?: boolean; fresh?: boolean } = {}): boolean | string | undefined {
+    getFeatureFlag(key: string, options: FeatureFlagOptions = {}): boolean | string | undefined {
         if (options.fresh && !this._flagsLoadedFromRemote) {
             return undefined
         }
@@ -615,10 +616,7 @@ export class PostHogFeatureFlags {
      *                  Returns undefined until the /flags endpoint responds.
      * @returns {FeatureFlagResult | undefined} The feature flag result including key, enabled, variant, and payload.
      */
-    getFeatureFlagResult(
-        key: string,
-        options: { send_event?: boolean; fresh?: boolean } = {}
-    ): FeatureFlagResult | undefined {
+    getFeatureFlagResult(key: string, options: FeatureFlagOptions = {}): FeatureFlagResult | undefined {
         if (options.fresh && !this._flagsLoadedFromRemote) {
             return undefined
         }
@@ -781,7 +779,7 @@ export class PostHogFeatureFlags {
      *                  Returns undefined until the /flags endpoint responds.
      * @returns {boolean | undefined} Whether the flag is enabled, or undefined if not found or not yet loaded.
      */
-    isFeatureEnabled(key: string, options: { send_event?: boolean; fresh?: boolean } = {}): boolean | undefined {
+    isFeatureEnabled(key: string, options: FeatureFlagOptions = {}): boolean | undefined {
         if (options.fresh && !this._flagsLoadedFromRemote) {
             return undefined
         }

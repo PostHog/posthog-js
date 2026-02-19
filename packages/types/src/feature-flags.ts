@@ -89,6 +89,22 @@ export type FeatureFlagOverrideOptions = {
 }
 
 /**
+ * Options for feature flag lookup methods (getFeatureFlag, isFeatureEnabled, getFeatureFlagResult).
+ */
+export type FeatureFlagOptions = {
+    /**
+     * Whether to send a $feature_flag_called event. Defaults to true.
+     */
+    send_event?: boolean
+    /**
+     * If true, only return values loaded from the server, not cached localStorage values.
+     * Returns undefined if flags haven't been loaded from the server yet.
+     * Defaults to false.
+     */
+    fresh?: boolean
+}
+
+/**
  * Options for overriding feature flags on the client-side.
  *
  * Can be:
