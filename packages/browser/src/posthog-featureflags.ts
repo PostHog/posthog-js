@@ -13,6 +13,7 @@ import {
     EarlyAccessFeatureStage,
     FeatureFlagDetail,
     FeatureFlagResult,
+    FeatureFlagOptions,
     OverrideFeatureFlagsOptions,
 } from './types'
 import { PostHogPersistence } from './posthog-persistence'
@@ -528,17 +529,32 @@ export class PostHogFeatureFlags {
         })
     }
 
-    /*
+    /**
      * Get feature flag's value for user.
+     *
+     * By default, this method may return cached values from localStorage if the `/flags` endpoint
+     * hasn't responded yet. This reduces flicker but means you might briefly see stale values
+     * (e.g., a flag that was disabled on the server).
      *
      * ### Usage:
      *
      *     if(posthog.getFeatureFlag('my-flag') === 'some-variant') { // do something }
      *
-     * @param {Object|String} key Key of the feature flag.
-     * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_called event to PostHog.
+     *     // Only use fresh values from the server (returns undefined until /flags responds)
+     *     if(posthog.getFeatureFlag('my-flag', { fresh: true }) === 'some-variant') { // do something }
+     *
+     * @param {String} key Key of the feature flag.
+     * @param {Object} options Optional settings.
+     * @param {boolean} [options.send_event=true] If false, won't send a $feature_flag_called event to PostHog.
+     * @param {boolean} [options.fresh=false] If true, only returns values loaded from the server, not cached localStorage values.
+     *                  Use this when you need to ensure the flag value reflects the current server state,
+     *                  such as after disabling a flag. Returns undefined until the /flags endpoint responds.
+     * @returns {boolean | string | undefined} The flag value, or undefined if not found or not yet loaded.
      */
-    getFeatureFlag(key: string, options: { send_event?: boolean } = {}): boolean | string | undefined {
+    getFeatureFlag(key: string, options: FeatureFlagOptions = {}): boolean | string | undefined {
+        if (options.fresh && !this._flagsLoadedFromRemote) {
+            return undefined
+        }
         if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
             logger.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
@@ -578,6 +594,10 @@ export class PostHogFeatureFlags {
      * Get a feature flag result including both the flag value and payload, while properly tracking the call.
      * This method emits the `$feature_flag_called` event by default.
      *
+     * By default, this method may return cached values from localStorage if the `/flags` endpoint
+     * hasn't responded yet. This reduces flicker but means you might briefly see stale values
+     * (e.g., a flag that was disabled on the server).
+     *
      * ### Usage:
      *
      *     const result = posthog.getFeatureFlagResult('my-flag')
@@ -585,12 +605,21 @@ export class PostHogFeatureFlags {
      *         console.log('Flag is enabled with payload:', result.payload)
      *     }
      *
+     *     // Only use fresh values from the server
+     *     const freshResult = posthog.getFeatureFlagResult('my-flag', { fresh: true })
+     *
      * @param {String} key Key of the feature flag.
      * @param {Object} [options] Options for the feature flag lookup.
      * @param {boolean} [options.send_event=true] If false, won't send the $feature_flag_called event.
+     * @param {boolean} [options.fresh=false] If true, only returns values loaded from the server, not cached localStorage values.
+     *                  Use this when you need to ensure the flag value reflects the current server state.
+     *                  Returns undefined until the /flags endpoint responds.
      * @returns {FeatureFlagResult | undefined} The feature flag result including key, enabled, variant, and payload.
      */
-    getFeatureFlagResult(key: string, options: { send_event?: boolean } = {}): FeatureFlagResult | undefined {
+    getFeatureFlagResult(key: string, options: FeatureFlagOptions = {}): FeatureFlagResult | undefined {
+        if (options.fresh && !this._flagsLoadedFromRemote) {
+            return undefined
+        }
         if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
             logger.warn('getFeatureFlagResult for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
@@ -731,16 +760,29 @@ export class PostHogFeatureFlags {
     /**
      * See if feature flag is enabled for user.
      *
+     * By default, this method may return cached values from localStorage if the `/flags` endpoint
+     * hasn't responded yet. This reduces flicker but means you might briefly see stale values
+     * (e.g., a flag that was disabled on the server).
+     *
      * ### Usage:
      *
      *     if(posthog.isFeatureEnabled('beta-feature')) { // do something }
      *
-     * @param key Key of the feature flag.
-     * @param [options] If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
-     * @returns A boolean value indicating whether or not the specified feature flag is enabled. If flag information has not yet been loaded,
-     *          or if the specified feature flag is disabled or does not exist, returns undefined.
+     *     // Only use fresh values from the server
+     *     if(posthog.isFeatureEnabled('beta-feature', { fresh: true })) { // do something }
+     *
+     * @param {String} key Key of the feature flag.
+     * @param {Object} [options] Optional settings.
+     * @param {boolean} [options.send_event=true] If false, won't send a $feature_flag_called event to PostHog.
+     * @param {boolean} [options.fresh=false] If true, only returns values loaded from the server, not cached localStorage values.
+     *                  Use this when you need to ensure the flag value reflects the current server state.
+     *                  Returns undefined until the /flags endpoint responds.
+     * @returns {boolean | undefined} Whether the flag is enabled, or undefined if not found or not yet loaded.
      */
-    isFeatureEnabled(key: string, options: { send_event?: boolean } = {}): boolean | undefined {
+    isFeatureEnabled(key: string, options: FeatureFlagOptions = {}): boolean | undefined {
+        if (options.fresh && !this._flagsLoadedFromRemote) {
+            return undefined
+        }
         if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
             logger.warn('isFeatureEnabled for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined

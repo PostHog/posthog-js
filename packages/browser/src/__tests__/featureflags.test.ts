@@ -157,6 +157,56 @@ describe('featureflags', () => {
         )
     })
 
+    describe('fresh option', () => {
+        it('should return undefined when fresh: true and flags have not been loaded from remote', () => {
+            // Flags exist in persistence (from previous session)
+            featureFlags._hasLoadedFlags = true
+            // But they haven't been loaded from the server yet
+            featureFlags._flagsLoadedFromRemote = false
+
+            expect(featureFlags.getFeatureFlag('beta-feature')).toEqual(true)
+            expect(featureFlags.getFeatureFlag('beta-feature', { fresh: true })).toEqual(undefined)
+
+            expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
+            expect(featureFlags.isFeatureEnabled('beta-feature', { fresh: true })).toEqual(undefined)
+
+            expect(featureFlags.getFeatureFlagResult('beta-feature')).toEqual({
+                key: 'beta-feature',
+                enabled: true,
+                variant: undefined,
+                payload: { some: 'payload' },
+            })
+            expect(featureFlags.getFeatureFlagResult('beta-feature', { fresh: true })).toEqual(undefined)
+        })
+
+        it('should return flag value when fresh: true and flags have been loaded from remote', () => {
+            featureFlags._hasLoadedFlags = true
+            featureFlags._flagsLoadedFromRemote = true
+
+            expect(featureFlags.getFeatureFlag('beta-feature', { fresh: true })).toEqual(true)
+            expect(featureFlags.isFeatureEnabled('beta-feature', { fresh: true })).toEqual(true)
+            expect(featureFlags.getFeatureFlagResult('beta-feature', { fresh: true })).toEqual({
+                key: 'beta-feature',
+                enabled: true,
+                variant: undefined,
+                payload: { some: 'payload' },
+            })
+        })
+
+        it('should return undefined for fresh: true when only localStorage cache exists', () => {
+            // Simulate: flags exist in localStorage from previous session
+            // but no network request has completed yet
+            featureFlags._hasLoadedFlags = false
+            featureFlags._flagsLoadedFromRemote = false
+
+            // Without fresh option, cached values are returned
+            expect(featureFlags.getFeatureFlag('beta-feature')).toEqual(true)
+
+            // With fresh option, undefined is returned
+            expect(featureFlags.getFeatureFlag('beta-feature', { fresh: true })).toEqual(undefined)
+        })
+    })
+
     it('should return the right feature flag and call capture', () => {
         featureFlags._hasLoadedFlags = false
 

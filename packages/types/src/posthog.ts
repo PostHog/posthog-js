@@ -13,6 +13,7 @@ import type {
     EarlyAccessFeatureCallback,
     EarlyAccessFeatureStage,
     FeatureFlagResult,
+    FeatureFlagOptions,
     OverrideFeatureFlagsOptions,
 } from './feature-flags'
 import type { SessionIdChangedCallback } from './session-recording'
@@ -231,9 +232,11 @@ export interface PostHog {
      *
      * @param key - The feature flag key
      * @param options - Options for the feature flag lookup
+     * @param options.send_event - Whether to send a $feature_flag_called event (default: true)
+     * @param options.fresh - If true, only return values loaded from the server, not cached localStorage values (default: false)
      * @returns The feature flag value (boolean for simple flags, string for multivariate)
      */
-    getFeatureFlag(key: string, options?: { send_event?: boolean }): boolean | string | undefined
+    getFeatureFlag(key: string, options?: FeatureFlagOptions): boolean | string | undefined
 
     /**
      * Get the payload of a feature flag.
@@ -251,18 +254,22 @@ export interface PostHog {
      *
      * @param key - The feature flag key
      * @param options - Options for the feature flag lookup
+     * @param options.send_event - Whether to send a $feature_flag_called event (default: true)
+     * @param options.fresh - If true, only return values loaded from the server, not cached localStorage values (default: false)
      * @returns The feature flag result including key, enabled, variant, and payload, or undefined if not loaded
      */
-    getFeatureFlagResult(key: string, options?: { send_event?: boolean }): FeatureFlagResult | undefined
+    getFeatureFlagResult(key: string, options?: FeatureFlagOptions): FeatureFlagResult | undefined
 
     /**
      * Check if a feature flag is enabled.
      *
      * @param key - The feature flag key
      * @param options - Options for the feature flag lookup
+     * @param options.send_event - Whether to send a $feature_flag_called event (default: true)
+     * @param options.fresh - If true, only return values loaded from the server, not cached localStorage values (default: false)
      * @returns Whether the feature flag is enabled
      */
-    isFeatureEnabled(key: string, options?: { send_event?: boolean }): boolean | undefined
+    isFeatureEnabled(key: string, options?: FeatureFlagOptions): boolean | undefined
 
     /**
      * Reload feature flags from the server.
