@@ -56,7 +56,17 @@ function StaticWrapper({ class: className, children }: BannerWrapperProps): h.JS
     return <div class={className}>{children}</div>
 }
 
-export function ProductTourBanner({
+export function ProductTourBanner(props: ProductTourBannerProps) {
+    return (
+        <div class="ph-tour-banner-wrapper">
+            <div class="ph-tour-banner-slide">
+                <ProductTourBannerInner {...props} />
+            </div>
+        </div>
+    )
+}
+
+function ProductTourBannerInner({
     step,
     onDismiss,
     onActionClick,

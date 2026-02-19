@@ -30,7 +30,7 @@ import { createLogger } from '../../utils/logger'
 import { document as _document, window as _window } from '../../utils/globals'
 import { localStore, sessionStore } from '../../storage'
 import { addEventListener } from '../../utils'
-import { isNull, SurveyMatchType } from '@posthog/core'
+import { isNull, isUndefined, SurveyMatchType } from '@posthog/core'
 import { propertyComparisons } from '../../utils/property-utils'
 import {
     TOUR_SHOWN_KEY_PREFIX,
@@ -153,6 +153,10 @@ function retrieveBannerShadow(
     div.className = containerClass
 
     addProductTourCSSVariablesToElement(div, tour.appearance)
+
+    if (!isUndefined(bannerConfig?.animation?.duration)) {
+        div.style.setProperty('--ph-tour-banner-animation-duration', `${bannerConfig.animation.duration}ms`)
+    }
 
     const shadow = div.attachShadow({ mode: 'open' })
 
