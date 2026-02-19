@@ -1,0 +1,128 @@
+import React from 'react'
+import type { PostHogConfig } from 'posthog-js'
+import { ClientPostHogProvider } from '../client/ClientPostHogProvider'
+import type { BootstrapConfig } from '../client/ClientPostHogProvider'
+import type { PostHogServer } from '../server/PostHogServer'
+
+export interface BootstrapFlagsConfig {
+    /** Specific flag keys to evaluate. If omitted, evaluates all flags. */
+    flags?: string[]
+    /** Whether to include feature flag payloads. Default: false. */
+    payloads?: boolean
+}
+
+export interface PostHogProviderProps {
+    /**
+     * PostHog project API key (starts with phc_).
+     * If omitted, reads from `NEXT_PUBLIC_POSTHOG_KEY` env var.
+     */
+    apiKey?: string
+    /** Optional posthog-js configuration overrides */
+    options?: Partial<PostHogConfig>
+    /** Enable server-side feature flag evaluation for bootstrap. */
+    bootstrapFlags?: boolean | BootstrapFlagsConfig
+    children: React.ReactNode
+}
+
+/**
+ * PostHog provider for Next.js App Router.
+ *
+ * This is an async server component that optionally evaluates feature flags
+ * on the server and passes them to the client via bootstrap. When
+ * `bootstrapFlags` is falsy (default), it passes through unchanged.
+ *
+ * All PostHog hooks (`usePostHog`, `useFeatureFlagEnabled`, etc.)
+ * require this provider as an ancestor.
+ */
+export async function PostHogProvider({ apiKey: apiKeyProp, options, bootstrapFlags, children }: PostHogProviderProps) {
+    const apiKey = apiKeyProp || process.env.NEXT_PUBLIC_POSTHOG_KEY
+    if (!apiKey) {
+        throw new Error(
+            '[PostHog Next.js] apiKey is required. Either pass it as a prop or set the NEXT_PUBLIC_POSTHOG_KEY environment variable.'
+        )
+    }
+    if (!apiKey.startsWith('phc_')) {
+        console.warn(`[PostHog Next.js] apiKey "${apiKey}" does not start with "phc_". This may not be a valid PostHog project API key.`)
+    }
+
+    const host = options?.api_host || process.env.NEXT_PUBLIC_POSTHOG_HOST
+    const resolvedOptions = host && host !== options?.api_host ? { ...options, api_host: host } : options
+
+    let bootstrap: BootstrapConfig | undefined
+
+    if (bootstrapFlags) {
+        try {
+            bootstrap = await evaluateFlags(apiKey, resolvedOptions, bootstrapFlags)
+        } catch (error) {
+            console.warn('[PostHog Next.js] Failed to evaluate bootstrap flags:', error)
+        }
+    }
+
+    return (
+        <ClientPostHogProvider apiKey={apiKey} options={resolvedOptions} bootstrap={bootstrap}>
+            {children}
+        </ClientPostHogProvider>
+    )
+}
+
+// Module-level cache for PostHogServer instances, keyed by "apiKey:host".
+// Avoids creating a new posthog-node client (with its poller and flush queue)
+// on every render.
+const serverCache = new Map<string, InstanceType<typeof PostHogServer>>()
+
+function getOrCreateServer(
+    postHogServer: typeof PostHogServer,
+    apiKey: string,
+    host: string | undefined
+) {
+    const cacheKey = `${apiKey}:${host ?? ''}`
+    let server = serverCache.get(cacheKey)
+    if (!server) {
+        server = new postHogServer(apiKey, { host })
+        serverCache.set(cacheKey, server)
+    }
+    return server
+}
+
+async function evaluateFlags(
+    apiKey: string,
+    options: Partial<PostHogConfig> | undefined,
+    bootstrapFlags: boolean | BootstrapFlagsConfig
+): Promise<BootstrapConfig> {
+    const { cookies } = await import('next/headers')
+    const { PostHogServer } = await import('../server/PostHogServer')
+    const { getPostHogCookieName, parsePostHogCookie } = await import('../shared/cookie')
+
+    const cookieStore = await cookies()
+    const server = getOrCreateServer(PostHogServer, apiKey, options?.api_host)
+    const client = server.getClient(cookieStore)
+    const distinctId = client.getDistinctId()
+
+    // Read identification state from cookie
+    const cookieName = getPostHogCookieName(apiKey)
+    const cookie = cookieStore.get(cookieName)
+    const cookieState = cookie ? parsePostHogCookie(cookie.value) : null
+    const isIdentifiedID = cookieState?.isIdentified ?? false
+
+    const config = typeof bootstrapFlags === 'object' ? bootstrapFlags : {}
+    const flagKeys = config.flags
+    const includePayloads = config.payloads ?? false
+
+    let featureFlags: Record<string, boolean | string>
+    let featureFlagPayloads: Record<string, any> | undefined
+
+    if (includePayloads) {
+        const result = await client.getAllFlagsAndPayloads(flagKeys)
+        featureFlags = result.featureFlags
+        featureFlagPayloads = result.featureFlagPayloads
+    } else {
+        featureFlags = await client.getAllFlags(flagKeys)
+    }
+
+    return {
+        distinctID: distinctId,
+        isIdentifiedID,
+        featureFlags,
+        ...(featureFlagPayloads ? { featureFlagPayloads } : {}),
+    }
+}

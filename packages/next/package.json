@@ -1,0 +1,86 @@
+{
+    "name": "@posthog/next",
+    "version": "0.0.1",
+    "description": "PostHog integration for Next.js",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/PostHog/posthog-js.git",
+        "directory": "packages/next"
+    },
+    "author": {
+        "name": "PostHog",
+        "email": "hey@posthog.com",
+        "url": "https://posthog.com"
+    },
+    "type": "module",
+    "license": "MIT",
+    "keywords": [
+        "posthog",
+        "nextjs",
+        "analytics",
+        "feature-flags"
+    ],
+    "sideEffects": false,
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        },
+        "./server": {
+            "types": "./dist/server.d.ts",
+            "default": "./dist/server.js"
+        },
+        "./middleware": {
+            "types": "./dist/middleware.d.ts",
+            "default": "./dist/middleware.js"
+        },
+        "./pages": {
+            "types": "./dist/pages.d.ts",
+            "default": "./dist/pages.js"
+        }
+    },
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist",
+        "src",
+        "!src/__tests__"
+    ],
+    "scripts": {
+        "clean": "rimraf dist",
+        "build": "tsgo -p tsconfig.build.json",
+        "dev": "tsgo -p tsconfig.build.json --watch",
+        "test:unit": "jest",
+        "test": "pnpm test:unit",
+        "lint": "eslint src",
+        "lint:fix": "eslint src --fix",
+        "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build"
+    },
+    "dependencies": {
+        "@posthog/core": "workspace:*",
+        "posthog-js": "workspace:*",
+        "posthog-node": "workspace:*",
+        "server-only": "^0.0.1"
+    },
+    "devDependencies": {
+        "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@testing-library/jest-dom": "^6.6.3",
+        "@testing-library/react": "^16.1.0",
+        "@types/jest": "^29.5.14",
+        "@types/react": "^19.0.0",
+        "@typescript/native-preview": "7.0.0-dev.20260216.1",
+        "jest": "^29.7.0",
+        "jest-environment-jsdom": "^29.7.0",
+        "next": "^15.0.0",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0",
+        "ts-jest": "^29.2.5",
+        "typescript": "catalog:"
+    },
+    "peerDependencies": {
+        "next": ">=13.0.0",
+        "react": ">=18.0.0",
+        "react-dom": ">=18.0.0"
+    },
+    "packageManager": "pnpm@10.23.0"
+}
