@@ -1,2 +1,2 @@
-export { postHogMiddleware } from './_middleware/postHogMiddleware'
-export type { PostHogMiddlewareOptions } from './_middleware/postHogMiddleware'
+export { postHogMiddleware } from './middleware/postHogMiddleware'
+export type { PostHogMiddlewareOptions } from './middleware/postHogMiddleware'

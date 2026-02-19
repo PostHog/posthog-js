@@ -23,7 +23,11 @@
     "sideEffects": false,
     "exports": {
         ".": {
-            "types": "./dist/index.d.ts",
+            "react-server": {
+                "types": "./dist/index.react-server.d.ts",
+                "default": "./dist/index.react-server.js"
+            },
+            "types": "./dist/index.react-server.d.ts",
             "default": "./dist/index.js"
         },
         "./server": {
@@ -40,7 +44,7 @@
         }
     },
     "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
+    "types": "./dist/index.react-server.d.ts",
     "files": [
         "dist",
         "src",
