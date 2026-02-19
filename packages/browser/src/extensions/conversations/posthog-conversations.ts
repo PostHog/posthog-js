@@ -5,6 +5,8 @@ import {
     GetTicketsOptions,
     GetTicketsResponse,
     MarkAsReadResponse,
+    RestoreFromTokenResponse,
+    RequestRestoreLinkResponse,
     SendMessageResponse,
     UserProvidedTraits,
 } from '../../posthog-conversations-types'
@@ -288,6 +290,47 @@ export class PostHogConversations {
             return null
         }
         return this._conversationsManager.getTickets(options)
+    }
+
+    /**
+     * Request a restore link email for previous conversations.
+     *
+     * @param email - Email address associated with previous conversations
+     * @returns Promise with generic success response or null if conversations unavailable
+     */
+    async requestRestoreLink(email: string): Promise<RequestRestoreLinkResponse | null> {
+        if (!this._conversationsManager) {
+            logger.warn('Conversations not available yet.')
+            return null
+        }
+        return this._conversationsManager.requestRestoreLink(email)
+    }
+
+    /**
+     * Redeem a restore token and relink eligible tickets to this browser session.
+     *
+     * @param restoreToken - Opaque restore token from restore email link
+     * @returns Promise with restore status or null if conversations unavailable
+     */
+    async restoreFromToken(restoreToken: string): Promise<RestoreFromTokenResponse | null> {
+        if (!this._conversationsManager) {
+            logger.warn('Conversations not available yet.')
+            return null
+        }
+        return this._conversationsManager.restoreFromToken(restoreToken)
+    }
+
+    /**
+     * Parse and redeem `ph_conv_restore` token from the current URL.
+     *
+     * @returns Promise with restore status, or null when no token/conversations unavailable
+     */
+    async restoreFromUrlToken(): Promise<RestoreFromTokenResponse | null> {
+        if (!this._conversationsManager) {
+            logger.warn('Conversations not available yet.')
+            return null
+        }
+        return this._conversationsManager.restoreFromUrlToken()
     }
 
     /**

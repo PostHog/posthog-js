@@ -1,31 +1,51 @@
 import { PostHog } from '../../../posthog-core'
 import { UserProvidedTraits } from '../../../posthog-conversations-types'
 import { createLogger } from '../../../utils/logger'
+import { window } from '../../../utils/globals'
 import { uuidv7 } from '../../../uuidv7'
 
 const logger = createLogger('[ConversationsPersistence]')
 
-// Persistence keys - defined here in the lazy-loaded extension bundle
-// These keys are also listed in constants.ts PERSISTENCE_RESERVED_PROPERTIES
-// to prevent them from being included in event properties
-const CONVERSATIONS_WIDGET_SESSION_ID = '$conversations_widget_session_id'
-const CONVERSATIONS_TICKET_ID = '$conversations_ticket_id'
-const CONVERSATIONS_WIDGET_STATE = '$conversations_widget_state'
-const CONVERSATIONS_USER_TRAITS = '$conversations_user_traits'
+// Old persistence keys (in PostHog's main persistence blob).
+// Kept for one-time migration to dedicated storage.
+const LEGACY_WIDGET_SESSION_ID = '$conversations_widget_session_id'
+const LEGACY_TICKET_ID = '$conversations_ticket_id'
+const LEGACY_WIDGET_STATE = '$conversations_widget_state'
+const LEGACY_USER_TRAITS = '$conversations_user_traits'
+
+interface ConversationsStorageData {
+    widgetSessionId?: string
+    ticketId?: string | null
+    widgetState?: 'open' | 'closed'
+    userTraits?: UserProvidedTraits | null
+}
 
 /**
- * ConversationsPersistence manages conversation-related data using PostHog's
- * core persistence layer. This ensures the data respects user's persistence
- * preferences (localStorage, cookie, sessionStorage, memory) and consent settings.
+ * Dedicated localStorage key scoped to the PostHog project token.
+ * Format: `ph_conv_<token>`
+ */
+function storageKey(posthog: PostHog): string | null {
+    const token = posthog.config?.token
+    return token ? 'ph_conv_' + token : null
+}
+
+/**
+ * ConversationsPersistence manages conversation data in its own dedicated
+ * localStorage entry, independent of PostHog's core persistence layer.
+ *
+ * This avoids a known issue where PostHog's persistence.props can lose data
+ * when the cookie+localStorage merge in _parse() fails on large entries.
+ *
+ * Pattern follows toolbar and surveys extensions which also use dedicated
+ * localStorage keys.
  */
 export class ConversationsPersistence {
     private _cachedWidgetSessionId: string | null = null
+    private _storageKey: string | null
 
-    constructor(private readonly _posthog: PostHog) {}
-
-    /** Check if persistence is available and enabled */
-    private _isPersistenceAvailable(): boolean {
-        return !!this._posthog.persistence && !this._posthog.persistence.isDisabled?.()
+    constructor(private readonly _posthog: PostHog) {
+        this._storageKey = storageKey(_posthog)
+        this._migrateFromLegacyPersistence()
     }
 
     /**
@@ -37,33 +57,28 @@ export class ConversationsPersistence {
      * the widget_session_id can access tickets associated with it.
      */
     getOrCreateWidgetSessionId(): string {
-        // Return cached value if available
         if (this._cachedWidgetSessionId) {
             return this._cachedWidgetSessionId
         }
 
-        // Check if persistence is available
-        if (!this._isPersistenceAvailable()) {
-            // Fallback: generate a new one each time (won't persist)
-            // This is acceptable for SSR or environments without persistence
-            const sessionId = uuidv7()
-            logger.warn('Persistence not available, widget_session_id will not persist', { sessionId })
-            return sessionId
+        let sessionId = this._read()?.widgetSessionId
+
+        if (!sessionId) {
+            sessionId = uuidv7()
+            this._write({ widgetSessionId: sessionId })
         }
 
-        try {
-            let sessionId = this._posthog.persistence?.get_property(CONVERSATIONS_WIDGET_SESSION_ID)
-            if (!sessionId) {
-                sessionId = uuidv7()
-                this._posthog.persistence?.register({ [CONVERSATIONS_WIDGET_SESSION_ID]: sessionId })
-            }
-            this._cachedWidgetSessionId = sessionId
-            return sessionId
-        } catch (error) {
-            logger.error('Failed to get/create widget_session_id', error)
-            // Fallback: generate a new one (won't persist)
-            return uuidv7()
-        }
+        this._cachedWidgetSessionId = sessionId
+        return sessionId
+    }
+
+    /**
+     * Overwrite the widget session ID (used by restore flow).
+     */
+    setWidgetSessionId(id: string): void {
+        this._cachedWidgetSessionId = id
+        const data = this._read() || {}
+        this._write({ ...data, widgetSessionId: id })
     }
 
     /**
@@ -72,186 +87,194 @@ export class ConversationsPersistence {
      */
     clearWidgetSessionId(): void {
         this._cachedWidgetSessionId = null
-
-        if (!this._isPersistenceAvailable()) {
-            return
-        }
-
-        try {
-            this._posthog.persistence?.unregister(CONVERSATIONS_WIDGET_SESSION_ID)
-            logger.info('Cleared widget_session_id')
-        } catch (error) {
-            logger.error('Failed to clear widget_session_id', error)
+        const data = this._read()
+        if (data) {
+            delete data.widgetSessionId
+            this._write(data)
         }
     }
 
-    /**
-     * Save the current ticket ID to persistence
-     */
     saveTicketId(ticketId: string): void {
-        if (!this._isPersistenceAvailable()) {
-            logger.warn('Persistence not available')
-            return
-        }
-
-        try {
-            this._posthog.persistence?.register({ [CONVERSATIONS_TICKET_ID]: ticketId })
-            logger.info('Saved ticket ID', { ticketId })
-        } catch (error) {
-            logger.error('Failed to save ticket ID', error)
-        }
+        const data = this._read() || {}
+        this._write({ ...data, ticketId })
     }
 
-    /**
-     * Load the current ticket ID from persistence
-     */
     loadTicketId(): string | null {
-        if (!this._isPersistenceAvailable()) {
-            logger.warn('Persistence not available')
-            return null
-        }
-
-        try {
-            const ticketId = this._posthog.persistence?.get_property(CONVERSATIONS_TICKET_ID)
-            if (ticketId) {
-                logger.info('Loaded ticket ID', { ticketId })
-            }
-            return ticketId || null
-        } catch (error) {
-            logger.error('Failed to load ticket ID', error)
-            return null
-        }
+        return this._read()?.ticketId || null
     }
 
-    /**
-     * Clear the current ticket ID from persistence
-     */
     clearTicketId(): void {
-        if (!this._isPersistenceAvailable()) {
-            logger.warn('Persistence not available')
-            return
-        }
-
-        try {
-            this._posthog.persistence?.unregister(CONVERSATIONS_TICKET_ID)
-            logger.info('Cleared ticket ID')
-        } catch (error) {
-            logger.error('Failed to clear ticket ID', error)
+        const data = this._read()
+        if (data) {
+            delete data.ticketId
+            this._write(data)
         }
     }
 
-    /**
-     * Save widget state (open, closed)
-     */
     saveWidgetState(state: 'open' | 'closed'): void {
-        if (!this._isPersistenceAvailable()) {
-            return
-        }
-
-        try {
-            this._posthog.persistence?.register({ [CONVERSATIONS_WIDGET_STATE]: state })
-        } catch (error) {
-            logger.error('Failed to save widget state', error)
-        }
+        const data = this._read() || {}
+        this._write({ ...data, widgetState: state })
     }
 
-    /**
-     * Load widget state
-     */
     loadWidgetState(): 'open' | 'closed' | null {
-        if (!this._isPersistenceAvailable()) {
-            return null
-        }
-
-        try {
-            const state = this._posthog.persistence?.get_property(CONVERSATIONS_WIDGET_STATE)
-            if (state === 'open' || state === 'closed') {
-                return state
-            }
-            return null
-        } catch (error) {
-            logger.error('Failed to load widget state', error)
-            return null
-        }
+        const state = this._read()?.widgetState
+        return state === 'open' || state === 'closed' ? state : null
     }
 
-    /**
-     * Save user-provided traits (name, email) to persistence
-     */
     saveUserTraits(traits: UserProvidedTraits): void {
-        if (!this._isPersistenceAvailable()) {
-            logger.warn('Persistence not available')
-            return
-        }
-
-        try {
-            this._posthog.persistence?.register({ [CONVERSATIONS_USER_TRAITS]: traits })
-            logger.info('Saved user traits', { hasName: !!traits.name, hasEmail: !!traits.email })
-        } catch (error) {
-            logger.error('Failed to save user traits', error)
-        }
+        const data = this._read() || {}
+        this._write({ ...data, userTraits: traits })
     }
 
-    /**
-     * Load user-provided traits from persistence
-     */
     loadUserTraits(): UserProvidedTraits | null {
-        if (!this._isPersistenceAvailable()) {
-            return null
-        }
-
-        try {
-            const traits = this._posthog.persistence?.get_property(CONVERSATIONS_USER_TRAITS) as
-                | UserProvidedTraits
-                | undefined
-            if (traits) {
-                logger.info('Loaded user traits', { hasName: !!traits.name, hasEmail: !!traits.email })
-                return traits
-            }
-            return null
-        } catch (error) {
-            logger.error('Failed to load user traits', error)
-            return null
-        }
+        const traits = this._read()?.userTraits
+        return traits && (traits.name || traits.email) ? traits : null
     }
 
-    /**
-     * Clear user-provided traits from persistence
-     */
     clearUserTraits(): void {
-        if (!this._isPersistenceAvailable()) {
+        const data = this._read()
+        if (data) {
+            delete data.userTraits
+            this._write(data)
+        }
+    }
+
+    clearAll(): void {
+        this._cachedWidgetSessionId = null
+        if (this._storageKey) {
+            try {
+                window?.localStorage?.removeItem(this._storageKey)
+            } catch {
+                logger.error('Failed to remove localStorage item')
+            }
+        }
+    }
+
+    private _read(): ConversationsStorageData | null {
+        if (!this._storageKey) {
+            return null
+        }
+        try {
+            const raw = window?.localStorage?.getItem(this._storageKey)
+            return raw ? (JSON.parse(raw) as ConversationsStorageData) : null
+        } catch {
+            return null
+        }
+    }
+
+    private _write(data: ConversationsStorageData): void {
+        if (!this._storageKey) {
             return
         }
-
         try {
-            this._posthog.persistence?.unregister(CONVERSATIONS_USER_TRAITS)
-            logger.info('Cleared user traits')
+            window?.localStorage?.setItem(this._storageKey, JSON.stringify(data))
         } catch (error) {
-            logger.error('Failed to clear user traits', error)
+            logger.error('Failed to write to localStorage', error)
         }
     }
 
     /**
-     * Clear all conversation-related data from persistence.
-     * This is called on posthog.reset() to start fresh.
+     * One-time migration: copy conversations data from PostHog's main
+     * persistence blob into the dedicated localStorage key, then remove
+     * the old keys from PostHog persistence so they stop bloating it.
      */
-    clearAll(): void {
-        if (!this._isPersistenceAvailable()) {
+    private _migrateFromLegacyPersistence(): void {
+        if (!this._storageKey || this._read()?.widgetSessionId) {
             return
         }
 
         try {
-            // Clear all conversation properties
-            this._posthog.persistence?.unregister(CONVERSATIONS_WIDGET_STATE)
-            this._posthog.persistence?.unregister(CONVERSATIONS_USER_TRAITS)
-            this._posthog.persistence?.unregister(CONVERSATIONS_TICKET_ID)
+            const persistence = this._posthog.persistence
+            if (!persistence || persistence.isDisabled?.()) {
+                return
+            }
 
-            // Clear widget session ID last (this will lose access to previous tickets)
-            this.clearWidgetSessionId()
+            const widgetSessionId = persistence.get_property(LEGACY_WIDGET_SESSION_ID)
+            if (!widgetSessionId) {
+                // persistence.props may be empty (the bug) — try raw localStorage
+                const legacyFromRaw = this._readLegacyFromRawStorage()
+                if (legacyFromRaw) {
+                    this._write(legacyFromRaw)
+                    logger.info('Migrated conversations data from raw localStorage')
+                }
+                return
+            }
 
-            logger.info('Cleared all conversation data')
+            const data: ConversationsStorageData = { widgetSessionId }
+
+            const ticketId = persistence.get_property(LEGACY_TICKET_ID)
+            if (ticketId) {
+                data.ticketId = ticketId
+            }
+
+            const widgetState = persistence.get_property(LEGACY_WIDGET_STATE)
+            if (widgetState === 'open' || widgetState === 'closed') {
+                data.widgetState = widgetState
+            }
+
+            const userTraits = persistence.get_property(LEGACY_USER_TRAITS) as UserProvidedTraits | undefined
+            if (userTraits) {
+                data.userTraits = userTraits
+            }
+
+            this._write(data)
+
+            persistence.unregister(LEGACY_WIDGET_SESSION_ID)
+            persistence.unregister(LEGACY_TICKET_ID)
+            persistence.unregister(LEGACY_WIDGET_STATE)
+            persistence.unregister(LEGACY_USER_TRAITS)
+
+            logger.info('Migrated conversations data to dedicated storage')
         } catch (error) {
-            logger.error('Failed to clear conversation data', error)
+            logger.error('Migration from legacy persistence failed', error)
+        }
+    }
+
+    /**
+     * Fallback for migration: read legacy keys directly from raw localStorage
+     * when PostHog persistence.props didn't load them (the original bug).
+     */
+    private _readLegacyFromRawStorage(): ConversationsStorageData | null {
+        try {
+            const token = this._posthog.config?.token
+            if (!token) {
+                return null
+            }
+            const key = (this._posthog.config as any).persistence_name
+                ? 'ph_' + (this._posthog.config as any).persistence_name
+                : 'ph_' + token + '_posthog'
+
+            const raw = window?.localStorage?.getItem(key)
+            if (!raw) {
+                return null
+            }
+
+            const parsed = JSON.parse(raw)
+            const widgetSessionId = parsed?.[LEGACY_WIDGET_SESSION_ID]
+            if (typeof widgetSessionId !== 'string' || !widgetSessionId) {
+                return null
+            }
+
+            const data: ConversationsStorageData = { widgetSessionId }
+
+            const ticketId = parsed?.[LEGACY_TICKET_ID]
+            if (ticketId) {
+                data.ticketId = ticketId
+            }
+
+            const widgetState = parsed?.[LEGACY_WIDGET_STATE]
+            if (widgetState === 'open' || widgetState === 'closed') {
+                data.widgetState = widgetState
+            }
+
+            const userTraits = parsed?.[LEGACY_USER_TRAITS]
+            if (userTraits) {
+                data.userTraits = userTraits
+            }
+
+            return data
+        } catch {
+            return null
         }
     }
 }

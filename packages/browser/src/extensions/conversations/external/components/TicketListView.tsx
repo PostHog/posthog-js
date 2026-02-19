@@ -10,6 +10,7 @@ interface TicketListViewProps {
     styles: ReturnType<typeof getStyles>
     onSelectTicket: (ticketId: string) => void
     onNewConversation: () => void
+    onOpenRestoreRequest: () => void
 }
 
 /**
@@ -28,7 +29,8 @@ const LoadingState: FunctionComponent<{ styles: ReturnType<typeof getStyles> }> 
 const EmptyState: FunctionComponent<{
     styles: ReturnType<typeof getStyles>
     onNewConversation: () => void
-}> = ({ styles, onNewConversation }) => (
+    onOpenRestoreRequest: () => void
+}> = ({ styles, onNewConversation, onOpenRestoreRequest }) => (
     <div style={styles.ticketListEmpty}>
         <div style={styles.emptyStateIcon}>
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -49,6 +51,18 @@ const EmptyState: FunctionComponent<{
         >
             Start a conversation
         </button>
+        <button
+            style={styles.fetchPreviousButton}
+            onClick={onOpenRestoreRequest}
+            onMouseEnter={(e) => {
+                e.currentTarget.style.opacity = '0.8'
+            }}
+            onMouseLeave={(e) => {
+                e.currentTarget.style.opacity = '1'
+            }}
+        >
+            Fetch previous conversations
+        </button>
     </div>
 )
 
@@ -61,6 +75,7 @@ export const TicketListView: FunctionComponent<TicketListViewProps> = ({
     styles,
     onSelectTicket,
     onNewConversation,
+    onOpenRestoreRequest,
 }) => {
     // Show loading state
     if (isLoading && tickets.length === 0) {
@@ -69,7 +84,13 @@ export const TicketListView: FunctionComponent<TicketListViewProps> = ({
 
     // Show empty state when no tickets
     if (tickets.length === 0) {
-        return <EmptyState styles={styles} onNewConversation={onNewConversation} />
+        return (
+            <EmptyState
+                styles={styles}
+                onNewConversation={onNewConversation}
+                onOpenRestoreRequest={onOpenRestoreRequest}
+            />
+        )
     }
 
     // Show ticket list

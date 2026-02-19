@@ -14,16 +14,28 @@ import { act } from '@testing-library/preact'
 // Mock the persistence layer
 jest.mock('../../../extensions/conversations/external/persistence', () => {
     return {
-        ConversationsPersistence: jest.fn().mockImplementation(() => ({
-            getOrCreateWidgetSessionId: jest.fn().mockReturnValue('test-widget-session-id'),
-            loadTicketId: jest.fn().mockReturnValue(null),
-            saveTicketId: jest.fn(),
-            loadWidgetState: jest.fn().mockReturnValue('closed'),
-            saveWidgetState: jest.fn(),
-            loadUserTraits: jest.fn().mockReturnValue(null),
-            saveUserTraits: jest.fn(),
-            clearWidgetSessionId: jest.fn(),
-        })),
+        ConversationsPersistence: jest.fn().mockImplementation(() => {
+            let storedTicketId: string | null = null
+            return {
+                getOrCreateWidgetSessionId: jest.fn().mockReturnValue('test-widget-session-id'),
+                setWidgetSessionId: jest.fn(),
+                loadTicketId: jest.fn(() => storedTicketId),
+                saveTicketId: jest.fn((ticketId: string) => {
+                    storedTicketId = ticketId
+                }),
+                clearTicketId: jest.fn(() => {
+                    storedTicketId = null
+                }),
+                loadWidgetState: jest.fn().mockReturnValue('closed'),
+                saveWidgetState: jest.fn(),
+                loadUserTraits: jest.fn().mockReturnValue(null),
+                saveUserTraits: jest.fn(),
+                clearWidgetSessionId: jest.fn(),
+                clearAll: jest.fn(() => {
+                    storedTicketId = null
+                }),
+            }
+        }),
     }
 })
 
@@ -31,6 +43,7 @@ describe('ConversationsManager', () => {
     let manager: ConversationsManager
     let mockPosthog: PostHog
     let mockConfig: ConversationsRemoteConfig
+    let mockRestoreResponse: { statusCode: number; json?: Record<string, any> }
 
     const mockMessages: Message[] = [
         {
@@ -83,6 +96,15 @@ describe('ConversationsManager', () => {
         localStorage.clear()
         jest.clearAllMocks()
         jest.useFakeTimers()
+        window.history.replaceState({}, '', '/')
+        mockRestoreResponse = {
+            statusCode: 200,
+            json: {
+                status: 'success',
+                widget_session_id: 'restored-widget-session-id',
+                migrated_ticket_ids: ['ticket-restored-1'],
+            },
+        }
 
         // Mock scrollIntoView which is not implemented in JSDOM
         Element.prototype.scrollIntoView = jest.fn()
@@ -108,6 +130,13 @@ describe('ConversationsManager', () => {
                     options.callback({
                         statusCode: 200,
                         json: createMockSendMessageResponse(),
+                    })
+                } else if (method === 'POST' && url.endsWith('/widget/restore')) {
+                    options.callback(mockRestoreResponse)
+                } else if (method === 'POST' && url.includes('/widget/restore/request')) {
+                    options.callback({
+                        statusCode: 200,
+                        json: { ok: true },
                     })
                 } else if (url.includes('/read') && method === 'POST') {
                     options.callback({
@@ -231,6 +260,95 @@ describe('ConversationsManager', () => {
 
             // User traits are accessed via mockPosthog.persistence.props
             expect(mockPosthog.persistence?.props).toBeDefined()
+        })
+    })
+
+    describe('restore token flow', () => {
+        it('should call restore endpoint when restore token exists in URL', async () => {
+            window.history.replaceState({}, '', '/?ph_conv_restore=restore-token-1')
+
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            expect(mockPosthog._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    method: 'POST',
+                    url: expect.stringContaining('/api/conversations/v1/widget/restore'),
+                    data: expect.objectContaining({
+                        restore_token: 'restore-token-1',
+                        widget_session_id: 'test-widget-session-id',
+                    }),
+                })
+            )
+        })
+
+        it('should apply restored ticket/session and clear restore token from URL', async () => {
+            window.history.replaceState({}, '', '/?ph_conv_restore=restore-token-2')
+
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            expect(manager.getWidgetSessionId()).toBe('restored-widget-session-id')
+            expect(manager.getCurrentTicketId()).toBe('ticket-restored-1')
+            expect(window.location.search).toBe('')
+        })
+
+        it('should keep local session when backend returns invalid status and clear URL', async () => {
+            mockRestoreResponse = {
+                statusCode: 200,
+                json: { status: 'invalid' },
+            }
+            window.history.replaceState({}, '', '/?ph_conv_restore=restore-token-3')
+
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            expect(manager.getWidgetSessionId()).toBe('test-widget-session-id')
+            expect(window.location.search).toBe('')
+        })
+
+        it('should preserve existing local session unless backend returns replacement', async () => {
+            mockRestoreResponse = {
+                statusCode: 200,
+                json: {
+                    status: 'success',
+                    migrated_ticket_ids: ['ticket-unchanged-session'],
+                },
+            }
+            window.history.replaceState({}, '', '/?ph_conv_restore=restore-token-4')
+
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            expect(manager.getWidgetSessionId()).toBe('test-widget-session-id')
+            expect(manager.getCurrentTicketId()).toBe('ticket-unchanged-session')
+        })
+
+        it('should clear restore token from URL when restore request fails', async () => {
+            mockRestoreResponse = {
+                statusCode: 500,
+                json: {
+                    detail: 'Internal server error',
+                },
+            }
+            window.history.replaceState({}, '', '/?ph_conv_restore=restore-token-5')
+
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            expect(window.location.search).toBe('')
+        })
+
+        it('should clear restore token from URL when restoreFromToken is called directly', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+            window.history.replaceState({}, '', '/?ph_conv_restore=manual-token')
+
+            await act(async () => {
+                await manager.restoreFromToken('manual-token')
+            })
+
+            expect(window.location.search).toBe('')
         })
     })
 
@@ -615,6 +733,16 @@ describe('ConversationsManager', () => {
             const getMessagesCall = calls.find((call) => call[0].url.includes('/widget/messages/'))
             expect(getMessagesCall[0].url).not.toContain('distinct_id=')
         })
+
+        it('should not poll while restore request view is active', async () => {
+            manager['_currentView'] = 'restore_request'
+
+            act(() => {
+                jest.advanceTimersByTime(5000)
+            })
+
+            expect(mockPosthog._send_request).not.toHaveBeenCalled()
+        })
     })
 
     describe('identify handling', () => {
@@ -811,6 +939,39 @@ describe('ConversationsManager', () => {
 
                 // Should have switched to the new ticket
                 expect(manager['_currentTicketId']).toBe('marked-ticket-999')
+            })
+        })
+
+        describe('requestRestoreLink API', () => {
+            it('should request restore link with normalized email and request_url', async () => {
+                await act(async () => {
+                    const response = await manager.requestRestoreLink('  TEST@Example.com ')
+                    expect(response).toEqual({ ok: true })
+                })
+
+                expect(mockPosthog._send_request).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        method: 'POST',
+                        url: expect.stringContaining('/api/conversations/v1/widget/restore/request'),
+                        data: expect.objectContaining({
+                            email: 'test@example.com',
+                            request_url: window.location.href,
+                        }),
+                    })
+                )
+            })
+
+            it('should not include request_url in query params for restore link request', async () => {
+                await act(async () => {
+                    await manager.requestRestoreLink('test@example.com')
+                })
+
+                expect(mockPosthog._send_request).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        method: 'POST',
+                        url: expect.not.stringContaining('request_url='),
+                    })
+                )
             })
         })
     })

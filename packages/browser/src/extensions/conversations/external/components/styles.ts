@@ -105,6 +105,17 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
         headerActions: {
             display: 'flex',
             gap: '4px',
+            alignItems: 'center',
+        },
+        headerLinkButton: {
+            background: 'transparent',
+            border: 'none',
+            color: getContrastTextColor(primaryColor),
+            cursor: 'pointer',
+            padding: '6px 8px',
+            fontSize: '12px',
+            borderRadius: '4px',
+            opacity: 0.9,
         },
         headerButton: {
             background: 'transparent',
@@ -244,6 +255,25 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             marginBottom: '24px',
             lineHeight: 1.5,
         },
+        recoverFooter: {
+            padding: '10px 14px',
+            borderTop: '1px solid #e5e7eb',
+            fontSize: '12px',
+            color: '#64748b',
+            lineHeight: 1.5,
+            flexShrink: 0,
+            textAlign: 'center',
+        },
+        recoverFooterLink: {
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            color: '#64748b',
+            cursor: 'pointer',
+            fontSize: '12px',
+            fontFamily: 'inherit',
+            textDecoration: 'underline',
+        },
         formField: {
             marginBottom: '16px',
         },
@@ -291,6 +321,16 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             fontSize: '12px',
             color: '#939393',
             fontWeight: 400,
+        },
+        restoreRequestSuccess: {
+            marginTop: '12px',
+            fontSize: '12px',
+            color: '#166534',
+            background: '#dcfce7',
+            border: '1px solid #86efac',
+            borderRadius: '6px',
+            padding: '10px 12px',
+            lineHeight: 1.4,
         },
         // Ticket list styles
         ticketListContainer: {
@@ -457,6 +497,16 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             fontSize: '14px',
             fontWeight: 600,
             transition: 'all 0.2s ease-out',
+        },
+        fetchPreviousButton: {
+            marginTop: '10px',
+            background: 'transparent',
+            border: 'none',
+            color: primaryColor,
+            cursor: 'pointer',
+            fontSize: '13px',
+            textDecoration: 'underline',
+            opacity: 1,
         },
         // Back button for message view header
         backButton: {

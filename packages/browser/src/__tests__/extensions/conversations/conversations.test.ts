@@ -22,6 +22,9 @@ describe('PostHogConversations', () => {
             hide: jest.fn(),
             reset: jest.fn(),
             isVisible: jest.fn().mockReturnValue(true),
+            requestRestoreLink: jest.fn(),
+            restoreFromToken: jest.fn(),
+            restoreFromUrlToken: jest.fn(),
         } as ConversationsManager
 
         // Setup mock PostHog instance
