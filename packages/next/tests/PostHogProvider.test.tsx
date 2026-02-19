@@ -80,6 +80,23 @@ describe('PostHogProvider', () => {
         )
     })
 
+    it('resolves synchronously when bootstrapFlags is off (static-safe)', async () => {
+        let settled = false
+        PostHogProvider({
+            apiKey: 'phc_test123',
+            children: <div>Child</div>,
+        }).then(() => {
+            settled = true
+        })
+
+        // Flush one microtick. An async function that never awaits
+        // returns an already-resolved promise, so the .then() callback
+        // runs in the next microtick. If any real async work happened,
+        // the promise would still be pending here.
+        await Promise.resolve()
+        expect(settled).toBe(true)
+    })
+
     it('throws when apiKey is empty and env var is not set', async () => {
         delete process.env.NEXT_PUBLIC_POSTHOG_KEY
         await expect(

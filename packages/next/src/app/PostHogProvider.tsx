@@ -19,7 +19,17 @@ export interface PostHogProviderProps {
     apiKey?: string
     /** Optional posthog-js configuration overrides */
     options?: Partial<PostHogConfig>
-    /** Enable server-side feature flag evaluation for bootstrap. */
+    /**
+     * Enable server-side feature flag evaluation for bootstrap.
+     *
+     * When enabled, the provider calls `cookies()` to read the user's
+     * identity and evaluates flags via `posthog-node`. This opts the
+     * route into **dynamic rendering** (incompatible with static
+     * generation / ISR).
+     *
+     * When omitted or falsy (default), no dynamic APIs are called and
+     * the provider is safe for static rendering and PPR.
+     */
     bootstrapFlags?: boolean | BootstrapFlagsConfig
     children: React.ReactNode
 }
@@ -27,9 +37,13 @@ export interface PostHogProviderProps {
 /**
  * PostHog provider for Next.js App Router.
  *
- * This is an async server component that optionally evaluates feature flags
- * on the server and passes them to the client via bootstrap. When
- * `bootstrapFlags` is falsy (default), it passes through unchanged.
+ * By default this component is **static-safe** — it does not call any
+ * dynamic APIs (`cookies()`, `headers()`) and is compatible with static
+ * generation, ISR, and Partial Prerendering (PPR).
+ *
+ * When `bootstrapFlags` is enabled, the provider evaluates feature flags
+ * on the server and bootstraps the client SDK, which opts the route into
+ * dynamic rendering.
  *
  * All PostHog hooks (`usePostHog`, `useFeatureFlagEnabled`, etc.)
  * require this provider as an ancestor.
