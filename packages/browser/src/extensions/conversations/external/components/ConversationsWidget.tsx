@@ -639,7 +639,6 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         return (
             <div style={styles.widget}>
                 <div style={windowStyle}>
-                    {/* Header */}
                     <div style={styles.header}>
                         <div style={showBackButton ? styles.headerWithBack : styles.headerTitle}>
                             {showBackButton && this._renderBackButton(styles)}
