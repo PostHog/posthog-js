@@ -21,6 +21,8 @@ jobs:
     posthog-upgrade:
         name: Upgrade PostHog Package
         runs-on: ubuntu-latest
+        env:
+            HUSKY: '0'
 
         steps:
             - name: Get upgrader token
