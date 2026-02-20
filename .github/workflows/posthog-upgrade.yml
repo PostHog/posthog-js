@@ -51,7 +51,7 @@ jobs:
                   PACKAGE_NAME: ${{ github.event.inputs.package_name }}
               run: |
                   pnpx taze -r --include "$PACKAGE_NAME" -w
-                  pnpm i
+                  pnpm i --no-frozen-lockfile
 
             - name: Generate branch name
               id: generate-branch-name
