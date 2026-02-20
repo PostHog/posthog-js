@@ -12,6 +12,10 @@ import {
     GetTicketsOptions,
     GetTicketsResponse,
     Ticket,
+    RestoreFromTokenPayload,
+    RestoreFromTokenResponse,
+    RequestRestoreLinkPayload,
+    RequestRestoreLinkResponse,
 } from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'
 import { ConversationsManager as ConversationsManagerInterface } from '../posthog-conversations'
@@ -20,57 +24,19 @@ import { ConversationsWidget, WidgetView } from './components/ConversationsWidge
 import { createLogger } from '../../../utils/logger'
 import { document, window } from '../../../utils/globals'
 import { formDataToQuery } from '../../../utils/request-utils'
+import { isCurrentDomainAllowed, getRestoreTokenFromUrl, clearRestoreTokenFromUrl } from './url-utils'
 
 const logger = createLogger('[ConversationsManager]')
 
 const WIDGET_CONTAINER_ID = 'ph-conversations-widget-container'
 const POLL_INTERVAL_MS = 5000 // 5 seconds
+const RESTORE_EXCHANGE_ENDPOINT = '/api/conversations/v1/widget/restore'
+const RESTORE_REQUEST_ENDPOINT = '/api/conversations/v1/widget/restore/request'
 
-/**
- * Extract hostname from a domain string (handles URLs and plain hostnames)
- */
-function extractHostname(domain: string): string | null {
-    // Remove protocol if present
-    let hostname = domain.replace(/^https?:\/\//, '')
-    // Remove path, query, port if present
-    hostname = hostname.split('/')[0].split('?')[0].split(':')[0]
-    return hostname || null
-}
-
-/**
- * Check if the current domain matches the allowed domains list.
- * Returns true if:
- * - domains is empty or not present (no restriction)
- * - current hostname matches any allowed domain
- */
-function isCurrentDomainAllowed(domains: string[] | undefined): boolean {
-    // No domain restriction - allow all
-    if (!domains || domains.length === 0) {
-        return true
-    }
-
-    const currentHostname = window?.location?.hostname
-    if (!currentHostname) {
-        // Can't determine hostname (SSR, etc.) - allow by default
-        return true
-    }
-
-    return domains.some((domain) => {
-        const allowedHostname = extractHostname(domain)
-        if (!allowedHostname) {
-            return false
-        }
-
-        if (allowedHostname.startsWith('*.')) {
-            // Wildcard match: *.example.com matches foo.example.com and example.com
-            const pattern = allowedHostname.slice(2) // Remove "*."
-            return currentHostname.endsWith(`.${pattern}`) || currentHostname === pattern
-        }
-
-        // Exact match
-        return currentHostname === allowedHostname
-    })
-}
+// Singleton guard: only one ConversationsManager per page, regardless of PostHog instance count.
+// Multiple PostHog instances (e.g. toolbar + main app) share the same DOM and script tags,
+// so we enforce a single manager to avoid duplicate widgets and mismatched widget_session_ids.
+let _activeManager: ConversationsManager | null = null
 
 export class ConversationsManager implements ConversationsManagerInterface {
     private _config: ConversationsRemoteConfig
@@ -80,7 +46,8 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private _currentTicketId: string | null = null
     private _pollIntervalId: number | null = null
     private _lastMessageTimestamp: string | null = null
-    private _isPolling: boolean = false
+    private _isPollingMessages: boolean = false
+    private _isPollingTickets: boolean = false
     private _unsubscribeIdentifyListener: (() => void) | null = null
     private _unreadCount: number = 0
     // SECURITY: widget_session_id is the key for access control
@@ -88,7 +55,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private _widgetSessionId: string
     private _isWidgetEnabled: boolean
     private _isDomainAllowed: boolean
+    private _widgetState: ConversationsWidgetState = 'closed'
     private _isWidgetRendered: boolean = false
+    private _hasProcessedRestoreToken: boolean = false
     private _initializeWidgetPromise: Promise<void> | null = null
     // View state management for ticket list vs message view
     private _currentView: WidgetView = 'messages'
@@ -101,7 +70,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
     ) {
         this._config = config
         this._persistence = new ConversationsPersistence(_posthog)
-        // Get or create widget_session_id - this stays the same even when user identifies
+
         this._widgetSessionId = this._persistence.getOrCreateWidgetSessionId()
 
         // Determine if widget should be shown based on config and domain
@@ -387,6 +356,33 @@ export class ConversationsManager implements ConversationsManagerInterface {
             return
         }
 
+        const restoreToken = getRestoreTokenFromUrl()
+        if (restoreToken && !this._hasProcessedRestoreToken) {
+            this._hasProcessedRestoreToken = true
+
+            // Clear the token from the URL immediately, then again after a tick and
+            // after the restore completes.  SPA routers (Next.js, React Router, etc.)
+            // maintain their own URL state and can overwrite a single replaceState call.
+            clearRestoreTokenFromUrl()
+            setTimeout(clearRestoreTokenFromUrl, 0)
+
+            this._restoreFromTokenWithRetry(restoreToken)
+                .catch((error) => {
+                    logger.warn('Failed to restore conversations from URL token', error)
+                })
+                .finally(() => {
+                    clearRestoreTokenFromUrl()
+                    this._completeInitialization()
+                })
+            return
+        }
+
+        this._completeInitialization()
+    }
+
+    private _completeInitialization(): void {
+        this._hasProcessedRestoreToken = true
+
         // Load any existing ticket ID from localStorage
         this._currentTicketId = this._persistence.loadTicketId()
         logger.info('Loaded ticket ID from storage', { ticketId: this._currentTicketId })
@@ -412,6 +408,88 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._setupIdentifyListener()
     }
 
+    private async _restoreFromTokenWithRetry(restoreToken: string): Promise<RestoreFromTokenResponse> {
+        try {
+            return await this._restoreFromToken(restoreToken)
+        } catch (error) {
+            logger.warn('Restore token exchange failed, retrying once', error)
+            return await this._restoreFromToken(restoreToken)
+        }
+    }
+
+    private async _restoreFromToken(restoreToken: string): Promise<RestoreFromTokenResponse> {
+        const token = this._config.token
+
+        const payload: RestoreFromTokenPayload = {
+            restore_token: restoreToken,
+            widget_session_id: this._widgetSessionId,
+            distinct_id: this._posthog.get_distinct_id(),
+            current_url: window?.location?.href,
+        }
+
+        // eslint-disable-next-line compat/compat
+        const data = await new Promise<RestoreFromTokenResponse>((resolve, reject) => {
+            this._posthog._send_request({
+                url: this._posthog.requestRouter.endpointFor('api', RESTORE_EXCHANGE_ENDPOINT),
+                method: 'POST',
+                data: payload,
+                headers: {
+                    'X-Conversations-Token': token,
+                },
+                callback: (response) => {
+                    if (response.statusCode === 429) {
+                        reject(new Error('Too many requests. Please wait before trying again.'))
+                        return
+                    }
+
+                    if (response.statusCode !== 200) {
+                        const errorMsg =
+                            response.json?.error ||
+                            response.json?.detail ||
+                            response.json?.message ||
+                            'Failed to restore conversations'
+                        reject(new Error(errorMsg))
+                        return
+                    }
+
+                    if (!response.json) {
+                        reject(new Error('Invalid response from server'))
+                        return
+                    }
+
+                    resolve(response.json as RestoreFromTokenResponse)
+                },
+            })
+        })
+
+        if (data.status !== 'success') {
+            logger.info('Restore token was not accepted', { status: data.status, code: data.code })
+            return data
+        }
+
+        this._lastMessageTimestamp = null
+        this._unreadCount = 0
+
+        // Apply the canonical widget_session_id from the server if provided
+        if (data.widget_session_id) {
+            this._widgetSessionId = data.widget_session_id
+            this._persistence.setWidgetSessionId(data.widget_session_id)
+        }
+
+        if (data.migrated_ticket_ids?.length) {
+            this._currentTicketId = data.migrated_ticket_ids[0]
+            this._persistence.saveTicketId(this._currentTicketId)
+            // Poll straight away so messages and ticket list are fresh
+            void this._pollMessages()
+            void this._pollTickets()
+        } else {
+            this._currentTicketId = null
+            this._persistence.clearTicketId()
+        }
+
+        return data
+    }
+
     /**
      * Initialize and render the widget UI
      * Uses a promise guard to prevent race conditions from concurrent calls
@@ -429,10 +507,8 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
     private async _doInitializeWidget(): Promise<void> {
         const savedState = this._persistence.loadWidgetState()
-        let initialState: ConversationsWidgetState = 'closed'
-        if (savedState === 'open') {
-            initialState = 'open'
-        }
+        const initialState: ConversationsWidgetState = savedState === 'open' ? 'open' : 'closed'
+        this._widgetState = initialState
 
         // Get initial user traits (from PostHog person properties or saved)
         const initialUserTraits = this._getInitialUserTraits()
@@ -445,7 +521,6 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._renderWidget(initialState, initialUserTraits, initialView, tickets)
         this._isWidgetRendered = true
 
-        // Track widget initialization
         this._posthog.capture('$conversations_widget_loaded', {
             hasExistingTicket: !!this._currentTicketId,
             initialState: initialState,
@@ -454,12 +529,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             hasUserTraits: !!initialUserTraits,
         })
 
-        // Load messages if in message view and have a ticket
-        if (initialView === 'messages' && this._currentTicketId) {
-            this._loadMessages()
-        }
-
-        // Start polling based on current view
+        // Start polling — the first poll fires immediately and loads messages or tickets
         this._startPolling()
     }
 
@@ -503,6 +573,14 @@ export class ConversationsManager implements ConversationsManagerInterface {
         })
     }
 
+    private _handleRequestRestoreLink = async (email: string): Promise<RequestRestoreLinkResponse> => {
+        const response = await this.requestRestoreLink(email)
+        this._posthog.capture('$conversations_restore_link_requested', {
+            hasEmail: !!email,
+        })
+        return response
+    }
+
     /**
      * Handle sending a message from the widget
      */
@@ -526,16 +604,15 @@ export class ConversationsManager implements ConversationsManagerInterface {
      * Handle widget state changes
      */
     private _handleStateChange = (state: ConversationsWidgetState): void => {
+        this._widgetState = state
         logger.info('Widget state changed', { state, view: this._currentView })
 
-        // Track state changes
         this._posthog.capture('$conversations_widget_state_changed', {
             state: state,
             view: this._currentView,
             ticketId: this._currentTicketId,
         })
 
-        // Save state to localStorage
         this._persistence.saveWidgetState(state)
 
         // Mark messages as read when widget opens (only if in message view with a ticket)
@@ -555,7 +632,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
 
         try {
-            const response = await this.markAsRead(this._currentTicketId || undefined)
+            const response = await this.markAsRead(this._currentTicketId)
             this._unreadCount = response.unread_count
             // Update the widget to reflect the new unread count
             this._widgetRef?.setUnreadCount(0)
@@ -574,10 +651,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
 
         try {
-            const response = await this.getMessages(
-                this._currentTicketId || undefined,
-                this._lastMessageTimestamp || undefined
-            )
+            const response = await this.getMessages(this._currentTicketId, this._lastMessageTimestamp || undefined)
 
             // Update unread count from response
             if (isNumber(response.unread_count)) {
@@ -601,26 +675,23 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
     }
 
-    /**
-     * Check if the widget is currently open
-     */
     private _isWidgetOpen(): boolean {
-        return this._persistence.loadWidgetState() === 'open'
+        return this._widgetState === 'open'
     }
 
     /**
      * Poll for new messages
      */
     private _pollMessages = async (): Promise<void> => {
-        if (this._isPolling || !this._currentTicketId) {
+        if (this._isPollingMessages || !this._currentTicketId) {
             return
         }
 
-        this._isPolling = true
+        this._isPollingMessages = true
         try {
             await this._loadMessages()
         } finally {
-            this._isPolling = false
+            this._isPollingMessages = false
         }
     }
 
@@ -628,15 +699,15 @@ export class ConversationsManager implements ConversationsManagerInterface {
      * Poll for tickets list
      */
     private _pollTickets = async (): Promise<void> => {
-        if (this._isPolling) {
+        if (this._isPollingTickets) {
             return
         }
 
-        this._isPolling = true
+        this._isPollingTickets = true
         try {
             await this._loadTickets()
         } finally {
-            this._isPolling = false
+            this._isPollingTickets = false
         }
     }
 
@@ -665,10 +736,14 @@ export class ConversationsManager implements ConversationsManagerInterface {
      * Main poll function that polls based on current view
      */
     private _poll = async (): Promise<void> => {
-        if (this._currentView === 'tickets') {
-            await this._pollTickets()
-        } else {
+        if (this._currentView === 'restore_request') {
+            return
+        }
+
+        if (this._currentView === 'messages') {
             await this._pollMessages()
+        } else {
+            await this._pollTickets()
         }
     }
 
@@ -914,6 +989,74 @@ export class ConversationsManager implements ConversationsManagerInterface {
         })
     }
 
+    async requestRestoreLink(email: string): Promise<RequestRestoreLinkResponse> {
+        const normalizedEmail = email.trim().toLowerCase()
+        if (!normalizedEmail) {
+            throw new Error('Email is required')
+        }
+
+        const token = this._config.token
+        const payload: RequestRestoreLinkPayload = {
+            email: normalizedEmail,
+            request_url: window?.location?.href || '',
+        }
+
+        // eslint-disable-next-line compat/compat
+        return new Promise((resolve, reject) => {
+            this._posthog._send_request({
+                url: this._posthog.requestRouter.endpointFor('api', RESTORE_REQUEST_ENDPOINT),
+                method: 'POST',
+                data: payload,
+                headers: {
+                    'X-Conversations-Token': token,
+                },
+                callback: (response) => {
+                    if (response.statusCode === 429) {
+                        reject(new Error('Too many requests. Please wait before trying again.'))
+                        return
+                    }
+
+                    if (response.statusCode !== 200) {
+                        const errorMsg =
+                            response.json?.error ||
+                            response.json?.detail ||
+                            response.json?.message ||
+                            'Failed to request restore link'
+                        reject(new Error(errorMsg))
+                        return
+                    }
+
+                    resolve({ ok: true })
+                },
+            })
+        })
+    }
+
+    async restoreFromToken(restoreToken: string): Promise<RestoreFromTokenResponse> {
+        const normalizedToken = restoreToken.trim()
+        if (!normalizedToken) {
+            throw new Error('Restore token is required')
+        }
+        try {
+            return await this._restoreFromTokenWithRetry(normalizedToken)
+        } finally {
+            clearRestoreTokenFromUrl()
+        }
+    }
+
+    async restoreFromUrlToken(): Promise<RestoreFromTokenResponse | null> {
+        const restoreToken = getRestoreTokenFromUrl()
+        if (!restoreToken) {
+            return null
+        }
+
+        try {
+            return await this.restoreFromToken(restoreToken)
+        } finally {
+            clearRestoreTokenFromUrl()
+        }
+    }
+
     /**
      * Get the current active ticket ID
      * Returns null if no conversation has been started yet
@@ -949,6 +1092,10 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
 
         this._widgetRef = null
+
+        if (_activeManager === this) {
+            _activeManager = null
+        }
         logger.info('Widget destroyed')
     }
 
@@ -1014,6 +1161,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 onSendMessage={this._handleSendMessage}
                 onStateChange={this._handleStateChange}
                 onIdentify={this._handleIdentify}
+                onRequestRestoreLink={this._handleRequestRestoreLink}
                 onSelectTicket={this._handleSelectTicket}
                 onNewConversation={this._handleNewConversation}
                 onBackToTickets={this._handleBackToTickets}
@@ -1025,10 +1173,20 @@ export class ConversationsManager implements ConversationsManagerInterface {
 }
 
 /**
- * Initialize the conversations widget
- * This is the entry point called from the lazy-loaded bundle
+ * Initialize the conversations widget.
+ * This is the entry point called from the lazy-loaded bundle.
+ *
+ * Uses a singleton guard: multiple PostHog instances on the same page
+ * (e.g. toolbar + main app) share the same DOM and script tags.
+ * Only one ConversationsManager is created; subsequent calls return the existing one.
  */
 export function initConversations(config: ConversationsRemoteConfig, posthog: PostHog): ConversationsManager {
+    if (_activeManager) {
+        logger.info('ConversationsManager already exists, reusing singleton')
+        return _activeManager
+    }
+
     logger.info('initConversations called', { hasConfig: !!config, hasPosthog: !!posthog })
-    return new ConversationsManager(config, posthog)
+    _activeManager = new ConversationsManager(config, posthog)
+    return _activeManager
 }

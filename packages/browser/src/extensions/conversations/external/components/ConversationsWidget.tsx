@@ -1,27 +1,28 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { h, Component, Fragment } from 'preact'
+import { h, Component } from 'preact'
 import {
     ConversationsRemoteConfig,
     Message,
     ConversationsWidgetState,
+    RequestRestoreLinkResponse,
     UserProvidedTraits,
     Ticket,
 } from '../../../../posthog-conversations-types'
 import { createLogger } from '../../../../utils/logger'
 import { getStyles } from './styles'
 import { OpenChatButton } from './OpenChatButton'
-import { SendMessageButton } from './SendMessageButton'
 import { CloseChatButton } from './CloseChatButton'
-import { RichContent } from './RichContent'
 import { TicketListView } from './TicketListView'
-import { formatRelativeTime } from './utils'
+import { IdentificationFormView } from './IdentificationFormView'
+import { RestoreRequestView } from './RestoreRequestView'
+import { MessagesView } from './MessagesView'
 
 const logger = createLogger('[ConversationsWidget]')
 
 /**
  * Type for the current view in the widget
  */
-export type WidgetView = 'tickets' | 'messages'
+export type WidgetView = 'tickets' | 'messages' | 'restore_request' | 'identification'
 
 interface WidgetProps {
     config: ConversationsRemoteConfig
@@ -34,6 +35,7 @@ interface WidgetProps {
     onSendMessage: (message: string) => Promise<void>
     onStateChange?: (state: ConversationsWidgetState) => void
     onIdentify?: (traits: UserProvidedTraits) => void
+    onRequestRestoreLink?: (email: string) => Promise<RequestRestoreLinkResponse>
     onSelectTicket?: (ticketId: string) => void
     onNewConversation?: () => void
     onBackToTickets?: () => void
@@ -49,13 +51,16 @@ interface WidgetState {
     inputValue: string
     isLoading: boolean
     error: string | null
-    showIdentificationForm: boolean
     formName: string
     formEmail: string
     formEmailError: string | null
     userTraits: UserProvidedTraits | null
     unreadCount: number
     hasMultipleTickets: boolean
+    restoreEmail: string
+    restoreEmailError: string | null
+    restoreRequestLoading: boolean
+    restoreRequestSuccess: boolean
 }
 
 export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
@@ -69,22 +74,28 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         const userTraits = props.initialUserTraits || null
         const needsIdentification = this._needsIdentification(props.config, userTraits, props.isUserIdentified)
 
+        // If identification is needed, start with that view; otherwise use the provided initial view
+        const initialView = needsIdentification ? 'identification' : props.initialView || 'messages'
+
         this.state = {
             state: props.initialState || 'closed',
-            view: props.initialView || 'messages',
+            view: initialView,
             messages: [],
             tickets: props.initialTickets || [],
             ticketsLoading: false,
             inputValue: '',
             isLoading: false,
             error: null,
-            showIdentificationForm: needsIdentification,
             formName: userTraits?.name || '',
             formEmail: userTraits?.email || '',
             formEmailError: null,
             userTraits,
             unreadCount: 0,
             hasMultipleTickets: props.hasMultipleTickets || false,
+            restoreEmail: userTraits?.email || '',
+            restoreEmailError: null,
+            restoreRequestLoading: false,
+            restoreRequestSuccess: false,
         }
     }
 
@@ -192,6 +203,26 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         }
     }
 
+    private _handleOpenRestoreRequest = () => {
+        this.setState((prevState) => ({
+            view: 'restore_request',
+            restoreEmail: prevState.restoreEmail || prevState.userTraits?.email || '',
+            restoreEmailError: null,
+            restoreRequestSuccess: false,
+        }))
+        if (this.props.onViewChange) {
+            this.props.onViewChange('restore_request')
+        }
+    }
+
+    private _handleCloseRestoreRequest = () => {
+        const returnView = this.state.hasMultipleTickets ? 'tickets' : 'messages'
+        this.setState({ view: returnView, restoreEmailError: null, restoreRequestSuccess: false })
+        if (this.props.onViewChange) {
+            this.props.onViewChange(returnView)
+        }
+    }
+
     private _handleInputChange = (e: Event) => {
         const target = e.target as HTMLTextAreaElement
         this.setState({ inputValue: target.value })
@@ -213,6 +244,15 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
     private _handleFormEmailChange = (e: Event) => {
         const target = e.target as HTMLInputElement
         this.setState({ formEmail: target.value, formEmailError: null })
+    }
+
+    private _handleRestoreEmailChange = (e: Event) => {
+        const target = e.target as HTMLInputElement
+        this.setState({
+            restoreEmail: target.value,
+            restoreEmailError: null,
+            restoreRequestSuccess: false,
+        })
     }
 
     private _validateEmail(email: string): boolean {
@@ -247,14 +287,59 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
             traits.email = formEmail.trim()
         }
 
+        // Navigate to appropriate view after identification
+        const nextView = this.state.hasMultipleTickets ? 'tickets' : 'messages'
+
         // Update state and notify parent
         this.setState({
             userTraits: traits,
-            showIdentificationForm: false,
+            view: nextView,
         })
 
         if (onIdentify) {
             onIdentify(traits)
+        }
+
+        if (this.props.onViewChange) {
+            this.props.onViewChange(nextView)
+        }
+    }
+
+    private _handleRestoreRequestSubmit = async (e: Event) => {
+        e.preventDefault()
+
+        if (!this.props.onRequestRestoreLink) {
+            return
+        }
+
+        const email = this.state.restoreEmail.trim()
+        if (!email) {
+            this.setState({ restoreEmailError: 'Email is required' })
+            return
+        }
+
+        if (!this._validateEmail(email)) {
+            this.setState({ restoreEmailError: 'Please enter a valid email address' })
+            return
+        }
+
+        this.setState({
+            restoreRequestLoading: true,
+            restoreEmailError: null,
+        })
+
+        try {
+            await this.props.onRequestRestoreLink(email)
+            this.setState({
+                restoreRequestLoading: false,
+                restoreRequestSuccess: true,
+            })
+        } catch (error) {
+            logger.error('Failed to request restore link', error)
+            this.setState({
+                restoreRequestLoading: false,
+                restoreEmailError: error instanceof Error ? error.message : 'Failed to request restore link',
+            })
         }
     }
 
@@ -289,13 +374,9 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
             this.setState({ isLoading: false })
         } catch (error) {
             logger.error('Failed to send message', error)
-            this.setState({
+            this.setState((prevState) => ({
                 isLoading: false,
                 error: error instanceof Error ? error.message : 'Failed to send message',
-            })
-
-            // Remove the temporary message on error
-            this.setState((prevState) => ({
                 messages: prevState.messages.filter((m) => m.id !== userMessage.id),
             }))
         }
@@ -334,13 +415,6 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
     }
 
     /**
-     * Public method to close the widget completely
-     */
-    close() {
-        this.setState({ state: 'closed' })
-    }
-
-    /**
      * Get user traits (either provided via form or from props)
      */
     getUserTraits(): UserProvidedTraits | null {
@@ -349,11 +423,15 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
 
     /**
      * Called when user identifies via posthog.identify()
-     * Hides the identification form since we now know who they are
+     * Navigates away from identification form since we now know who they are
      */
     setUserIdentified(): void {
-        if (this.state.showIdentificationForm) {
-            this.setState({ showIdentificationForm: false })
+        if (this.state.view === 'identification') {
+            const nextView = this.state.hasMultipleTickets ? 'tickets' : 'messages'
+            this.setState({ view: nextView })
+            if (this.props.onViewChange) {
+                this.props.onViewChange(nextView)
+            }
         }
     }
 
@@ -412,101 +490,25 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
     }
 
     private _renderIdentificationForm(styles: ReturnType<typeof getStyles>) {
-        const { config } = this.props
-        const { formName, formEmail, formEmailError } = this.state
-
-        const title = config.identificationFormTitle || 'Before we start...'
-        const description =
-            config.identificationFormDescription || 'Please provide your details so we can help you better.'
-        const showNameField = config.collectName !== false // Show by default unless explicitly disabled
-
         return (
-            <div style={styles.identificationForm}>
-                <div style={styles.formTitle}>{title}</div>
-                <div style={styles.formDescription}>{description}</div>
-
-                <form onSubmit={this._handleFormSubmit}>
-                    {showNameField && (
-                        <div style={styles.formField}>
-                            <label style={styles.formLabel}>
-                                Name <span style={styles.formOptional}>(optional)</span>
-                            </label>
-                            <input
-                                type="text"
-                                style={styles.formInput}
-                                value={formName}
-                                onInput={this._handleFormNameChange}
-                                placeholder="Your name"
-                                autoComplete="name"
-                            />
-                        </div>
-                    )}
-
-                    <div style={styles.formField}>
-                        <label style={styles.formLabel}>
-                            Email {!config.requireEmail && <span style={styles.formOptional}>(optional)</span>}
-                        </label>
-                        <input
-                            type="email"
-                            style={{
-                                ...styles.formInput,
-                                ...(formEmailError ? styles.formInputError : {}),
-                            }}
-                            value={formEmail}
-                            onInput={this._handleFormEmailChange}
-                            placeholder="you@example.com"
-                            autoComplete="email"
-                        />
-                        {formEmailError && <div style={styles.formError}>{formEmailError}</div>}
-                    </div>
-
-                    <button
-                        type="submit"
-                        style={styles.formSubmitButton}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.opacity = '0.9'
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.opacity = '1'
-                        }}
-                    >
-                        Start Chat
-                    </button>
-                </form>
-            </div>
-        )
-    }
-
-    private _renderMessage(message: Message, styles: ReturnType<typeof getStyles>, primaryColor: string) {
-        const isCustomer = message.author_type === 'customer'
-        const messageStyle = {
-            ...styles.message,
-            ...(isCustomer ? styles.messageCustomer : styles.messageAgent),
-        }
-        const contentStyle = {
-            ...styles.messageContent,
-            ...(isCustomer ? styles.messageContentCustomer : styles.messageContentAgent),
-        }
-
-        return (
-            <div key={message.id} style={messageStyle}>
-                {!isCustomer && message.author_name && <div style={styles.messageAuthor}>{message.author_name}</div>}
-                <div style={contentStyle}>
-                    <RichContent
-                        richContent={message.rich_content}
-                        content={message.content}
-                        isCustomer={isCustomer}
-                        primaryColor={primaryColor}
-                    />
-                </div>
-                <div style={styles.messageTime}>{formatRelativeTime(message.created_at)}</div>
-            </div>
+            <IdentificationFormView
+                config={this.props.config}
+                styles={styles}
+                formName={this.state.formName}
+                formEmail={this.state.formEmail}
+                formEmailError={this.state.formEmailError}
+                onNameChange={this._handleFormNameChange}
+                onEmailChange={this._handleFormEmailChange}
+                onSubmit={this._handleFormSubmit}
+            />
         )
     }
 
     private _renderBackButton(styles: ReturnType<typeof getStyles>) {
+        const onClick =
+            this.state.view === 'restore_request' ? this._handleCloseRestoreRequest : this._handleBackToTickets
         return (
-            <button style={styles.backButton} onClick={this._handleBackToTickets} aria-label="Back to conversations">
+            <button style={styles.backButton} onClick={onClick} aria-label="Back to conversations">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <polyline points="15 18 9 12 15 6" />
                 </svg>
@@ -524,55 +526,87 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
                 styles={styles}
                 onSelectTicket={this._handleSelectTicket}
                 onNewConversation={this._handleNewConversation}
+                onOpenRestoreRequest={this._handleOpenRestoreRequest}
             />
         )
     }
 
     private _renderMessages(styles: ReturnType<typeof getStyles>, primaryColor: string, placeholderText: string) {
-        const { messages, inputValue, isLoading, error } = this.state
-
         return (
-            <>
-                <div style={styles.messages}>
-                    {messages.map((message) => this._renderMessage(message, styles, primaryColor))}
-                    <div
-                        ref={(el) => {
-                            this._messagesEndRef = el
-                        }}
-                    />
-                </div>
-
-                {/* Error message */}
-                {error && <div style={styles.error}>{error}</div>}
-
-                {/* Input */}
-                <div style={styles.inputContainer}>
-                    <textarea
-                        ref={(el) => {
-                            this._inputRef = el
-                        }}
-                        style={styles.input}
-                        placeholder={placeholderText}
-                        value={inputValue}
-                        onInput={this._handleInputChange}
-                        onKeyPress={this._handleKeyPress}
-                        rows={1}
-                        disabled={isLoading}
-                    />
-                    <SendMessageButton
-                        primaryColor={primaryColor}
-                        inputValue={inputValue}
-                        isLoading={isLoading}
-                        handleSendMessage={this._handleSendMessage}
-                    />
-                </div>
-            </>
+            <MessagesView
+                styles={styles}
+                primaryColor={primaryColor}
+                placeholderText={placeholderText}
+                messages={this.state.messages}
+                inputValue={this.state.inputValue}
+                isLoading={this.state.isLoading}
+                error={this.state.error}
+                onInputChange={this._handleInputChange}
+                onKeyDown={this._handleKeyPress}
+                onSendMessage={this._handleSendMessage}
+                messagesEndRef={(el) => {
+                    this._messagesEndRef = el
+                }}
+                inputRef={(el) => {
+                    this._inputRef = el
+                }}
+            />
         )
+    }
+
+    private _renderRestoreRequestView(styles: ReturnType<typeof getStyles>) {
+        return (
+            <RestoreRequestView
+                styles={styles}
+                restoreEmail={this.state.restoreEmail}
+                restoreEmailError={this.state.restoreEmailError}
+                restoreRequestLoading={this.state.restoreRequestLoading}
+                restoreRequestSuccess={this.state.restoreRequestSuccess}
+                onEmailChange={this._handleRestoreEmailChange}
+                onSubmit={this._handleRestoreRequestSubmit}
+            />
+        )
+    }
+
+    /**
+     * Get the title for the current view
+     */
+    private _getTitle(view: WidgetView): string {
+        switch (view) {
+            case 'tickets':
+                return 'Conversations'
+            case 'restore_request':
+                return 'Restore conversations'
+            case 'identification':
+                return 'Support Chat'
+            case 'messages':
+                return 'Support Chat'
+        }
+    }
+
+    /**
+     * Render the content for the current view
+     */
+    private _renderViewContent(
+        styles: ReturnType<typeof getStyles>,
+        primaryColor: string,
+        placeholderText: string
+    ): h.JSX.Element {
+        switch (this.state.view) {
+            case 'identification':
+                return this._renderIdentificationForm(styles)
+            case 'restore_request':
+                return this._renderRestoreRequestView(styles)
+            case 'tickets':
+                return this._renderTicketList(styles)
+            case 'messages':
+                return this._renderMessages(styles, primaryColor, placeholderText)
+        }
     }
 
     render() {
         const { config } = this.props
-        const { state, view, showIdentificationForm } = this.state
+        const { state, view } = this.state
         const primaryColor = config.color || '#5375ff'
         const widgetPosition = config.widgetPosition || 'bottom_right'
         const placeholderText = config.placeholderText || 'Type your message...'
@@ -596,34 +630,39 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
             ...styles.windowOpen,
         }
 
-        // Determine header title based on view
-        const headerTitle = view === 'tickets' ? 'Conversations' : 'Support Chat'
+        // Show back button in message view when there are multiple tickets or in restore request view
+        const showBackButton = (view === 'messages' && this.state.hasMultipleTickets) || view === 'restore_request'
 
-        // Show back button in message view when there are multiple tickets
-        const showBackButton = view === 'messages' && this.state.hasMultipleTickets
+        // Show recover footer only in tickets and messages views
+        const showRecoverFooter = view === 'tickets' || view === 'messages'
 
         return (
             <div style={styles.widget}>
                 <div style={windowStyle}>
-                    {/* Header */}
                     <div style={styles.header}>
                         <div style={showBackButton ? styles.headerWithBack : styles.headerTitle}>
                             {showBackButton && this._renderBackButton(styles)}
-                            <span style={styles.headerTitle}>{headerTitle}</span>
+                            <span style={styles.headerTitle}>{this._getTitle(view)}</span>
                         </div>
                         <div style={styles.headerActions}>
                             <CloseChatButton primaryColor={primaryColor} handleClose={this._handleClose} />
                         </div>
                     </div>
 
-                    {/* Show identification form if needed */}
-                    {showIdentificationForm
-                        ? this._renderIdentificationForm(styles)
-                        : view === 'tickets'
-                          ? // Ticket list view
-                            this._renderTicketList(styles)
-                          : // Messages view
-                            this._renderMessages(styles, primaryColor, placeholderText)}
+                    {this._renderViewContent(styles, primaryColor, placeholderText)}
+
+                    {showRecoverFooter && (
+                        <div style={styles.recoverFooter}>
+                            Don't see your previous tickets?{' '}
+                            <button
+                                type="button"
+                                style={styles.recoverFooterLink}
+                                onClick={this._handleOpenRestoreRequest}
+                            >
+                                Recover them here
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         )
