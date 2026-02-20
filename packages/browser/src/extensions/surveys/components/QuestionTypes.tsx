@@ -8,7 +8,16 @@ import {
     SurveyAppearance,
     SurveyQuestionType,
 } from '../../../posthog-surveys-types'
-import { isArray, isNull, isNumber, isString } from '@posthog/core'
+import {
+    isArray,
+    isNull,
+    isNumber,
+    isString,
+    getValidationError,
+    getLengthFromRules,
+    getRequirementsHint,
+    SurveyValidationType,
+} from '@posthog/core'
 import {
     dissatisfiedEmoji,
     neutralEmoji,
@@ -97,7 +106,6 @@ export function OpenTextQuestion({
         }
         return ''
     })
-
     useEffect(() => {
         setTimeout(() => {
             if (!isPreviewMode) {
@@ -108,6 +116,30 @@ export function OpenTextQuestion({
 
     const htmlFor = `surveyQuestion${displayQuestionIndex}`
 
+    // Validation logic
+    const validationError = useMemo(() => {
+        return getValidationError(text, question.validation, question.optional)
+    }, [text, question.validation, question.optional])
+
+    // Build requirements hint message
+    const minLength = getLengthFromRules(question.validation, SurveyValidationType.MinLength)
+    const maxLength = getLengthFromRules(question.validation, SurveyValidationType.MaxLength)
+    const requirementsHint = useMemo(() => getRequirementsHint(minLength, maxLength), [minLength, maxLength])
+
+    const handleSubmit = () => {
+        if (validationError) {
+            return
+        }
+        onSubmit(text.trim())
+    }
+
+    const handlePreviewSubmit = () => {
+        if (validationError) {
+            return
+        }
+        onPreviewSubmit(text.trim())
+    }
+
     return (
         <Fragment>
             <div className="question-container">
@@ -117,6 +149,8 @@ export function OpenTextQuestion({
                     id={htmlFor}
                     rows={4}
                     placeholder={appearance?.placeholder}
+                    minLength={minLength}
+                    maxLength={maxLength}
                     onInput={(e) => {
                         setText(e.currentTarget.value)
                         e.stopPropagation()
@@ -126,13 +160,14 @@ export function OpenTextQuestion({
                     }}
                     value={text}
                 />
+                {requirementsHint && <div className="validation-hint">{requirementsHint}</div>}
             </div>
             <BottomSection
                 text={question.buttonText || 'Submit'}
-                submitDisabled={!text && !question.optional}
+                submitDisabled={!!validationError}
                 appearance={appearance}
-                onSubmit={() => onSubmit(text)}
-                onPreviewSubmit={() => onPreviewSubmit(text)}
+                onSubmit={handleSubmit}
+                onPreviewSubmit={handlePreviewSubmit}
             />
         </Fragment>
     )

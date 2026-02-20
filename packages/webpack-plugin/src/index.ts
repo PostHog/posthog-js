@@ -18,8 +18,8 @@ export class PosthogWebpackPlugin {
             `Personal API key not provided. If you are using turbo, make sure to add env variables to your turbo config`
         )
         assertValue(
-            this.resolvedConfig.envId,
-            `Environment ID not provided. If you are using turbo, make sure to add env variables to your turbo config`
+            this.resolvedConfig.projectId,
+            `projectId (or deprecated envId) not provided. If you are using turbo, make sure to add env variables to your turbo config`
         )
     }
 
@@ -70,12 +70,12 @@ export class PosthogWebpackPlugin {
             })
         )
 
-        if (config.sourcemaps.project) {
-            args.push('--project', config.sourcemaps.project)
+        if (config.sourcemaps.releaseName) {
+            args.push('--release-name', config.sourcemaps.releaseName)
         }
 
-        if (config.sourcemaps.version) {
-            args.push('--version', config.sourcemaps.version)
+        if (config.sourcemaps.releaseVersion) {
+            args.push('--release-version', config.sourcemaps.releaseVersion)
         }
 
         if (config.sourcemaps.deleteAfterUpload) {
@@ -92,8 +92,8 @@ export class PosthogWebpackPlugin {
                 RUST_LOG: `posthog_cli=${config.logLevel}`,
                 ...process.env,
                 POSTHOG_CLI_HOST: config.host,
-                POSTHOG_CLI_TOKEN: config.personalApiKey,
-                POSTHOG_CLI_ENV_ID: config.envId,
+                POSTHOG_CLI_API_KEY: config.personalApiKey,
+                POSTHOG_CLI_PROJECT_ID: config.projectId,
             },
             stdio: 'inherit',
         })

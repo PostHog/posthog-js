@@ -52,9 +52,13 @@ export function createTour(overrides: Partial<ProductTour> = {}): ProductTour {
     }
 }
 
-export function createElementStep(selector: string, overrides: Partial<ProductTourStep> = {}): ProductTourStep {
+export function createElementStep(
+    selector: string,
+    overrides: Partial<ProductTourStep> = {},
+    asModal?: boolean
+): ProductTourStep {
     return createStep({
-        type: 'element',
+        type: asModal ? 'modal' : 'element',
         selector,
         useManualSelector: true,
         ...overrides,

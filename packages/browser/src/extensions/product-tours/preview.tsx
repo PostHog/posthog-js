@@ -5,7 +5,7 @@ import { document as _document } from '../../utils/globals'
 import { ProductTourBanner } from './components/ProductTourBanner'
 import { ProductTourSurveyStepInner } from './components/ProductTourSurveyStepInner'
 import { ProductTourTooltipInner } from './components/ProductTourTooltipInner'
-import { getProductTourStylesheet, addProductTourCSSVariablesToElement } from './product-tours-utils'
+import { getProductTourStylesheet, addProductTourCSSVariablesToElement, hasElementTarget } from './product-tours-utils'
 
 const document = _document as Document
 
@@ -43,7 +43,7 @@ export function renderProductTourPreview({
 
     const isSurveyStep = step.type === 'survey'
     const isBannerStep = step.type === 'banner'
-    const isModal = step.type === 'modal'
+    const isModal = !hasElementTarget(step)
     const tooltipClass = `ph-tour-tooltip${isModal ? ' ph-tour-tooltip--modal' : ''}${isSurveyStep ? ' ph-tour-survey-step' : ''}`
 
     if (isBannerStep) {

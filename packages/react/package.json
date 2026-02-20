@@ -1,6 +1,6 @@
 {
     "name": "@posthog/react",
-    "version": "1.7.0",
+    "version": "1.8.0",
     "description": "Provides components and hooks for React integrations of PostHog.",
     "repository": {
         "type": "git",
@@ -40,7 +40,9 @@
         }
     },
     "devDependencies": {
+        "@babel/preset-env": "catalog:",
         "@babel/preset-react": "catalog:",
+        "@babel/preset-typescript": "catalog:",
         "@posthog-tooling/rollup-utils": "workspace:*",
         "@rollup/plugin-inject": "^4.0.2",
         "@rollup/plugin-replace": "^2.3.4",

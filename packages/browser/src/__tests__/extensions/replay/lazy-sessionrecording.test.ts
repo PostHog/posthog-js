@@ -53,6 +53,13 @@ import {
 
 jest.mock('../../../config', () => ({ LIB_VERSION: '0.0.1' }))
 
+const mockRemoteConfigLoad = jest.fn()
+jest.mock('../../../remote-config', () => ({
+    RemoteConfigLoader: jest.fn().mockImplementation(() => ({
+        load: mockRemoteConfigLoad,
+    })),
+}))
+
 const EMPTY_BUFFER = {
     data: [],
     sessionId: null,
@@ -194,6 +201,8 @@ describe('Lazy SessionRecording', () => {
                 return () => {}
             }),
             version: 'fake',
+            wasMaxDepthReached: jest.fn(() => false),
+            resetMaxDepthState: jest.fn(),
         }
         assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = jest.fn(() => {
             // we pretend to be rrweb and call emit
@@ -211,6 +220,7 @@ describe('Lazy SessionRecording', () => {
     }
 
     beforeEach(() => {
+        mockRemoteConfigLoad.mockClear()
         removePageviewCaptureHookMock = jest.fn()
         sessionId = 'sessionId' + uuidv7()
 
@@ -350,6 +360,73 @@ describe('Lazy SessionRecording', () => {
             })
         })
 
+        describe('remote config cache invalidation', () => {
+            const FIVE_MINUTES_IN_MS = 5 * 60 * 1000
+
+            it.each([
+                [
+                    'ignores config with stale cache_timestamp (> 5 minutes old)',
+                    { enabled: true, endpoint: '/s/', cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000 },
+                    false,
+                ],
+                [
+                    'uses config with fresh cache_timestamp (< 5 minutes old)',
+                    { enabled: true, endpoint: '/s/', cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS + 60000 },
+                    true,
+                ],
+                [
+                    'uses config with very recent cache_timestamp',
+                    { enabled: true, endpoint: '/s/', cache_timestamp: Date.now() - 1000 },
+                    true,
+                ],
+            ])('%s', (_name, persistedConfig, shouldUseConfig) => {
+                // stop recording so TTL check is active
+                sessionRecording.stopRecording()
+
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: persistedConfig,
+                })
+
+                const result = sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']
+
+                if (shouldUseConfig) {
+                    expect(result?.enabled).toBe(true)
+                } else {
+                    expect(result).toBeUndefined()
+                    expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBeUndefined()
+                }
+            })
+
+            it('treats legacy config without cache_timestamp as fresh', () => {
+                sessionRecording.stopRecording()
+
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: { enabled: true, endpoint: '/s/' },
+                })
+
+                const result = sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']
+                expect(result?.enabled).toBe(true)
+                expect(result?.endpoint).toBe('/s/')
+            })
+
+            it('trusts stale config once recording has started (long-lived SPA)', () => {
+                expect(sessionRecording['_lazyLoadedSessionRecording'].isStarted).toBe(true)
+
+                // simulate time passing and config becoming stale
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: {
+                        enabled: true,
+                        endpoint: '/s/',
+                        cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000,
+                    },
+                })
+
+                // should still return config because recording has started
+                const config = sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']
+                expect(config?.enabled).toBe(true)
+            })
+        })
+
         describe('isConsoleLogCaptureEnabled', () => {
             it.each([
                 ['enabled when both enabled', true, true, true],
@@ -399,6 +476,7 @@ describe('Lazy SessionRecording', () => {
                 ) => {
                     posthog.persistence?.register({
                         [SESSION_RECORDING_REMOTE_CONFIG]: {
+                            cache_timestamp: Date.now(),
                             canvasRecording: { enabled: serverSide, fps: 4, quality: '0.1' },
                         },
                     })
@@ -430,6 +508,7 @@ describe('Lazy SessionRecording', () => {
                 ) => {
                     posthog.persistence?.register({
                         [SESSION_RECORDING_REMOTE_CONFIG]: {
+                            cache_timestamp: Date.now(),
                             canvasRecording: { enabled: true, fps, quality },
                         },
                     })
@@ -478,16 +557,49 @@ describe('Lazy SessionRecording', () => {
                 ],
                 ['uses server side setting (disabled) if client side setting is not set', false, undefined, undefined],
                 ['uses server side setting (enabled) if client side setting is not set', true, undefined, true],
+                // server side returns an object with network_timing
+                [
+                    'uses server side object config with network_timing enabled',
+                    { network_timing: true },
+                    undefined,
+                    true,
+                ],
+                [
+                    'uses server side object config with network_timing disabled',
+                    { network_timing: false },
+                    undefined,
+                    undefined,
+                ],
+                [
+                    'does not enable network timing when server returns object with only web_vitals enabled',
+                    { web_vitals: true, network_timing: false },
+                    undefined,
+                    undefined,
+                ],
+                [
+                    'does not enable network timing when server returns object with only web_vitals and no network_timing',
+                    { web_vitals: true },
+                    undefined,
+                    undefined,
+                ],
+                [
+                    'enables network timing when server returns object with both enabled',
+                    { web_vitals: true, network_timing: true },
+                    undefined,
+                    true,
+                ],
+                ['client side overrides server side object config', { network_timing: true }, false, undefined],
             ])(
                 '%s',
                 (
                     _name: string,
-                    serverSide: boolean | undefined,
+                    serverSide: boolean | PerformanceCaptureConfig | undefined,
                     clientSide: boolean | PerformanceCaptureConfig | undefined,
                     expected: boolean | undefined
                 ) => {
                     posthog.persistence?.register({
                         [SESSION_RECORDING_REMOTE_CONFIG]: {
+                            cache_timestamp: Date.now(),
                             networkPayloadCapture: { capturePerformance: serverSide },
                         },
                     })
@@ -570,6 +682,7 @@ describe('Lazy SessionRecording', () => {
                 ) => {
                     posthog.persistence?.register({
                         [SESSION_RECORDING_REMOTE_CONFIG]: {
+                            cache_timestamp: Date.now(),
                             masking: serverConfig,
                         },
                     })
@@ -1507,6 +1620,44 @@ describe('Lazy SessionRecording', () => {
                     skip_client_rate_limiting: true,
                 }
             )
+        })
+
+        it('sets $snapshot_max_depth_exceeded when depth limit is hit', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            assignableWindow.__PosthogExtensions__.rrweb.wasMaxDepthReached.mockReturnValue(true)
+            _emit(createFullSnapshot())
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded']).toBe(true)
+            expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
+                $snapshot_max_depth_exceeded: true,
+            })
+        })
+
+        it('resets $snapshot_max_depth_exceeded on session change', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded'] = true
+
+            // simulate session id change callback
+            sessionRecording['_lazyLoadedSessionRecording']['_onSessionIdCallback']('new-session-id', 'new-window-id', {
+                activityTimeout: true,
+            })
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded']).toBe(false)
+            expect(assignableWindow.__PosthogExtensions__.rrweb.resetMaxDepthState).toHaveBeenCalled()
         })
 
         it('buffers emitted events', () => {
@@ -2572,6 +2723,62 @@ describe('Lazy SessionRecording', () => {
             expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(undefined)
             expect(sessionRecording.status).toBe('active')
         })
+
+        describe('legacy boolean true in persistence', () => {
+            it.each([
+                ['0% sample rate', '0.00', 'disabled'],
+                ['100% sample rate', '1.00', 'sampled'],
+            ] as const)(
+                'clears legacy true and makes fresh sampling decision with %s',
+                (_name, sampleRate, expectedStatus) => {
+                    // simulate legacy SDK having stored boolean true
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_IS_SAMPLED]: true,
+                    })
+                    expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(true)
+
+                    sessionRecording.onRemoteConfig(
+                        makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate } })
+                    )
+
+                    // legacy true should be treated as unknown and a fresh decision made
+                    expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).not.toBe(true)
+                    expect(sessionRecording.status).toBe(expectedStatus)
+                }
+            )
+
+            it('legacy true with 0% sample rate does not record even if session has not changed', () => {
+                // simulate legacy SDK having stored boolean true
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_IS_SAMPLED]: true,
+                })
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.00' } })
+                )
+
+                // should be disabled despite legacy true, because 0% sample rate
+                expect(sessionRecording.status).toBe('disabled')
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+                expect(posthog.capture).not.toHaveBeenCalled()
+            })
+
+            it('preserves false from persistence (not legacy, still valid format)', () => {
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_IS_SAMPLED]: false,
+                })
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.50' } })
+                )
+
+                // false is still valid format, should remain disabled
+                expect(sessionRecording.status).toBe('disabled')
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+            })
+        })
     })
 
     describe('masking', () => {
@@ -3609,6 +3816,67 @@ describe('Lazy SessionRecording', () => {
                 }),
                 expect.anything()
             )
+        })
+    })
+
+    describe('stale config retry on script loaded', () => {
+        const FIVE_MINUTES_IN_MS = 5 * 60 * 1000
+
+        beforeEach(() => {
+            addRRwebToWindow()
+        })
+
+        it('requests fresh config when persisted config is stale', () => {
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: {
+                    enabled: true,
+                    endpoint: '/s/',
+                    cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000,
+                },
+            })
+
+            sessionRecording.startIfEnabledOrStop()
+
+            expect(mockRemoteConfigLoad).toHaveBeenCalledTimes(1)
+            expect(sessionRecording.started).toBe(false)
+        })
+
+        it('does not request fresh config more than once', () => {
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: {
+                    enabled: true,
+                    endpoint: '/s/',
+                    cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000,
+                },
+            })
+
+            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.startIfEnabledOrStop()
+
+            expect(mockRemoteConfigLoad).toHaveBeenCalledTimes(1)
+        })
+
+        it('starts recording after fresh config arrives', () => {
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: {
+                    enabled: true,
+                    endpoint: '/s/',
+                    cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000,
+                },
+            })
+
+            sessionRecording.startIfEnabledOrStop()
+            expect(sessionRecording.started).toBe(false)
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(sessionRecording.started).toBe(true)
         })
     })
 })

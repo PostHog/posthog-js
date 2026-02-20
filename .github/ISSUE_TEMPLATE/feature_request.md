@@ -21,6 +21,7 @@ _Please describe._
 - [ ] posthog-react-native
 - [ ] @posthog/react
 - [ ] @posthog/ai
+- [ ] @posthog/convex
 - [ ] @posthog/nextjs-config
 - [ ] @posthog/nuxt
 - [ ] @posthog/rollup-plugin

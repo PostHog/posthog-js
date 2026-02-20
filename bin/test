@@ -44,6 +44,7 @@ PACKAGES=(
 # Package display names for the menu
 declare -A PACKAGE_NAMES=(
     ["ai"]="@posthog/ai"
+    ["convex"]="@posthog/convex"
     ["browser"]="posthog-js"
     ["core"]="@posthog/core"
     ["nextjs-config"]="@posthog/nextjs-config"

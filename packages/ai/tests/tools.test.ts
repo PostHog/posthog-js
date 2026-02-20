@@ -341,5 +341,32 @@ describe('Tool Handling Tests', () => {
         },
       ])
     })
+
+    it('should convert Uint8Array inline data to base64', () => {
+      const bytes = new Uint8Array([72, 101, 108, 108, 111]) // "Hello"
+      const response = {
+        candidates: [
+          {
+            content: {
+              parts: [{ inlineData: { mimeType: 'audio/pcm', data: bytes } }],
+            },
+          },
+        ],
+      }
+
+      const formatted = formatResponseGemini(response)
+      expect(formatted).toEqual([
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'audio',
+              mime_type: 'audio/pcm',
+              data: 'SGVsbG8=', // base64 of "Hello"
+            },
+          ],
+        },
+      ])
+    })
   })
 })

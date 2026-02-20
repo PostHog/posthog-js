@@ -89,6 +89,17 @@ export async function start(
         ...flagsResponseOverrides,
     }
 
+    // Mock the remote config endpoint to return the same config data as the flags response.
+    // RemoteConfig is now the sole config loading mechanism, so tests must serve it.
+    // Uses a regex that excludes config.js (script) — only intercepts the JSON config endpoint.
+    void context.route(/\/array\/[^/]+\/config(\?|$)/, (route) => {
+        route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify(flagsResponse),
+        })
+    })
+
     // allow promise in e2e tests
     // eslint-disable-next-line compat/compat
     const flagsMock = new Promise((resolve) => {

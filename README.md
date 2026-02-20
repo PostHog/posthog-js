@@ -24,6 +24,7 @@ This is a monorepo containing multiple packages to integrate with Posthog using 
 - [posthog-react-native](./packages/react-native/README.md)
 - [@posthog/react](./packages/react/README.md)
 - [@posthog/ai](./packages/ai/README.md)
+- [@posthog/convex](./packages/convex/README.md)
 - [@posthog/nextjs-config](./packages/nextjs-config/README.md)
 - [@posthog/nuxt](./packages/nuxt/README.md)
 - [@posthog/rollup-plugin](./packages/rollup-plugin/README.md)

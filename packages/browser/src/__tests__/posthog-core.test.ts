@@ -376,39 +376,39 @@ describe('posthog core', () => {
         })
     })
 
-    describe('setTestUser()', () => {
+    describe('setInternalOrTestUser()', () => {
         const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
             const beforeSendMock = jest.fn().mockImplementation((e) => e)
             const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
             return { posthog, beforeSendMock }
         }
 
-        it('should set $test_user person property to true', () => {
+        it('should set $internal_or_test_user person property to true', () => {
             const { posthog, beforeSendMock } = setup({ person_profiles: 'always' })
 
-            posthog.setTestUser()
+            posthog.setInternalOrTestUser()
 
             expect(beforeSendMock).toHaveBeenCalledTimes(1)
             const call = beforeSendMock.mock.calls[0][0]
             expect(call.event).toEqual('$set')
-            expect(call.properties.$set).toEqual({ $test_user: true })
+            expect(call.properties.$set).toEqual({ $internal_or_test_user: true })
         })
 
         it('should enable person processing when called in identified_only mode', () => {
             const { posthog, beforeSendMock } = setup({ person_profiles: 'identified_only' })
 
-            posthog.capture('event before setTestUser')
-            posthog.setTestUser()
-            posthog.capture('event after setTestUser')
+            posthog.capture('event before setInternalOrTestUser')
+            posthog.setInternalOrTestUser()
+            posthog.capture('event after setInternalOrTestUser')
 
             expect(beforeSendMock).toHaveBeenCalledTimes(3)
 
             const eventBefore = beforeSendMock.mock.calls[0][0]
             expect(eventBefore.properties.$process_person_profile).toEqual(false)
 
-            const setTestUserEvent = beforeSendMock.mock.calls[1][0]
-            expect(setTestUserEvent.event).toEqual('$set')
-            expect(setTestUserEvent.properties.$process_person_profile).toEqual(true)
+            const setInternalOrTestUserEvent = beforeSendMock.mock.calls[1][0]
+            expect(setInternalOrTestUserEvent.event).toEqual('$set')
+            expect(setInternalOrTestUserEvent.properties.$process_person_profile).toEqual(true)
 
             const eventAfter = beforeSendMock.mock.calls[2][0]
             expect(eventAfter.properties.$process_person_profile).toEqual(true)
@@ -417,30 +417,30 @@ describe('posthog core', () => {
         it('should not send duplicate events when called multiple times', () => {
             const { posthog, beforeSendMock } = setup({ person_profiles: 'always' })
 
-            posthog.setTestUser()
-            posthog.setTestUser()
+            posthog.setInternalOrTestUser()
+            posthog.setInternalOrTestUser()
 
             expect(beforeSendMock).toHaveBeenCalledTimes(1)
         })
 
-        describe('test_user_hostname config', () => {
-            it('should call setTestUser automatically when hostname matches regex', async () => {
+        describe('internal_or_test_user_hostname config', () => {
+            it('should call setInternalOrTestUser automatically when hostname matches regex', async () => {
                 mockHostName.mockReturnValue('localhost')
                 const { beforeSendMock } = setup({
                     person_profiles: 'identified_only',
-                    test_user_hostname: /^(localhost|127\.0\.0\.1)$/,
+                    internal_or_test_user_hostname: /^(localhost|127\.0\.0\.1)$/,
                 })
 
                 const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
                 expect(setEvents.length).toEqual(1)
-                expect(setEvents[0][0].properties.$set).toEqual({ $test_user: true })
+                expect(setEvents[0][0].properties.$set).toEqual({ $internal_or_test_user: true })
             })
 
             it('should work with string exact match', () => {
                 mockHostName.mockReturnValue('localhost')
                 const { beforeSendMock } = setup({
                     person_profiles: 'identified_only',
-                    test_user_hostname: 'localhost',
+                    internal_or_test_user_hostname: 'localhost',
                 })
 
                 const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
@@ -451,18 +451,18 @@ describe('posthog core', () => {
                 mockHostName.mockReturnValue('localhost.example.com')
                 const { beforeSendMock } = setup({
                     person_profiles: 'identified_only',
-                    test_user_hostname: 'localhost',
+                    internal_or_test_user_hostname: 'localhost',
                 })
 
                 const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
                 expect(setEvents.length).toEqual(0)
             })
 
-            it('should not call setTestUser when hostname does not match', () => {
+            it('should not call setInternalOrTestUser when hostname does not match', () => {
                 mockHostName.mockReturnValue('production.example.com')
                 const { beforeSendMock } = setup({
                     person_profiles: 'identified_only',
-                    test_user_hostname: /^localhost$/,
+                    internal_or_test_user_hostname: /^localhost$/,
                 })
 
                 const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
@@ -474,13 +474,69 @@ describe('posthog core', () => {
                 const { posthog, beforeSendMock } = setup({
                     person_profiles: 'identified_only',
                     defaults: '2026-01-30',
-                    test_user_hostname: null,
+                    internal_or_test_user_hostname: null,
                 })
 
-                expect(posthog.config.test_user_hostname).toBeNull()
+                expect(posthog.config.internal_or_test_user_hostname).toBeNull()
                 const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
                 expect(setEvents.length).toEqual(0)
             })
+        })
+    })
+
+    describe('_execute_array and push re-entrancy guard', () => {
+        it('should not infinitely recurse when push is called re-entrantly (e.g., TikTok Proxy)', () => {
+            const posthog = defaultPostHog()
+
+            // Simulate TikTok's in-app browser Proxy behavior:
+            // When _execute_array dispatches a method via this[method](),
+            // a Proxy intercepts it and calls push() instead, which would
+            // re-enter _execute_array and cause infinite recursion.
+            const origCapture = posthog.capture.bind(posthog)
+            let callCount = 0
+            posthog.capture = function (...args: any[]) {
+                callCount++
+                if (callCount > 100) {
+                    throw new Error('Infinite recursion detected')
+                }
+                // Simulate what TikTok's Proxy does: convert the method call
+                // to a push() call
+                posthog.push(['capture', ...args])
+            } as any
+
+            // This should not throw RangeError: Maximum call stack size exceeded
+            expect(() => {
+                posthog.push(['capture', 'test-event', { foo: 'bar' }])
+            }).not.toThrow()
+
+            // Restore original capture to verify it was called via prototype
+            posthog.capture = origCapture
+        })
+
+        it('should execute methods normally when no Proxy interference', () => {
+            const posthog = defaultPostHog()
+            const captureSpy = jest.spyOn(posthog, 'capture').mockImplementation()
+
+            posthog.push(['capture', 'test-event', { foo: 'bar' }])
+
+            expect(captureSpy).toHaveBeenCalledWith('test-event', { foo: 'bar' })
+            captureSpy.mockRestore()
+        })
+
+        it('should handle _execute_array with array of commands', () => {
+            const posthog = defaultPostHog()
+            const registerSpy = jest.spyOn(posthog, 'register').mockImplementation()
+            const captureSpy = jest.spyOn(posthog, 'capture').mockImplementation()
+
+            posthog._execute_array([
+                ['register', { key: 'value' }],
+                ['capture', 'test-event'],
+            ])
+
+            expect(registerSpy).toHaveBeenCalledWith({ key: 'value' })
+            expect(captureSpy).toHaveBeenCalledWith('test-event')
+            registerSpy.mockRestore()
+            captureSpy.mockRestore()
         })
     })
 })

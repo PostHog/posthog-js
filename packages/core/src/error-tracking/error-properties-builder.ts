@@ -34,7 +34,7 @@ export class ErrorPropertiesBuilder {
     }
     const coercingContext: CoercingContext = this.buildCoercingContext(mechanism, hint, 0)
     const exceptionWithCause = coercingContext.apply(input)
-    const parsingContext: ParsingContext = this.buildParsingContext()
+    const parsingContext: ParsingContext = this.buildParsingContext(hint)
     const exceptionWithStack = this.parseStacktrace(exceptionWithCause, parsingContext)
     const exceptionList = this.convertToExceptionList(exceptionWithStack, mechanism)
     return {
@@ -68,7 +68,7 @@ export class ErrorPropertiesBuilder {
     }
     let stack: StackFrame[] | undefined = undefined
     if (err.stack != '' && err.stack != null) {
-      stack = this.applyChunkIds(this.stackParser(err.stack, err.synthetic ? 1 : 0), ctx.chunkIdMap)
+      stack = this.applyChunkIds(this.stackParser(err.stack, err.synthetic ? ctx.skipFirstLines : 0), ctx.chunkIdMap)
     }
     return { ...err, cause, stack }
   }
@@ -128,14 +128,15 @@ export class ErrorPropertiesBuilder {
     return exceptionList
   }
 
-  private buildParsingContext(): ParsingContext {
+  private buildParsingContext(hint: EventHint): ParsingContext {
     const context = {
       chunkIdMap: getFilenameToChunkIdMap(this.stackParser),
+      skipFirstLines: hint.skipFirstLines ?? 1,
     } as ParsingContext
     return context
   }
 
-  private buildCoercingContext(mechanism: Mechanism, hint: EventHint, depth: number = 0): CoercingContext {
+  public buildCoercingContext(mechanism: Mechanism, hint: EventHint, depth: number = 0): CoercingContext {
     const coerce = (input: unknown, depth: number) => {
       if (depth <= MAX_CAUSE_RECURSION) {
         const ctx = this.buildCoercingContext(mechanism, hint, depth)

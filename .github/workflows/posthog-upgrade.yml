@@ -48,42 +48,10 @@ jobs:
               id: pnpm-upgrade
               shell: bash
               env:
-                  RETRY_TIMES: 20
-                  RETRY_WAIT_SECONDS: 5
                   PACKAGE_NAME: ${{ github.event.inputs.package_name }}
-                  PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
               run: |
-                  OUTGOING_VERSION=$(jq ".dependencies[\"$PACKAGE_NAME\"]" package.json -r)
-                  echo "outgoing-version=$OUTGOING_VERSION" >> "$GITHUB_OUTPUT"
-                  for i in $(seq 1 $RETRY_TIMES); do
-                      # Retry loop because of npm being _eventually_ consistent
-                      if pnpm -r upgrade "$PACKAGE_NAME@$PACKAGE_VERSION"; then
-                          break
-                      else
-                          [ $i -ne $RETRY_TIMES ] && sleep $RETRY_WAIT_SECONDS || false
-                      fi
-                  done
-
-            - name: Install new package version in hedgebox-dummy
-              shell: bash
-              env:
-                  RETRY_TIMES: 20
-                  RETRY_WAIT_SECONDS: 5
-                  PACKAGE_NAME: ${{ github.event.inputs.package_name }}
-                  PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
-              run: |
-                  if [ -d "hedgebox-dummy" ]; then
-                      cd hedgebox-dummy
-                      for i in $(seq 1 $RETRY_TIMES); do
-                          if pnpm upgrade "$PACKAGE_NAME@$PACKAGE_VERSION"; then
-                              break
-                          else
-                              [ $i -ne $RETRY_TIMES ] && sleep $RETRY_WAIT_SECONDS || false
-                          fi
-                      done
-                  else
-                      echo "hedgebox-dummy folder not found, skipping"
-                  fi
+                  pnpx taze -r --include "$PACKAGE_NAME" -w
+                  pnpm i
 
             - name: Generate branch name
               id: generate-branch-name
@@ -109,7 +77,7 @@ jobs:
 
                       ${{ github.event.inputs.package_name }} version ${{ github.event.inputs.package_version }} has been released. This updates PostHog to use it.
 
-                      https://github.com/PostHog/posthog-js/compare/${{ github.event.inputs.package_name }}@${{ steps.pnpm-upgrade.outputs.outgoing-version }}...${{ github.event.inputs.package_name }}@${{ github.event.inputs.package_version }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${{ github.event.inputs.package_name }}?activeTab=version)
+                      [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${{ github.event.inputs.package_name }}?activeTab=version)
 
             - name: Output pull request result
               shell: bash

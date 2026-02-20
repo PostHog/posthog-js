@@ -1,5 +1,4 @@
 import { EventMessage, PostHog } from 'posthog-node'
-import { Buffer } from 'buffer'
 import OpenAIOrignal from 'openai'
 import AnthropicOriginal from '@anthropic-ai/sdk'
 import type { ChatCompletionTool } from 'openai/resources/chat/completions'
@@ -279,9 +278,17 @@ export const formatResponseGemini = (response: any): FormattedMessage[] => {
             const mimeType = part.inlineData.mimeType || 'audio/pcm'
             let data = part.inlineData.data
 
-            // Handle binary data (Buffer/Uint8Array -> base64)
-            if (data instanceof Uint8Array || Buffer.isBuffer(data)) {
-              data = Buffer.from(data).toString('base64')
+            // Handle binary data (Uint8Array/Buffer -> base64)
+            if (data instanceof Uint8Array) {
+              if (typeof Buffer !== 'undefined') {
+                data = Buffer.from(data).toString('base64')
+              } else {
+                let binary = ''
+                for (let i = 0; i < data.length; i++) {
+                  binary += String.fromCharCode(data[i])
+                }
+                data = btoa(binary)
+              }
             }
 
             // Sanitize base64 data for images and other large inline data
@@ -569,7 +576,8 @@ function sanitizeValues(obj: any): any {
   }
   const jsonSafe = JSON.parse(JSON.stringify(obj))
   if (typeof jsonSafe === 'string') {
-    return Buffer.from(jsonSafe, STRING_FORMAT).toString(STRING_FORMAT)
+    // Sanitize lone surrogates by round-tripping through UTF-8
+    return new TextDecoder().decode(new TextEncoder().encode(jsonSafe))
   } else if (Array.isArray(jsonSafe)) {
     return jsonSafe.map(sanitizeValues)
   } else if (jsonSafe && typeof jsonSafe === 'object') {

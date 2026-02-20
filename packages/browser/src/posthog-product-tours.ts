@@ -41,9 +41,13 @@ export class PostHogProductTours {
     }
 
     onRemoteConfig(response: RemoteConfig): void {
+        if (!('productTours' in response)) {
+            return
+        }
+
         if (this._instance.persistence) {
             this._instance.persistence.register({
-                [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: !!response?.productTours,
+                [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: !!response.productTours,
             })
         }
         this.loadIfEnabled()

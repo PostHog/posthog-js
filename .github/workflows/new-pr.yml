@@ -27,7 +27,7 @@ jobs:
                       echo "is-shame-worthy=false" >> "$GITHUB_OUTPUT"
                   fi
               env:
-                  RAW_BODY: ${{ github.event.pull_request.body }}
+                  RAW_BODY: ${{ toJSON(github.event.pull_request.body) }}
 
             - name: Shame if PR has no description
               if: steps.is-shame-worthy.outputs.is-shame-worthy == 'true'

@@ -29,6 +29,12 @@ export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
   sendFeatureFlags?: boolean | SendFeatureFlagsOptions
   timestamp?: Date
   uuid?: string
+  /**
+   * Internal flag set by captureException() to indicate this $exception
+   * event originated from the proper exception capture path. Used to warn users who call
+   * capture() with '$exception' directly.
+   */
+  _originatedFromCaptureException?: boolean
 }
 
 export type GroupIdentifyMessage = {
@@ -91,6 +97,8 @@ export type FeatureFlagCondition = {
   rollout_percentage?: number
   variant?: string
 }
+
+export type FeatureFlagBucketingIdentifier = 'distinct_id' | 'device_id' | '' | null
 
 export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
 
@@ -197,6 +205,7 @@ export type PostHogFeatureFlag = {
   id: number
   name: string
   key: string
+  bucketing_identifier?: FeatureFlagBucketingIdentifier
   filters?: {
     aggregation_group_type_index?: number
     groups?: FeatureFlagCondition[]

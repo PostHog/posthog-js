@@ -133,53 +133,68 @@ test.describe('product tours - step navigation', () => {
         })
     })
 
-    test.describe('multi-page navigation', () => {
-        test('tour resumes after navigating to new page', async ({ page, context }) => {
-            const tour = createTour({
-                id: 'multi-page-tour',
-                steps: [
-                    createElementStep('#nav-link', {
-                        id: 'step-1',
-                        progressionTrigger: 'click',
-                        contentHtml: '<p>Click this link to continue</p>',
-                    }),
-                    createElementStep('#page2-target', {
-                        id: 'step-2',
-                        progressionTrigger: 'button',
-                        contentHtml: '<p>Welcome to page 2!</p>',
-                    }),
-                ],
+    const elementStepVariants = [
+        { label: 'element step (legacy)', asModal: false },
+        { label: 'modal step with selector', asModal: true },
+    ]
+
+    for (const { label, asModal } of elementStepVariants) {
+        test.describe(`multi-page navigation - ${label}`, () => {
+            test('tour resumes after navigating to new page', async ({ page, context }) => {
+                const tour = createTour({
+                    id: 'multi-page-tour',
+                    steps: [
+                        createElementStep(
+                            '#nav-link',
+                            {
+                                id: 'step-1',
+                                progressionTrigger: 'click',
+                                contentHtml: '<p>Click this link to continue</p>',
+                            },
+                            asModal
+                        ),
+                        createElementStep(
+                            '#page2-target',
+                            {
+                                id: 'step-2',
+                                progressionTrigger: 'button',
+                                contentHtml: '<p>Welcome to page 2!</p>',
+                            },
+                            asModal
+                        ),
+                    ],
+                })
+
+                await startWithTours(page, context, [tour])
+
+                await expect(tourTooltip(page, 'multi-page-tour')).toBeVisible({ timeout: 5000 })
+                await expect(tourContainer(page, 'multi-page-tour').locator('.ph-tour-content')).toContainText(
+                    'Click this link'
+                )
+
+                const sessionState = await getSessionState(page)
+                expect(sessionState.tourId).toBe('multi-page-tour')
+                expect(sessionState.stepIndex).toBe(0)
+
+                await tourContainer(page, 'multi-page-tour').locator('.ph-tour-spotlight').click()
+
+                await page.waitForURL('**/page2.html')
+
+                await start(
+                    { ...startOptionsWithProductTours, type: 'reload', url: './playground/cypress/page2.html' },
+                    page,
+                    context
+                )
+                await mockProductToursApi(page, [tour])
+
+                await expect(tourTooltip(page, 'multi-page-tour')).toBeVisible({ timeout: 5000 })
+                await expect(tourContainer(page, 'multi-page-tour').locator('.ph-tour-content')).toContainText(
+                    'Welcome to page 2'
+                )
+
+                const newSessionState = await getSessionState(page)
+                expect(newSessionState.stepIndex).toBe(1)
             })
-
-            await startWithTours(page, context, [tour])
-
-            await expect(tourTooltip(page, 'multi-page-tour')).toBeVisible({ timeout: 5000 })
-            await expect(tourContainer(page, 'multi-page-tour').locator('.ph-tour-content')).toContainText(
-                'Click this link'
-            )
-
-            const sessionState = await getSessionState(page)
-            expect(sessionState.tourId).toBe('multi-page-tour')
-            expect(sessionState.stepIndex).toBe(0)
-
-            await tourContainer(page, 'multi-page-tour').locator('.ph-tour-spotlight').click()
-
-            await page.waitForURL('**/page2.html')
-
-            await start(
-                { ...startOptionsWithProductTours, type: 'reload', url: './playground/cypress/page2.html' },
-                page,
-                context
-            )
-            await mockProductToursApi(page, [tour])
-
-            await expect(tourTooltip(page, 'multi-page-tour')).toBeVisible({ timeout: 5000 })
-            await expect(tourContainer(page, 'multi-page-tour').locator('.ph-tour-content')).toContainText(
-                'Welcome to page 2'
-            )
-
-            const newSessionState = await getSessionState(page)
-            expect(newSessionState.stepIndex).toBe(1)
         })
-    })
+    }
 })

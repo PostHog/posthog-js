@@ -1,5 +1,89 @@
 # posthog-ai
 
+## 7.9.0
+
+### Minor Changes
+
+- [#3103](https://github.com/PostHog/posthog-js/pull/3103) [`526520a`](https://github.com/PostHog/posthog-js/commit/526520a6f1b09bdc847e3156807e11be0fdf052d) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Added AI SDK OTEL span processing pipeline
+  (2026-02-18)
+
+## 7.8.13
+
+### Patch Changes
+
+- Updated dependencies [[`9dbc05e`](https://github.com/PostHog/posthog-js/commit/9dbc05ed65ddc8c37c9262b9aebfc51d0c748971)]:
+  - @posthog/core@1.23.1
+  - posthog-node@5.24.17
+
+## 7.8.12
+
+### Patch Changes
+
+- [#3102](https://github.com/PostHog/posthog-js/pull/3102) [`f505865`](https://github.com/PostHog/posthog-js/commit/f505865d6000228458f5cb2d63296c228f4d0cd6) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Bind prompt fetches to both credentials by requiring `projectApiKey` and adding `token=<projectApiKey>` to prompt API reads.
+  (2026-02-17)
+- Updated dependencies [[`e962f01`](https://github.com/PostHog/posthog-js/commit/e962f01c80476b9325f0bbb4ca591820cfb9f338)]:
+  - @posthog/core@1.23.0
+  - posthog-node@5.24.16
+
+## 7.8.11
+
+### Patch Changes
+
+- [#3083](https://github.com/PostHog/posthog-js/pull/3083) [`3cff372`](https://github.com/PostHog/posthog-js/commit/3cff372a08138d3a6e36f1e354239e68bf52501c) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Remove static Buffer imports for edge runtime compatibility
+  (2026-02-12)
+
+## 7.8.10
+
+### Patch Changes
+
+- [#3075](https://github.com/PostHog/posthog-js/pull/3075) [`72b2bc7`](https://github.com/PostHog/posthog-js/commit/72b2bc7c1f98dd63b24ac056dcda098b78950652) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates: - Updated dependency [`@anthropic-ai/sdk@^0.74.0` ↗︎](https://www.npmjs.com/package/@anthropic-ai/sdk/v/0.74.0) (from `^0.72.1`, in `dependencies`) (2026-02-11)
+
+## 7.8.9
+
+### Patch Changes
+
+- [#3069](https://github.com/PostHog/posthog-js/pull/3069) [`c81ee34`](https://github.com/PostHog/posthog-js/commit/c81ee34096a780b13e97a862197d4a6fdedb749a) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates: - Updated dependency [`@google/genai@^1.40.0` ↗︎](https://www.npmjs.com/package/@google/genai/v/1.40.0) (from `^1.38.0`, in `dependencies`) (2026-02-10)
+- Updated dependencies [[`0acf16f`](https://github.com/PostHog/posthog-js/commit/0acf16fcbf8c32d5f28b86b6fa200271ad0b647e)]:
+  - @posthog/core@1.22.0
+  - posthog-node@5.24.15
+
+## 7.8.8
+
+### Patch Changes
+
+- Updated dependencies [[`d578824`](https://github.com/PostHog/posthog-js/commit/d578824395ceba3b854970c2a7723e97466d9e9d)]:
+  - @posthog/core@1.21.0
+  - posthog-node@5.24.14
+
+## 7.8.7
+
+### Patch Changes
+
+- Updated dependencies [[`e055f9a`](https://github.com/PostHog/posthog-js/commit/e055f9a344d7c11309c56444383f79df335a5c51)]:
+  - @posthog/core@1.20.2
+  - posthog-node@5.24.12
+
+## 7.8.6
+
+### Patch Changes
+
+- Updated dependencies [[`8f75dae`](https://github.com/PostHog/posthog-js/commit/8f75dae39ae2938624ca49e778915a92f2491556)]:
+  - @posthog/core@1.20.1
+  - posthog-node@5.24.11
+
+## 7.8.5
+
+### Patch Changes
+
+- [#3021](https://github.com/PostHog/posthog-js/pull/3021) [`e7ceae5`](https://github.com/PostHog/posthog-js/commit/e7ceae5b5a3a95df84519d99014d587f1d86fd5c) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - fix(llma): small prompt management fixes
+  (2026-02-04)
+
+- [#3030](https://github.com/PostHog/posthog-js/pull/3030) [`98d6274`](https://github.com/PostHog/posthog-js/commit/98d6274a1da337560b2acf4f62eeefba1f8e5fd4) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Changes prompts default URL.
+  (2026-02-04)
+- Updated dependencies [[`bb62809`](https://github.com/PostHog/posthog-js/commit/bb62809917845685ae7e2e6d5adad6be5528356e)]:
+  - @posthog/core@1.20.0
+  - posthog-node@5.24.10
+
 ## 7.8.4
 
 ### Patch Changes

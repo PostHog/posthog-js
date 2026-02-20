@@ -327,6 +327,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (typeof props === 'string') {
       this._logger.warn('Called capture() with a string as the first argument when an object was expected.')
     }
+    if (props.event === '$exception' && !props._originatedFromCaptureException) {
+      this._logger.warn(
+        "Using `posthog.capture('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureException(error)` instead, which attaches required metadata automatically."
+      )
+    }
     this.addPendingPromise(
       this.prepareEventMessage(props)
         .then(({ distinctId, event, properties, options }) => {
@@ -390,6 +395,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   async captureImmediate(props: EventMessage): Promise<void> {
     if (typeof props === 'string') {
       this._logger.warn('Called captureImmediate() with a string as the first argument when an object was expected.')
+    }
+    if (props.event === '$exception' && !props._originatedFromCaptureException) {
+      this._logger.warn(
+        "Capturing a `$exception` event via `posthog.captureImmediate('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureExceptionImmediate(error)` instead, which attaches this metadata by default."
+      )
     }
     return this.addPendingPromise(
       this.prepareEventMessage(props)

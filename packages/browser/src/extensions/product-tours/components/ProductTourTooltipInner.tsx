@@ -1,6 +1,6 @@
 import { h } from 'preact'
 import { ProductTourStep, ProductTourAppearance, ProductTourStepButton } from '../../../posthog-product-tours-types'
-import { getStepHtml } from '../product-tours-utils'
+import { getStepHtml, hasElementTarget } from '../product-tours-utils'
 import { IconPosthogLogo, cancelSVG } from '../../surveys/icons'
 
 interface TourButtonProps {
@@ -58,7 +58,7 @@ export function ProductTourTooltipInner({
     const whiteLabel = appearance?.whiteLabel ?? false
     const isLastStep = stepIndex >= totalSteps - 1
     const isFirstStep = stepIndex === 0
-    const showDefaultButtons = !step.buttons && (step.progressionTrigger === 'button' || step.type === 'modal')
+    const showDefaultButtons = !step.buttons && (step.progressionTrigger === 'button' || !hasElementTarget(step))
     const hasCustomButtons = !!step.buttons
 
     const isInteractive = !!(onNext || onPrevious || onDismiss || onButtonClick)

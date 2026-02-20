@@ -165,6 +165,12 @@ export type PostHogCaptureOptions = {
   /** If provided overrides the auto-generated timestamp */
   timestamp?: Date
   disableGeoip?: boolean
+  /**
+   * Internal flag set by captureException() to indicate this $exception
+   * event originated from the proper exception capture path. Used to warn users who call
+   * capture('$exception') directly.
+   */
+  _originatedFromCaptureException?: boolean
 }
 
 export type PostHogFetchResponse = {
@@ -225,9 +231,46 @@ export type PostHogRemoteConfig = {
    * Indicates if the team has any flags enabled (if not we don't need to load them)
    */
   hasFeatureFlags?: boolean
+
+  /**
+   * Error tracking remote config.
+   * Either a boolean (false = disabled) or a map with configuration.
+   * When a map, `autocaptureExceptions` (boolean) controls whether automatic exception capture is enabled remotely.
+   */
+  errorTracking?:
+    | boolean
+    | {
+        [key: string]: JsonType
+      }
+
+  /**
+   * Capture performance remote config.
+   * Either a boolean (false = disabled) or a map with configuration.
+   * When a map, `network_timing` (boolean) controls whether network timing capture is enabled remotely.
+   */
+  capturePerformance?:
+    | boolean
+    | {
+        [key: string]: JsonType
+      }
 }
 
 export type FeatureFlagValue = string | boolean
+
+/**
+ * Result of evaluating a feature flag, including both the flag value and its payload.
+ */
+export type FeatureFlagResult = {
+  readonly key: string
+  readonly enabled: boolean
+  readonly variant?: string
+  readonly payload?: JsonType
+}
+
+export type FeatureFlagResultOptions = {
+  /** Whether to send a $feature_flag_called event. Defaults to true. */
+  sendEvent?: boolean
+}
 
 export type PostHogFlagsResponse = Omit<PostHogRemoteConfig, 'hasFeatureFlags'> & {
   featureFlags: {
@@ -460,6 +503,18 @@ export enum SurveyQuestionDescriptionContentType {
   Text = 'text',
 }
 
+// Survey validation types
+export enum SurveyValidationType {
+  MinLength = 'min_length',
+  MaxLength = 'max_length',
+}
+
+export interface SurveyValidationRule {
+  type: SurveyValidationType
+  value?: number
+  errorMessage?: string
+}
+
 type SurveyQuestionBase = {
   question: string
   id: string
@@ -469,6 +524,7 @@ type SurveyQuestionBase = {
   buttonText?: string
   originalQuestionIndex: number
   branching?: NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching
+  validation?: SurveyValidationRule[]
 }
 
 export type BasicSurveyQuestion = SurveyQuestionBase & {

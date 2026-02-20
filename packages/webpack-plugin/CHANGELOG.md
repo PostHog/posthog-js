@@ -1,5 +1,61 @@
 # @posthog/webpack-plugin
 
+## 1.2.24
+
+### Patch Changes
+
+- Updated dependencies [[`9dbc05e`](https://github.com/PostHog/posthog-js/commit/9dbc05ed65ddc8c37c9262b9aebfc51d0c748971)]:
+    - @posthog/core@1.23.1
+
+## 1.2.23
+
+### Patch Changes
+
+- Updated dependencies [[`e962f01`](https://github.com/PostHog/posthog-js/commit/e962f01c80476b9325f0bbb4ca591820cfb9f338)]:
+    - @posthog/core@1.23.0
+
+## 1.2.22
+
+### Patch Changes
+
+- [#3076](https://github.com/PostHog/posthog-js/pull/3076) [`91234bb`](https://github.com/PostHog/posthog-js/commit/91234bb015ff18b1a95f08448053e7b75730ed81) Thanks [@hpouillot](https://github.com/hpouillot)! - rename sourcemaps config variables with `releaseName`, `releaseVersion`, `projectId`
+  (2026-02-12)
+
+## 1.2.21
+
+### Patch Changes
+
+- Updated dependencies [[`0acf16f`](https://github.com/PostHog/posthog-js/commit/0acf16fcbf8c32d5f28b86b6fa200271ad0b647e)]:
+    - @posthog/core@1.22.0
+
+## 1.2.20
+
+### Patch Changes
+
+- Updated dependencies [[`d578824`](https://github.com/PostHog/posthog-js/commit/d578824395ceba3b854970c2a7723e97466d9e9d)]:
+    - @posthog/core@1.21.0
+
+## 1.2.19
+
+### Patch Changes
+
+- Updated dependencies [[`e055f9a`](https://github.com/PostHog/posthog-js/commit/e055f9a344d7c11309c56444383f79df335a5c51)]:
+    - @posthog/core@1.20.2
+
+## 1.2.18
+
+### Patch Changes
+
+- Updated dependencies [[`8f75dae`](https://github.com/PostHog/posthog-js/commit/8f75dae39ae2938624ca49e778915a92f2491556)]:
+    - @posthog/core@1.20.1
+
+## 1.2.17
+
+### Patch Changes
+
+- Updated dependencies [[`bb62809`](https://github.com/PostHog/posthog-js/commit/bb62809917845685ae7e2e6d5adad6be5528356e)]:
+    - @posthog/core@1.20.0
+
 ## 1.2.16
 
 ### Patch Changes

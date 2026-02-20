@@ -3,7 +3,9 @@ import {
     getSpotlightStyle,
     renderTipTapContent,
     normalizeUrl,
+    resolveStepTranslation,
 } from '../../extensions/product-tours/product-tours-utils'
+import { ProductTourStep } from '../../posthog-product-tours-types'
 import { doesTourActivateByEvent, doesTourActivateByAction } from '../../utils/product-tour-utils'
 
 describe('calculateTooltipPosition', () => {
@@ -186,6 +188,79 @@ describe('normalizeUrl', () => {
 
     it('handles URL with query string and trailing slash', () => {
         expect(normalizeUrl('https://example.com/?foo=bar')).toBe('https://example.com/?foo=bar')
+    })
+})
+
+describe('resolveStepTranslation', () => {
+    const baseStep: ProductTourStep = {
+        id: 'step-1',
+        type: 'modal',
+        progressionTrigger: 'button',
+        content: { type: 'doc', content: [{ type: 'text', text: 'Hello' }] },
+        buttons: {
+            primary: { text: 'Next', action: 'next_step' },
+            secondary: { text: 'Skip', action: 'dismiss' },
+        },
+        survey: {
+            type: 'rating',
+            questionText: 'How was it?',
+            display: 'emoji',
+            scale: 5,
+            lowerBoundLabel: 'Bad',
+            upperBoundLabel: 'Good',
+            submitButtonText: 'Submit',
+            backButtonText: 'Back',
+        },
+        translations: {
+            fr: {
+                content: { type: 'doc', content: [{ type: 'text', text: 'Bonjour' }] },
+                buttons: { primary: { text: 'Suivant' }, secondary: { text: 'Passer' } },
+                survey: { questionText: "Comment c'était ?", submitButtonText: 'Envoyer' },
+            },
+        },
+    }
+
+    it.each([
+        ['null lang', null, {}],
+        ['empty string lang', '', {}],
+        ['missing lang', 'de', {}],
+        ['no base match', 'de-AT', {}],
+        ['no translations on step', 'fr', { translations: undefined }],
+    ])('returns step unchanged for %s', (_label, lang, overrides) => {
+        const step = { ...baseStep, ...overrides }
+        expect(resolveStepTranslation(step, lang as string | null)).toBe(step)
+    })
+
+    it.each([
+        ['exact match', 'fr'],
+        ['base language fallback', 'fr-FR'],
+    ])('resolves translation via %s', (_label, lang) => {
+        const result = resolveStepTranslation(baseStep, lang)
+
+        // translated fields
+        expect(result.content).toEqual({ type: 'doc', content: [{ type: 'text', text: 'Bonjour' }] })
+        expect(result.buttons?.primary).toEqual({ text: 'Suivant', action: 'next_step' })
+        expect(result.buttons?.secondary).toEqual({ text: 'Passer', action: 'dismiss' })
+        expect(result.survey?.questionText).toBe("Comment c'était ?")
+        expect(result.survey?.submitButtonText).toBe('Envoyer')
+
+        // non-translated fields preserved
+        expect(result.survey?.scale).toBe(5)
+        expect(result.id).toBe('step-1')
+    })
+
+    it('does not mutate the original step', () => {
+        resolveStepTranslation(baseStep, 'fr')
+        expect(baseStep.buttons?.primary?.text).toBe('Next')
+        expect(baseStep.survey?.questionText).toBe('How was it?')
+    })
+
+    it.each([
+        ['buttons', { buttons: undefined }, (r: ProductTourStep) => r.buttons],
+        ['survey', { survey: undefined }, (r: ProductTourStep) => r.survey],
+    ])('skips %s translation when step has no %s', (_label, overrides, accessor) => {
+        const result = resolveStepTranslation({ ...baseStep, ...overrides }, 'fr')
+        expect(accessor(result)).toBeUndefined()
     })
 })
 

@@ -1,5 +1,109 @@
 # posthog-react-native
 
+## 4.35.1
+
+### Patch Changes
+
+- Updated dependencies [[`9dbc05e`](https://github.com/PostHog/posthog-js/commit/9dbc05ed65ddc8c37c9262b9aebfc51d0c748971)]:
+  - @posthog/core@1.23.1
+
+## 4.35.0
+
+### Minor Changes
+
+- [#3086](https://github.com/PostHog/posthog-js/pull/3086) [`e962f01`](https://github.com/PostHog/posthog-js/commit/e962f01c80476b9325f0bbb4ca591820cfb9f338) Thanks [@marandaneto](https://github.com/marandaneto)! - feat: support remote config for error tracking, session replay capture performance and capture logs
+  (2026-02-17)
+
+### Patch Changes
+
+- Updated dependencies [[`e962f01`](https://github.com/PostHog/posthog-js/commit/e962f01c80476b9325f0bbb4ca591820cfb9f338)]:
+  - @posthog/core@1.23.0
+
+## 4.34.0
+
+### Minor Changes
+
+- [#3084](https://github.com/PostHog/posthog-js/pull/3084) [`e2ac0e8`](https://github.com/PostHog/posthog-js/commit/e2ac0e856821a0b7e2e25c1142c602c4c138cbdd) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - add error boundary
+  (2026-02-12)
+
+## 4.33.0
+
+### Minor Changes
+
+- [#3065](https://github.com/PostHog/posthog-js/pull/3065) [`34ee954`](https://github.com/PostHog/posthog-js/commit/34ee95404fdae8c97f3263a600392caac5b982a8) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Add `useFeatureFlagResult` hook
+  (2026-02-12)
+
+### Patch Changes
+
+- [#3071](https://github.com/PostHog/posthog-js/pull/3071) [`d1d62d4`](https://github.com/PostHog/posthog-js/commit/d1d62d4e4a3653f0b93abcbd9f33567ed60e3547) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: `PostHogContext` is correctly typed
+  (2026-02-12)
+
+## 4.32.0
+
+### Minor Changes
+
+- [#3045](https://github.com/PostHog/posthog-js/pull/3045) [`0acf16f`](https://github.com/PostHog/posthog-js/commit/0acf16fcbf8c32d5f28b86b6fa200271ad0b647e) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Add `getFeatureFlagResult` to PostHogCore
+  (2026-02-10)
+
+### Patch Changes
+
+- Updated dependencies [[`0acf16f`](https://github.com/PostHog/posthog-js/commit/0acf16fcbf8c32d5f28b86b6fa200271ad0b647e)]:
+  - @posthog/core@1.22.0
+
+## 4.31.1
+
+### Patch Changes
+
+- [#3070](https://github.com/PostHog/posthog-js/pull/3070) [`eca98ac`](https://github.com/PostHog/posthog-js/commit/eca98ac8da99210b69f67474189ca8720c76062b) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: export PostHogMaskView
+  (2026-02-10)
+
+## 4.31.0
+
+### Minor Changes
+
+- [#2820](https://github.com/PostHog/posthog-js/pull/2820) [`d578824`](https://github.com/PostHog/posthog-js/commit/d578824395ceba3b854970c2a7723e97466d9e9d) Thanks [@ordehi](https://github.com/ordehi)! - Add survey response validation for message length (min and max length). Fixes whitespace-only bypass for required questions. Existing surveys work unchanged but now properly reject blank responses.
+  (2026-02-09)
+
+### Patch Changes
+
+- Updated dependencies [[`d578824`](https://github.com/PostHog/posthog-js/commit/d578824395ceba3b854970c2a7723e97466d9e9d)]:
+  - @posthog/core@1.21.0
+
+## 4.30.3
+
+### Patch Changes
+
+- [#3028](https://github.com/PostHog/posthog-js/pull/3028) [`e055f9a`](https://github.com/PostHog/posthog-js/commit/e055f9a344d7c11309c56444383f79df335a5c51) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: Queue pending feature flags reload instead of dropping requests when a reload is already in flight
+  (2026-02-09)
+- Updated dependencies [[`e055f9a`](https://github.com/PostHog/posthog-js/commit/e055f9a344d7c11309c56444383f79df335a5c51)]:
+  - @posthog/core@1.20.2
+
+## 4.30.2
+
+### Patch Changes
+
+- Updated dependencies [[`8f75dae`](https://github.com/PostHog/posthog-js/commit/8f75dae39ae2938624ca49e778915a92f2491556)]:
+  - @posthog/core@1.20.1
+
+## 4.30.1
+
+### Patch Changes
+
+- [#3031](https://github.com/PostHog/posthog-js/pull/3031) [`26775e2`](https://github.com/PostHog/posthog-js/commit/26775e2ac54b0b6e2356336a68daed35cb7cd6fc) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: prevent duplicate events with transactional storage (async) updates
+  (2026-02-05)
+
+## 4.30.0
+
+### Minor Changes
+
+- [#3023](https://github.com/PostHog/posthog-js/pull/3023) [`bb62809`](https://github.com/PostHog/posthog-js/commit/bb62809917845685ae7e2e6d5adad6be5528356e) Thanks [@marandaneto](https://github.com/marandaneto)! - feat: only capture $set events if the user properties have changed
+  (2026-02-04)
+
+### Patch Changes
+
+- Updated dependencies [[`bb62809`](https://github.com/PostHog/posthog-js/commit/bb62809917845685ae7e2e6d5adad6be5528356e)]:
+  - @posthog/core@1.20.0
+
 ## 4.29.0
 
 ### Minor Changes

@@ -1,4 +1,4 @@
 # source ./export-posthog-cli.sh
 # https://github.com/PostHog/posthog/tree/master/cli#env-based-authentication
-export POSTHOG_CLI_TOKEN=
-export POSTHOG_CLI_ENV_ID=
+export POSTHOG_CLI_API_KEY=
+export POSTHOG_CLI_PROJECT_ID=

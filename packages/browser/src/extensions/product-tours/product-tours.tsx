@@ -5,17 +5,24 @@ import {
     ProductTourBannerConfig,
     ProductTourCallback,
     ProductTourDismissReason,
+    ProductTourEventName,
+    ProductTourEventProperties,
     ProductTourRenderReason,
+    ProductTourStep,
     ProductTourStepButton,
     ShowTourOptions,
 } from '../../posthog-product-tours-types'
 import { SurveyEventName, SurveyEventProperties } from '../../posthog-surveys-types'
 import {
     addProductTourCSSVariablesToElement,
+    ElementFindResult,
     findStepElement,
     getElementMetadata,
     getProductTourStylesheet,
+    getStepImageUrls,
+    hasElementTarget,
     normalizeUrl,
+    resolveStepTranslation,
 } from './product-tours-utils'
 import { ProductTourTooltip } from './components/ProductTourTooltip'
 import { ProductTourBanner } from './components/ProductTourBanner'
@@ -23,7 +30,7 @@ import { createLogger } from '../../utils/logger'
 import { document as _document, window as _window } from '../../utils/globals'
 import { localStore, sessionStore } from '../../storage'
 import { addEventListener } from '../../utils'
-import { isNull, SurveyMatchType } from '@posthog/core'
+import { isNull, isUndefined, SurveyMatchType } from '@posthog/core'
 import { propertyComparisons } from '../../utils/property-utils'
 import {
     TOUR_SHOWN_KEY_PREFIX,
@@ -34,6 +41,7 @@ import {
 import { doesTourActivateByAction, doesTourActivateByEvent } from '../../utils/product-tour-utils'
 import { TOOLBAR_ID } from '../../constants'
 import { ProductTourEventReceiver } from '../../utils/product-tour-event-receiver'
+import { getBrowserLanguage } from '../../utils/event-utils'
 
 const logger = createLogger('[Product Tours]')
 
@@ -146,6 +154,10 @@ function retrieveBannerShadow(
 
     addProductTourCSSVariablesToElement(div, tour.appearance)
 
+    if (!isUndefined(bannerConfig?.animation?.duration)) {
+        div.style.setProperty('--ph-tour-banner-animation-duration', `${bannerConfig.animation.duration}ms`)
+    }
+
     const shadow = div.attachShadow({ mode: 'open' })
 
     const stylesheet = getProductTourStylesheet()
@@ -193,10 +205,36 @@ export class ProductTourManager {
     private _pendingTourTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map()
     private _eventReceiver: ProductTourEventReceiver
     private _registeredEventTourIds: Set<string> = new Set()
+    private _preloadedImageUrls: Set<string> = new Set()
 
     constructor(instance: PostHog) {
         this._instance = instance
         this._eventReceiver = new ProductTourEventReceiver(instance)
+    }
+
+    private _preloadTourImages(tours: ProductTour[]): void {
+        const urls = tours
+            .filter((tour) => !tour.disable_image_preload)
+            .flatMap((tour) => tour.steps.flatMap(getStepImageUrls))
+
+        for (const url of urls) {
+            if (!this._preloadedImageUrls.has(url)) {
+                this._preloadedImageUrls.add(url)
+                new Image().src = url
+            }
+        }
+    }
+
+    private _getCurrentStep(): ProductTourStep | null {
+        if (!this._activeTour) {
+            return null
+        }
+        const rawStep = this._activeTour.steps[this._currentStepIndex]
+        if (!rawStep) {
+            return null
+        }
+        const language = this._instance.config.override_display_language ?? getBrowserLanguage()
+        return resolveStepTranslation(rawStep, language ?? null)
     }
 
     private _setStepIndex(index: number): void {
@@ -309,6 +347,8 @@ export class ProductTourManager {
                 this._removeAllTriggerListeners()
                 return
             }
+
+            this._preloadTourImages(tours)
 
             const activeTriggerTourIds = new Set<string>()
 
@@ -444,11 +484,11 @@ export class ProductTourManager {
         const rendered = this._renderCurrentStep()
 
         if (rendered) {
-            this._captureEvent('product tour shown', {
-                $product_tour_id: tour.id,
-                $product_tour_name: tour.name,
-                $product_tour_iteration: tour.current_iteration || 1,
-                $product_tour_render_reason: renderReason,
+            this._captureEvent(ProductTourEventName.SHOWN, {
+                [ProductTourEventProperties.TOUR_ID]: tour.id,
+                [ProductTourEventProperties.TOUR_NAME]: tour.name,
+                [ProductTourEventProperties.TOUR_ITERATION]: tour.current_iteration || 1,
+                [ProductTourEventProperties.TOUR_RENDER_REASON]: renderReason,
             })
 
             if (!this._isPreviewMode) {
@@ -496,10 +536,10 @@ export class ProductTourManager {
 
         const currentStep = this._activeTour.steps[this._currentStepIndex]
 
-        this._captureEvent('product tour step completed', {
-            $product_tour_id: this._activeTour.id,
-            $product_tour_step_id: currentStep.id,
-            $product_tour_step_order: this._currentStepIndex,
+        this._captureEvent(ProductTourEventName.STEP_COMPLETED, {
+            [ProductTourEventProperties.TOUR_ID]: this._activeTour.id,
+            [ProductTourEventProperties.TOUR_STEP_ID]: currentStep.id,
+            [ProductTourEventProperties.TOUR_STEP_ORDER]: this._currentStepIndex,
         })
 
         if (this._currentStepIndex < this._activeTour.steps.length - 1) {
@@ -526,11 +566,11 @@ export class ProductTourManager {
 
         const currentStep = this._activeTour.steps[this._currentStepIndex]
 
-        this._captureEvent('product tour dismissed', {
-            $product_tour_id: this._activeTour.id,
-            $product_tour_step_id: currentStep.id,
-            $product_tour_step_order: this._currentStepIndex,
-            $product_tour_dismiss_reason: reason,
+        this._captureEvent(ProductTourEventName.DISMISSED, {
+            [ProductTourEventProperties.TOUR_ID]: this._activeTour.id,
+            [ProductTourEventProperties.TOUR_STEP_ID]: currentStep.id,
+            [ProductTourEventProperties.TOUR_STEP_ORDER]: this._currentStepIndex,
+            [ProductTourEventProperties.TOUR_DISMISS_REASON]: reason,
         })
 
         if (!this._isPreviewMode) {
@@ -548,7 +588,53 @@ export class ProductTourManager {
         this._cleanup()
     }
 
+    private _handleBannerActionClick = (): void => {
+        if (!this._activeTour) {
+            return
+        }
+
+        const step = this._getCurrentStep()
+        if (!step) {
+            return
+        }
+
+        const action = step.bannerConfig?.action
+
+        this._captureEvent(ProductTourEventName.BANNER_ACTION_CLICKED, {
+            [ProductTourEventProperties.TOUR_ID]: this._activeTour.id,
+            [ProductTourEventProperties.TOUR_NAME]: this._activeTour.name,
+            [ProductTourEventProperties.TOUR_ITERATION]: this._activeTour.current_iteration || 1,
+            [ProductTourEventProperties.TOUR_STEP_ID]: step.id,
+            [ProductTourEventProperties.TOUR_STEP_ORDER]: this._currentStepIndex,
+            [ProductTourEventProperties.TOUR_BUTTON_ACTION]: action?.type,
+            [ProductTourEventProperties.TOUR_BUTTON_LINK]: action?.link,
+            [ProductTourEventProperties.TOUR_BUTTON_TOUR_ID]: action?.tourId,
+        })
+
+        if (action?.type === 'trigger_tour' && action.tourId) {
+            this._cleanup()
+            this.showTourById(action.tourId)
+        }
+    }
+
     private _handleButtonClick = (button: ProductTourStepButton): void => {
+        if (this._activeTour) {
+            const currentStep = this._activeTour.steps[this._currentStepIndex]
+            if (currentStep) {
+                this._captureEvent(ProductTourEventName.BUTTON_CLICKED, {
+                    [ProductTourEventProperties.TOUR_ID]: this._activeTour.id,
+                    [ProductTourEventProperties.TOUR_NAME]: this._activeTour.name,
+                    [ProductTourEventProperties.TOUR_ITERATION]: this._activeTour.current_iteration || 1,
+                    [ProductTourEventProperties.TOUR_STEP_ID]: currentStep.id,
+                    [ProductTourEventProperties.TOUR_STEP_ORDER]: this._currentStepIndex,
+                    [ProductTourEventProperties.TOUR_BUTTON_TEXT]: button.text,
+                    [ProductTourEventProperties.TOUR_BUTTON_ACTION]: button.action,
+                    ...(button.link && { [ProductTourEventProperties.TOUR_BUTTON_LINK]: button.link }),
+                    ...(button.tourId && { [ProductTourEventProperties.TOUR_BUTTON_TOUR_ID]: button.tourId }),
+                })
+            }
+        }
+
         switch (button.action) {
             case 'dismiss':
                 this.dismissTour('user_clicked_skip')
@@ -576,9 +662,9 @@ export class ProductTourManager {
             return
         }
 
-        this._captureEvent('product tour completed', {
-            $product_tour_id: this._activeTour.id,
-            $product_tour_steps_count: this._activeTour.steps.length,
+        this._captureEvent(ProductTourEventName.COMPLETED, {
+            [ProductTourEventProperties.TOUR_ID]: this._activeTour.id,
+            [ProductTourEventProperties.TOUR_STEPS_COUNT]: this._activeTour.steps.length,
         })
 
         if (!this._isPreviewMode) {
@@ -601,7 +687,7 @@ export class ProductTourManager {
             return false
         }
 
-        const step = this._activeTour.steps[this._currentStepIndex]
+        const step = this._getCurrentStep()
         if (!step) {
             logger.warn(`Step ${this._currentStepIndex} not found in tour ${this._activeTour.id}`)
             this._cleanup()
@@ -610,12 +696,7 @@ export class ProductTourManager {
 
         // Banner step - render full-width banner
         if (step.type === 'banner') {
-            this._captureEvent('product tour step shown', {
-                $product_tour_id: this._activeTour.id,
-                $product_tour_step_id: step.id,
-                $product_tour_step_order: this._currentStepIndex,
-                $product_tour_step_type: 'banner',
-            })
+            this._captureStepShown()
 
             this._isResuming = false
             this._renderBanner()
@@ -633,14 +714,9 @@ export class ProductTourManager {
             return false
         }
 
-        // Modal step (no selector) - render without a target element
-        if (step.type === 'modal') {
-            this._captureEvent('product tour step shown', {
-                $product_tour_id: this._activeTour.id,
-                $product_tour_step_id: step.id,
-                $product_tour_step_order: this._currentStepIndex,
-                $product_tour_step_type: 'modal',
-            })
+        // Screen-positioned step (no element targeting) - render without a target element
+        if (!hasElementTarget(step)) {
+            this._captureStepShown()
 
             this._isResuming = false
             this._renderTooltipWithPreact(null)
@@ -650,8 +726,8 @@ export class ProductTourManager {
         const result = findStepElement(step)
 
         const inferenceProps = {
-            $use_manual_selector: step.useManualSelector ?? false,
-            $inference_data_present: !!step.inferenceData,
+            [ProductTourEventProperties.USE_MANUAL_SELECTOR]: step.useManualSelector ?? false,
+            [ProductTourEventProperties.INFERENCE_DATA_PRESENT]: !!step.inferenceData,
         }
 
         const previousStep = this._currentStepIndex > 0 ? this._activeTour.steps[this._currentStepIndex - 1] : null
@@ -674,16 +750,9 @@ export class ProductTourManager {
 
             const waitDurationMs = retryCount * retryTimeout
 
-            this._captureEvent('product tour step selector failed', {
-                $product_tour_id: this._activeTour.id,
-                $product_tour_step_id: step.id,
-                $product_tour_step_order: this._currentStepIndex,
-                $product_tour_step_selector: step.selector,
-                $product_tour_error: result.error,
-                $product_tour_matches_count: result.matchCount,
-                $product_tour_failure_phase: 'runtime',
-                $product_tour_waited_for_element: shouldWaitForElement,
-                $product_tour_wait_duration_ms: waitDurationMs,
+            this._captureStepSelectorFailed(result, {
+                [ProductTourEventProperties.TOUR_WAITED_FOR_ELEMENT]: shouldWaitForElement,
+                [ProductTourEventProperties.TOUR_WAIT_DURATION_MS]: waitDurationMs,
                 ...inferenceProps,
             })
 
@@ -703,16 +772,7 @@ export class ProductTourManager {
         }
 
         if (result.error === 'multiple_matches') {
-            this._captureEvent('product tour step selector failed', {
-                $product_tour_id: this._activeTour.id,
-                $product_tour_step_id: step.id,
-                $product_tour_step_order: this._currentStepIndex,
-                $product_tour_step_selector: step.selector,
-                $product_tour_error: result.error,
-                $product_tour_matches_count: result.matchCount,
-                $product_tour_failure_phase: 'runtime',
-                ...inferenceProps,
-            })
+            this._captureStepSelectorFailed(result, inferenceProps)
             // Continue with first match for multiple_matches case
         }
 
@@ -723,16 +783,13 @@ export class ProductTourManager {
         const element = result.element
         const metadata = getElementMetadata(element)
 
-        this._captureEvent('product tour step shown', {
-            $product_tour_id: this._activeTour.id,
-            $product_tour_step_id: step.id,
-            $product_tour_step_order: this._currentStepIndex,
-            $product_tour_step_selector: step.selector,
-            $product_tour_step_selector_found: true,
-            $product_tour_step_element_tag: metadata.tag,
-            $product_tour_step_element_id: metadata.id,
-            $product_tour_step_element_classes: metadata.classes,
-            $product_tour_step_element_text: metadata.text,
+        this._captureStepShown({
+            [ProductTourEventProperties.TOUR_STEP_SELECTOR]: step.selector,
+            [ProductTourEventProperties.TOUR_STEP_SELECTOR_FOUND]: true,
+            [ProductTourEventProperties.TOUR_STEP_ELEMENT_TAG]: metadata.tag,
+            [ProductTourEventProperties.TOUR_STEP_ELEMENT_ID]: metadata.id,
+            [ProductTourEventProperties.TOUR_STEP_ELEMENT_CLASSES]: metadata.classes,
+            [ProductTourEventProperties.TOUR_STEP_ELEMENT_TEXT]: metadata.text,
             ...inferenceProps,
         })
 
@@ -750,7 +807,11 @@ export class ProductTourManager {
             return
         }
 
-        const step = this._activeTour.steps[this._currentStepIndex]
+        const step = this._getCurrentStep()
+        if (!step) {
+            return
+        }
+
         const { shadow } = retrieveTourShadow(this._activeTour)
 
         render(
@@ -775,13 +836,17 @@ export class ProductTourManager {
             return
         }
 
-        const step = this._activeTour.steps[this._currentStepIndex]
+        const step = this._getCurrentStep()
+        if (!step) {
+            return
+        }
+
         const result = retrieveBannerShadow(this._activeTour, step.bannerConfig)
 
         if (!result) {
-            this._captureEvent('product tour banner container selector failed', {
-                $product_tour_id: this._activeTour.id,
-                $product_tour_banner_selector: step?.bannerConfig?.selector,
+            this._captureEvent(ProductTourEventName.BANNER_CONTAINER_SELECTOR_FAILED, {
+                [ProductTourEventProperties.TOUR_ID]: this._activeTour.id,
+                [ProductTourEventProperties.TOUR_BANNER_SELECTOR]: step?.bannerConfig?.selector,
             })
             this.dismissTour('container_unavailable')
             return
@@ -789,19 +854,11 @@ export class ProductTourManager {
 
         const { shadow } = result
 
-        const handleTriggerTour = () => {
-            const tourId = step.bannerConfig?.action?.tourId
-            if (tourId) {
-                this._cleanup()
-                this.showTourById(tourId)
-            }
-        }
-
         render(
             <ProductTourBanner
                 step={step}
                 onDismiss={() => this.dismissTour('user_clicked_skip')}
-                onTriggerTour={handleTriggerTour}
+                onActionClick={this._handleBannerActionClick}
                 displayFrequency={this._activeTour.display_frequency}
             />,
             shadow
@@ -814,17 +871,17 @@ export class ProductTourManager {
         }
 
         const tourId = this._activeTour.id
-        const step = this._activeTour.steps[this._currentStepIndex]
+        const step = this._getCurrentStep()
+        if (!step) {
+            return
+        }
+
         const surveyId = step.linkedSurveyId
         const questionId = step.linkedSurveyQuestionId
         const questionText = step.survey?.questionText || ''
 
-        this._captureEvent('product tour step shown', {
-            $product_tour_id: this._activeTour.id,
-            $product_tour_step_id: step.id,
-            $product_tour_step_order: this._currentStepIndex,
-            $product_tour_step_type: 'survey',
-            $product_tour_linked_survey_id: surveyId,
+        this._captureStepShown({
+            [ProductTourEventProperties.TOUR_LINKED_SURVEY_ID]: surveyId,
         })
 
         this._captureEvent(SurveyEventName.SHOWN, {
@@ -951,7 +1008,7 @@ export class ProductTourManager {
                 logger.info(`Tour ${tour.id} triggered by click on ${selector}`)
 
                 if (this.showTour(currentTour, { reason: 'trigger' })) {
-                    event.stopPropagation()
+                    event.preventDefault()
                 } else {
                     logger.info(`Tour ${tour.id} failed to show; not intercepting click.`)
                 }
@@ -980,11 +1037,42 @@ export class ProductTourManager {
         })
     }
 
-    private _captureEvent(eventName: string, properties: Record<string, any>): void {
+    private _captureEvent(eventName: ProductTourEventName | SurveyEventName, properties: Record<string, any>): void {
         if (this._isPreviewMode) {
             return
         }
         this._instance.capture(eventName, properties)
+    }
+
+    private _captureStepShown(extraProps?: Record<string, any>): void {
+        if (!this._activeTour) {
+            return
+        }
+        const step = this._activeTour.steps[this._currentStepIndex]
+        this._captureEvent(ProductTourEventName.STEP_SHOWN, {
+            [ProductTourEventProperties.TOUR_ID]: this._activeTour.id,
+            [ProductTourEventProperties.TOUR_STEP_ID]: step.id,
+            [ProductTourEventProperties.TOUR_STEP_ORDER]: this._currentStepIndex,
+            [ProductTourEventProperties.TOUR_STEP_TYPE]: step.type,
+            ...extraProps,
+        })
+    }
+
+    private _captureStepSelectorFailed(result: ElementFindResult, extraProps?: Record<string, any>): void {
+        if (!this._activeTour) {
+            return
+        }
+        const step = this._activeTour.steps[this._currentStepIndex]
+        this._captureEvent(ProductTourEventName.STEP_SELECTOR_FAILED, {
+            [ProductTourEventProperties.TOUR_ID]: this._activeTour.id,
+            [ProductTourEventProperties.TOUR_STEP_ID]: step.id,
+            [ProductTourEventProperties.TOUR_STEP_ORDER]: this._currentStepIndex,
+            [ProductTourEventProperties.TOUR_STEP_SELECTOR]: step.selector,
+            [ProductTourEventProperties.TOUR_ERROR]: result.error,
+            [ProductTourEventProperties.TOUR_MATCHES_COUNT]: result.matchCount,
+            [ProductTourEventProperties.TOUR_FAILURE_PHASE]: 'runtime',
+            ...extraProps,
+        })
     }
 
     // Public API methods delegated from PostHogProductTours

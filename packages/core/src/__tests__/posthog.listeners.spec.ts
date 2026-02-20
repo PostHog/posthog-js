@@ -31,10 +31,12 @@ describe('PostHog Core', () => {
 
       posthog.identify('user-1')
       expect(mock).toHaveBeenCalledTimes(1)
-      posthog.identify('user-1')
+      // Calling identify with a different user should emit again
+      posthog.identify('user-2')
       expect(mock).toHaveBeenCalledTimes(2)
       unsubscribe()
-      posthog.identify('user-1')
+      posthog.identify('user-3')
+      // Should not be called again after unsubscribe
       expect(mock).toHaveBeenCalledTimes(2)
     })
 

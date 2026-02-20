@@ -63,6 +63,7 @@ import { PostHog } from '../../../posthog-core'
 import {
     CaptureResult,
     NetworkRecordOptions,
+    PerformanceCaptureConfig,
     Properties,
     SessionIdChangedCallback,
     SessionRecordingOptions,
@@ -85,7 +86,16 @@ const ONE_KB = 1024
 const ONE_MINUTE = 1000 * 60
 const FIVE_MINUTES = ONE_MINUTE * 5
 
+/**
+ * Extracts the network_timing value from a capturePerformance config.
+ * Returns `true`/`false` if explicitly set, or `undefined` if not specified.
+ */
+function networkTimingFromConfig(config: boolean | PerformanceCaptureConfig | undefined): boolean | undefined {
+    return isObject(config) ? config.network_timing : config
+}
+
 export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
+export const RECORDING_REMOTE_CONFIG_TTL_MS = FIVE_MINUTES
 export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
@@ -132,8 +142,12 @@ const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
     attempt: 1,
 })
 
+function getRRWeb() {
+    return assignableWindow?.__PosthogExtensions__?.rrweb
+}
+
 function getRRWebRecord(): rrwebRecordType | undefined {
-    return assignableWindow?.__PosthogExtensions__?.rrweb?.record
+    return getRRWeb()?.record
 }
 
 export type compressedFullSnapshotEvent = {
@@ -319,6 +333,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      */
     private _queuedRRWebEvents: QueuedRRWebEvent[] = []
     private _isIdle: boolean | 'unknown' = 'unknown'
+    private _maxDepthExceeded = false
 
     private _linkedFlagMatching: LinkedFlagMatching
     private _urlTriggerMatching: URLTriggerMatching
@@ -359,9 +374,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private get _isSampled(): boolean | null {
         const currentValue = this._instance.get_property(SESSION_RECORDING_IS_SAMPLED)
-        // originally we would store `true` or `false` or nothing,
-        // but that would mean sometimes we would carry on recording on session id change
-        return isBoolean(currentValue) ? currentValue : isString(currentValue) ? currentValue === this.sessionId : null
+        // we store the session id when sampled so that we can detect session id changes
+        // and `false` when not sampled
+        // legacy SDKs stored `true` when sampled, but that is not tied to a session id
+        // so we treat it as null (unknown) and will make a fresh decision
+        if (currentValue === true) {
+            return null
+        }
+        return currentValue === false ? false : isString(currentValue) ? currentValue === this.sessionId : null
     }
 
     private get _sampleRate(): number | null {
@@ -474,12 +494,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             networkPayloadCapture_client_side?.recordHeaders || networkPayloadCapture_server_side?.recordHeaders
         const bodyEnabled =
             networkPayloadCapture_client_side?.recordBody || networkPayloadCapture_server_side?.recordBody
-        const clientConfigForPerformanceCapture = isObject(this._instance.config.capture_performance)
-            ? this._instance.config.capture_performance.network_timing
-            : this._instance.config.capture_performance
-        const networkTimingEnabled = !!(isBoolean(clientConfigForPerformanceCapture)
-            ? clientConfigForPerformanceCapture
-            : networkPayloadCapture_server_side?.capturePerformance)
+        const clientNetworkTiming = networkTimingFromConfig(this._instance.config.capture_performance)
+        const serverNetworkTiming = networkTimingFromConfig(networkPayloadCapture_server_side?.capturePerformance)
+        const networkTimingEnabled = !!(isBoolean(clientNetworkTiming) ? clientNetworkTiming : serverNetworkTiming)
 
         return headersEnabled || bodyEnabled || networkTimingEnabled
             ? { recordHeaders: headersEnabled, recordBody: bodyEnabled, recordPerformance: networkTimingEnabled }
@@ -691,6 +708,24 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return undefined
         }
         const parsedConfig = isObject(persistedConfig) ? persistedConfig : JSON.parse(persistedConfig)
+
+        // Only check TTL if recording hasn't started yet
+        // Once started, trust the config until a hard page load
+        if (!this.isStarted) {
+            // default to now so that older persisted configs without a cache_timestamp
+            // are treated as fresh instead of being cleared on every read
+            // they come from versions of the code that will never set a cache_timestamp
+            const cacheTimestamp = parsedConfig.cache_timestamp ?? Date.now()
+            if (Date.now() - cacheTimestamp > RECORDING_REMOTE_CONFIG_TTL_MS) {
+                logger.info('persisted remote config for session recording is stale and will be ignored', {
+                    cacheTimestamp,
+                    persistedConfig,
+                })
+                this._instance.persistence?.unregister(SESSION_RECORDING_REMOTE_CONFIG)
+                return undefined
+            }
+        }
+
         return parsedConfig as SessionRecordingPersistedConfig
     }
 
@@ -856,6 +891,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // Reset first full snapshot timestamp for the new session
         this._instance.persistence?.unregister(SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP)
+
+        this._maxDepthExceeded = false
+        getRRWeb()?.resetMaxDepthState?.()
 
         this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
 
@@ -1052,6 +1090,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $snapshot_data: eventToSend,
             $session_id: targetSessionId,
             $window_id: targetWindowId,
+        }
+
+        if (event.type === EventType.FullSnapshot && getRRWeb()?.wasMaxDepthReached?.()) {
+            this._maxDepthExceeded = true
         }
 
         if (this.status === DISABLED) {
@@ -1483,6 +1525,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_session_start: sessionStartTimestamp,
             $sdk_debug_replay_flushed_size: this._flushedSizeTracker?.currentTrackedSize,
             $sdk_debug_replay_full_snapshots: this._fullSnapshotTimestamps,
+            $snapshot_max_depth_exceeded: this._maxDepthExceeded,
         }
     }
 

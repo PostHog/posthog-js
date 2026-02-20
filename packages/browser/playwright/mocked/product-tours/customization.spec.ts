@@ -1,6 +1,13 @@
 import { SurveyPosition } from '@posthog/core'
 import { expect, test } from '../utils/posthog-playwright-test-base'
-import { createTour, createStep, tourTooltip, tourContainer, startWithTours } from './utils'
+import {
+    createTour,
+    createStep,
+    tourTooltip,
+    tourContainer,
+    startWithTours,
+    startOptionsWithProductTours,
+} from './utils'
 
 test.describe('product tours - customization', () => {
     test.describe('appearance styling', () => {
@@ -316,6 +323,67 @@ test.describe('product tours - customization', () => {
             await expect(tourContainer(page, 'other-tour').locator('.ph-tour-content')).toContainText(
                 'Other tour started!'
             )
+        })
+    })
+
+    test.describe('localization', () => {
+        const translatedTour = (
+            id: string,
+            steps = [
+                createStep({
+                    contentHtml: '<p>Hello</p>',
+                    buttons: {
+                        primary: { text: 'Next', action: 'next_step' as const },
+                        secondary: { text: 'Skip', action: 'dismiss' as const },
+                    },
+                    translations: {
+                        fr: {
+                            contentHtml: '<p>Bonjour</p>',
+                            buttons: { primary: { text: 'Suivant' }, secondary: { text: 'Passer' } },
+                        },
+                    },
+                }),
+            ]
+        ) => createTour({ id, steps })
+
+        test('renders translated content when override_display_language is set', async ({ page, context }) => {
+            const tour = translatedTour('i18n-content')
+            await startWithTours(page, context, [tour], {
+                startOptions: {
+                    ...startOptionsWithProductTours,
+                    options: { ...startOptionsWithProductTours.options, override_display_language: 'fr' },
+                },
+            })
+
+            const container = tourContainer(page, 'i18n-content')
+            await expect(tourTooltip(page, 'i18n-content')).toBeVisible({ timeout: 5000 })
+            await expect(container.locator('.ph-tour-content')).toContainText('Bonjour')
+            await expect(container.locator('button:has-text("Suivant")')).toBeVisible()
+            await expect(container.locator('button:has-text("Passer")')).toBeVisible()
+        })
+
+        test('falls back to default content when translation is missing', async ({ page, context }) => {
+            const tour = translatedTour('i18n-fallback')
+            await startWithTours(page, context, [tour], {
+                startOptions: {
+                    ...startOptionsWithProductTours,
+                    options: { ...startOptionsWithProductTours.options, override_display_language: 'de' },
+                },
+            })
+
+            const container = tourContainer(page, 'i18n-fallback')
+            await expect(tourTooltip(page, 'i18n-fallback')).toBeVisible({ timeout: 5000 })
+            await expect(container.locator('.ph-tour-content')).toContainText('Hello')
+            await expect(container.locator('button:has-text("Next")')).toBeVisible()
+        })
+
+        test('renders default content when no override_display_language is set', async ({ page, context }) => {
+            const tour = translatedTour('i18n-none')
+            await startWithTours(page, context, [tour])
+
+            const container = tourContainer(page, 'i18n-none')
+            await expect(tourTooltip(page, 'i18n-none')).toBeVisible({ timeout: 5000 })
+            await expect(container.locator('.ph-tour-content')).toContainText('Hello')
         })
     })
 

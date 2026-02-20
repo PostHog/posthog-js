@@ -57,6 +57,7 @@ export const SURVEYS_ACTIVATED = '$surveys_activated'
 export const PRODUCT_TOURS_ACTIVATED = '$product_tours_activated'
 export const CONVERSATIONS = '$conversations'
 export const FLAG_CALL_REPORTED = '$flag_call_reported'
+export const PERSISTENCE_FEATURE_FLAG_ERRORS = '$feature_flag_errors'
 export const USER_STATE = '$user_state'
 export const CLIENT_SESSION_PROPS = '$client_session_props'
 export const CAPTURE_RATE_LIMIT = '$capture_rate_limit'
@@ -97,6 +98,7 @@ export const PERSISTENCE_RESERVED_PROPERTIES = [
     STORED_PERSON_PROPERTIES_KEY,
     SURVEYS,
     FLAG_CALL_REPORTED,
+    PERSISTENCE_FEATURE_FLAG_ERRORS,
     CLIENT_SESSION_PROPS,
     CAPTURE_RATE_LIMIT,
     INITIAL_CAMPAIGN_PARAMS,
@@ -111,3 +113,8 @@ export const PERSISTENCE_RESERVED_PROPERTIES = [
 ]
 
 export const SURVEYS_REQUEST_TIMEOUT_MS = 10000
+
+/* Z-INDEX HIERARCHY: tours > surveys > support */
+export const Z_INDEX_TOURS = 2147483646
+export const Z_INDEX_SURVEYS = 2147483645
+export const Z_INDEX_CONVERSATIONS = 2147483644

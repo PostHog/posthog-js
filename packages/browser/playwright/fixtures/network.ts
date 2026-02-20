@@ -9,6 +9,7 @@ const files = fs.readdirSync(path.join(__dirname, '../../dist'))
 
 export const testNetwork = testPage.extend<{
     network: NetworkPage
+    mockIngestion: boolean
     flagsOverrides: Partial<FlagsResponse>
     staticOverrides: Record<string, string>
 }>({
@@ -21,12 +22,16 @@ export const testNetwork = testPage.extend<{
         },
         { option: true },
     ],
+    mockIngestion: true,
     network: [
-        async ({ page, flagsOverrides, staticOverrides }, use) => {
+        async ({ page, flagsOverrides, mockIngestion, staticOverrides }, use) => {
             const networkPage = new NetworkPage(page)
             await networkPage.mockStatic(staticOverrides)
             if (flagsOverrides) {
                 await networkPage.mockFlags(flagsOverrides)
+            }
+            if (mockIngestion) {
+                await networkPage.mockIngestion()
             }
             await use(networkPage)
             networkPage.expectNoFailed()
@@ -85,6 +90,16 @@ export class NetworkPage {
                 body: JSON.stringify(flagsResponse),
             })
         })
+
+        // Mock the remote config endpoint to return the same config data.
+        // RemoteConfig is now the sole config loading mechanism.
+        await this.page.route(/\/array\/[^/]+\/config(\?|$)/, async (route) => {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify(flagsResponse),
+            })
+        })
     }
 
     async mockSurveys(surveysResponse: any[]) {
@@ -93,6 +108,15 @@ export class NetworkPage {
                 json: {
                     surveys: surveysResponse,
                 },
+            })
+        })
+    }
+
+    async mockIngestion() {
+        await this.page.route('**/e/**', async (route) => {
+            await route.fulfill({
+                headers: { loaded: 'mock captured' },
+                json: {},
             })
         })
     }

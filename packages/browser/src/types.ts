@@ -23,11 +23,16 @@ export type {
     FeatureFlagMetadata,
     EvaluationReason,
     FeatureFlagResult,
+    FeatureFlagOptions,
     RemoteConfigFeatureFlagCallback,
     EarlyAccessFeature,
     EarlyAccessFeatureStage,
     EarlyAccessFeatureCallback,
     EarlyAccessFeatureResponse,
+    FeatureFlagOverrides,
+    FeatureFlagPayloadOverrides,
+    FeatureFlagOverrideOptions,
+    OverrideFeatureFlagsOptions,
 } from '@posthog/types'
 
 // Request types
@@ -90,13 +95,14 @@ import type {
     ToolbarParams,
     PostHogConfig as BasePostHogConfig,
     PostHog as BasePostHogInterface,
+    RequestResponse,
 } from '@posthog/types'
 
 /* Small override from the base class to make it more specific to the browser/src/posthog-core.ts file
  * This guarantees we'll be able to use `PostHogConfig` as implemented in the browser/src/posthog-core.ts file
  * using the proper `loaded` function signature.
  */
-export type PostHogInterface = Omit<BasePostHogInterface, 'config' | 'init' | 'set_config'>
+export type PostHogInterface = Omit<BasePostHogInterface, 'config' | 'init'>
 
 /*
  * Specify that `loaded` should be using the PostHog instance type
@@ -117,7 +123,7 @@ export interface RequestWithOptions {
     transport?: 'XHR' | 'fetch' | 'sendBeacon'
     method?: 'POST' | 'GET'
     urlQueryArgs?: { compression: Compression }
-    callback?: (response: import('@posthog/types').RequestResponse) => void
+    callback?: (response: RequestResponse) => void
     timeout?: number
     noRetries?: boolean
     disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]
@@ -152,6 +158,11 @@ export type SessionRecordingPersistedConfig = Omit<
     | 'sampleRate'
     | 'minimumDurationMilliseconds'
 > & {
+    /**
+     * Used to determine if the persisted config is still valid or we need to wait for a new one
+     * only accepts undefined since older versions of the library didn't set this.
+     */
+    cache_timestamp?: number
     enabled: boolean
     networkPayloadCapture: SessionRecordingRemoteConfig['networkPayloadCapture'] & {
         capturePerformance: RemoteConfig['capturePerformance']
@@ -323,8 +334,7 @@ export interface RemoteConfig {
 }
 
 /**
- * Flags returns feature flags and their payloads, and optionally returns everything else from the remote config
- * assuming it's called with `config=true`
+ * Flags returns feature flags and their payloads
  */
 export interface FlagsResponse extends RemoteConfig {
     featureFlags: Record<string, string | boolean>

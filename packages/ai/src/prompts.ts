@@ -36,7 +36,8 @@ function isPromptsWithPostHog(options: PromptsOptions): options is PromptsWithPo
  * // Or with direct options (no PostHog client needed)
  * const prompts = new Prompts({
  *   personalApiKey: 'phx_xxx',
- *   host: 'https://app.posthog.com',
+ *   projectApiKey: 'phc_xxx',
+ *   host: 'https://us.posthog.com',
  * })
  *
  * // Fetch with caching and fallback
@@ -54,6 +55,7 @@ function isPromptsWithPostHog(options: PromptsOptions): options is PromptsWithPo
  */
 export class Prompts {
   private personalApiKey: string
+  private projectApiKey: string
   private host: string
   private defaultCacheTtlSeconds: number
   private cache: Map<string, CachedPrompt> = new Map()
@@ -63,11 +65,13 @@ export class Prompts {
 
     if (isPromptsWithPostHog(options)) {
       this.personalApiKey = options.posthog.options.personalApiKey ?? ''
+      this.projectApiKey = options.posthog.apiKey ?? ''
       this.host = options.posthog.host
     } else {
       // Direct options
       this.personalApiKey = options.personalApiKey
-      this.host = options.host ?? 'https://app.posthog.com'
+      this.projectApiKey = options.projectApiKey
+      this.host = options.host ?? 'https://us.posthog.com'
     }
   }
 
@@ -166,8 +170,16 @@ export class Prompts {
           'Please provide it when initializing the Prompts instance.'
       )
     }
+    if (!this.projectApiKey) {
+      throw new Error(
+        '[PostHog Prompts] projectApiKey is required to fetch prompts. ' +
+          'Please provide it when initializing the Prompts instance.'
+      )
+    }
 
-    const url = `${this.host}/api/environments/@current/llm_prompts/name/${encodeURIComponent(name)}/`
+    const encodedPromptName = encodeURIComponent(name)
+    const encodedProjectApiKey = encodeURIComponent(this.projectApiKey)
+    const url = `${this.host}/api/environments/@current/llm_prompts/name/${encodedPromptName}/?token=${encodedProjectApiKey}`
 
     const response = await fetch(url, {
       method: 'GET',

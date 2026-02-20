@@ -28,11 +28,16 @@ export type {
     FeatureFlagMetadata,
     EvaluationReason,
     FeatureFlagResult,
+    FeatureFlagOptions,
     RemoteConfigFeatureFlagCallback,
     EarlyAccessFeature,
     EarlyAccessFeatureStage,
     EarlyAccessFeatureCallback,
     EarlyAccessFeatureResponse,
+    FeatureFlagOverrides,
+    FeatureFlagPayloadOverrides,
+    FeatureFlagOverrideOptions,
+    OverrideFeatureFlagsOptions,
 } from './feature-flags'
 
 // Request types

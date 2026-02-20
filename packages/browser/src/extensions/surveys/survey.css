@@ -5,7 +5,7 @@
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
     --ph-survey-box-padding: 20px 24px;
     --ph-survey-max-width: 300px;
-    --ph-survey-z-index: 2147483647;
+    --ph-survey-z-index: 2147483645; /* Z_INDEX_SURVEYS from constants.ts */
     --ph-survey-border-color: #dcdcdc;
     --ph-survey-border-bottom: 1.5px solid var(--ph-survey-border-color);
     --ph-survey-border-radius: 10px;
@@ -561,6 +561,13 @@
         opacity: var(--ph-survey-disabled-button-opacity);
         cursor: not-allowed;
     }
+}
+
+/* Validation Hint */
+.validation-hint {
+    font-size: 12px;
+    opacity: 0.7;
+    margin-top: 4px;
 }
 
 /* Cancel Button (Circular X button) */

@@ -56,6 +56,7 @@ import {
     ExceptionAutoCaptureConfig,
     FeatureFlagDetail,
     FeatureFlagsCallback,
+    FeatureFlagOptions,
     FeatureFlagResult,
     JsonType,
     OverrideConfig,
@@ -136,6 +137,11 @@ type OnlyValidKeys<T, Shape> = T extends Shape ? (Exclude<keyof T, keyof Shape> 
 
 const instances: Record<string, PostHog> = {}
 
+// Tracks re-entrant calls to _execute_array. Used to detect when a third-party
+// Proxy (e.g., TikTok's in-app browser) wraps window.posthog and converts method
+// calls into push() calls, which would otherwise cause infinite recursion.
+let _executeArrayDepth = 0
+
 // some globals for comparisons
 const __NOOP = () => {}
 
@@ -156,13 +162,17 @@ const defaultsThatVaryByConfig = (
     defaults?: ConfigDefaults
 ): Pick<
     PostHogConfig,
-    'rageclick' | 'capture_pageview' | 'session_recording' | 'external_scripts_inject_target' | 'test_user_hostname'
+    | 'rageclick'
+    | 'capture_pageview'
+    | 'session_recording'
+    | 'external_scripts_inject_target'
+    | 'internal_or_test_user_hostname'
 > => ({
     rageclick: defaults && defaults >= '2025-11-30' ? { content_ignorelist: true } : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
     external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
-    test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
+    internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
@@ -195,7 +205,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_surveys: false,
     disable_surveys_automatic_display: false,
     disable_conversations: false,
-    disable_product_tours: true,
+    disable_product_tours: false,
     disable_external_dependency_loading: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
@@ -362,6 +372,7 @@ export class PostHog implements PostHogInterface {
     compression?: Compression
     __request_queue: QueuedRequestWithOptions[]
     _pendingRemoteConfig?: RemoteConfig
+    _remoteConfigLoader?: RemoteConfigLoader
     analyticsDefaultEndpoint: string
     version: string = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
@@ -370,7 +381,7 @@ export class PostHog implements PostHogInterface {
     SentryIntegration: typeof SentryIntegration
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
 
-    private _internalEventEmitter = new SimpleEventEmitter()
+    _internalEventEmitter = new SimpleEventEmitter()
 
     // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
     /** @deprecated Use `flagsEndpointWasHit` instead.  We migrated to using a new feature flag endpoint and the new method is more semantically accurate */
@@ -521,6 +532,8 @@ export class PostHog implements PostHogInterface {
 
         if (config.person_profiles) {
             this._initialPersonProfilesConfig = config.person_profiles
+        } else if (config.process_person) {
+            this._initialPersonProfilesConfig = config.process_person
         }
 
         this.set_config(
@@ -751,7 +764,7 @@ export class PostHog implements PostHogInterface {
 
         initTasks.push(() => {
             this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
-            this.deadClicksAutocapture.startIfEnabled()
+            this.deadClicksAutocapture.startIfEnabledOrStop()
         })
 
         // Replay any pending remote config that arrived before extensions were ready
@@ -867,13 +880,13 @@ export class PostHog implements PostHogInterface {
 
         this._start_queue_if_opted_in()
 
-        // Check if current hostname matches test_user_hostname pattern and mark as test user before any events
-        if (this.config.test_user_hostname && location?.hostname) {
+        // Check if current hostname matches internal_or_test_user_hostname pattern and mark as test user before any events
+        if (this.config.internal_or_test_user_hostname && location?.hostname) {
             const hostname = location.hostname
-            const pattern = this.config.test_user_hostname
+            const pattern = this.config.internal_or_test_user_hostname
             const matches = typeof pattern === 'string' ? hostname === pattern : pattern.test(hostname)
             if (matches) {
-                this.setTestUser()
+                this.setInternalOrTestUser()
             }
         }
 
@@ -888,8 +901,8 @@ export class PostHog implements PostHogInterface {
             }, 1)
         }
 
-        new RemoteConfigLoader(this).load()
-        this.featureFlags.flags()
+        this._remoteConfigLoader = new RemoteConfigLoader(this)
+        this._remoteConfigLoader.load()
     }
 
     _start_queue_if_opted_in(): void {
@@ -995,50 +1008,59 @@ export class PostHog implements PostHogInterface {
      * @param {Array} array
      */
     _execute_array(array: SnippetArrayItem[]): void {
-        let fn_name
-        const alias_calls: SnippetArrayItem[] = []
-        const other_calls: SnippetArrayItem[] = []
-        const capturing_calls: SnippetArrayItem[] = []
-        eachArray(array, (item) => {
-            if (item) {
-                fn_name = item[0]
-                if (isArray(fn_name)) {
-                    capturing_calls.push(item) // chained call e.g. posthog.get_group().set()
-                } else if (isFunction(item)) {
-                    ;(item as any).call(this)
-                } else if (isArray(item) && fn_name === 'alias') {
-                    alias_calls.push(item)
-                } else if (isArray(item) && fn_name.indexOf('capture') !== -1 && isFunction((this as any)[fn_name])) {
-                    capturing_calls.push(item)
-                } else {
-                    other_calls.push(item)
-                }
-            }
-        })
-
-        const execute = function (calls: SnippetArrayItem[], thisArg: any) {
-            eachArray(
-                calls,
-                function (item) {
-                    if (isArray(item[0])) {
-                        // chained call
-                        let caller = thisArg
-                        each(item, function (call) {
-                            caller = caller[call[0]].apply(caller, call.slice(1))
-                        })
+        _executeArrayDepth++
+        try {
+            let fn_name
+            const alias_calls: SnippetArrayItem[] = []
+            const other_calls: SnippetArrayItem[] = []
+            const capturing_calls: SnippetArrayItem[] = []
+            eachArray(array, (item) => {
+                if (item) {
+                    fn_name = item[0]
+                    if (isArray(fn_name)) {
+                        capturing_calls.push(item) // chained call e.g. posthog.get_group().set()
+                    } else if (isFunction(item)) {
+                        ;(item as any).call(this)
+                    } else if (isArray(item) && fn_name === 'alias') {
+                        alias_calls.push(item)
+                    } else if (
+                        isArray(item) &&
+                        fn_name.indexOf('capture') !== -1 &&
+                        isFunction((this as any)[fn_name])
+                    ) {
+                        capturing_calls.push(item)
                     } else {
-                        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                        // @ts-ignore
-                        this[item[0]].apply(this, item.slice(1))
+                        other_calls.push(item)
                     }
-                },
-                thisArg
-            )
-        }
+                }
+            })
 
-        execute(alias_calls, this)
-        execute(other_calls, this)
-        execute(capturing_calls, this)
+            const execute = function (calls: SnippetArrayItem[], thisArg: any) {
+                eachArray(
+                    calls,
+                    function (item) {
+                        if (isArray(item[0])) {
+                            // chained call
+                            let caller = thisArg
+                            each(item, function (call) {
+                                caller = caller[call[0]].apply(caller, call.slice(1))
+                            })
+                        } else {
+                            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                            // @ts-ignore
+                            this[item[0]].apply(this, item.slice(1))
+                        }
+                    },
+                    thisArg
+                )
+            }
+
+            execute(alias_calls, this)
+            execute(other_calls, this)
+            execute(capturing_calls, this)
+        } finally {
+            _executeArrayDepth--
+        }
     }
 
     _hasBootstrappedFeatureFlags(): boolean {
@@ -1063,6 +1085,19 @@ export class PostHog implements PostHogInterface {
      * @param {Array} item A [function_name, args...] array to be executed
      */
     push(item: SnippetArrayItem): void {
+        if (_executeArrayDepth > 0 && isArray(item) && isString(item[0])) {
+            // push() is being called while _execute_array is already running.
+            // This happens when a third-party Proxy (e.g., TikTok's in-app browser)
+            // wraps window.posthog and converts method calls into push() calls,
+            // creating an infinite loop: _execute_array -> this[method] -> Proxy ->
+            // push -> _execute_array -> ...
+            // Dispatch directly from the prototype to break the cycle.
+            const fn = (PostHog.prototype as any)[item[0]]
+            if (isFunction(fn)) {
+                fn.apply(this, item.slice(1))
+            }
+            return
+        }
         this._execute_array([item])
     }
 
@@ -1136,6 +1171,12 @@ export class PostHog implements PostHogInterface {
                 'Invalid `$current_url` property provided to `posthog.capture`. Input must be a string. Ignoring provided value.'
             )
             delete properties?.$current_url
+        }
+
+        if (event_name === '$exception' && !options?._originatedFromCaptureException) {
+            logger.warn(
+                "Using `posthog.capture('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureException(error)` instead, which attaches required metadata automatically."
+            )
         }
 
         // update persistence
@@ -1639,8 +1680,9 @@ export class PostHog implements PostHogInterface {
      *
      * @param {Object|String} prop Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
+     *                        If {fresh: true}, we won't return cached values from localStorage - only values loaded from the server.
      */
-    getFeatureFlag(key: string, options?: { send_event?: boolean }): boolean | string | undefined {
+    getFeatureFlag(key: string, options?: FeatureFlagOptions): boolean | string | undefined {
         return this.featureFlags.getFeatureFlag(key, options)
     }
 
@@ -1696,9 +1738,10 @@ export class PostHog implements PostHogInterface {
      * @param {string} key Key of the feature flag.
      * @param {Object} [options] Options for the feature flag lookup.
      * @param {boolean} [options.send_event=true] If false, won't send the $feature_flag_called event.
+     * @param {boolean} [options.fresh=false] If true, won't return cached values from localStorage - only values loaded from the server.
      * @returns {FeatureFlagResult | undefined} The feature flag result including key, enabled, variant, and payload.
      */
-    getFeatureFlagResult(key: string, options?: { send_event?: boolean }): FeatureFlagResult | undefined {
+    getFeatureFlagResult(key: string, options?: FeatureFlagOptions): FeatureFlagResult | undefined {
         return this.featureFlags.getFeatureFlagResult(key, options)
     }
 
@@ -1731,8 +1774,9 @@ export class PostHog implements PostHogInterface {
      *
      * @param {Object|String} prop Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
+     *                        If {fresh: true}, we won't return cached values from localStorage - only values loaded from the server.
      */
-    isFeatureEnabled(key: string, options?: { send_event: boolean }): boolean | undefined {
+    isFeatureEnabled(key: string, options?: FeatureFlagOptions): boolean | undefined {
         return this.featureFlags.isFeatureEnabled(key, options)
     }
 
@@ -1934,6 +1978,10 @@ export class PostHog implements PostHogInterface {
      * listener is registered, the first callback will be the next event
      * _after_ registering a listener
      *
+     * Available events:
+     * - `eventCaptured`: Emitted immediately before trying to send an event
+     * - `featureFlagsReloading`: Emitted when feature flags are being reloaded (e.g. after `identify()`, `group()`, or `reloadFeatureFlags()`)
+     *
      * {@label Capture}
      *
      * @example
@@ -1943,13 +1991,21 @@ export class PostHog implements PostHogInterface {
      * })
      * ```
      *
+     * @example
+     * ```js
+     * // Track when feature flags are reloading to show a loading state
+     * posthog.on('featureFlagsReloading', () => {
+     *   console.log('Feature flags are being reloaded...')
+     * })
+     * ```
+     *
      * @public
      *
      * @param {String} event The event to listen for.
      * @param {Function} cb The callback function to call when the event is emitted.
      * @returns {Function} A function that can be called to unsubscribe the listener.
      */
-    on(event: 'eventCaptured', cb: (...args: any[]) => void): () => void {
+    on(event: 'eventCaptured' | 'featureFlagsReloading', cb: (...args: any[]) => void): () => void {
         return this._internalEventEmitter.on(event, cb)
     }
 
@@ -2599,6 +2655,9 @@ export class PostHog implements PostHogInterface {
         this.persistence?.clear()
         this.sessionPersistence?.clear()
         this.surveys.reset()
+        // Stop the refresh interval before resetting flags — featureFlags.reset() clears
+        // the debouncer, so if the order were reversed a pending refresh could fire after reset.
+        this._remoteConfigLoader?.stop()
         this.featureFlags.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
@@ -2844,6 +2903,7 @@ export class PostHog implements PostHogInterface {
             this.autocapture?.startIfEnabled()
             this.heatmaps?.startIfEnabled()
             this.exceptionObserver?.startIfEnabledOrStop()
+            this.deadClicksAutocapture?.startIfEnabledOrStop()
             this.surveys.loadIfEnabled()
             this._sync_opt_out_with_persistence()
             this.externalIntegrations?.startIfEnabledOrStop()
@@ -3182,31 +3242,31 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
-     * Marks the current user as a test user by setting the `$test_user` person property to `true`.
+     * Marks the current user as a test user by setting the `$internal_or_test_user` person property to `true`.
      * This also enables person processing for the current user.
      *
      * This is useful for using in a cohort your internal/test filters for your posthog org.
      * @see https://posthog.com/tutorials/filter-internal-users
-     * Create a cohort with `$test_user` IS SET, and set your internal test filters to be NOT IN that cohort.
+     * Create a cohort with `$internal_or_test_user` IS SET, and set your internal test filters to be NOT IN that cohort.
      *
      * {@label Identification}
      *
      * @example
      * ```js
      * // Manually mark as test user
-     * posthog.setTestUser()
+     * posthog.setInternalOrTestUser()
      *
-     * // Or use test_user_hostname config for automatic detection
-     * posthog.init('token', { test_user_hostname: 'localhost' })
+     * // Or use internal_or_test_user_hostname config for automatic detection
+     * posthog.init('token', { internal_or_test_user_hostname: 'localhost' })
      * ```
      *
      * @public
      */
-    setTestUser(): void {
-        if (!this._requirePersonProcessing('posthog.setTestUser')) {
+    setInternalOrTestUser(): void {
+        if (!this._requirePersonProcessing('posthog.setInternalOrTestUser')) {
             return
         }
-        this.setPersonProperties({ $test_user: true })
+        this.setPersonProperties({ $internal_or_test_user: true })
     }
 
     /**

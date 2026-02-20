@@ -17,7 +17,7 @@
     --ph-tour-box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     --ph-tour-max-width: 320px;
     --ph-tour-padding: 16px;
-    --ph-tour-z-index: 2147483646;
+    --ph-tour-z-index: 2147483646; /* Z_INDEX_TOURS from constants.ts */
 
     --ph-tour-overlay-color: rgba(0, 0, 0, 0.5);
     --ph-tour-spotlight-padding: 8px;
@@ -335,6 +335,7 @@
 }
 
 .ph-tour-button {
+    text-decoration: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -559,6 +560,25 @@
 }
 
 /* Banner styles */
+@keyframes ph-tour-banner-slide-in {
+    from {
+        grid-template-rows: 0fr;
+    }
+    to {
+        grid-template-rows: 1fr;
+    }
+}
+
+.ph-tour-banner-wrapper {
+    display: grid;
+    animation: ph-tour-banner-slide-in var(--ph-tour-banner-animation-duration, 300ms) ease-out forwards;
+}
+
+.ph-tour-banner-slide {
+    overflow: hidden;
+    min-height: 0;
+}
+
 .ph-tour-banner {
     display: flex;
     align-items: center;

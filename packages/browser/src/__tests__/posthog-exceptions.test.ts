@@ -1,4 +1,4 @@
-import { ERROR_TRACKING_SUPPRESSION_RULES } from '../constants'
+import { ERROR_TRACKING_SUPPRESSION_RULES, ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS } from '../constants'
 import { defaultConfig, PostHog } from '../posthog-core'
 import { PostHogExceptions } from '../posthog-exceptions'
 import { PostHogPersistence } from '../posthog-persistence'
@@ -70,6 +70,41 @@ describe('PostHogExceptions', () => {
             const remoteResponse: Partial<RemoteConfig> = { errorTracking: { suppressionRules: [suppressionRule] } }
             exceptions.onRemoteConfig(remoteResponse as RemoteConfig)
             expect(exceptions['_suppressionRules']).toEqual([suppressionRule])
+        })
+
+        it('does not overwrite persistence when called with empty config', () => {
+            const suppressionRule = createSuppressionRule()
+            // Set up existing persisted values
+            posthog.persistence?.register({
+                [ERROR_TRACKING_SUPPRESSION_RULES]: [suppressionRule],
+                [ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS]: true,
+            })
+
+            // Create new instance to pick up persisted values
+            const newExceptions = new PostHogExceptions(posthog)
+
+            // Call with empty config (simulating config fetch failure)
+            newExceptions.onRemoteConfig({} as RemoteConfig)
+
+            // Should NOT have overwritten the existing values
+            expect(posthog.persistence!.props[ERROR_TRACKING_SUPPRESSION_RULES]).toEqual([suppressionRule])
+            expect(posthog.persistence!.props[ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS]).toBe(true)
+        })
+
+        it('updates persistence when errorTracking key is present', () => {
+            const suppressionRule = createSuppressionRule()
+            posthog.persistence?.register({
+                [ERROR_TRACKING_SUPPRESSION_RULES]: [suppressionRule],
+                [ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS]: true,
+            })
+
+            const newExceptions = new PostHogExceptions(posthog)
+            newExceptions.onRemoteConfig({
+                errorTracking: { suppressionRules: [], captureExtensionExceptions: false },
+            } as RemoteConfig)
+
+            expect(posthog.persistence!.props[ERROR_TRACKING_SUPPRESSION_RULES]).toEqual([])
+            expect(posthog.persistence!.props[ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS]).toBe(false)
         })
     })
 
