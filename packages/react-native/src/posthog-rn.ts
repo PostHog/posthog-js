@@ -1422,7 +1422,10 @@ export class PostHog extends PostHogCore {
    *
    * @returns true if the native SDK is ready (initialized or already was), false otherwise
    */
-  private async initializeSessionReplayNative(options?: PostHogOptions, cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>): Promise<boolean> {
+  private async initializeSessionReplayNative(
+    options?: PostHogOptions,
+    cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>
+  ): Promise<boolean> {
     if (!OptionalReactNativeSessionReplay) {
       this._logger.warn('Session replay enabled but not installed.')
       return false
@@ -1540,7 +1543,10 @@ export class PostHog extends PostHogCore {
     }
   }
 
-  private async startSessionReplay(options?: PostHogOptions, cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>): Promise<void> {
+  private async startSessionReplay(
+    options?: PostHogOptions,
+    cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>
+  ): Promise<void> {
     this._enableSessionReplay = options?.enableSessionReplay
     this._sessionReplayOptions = options
 
