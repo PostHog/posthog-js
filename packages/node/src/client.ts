@@ -1696,8 +1696,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private createFeatureFlagEvaluationContext(
     distinctId: string,
     groups?: Record<string, string>,
-    personProperties?: Record<string, string>,
-    groupProperties?: Record<string, Record<string, string>>
+    personProperties?: Record<string, any>,
+    groupProperties?: Record<string, Record<string, any>>
   ): FeatureFlagEvaluationContext {
     return {
       distinctId,
