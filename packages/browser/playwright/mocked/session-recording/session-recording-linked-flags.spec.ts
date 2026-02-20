@@ -1,5 +1,5 @@
 import { test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
-import { start, StartOptions } from '../utils/setup'
+import { start, StartOptions, waitForRemoteConfig } from '../utils/setup'
 import { assertThatRecordingStarted, pollUntilEventCaptured } from '../utils/event-capture-utils'
 import { BrowserContext, Page } from '@playwright/test'
 
@@ -42,6 +42,7 @@ test.describe('Session recording - linked flags', () => {
             page,
             context
         )
+        await waitForRemoteConfig(page)
         await page.expectCapturedEventsToBe(expectedStartingEvents)
         await page.resetCapturedEvents()
     }

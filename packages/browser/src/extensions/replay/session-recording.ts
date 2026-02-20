@@ -20,7 +20,7 @@ import {
     window,
 } from '../../utils/globals'
 import { RECORDING_REMOTE_CONFIG_TTL_MS } from './external/lazy-loaded-session-recorder'
-import { DISABLED, LAZY_LOADING, SessionRecordingStatus, TriggerType } from './external/triggerMatching'
+import { DISABLED, LAZY_LOADING, PENDING_CONFIG, SessionRecordingStatus, TriggerType } from './external/triggerMatching'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -39,15 +39,20 @@ export class SessionRecording {
     }
 
     /**
-     * defaults to buffering mode until a flags response is received
-     * once a flags response is received status can be disabled, active or sampled
+     * defaults to pending_config until a remote config response is received
+     * transitions to lazy_loading while the recording script is being loaded
+     * once loaded, status is delegated to the lazy-loaded recorder (active, buffering, disabled, etc.)
      */
     get status(): SessionRecordingStatus {
         if (this._lazyLoadedSessionRecording) {
             return this._lazyLoadedSessionRecording.status
         }
 
-        if (this._receivedFlags && !this._isRecordingEnabled) {
+        if (!this._receivedFlags) {
+            return PENDING_CONFIG
+        }
+
+        if (!this._isRecordingEnabled) {
             return DISABLED
         }
 
@@ -73,6 +78,11 @@ export class SessionRecording {
     }
 
     startIfEnabledOrStop(startReason?: SessionStartReason) {
+        // Wait for fresh remote config before starting recording
+        if (!this._receivedFlags) {
+            return
+        }
+
         if (this._isRecordingEnabled && this._lazyLoadedSessionRecording?.isStarted) {
             return
         }

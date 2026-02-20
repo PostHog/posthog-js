@@ -467,7 +467,7 @@ describe('posthog core', () => {
                 $session_entry_referring_domain: 'https://referrer.example.com',
                 $is_identified: false,
                 $process_person_profile: false,
-                $recording_status: 'lazy_loading',
+                $recording_status: 'pending_config',
                 $sdk_debug_retry_queue_size: 0,
                 $config_defaults: 'unset',
             })
@@ -493,7 +493,7 @@ describe('posthog core', () => {
                 $lib_custom_api_host: 'https://custom.posthog.com',
                 $is_identified: false,
                 $process_person_profile: false,
-                $recording_status: 'lazy_loading',
+                $recording_status: 'pending_config',
                 $sdk_debug_retry_queue_size: 0,
                 $config_defaults: 'unset',
             })

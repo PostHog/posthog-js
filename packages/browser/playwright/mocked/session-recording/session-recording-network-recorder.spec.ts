@@ -1,5 +1,5 @@
 import { test, expect } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
+import { start, waitForSessionRecordingToStart } from '../utils/setup'
 import { Page } from '@playwright/test'
 
 test.beforeEach(async ({ context }) => {
@@ -90,6 +90,7 @@ test.beforeEach(async ({ context }) => {
                     )
                 },
             })
+            await waitForSessionRecordingToStart(page)
 
             // also wrap after posthog is loaded
             await page.evaluate((isBadlyBehaved) => {

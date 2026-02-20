@@ -1,6 +1,6 @@
 import { RemoteConfig } from '@/types'
 import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
+import { start, waitForRemoteConfig } from '../utils/setup'
 import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 
 const startOptions = {
@@ -52,6 +52,7 @@ test.describe('Session recording - trigger match types 0% sampling + event trigg
                     await start(anyMatchOptions, page, context)
                 },
             })
+            await waitForRemoteConfig(page)
             await page.expectCapturedEventsToBe(['$pageview'])
             await page.resetCapturedEvents()
         })
@@ -94,6 +95,7 @@ test.describe('Session recording - trigger match types 0% sampling + event trigg
                     await start(allMatchOptions, page, context)
                 },
             })
+            await waitForRemoteConfig(page)
             await page.expectCapturedEventsToBe(['$pageview'])
             await page.resetCapturedEvents()
         })
@@ -172,6 +174,7 @@ test.describe('Session recording - trigger match types 0% sampling + event trigg
                     await start(anyMatchOptions, page, context)
                 },
             })
+            await waitForRemoteConfig(page)
             await page.expectCapturedEventsToBe(['$pageview'])
             await page.resetCapturedEvents()
         })
@@ -230,6 +233,7 @@ test.describe('Session recording - trigger match types 0% sampling + event trigg
                     await start(allMatchOptions, page, context)
                 },
             })
+            await waitForRemoteConfig(page)
             await page.expectCapturedEventsToBe(['$pageview'])
             await page.resetCapturedEvents()
         })
