@@ -49,8 +49,9 @@ jobs:
               shell: bash
               env:
                   PACKAGE_NAME: ${{ github.event.inputs.package_name }}
+                  PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
               run: |
-                  pnpx taze -r --include "$PACKAGE_NAME" -w
+                  sed -i "s|${PACKAGE_NAME}:.*|${PACKAGE_NAME}: ^${PACKAGE_VERSION}|" pnpm-workspace.yaml
                   pnpm i --no-frozen-lockfile
 
             - name: Generate branch name
