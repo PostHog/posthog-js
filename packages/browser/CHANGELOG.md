@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.352.0
+
+### Minor Changes
+
+- [#3121](https://github.com/PostHog/posthog-js/pull/3121) [`c3c9780`](https://github.com/PostHog/posthog-js/commit/c3c978053bda3466df47e244ec05812aecd01f1f) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Ability to retrieve previous conversations
+  (2026-02-20)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.352.0
+
 ## 1.351.4
 
 ### Patch Changes
