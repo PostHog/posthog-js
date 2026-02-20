@@ -105,6 +105,8 @@ export class PostHog extends PostHogCore {
   private _appProperties: PostHogCustomAppProperties = {}
   private _currentSessionId?: string | undefined
   private _enableSessionReplay?: boolean
+  private _sessionReplayNativeInitialized: boolean = false
+  private _sessionReplayOptions?: PostHogOptions
   private _disableSurveys: boolean
   private _disableRemoteConfig: boolean
   private _errorTracking: ErrorTracking
@@ -931,6 +933,156 @@ export class PostHog extends PostHogCore {
   }
 
   /**
+   * Starts session recording.
+   * This method will have no effect if PostHog is not enabled, or if session replay is disabled in your project settings.
+   *
+   * Note: This is only available on iOS and Android. On web/macOS, this is a no-op.
+   *
+   * Requires `posthog-react-native-session-replay` version 1.3.0 or higher.
+   *
+   * {@label Session Replay}
+   *
+   * @example
+   * ```js
+   * // Resume the current session recording
+   * await posthog.startSessionRecording()
+   * ```
+   *
+   * @example
+   * ```js
+   * // Start a new session recording
+   * await posthog.startSessionRecording(false)
+   * ```
+   *
+   * @public
+   *
+   * @param resumeCurrent - Whether to resume recording of current session (true) or start a new session (false). Defaults to true.
+   */
+  async startSessionRecording(resumeCurrent: boolean = true): Promise<void> {
+    await this._initPromise
+
+    if (this.isDisabled) {
+      return
+    }
+
+    if (!OptionalReactNativeSessionReplay) {
+      // Web/macOS - silently return
+      return
+    }
+
+    try {
+      // Check if the plugin supports startRecording
+      if (!OptionalReactNativeSessionReplay.startRecording) {
+        this._logger.warn('startRecording is not available. Please update posthog-react-native-session-replay.')
+        return
+      }
+
+      // Lazily initialize native SDK if not already initialized
+      // This handles the case where enableSessionReplay = false in config but user wants to start manually
+      if (!this._sessionReplayNativeInitialized) {
+        this._logger.info('Native session replay SDK not initialized, initializing now...')
+        const initialized = await this.initializeSessionReplayNative(this._sessionReplayOptions)
+        if (!initialized) {
+          this._logger.error('Failed to initialize native session replay SDK.')
+          return
+        }
+      }
+
+      // Handle session ID if not resuming
+      if (!resumeCurrent) {
+        super.resetSessionId()
+        const newSessionId = super.getSessionId()
+        // sync native + rn sessionId
+        this._resetSessionId(OptionalReactNativeSessionReplay, String(newSessionId))
+        this._currentSessionId = newSessionId
+      }
+
+      await OptionalReactNativeSessionReplay.startRecording(resumeCurrent)
+      this._logger.info(`Session recording ${resumeCurrent ? 'resumed' : 'started'}.`)
+    } catch (e) {
+      this._logger.error(`Failed to start session recording: ${e}`)
+    }
+  }
+
+  /**
+   * Stops the current session recording if one is in progress.
+   *
+   * Note: This is only available on iOS and Android. On web/macOS, this is a no-op.
+   *
+   * Requires `posthog-react-native-session-replay` version 1.3.0 or higher.
+   *
+   * {@label Session Replay}
+   *
+   * @example
+   * ```js
+   * await posthog.stopSessionRecording()
+   * ```
+   * @public
+   */
+  async stopSessionRecording(): Promise<void> {
+    await this._initPromise
+
+    if (this.isDisabled) {
+      return
+    }
+
+    if (!OptionalReactNativeSessionReplay) {
+      // Web/macOS - silently return
+      return
+    }
+
+    try {
+      // Check if the plugin supports stopRecording
+      if (!OptionalReactNativeSessionReplay.stopRecording) {
+        this._logger.warn('stopRecording is not available. Please update posthog-react-native-session-replay.')
+        return
+      }
+
+      await OptionalReactNativeSessionReplay.stopRecording()
+      // this._enableSessionReplay = false
+      this._logger.info('Session recording stopped.')
+    } catch (e) {
+      this._logger.error(`Failed to stop session recording: ${e}`)
+    }
+  }
+
+  /**
+   * Returns whether session replay is currently active.
+   *
+   * Note: This is only available on iOS and Android. On web/macOS, this always returns false.
+   *
+   * {@label Session Replay}
+   *
+   * @example
+   * ```js
+   * const isActive = await posthog.isSessionReplayActive()
+   * ```
+   *
+   * @public
+   *
+   * @returns Whether session replay is currently active
+   */
+  async isSessionReplayActive(): Promise<boolean> {
+    await this._initPromise
+
+    if (this.isDisabled) {
+      return false
+    }
+
+    if (!OptionalReactNativeSessionReplay) {
+      // Web/macOS - always return false
+      return false
+    }
+
+    try {
+      return await OptionalReactNativeSessionReplay.isEnabled()
+    } catch (e) {
+      this._logger.error(`Failed to check session replay status: ${e}`)
+      return false
+    }
+  }
+
+  /**
    * Associates events with a specific user. Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)
    *
    * {@label Identification}
@@ -1264,14 +1416,29 @@ export class PostHog extends PostHogCore {
     }
   }
 
-  private async startSessionReplay(
+  /**
+   * Initializes the native session replay SDK if not already initialized.
+   * This is called automatically by startSessionReplay() or lazily by startSessionRecording().
+   *
+   * @returns true if the native SDK is ready (initialized or already was), false otherwise
+   */
+  private async initializeSessionReplayNative(
     options?: PostHogOptions,
     cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>
-  ): Promise<void> {
-    this._enableSessionReplay = options?.enableSessionReplay
-    if (!this._isEnableSessionReplay()) {
-      this._logger.info('Session replay is not enabled.')
-      return
+  ): Promise<boolean> {
+    if (!OptionalReactNativeSessionReplay) {
+      this._logger.warn('Session replay enabled but not installed.')
+      return false
+    }
+
+    if (this._sessionReplayNativeInitialized) {
+      return true
+    }
+
+    const sessionId = this.getSessionId()
+    if (sessionId.length === 0) {
+      this._logger.warn(`Session replay enabled but no sessionId found.`)
+      return false
     }
 
     const defaultThrottleDelayMs = 1000
@@ -1335,15 +1502,66 @@ export class PostHog extends PostHogCore {
 
     // if Flags API has not returned yet, we will start session replay with default config.
     const sessionReplay = this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}
+    const cachedSessionReplayConfig = (sessionReplay as { [key: string]: JsonType }) ?? {}
+
+    this._logger.info(
+      `Session replay session recording from flags cached config: ${JSON.stringify(cachedSessionReplayConfig)}`
+    )
+
+    const sdkOptions = {
+      apiKey: this.apiKey,
+      host: this.host,
+      debug: this.isDebug,
+      distinctId: this.getDistinctId(),
+      anonymousId: this.getAnonymousId(),
+      sdkVersion: this.getLibraryVersion(),
+      flushAt: this.flushAt,
+    }
+
+    this._logger.info(`Session replay sdk options: ${JSON.stringify(sdkOptions)}`)
+
+    try {
+      if (!(await OptionalReactNativeSessionReplay.isEnabled())) {
+        await OptionalReactNativeSessionReplay.start(
+          String(sessionId),
+          sdkOptions,
+          sdkReplayConfig,
+          cachedSessionReplayConfig
+        )
+        this._logger.info(`Session replay started with sessionId ${sessionId}.`)
+      } else {
+        // if somehow the SDK is already enabled with a different sessionId, we reset it
+        this._resetSessionId(OptionalReactNativeSessionReplay, String(sessionId))
+        this._logger.info(`Session replay already started with sessionId ${sessionId}.`)
+      }
+      this._currentSessionId = sessionId
+      this._sessionReplayNativeInitialized = true
+      return true
+    } catch (e) {
+      this._logger.error(`Session replay failed to start: ${e}.`)
+      return false
+    }
+  }
+
+  private async startSessionReplay(
+    options?: PostHogOptions,
+    cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>
+  ): Promise<void> {
+    this._enableSessionReplay = options?.enableSessionReplay
+    this._sessionReplayOptions = options
+
+    if (!this._isEnableSessionReplay()) {
+      this._logger.info('Session replay is not enabled.')
+      return
+    }
+
+    // if Flags API has not returned yet, we will start session replay with default config.
+    const sessionReplay = this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}
     const featureFlags = this.getKnownFeatureFlags() ?? {}
     const cachedFeatureFlags = (featureFlags as { [key: string]: FeatureFlagValue }) ?? {}
     const cachedSessionReplayConfig = (sessionReplay as { [key: string]: JsonType }) ?? {}
 
     this._logger.info('Session replay feature flags from flags cached config:', JSON.stringify(cachedFeatureFlags))
-
-    this._logger.info(
-      `Session replay session recording from flags cached config: ${JSON.stringify(cachedSessionReplayConfig)}`
-    )
 
     let recordingActive = true
     const linkedFlag = cachedSessionReplayConfig['linkedFlag'] as
@@ -1382,47 +1600,7 @@ export class PostHog extends PostHogCore {
     }
 
     if (recordingActive) {
-      if (OptionalReactNativeSessionReplay) {
-        const sessionId = this.getSessionId()
-
-        if (sessionId.length === 0) {
-          this._logger.warn(`Session replay enabled but no sessionId found.`)
-          return
-        }
-
-        const sdkOptions = {
-          apiKey: this.apiKey,
-          host: this.host,
-          debug: this.isDebug,
-          distinctId: this.getDistinctId(),
-          anonymousId: this.getAnonymousId(),
-          sdkVersion: this.getLibraryVersion(),
-          flushAt: this.flushAt,
-        }
-
-        this._logger.info(`Session replay sdk options: ${JSON.stringify(sdkOptions)}`)
-
-        try {
-          if (!(await OptionalReactNativeSessionReplay.isEnabled())) {
-            await OptionalReactNativeSessionReplay.start(
-              String(sessionId),
-              sdkOptions,
-              sdkReplayConfig,
-              cachedSessionReplayConfig
-            )
-            this._logger.info(`Session replay started with sessionId ${sessionId}.`)
-          } else {
-            // if somehow the SDK is already enabled with a different sessionId, we reset it
-            this._resetSessionId(OptionalReactNativeSessionReplay, String(sessionId))
-            this._logger.info(`Session replay already started with sessionId ${sessionId}.`)
-          }
-          this._currentSessionId = sessionId
-        } catch (e) {
-          this._logger.error(`Session replay failed to start: ${e}.`)
-        }
-      } else {
-        this._logger.warn('Session replay enabled but not installed.')
-      }
+      await this.initializeSessionReplayNative(options, cachedRemoteConfig)
     } else {
       this._logger.info('Session replay disabled.')
     }
