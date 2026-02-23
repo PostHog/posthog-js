@@ -160,6 +160,13 @@ describe('PostHogConversations', () => {
             expect(assignableWindow.__PosthogExtensions__?.loadExternalDependency).toHaveBeenCalledTimes(1)
         })
 
+        it('should not load for toolbar internal instance', () => {
+            mockPostHog.config.name = 'ph_toolbar_internal'
+            conversations.onRemoteConfig(validRemoteConfig as RemoteConfig)
+
+            expect(assignableWindow.__PosthogExtensions__?.loadExternalDependency).not.toHaveBeenCalled()
+        })
+
         it('should not load if conversations are disabled', () => {
             mockPostHog.config.disable_conversations = true
             conversations.onRemoteConfig(validRemoteConfig as RemoteConfig)
