@@ -23,12 +23,18 @@ const mockGetDistinctId = jest.fn()
 jest.mock('../src/server/PostHogServer', () => ({
     PostHogServer: jest.fn().mockImplementation(() => ({
         getClient: jest.fn().mockReturnValue({
+            getDistinctId: mockGetDistinctId,
+        }),
+        getClientForDistinctId: jest.fn().mockReturnValue({
             getAllFlags: mockGetAllFlags,
             getAllFlagsAndPayloads: mockGetAllFlagsAndPayloads,
             getDistinctId: mockGetDistinctId,
         }),
     })),
 }))
+
+// in test, just call the function directly (no caching)
+;(React as any).cache = (fn: Function) => fn
 
 describe('PostHogProvider', () => {
     const originalEnv = process.env
@@ -259,12 +265,12 @@ describe('PostHogProvider', () => {
             })
             render(element)
 
-            expect(mockGetAllFlags).toHaveBeenCalledWith(undefined)
+            expect(mockGetAllFlagsAndPayloads).toHaveBeenCalledWith({})
             expect(mockClientProvider).toHaveBeenCalledWith(
                 expect.objectContaining({
                     bootstrap: expect.objectContaining({
-                        distinctID: 'user_abc',
-                        featureFlags: { 'flag-1': true, 'flag-2': 'variant-a' },
+                        featureFlags: { 'flag-1': true },
+                        featureFlagPayloads: { 'flag-1': { color: 'blue' } },
                     }),
                 })
             )
@@ -278,32 +284,10 @@ describe('PostHogProvider', () => {
             })
             render(element)
 
-            expect(mockGetAllFlags).toHaveBeenCalledWith(['flag-1'])
+            expect(mockGetAllFlagsAndPayloads).toHaveBeenCalledWith({ flagKeys: ['flag-1'] })
         })
 
-        it('includes payloads when payloads option is true', async () => {
-            const element = await PostHogProvider({
-                apiKey: 'phc_test123',
-                bootstrapFlags: { payloads: true },
-                children: <div>Child</div>,
-            })
-            render(element)
-
-            expect(mockGetAllFlagsAndPayloads).toHaveBeenCalledWith(undefined)
-            expect(mockGetAllFlags).not.toHaveBeenCalled()
-            expect(mockClientProvider).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    bootstrap: expect.objectContaining({
-                        featureFlags: { 'flag-1': true },
-                        featureFlagPayloads: { 'flag-1': { color: 'blue' } },
-                    }),
-                })
-            )
-        })
-
-        it('sets isIdentifiedID to true when distinct_id differs from device_id', async () => {
-            setupCookieMock(identifiedCookieValue)
-
+        it('always includes payloads in bootstrap', async () => {
             const element = await PostHogProvider({
                 apiKey: 'phc_test123',
                 bootstrapFlags: true,
@@ -311,10 +295,11 @@ describe('PostHogProvider', () => {
             })
             render(element)
 
+            expect(mockGetAllFlagsAndPayloads).toHaveBeenCalled()
             expect(mockClientProvider).toHaveBeenCalledWith(
                 expect.objectContaining({
                     bootstrap: expect.objectContaining({
-                        isIdentifiedID: true,
+                        featureFlagPayloads: { 'flag-1': { color: 'blue' } },
                     }),
                 })
             )
@@ -338,7 +323,7 @@ describe('PostHogProvider', () => {
         })
 
         it('renders without bootstrap when flag evaluation fails', async () => {
-            mockGetAllFlags.mockRejectedValue(new Error('network timeout'))
+            mockGetAllFlagsAndPayloads.mockRejectedValue(new Error('network timeout'))
             const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
 
             const element = await PostHogProvider({
@@ -361,7 +346,7 @@ describe('PostHogProvider', () => {
         })
 
         it('does not disable first flag load when bootstrap fails', async () => {
-            mockGetAllFlags.mockRejectedValue(new Error('network timeout'))
+            mockGetAllFlagsAndPayloads.mockRejectedValue(new Error('network timeout'))
             jest.spyOn(console, 'warn').mockImplementation()
 
             const element = await PostHogProvider({
@@ -380,24 +365,5 @@ describe('PostHogProvider', () => {
             )
         })
 
-        it('sets isIdentifiedID to false when distinct_id equals device_id', async () => {
-            setupCookieMock(anonymousCookieValue)
-            mockGetDistinctId.mockReturnValue('device_xyz')
-
-            const element = await PostHogProvider({
-                apiKey: 'phc_test123',
-                bootstrapFlags: true,
-                children: <div>Child</div>,
-            })
-            render(element)
-
-            expect(mockClientProvider).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    bootstrap: expect.objectContaining({
-                        isIdentifiedID: false,
-                    }),
-                })
-            )
-        })
     })
 })

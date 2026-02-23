@@ -5,13 +5,18 @@ import type { BootstrapConfig } from '../client/ClientPostHogProvider'
 import { cookies } from 'next/headers'
 import { PostHogServer } from '../server/PostHogServer'
 import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey } from '../shared/config'
-import { getPostHogCookieName, parsePostHogCookie } from '../shared/cookie'
+import { readPostHogCookie } from '../shared/cookie'
+import type { AllFlagsOptions } from '../shared/scoped-client'
 
 export interface BootstrapFlagsConfig {
     /** Specific flag keys to evaluate. If omitted, evaluates all flags. */
     flags?: string[]
-    /** Whether to include feature flag payloads. Default: false. */
-    payloads?: boolean
+    /** Groups to evaluate flags for (e.g., `{ company: 'posthog' }`). */
+    groups?: AllFlagsOptions['groups']
+    /** Known person properties to use for flag evaluation. */
+    personProperties?: AllFlagsOptions['personProperties']
+    /** Known group properties to use for flag evaluation, keyed by group type. */
+    groupProperties?: AllFlagsOptions['groupProperties']
 }
 
 export interface PostHogProviderProps {
@@ -100,41 +105,40 @@ function getOrCreateServer(apiKey: string, host: string | undefined) {
     return server
 }
 
+/**
+ * React.cache-wrapped flag evaluation.
+ *
+ * Deduplicates posthog-node calls within a single RSC render pass.
+ * All arguments are primitives so React.cache's reference-equality
+ * check works correctly. The `optionsJson` parameter is a serialized
+ * options object forwarded to posthog-node's getAllFlagsAndPayloads.
+ */
+const cachedFetchFlags = React.cache(
+    async (apiKey: string, host: string, distinctId: string, optionsJson: string) => {
+        const server = getOrCreateServer(apiKey, host || undefined)
+        const client = server.getClientForDistinctId(distinctId)
+        const options = JSON.parse(optionsJson)
+        return client.getAllFlagsAndPayloads(options)
+    }
+)
+
 async function evaluateFlags(
     apiKey: string,
     options: Partial<PostHogConfig> | undefined,
     bootstrapFlags: boolean | BootstrapFlagsConfig
-): Promise<BootstrapConfig> {
+): Promise<BootstrapConfig | undefined> {
     const cookieStore = await cookies()
-    const server = getOrCreateServer(apiKey, options?.api_host)
-    const client = server.getClient(cookieStore)
-    const distinctId = client.getDistinctId()
-
-    // Read identification state from cookie
-    const cookieName = getPostHogCookieName(apiKey)
-    const cookie = cookieStore.get(cookieName)
-    const cookieState = cookie ? parsePostHogCookie(cookie.value) : null
-    const isIdentifiedID = cookieState?.isIdentified ?? false
-
-    const config = typeof bootstrapFlags === 'object' ? bootstrapFlags : {}
-    const flagKeys = config.flags
-    const includePayloads = config.payloads ?? false
-
-    let featureFlags: Record<string, boolean | string>
-    let featureFlagPayloads: Record<string, any> | undefined
-
-    if (includePayloads) {
-        const result = await client.getAllFlagsAndPayloads(flagKeys)
-        featureFlags = result.featureFlags
-        featureFlagPayloads = result.featureFlagPayloads
-    } else {
-        featureFlags = await client.getAllFlags(flagKeys)
+    const cookieState = readPostHogCookie(cookieStore, apiKey)
+    if (!cookieState) {
+        return undefined
     }
 
-    return {
-        distinctID: distinctId,
-        isIdentifiedID,
-        featureFlags,
-        ...(featureFlagPayloads ? { featureFlagPayloads } : {}),
-    }
+    const { flags: flagKeys, ...flagOptions } = typeof bootstrapFlags === 'object' ? bootstrapFlags : {}
+    const allFlagsOptions: AllFlagsOptions = { ...flagOptions, ...(flagKeys ? { flagKeys } : {}) }
+    return cachedFetchFlags(
+        apiKey,
+        options?.api_host ?? '',
+        cookieState.distinctId,
+        JSON.stringify(allFlagsOptions)
+    )
 }
