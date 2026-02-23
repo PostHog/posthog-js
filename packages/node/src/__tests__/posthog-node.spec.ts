@@ -347,6 +347,61 @@ describe('PostHog Node.js', () => {
       await client.shutdown()
     })
 
+    it('should include registered properties in captured events', async () => {
+      posthog.register({ registered_prop: 'registered_value', another: 123 })
+
+      posthog.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
+
+      await waitForFlushTimer()
+
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents).toEqual([
+        expect.objectContaining({
+          distinct_id: '123',
+          event: 'test-event',
+          properties: expect.objectContaining({
+            registered_prop: 'registered_value',
+            another: 123,
+            foo: 'bar',
+          }),
+        }),
+      ])
+    })
+
+    it('should allow capture properties to override registered properties', async () => {
+      posthog.register({ foo: 'registered_value', only_registered: 'yes' })
+
+      posthog.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'override_value' } })
+
+      await waitForFlushTimer()
+
+      const batchEvents = getLastBatchEvents()
+      // The registered-only property should still be present
+      expect(batchEvents?.[0].properties).toEqual(
+        expect.objectContaining({
+          only_registered: 'yes',
+          foo: 'override_value',
+        })
+      )
+    })
+
+    it('should stop including unregistered properties', async () => {
+      posthog.register({ foo: 'bar', remove_me: 'value' })
+      posthog.unregister('remove_me')
+
+      posthog.capture({ distinctId: '123', event: 'test-event' })
+
+      await waitForFlushTimer()
+
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents?.[0].properties).toEqual(
+        expect.objectContaining({
+          foo: 'bar',
+        })
+      )
+      expect(batchEvents?.[0].properties).not.toHaveProperty('remove_me')
+    })
+
     it('should warn if capture is called with a string', () => {
       posthog.debug(true)
       // @ts-expect-error - Testing the warning when passing a string instead of an object
