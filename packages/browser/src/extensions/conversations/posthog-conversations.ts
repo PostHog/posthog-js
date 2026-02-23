@@ -74,6 +74,12 @@ export class PostHogConversations {
         if (this._instance.config.disable_conversations) {
             return
         }
+        // The toolbar's internal PostHog instance must not own the conversations
+        // manager — its distinct_id is always anonymous and would be sent instead
+        // of the identified user's ID.
+        if (this._instance.config.name === 'ph_toolbar_internal') {
+            return
+        }
         if (this._instance.config.cookieless_mode && this._instance.consent.isOptedOut()) {
             return
         }
