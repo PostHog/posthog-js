@@ -44,6 +44,21 @@ export function serializePostHogCookie(anonymousId: string): string {
     })
 }
 
+/**
+ * Reads and parses the PostHog cookie from a cookie store.
+ *
+ * Compatible with Next.js `cookies()`, `request.cookies`, and any object
+ * with a `get(name)` method that returns `{ value: string } | undefined`.
+ */
+export function readPostHogCookie(
+    cookies: { get(name: string): { value: string } | undefined },
+    apiKey: string
+): PostHogCookieState | null {
+    const cookieName = getPostHogCookieName(apiKey)
+    const cookie = cookies.get(cookieName)
+    return cookie ? parsePostHogCookie(cookie.value) : null
+}
+
 export function parsePostHogCookie(cookieValue: string): PostHogCookieState | null {
     if (!cookieValue) {
         return null

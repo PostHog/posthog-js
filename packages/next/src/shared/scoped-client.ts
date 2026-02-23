@@ -4,6 +4,19 @@ import type { PostHog } from 'posthog-node'
 type JsonType = string | number | boolean | null | undefined | { [key: string]: JsonType } | JsonType[]
 
 /**
+ * Options for evaluating all feature flags.
+ * Mirrors the options parameter of posthog-node's getAllFlags / getAllFlagsAndPayloads.
+ */
+export type AllFlagsOptions = {
+    groups?: Record<string, string>
+    personProperties?: Record<string, string>
+    groupProperties?: Record<string, Record<string, string>>
+    onlyEvaluateLocally?: boolean
+    disableGeoip?: boolean
+    flagKeys?: string[]
+}
+
+/**
  * A scoped PostHog server client bound to a specific distinct_id.
  *
  * All calls are automatically scoped to the distinct_id extracted
@@ -61,20 +74,18 @@ export interface PostHogServerClient {
     /**
      * Get all feature flags and their values for this user.
      *
-     * @param flagKeys - Optional list of specific flag keys to evaluate.
-     *                   If omitted, evaluates all flags.
+     * @param options - Optional configuration for flag evaluation
      * @returns A record of flag keys to their values
      */
-    getAllFlags(flagKeys?: string[]): Promise<Record<string, string | boolean>>
+    getAllFlags(options?: AllFlagsOptions): Promise<Record<string, string | boolean>>
 
     /**
      * Get all feature flags and their payloads for this user.
      *
-     * @param flagKeys - Optional list of specific flag keys to evaluate.
-     *                   If omitted, evaluates all flags.
+     * @param options - Optional configuration for flag evaluation
      * @returns An object with featureFlags and featureFlagPayloads records
      */
-    getAllFlagsAndPayloads(flagKeys?: string[]): Promise<{
+    getAllFlagsAndPayloads(options?: AllFlagsOptions): Promise<{
         featureFlags: Record<string, string | boolean>
         featureFlagPayloads: Record<string, JsonType>
     }>
@@ -116,12 +127,12 @@ export function createScopedClient(client: PostHog, distinctId: string): PostHog
             return client.getFeatureFlagPayload(flagKey, distinctId)
         },
 
-        async getAllFlags(flagKeys?: string[]) {
-            return client.getAllFlags(distinctId, flagKeys ? { flagKeys } : {})
+        async getAllFlags(options?: AllFlagsOptions) {
+            return client.getAllFlags(distinctId, options ?? {})
         },
 
-        async getAllFlagsAndPayloads(flagKeys?: string[]) {
-            const result = await client.getAllFlagsAndPayloads(distinctId, flagKeys ? { flagKeys } : {})
+        async getAllFlagsAndPayloads(options?: AllFlagsOptions) {
+            const result = await client.getAllFlagsAndPayloads(distinctId, options ?? {})
             return {
                 featureFlags: result.featureFlags ?? {},
                 featureFlagPayloads: result.featureFlagPayloads ?? {},

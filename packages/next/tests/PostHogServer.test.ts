@@ -157,9 +157,31 @@ describe('PostHogServer', () => {
             })
 
             const client = server.getClient(cookies as any)
-            await client.getAllFlags(['flag-a'])
+            await client.getAllFlags({ flagKeys: ['flag-a'] })
 
             expect(mockGetAllFlags).toHaveBeenCalledWith('user_abc', { flagKeys: ['flag-a'] })
+        })
+
+        it('forwards options to getAllFlagsAndPayloads', async () => {
+            mockGetAllFlagsAndPayloads.mockResolvedValue({
+                featureFlags: { 'flag-a': true },
+                featureFlagPayloads: { 'flag-a': { discount: 10 } },
+            })
+            const server = new PostHogServer('phc_test123')
+            const cookies = createMockCookies({
+                ph_phc_test123_posthog: JSON.stringify({
+                    distinct_id: 'user_abc',
+                    $device_id: 'device_xyz',
+                }),
+            })
+
+            const client = server.getClient(cookies as any)
+            await client.getAllFlagsAndPayloads({ flagKeys: ['flag-a'], groups: { company: 'posthog' } })
+
+            expect(mockGetAllFlagsAndPayloads).toHaveBeenCalledWith('user_abc', {
+                flagKeys: ['flag-a'],
+                groups: { company: 'posthog' },
+            })
         })
     })
 
