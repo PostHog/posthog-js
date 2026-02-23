@@ -1,4 +1,4 @@
-import { addEventListener, trySafe } from '../utils'
+import { addEventListener, trySafe, isToolbarInstance } from '../utils'
 import { PostHog } from '../posthog-core'
 import { ToolbarParams } from '../types'
 import { _getHashParam } from '../utils/request-utils'
@@ -50,7 +50,7 @@ export class Toolbar {
         history: History | undefined = undefined
     ): boolean {
         // don't load the toolbar on the toolbar :)
-        if (this.instance.config.name && this.instance.config.name === 'ph_toolbar_internal') {
+        if (isToolbarInstance(this.instance.config)) {
             return false
         }
         if (!window || !document) {

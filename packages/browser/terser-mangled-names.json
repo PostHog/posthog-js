@@ -170,6 +170,7 @@
         "_getMatchingItems",
         "_getNode",
         "_getNodeOrRelevantParent",
+        "_getPersonTraits",
         "_getProperties",
         "_getProperty",
         "_getSessionId",

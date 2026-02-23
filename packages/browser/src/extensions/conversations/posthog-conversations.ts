@@ -14,6 +14,7 @@ import { RemoteConfig } from '../../types'
 import { assignableWindow, LazyLoadedConversationsInterface } from '../../utils/globals'
 import { createLogger } from '../../utils/logger'
 import { isNullish, isUndefined, isBoolean, isNull } from '@posthog/core'
+import { isToolbarInstance } from '../../utils'
 
 const logger = createLogger('[Conversations]')
 
@@ -72,6 +73,12 @@ export class PostHogConversations {
             return
         }
         if (this._instance.config.disable_conversations) {
+            return
+        }
+        // The toolbar's internal PostHog instance must not own the conversations
+        // manager — its distinct_id is always anonymous and would be sent instead
+        // of the identified user's ID.
+        if (isToolbarInstance(this._instance.config)) {
             return
         }
         if (this._instance.config.cookieless_mode && this._instance.consent.isOptedOut()) {

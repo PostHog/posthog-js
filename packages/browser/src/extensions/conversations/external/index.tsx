@@ -18,6 +18,7 @@ import {
     RequestRestoreLinkResponse,
 } from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'
+import { STORED_PERSON_PROPERTIES_KEY } from '../../../constants'
 import { ConversationsManager as ConversationsManagerInterface } from '../posthog-conversations'
 import { ConversationsPersistence } from './persistence'
 import { ConversationsWidget, WidgetView } from './components/ConversationsWidget'
@@ -33,9 +34,9 @@ const POLL_INTERVAL_MS = 5000 // 5 seconds
 const RESTORE_EXCHANGE_ENDPOINT = '/api/conversations/v1/widget/restore'
 const RESTORE_REQUEST_ENDPOINT = '/api/conversations/v1/widget/restore/request'
 
-// Singleton guard: only one ConversationsManager per page, regardless of PostHog instance count.
-// Multiple PostHog instances (e.g. toolbar + main app) share the same DOM and script tags,
-// so we enforce a single manager to avoid duplicate widgets and mismatched widget_session_ids.
+// Singleton guard: only one ConversationsManager per page.
+// The toolbar's internal PostHog instance is excluded from creating a manager
+// (see PostHogConversations.loadIfEnabled), so this always belongs to the main instance.
 let _activeManager: ConversationsManager | null = null
 
 export class ConversationsManager implements ConversationsManagerInterface {
@@ -77,13 +78,6 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._isWidgetEnabled = config.widgetEnabled === true
         this._isDomainAllowed = isCurrentDomainAllowed(config.domains)
 
-        logger.info('ConversationsManager initialized', {
-            config,
-            widgetSessionId: this._widgetSessionId,
-            isWidgetEnabled: this._isWidgetEnabled,
-            isDomainAllowed: this._isDomainAllowed,
-        })
-
         this._initialize()
     }
 
@@ -114,13 +108,10 @@ export class ConversationsManager implements ConversationsManagerInterface {
         // eslint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
             const distinctId = this._posthog.get_distinct_id()
-            const personProperties = this._posthog.persistence?.props || {}
+            const personTraits = this._getPersonTraits()
 
-            // Priority for traits:
-            // 1. User-provided traits from the widget form
-            // 2. PostHog person properties
-            const name = userTraits?.name || personProperties.$name || personProperties.name || null
-            const email = userTraits?.email || personProperties.$email || personProperties.email || null
+            const name = userTraits?.name || personTraits.name || null
+            const email = userTraits?.email || personTraits.email || null
 
             const payload: Partial<SendMessagePayload> = {
                 widget_session_id: this._widgetSessionId,
@@ -534,19 +525,35 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /**
+     * Extract name and email from PostHog's stored person properties.
+     *
+     * Person properties set via posthog.identify() are stored under the
+     * $stored_person_properties persistence key, not as top-level props.
+     * We check both locations plus the super-properties for completeness.
+     */
+    private _getPersonTraits(): { name: string | undefined; email: string | undefined } {
+        const superProps = this._posthog.persistence?.props || {}
+        const storedPersonProps =
+            (this._posthog.get_property(STORED_PERSON_PROPERTIES_KEY) as Record<string, any>) || {}
+
+        const name =
+            storedPersonProps.$name || storedPersonProps.name || superProps.$name || superProps.name || undefined
+        const email =
+            storedPersonProps.$email || storedPersonProps.email || superProps.$email || superProps.email || undefined
+
+        return { name, email }
+    }
+
+    /**
      * Get initial user traits from PostHog or localStorage
      */
     private _getInitialUserTraits(): UserProvidedTraits | null {
-        // First, check PostHog's person properties
-        const personProperties = this._posthog.persistence?.props || {}
-        const posthogName = personProperties.$name || personProperties.name
-        const posthogEmail = personProperties.$email || personProperties.email
+        const { name, email } = this._getPersonTraits()
 
-        // If we have traits from PostHog, use those
-        if (posthogName || posthogEmail) {
+        if (name || email) {
             return {
-                name: posthogName || undefined,
-                email: posthogEmail || undefined,
+                name: name || undefined,
+                email: email || undefined,
             }
         }
 
@@ -1176,17 +1183,15 @@ export class ConversationsManager implements ConversationsManagerInterface {
  * Initialize the conversations widget.
  * This is the entry point called from the lazy-loaded bundle.
  *
- * Uses a singleton guard: multiple PostHog instances on the same page
- * (e.g. toolbar + main app) share the same DOM and script tags.
- * Only one ConversationsManager is created; subsequent calls return the existing one.
+ * Singleton guard: only one ConversationsManager per page. The toolbar's
+ * internal PostHog instance is excluded upstream (see loadIfEnabled), so
+ * this always belongs to the customer's main instance.
  */
 export function initConversations(config: ConversationsRemoteConfig, posthog: PostHog): ConversationsManager {
     if (_activeManager) {
-        logger.info('ConversationsManager already exists, reusing singleton')
         return _activeManager
     }
 
-    logger.info('initConversations called', { hasConfig: !!config, hasPosthog: !!posthog })
     _activeManager = new ConversationsManager(config, posthog)
     return _activeManager
 }
