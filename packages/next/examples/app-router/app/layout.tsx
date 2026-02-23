@@ -16,7 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <body className="bg-gray-50 text-gray-900 min-h-screen">
                 <PostHogProvider
                     apiKey={process.env.NEXT_PUBLIC_POSTHOG_KEY!}
-                    options={{ api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST }}
+                    options={{ api_host: '/ingest' }}
                     bootstrapFlags
                 >
                     <Suspense fallback={null}>
