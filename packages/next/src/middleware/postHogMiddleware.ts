@@ -2,7 +2,7 @@ import 'server-only'
 
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { getPostHogCookieName, parsePostHogCookie, serializePostHogCookie } from '../shared/cookie'
+import { getPostHogCookieName, readPostHogCookie, serializePostHogCookie } from '../shared/cookie'
 import { generateAnonymousId } from '../shared/identity'
 import { resolveApiKey } from '../shared/config'
 import { COOKIE_MAX_AGE_SECONDS, DEFAULT_API_HOST, DEFAULT_INGEST_PATH } from '../shared/constants'
@@ -120,8 +120,7 @@ export function postHogMiddleware(config: PostHogMiddlewareOptions = {}) {
         }
 
         const cookieName = getPostHogCookieName(apiKey)
-        const existingCookie = request.cookies.get(cookieName)
-        const state = existingCookie ? parsePostHogCookie(existingCookie.value) : null
+        const state = readPostHogCookie(request.cookies, apiKey)
         const response = config.response ?? NextResponse.next()
 
         // Seed the PostHog cookie on first visit so server and client

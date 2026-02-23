@@ -2,7 +2,7 @@ import 'server-only'
 
 import { PostHog } from 'posthog-node'
 import type { PostHogOptions } from 'posthog-node'
-import { getPostHogCookieName, parsePostHogCookie } from '../shared/cookie'
+import { readPostHogCookie } from '../shared/cookie'
 import { generateAnonymousId } from '../shared/identity'
 import { createScopedClient } from '../shared/scoped-client'
 import type { PostHogServerClient } from '../shared/scoped-client'
@@ -67,9 +67,7 @@ export class PostHogServer {
      * @returns A PostHogServerClient scoped to the user's distinct_id
      */
     getClient(cookies: CookieStore): PostHogServerClient {
-        const cookieName = getPostHogCookieName(this.apiKey)
-        const cookie = cookies.get(cookieName)
-        const state = cookie ? parsePostHogCookie(cookie.value) : null
+        const state = readPostHogCookie(cookies, this.apiKey)
         const distinctId = state?.distinctId ?? generateAnonymousId()
 
         return createScopedClient(this.client, distinctId)
