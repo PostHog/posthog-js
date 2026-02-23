@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.353.0
+
+### Minor Changes
+
+- [#3135](https://github.com/PostHog/posthog-js/pull/3135) [`fba7e5b`](https://github.com/PostHog/posthog-js/commit/fba7e5bcf67d3a7e5b55b6bb95a0dcb637f56f6a) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Persist $user_state to cookie for server-side access
+  (2026-02-23)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.353.0
+
 ## 1.352.1
 
 ### Patch Changes
