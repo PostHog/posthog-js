@@ -159,6 +159,7 @@ describe('ConversationsManager', () => {
                 endpointFor: jest.fn((type: string, path: string) => `https://test.posthog.com${path}`),
             },
             get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
+            get_property: jest.fn().mockReturnValue(undefined),
             get_session_id: jest.fn().mockReturnValue('test-session-id-123'),
             get_session_replay_url: jest.fn().mockReturnValue('https://app.posthog.com/replay/test-session?t=100'),
             persistence: {
