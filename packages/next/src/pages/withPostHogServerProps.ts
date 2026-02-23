@@ -1,7 +1,7 @@
 import type { GetServerSideProps, GetServerSidePropsContext, GetServerSidePropsResult } from 'next'
 import { PostHog } from 'posthog-node'
 import type { PostHogOptions } from 'posthog-node'
-import { getPostHogCookieName, parsePostHogCookie } from '../shared/cookie'
+import { getPostHogCookieName, parsePostHogCookie, cookieStateToProperties } from '../shared/cookie'
 import { generateAnonymousId } from '../shared/identity'
 import { createScopedClient } from '../shared/scoped-client'
 import type { PostHogServerClient } from '../shared/scoped-client'
@@ -52,16 +52,13 @@ export function withPostHogServerProps<P extends Record<string, unknown>>(
 ): GetServerSideProps<P> {
     return async (context: GetServerSidePropsContext) => {
         const client = new PostHog(apiKey, options)
-
-        // Parse cookie from request headers
         const cookieHeader = context.req.headers.cookie || ''
         const cookies = parseCookiesFromHeader(cookieHeader)
         const cookieName = getPostHogCookieName(apiKey)
         const cookieValue = cookies[cookieName]
         const state = cookieValue ? parsePostHogCookie(cookieValue) : null
         const distinctId = state?.distinctId ?? generateAnonymousId()
-
-        const scopedClient = createScopedClient(client, distinctId)
+        const scopedClient = createScopedClient(client, distinctId, cookieStateToProperties(state))
 
         return handler(context, scopedClient)
     }

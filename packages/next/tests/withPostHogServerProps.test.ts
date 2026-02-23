@@ -124,7 +124,7 @@ describe('withPostHogServerProps', () => {
         expect(mockCapture).toHaveBeenCalledWith({
             distinctId: 'user_abc',
             event: 'test_event',
-            properties: { page: '/dashboard' },
+            properties: { $device_id: 'device_xyz', page: '/dashboard' },
         })
     })
 })

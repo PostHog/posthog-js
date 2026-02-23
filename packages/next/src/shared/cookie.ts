@@ -1,8 +1,11 @@
+import { uuidv7 } from '@posthog/core'
 import { COOKIE_PREFIX, COOKIE_SUFFIX } from './constants'
 
 export interface PostHogCookieState {
     distinctId: string
     isIdentified: boolean
+    sessionId?: string
+    deviceId?: string
 }
 
 /**
@@ -37,10 +40,13 @@ export function getPostHogCookieName(apiKey: string): string {
  * @returns JSON string suitable for the PostHog cookie value
  */
 export function serializePostHogCookie(anonymousId: string): string {
+    const now = Date.now()
+    const sessionId = uuidv7()
     return JSON.stringify({
         distinct_id: anonymousId,
         $device_id: anonymousId,
         $user_state: 'anonymous',
+        $sesid: [now, sessionId, now],
     })
 }
 
@@ -59,6 +65,23 @@ export function readPostHogCookie(
     return cookie ? parsePostHogCookie(cookie.value) : null
 }
 
+/**
+ * Converts cookie state into PostHog properties (e.g. `$session_id`, `$device_id`).
+ */
+export function cookieStateToProperties(state: PostHogCookieState | null): Record<string, string> | undefined {
+    if (!state) {
+        return undefined
+    }
+    const props: Record<string, string> = {}
+    if (state.sessionId) {
+        props.$session_id = state.sessionId
+    }
+    if (state.deviceId) {
+        props.$device_id = state.deviceId
+    }
+    return Object.keys(props).length > 0 ? props : undefined
+}
+
 export function parsePostHogCookie(cookieValue: string): PostHogCookieState | null {
     if (!cookieValue) {
         return null
@@ -70,9 +93,14 @@ export function parsePostHogCookie(cookieValue: string): PostHogCookieState | nu
             return null
         }
 
+        // $sesid is stored as [lastActivityTimestamp, sessionId, sessionStartTimestamp]
+        const sesid = Array.isArray(parsed.$sesid) ? parsed.$sesid[1] : undefined
+
         return {
             distinctId: String(parsed.distinct_id),
             isIdentified: parsed.$user_state === 'identified',
+            sessionId: typeof sesid === 'string' ? sesid : undefined,
+            deviceId: typeof parsed.$device_id === 'string' ? parsed.$device_id : undefined,
         }
     } catch {
         return null

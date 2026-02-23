@@ -109,10 +109,18 @@ export interface PostHogServerClient {
  * Note that `identify` is not available from the server. Call it
  * from the client.
  */
-export function createScopedClient(client: PostHog, distinctId: string): PostHogServerClient {
+export function createScopedClient(
+    client: PostHog,
+    distinctId: string,
+    additionalProperties?: Record<string, unknown>
+): PostHogServerClient {
     return {
         capture(event: string, properties?: Record<string, unknown>) {
-            client.capture({ distinctId, event, properties })
+            client.capture({
+                distinctId,
+                event,
+                properties: { ...additionalProperties, ...properties },
+            })
         },
 
         async isFeatureEnabled(flagKey: string) {
