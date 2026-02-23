@@ -2,4 +2,4 @@
 'posthog-node': minor
 ---
 
-Fixes an issue where super properties added with `.register` were not included in all subsequent events
+Officially adds support for super properties added with `.register` (it was available as a function but did not actually work previously)
