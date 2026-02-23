@@ -1805,6 +1805,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     let mergedDistinctId = distinctId || contextData?.distinctId
 
     const mergedProperties = {
+      ...this.props,
       ...(contextData?.properties || {}),
       ...(properties || {}),
     }
