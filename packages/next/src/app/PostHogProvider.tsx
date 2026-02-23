@@ -3,7 +3,7 @@ import type { PostHogConfig } from 'posthog-js'
 import { ClientPostHogProvider } from '../client/ClientPostHogProvider'
 import type { BootstrapConfig } from '../client/ClientPostHogProvider'
 import type { PostHogServer } from '../server/PostHogServer'
-import { NEXTJS_CLIENT_DEFAULTS } from '../shared/config'
+import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey } from '../shared/config'
 
 export interface BootstrapFlagsConfig {
     /** Specific flag keys to evaluate. If omitted, evaluates all flags. */
@@ -50,12 +50,7 @@ export interface PostHogProviderProps {
  * require this provider as an ancestor.
  */
 export async function PostHogProvider({ apiKey: apiKeyProp, options, bootstrapFlags, children }: PostHogProviderProps) {
-    const apiKey = apiKeyProp || process.env.NEXT_PUBLIC_POSTHOG_KEY
-    if (!apiKey) {
-        throw new Error(
-            '[PostHog Next.js] apiKey is required. Either pass it as a prop or set the NEXT_PUBLIC_POSTHOG_KEY environment variable.'
-        )
-    }
+    const apiKey = resolveApiKey(apiKeyProp)
     if (!apiKey.startsWith('phc_')) {
         console.warn(`[PostHog Next.js] apiKey "${apiKey}" does not start with "phc_". This may not be a valid PostHog project API key.`)
     }
