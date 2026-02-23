@@ -85,7 +85,47 @@ describe('PostHogServer', () => {
             expect(mockCapture).toHaveBeenCalledWith({
                 distinctId: 'user_abc',
                 event: 'test_event',
-                properties: { key: 'value' },
+                properties: { $device_id: 'device_xyz', key: 'value' },
+            })
+        })
+
+        it('includes $session_id and $device_id in capture from cookie', () => {
+            const server = new PostHogServer('phc_test123')
+            const cookies = createMockCookies({
+                ph_phc_test123_posthog: JSON.stringify({
+                    distinct_id: 'user_abc',
+                    $device_id: 'device_xyz',
+                    $sesid: [1708700000000, 'session-123', 1708700000000],
+                }),
+            })
+
+            const client = server.getClient(cookies as any)
+            client.capture('test_event', { key: 'value' })
+
+            expect(mockCapture).toHaveBeenCalledWith({
+                distinctId: 'user_abc',
+                event: 'test_event',
+                properties: { $session_id: 'session-123', $device_id: 'device_xyz', key: 'value' },
+            })
+        })
+
+        it('allows user properties to override cookie properties', () => {
+            const server = new PostHogServer('phc_test123')
+            const cookies = createMockCookies({
+                ph_phc_test123_posthog: JSON.stringify({
+                    distinct_id: 'user_abc',
+                    $device_id: 'device_xyz',
+                    $sesid: [1708700000000, 'session-123', 1708700000000],
+                }),
+            })
+
+            const client = server.getClient(cookies as any)
+            client.capture('test_event', { $session_id: 'custom-session' })
+
+            expect(mockCapture).toHaveBeenCalledWith({
+                distinctId: 'user_abc',
+                event: 'test_event',
+                properties: { $session_id: 'custom-session', $device_id: 'device_xyz' },
             })
         })
 
