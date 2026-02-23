@@ -67,6 +67,8 @@ describe('getRemoteConfigNumber', () => {
     expect(getRemoteConfigNumber(false, 'sampleRate')).toBeUndefined()
     expect(getRemoteConfigNumber({}, 'sampleRate')).toBeUndefined()
     expect(getRemoteConfigNumber({ sampleRate: 'abc' }, 'sampleRate')).toBeUndefined()
+    expect(getRemoteConfigNumber({ sampleRate: '' }, 'sampleRate')).toBeUndefined()
+    expect(getRemoteConfigNumber({ sampleRate: '   ' }, 'sampleRate')).toBeUndefined()
   })
 
   it('returns numeric value from number', () => {
