@@ -1,4 +1,4 @@
-import { getRemoteConfigBool, getRemoteConfigNumber } from '../src/utils'
+import { getRemoteConfigBool, getRemoteConfigNumber, isValidSampleRate } from '../src/utils'
 
 describe('getRemoteConfigBool', () => {
   it('returns default value when field is undefined', () => {
@@ -75,5 +75,20 @@ describe('getRemoteConfigNumber', () => {
 
   it('returns numeric value from numeric string', () => {
     expect(getRemoteConfigNumber({ sampleRate: '0.5' }, 'sampleRate')).toBe(0.5)
+  })
+})
+
+describe('isValidSampleRate', () => {
+  it('returns true only for finite values in [0, 1]', () => {
+    expect(isValidSampleRate(0)).toBe(true)
+    expect(isValidSampleRate(0.5)).toBe(true)
+    expect(isValidSampleRate(1)).toBe(true)
+
+    expect(isValidSampleRate(-0.1)).toBe(false)
+    expect(isValidSampleRate(1.1)).toBe(false)
+    expect(isValidSampleRate(Number.POSITIVE_INFINITY)).toBe(false)
+    expect(isValidSampleRate(Number.NaN)).toBe(false)
+    expect(isValidSampleRate('0.5')).toBe(false)
+    expect(isValidSampleRate(null)).toBe(false)
   })
 })

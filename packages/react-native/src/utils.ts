@@ -97,3 +97,10 @@ export function getRemoteConfigNumber(
 
   return undefined
 }
+
+/**
+ * Checks whether a value is a valid session replay sample rate in the inclusive range [0, 1].
+ */
+export function isValidSampleRate(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1
+}

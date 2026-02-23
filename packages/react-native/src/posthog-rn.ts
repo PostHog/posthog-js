@@ -25,7 +25,7 @@ import {
   PostHogCustomStorage,
   PostHogSessionReplayConfig,
 } from './types'
-import { getRemoteConfigBool, getRemoteConfigNumber } from './utils'
+import { getRemoteConfigBool, getRemoteConfigNumber, isValidSampleRate } from './utils'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativeSessionReplay } from './optional/OptionalSessionReplay'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
@@ -1481,8 +1481,6 @@ export class PostHog extends PostHogCore {
 
     const captureLog = localCaptureLog && remoteConsoleLogEnabled
     const captureNetworkTelemetry = localCaptureNetworkTelemetry && remoteNetworkTimingEnabled
-    const isValidSampleRate = (value: unknown): value is number =>
-      typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1
 
     const localSampleRateValid =
       localSampleRate === undefined ? undefined : isValidSampleRate(localSampleRate) ? localSampleRate : undefined
