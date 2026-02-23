@@ -2,6 +2,7 @@ import React from 'react'
 import type { AppProps } from 'next/app'
 import { PostHogProvider } from 'posthog-js/react'
 import type { PostHogConfig } from 'posthog-js'
+import { NEXTJS_CLIENT_DEFAULTS } from '../shared/config'
 
 /**
  * Configuration for the withPostHogApp HOC.
@@ -35,9 +36,11 @@ type NextApp = React.ComponentType<AppProps>
  * ```
  */
 export function withPostHogApp(App: NextApp, config: WithPostHogAppOptions): NextApp {
+    const mergedOptions: Partial<PostHogConfig> = { ...NEXTJS_CLIENT_DEFAULTS, ...config.options }
+
     function PostHogApp(props: AppProps) {
         return (
-            <PostHogProvider apiKey={config.apiKey} options={config.options}>
+            <PostHogProvider apiKey={config.apiKey} options={mergedOptions}>
                 <App {...props} />
             </PostHogProvider>
         )

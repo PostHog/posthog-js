@@ -49,6 +49,39 @@ describe('withPostHogApp', () => {
         )
     })
 
+    it('applies Next.js-specific defaults', () => {
+        const WrappedApp = withPostHogApp(MockApp, { apiKey: 'phc_test123' })
+        render(<WrappedApp Component={MockPage} pageProps={{}} router={{} as any} />)
+
+        expect(mockPostHogProvider).toHaveBeenCalledWith(
+            expect.objectContaining({
+                options: expect.objectContaining({
+                    persistence: 'localStorage+cookie',
+                    opt_out_capturing_persistence_type: 'cookie',
+                    opt_out_persistence_by_default: true,
+                }),
+            })
+        )
+    })
+
+    it('allows user options to override defaults', () => {
+        const WrappedApp = withPostHogApp(MockApp, {
+            apiKey: 'phc_test123',
+            options: { persistence: 'memory', opt_out_persistence_by_default: false },
+        })
+        render(<WrappedApp Component={MockPage} pageProps={{}} router={{} as any} />)
+
+        expect(mockPostHogProvider).toHaveBeenCalledWith(
+            expect.objectContaining({
+                options: expect.objectContaining({
+                    persistence: 'memory',
+                    opt_out_capturing_persistence_type: 'cookie',
+                    opt_out_persistence_by_default: false,
+                }),
+            })
+        )
+    })
+
     it('forwards all props to the wrapped App', () => {
         const WrappedApp = withPostHogApp(MockApp, { apiKey: 'phc_test123' })
         const customPageProps = { customProp: 'value' }

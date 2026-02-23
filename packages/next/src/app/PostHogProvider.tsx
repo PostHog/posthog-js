@@ -3,6 +3,7 @@ import type { PostHogConfig } from 'posthog-js'
 import { ClientPostHogProvider } from '../client/ClientPostHogProvider'
 import type { BootstrapConfig } from '../client/ClientPostHogProvider'
 import type { PostHogServer } from '../server/PostHogServer'
+import { NEXTJS_CLIENT_DEFAULTS } from '../shared/config'
 
 export interface BootstrapFlagsConfig {
     /** Specific flag keys to evaluate. If omitted, evaluates all flags. */
@@ -60,7 +61,11 @@ export async function PostHogProvider({ apiKey: apiKeyProp, options, bootstrapFl
     }
 
     const host = options?.api_host || process.env.NEXT_PUBLIC_POSTHOG_HOST
-    const resolvedOptions = host && host !== options?.api_host ? { ...options, api_host: host } : options
+    const resolvedOptions: Partial<PostHogConfig> = {
+        ...NEXTJS_CLIENT_DEFAULTS,
+        ...options,
+        ...(host ? { api_host: host } : {}),
+    }
 
     let bootstrap: BootstrapConfig | undefined
 

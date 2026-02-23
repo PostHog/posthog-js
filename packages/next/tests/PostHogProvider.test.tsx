@@ -80,6 +80,46 @@ describe('PostHogProvider', () => {
         )
     })
 
+    describe('Next.js client defaults', () => {
+        it('applies Next.js-specific defaults when no options provided', async () => {
+            const element = await PostHogProvider({
+                apiKey: 'phc_test123',
+                children: <div>Child</div>,
+            })
+            render(element)
+            expect(mockClientProvider).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    options: expect.objectContaining({
+                        persistence: 'localStorage+cookie',
+                        opt_out_capturing_persistence_type: 'cookie',
+                        opt_out_persistence_by_default: true,
+                    }),
+                })
+            )
+        })
+
+        it('allows user options to override defaults', async () => {
+            const element = await PostHogProvider({
+                apiKey: 'phc_test123',
+                options: {
+                    persistence: 'memory',
+                    opt_out_persistence_by_default: false,
+                },
+                children: <div>Child</div>,
+            })
+            render(element)
+            expect(mockClientProvider).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    options: expect.objectContaining({
+                        persistence: 'memory',
+                        opt_out_capturing_persistence_type: 'cookie',
+                        opt_out_persistence_by_default: false,
+                    }),
+                })
+            )
+        })
+    })
+
     it('resolves synchronously when bootstrapFlags is off (static-safe)', async () => {
         let settled = false
         PostHogProvider({
