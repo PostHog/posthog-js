@@ -14,6 +14,22 @@ export type PostHogClientConfig = Partial<PostHogConfig>
 export type PostHogServerConfig = PostHogOptions
 
 /**
+ * Resolves the PostHog API key from an explicit value or the
+ * `NEXT_PUBLIC_POSTHOG_KEY` environment variable.
+ *
+ * Throws if neither is available.
+ */
+export function resolveApiKey(apiKey?: string): string {
+    const resolved = apiKey || process.env.NEXT_PUBLIC_POSTHOG_KEY
+    if (!resolved) {
+        throw new Error(
+            '[PostHog Next.js] apiKey is required. Either pass it explicitly or set the NEXT_PUBLIC_POSTHOG_KEY environment variable.'
+        )
+    }
+    return resolved
+}
+
+/**
  * Next.js-specific defaults for the posthog-js client.
  *
  * These ensure the server can read both identity and consent state from cookies:
