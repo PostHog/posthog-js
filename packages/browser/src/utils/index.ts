@@ -1,4 +1,4 @@
-import { Breaker, Properties } from '../types'
+import { Breaker, PostHogConfig, Properties } from '../types'
 import { nativeForEach, nativeIndexOf } from './globals'
 import { logger } from './logger'
 import { isFormData, isNull, isNullish, isNumber, isString, hasOwnProperty, isArray } from '@posthog/core'
@@ -283,4 +283,10 @@ export function migrateConfigField<T>(
     }
 
     return defaultValue
+}
+
+const TOOLBAR_INTERNAL_INSTANCE_NAME = 'ph_toolbar_internal'
+
+export function isToolbarInstance(config: Pick<PostHogConfig, 'name'>): boolean {
+    return config.name === TOOLBAR_INTERNAL_INSTANCE_NAME
 }
