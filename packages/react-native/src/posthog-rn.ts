@@ -25,7 +25,7 @@ import {
   PostHogCustomStorage,
   PostHogSessionReplayConfig,
 } from './types'
-import { getRemoteConfigBool } from './utils'
+import { getRemoteConfigBool, getRemoteConfigNumber } from './utils'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativeSessionReplay } from './optional/OptionalSessionReplay'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
@@ -298,7 +298,7 @@ export class PostHog extends PostHogCore {
    * Called when remote config has been loaded (from either the remote config endpoint or the flags endpoint).
    * Gates error tracking autocapture based on the remote config response.
    *
-   * Session replay config (consoleLogRecordingEnabled, capturePerformance.network_timing) is already
+   * Session replay config (consoleLogRecordingEnabled, sampleRate, capturePerformance.network_timing) is already
    * cached via PostHogPersistedProperty.RemoteConfig and applied at startup in startSessionReplay().
    *
    * @internal
@@ -1449,6 +1449,7 @@ export class PostHog extends PostHogCore {
       maskAllSandboxedViews = true,
       captureLog: localCaptureLog = true,
       captureNetworkTelemetry: localCaptureNetworkTelemetry = true,
+      sampleRate: localSampleRate,
       iOSdebouncerDelayMs = defaultThrottleDelayMs,
       androidDebouncerDelayMs = defaultThrottleDelayMs,
     } = options?.sessionReplayConfig ?? {}
@@ -1476,15 +1477,43 @@ export class PostHog extends PostHogCore {
       'network_timing',
       true
     )
+    const remoteSampleRateRaw = getRemoteConfigNumber(cachedRemoteConfig?.sessionRecording, 'sampleRate')
 
     const captureLog = localCaptureLog && remoteConsoleLogEnabled
     const captureNetworkTelemetry = localCaptureNetworkTelemetry && remoteNetworkTimingEnabled
+    const isValidSampleRate = (value: unknown): value is number =>
+      typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1
+
+    const localSampleRateValid =
+      localSampleRate === undefined ? undefined : isValidSampleRate(localSampleRate) ? localSampleRate : undefined
+    const remoteSampleRateValid =
+      remoteSampleRateRaw === undefined
+        ? undefined
+        : isValidSampleRate(remoteSampleRateRaw)
+          ? remoteSampleRateRaw
+          : undefined
+
+    const sampleRate = localSampleRateValid ?? remoteSampleRateValid
 
     if (localCaptureLog && !remoteConsoleLogEnabled) {
       this._logger.info('captureLog disabled by remote config (consoleLogRecordingEnabled=false).')
     }
     if (localCaptureNetworkTelemetry && !remoteNetworkTimingEnabled) {
       this._logger.info('captureNetworkTelemetry disabled by remote config (capturePerformance.network_timing=false).')
+    }
+    if (localSampleRate !== undefined && localSampleRateValid === undefined) {
+      this._logger.warn(
+        `Ignoring invalid sessionReplayConfig.sampleRate '${localSampleRate}'. Expected a number between 0 and 1.`
+      )
+    }
+    if (remoteSampleRateRaw !== undefined && remoteSampleRateValid === undefined) {
+      this._logger.warn(
+        `Ignoring invalid remote config sessionRecording.sampleRate '${remoteSampleRateRaw}'. Expected a number between 0 and 1.`
+      )
+    }
+    if (typeof sampleRate === 'number') {
+      const source = localSampleRateValid !== undefined ? 'local config' : 'remote config'
+      this._logger.info(`sampleRate set from ${source} (${sampleRate}).`)
     }
 
     const sdkReplayConfig = {
@@ -1493,6 +1522,7 @@ export class PostHog extends PostHogCore {
       maskAllSandboxedViews,
       captureLog,
       captureNetworkTelemetry,
+      sampleRate,
       iOSdebouncerDelayMs,
       androidDebouncerDelayMs,
       throttleDelayMs,

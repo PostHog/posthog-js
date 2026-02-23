@@ -1,4 +1,4 @@
-import { getRemoteConfigBool } from '../src/utils'
+import { getRemoteConfigBool, getRemoteConfigNumber } from '../src/utils'
 
 describe('getRemoteConfigBool', () => {
   it('returns default value when field is undefined', () => {
@@ -58,5 +58,22 @@ describe('getRemoteConfigBool', () => {
 
   it('returns empty object defaults to true (key missing)', () => {
     expect(getRemoteConfigBool({}, 'key')).toBe(true)
+  })
+})
+
+describe('getRemoteConfigNumber', () => {
+  it('returns undefined for missing/invalid fields', () => {
+    expect(getRemoteConfigNumber(undefined, 'sampleRate')).toBeUndefined()
+    expect(getRemoteConfigNumber(false, 'sampleRate')).toBeUndefined()
+    expect(getRemoteConfigNumber({}, 'sampleRate')).toBeUndefined()
+    expect(getRemoteConfigNumber({ sampleRate: 'abc' }, 'sampleRate')).toBeUndefined()
+  })
+
+  it('returns numeric value from number', () => {
+    expect(getRemoteConfigNumber({ sampleRate: 0.5 }, 'sampleRate')).toBe(0.5)
+  })
+
+  it('returns numeric value from numeric string', () => {
+    expect(getRemoteConfigNumber({ sampleRate: '0.5' }, 'sampleRate')).toBe(0.5)
   })
 })
