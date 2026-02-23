@@ -120,21 +120,16 @@ describe('PostHogProvider', () => {
         })
     })
 
-    it('resolves synchronously when bootstrapFlags is off (static-safe)', async () => {
-        let settled = false
-        PostHogProvider({
+    it('does not call cookies() when bootstrapFlags is off (static-safe)', async () => {
+        const { cookies } = require('next/headers')
+
+        const element = await PostHogProvider({
             apiKey: 'phc_test123',
             children: <div>Child</div>,
-        }).then(() => {
-            settled = true
         })
+        render(element)
 
-        // Flush one microtick. An async function that never awaits
-        // returns an already-resolved promise, so the .then() callback
-        // runs in the next microtick. If any real async work happened,
-        // the promise would still be pending here.
-        await Promise.resolve()
-        expect(settled).toBe(true)
+        expect(cookies).not.toHaveBeenCalled()
     })
 
     it('throws when apiKey is empty and env var is not set', async () => {
@@ -325,6 +320,23 @@ describe('PostHogProvider', () => {
             )
         })
 
+        it('disables first flag load on client when bootstrap succeeds', async () => {
+            const element = await PostHogProvider({
+                apiKey: 'phc_test123',
+                bootstrapFlags: true,
+                children: <div>Child</div>,
+            })
+            render(element)
+
+            expect(mockClientProvider).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    options: expect.objectContaining({
+                        advanced_disable_feature_flags_on_first_load: true,
+                    }),
+                })
+            )
+        })
+
         it('renders without bootstrap when flag evaluation fails', async () => {
             mockGetAllFlags.mockRejectedValue(new Error('network timeout'))
             const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
@@ -346,6 +358,26 @@ describe('PostHogProvider', () => {
                 expect.any(Error)
             )
             warnSpy.mockRestore()
+        })
+
+        it('does not disable first flag load when bootstrap fails', async () => {
+            mockGetAllFlags.mockRejectedValue(new Error('network timeout'))
+            jest.spyOn(console, 'warn').mockImplementation()
+
+            const element = await PostHogProvider({
+                apiKey: 'phc_test123',
+                bootstrapFlags: true,
+                children: <div>Child</div>,
+            })
+            render(element)
+
+            expect(mockClientProvider).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    options: expect.not.objectContaining({
+                        advanced_disable_feature_flags_on_first_load: true,
+                    }),
+                })
+            )
         })
 
         it('sets isIdentifiedID to false when distinct_id equals device_id', async () => {

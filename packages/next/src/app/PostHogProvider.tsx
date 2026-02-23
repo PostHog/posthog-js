@@ -2,8 +2,10 @@ import React from 'react'
 import type { PostHogConfig } from 'posthog-js'
 import { ClientPostHogProvider } from '../client/ClientPostHogProvider'
 import type { BootstrapConfig } from '../client/ClientPostHogProvider'
-import type { PostHogServer } from '../server/PostHogServer'
+import { cookies } from 'next/headers'
+import { PostHogServer } from '../server/PostHogServer'
 import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey } from '../shared/config'
+import { getPostHogCookieName, parsePostHogCookie } from '../shared/cookie'
 
 export interface BootstrapFlagsConfig {
     /** Specific flag keys to evaluate. If omitted, evaluates all flags. */
@@ -55,7 +57,7 @@ export async function PostHogProvider({ apiKey: apiKeyProp, options, bootstrapFl
         console.warn(`[PostHog Next.js] apiKey "${apiKey}" does not start with "phc_". This may not be a valid PostHog project API key.`)
     }
 
-    const host = options?.api_host || process.env.NEXT_PUBLIC_POSTHOG_HOST
+    const host = options?.api_host ?? process.env.NEXT_PUBLIC_POSTHOG_HOST
     const resolvedOptions: Partial<PostHogConfig> = {
         ...NEXTJS_CLIENT_DEFAULTS,
         ...options,
@@ -67,6 +69,10 @@ export async function PostHogProvider({ apiKey: apiKeyProp, options, bootstrapFl
     if (bootstrapFlags) {
         try {
             bootstrap = await evaluateFlags(apiKey, resolvedOptions, bootstrapFlags)
+
+            // Considering we've just evaluated flags via SSR, there's no need to immediately
+            // reload them from the client.
+            resolvedOptions.advanced_disable_feature_flags_on_first_load = true
         } catch (error) {
             console.warn('[PostHog Next.js] Failed to evaluate bootstrap flags:', error)
         }
@@ -82,17 +88,13 @@ export async function PostHogProvider({ apiKey: apiKeyProp, options, bootstrapFl
 // Module-level cache for PostHogServer instances, keyed by "apiKey:host".
 // Avoids creating a new posthog-node client (with its poller and flush queue)
 // on every render.
-const serverCache = new Map<string, InstanceType<typeof PostHogServer>>()
+const serverCache = new Map<string, PostHogServer>()
 
-function getOrCreateServer(
-    postHogServer: typeof PostHogServer,
-    apiKey: string,
-    host: string | undefined
-) {
+function getOrCreateServer(apiKey: string, host: string | undefined) {
     const cacheKey = `${apiKey}:${host ?? ''}`
     let server = serverCache.get(cacheKey)
     if (!server) {
-        server = new postHogServer(apiKey, { host })
+        server = new PostHogServer(apiKey, { host })
         serverCache.set(cacheKey, server)
     }
     return server
@@ -103,12 +105,8 @@ async function evaluateFlags(
     options: Partial<PostHogConfig> | undefined,
     bootstrapFlags: boolean | BootstrapFlagsConfig
 ): Promise<BootstrapConfig> {
-    const { cookies } = await import('next/headers')
-    const { PostHogServer } = await import('../server/PostHogServer')
-    const { getPostHogCookieName, parsePostHogCookie } = await import('../shared/cookie')
-
     const cookieStore = await cookies()
-    const server = getOrCreateServer(PostHogServer, apiKey, options?.api_host)
+    const server = getOrCreateServer(apiKey, options?.api_host)
     const client = server.getClient(cookieStore)
     const distinctId = client.getDistinctId()
 
