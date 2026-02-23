@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.25.0
+
+### Minor Changes
+
+- [#3132](https://github.com/PostHog/posthog-js/pull/3132) [`301e75a`](https://github.com/PostHog/posthog-js/commit/301e75a8ecd7a983fc634d9ad9b521c8007a51d1) Thanks [@benjackwhite](https://github.com/benjackwhite)! - Officially adds support for super properties added with `.register` (it was available as a function but did not actually work previously)
+  (2026-02-23)
+
 ## 5.24.17
 
 ### Patch Changes
