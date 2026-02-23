@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.352.1
+
+### Patch Changes
+
+- [#3129](https://github.com/PostHog/posthog-js/pull/3129) [`6bfa003`](https://github.com/PostHog/posthog-js/commit/6bfa003116aa8ef65fe605c29ffee711f4d39b74) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: no need to put rrweb and friends directly on window in posthog-recorder
+  (2026-02-23)
+
+- [#3131](https://github.com/PostHog/posthog-js/pull/3131) [`ad26474`](https://github.com/PostHog/posthog-js/commit/ad26474d8964798ee3e10b6cfdf14f1cbd0969ac) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Fix issue with toolbar interferring distinct id in conversations
+  (2026-02-23)
+- Updated dependencies []:
+    - @posthog/types@1.352.1
+
 ## 1.352.0
 
 ### Minor Changes
