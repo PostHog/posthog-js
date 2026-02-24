@@ -232,6 +232,7 @@
         "_internalEventEmitter",
         "_internalFlagCheckSatisfied",
         "_isBelowMinimumDuration",
+        "_isCacheStale",
         "_isCalled",
         "_isConsoleLogCaptureEnabled",
         "_isConversationsEnabled",
