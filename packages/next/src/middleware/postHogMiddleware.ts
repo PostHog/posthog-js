@@ -2,7 +2,7 @@ import 'server-only'
 
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { getPostHogCookieName, readPostHogCookie, serializePostHogCookie } from '../shared/cookie'
+import { getPostHogCookieName, readPostHogCookie, serializePostHogCookie, isOptedOut } from '../shared/cookie'
 import { generateAnonymousId } from '../shared/identity'
 import { resolveApiKey } from '../shared/config'
 import { COOKIE_MAX_AGE_SECONDS, DEFAULT_API_HOST, DEFAULT_INGEST_PATH } from '../shared/constants'
@@ -42,6 +42,21 @@ export interface PostHogMiddlewareOptions {
      * ```
      */
     response?: NextResponse
+    /**
+     * When true, skips cookie seeding when no consent cookie is present.
+     * Mirrors the client-side `opt_out_capturing_by_default` option.
+     */
+    optOutByDefault?: boolean
+    /**
+     * Custom name for the consent cookie.
+     * Mirrors the client-side `consent_persistence_name` option.
+     */
+    consentCookieName?: string
+    /**
+     * Custom prefix for the consent cookie (appended with apiKey).
+     * Mirrors the client-side `opt_out_capturing_cookie_prefix` option.
+     */
+    consentCookiePrefix?: string
     /**
      * Proxy PostHog API requests through your app's domain.
      *
@@ -122,6 +137,19 @@ export function postHogMiddleware(config: PostHogMiddlewareOptions = {}) {
         const cookieName = getPostHogCookieName(apiKey)
         const state = readPostHogCookie(request.cookies, apiKey)
         const response = config.response ?? NextResponse.next()
+
+        const optedOut = isOptedOut(request.cookies, apiKey, {
+            opt_out_capturing_by_default: config.optOutByDefault,
+            consent_persistence_name: config.consentCookieName,
+            opt_out_capturing_cookie_prefix: config.consentCookiePrefix,
+        })
+
+        if (optedOut) {
+            if (state) {
+                response.cookies.delete(cookieName)
+            }
+            return response
+        }
 
         // Seed the PostHog cookie on first visit so server and client
         // share the same identity from the first render.

@@ -107,23 +107,16 @@ describe('getPostHog', () => {
         })
     })
 
-    it('generates anonymous distinct_id when no cookie exists', async () => {
+    it('calls enterContext with undefined identity when no cookie exists', async () => {
         const cookieStore = createMockCookies({})
         ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
 
         await getPostHog('phc_test123')
 
-        expect(mockEnterContext).toHaveBeenCalledWith(
-            expect.objectContaining({
-                distinctId: expect.any(String),
-            })
-        )
-        // The distinct_id should be a truthy string (UUID)
-        const call = mockEnterContext.mock.calls[0][0]
-        expect(call.distinctId).toBeTruthy()
-        expect(typeof call.distinctId).toBe('string')
-        // No properties when no cookie
-        expect(call.properties).toBeUndefined()
+        expect(mockEnterContext).toHaveBeenCalledWith({
+            distinctId: undefined,
+            properties: undefined,
+        })
     })
 
     it('uses explicit apiKey over env var', async () => {
@@ -182,6 +175,39 @@ describe('getPostHog', () => {
 
         expect(mockEnterContext).toHaveBeenCalledWith({
             distinctId: 'user_abc',
+        })
+    })
+
+    describe('consent awareness', () => {
+        it('does not call enterContext when consent cookie is 0', async () => {
+            const cookieStore = createMockCookies({
+                ph_phc_test123_posthog: JSON.stringify({
+                    distinct_id: 'user_abc',
+                    $device_id: 'device_xyz',
+                }),
+                __ph_opt_in_out_phc_test123: '0',
+            })
+            ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
+
+            const client = await getPostHog('phc_test123')
+            expect(client).toBeDefined()
+            expect(mockEnterContext).not.toHaveBeenCalled()
+        })
+
+        it('calls enterContext normally when consent cookie is 1', async () => {
+            const cookieStore = createMockCookies({
+                ph_phc_test123_posthog: JSON.stringify({
+                    distinct_id: 'user_abc',
+                    $device_id: 'device_xyz',
+                }),
+                __ph_opt_in_out_phc_test123: '1',
+            })
+            ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
+
+            await getPostHog('phc_test123')
+            expect(mockEnterContext).toHaveBeenCalledWith(
+                expect.objectContaining({ distinctId: 'user_abc' })
+            )
         })
     })
 })

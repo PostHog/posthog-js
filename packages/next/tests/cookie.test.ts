@@ -1,4 +1,10 @@
-import { getPostHogCookieName, parsePostHogCookie, serializePostHogCookie } from '../src/shared/cookie'
+import {
+    getPostHogCookieName,
+    parsePostHogCookie,
+    serializePostHogCookie,
+    getConsentCookieName,
+    isOptedOut,
+} from '../src/shared/cookie'
 
 describe('getPostHogCookieName', () => {
     it('returns correct cookie name for a simple API key', () => {
@@ -114,6 +120,76 @@ describe('parsePostHogCookie', () => {
 
     it('returns null for null input', () => {
         expect(parsePostHogCookie(null as unknown as string)).toBeNull()
+    })
+})
+
+describe('getConsentCookieName', () => {
+    it('returns default name with __ph_opt_in_out_ prefix', () => {
+        expect(getConsentCookieName('phc_abc123')).toBe('__ph_opt_in_out_phc_abc123')
+    })
+
+    it('uses consent_persistence_name when provided', () => {
+        expect(getConsentCookieName('phc_abc123', { consent_persistence_name: 'my_consent' })).toBe('my_consent')
+    })
+
+    it('uses opt_out_capturing_cookie_prefix + apiKey when provided', () => {
+        expect(getConsentCookieName('phc_abc123', { opt_out_capturing_cookie_prefix: 'custom_' })).toBe(
+            'custom_phc_abc123'
+        )
+    })
+
+    it('prefers consent_persistence_name over opt_out_capturing_cookie_prefix', () => {
+        expect(
+            getConsentCookieName('phc_abc123', {
+                consent_persistence_name: 'my_consent',
+                opt_out_capturing_cookie_prefix: 'custom_',
+            })
+        ).toBe('my_consent')
+    })
+})
+
+describe('isOptedOut', () => {
+    const makeCookies = (entries: Record<string, string>) => ({
+        get: (name: string) => {
+            const value = entries[name]
+            return value !== undefined ? { name, value } : undefined
+        },
+    })
+
+    it('returns false when no consent cookie and opt_out_by_default is false', () => {
+        expect(isOptedOut(makeCookies({}), 'phc_test')).toBe(false)
+    })
+
+    it('returns true when no consent cookie and opt_out_by_default is true', () => {
+        expect(isOptedOut(makeCookies({}), 'phc_test', { opt_out_capturing_by_default: true })).toBe(true)
+    })
+
+    it('returns false when consent cookie is 1 (opted in)', () => {
+        expect(isOptedOut(makeCookies({ __ph_opt_in_out_phc_test: '1' }), 'phc_test')).toBe(false)
+    })
+
+    it('returns true when consent cookie is 0 (opted out)', () => {
+        expect(isOptedOut(makeCookies({ __ph_opt_in_out_phc_test: '0' }), 'phc_test')).toBe(true)
+    })
+
+    it('returns false for yes-like values (true, yes)', () => {
+        expect(isOptedOut(makeCookies({ __ph_opt_in_out_phc_test: 'true' }), 'phc_test')).toBe(false)
+        expect(isOptedOut(makeCookies({ __ph_opt_in_out_phc_test: 'yes' }), 'phc_test')).toBe(false)
+    })
+
+    it('returns true for no-like values (false, no)', () => {
+        expect(isOptedOut(makeCookies({ __ph_opt_in_out_phc_test: 'false' }), 'phc_test')).toBe(true)
+        expect(isOptedOut(makeCookies({ __ph_opt_in_out_phc_test: 'no' }), 'phc_test')).toBe(true)
+    })
+
+    it('uses custom consent_persistence_name', () => {
+        const cookies = makeCookies({ my_consent: '0' })
+        expect(isOptedOut(cookies, 'phc_test', { consent_persistence_name: 'my_consent' })).toBe(true)
+    })
+
+    it('explicit opt-in overrides opt_out_by_default', () => {
+        const cookies = makeCookies({ __ph_opt_in_out_phc_test: '1' })
+        expect(isOptedOut(cookies, 'phc_test', { opt_out_capturing_by_default: true })).toBe(false)
     })
 })
 

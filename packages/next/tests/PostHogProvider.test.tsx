@@ -230,6 +230,10 @@ describe('PostHogProvider', () => {
                     if (name === 'ph_phc_test123_posthog') {
                         return { name, value: cookieValue }
                     }
+                    // Consent cookie — opted in so flag evaluation proceeds
+                    if (name === '__ph_opt_in_out_phc_test123') {
+                        return { name, value: '1' }
+                    }
                     return undefined
                 }),
             })
@@ -354,5 +358,100 @@ describe('PostHogProvider', () => {
             )
         })
 
+    })
+
+    describe('consent awareness', () => {
+        const identifiedCookieValue = JSON.stringify({
+            distinct_id: 'user_abc',
+            $device_id: 'device_xyz',
+            $user_state: 'identified',
+        })
+
+        function setupCookiesWithConsent(cookies: Record<string, string>) {
+            const { cookies: cookiesFn } = require('next/headers')
+            cookiesFn.mockResolvedValue({
+                get: jest.fn((name: string) => {
+                    const value = cookies[name]
+                    return value !== undefined ? { name, value } : undefined
+                }),
+            })
+        }
+
+        beforeEach(() => {
+            mockGetAllFlagsAndPayloads.mockReset()
+            mockGetAllFlagsAndPayloads.mockResolvedValue({
+                featureFlags: { 'flag-1': true },
+                featureFlagPayloads: { 'flag-1': { color: 'blue' } },
+            })
+        })
+
+        it('skips flag evaluation when consent cookie is 0', async () => {
+            setupCookiesWithConsent({
+                ph_phc_test123_posthog: identifiedCookieValue,
+                __ph_opt_in_out_phc_test123: '0',
+            })
+
+            const element = await PostHogProvider({
+                apiKey: 'phc_test123',
+                bootstrapFlags: true,
+                children: <div>Child</div>,
+            })
+            render(element)
+
+            expect(mockGetAllFlagsAndPayloads).not.toHaveBeenCalled()
+            expect(mockClientProvider).toHaveBeenCalledWith(
+                expect.objectContaining({ bootstrap: undefined })
+            )
+        })
+
+        it('evaluates flags when consent cookie is 1', async () => {
+            setupCookiesWithConsent({
+                ph_phc_test123_posthog: identifiedCookieValue,
+                __ph_opt_in_out_phc_test123: '1',
+            })
+
+            const element = await PostHogProvider({
+                apiKey: 'phc_test123',
+                bootstrapFlags: true,
+                children: <div>Child</div>,
+            })
+            render(element)
+
+            expect(mockGetAllFlagsAndPayloads).toHaveBeenCalledWith('user_abc', {})
+        })
+
+        it('skips flag evaluation when no consent cookie and opt_out_capturing_by_default is true', async () => {
+            setupCookiesWithConsent({
+                ph_phc_test123_posthog: identifiedCookieValue,
+            })
+
+            const element = await PostHogProvider({
+                apiKey: 'phc_test123',
+                options: { opt_out_capturing_by_default: true },
+                bootstrapFlags: true,
+                children: <div>Child</div>,
+            })
+            render(element)
+
+            expect(mockGetAllFlagsAndPayloads).not.toHaveBeenCalled()
+            expect(mockClientProvider).toHaveBeenCalledWith(
+                expect.objectContaining({ bootstrap: undefined })
+            )
+        })
+
+        it('evaluates flags when no consent cookie and opt_out_capturing_by_default is false (default)', async () => {
+            setupCookiesWithConsent({
+                ph_phc_test123_posthog: identifiedCookieValue,
+            })
+
+            const element = await PostHogProvider({
+                apiKey: 'phc_test123',
+                bootstrapFlags: true,
+                children: <div>Child</div>,
+            })
+            render(element)
+
+            expect(mockGetAllFlagsAndPayloads).toHaveBeenCalledWith('user_abc', {})
+        })
     })
 })

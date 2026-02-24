@@ -33,9 +33,10 @@ class MockNextRequest {
 }
 
 const mockCookiesSet = jest.fn()
+const mockCookiesDelete = jest.fn()
 const mockNextResponseNext = jest.fn(() => ({
     headers: new Map(),
-    cookies: { set: mockCookiesSet },
+    cookies: { set: mockCookiesSet, delete: mockCookiesDelete },
 }))
 
 const mockNextResponseRewrite = jest.fn((url: URL) => ({
@@ -358,6 +359,73 @@ describe('postHogMiddleware', () => {
 
             expect(mockNextResponseRewrite).not.toHaveBeenCalled()
             expect(mockNextResponseNext).toHaveBeenCalled()
+        })
+    })
+
+    describe('consent awareness', () => {
+        const CONSENT_COOKIE = '__ph_opt_in_out_phc_test123'
+
+        it('does not seed identity cookie when opted out (consent cookie = 0)', async () => {
+            const middleware = postHogMiddleware({ apiKey: 'phc_test123' })
+            const req = new MockNextRequest('https://example.com/', {
+                [CONSENT_COOKIE]: '0',
+            })
+
+            await middleware(req as any)
+            expect(mockCookiesSet).not.toHaveBeenCalled()
+        })
+
+        it('seeds identity cookie when opted in (consent cookie = 1)', async () => {
+            const middleware = postHogMiddleware({ apiKey: 'phc_test123' })
+            const req = new MockNextRequest('https://example.com/', {
+                [CONSENT_COOKIE]: '1',
+            })
+
+            await middleware(req as any)
+            expect(mockCookiesSet).toHaveBeenCalledWith(COOKIE_NAME, expect.any(String), expect.any(Object))
+        })
+
+        it('does not seed when no consent cookie and optOutByDefault is true', async () => {
+            const middleware = postHogMiddleware({
+                apiKey: 'phc_test123',
+                optOutByDefault: true,
+            })
+            const req = new MockNextRequest('https://example.com/')
+
+            await middleware(req as any)
+            expect(mockCookiesSet).not.toHaveBeenCalled()
+        })
+
+        it('seeds when no consent cookie and optOutByDefault is false (default)', async () => {
+            const middleware = postHogMiddleware({ apiKey: 'phc_test123' })
+            const req = new MockNextRequest('https://example.com/')
+
+            await middleware(req as any)
+            expect(mockCookiesSet).toHaveBeenCalled()
+        })
+
+        it('deletes existing identity cookie when opted out', async () => {
+            const middleware = postHogMiddleware({ apiKey: 'phc_test123' })
+            const req = new MockNextRequest('https://example.com/', {
+                [COOKIE_NAME]: JSON.stringify({ distinct_id: 'user_123', $device_id: 'device_abc' }),
+                [CONSENT_COOKIE]: '0',
+            })
+
+            await middleware(req as any)
+            expect(mockCookiesDelete).toHaveBeenCalledWith(COOKIE_NAME)
+        })
+
+        it('uses custom consentCookieName', async () => {
+            const middleware = postHogMiddleware({
+                apiKey: 'phc_test123',
+                consentCookieName: 'my_consent',
+            })
+            const req = new MockNextRequest('https://example.com/', {
+                my_consent: '0',
+            })
+
+            await middleware(req as any)
+            expect(mockCookiesSet).not.toHaveBeenCalled()
         })
     })
 })
