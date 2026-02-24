@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.353.1
+
+### Patch Changes
+
+- [#3143](https://github.com/PostHog/posthog-js/pull/3143) [`0b86924`](https://github.com/PostHog/posthog-js/commit/0b86924ac25445686618cf36c2bfe58f1bcee9e7) Thanks [@adboio](https://github.com/adboio)! - fix autofill bug in hosted surveys
+  (2026-02-24)
+- Updated dependencies []:
+    - @posthog/types@1.353.1
+
 ## 1.353.0
 
 ### Minor Changes
