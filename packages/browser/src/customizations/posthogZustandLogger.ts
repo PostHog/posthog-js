@@ -151,12 +151,11 @@ export function posthogZustandTracker<S = any>(config: PostHogZustandTrackerConf
         const result = fn()
 
         if (result instanceof Promise) {
-            return result.then((resolvedValue) => {
+            return result.finally(() => {
                 // eslint-disable-next-line compat/compat
                 const executionTimeMs = performance.now() - startTime
                 const nextState = store.getState()
                 logStateChange(actionName, prevState, nextState, executionTimeMs)
-                return resolvedValue
             }) as R
         }
 

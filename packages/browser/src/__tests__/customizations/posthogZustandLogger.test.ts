@@ -124,6 +124,24 @@ describe('posthogZustandTracker', () => {
             expect(result).toBe('async result')
         })
 
+        test('logs partial state changes when async action rejects', async () => {
+            const store = createMockStore({ loading: false, data: null as string | null })
+            const { logger, calls } = createMockLogger()
+
+            const track = posthogZustandTracker({ store, logger })
+
+            await expect(
+                track('failingFetch', async () => {
+                    store.setState({ loading: true })
+                    throw new Error('network error')
+                })
+            ).rejects.toThrow('network error')
+
+            expect(calls).toHaveLength(1)
+            expect(calls[0].stateEvent.type).toBe('failingFetch')
+            expect(calls[0].stateEvent.changedState).toEqual({ loading: true })
+        })
+
         test('executionTimeMs reflects async duration', async () => {
             const store = createMockStore({ count: 0 })
             const { logger, calls } = createMockLogger()
