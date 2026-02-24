@@ -493,6 +493,15 @@ export interface IPostHog {
   withContext<T>(data: Partial<ContextData>, fn: () => T, options?: ContextOptions): T
 
   /**
+   * @description Set context without a callback wrapper. Must be called in the same
+   * async scope that makes PostHog calls. Prefer `withContext()` when you can wrap
+   * code in a callback.
+   * @param data Context data to apply (distinctId, sessionId, properties)
+   * @param options Context options (fresh)
+   */
+  enterContext(data: Partial<ContextData>, options?: ContextOptions): void
+
+  /**
    * @description Get the current context data.
    * @returns The current context data, or undefined if no context is set
    */

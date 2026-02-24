@@ -1513,6 +1513,24 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * Set context without a callback wrapper.
+   *
+   * Uses `AsyncLocalStorage.enterWith()` to attach context to the current
+   * async execution context. The context lives until that async context ends.
+   *
+   * Must be called in the same async scope that makes PostHog calls.
+   * Calling this outside a request-scoped async context will leak context
+   * across unrelated work. Prefer `withContext()` when you can wrap code
+   * in a callback — it creates an isolated scope that cleans up automatically.
+   *
+   * @param data - Context data to apply (distinctId, sessionId, properties)
+   * @param options - Context options (fresh: true to start with clean context instead of inheriting)
+   */
+  enterContext(data: Partial<ContextData>, options?: ContextOptions): void {
+    this.context?.enter(data as ContextData, options)
+  }
+
+  /**
    * Shutdown the PostHog client gracefully.
    *
    * @example
