@@ -194,7 +194,10 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
   return inputs
 }
 
-const mapVercelOutput = (result: LanguageModelContent[]): PostHogInput[] => {
+const mapVercelOutput = (result: LanguageModelContent[] | undefined): PostHogInput[] => {
+  if (!result || !Array.isArray(result)) {
+    return []
+  }
   const content: OutputContentItem[] = result.map((item) => {
     if (item.type === 'text') {
       return { type: 'text', text: truncate(item.text) }
