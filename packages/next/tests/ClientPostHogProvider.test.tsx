@@ -9,9 +9,23 @@ jest.mock('posthog-js/react', () => ({
     PostHogProvider: (props: any) => mockPostHogProvider(props),
 }))
 
+import posthogJs from 'posthog-js'
+
+jest.mock('posthog-js', () => ({
+    __esModule: true,
+    default: {
+        __loaded: false,
+        init: jest.fn(),
+    },
+}))
+
+const mockPostHogJs = posthogJs as jest.Mocked<typeof posthogJs> & { __loaded: boolean }
+
 describe('ClientPostHogProvider', () => {
     beforeEach(() => {
         mockPostHogProvider.mockClear()
+        ;(mockPostHogJs.init as jest.Mock).mockClear()
+        mockPostHogJs.__loaded = false
     })
 
     it('renders children', () => {
@@ -23,18 +37,24 @@ describe('ClientPostHogProvider', () => {
         expect(screen.getByTestId('child')).toBeInTheDocument()
     })
 
-    it('passes apiKey and options to upstream provider', () => {
+    it('calls init with apiKey and options', () => {
         const options = { api_host: 'https://custom.posthog.com' }
         render(
             <ClientPostHogProvider apiKey="phc_test123" options={options}>
                 <div>Child</div>
             </ClientPostHogProvider>
         )
+        expect(mockPostHogJs.init).toHaveBeenCalledWith('phc_test123', options)
+    })
+
+    it('passes client to upstream provider', () => {
+        render(
+            <ClientPostHogProvider apiKey="phc_test123">
+                <div>Child</div>
+            </ClientPostHogProvider>
+        )
         expect(mockPostHogProvider).toHaveBeenCalledWith(
-            expect.objectContaining({
-                apiKey: 'phc_test123',
-                options: expect.objectContaining({ api_host: 'https://custom.posthog.com' }),
-            })
+            expect.objectContaining({ client: mockPostHogJs })
         )
     })
 
@@ -49,13 +69,7 @@ describe('ClientPostHogProvider', () => {
                 <div>Child</div>
             </ClientPostHogProvider>
         )
-        expect(mockPostHogProvider).toHaveBeenCalledWith(
-            expect.objectContaining({
-                options: expect.objectContaining({
-                    bootstrap,
-                }),
-            })
-        )
+        expect(mockPostHogJs.init).toHaveBeenCalledWith('phc_test123', { bootstrap })
     })
 
     it('merges bootstrap with existing options without overwriting', () => {
@@ -66,12 +80,11 @@ describe('ClientPostHogProvider', () => {
                 <div>Child</div>
             </ClientPostHogProvider>
         )
-        expect(mockPostHogProvider).toHaveBeenCalledWith(
+        expect(mockPostHogJs.init).toHaveBeenCalledWith(
+            'phc_test123',
             expect.objectContaining({
-                options: expect.objectContaining({
-                    api_host: 'https://custom.posthog.com',
-                    bootstrap,
-                }),
+                api_host: 'https://custom.posthog.com',
+                bootstrap,
             })
         )
     })
@@ -89,17 +102,26 @@ describe('ClientPostHogProvider', () => {
                 <div>Child</div>
             </ClientPostHogProvider>
         )
-        expect(mockPostHogProvider).toHaveBeenCalledWith(
+        expect(mockPostHogJs.init).toHaveBeenCalledWith(
+            'phc_test123',
             expect.objectContaining({
-                options: expect.objectContaining({
-                    bootstrap: expect.objectContaining({
-                        sessionID: 'sess_123',
-                        distinctID: 'user_abc',
-                        featureFlags: { 'flag-a': true },
-                    }),
+                bootstrap: expect.objectContaining({
+                    sessionID: 'sess_123',
+                    distinctID: 'user_abc',
+                    featureFlags: { 'flag-a': true },
                 }),
             })
         )
+    })
+
+    it('does not call init when already loaded', () => {
+        mockPostHogJs.__loaded = true
+        render(
+            <ClientPostHogProvider apiKey="phc_test123">
+                <div>Child</div>
+            </ClientPostHogProvider>
+        )
+        expect(mockPostHogJs.init).not.toHaveBeenCalled()
     })
 
     it('throws when apiKey is empty', () => {
