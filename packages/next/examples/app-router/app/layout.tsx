@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import { Suspense } from 'react'
 import { PostHogProvider, PostHogPageView } from '@posthog/next'
 import { Nav } from './components/Nav'
 import { ConsentBanner } from './components/ConsentBanner'
@@ -19,9 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     options={{ api_host: '/ingest' }}
                     bootstrapFlags
                 >
-                    <Suspense fallback={null}>
-                        <PostHogPageView />
-                    </Suspense>
+                    <PostHogPageView />
                     <Nav />
                     <main className="max-w-4xl mx-auto px-4 py-8">{children}</main>
                     <ConsentBanner />
