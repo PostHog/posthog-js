@@ -15,21 +15,14 @@ jest.mock('next/headers', () => ({
     cookies: jest.fn(),
 }))
 
-// Mock PostHogServer
-const mockGetAllFlags = jest.fn()
-const mockGetAllFlagsAndPayloads = jest.fn()
-const mockGetDistinctId = jest.fn()
+// Mock nodeClientCache — the mock fn must be declared with `var` so it's
+// hoisted and available inside the jest.mock factory (which Jest hoists above
+// `const`/`let` declarations).
+var mockGetAllFlagsAndPayloads = jest.fn()
 
-jest.mock('../src/server/PostHogServer', () => ({
-    PostHogServer: jest.fn().mockImplementation(() => ({
-        getClient: jest.fn().mockReturnValue({
-            getDistinctId: mockGetDistinctId,
-        }),
-        getClientForDistinctId: jest.fn().mockReturnValue({
-            getAllFlags: mockGetAllFlags,
-            getAllFlagsAndPayloads: mockGetAllFlagsAndPayloads,
-            getDistinctId: mockGetDistinctId,
-        }),
+jest.mock('../src/server/nodeClientCache', () => ({
+    getOrCreateNodeClient: jest.fn().mockImplementation(() => ({
+        getAllFlagsAndPayloads: (...args: any[]) => mockGetAllFlagsAndPayloads(...args),
     })),
 }))
 
@@ -243,12 +236,8 @@ describe('PostHogProvider', () => {
         }
 
         beforeEach(() => {
-            mockGetAllFlags.mockReset()
             mockGetAllFlagsAndPayloads.mockReset()
-            mockGetDistinctId.mockReset()
 
-            mockGetDistinctId.mockReturnValue('user_abc')
-            mockGetAllFlags.mockResolvedValue({ 'flag-1': true, 'flag-2': 'variant-a' })
             mockGetAllFlagsAndPayloads.mockResolvedValue({
                 featureFlags: { 'flag-1': true },
                 featureFlagPayloads: { 'flag-1': { color: 'blue' } },
@@ -265,7 +254,7 @@ describe('PostHogProvider', () => {
             })
             render(element)
 
-            expect(mockGetAllFlagsAndPayloads).toHaveBeenCalledWith({})
+            expect(mockGetAllFlagsAndPayloads).toHaveBeenCalledWith('user_abc', {})
             expect(mockClientProvider).toHaveBeenCalledWith(
                 expect.objectContaining({
                     bootstrap: expect.objectContaining({
@@ -284,7 +273,7 @@ describe('PostHogProvider', () => {
             })
             render(element)
 
-            expect(mockGetAllFlagsAndPayloads).toHaveBeenCalledWith({ flagKeys: ['flag-1'] })
+            expect(mockGetAllFlagsAndPayloads).toHaveBeenCalledWith('user_abc', { flagKeys: ['flag-1'] })
         })
 
         it('always includes payloads in bootstrap', async () => {
