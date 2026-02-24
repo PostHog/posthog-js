@@ -141,8 +141,9 @@ export class PostHogPersistence {
     /**
      * Check if the feature flag cache is stale based on the configured TTL.
      * @param ttl Optional TTL override (uses config value if not provided)
+     * @internal
      */
-    isFeatureFlagCacheStale(ttl?: number): boolean {
+    _isFeatureFlagCacheStale(ttl?: number): boolean {
         const effectiveTtl = ttl ?? this._config.feature_flag_cache_ttl_ms
         if (!effectiveTtl || effectiveTtl <= 0) {
             return false
@@ -158,7 +159,7 @@ export class PostHogPersistence {
         each(this.props, (v, k) => {
             if (k === ENABLED_FEATURE_FLAGS && isObject(v)) {
                 // Skip $feature/ properties if cache is stale
-                if (!this.isFeatureFlagCacheStale()) {
+                if (!this._isFeatureFlagCacheStale()) {
                     const keys = Object.keys(v)
                     for (let i = 0; i < keys.length; i++) {
                         p[`$feature/${keys[i]}`] = v[keys[i]]

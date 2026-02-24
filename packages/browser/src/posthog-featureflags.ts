@@ -192,6 +192,7 @@ export class PostHogFeatureFlags {
     private _reloadDebouncer?: any
     private _flagsLoadedFromRemote: boolean = false
     private _hasLoggedDeprecationWarning: boolean = false
+    private _staleCacheRefreshTriggered: boolean = false
 
     constructor(private _instance: PostHog) {
         this.featureFlagEventHandlers = []
@@ -202,9 +203,26 @@ export class PostHogFeatureFlags {
      */
     private _isCacheStale(): boolean {
         return (
-            this._instance.persistence?.isFeatureFlagCacheStale(this._instance.config.feature_flag_cache_ttl_ms) ??
+            this._instance.persistence?._isFeatureFlagCacheStale(this._instance.config.feature_flag_cache_ttl_ms) ??
             false
         )
+    }
+
+    /**
+     * Triggers a debounced reload when cache staleness is first detected.
+     * Returns true if cache is stale, false otherwise.
+     */
+    private _checkAndTriggerStaleRefresh(): boolean {
+        if (!this._isCacheStale()) {
+            return false
+        }
+        // Only trigger refresh once per stale period
+        if (!this._staleCacheRefreshTriggered && !this._requestInFlight) {
+            this._staleCacheRefreshTriggered = true
+            logger.warn('Feature flag cache is stale, triggering refresh...')
+            this.reloadFeatureFlags()
+        }
+        return true
     }
 
     private _getValidEvaluationEnvironments(): string[] {
@@ -569,13 +587,8 @@ export class PostHogFeatureFlags {
             logger.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
-        // Check if cache is stale based on configured TTL
-        if (this._isCacheStale()) {
-            logger.warn(
-                'getFeatureFlag for key "' +
-                    key +
-                    '" returning undefined. Feature flag cache is stale (older than configured TTL).'
-            )
+        // Check if cache is stale and trigger refresh if needed
+        if (this._checkAndTriggerStaleRefresh()) {
             return undefined
         }
         const result = this.getFeatureFlagResult(key, options)
@@ -643,13 +656,8 @@ export class PostHogFeatureFlags {
             logger.warn('getFeatureFlagResult for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
-        // Check if cache is stale based on configured TTL
-        if (this._isCacheStale()) {
-            logger.warn(
-                'getFeatureFlagResult for key "' +
-                    key +
-                    '" returning undefined. Feature flag cache is stale (older than configured TTL).'
-            )
+        // Check if cache is stale and trigger refresh if needed
+        if (this._checkAndTriggerStaleRefresh()) {
             return undefined
         }
 
@@ -837,6 +845,12 @@ export class PostHogFeatureFlags {
         const currentFlagPayloads = this.getFlagPayloads()
         const currentFlagDetails = this.getFlagsWithDetails()
         parseFlagsResponse(response, this._instance.persistence, currentFlags, currentFlagPayloads, currentFlagDetails)
+
+        // Reset stale refresh flag when we successfully receive fresh flags
+        if (!errorsLoading) {
+            this._staleCacheRefreshTriggered = false
+        }
+
         this._fireFeatureFlagsCallbacks(errorsLoading)
     }
 

@@ -3626,5 +3626,67 @@ describe('$feature_flag_error tracking', () => {
 
             expect(featureFlags.getFeatureFlagResult('beta-feature')).toBeUndefined()
         })
+
+        it('should trigger reloadFeatureFlags when cache is stale', () => {
+            const reloadSpy = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            // Set TTL to 1 hour
+            instance.config.feature_flag_cache_ttl_ms = 60 * 60 * 1000
+
+            // Set evaluated_at to 2 hours ago (stale)
+            const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000
+            instance.persistence.register({
+                $feature_flag_evaluated_at: twoHoursAgo,
+            })
+
+            featureFlags._hasLoadedFlags = true
+
+            // First call should trigger reload
+            featureFlags.getFeatureFlag('beta-feature')
+            expect(reloadSpy).toHaveBeenCalledTimes(1)
+
+            // Second call should NOT trigger another reload (already triggered)
+            featureFlags.getFeatureFlag('beta-feature')
+            expect(reloadSpy).toHaveBeenCalledTimes(1)
+
+            reloadSpy.mockRestore()
+        })
+
+        it('should reset staleCacheRefreshTriggered after successful flag load', () => {
+            const reloadSpy = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            // Set TTL to 1 hour
+            instance.config.feature_flag_cache_ttl_ms = 60 * 60 * 1000
+
+            // Set evaluated_at to 2 hours ago (stale)
+            const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000
+            instance.persistence.register({
+                $feature_flag_evaluated_at: twoHoursAgo,
+            })
+
+            featureFlags._hasLoadedFlags = true
+
+            // First stale detection triggers reload
+            featureFlags.getFeatureFlag('beta-feature')
+            expect(reloadSpy).toHaveBeenCalledTimes(1)
+
+            // Simulate successful flag load with fresh timestamp
+            const now = Date.now()
+            instance.persistence.register({
+                $feature_flag_evaluated_at: now,
+            })
+            featureFlags.receivedFeatureFlags({ featureFlags: { 'beta-feature': true } }, false)
+
+            // Make cache stale again
+            instance.persistence.register({
+                $feature_flag_evaluated_at: twoHoursAgo,
+            })
+
+            // Should trigger reload again since flag was reset
+            featureFlags.getFeatureFlag('beta-feature')
+            expect(reloadSpy).toHaveBeenCalledTimes(2)
+
+            reloadSpy.mockRestore()
+        })
     })
 })
