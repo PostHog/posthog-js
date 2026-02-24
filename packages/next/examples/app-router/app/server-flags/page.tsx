@@ -1,8 +1,6 @@
 import Link from 'next/link'
 import { getPostHog } from '@posthog/next/server'
 
-export const dynamic = 'force-dynamic'
-
 export default async function ServerFlagsPage() {
     const posthog = await getPostHog()
     const allFlags = await posthog.getAllFlags()
