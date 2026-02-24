@@ -5,7 +5,7 @@ import type { BootstrapConfig } from '../client/ClientPostHogProvider'
 import { cookies } from 'next/headers'
 import { getOrCreateNodeClient } from '../server/nodeClientCache'
 import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey } from '../shared/config'
-import { readPostHogCookie } from '../shared/cookie'
+import { readPostHogCookie, isOptedOut } from '../shared/cookie'
 
 type AllFlagsOptions = {
     groups?: Record<string, string>
@@ -120,6 +120,11 @@ async function evaluateFlags(
     bootstrapFlags: boolean | BootstrapFlagsConfig
 ): Promise<BootstrapConfig | undefined> {
     const cookieStore = await cookies()
+
+    if (isOptedOut(cookieStore, apiKey, options)) {
+        return undefined
+    }
+
     const cookieState = readPostHogCookie(cookieStore, apiKey)
     if (!cookieState) {
         return undefined

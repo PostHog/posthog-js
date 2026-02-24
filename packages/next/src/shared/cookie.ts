@@ -1,4 +1,4 @@
-import { uuidv7 } from '@posthog/core'
+import { uuidv7, isNoLike, isYesLike } from '@posthog/core'
 import { COOKIE_PREFIX, COOKIE_SUFFIX } from './constants'
 
 export interface PostHogCookieState {
@@ -105,4 +105,41 @@ export function parsePostHogCookie(cookieValue: string): PostHogCookieState | nu
     } catch {
         return null
     }
+}
+
+export interface ConsentCookieConfig {
+    consent_persistence_name?: string | null
+    opt_out_capturing_cookie_prefix?: string | null
+}
+
+const CONSENT_PREFIX = '__ph_opt_in_out_'
+
+export function getConsentCookieName(apiKey: string, config?: ConsentCookieConfig): string {
+    if (config?.consent_persistence_name) {
+        return config.consent_persistence_name
+    }
+    if (config?.opt_out_capturing_cookie_prefix) {
+        return config.opt_out_capturing_cookie_prefix + apiKey
+    }
+    return CONSENT_PREFIX + apiKey
+}
+
+export interface ConsentConfig extends ConsentCookieConfig {
+    opt_out_capturing_by_default?: boolean
+}
+
+export function isOptedOut(
+    cookies: { get(name: string): { value: string } | undefined },
+    apiKey: string,
+    config?: ConsentConfig
+): boolean {
+    const cookieName = getConsentCookieName(apiKey, config)
+    const cookie = cookies.get(cookieName)
+
+    if (cookie) {
+        return isNoLike(cookie.value)
+    }
+
+    // No consent cookie means pending — defer to config
+    return config?.opt_out_capturing_by_default ?? false
 }
