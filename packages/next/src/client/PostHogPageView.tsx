@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { usePostHog } from 'posthog-js/react'
 
@@ -9,6 +9,9 @@ import { usePostHog } from 'posthog-js/react'
  *
  * Place this component inside your `PostHogProvider` (typically in `app/layout.tsx`).
  * It will automatically capture a `$pageview` event whenever the route changes.
+ *
+ * Includes its own Suspense boundary (required by `useSearchParams()`), so you
+ * don't need to wrap it in one yourself.
  *
  * @example
  * ```tsx
@@ -30,6 +33,14 @@ import { usePostHog } from 'posthog-js/react'
  * ```
  */
 export function PostHogPageView() {
+    return (
+        <Suspense fallback={null}>
+            <PageViewTracker />
+        </Suspense>
+    )
+}
+
+function PageViewTracker() {
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const posthog = usePostHog()
