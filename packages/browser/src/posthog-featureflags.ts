@@ -22,6 +22,7 @@ import {
     PERSISTENCE_EARLY_ACCESS_FEATURES,
     PERSISTENCE_FEATURE_FLAG_DETAILS,
     PERSISTENCE_FEATURE_FLAG_ERRORS,
+    PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     ENABLED_FEATURE_FLAGS,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
@@ -57,7 +58,6 @@ const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
 const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
 const PERSISTENCE_FEATURE_FLAG_REQUEST_ID = '$feature_flag_request_id'
-const PERSISTENCE_FEATURE_FLAG_EVALUATED_AT = '$feature_flag_evaluated_at'
 
 export const filterActiveFeatureFlags = (featureFlags?: Record<string, string | boolean>) => {
     const activeFeatureFlags: Record<string, string | boolean> = {}
@@ -195,6 +195,29 @@ export class PostHogFeatureFlags {
 
     constructor(private _instance: PostHog) {
         this.featureFlagEventHandlers = []
+    }
+
+    /**
+     * Check if the feature flag cache is stale based on the configured TTL.
+     * Returns true if:
+     * - A TTL is configured (feature_flag_cache_ttl_ms > 0)
+     * - AND the cache has an evaluatedAt timestamp
+     * - AND the cache is older than the TTL
+     */
+    private _isCacheStale(): boolean {
+        const ttl = this._instance.config.feature_flag_cache_ttl_ms
+        if (!ttl || ttl <= 0) {
+            return false // TTL disabled, cache never considered stale
+        }
+
+        const evaluatedAt = this._instance.get_property(PERSISTENCE_FEATURE_FLAG_EVALUATED_AT)
+        if (!evaluatedAt) {
+            // No timestamp means we've never successfully loaded flags
+            // Treat as stale if TTL is configured
+            return true
+        }
+
+        return Date.now() - evaluatedAt > ttl
     }
 
     private _getValidEvaluationEnvironments(): string[] {
@@ -559,6 +582,15 @@ export class PostHogFeatureFlags {
             logger.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
+        // Check if cache is stale based on configured TTL
+        if (this._isCacheStale()) {
+            logger.warn(
+                'getFeatureFlag for key "' +
+                    key +
+                    '" returning undefined. Feature flag cache is stale (older than configured TTL).'
+            )
+            return undefined
+        }
         const result = this.getFeatureFlagResult(key, options)
         return result?.variant ?? result?.enabled
     }
@@ -622,6 +654,15 @@ export class PostHogFeatureFlags {
         }
         if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
             logger.warn('getFeatureFlagResult for key "' + key + '" failed. Feature flags didn\'t load in time.')
+            return undefined
+        }
+        // Check if cache is stale based on configured TTL
+        if (this._isCacheStale()) {
+            logger.warn(
+                'getFeatureFlagResult for key "' +
+                    key +
+                    '" returning undefined. Feature flag cache is stale (older than configured TTL).'
+            )
             return undefined
         }
 

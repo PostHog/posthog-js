@@ -10,6 +10,7 @@ import {
     INITIAL_PERSON_INFO,
     INITIAL_REFERRER_INFO,
     PERSISTENCE_RESERVED_PROPERTIES,
+    PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
 } from './constants'
 
 import { isUndefined } from '@posthog/core'
@@ -139,12 +140,26 @@ export class PostHogPersistence {
 
     properties(): Properties {
         const p: Properties = {}
+
+        // Check if feature flag cache is stale based on TTL config
+        const ttl = this._config.feature_flag_cache_ttl_ms
+        let isCacheStale = false
+        if (ttl && ttl > 0) {
+            const evaluatedAt = this.props[PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]
+            if (!evaluatedAt || Date.now() - evaluatedAt > ttl) {
+                isCacheStale = true
+            }
+        }
+
         // Filter out reserved properties
-        each(this.props, function (v, k) {
+        each(this.props, (v, k) => {
             if (k === ENABLED_FEATURE_FLAGS && isObject(v)) {
-                const keys = Object.keys(v)
-                for (let i = 0; i < keys.length; i++) {
-                    p[`$feature/${keys[i]}`] = v[keys[i]]
+                // Skip $feature/ properties if cache is stale
+                if (!isCacheStale) {
+                    const keys = Object.keys(v)
+                    for (let i = 0; i < keys.length; i++) {
+                        p[`$feature/${keys[i]}`] = v[keys[i]]
+                    }
                 }
             } else if (!include(PERSISTENCE_RESERVED_PROPERTIES, k)) {
                 p[k] = v

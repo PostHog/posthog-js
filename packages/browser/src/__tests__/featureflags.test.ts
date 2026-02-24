@@ -3517,4 +3517,114 @@ describe('$feature_flag_error tracking', () => {
             })
         )
     })
+
+    describe('feature flag cache TTL', () => {
+        beforeEach(() => {
+            // Set up flags in persistence for TTL tests
+            instance.persistence.register({
+                $enabled_feature_flags: {
+                    'beta-feature': true,
+                    'alpha-feature-2': true,
+                    'multivariate-flag': 'variant-1',
+                },
+            })
+        })
+
+        it('should return undefined when cache is stale and TTL is configured', () => {
+            // Set TTL to 1 hour
+            instance.config.feature_flag_cache_ttl_ms = 60 * 60 * 1000
+
+            // Set evaluated_at to 2 hours ago (stale)
+            const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000
+            instance.persistence.register({
+                $feature_flag_evaluated_at: twoHoursAgo,
+            })
+
+            featureFlags._hasLoadedFlags = true
+
+            expect(featureFlags.getFeatureFlag('beta-feature')).toBeUndefined()
+            expect(mockWarn).toHaveBeenCalledWith(
+                '[PostHog.js] [FeatureFlags]',
+                expect.stringContaining('Feature flag cache is stale')
+            )
+        })
+
+        it('should return flag value when cache is fresh', () => {
+            // Set TTL to 1 hour
+            instance.config.feature_flag_cache_ttl_ms = 60 * 60 * 1000
+
+            // Set evaluated_at to 30 minutes ago (fresh)
+            const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000
+            instance.persistence.register({
+                $feature_flag_evaluated_at: thirtyMinutesAgo,
+            })
+
+            featureFlags._hasLoadedFlags = true
+
+            expect(featureFlags.getFeatureFlag('beta-feature')).toEqual(true)
+        })
+
+        it('should return flag value when TTL is not configured (default behavior)', () => {
+            // No TTL configured (default)
+            instance.config.feature_flag_cache_ttl_ms = undefined
+
+            // Set evaluated_at to a long time ago
+            const oneYearAgo = Date.now() - 365 * 24 * 60 * 60 * 1000
+            instance.persistence.register({
+                $feature_flag_evaluated_at: oneYearAgo,
+            })
+
+            featureFlags._hasLoadedFlags = true
+
+            // Should still return flag value since TTL is not configured
+            expect(featureFlags.getFeatureFlag('beta-feature')).toEqual(true)
+        })
+
+        it('should return flag value when TTL is 0 (disabled)', () => {
+            // TTL explicitly disabled
+            instance.config.feature_flag_cache_ttl_ms = 0
+
+            // Set evaluated_at to a long time ago
+            const oneYearAgo = Date.now() - 365 * 24 * 60 * 60 * 1000
+            instance.persistence.register({
+                $feature_flag_evaluated_at: oneYearAgo,
+            })
+
+            featureFlags._hasLoadedFlags = true
+
+            // Should still return flag value since TTL is disabled
+            expect(featureFlags.getFeatureFlag('beta-feature')).toEqual(true)
+        })
+
+        it('should treat missing evaluated_at as stale when TTL is configured', () => {
+            // Set TTL to 1 hour
+            instance.config.feature_flag_cache_ttl_ms = 60 * 60 * 1000
+
+            // No evaluated_at set
+            instance.persistence.unregister('$feature_flag_evaluated_at')
+
+            featureFlags._hasLoadedFlags = true
+
+            expect(featureFlags.getFeatureFlag('beta-feature')).toBeUndefined()
+            expect(mockWarn).toHaveBeenCalledWith(
+                '[PostHog.js] [FeatureFlags]',
+                expect.stringContaining('Feature flag cache is stale')
+            )
+        })
+
+        it('should return undefined for getFeatureFlagResult when cache is stale', () => {
+            // Set TTL to 1 hour
+            instance.config.feature_flag_cache_ttl_ms = 60 * 60 * 1000
+
+            // Set evaluated_at to 2 hours ago (stale)
+            const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000
+            instance.persistence.register({
+                $feature_flag_evaluated_at: twoHoursAgo,
+            })
+
+            featureFlags._hasLoadedFlags = true
+
+            expect(featureFlags.getFeatureFlagResult('beta-feature')).toBeUndefined()
+        })
+    })
 })
