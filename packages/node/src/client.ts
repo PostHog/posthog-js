@@ -26,6 +26,7 @@ import {
   PostHogOptions,
   SendFeatureFlagsOptions,
   FlagEvaluationOptions,
+  AllFlagsOptions,
 } from './types'
 import {
   FeatureFlagsPoller,
@@ -612,6 +613,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     })
   }
 
+  private _resolveDistinctId<T>(
+    distinctIdOrOptions: string | T | undefined,
+    options: T | undefined
+  ): { distinctId: string | undefined; options: T | undefined } {
+    if (typeof distinctIdOrOptions === 'string') {
+      return { distinctId: distinctIdOrOptions, options }
+    }
+    return { distinctId: this.context?.get()?.distinctId, options: distinctIdOrOptions }
+  }
+
   /**
    * Internal method that handles feature flag evaluation with full details.
    * Used by getFeatureFlag, getFeatureFlagPayload, and getFeatureFlagResult.
@@ -1021,16 +1032,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     distinctIdOrOptions?: string | FlagEvaluationOptions,
     options?: FlagEvaluationOptions
   ): Promise<FeatureFlagResult | undefined> {
-    let resolvedDistinctId: string | undefined
-    let resolvedOptions: FlagEvaluationOptions | undefined
-
-    if (typeof distinctIdOrOptions === 'string') {
-      resolvedDistinctId = distinctIdOrOptions
-      resolvedOptions = options
-    } else {
-      resolvedDistinctId = this.context?.get()?.distinctId
-      resolvedOptions = distinctIdOrOptions
-    }
+    const { distinctId: resolvedDistinctId, options: resolvedOptions } = this._resolveDistinctId(
+      distinctIdOrOptions,
+      options
+    )
 
     if (!resolvedDistinctId) {
       this._logger.warn('[PostHog] distinctId is required — pass it explicitly or use withContext()')
@@ -1172,18 +1177,24 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param options - Optional configuration for flag evaluation
    * @returns Promise that resolves to a record of flag keys and their values
    */
+  async getAllFlags(options?: AllFlagsOptions): Promise<Record<string, FeatureFlagValue>>
+  async getAllFlags(distinctId: string, options?: AllFlagsOptions): Promise<Record<string, FeatureFlagValue>>
   async getAllFlags(
-    distinctId: string,
-    options?: {
-      groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
-      onlyEvaluateLocally?: boolean
-      disableGeoip?: boolean
-      flagKeys?: string[]
-    }
+    distinctIdOrOptions?: string | AllFlagsOptions,
+    options?: AllFlagsOptions
   ): Promise<Record<string, FeatureFlagValue>> {
-    const response = await this.getAllFlagsAndPayloads(distinctId, options)
+    const { distinctId: resolvedDistinctId, options: resolvedOptions } = this._resolveDistinctId(
+      distinctIdOrOptions,
+      options
+    )
+    if (!resolvedDistinctId) {
+      this._logger.warn(
+        '[PostHog] distinctId is required to get feature flags — pass it explicitly or use withContext()'
+      )
+      return {}
+    }
+
+    const response = await this.getAllFlagsAndPayloads(resolvedDistinctId, resolvedOptions)
     return response.featureFlags || {}
   }
 
@@ -1220,22 +1231,28 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param options - Optional configuration for flag evaluation
    * @returns Promise that resolves to flags and payloads
    */
+  async getAllFlagsAndPayloads(options?: AllFlagsOptions): Promise<PostHogFlagsAndPayloadsResponse>
+  async getAllFlagsAndPayloads(distinctId: string, options?: AllFlagsOptions): Promise<PostHogFlagsAndPayloadsResponse>
   async getAllFlagsAndPayloads(
-    distinctId: string,
-    options?: {
-      groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
-      onlyEvaluateLocally?: boolean
-      disableGeoip?: boolean
-      flagKeys?: string[]
-    }
+    distinctIdOrOptions?: string | AllFlagsOptions,
+    options?: AllFlagsOptions
   ): Promise<PostHogFlagsAndPayloadsResponse> {
-    const { groups, disableGeoip, flagKeys } = options || {}
-    let { onlyEvaluateLocally, personProperties, groupProperties } = options || {}
+    const { distinctId: resolvedDistinctId, options: resolvedOptions } = this._resolveDistinctId(
+      distinctIdOrOptions,
+      options
+    )
+    if (!resolvedDistinctId) {
+      this._logger.warn(
+        '[PostHog] distinctId is required to get feature flags and payloads — pass it explicitly or use withContext()'
+      )
+      return { featureFlags: {}, featureFlagPayloads: {} }
+    }
+
+    const { groups, disableGeoip, flagKeys } = resolvedOptions || {}
+    let { onlyEvaluateLocally, personProperties, groupProperties } = resolvedOptions || {}
 
     const adjustedProperties = this.addLocalPersonAndGroupProperties(
-      distinctId,
+      resolvedDistinctId,
       groups,
       personProperties,
       groupProperties
@@ -1244,7 +1261,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     personProperties = adjustedProperties.allPersonProperties
     groupProperties = adjustedProperties.allGroupProperties
     const evaluationContext = this.createFeatureFlagEvaluationContext(
-      distinctId,
+      resolvedDistinctId,
       groups,
       personProperties,
       groupProperties

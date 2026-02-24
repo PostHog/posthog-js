@@ -4,6 +4,7 @@ import type {
   JsonType,
   PostHogFetchOptions,
   PostHogFetchResponse,
+  PostHogFlagsAndPayloadsResponse,
 } from '@posthog/core'
 import { ContextData, ContextOptions } from './extensions/context/types'
 
@@ -76,13 +77,19 @@ export type OverrideFeatureFlagsOptions =
   | Record<string, FeatureFlagValue>
   | FeatureFlagOverrideOptions
 
-export type FlagEvaluationOptions = {
+export type BaseFlagEvaluationOptions = {
   groups?: Record<string, string>
   personProperties?: Record<string, string>
   groupProperties?: Record<string, Record<string, string>>
   onlyEvaluateLocally?: boolean
-  sendFeatureFlagEvents?: boolean
   disableGeoip?: boolean
+}
+export type FlagEvaluationOptions = BaseFlagEvaluationOptions & {
+  sendFeatureFlagEvents?: boolean
+}
+
+export type AllFlagsOptions = BaseFlagEvaluationOptions & {
+  flagKeys?: string[]
 }
 
 export type FeatureFlagOverrideOptions = {
@@ -417,6 +424,34 @@ export interface IPostHog {
       onlyEvaluateLocally?: boolean
     }
   ): Promise<JsonType | undefined>
+
+  /**
+   * @description Get all feature flag values using distinctId from withContext().
+   */
+  getAllFlags(options?: AllFlagsOptions): Promise<Record<string, FeatureFlagValue>>
+
+  /**
+   * @description Get all feature flag values for a specific user.
+   *
+   * @param distinctId - The user's distinct ID
+   * @param options - Optional configuration for flag evaluation
+   * @returns Promise that resolves to a record of flag keys and their values
+   */
+  getAllFlags(distinctId: string, options?: AllFlagsOptions): Promise<Record<string, FeatureFlagValue>>
+
+  /**
+   * @description Get all feature flag values and payloads using distinctId from withContext().
+   */
+  getAllFlagsAndPayloads(options?: AllFlagsOptions): Promise<PostHogFlagsAndPayloadsResponse>
+
+  /**
+   * @description Get all feature flag values and payloads for a specific user.
+   *
+   * @param distinctId - The user's distinct ID
+   * @param options - Optional configuration for flag evaluation
+   * @returns Promise that resolves to flags and payloads
+   */
+  getAllFlagsAndPayloads(distinctId: string, options?: AllFlagsOptions): Promise<PostHogFlagsAndPayloadsResponse>
 
   /**
    * @description Get a feature flag result using distinctId from withContext().

@@ -384,5 +384,79 @@ describe('PostHog Context', () => {
       const body = JSON.parse((flagsCall?.[1] as any)?.body)
       expect(body.distinct_id).toBe('explicit-user')
     })
+
+    it('should return empty when calling getAllFlags without distinctId and no context', async () => {
+      mockedFetch.mockImplementation(apiImplementation({ decideFlags: { 'test-flag': true } }))
+
+      const result = await posthog.getAllFlags()
+
+      expect(result).toEqual({})
+    })
+
+    it('should use distinctId from context for getAllFlags', async () => {
+      mockedFetch.mockImplementation(apiImplementation({ decideFlags: { 'test-flag': 'variant-a' } }))
+
+      const result = await posthog.withContext({ distinctId: 'context-user' }, async () => {
+        return posthog.getAllFlags()
+      })
+
+      expect(result).toEqual({ 'test-flag': 'variant-a' })
+
+      const flagsCall = mockedFetch.mock.calls.find((c) => (c[0] as string).includes('/flags/'))
+      const body = JSON.parse((flagsCall?.[1] as any)?.body)
+      expect(body.distinct_id).toBe('context-user')
+    })
+
+    it('should prefer explicit distinctId over context for getAllFlags', async () => {
+      mockedFetch.mockImplementation(apiImplementation({ decideFlags: { 'test-flag': true } }))
+
+      await posthog.withContext({ distinctId: 'context-user' }, async () => {
+        await posthog.getAllFlags('explicit-user')
+      })
+
+      const flagsCall = mockedFetch.mock.calls.find((c) => (c[0] as string).includes('/flags/'))
+      const body = JSON.parse((flagsCall?.[1] as any)?.body)
+      expect(body.distinct_id).toBe('explicit-user')
+    })
+
+    it('should return empty when calling getAllFlagsAndPayloads without distinctId and no context', async () => {
+      mockedFetch.mockImplementation(apiImplementation({ decideFlags: { 'test-flag': true } }))
+
+      const result = await posthog.getAllFlagsAndPayloads()
+
+      expect(result).toEqual({ featureFlags: {}, featureFlagPayloads: {} })
+    })
+
+    it('should use distinctId from context for getAllFlagsAndPayloads', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          decideFlags: { 'test-flag': 'variant-a' },
+          flagsPayloads: { 'test-flag': { key: 'value' } },
+        })
+      )
+
+      const result = await posthog.withContext({ distinctId: 'context-user' }, async () => {
+        return posthog.getAllFlagsAndPayloads()
+      })
+
+      expect(result.featureFlags).toEqual({ 'test-flag': 'variant-a' })
+      expect(result.featureFlagPayloads).toEqual({ 'test-flag': { key: 'value' } })
+
+      const flagsCall = mockedFetch.mock.calls.find((c) => (c[0] as string).includes('/flags/'))
+      const body = JSON.parse((flagsCall?.[1] as any)?.body)
+      expect(body.distinct_id).toBe('context-user')
+    })
+
+    it('should prefer explicit distinctId over context for getAllFlagsAndPayloads', async () => {
+      mockedFetch.mockImplementation(apiImplementation({ decideFlags: { 'test-flag': true } }))
+
+      await posthog.withContext({ distinctId: 'context-user' }, async () => {
+        await posthog.getAllFlagsAndPayloads('explicit-user')
+      })
+
+      const flagsCall = mockedFetch.mock.calls.find((c) => (c[0] as string).includes('/flags/'))
+      const body = JSON.parse((flagsCall?.[1] as any)?.body)
+      expect(body.distinct_id).toBe('explicit-user')
+    })
   })
 })
