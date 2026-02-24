@@ -1,5 +1,11 @@
 # posthog-ai
 
+## 7.9.2
+
+### Patch Changes
+
+- [#3137](https://github.com/PostHog/posthog-js/pull/3137) [`7d92690`](https://github.com/PostHog/posthog-js/commit/7d926905db1be3072518c654ccec75554b0bbc8b) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates: - Updated dependency [`@langchain/core@^1.1.27` ↗︎](https://www.npmjs.com/package/@langchain/core/v/1.1.27) (from `^1.1.17`, in `dependencies`) (2026-02-24)
+
 ## 7.9.1
 
 ### Patch Changes
