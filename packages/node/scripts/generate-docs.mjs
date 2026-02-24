@@ -37,9 +37,9 @@ const NODE_TYPE_EXAMPLES = {
 const __dirname = import.meta.dirname
 
 const config = {
-  packageDir: path.resolve(__dirname, '..'), // packages/node
-  apiJsonPath: path.resolve(__dirname, '../docs/posthog-node.api.json'),
-  outputPath: path.resolve(__dirname, `../references/posthog-node-references-${version}.json`),
+  packageDir: path.resolve(import.meta.dirname, '..'), // packages/node
+  apiJsonPath: path.resolve(import.meta.dirname, '../docs/posthog-node.api.json'),
+  outputPath: path.resolve(import.meta.dirname, `../references/posthog-node-references-${version}.json`),
   version: version,
   id: NODE_SPEC_INFO.id,
   hogRef: HOG_REF,

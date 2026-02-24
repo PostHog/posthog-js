@@ -31,11 +31,12 @@ const isMethodDeprecated = hasDeprecatedBlock;
 /**
  * Collect all public methods from a class and its inheritance chain
  * @param {any} posthogClass - Starting class
+ * @param {string} rootClass - Root class name for constructor display
  * @returns {any[]} - Array of unique public methods
  */
 const collectMethodsWithInheritance = (posthogClass, rootClass) => {
     if (!posthogClass) return [];
-    
+
     const allMethods = new Map();
     const apiPackage = posthogClass.getAssociatedPackage();
     const inheritanceChain = getInheritanceChain(posthogClass, apiPackage);
