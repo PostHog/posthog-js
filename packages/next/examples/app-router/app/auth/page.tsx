@@ -6,7 +6,7 @@ import { usePostHog } from '@posthog/next'
 
 export default function AuthPage() {
     const posthog = usePostHog()
-    const [email, setEmail] = useState('')
+    const [email, setEmail] = useState('user@example.com')
     const [loggedInAs, setLoggedInAs] = useState<string | null>(() => {
         if (typeof window !== 'undefined') {
             return localStorage.getItem('posthog-example-user')

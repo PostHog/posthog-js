@@ -10,7 +10,7 @@ const demos = [
     {
         title: 'Server-Side Flags',
         href: '/server-flags',
-        description: 'Evaluate feature flags in server components using PostHogServer.',
+        description: 'Evaluate feature flags in server components using getPostHog().',
     },
     {
         title: 'Client Hooks',
