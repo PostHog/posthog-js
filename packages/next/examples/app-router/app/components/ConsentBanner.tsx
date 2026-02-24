@@ -7,14 +7,10 @@ type ConsentState = 'pending' | 'granted' | 'denied'
 
 export function ConsentBanner() {
     const posthog = usePostHog()
-    const [consent, setConsent] = useState<ConsentState>('pending')
+    const [consent, setConsent] = useState<ConsentState | null>(null)
 
     useEffect(() => {
-        if (posthog.has_opted_in_capturing()) {
-            setConsent('granted')
-        } else if (posthog.has_opted_out_capturing()) {
-            setConsent('denied')
-        }
+        setConsent(posthog.get_explicit_consent_status())
     }, [posthog])
 
     const accept = () => {
@@ -58,7 +54,7 @@ export function ConsentBanner() {
         )
     }
 
-    return (
+    return ( consent &&
         <div className="fixed bottom-4 right-4 z-50">
             <button
                 onClick={reset}
