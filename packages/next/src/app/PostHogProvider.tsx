@@ -3,10 +3,18 @@ import type { PostHogConfig } from 'posthog-js'
 import { ClientPostHogProvider } from '../client/ClientPostHogProvider'
 import type { BootstrapConfig } from '../client/ClientPostHogProvider'
 import { cookies } from 'next/headers'
-import { PostHogServer } from '../server/PostHogServer'
+import { getOrCreateNodeClient } from '../server/nodeClientCache'
 import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey } from '../shared/config'
 import { readPostHogCookie } from '../shared/cookie'
-import type { AllFlagsOptions } from '../shared/scoped-client'
+
+type AllFlagsOptions = {
+    groups?: Record<string, string>
+    personProperties?: Record<string, string>
+    groupProperties?: Record<string, Record<string, string>>
+    onlyEvaluateLocally?: boolean
+    disableGeoip?: boolean
+    flagKeys?: string[]
+}
 
 export interface BootstrapFlagsConfig {
     /** Specific flag keys to evaluate. If omitted, evaluates all flags. */
@@ -90,21 +98,6 @@ export async function PostHogProvider({ apiKey: apiKeyProp, options, bootstrapFl
     )
 }
 
-// Module-level cache for PostHogServer instances, keyed by "apiKey:host".
-// Avoids creating a new posthog-node client (with its poller and flush queue)
-// on every render.
-const serverCache = new Map<string, PostHogServer>()
-
-function getOrCreateServer(apiKey: string, host: string | undefined) {
-    const cacheKey = `${apiKey}:${host ?? ''}`
-    let server = serverCache.get(cacheKey)
-    if (!server) {
-        server = new PostHogServer(apiKey, { host })
-        serverCache.set(cacheKey, server)
-    }
-    return server
-}
-
 /**
  * React.cache-wrapped flag evaluation.
  *
@@ -115,10 +108,9 @@ function getOrCreateServer(apiKey: string, host: string | undefined) {
  */
 const cachedFetchFlags = React.cache(
     async (apiKey: string, host: string, distinctId: string, optionsJson: string) => {
-        const server = getOrCreateServer(apiKey, host || undefined)
-        const client = server.getClientForDistinctId(distinctId)
+        const client = getOrCreateNodeClient(apiKey, host ? { host } : undefined)
         const options = JSON.parse(optionsJson)
-        return client.getAllFlagsAndPayloads(options)
+        return client.getAllFlagsAndPayloads(distinctId, options)
     }
 )
 
