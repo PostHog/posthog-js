@@ -199,25 +199,13 @@ export class PostHogFeatureFlags {
 
     /**
      * Check if the feature flag cache is stale based on the configured TTL.
-     * Returns true if:
-     * - A TTL is configured (feature_flag_cache_ttl_ms > 0)
-     * - AND the cache has an evaluatedAt timestamp
-     * - AND the cache is older than the TTL
      */
     private _isCacheStale(): boolean {
-        const ttl = this._instance.config.feature_flag_cache_ttl_ms
-        if (!ttl || ttl <= 0) {
-            return false // TTL disabled, cache never considered stale
-        }
-
-        const evaluatedAt = this._instance.get_property(PERSISTENCE_FEATURE_FLAG_EVALUATED_AT)
-        if (!evaluatedAt) {
-            // No timestamp means we've never successfully loaded flags
-            // Treat as stale if TTL is configured
-            return true
-        }
-
-        return Date.now() - evaluatedAt > ttl
+        return (
+            this._instance.persistence?.isFeatureFlagCacheStale(
+                this._instance.config.feature_flag_cache_ttl_ms
+            ) ?? false
+        )
     }
 
     private _getValidEvaluationEnvironments(): string[] {
