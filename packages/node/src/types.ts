@@ -76,6 +76,15 @@ export type OverrideFeatureFlagsOptions =
   | Record<string, FeatureFlagValue>
   | FeatureFlagOverrideOptions
 
+export type FlagEvaluationOptions = {
+  groups?: Record<string, string>
+  personProperties?: Record<string, string>
+  groupProperties?: Record<string, Record<string, string>>
+  onlyEvaluateLocally?: boolean
+  sendFeatureFlagEvents?: boolean
+  disableGeoip?: boolean
+}
+
 export type FeatureFlagOverrideOptions = {
   /**
    * Flag overrides. Can be:
@@ -410,6 +419,11 @@ export interface IPostHog {
   ): Promise<JsonType | undefined>
 
   /**
+   * @description Get a feature flag result using distinctId from withContext().
+   */
+  getFeatureFlagResult(key: string, options?: FlagEvaluationOptions): Promise<FeatureFlagResult | undefined>
+
+  /**
    * @description Get the result of evaluating a feature flag, including its value and payload.
    * This is more efficient than calling getFeatureFlag and getFeatureFlagPayload separately when you need both.
    *
@@ -431,14 +445,7 @@ export interface IPostHog {
   getFeatureFlagResult(
     key: string,
     distinctId: string,
-    options?: {
-      groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
-      onlyEvaluateLocally?: boolean
-      sendFeatureFlagEvents?: boolean
-      disableGeoip?: boolean
-    }
+    options?: FlagEvaluationOptions
   ): Promise<FeatureFlagResult | undefined>
 
   /**

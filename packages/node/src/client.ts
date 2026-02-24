@@ -1,7 +1,6 @@
 import { version } from './version'
 
 import {
-  FeatureFlagDetail,
   FeatureFlagValue,
   isBlockedUA,
   isPlainObject,
@@ -26,6 +25,7 @@ import {
   OverrideFeatureFlagsOptions,
   PostHogOptions,
   SendFeatureFlagsOptions,
+  FlagEvaluationOptions,
 } from './types'
 import {
   FeatureFlagsPoller,
@@ -1010,21 +1010,36 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param options - Optional configuration for flag evaluation
    * @returns Promise that resolves to the flag result or undefined
    */
+  async getFeatureFlagResult(key: string, options?: FlagEvaluationOptions): Promise<FeatureFlagResult | undefined>
   async getFeatureFlagResult(
     key: string,
     distinctId: string,
-    options?: {
-      groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
-      onlyEvaluateLocally?: boolean
-      sendFeatureFlagEvents?: boolean
-      disableGeoip?: boolean
-    }
+    options?: FlagEvaluationOptions
+  ): Promise<FeatureFlagResult | undefined>
+  async getFeatureFlagResult(
+    key: string,
+    distinctIdOrOptions?: string | FlagEvaluationOptions,
+    options?: FlagEvaluationOptions
   ): Promise<FeatureFlagResult | undefined> {
-    return this._getFeatureFlagResult(key, distinctId, {
-      ...options,
-      sendFeatureFlagEvents: options?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
+    let resolvedDistinctId: string | undefined
+    let resolvedOptions: FlagEvaluationOptions | undefined
+
+    if (typeof distinctIdOrOptions === 'string') {
+      resolvedDistinctId = distinctIdOrOptions
+      resolvedOptions = options
+    } else {
+      resolvedDistinctId = this.context?.get()?.distinctId
+      resolvedOptions = distinctIdOrOptions
+    }
+
+    if (!resolvedDistinctId) {
+      this._logger.warn('[PostHog] distinctId is required — pass it explicitly or use withContext()')
+      return undefined
+    }
+
+    return this._getFeatureFlagResult(key, resolvedDistinctId, {
+      ...resolvedOptions,
+      sendFeatureFlagEvents: resolvedOptions?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
     })
   }
 

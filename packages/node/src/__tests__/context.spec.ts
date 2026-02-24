@@ -339,4 +339,50 @@ describe('PostHog Context', () => {
       expect(events?.[0].properties.outer).toBeUndefined()
     })
   })
+
+  describe('feature flag methods with context', () => {
+    it('should return undefined when calling getFeatureFlagResult without distinctId and no context', async () => {
+      mockedFetch.mockImplementation(apiImplementation({ decideFlags: { 'test-flag': true } }))
+
+      const result = await posthog.getFeatureFlagResult('test-flag')
+
+      expect(result).toBeUndefined()
+    })
+
+    it('should use distinctId from context for getFeatureFlagResult', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          decideFlags: { 'test-flag': 'variant-a' },
+          flagsPayloads: { 'test-flag': { key: 'value' } },
+        })
+      )
+
+      const result = await posthog.withContext({ distinctId: 'context-user' }, async () => {
+        return posthog.getFeatureFlagResult('test-flag')
+      })
+
+      expect(result).toMatchObject({
+        key: 'test-flag',
+        enabled: true,
+        variant: 'variant-a',
+      })
+
+      // Verify the /flags/ call used the correct distinctId
+      const flagsCall = mockedFetch.mock.calls.find((c) => (c[0] as string).includes('/flags/'))
+      const body = JSON.parse((flagsCall?.[1] as any)?.body)
+      expect(body.distinct_id).toBe('context-user')
+    })
+
+    it('should prefer explicit distinctId over context', async () => {
+      mockedFetch.mockImplementation(apiImplementation({ decideFlags: { 'test-flag': true } }))
+
+      await posthog.withContext({ distinctId: 'context-user' }, async () => {
+        await posthog.getFeatureFlagResult('test-flag', 'explicit-user')
+      })
+
+      const flagsCall = mockedFetch.mock.calls.find((c) => (c[0] as string).includes('/flags/'))
+      const body = JSON.parse((flagsCall?.[1] as any)?.body)
+      expect(body.distinct_id).toBe('explicit-user')
+    })
+  })
 })
