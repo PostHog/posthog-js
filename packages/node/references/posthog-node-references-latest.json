@@ -1349,7 +1349,6 @@
         },
         {
           "category": "",
-          "description": "* ** QUEUEING AND FLUSHING *",
           "details": null,
           "id": "enqueue",
           "showDocs": true,
@@ -1434,6 +1433,28 @@
               "id": "flush_with_error_handling",
               "name": "flush with error handling",
               "code": "\n\n// flush with error handling\nposthog.flush().then(() => {\n  console.log('Flush complete')\n}).catch((err) => {\n  console.error('Flush failed', err)\n})\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "",
+          "description": "Hook that allows subclasses to wait for storage operations to complete. This is called after queue changes are persisted during flush to ensure data is safely written to storage before considering events as sent.\nOverride this in implementations with async storage (e.g., React Native) to prevent duplicate events on app crash/restart scenarios.",
+          "details": null,
+          "id": "flushStorage",
+          "showDocs": true,
+          "title": "flushStorage",
+          "examples": [
+            {
+              "id": "flushstorage",
+              "name": "Generated example for flushStorage",
+              "code": "// Generated example for flushStorage\nposthog.flushStorage();"
             }
           ],
           "releaseTag": "public",
@@ -1946,8 +1967,8 @@
             }
           ],
           "returnType": {
-            "id": "Promise<PostHogFlagsResponse | undefined>",
-            "name": "Promise<PostHogFlagsResponse | undefined>"
+            "id": "Promise<GetFlagsResult>",
+            "name": "Promise<GetFlagsResult>"
           },
           "path": "src/entrypoints/index.node.ts"
         },
@@ -2241,6 +2262,75 @@
         {
           "category": "",
           "details": null,
+          "id": "prepareMessage",
+          "showDocs": true,
+          "title": "prepareMessage",
+          "examples": [
+            {
+              "id": "preparemessage",
+              "name": "Generated example for prepareMessage",
+              "code": "// Generated example for prepareMessage\nposthog.prepareMessage();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "string",
+              "name": "type"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "any",
+              "name": "_message"
+            },
+            {
+              "description": "",
+              "isOptional": true,
+              "type": "PostHogCaptureOptions",
+              "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "PostHogEventProperties",
+            "name": "PostHogEventProperties"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "",
+          "description": "Hook that allows subclasses to transform or filter a message before it's queued. Return null to drop the message.",
+          "details": null,
+          "id": "processBeforeEnqueue",
+          "showDocs": true,
+          "title": "processBeforeEnqueue",
+          "examples": [
+            {
+              "id": "processbeforeenqueue",
+              "name": "Generated example for processBeforeEnqueue",
+              "code": "// Generated example for processBeforeEnqueue\nposthog.processBeforeEnqueue();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The prepared message",
+              "isOptional": false,
+              "type": "PostHogEventProperties",
+              "name": "message"
+            }
+          ],
+          "returnType": {
+            "id": "PostHogEventProperties | null",
+            "name": "PostHogEventProperties | null"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "",
+          "details": null,
           "id": "register",
           "showDocs": true,
           "title": "register",
@@ -2488,11 +2578,25 @@
       "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.Open;\n}"
     },
     {
+      "id": "BeforeSendFn_2",
+      "name": "BeforeSendFn_2",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(event: CaptureEvent | null) => CaptureEvent | null"
+    },
+    {
       "id": "BeforeSendFn",
       "name": "BeforeSendFn",
       "properties": [],
       "path": "src/types.ts",
       "example": "(event: EventMessage | null) => EventMessage | null"
+    },
+    {
+      "id": "CaptureEvent",
+      "name": "CaptureEvent",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    uuid?: string;\n    event: string;\n    properties?: PostHogEventProperties;\n    $set?: PostHogEventProperties;\n    $set_once?: PostHogEventProperties;\n    timestamp?: Date;\n}"
     },
     {
       "id": "ChunkIdMapType",
@@ -2613,6 +2717,10 @@
           "name": "mechanism"
         },
         {
+          "type": "number",
+          "name": "skipFirstLines"
+        },
+        {
           "type": "Error | null",
           "name": "syntheticException"
         }
@@ -2625,6 +2733,62 @@
       "properties": [],
       "path": "src/types.ts",
       "example": "Omit<IdentifyMessage, 'distinctId'> & {\n    distinctId?: string;\n    event: string;\n    groups?: Record<string, string | number>;\n    sendFeatureFlags?: boolean | SendFeatureFlagsOptions;\n    timestamp?: Date;\n    uuid?: string;\n    _originatedFromCaptureException?: boolean;\n}"
+    },
+    {
+      "id": "Exception",
+      "name": "Exception",
+      "properties": [
+        {
+          "type": "Mechanism",
+          "name": "mechanism"
+        },
+        {
+          "type": "string",
+          "name": "module"
+        },
+        {
+          "type": "{\n        frames?: StackFrame[];\n        type: 'raw';\n    }",
+          "name": "stacktrace"
+        },
+        {
+          "type": "number",
+          "name": "thread_id"
+        },
+        {
+          "type": "string",
+          "name": "type"
+        },
+        {
+          "type": "string",
+          "name": "value"
+        }
+      ],
+      "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "ExceptionLike",
+      "name": "ExceptionLike",
+      "properties": [
+        {
+          "type": "ExceptionLike",
+          "name": "cause"
+        },
+        {
+          "type": "SeverityLevel",
+          "name": "level"
+        },
+        {
+          "type": "string",
+          "name": "stack"
+        }
+      ],
+      "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "ExceptionList",
+      "name": "ExceptionList",
+      "properties": [],
+      "path": "../core/src/error-tracking/types.ts"
     },
     {
       "id": "ExpressErrorMiddleware",
@@ -2648,25 +2812,32 @@
       "example": "\"distinct_id\" | \"device_id\""
     },
     {
-      "id": "FeatureFlagDetail",
-      "name": "FeatureFlagDetail",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    key: string;\n    enabled: boolean;\n    variant: string | undefined;\n    reason: EvaluationReason | undefined;\n    metadata: FeatureFlagMetadata | undefined;\n}"
-    },
-    {
-      "id": "FeatureFlagBucketingIdentifier",
-      "name": "FeatureFlagBucketingIdentifier",
-      "properties": [],
-      "path": "src/types.ts",
-      "example": "\"distinct_id\" | \"device_id\""
-    },
-    {
       "id": "FeatureFlagCondition",
       "name": "FeatureFlagCondition",
       "properties": [],
       "path": "src/types.ts",
       "example": "{\n    properties: FlagProperty[];\n    rollout_percentage?: number;\n    variant?: string;\n}"
+    },
+    {
+      "id": "FeatureFlagDetail",
+      "name": "FeatureFlagDetail",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    key: string;\n    enabled: boolean;\n    variant: string | undefined;\n    reason: EvaluationReason | undefined;\n    metadata: FeatureFlagMetadata | undefined;\n    failed?: boolean;\n}"
+    },
+    {
+      "id": "FeatureFlagErrorType",
+      "name": "FeatureFlagErrorType",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "\"apiError\""
+    },
+    {
+      "id": "FeatureFlagMetadata",
+      "name": "FeatureFlagMetadata",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    id: number | undefined;\n    version: number | undefined;\n    description: string | undefined;\n    payload: string | undefined;\n}"
     },
     {
       "id": "FeatureFlagOverrideOptions",
@@ -2676,11 +2847,25 @@
       "example": "{\n    flags?: false | string[] | Record<string, FeatureFlagValue>;\n    payloads?: false | Record<string, JsonType>;\n}"
     },
     {
+      "id": "FeatureFlagRequestError",
+      "name": "FeatureFlagRequestError",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    type: 'timeout' | 'connection_error' | 'api_error' | 'unknown_error';\n    statusCode?: number;\n}"
+    },
+    {
       "id": "FeatureFlagResult",
       "name": "FeatureFlagResult",
       "properties": [],
       "path": "src/types.ts",
       "example": "{\n    key: string;\n    enabled: boolean;\n    variant: string | undefined;\n    payload: JsonType | undefined;\n}"
+    },
+    {
+      "id": "FeatureFlagValue",
+      "name": "FeatureFlagValue",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "string | boolean"
     },
     {
       "id": "FlagDefinitionCacheData",
@@ -2723,6 +2908,13 @@
       "properties": [],
       "path": "src/types.ts",
       "example": "string | number | (string | number)[] | boolean"
+    },
+    {
+      "id": "GetFlagsResult",
+      "name": "GetFlagsResult",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    success: true;\n    response: PostHogFeatureFlagsResponse;\n} | {\n    success: false;\n    error: FeatureFlagRequestError;\n}"
     },
     {
       "id": "GetModuleFn",
@@ -2829,7 +3021,7 @@
       "name": "MultipleSurveyQuestion",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.SingleChoice | SurveyQuestionType.MultipleChoice;\n    choices: string[];\n    hasOpenChoice?: boolean;\n    shuffleOptions?: boolean;\n}"
+      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.SingleChoice | SurveyQuestionType.MultipleChoice;\n    choices: string[];\n    hasOpenChoice?: boolean;\n    shuffleOptions?: boolean;\n    skipSubmitButton?: boolean;\n}"
     },
     {
       "id": "NextQuestionBranching",
@@ -2874,6 +3066,10 @@
         {
           "type": "ChunkIdMapType",
           "name": "chunkIdMap"
+        },
+        {
+          "type": "number",
+          "name": "skipFirstLines"
         }
       ],
       "path": "../core/src/error-tracking/types.ts"
@@ -2916,14 +3112,14 @@
       "name": "PostHogCaptureOptions",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "{\n    uuid?: string;\n    timestamp?: Date;\n    disableGeoip?: boolean;\n}"
+      "example": "{\n    uuid?: string;\n    timestamp?: Date;\n    disableGeoip?: boolean;\n    _originatedFromCaptureException?: boolean;\n}"
     },
     {
       "id": "PostHogCoreOptions",
       "name": "PostHogCoreOptions",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "{\n    host?: string;\n    flushAt?: number;\n    flushInterval?: number;\n    maxBatchSize?: number;\n    maxQueueSize?: number;\n    disabled?: boolean;\n    defaultOptIn?: boolean;\n    sendFeatureFlagEvent?: boolean;\n    preloadFeatureFlags?: boolean;\n    disableRemoteConfig?: boolean;\n    disableSurveys?: boolean;\n    bootstrap?: {\n        distinctId?: string;\n        isIdentifiedId?: boolean;\n        featureFlags?: Record<string, FeatureFlagValue>;\n        featureFlagPayloads?: Record<string, JsonType>;\n    };\n    fetchRetryCount?: number;\n    fetchRetryDelay?: number;\n    requestTimeout?: number;\n    featureFlagsRequestTimeoutMs?: number;\n    remoteConfigRequestTimeoutMs?: number;\n    sessionExpirationTimeSeconds?: number;\n    disableCompression?: boolean;\n    disableGeoip?: boolean;\n    historicalMigration?: boolean;\n    evaluationEnvironments?: readonly string[];\n}"
+      "example": "{\n    host?: string;\n    flushAt?: number;\n    flushInterval?: number;\n    maxBatchSize?: number;\n    maxQueueSize?: number;\n    disabled?: boolean;\n    defaultOptIn?: boolean;\n    sendFeatureFlagEvent?: boolean;\n    preloadFeatureFlags?: boolean;\n    disableRemoteConfig?: boolean;\n    disableSurveys?: boolean;\n    bootstrap?: {\n        distinctId?: string;\n        isIdentifiedId?: boolean;\n        featureFlags?: Record<string, FeatureFlagValue>;\n        featureFlagPayloads?: Record<string, JsonType>;\n    };\n    fetchRetryCount?: number;\n    fetchRetryDelay?: number;\n    requestTimeout?: number;\n    featureFlagsRequestTimeoutMs?: number;\n    remoteConfigRequestTimeoutMs?: number;\n    sessionExpirationTimeSeconds?: number;\n    disableCompression?: boolean;\n    disableGeoip?: boolean;\n    historicalMigration?: boolean;\n    evaluationContexts?: readonly string[];\n    evaluationEnvironments?: readonly string[];\n    personProfiles?: 'always' | 'identified_only' | 'never';\n    before_send?: BeforeSendFn | BeforeSendFn[];\n}"
     },
     {
       "id": "PostHogEventProperties",
@@ -2940,11 +3136,193 @@
       "example": "{\n    id: number;\n    name: string;\n    key: string;\n    bucketing_identifier?: FeatureFlagBucketingIdentifier;\n    filters?: {\n        aggregation_group_type_index?: number;\n        groups?: FeatureFlagCondition[];\n        multivariate?: {\n            variants: {\n                key: string;\n                rollout_percentage: number;\n            }[];\n        };\n        payloads?: Record<string, string>;\n    };\n    deleted: boolean;\n    active: boolean;\n    rollout_percentage: null | number;\n    ensure_experience_continuity: boolean;\n    experiment_set: number[];\n}"
     },
     {
+      "id": "PostHogFeatureFlagDetails",
+      "name": "PostHogFeatureFlagDetails",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "\"flags\" | \"featureFlags\" | \"featureFlagPayloads\" | \"requestId\""
+    },
+    {
+      "id": "PostHogFeatureFlagsResponse",
+      "name": "PostHogFeatureFlagsResponse",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "\"flags\" | \"featureFlags\" | \"featureFlagPayloads\" | \"requestId\""
+    },
+    {
+      "id": "PostHogFetchOptions",
+      "name": "PostHogFetchOptions",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    method: 'GET' | 'POST' | 'PUT' | 'PATCH';\n    mode?: 'no-cors';\n    credentials?: 'omit';\n    headers: {\n        [key: string]: string;\n    };\n    body?: string | Blob;\n    signal?: AbortSignal;\n}"
+    },
+    {
+      "id": "PostHogFetchResponse",
+      "name": "PostHogFetchResponse",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    status: number;\n    text: () => Promise<string>;\n    json: () => Promise<any>;\n    headers?: {\n        get(name: string): string | null;\n    };\n}"
+    },
+    {
+      "id": "PostHogFlagsAndPayloadsResponse",
+      "name": "PostHogFlagsAndPayloadsResponse",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "\"featureFlags\" | \"featureFlagPayloads\""
+    },
+    {
+      "id": "PostHogFlagsResponse",
+      "name": "PostHogFlagsResponse",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "Omit<PostHogRemoteConfig, 'hasFeatureFlags'> & {\n    featureFlags: {\n        [key: string]: FeatureFlagValue;\n    };\n    featureFlagPayloads: {\n        [key: string]: JsonType;\n    };\n    flags: {\n        [key: string]: FeatureFlagDetail;\n    };\n    errorsWhileComputingFlags: boolean;\n    sessionRecording?: boolean | {\n        [key: string]: JsonType;\n    };\n    quotaLimited?: string[];\n    requestId?: string;\n    evaluatedAt?: number;\n}"
+    },
+    {
       "id": "PostHogOptions",
       "name": "PostHogOptions",
       "properties": [],
       "path": "src/types.ts",
       "example": "Omit<PostHogCoreOptions, 'before_send'> & {\n    persistence?: 'memory';\n    personalApiKey?: string;\n    privacyMode?: boolean;\n    enableExceptionAutocapture?: boolean;\n    featureFlagsPollingInterval?: number;\n    maxCacheSize?: number;\n    fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>;\n    enableLocalEvaluation?: boolean;\n    flagDefinitionCacheProvider?: FlagDefinitionCacheProvider;\n    before_send?: BeforeSendFn | BeforeSendFn[];\n    evaluationContexts?: readonly string[];\n    evaluationEnvironments?: readonly string[];\n    custom_blocked_useragents?: string[];\n    __preview_capture_bot_pageviews?: boolean;\n    strictLocalEvaluation?: boolean;\n}"
+    },
+    {
+      "id": "PostHogPersistedProperty",
+      "name": "PostHogPersistedProperty",
+      "properties": [
+        {
+          "type": "\"anonymous_id\"",
+          "name": "AnonymousId"
+        },
+        {
+          "type": "\"bootstrap_feature_flag_details\"",
+          "name": "BootstrapFeatureFlagDetails"
+        },
+        {
+          "type": "\"bootstrap_feature_flag_payloads\"",
+          "name": "BootstrapFeatureFlagPayloads"
+        },
+        {
+          "type": "\"bootstrap_feature_flags\"",
+          "name": "BootstrapFeatureFlags"
+        },
+        {
+          "type": "\"distinct_id\"",
+          "name": "DistinctId"
+        },
+        {
+          "type": "\"enable_person_processing\"",
+          "name": "EnablePersonProcessing"
+        },
+        {
+          "type": "\"feature_flag_details\"",
+          "name": "FeatureFlagDetails"
+        },
+        {
+          "type": "\"feature_flag_payloads\"",
+          "name": "FeatureFlagPayloads"
+        },
+        {
+          "type": "\"feature_flags\"",
+          "name": "FeatureFlags"
+        },
+        {
+          "type": "\"flags_endpoint_was_hit\"",
+          "name": "FlagsEndpointWasHit"
+        },
+        {
+          "type": "\"group_properties\"",
+          "name": "GroupProperties"
+        },
+        {
+          "type": "\"installed_app_build\"",
+          "name": "InstalledAppBuild"
+        },
+        {
+          "type": "\"installed_app_version\"",
+          "name": "InstalledAppVersion"
+        },
+        {
+          "type": "\"opted_out\"",
+          "name": "OptedOut"
+        },
+        {
+          "type": "\"override_feature_flags\"",
+          "name": "OverrideFeatureFlags"
+        },
+        {
+          "type": "\"person_mode\"",
+          "name": "PersonMode"
+        },
+        {
+          "type": "\"person_properties\"",
+          "name": "PersonProperties"
+        },
+        {
+          "type": "\"props\"",
+          "name": "Props"
+        },
+        {
+          "type": "\"queue\"",
+          "name": "Queue"
+        },
+        {
+          "type": "\"remote_config\"",
+          "name": "RemoteConfig"
+        },
+        {
+          "type": "\"session_id\"",
+          "name": "SessionId"
+        },
+        {
+          "type": "\"session_timestamp\"",
+          "name": "SessionLastTimestamp"
+        },
+        {
+          "type": "\"session_replay\"",
+          "name": "SessionReplay"
+        },
+        {
+          "type": "\"session_start_timestamp\"",
+          "name": "SessionStartTimestamp"
+        },
+        {
+          "type": "\"survey_last_seen_date\"",
+          "name": "SurveyLastSeenDate"
+        },
+        {
+          "type": "\"surveys\"",
+          "name": "Surveys"
+        },
+        {
+          "type": "\"surveys_seen\"",
+          "name": "SurveysSeen"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "PostHogRemoteConfig",
+      "name": "PostHogRemoteConfig",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    sessionRecording?: boolean | {\n        [key: string]: JsonType;\n    };\n    supportedCompression?: Compression[];\n    surveys?: boolean | Survey[];\n    hasFeatureFlags?: boolean;\n    errorTracking?: boolean | {\n        [key: string]: JsonType;\n    };\n    capturePerformance?: boolean | {\n        [key: string]: JsonType;\n    };\n}"
+    },
+    {
+      "id": "PreviouslyCapturedError",
+      "name": "PreviouslyCapturedError",
+      "properties": [
+        {
+          "type": "boolean",
+          "name": "__posthog_previously_captured_error"
+        }
+      ],
+      "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "PrimitiveType",
+      "name": "PrimitiveType",
+      "properties": [],
+      "path": "../core/src/error-tracking/coercers/primitive-coercer.ts",
+      "example": "null | undefined | boolean | number | string | symbol | bigint"
     },
     {
       "id": "PropertyGroup",
@@ -2958,7 +3336,7 @@
       "name": "RatingSurveyQuestion",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.Rating;\n    display: SurveyRatingDisplay;\n    scale: 3 | 5 | 7 | 10;\n    lowerBoundLabel: string;\n    upperBoundLabel: string;\n}"
+      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.Rating;\n    display: SurveyRatingDisplay;\n    scale: 2 | 3 | 5 | 7 | 10;\n    lowerBoundLabel: string;\n    upperBoundLabel: string;\n    skipSubmitButton?: boolean;\n}"
     },
     {
       "id": "ResponseBasedBranching",
@@ -3107,7 +3485,7 @@
       "name": "Survey",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "{\n    id: string;\n    name: string;\n    description?: string;\n    type: SurveyType;\n    feature_flag_keys?: {\n        key: string;\n        value?: string;\n    }[];\n    linked_flag_key?: string;\n    targeting_flag_key?: string;\n    internal_targeting_flag_key?: string;\n    questions: SurveyQuestion[];\n    appearance?: SurveyAppearance;\n    conditions?: {\n        url?: string;\n        selector?: string;\n        seenSurveyWaitPeriodInDays?: number;\n        urlMatchType?: SurveyMatchType;\n        events?: {\n            repeatedActivation?: boolean;\n            values?: {\n                name: string;\n            }[];\n        };\n        actions?: {\n            values: SurveyActionType[];\n        };\n        deviceTypes?: string[];\n        deviceTypesMatchType?: SurveyMatchType;\n        linkedFlagVariant?: string;\n    };\n    start_date?: string;\n    end_date?: string;\n    current_iteration?: number;\n    current_iteration_start_date?: string;\n}"
+      "example": "{\n    id: string;\n    name: string;\n    description?: string;\n    type: SurveyType;\n    feature_flag_keys?: {\n        key: string;\n        value?: string;\n    }[];\n    linked_flag_key?: string;\n    targeting_flag_key?: string;\n    internal_targeting_flag_key?: string;\n    questions: SurveyQuestion[];\n    appearance?: SurveyAppearance;\n    conditions?: {\n        url?: string;\n        selector?: string;\n        seenSurveyWaitPeriodInDays?: number;\n        urlMatchType?: SurveyMatchType;\n        events?: {\n            repeatedActivation?: boolean;\n            values?: {\n                name: string;\n            }[];\n        };\n        actions?: {\n            values: SurveyActionType[];\n        };\n        deviceTypes?: string[];\n        deviceTypesMatchType?: SurveyMatchType;\n        linkedFlagVariant?: string;\n    };\n    start_date?: string;\n    end_date?: string;\n    current_iteration?: number;\n    current_iteration_start_date?: string;\n    schedule?: SurveySchedule;\n}"
     },
     {
       "id": "SurveyActionType",
@@ -3209,7 +3587,7 @@
       "name": "SurveyQuestionBase",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "{\n    question: string;\n    id: string;\n    description?: string;\n    descriptionContentType?: SurveyQuestionDescriptionContentType;\n    optional?: boolean;\n    buttonText?: string;\n    originalQuestionIndex: number;\n    branching?: NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching;\n}"
+      "example": "{\n    question: string;\n    id: string;\n    description?: string;\n    descriptionContentType?: SurveyQuestionDescriptionContentType;\n    optional?: boolean;\n    buttonText?: string;\n    originalQuestionIndex: number;\n    branching?: NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching;\n    validation?: SurveyValidationRule[];\n}"
     },
     {
       "id": "SurveyQuestionBranchingType",
@@ -3299,6 +3677,25 @@
       "example": "{\n    surveys: Survey[];\n}"
     },
     {
+      "id": "SurveySchedule",
+      "name": "SurveySchedule",
+      "properties": [
+        {
+          "type": "\"always\"",
+          "name": "Always"
+        },
+        {
+          "type": "\"once\"",
+          "name": "Once"
+        },
+        {
+          "type": "\"recurring\"",
+          "name": "Recurring"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
       "id": "SurveyType",
       "name": "SurveyType",
       "properties": [
@@ -3317,6 +3714,40 @@
         {
           "type": "\"widget\"",
           "name": "Widget"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "SurveyValidationRule",
+      "name": "SurveyValidationRule",
+      "properties": [
+        {
+          "type": "string",
+          "name": "errorMessage"
+        },
+        {
+          "type": "SurveyValidationType",
+          "name": "type"
+        },
+        {
+          "type": "number",
+          "name": "value"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "SurveyValidationType",
+      "name": "SurveyValidationType",
+      "properties": [
+        {
+          "type": "\"max_length\"",
+          "name": "MaxLength"
+        },
+        {
+          "type": "\"min_length\"",
+          "name": "MinLength"
         }
       ],
       "path": "../core/src/types.ts"
