@@ -486,6 +486,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "true"
   ],
   "feature_flag_request_timeout_ms": "number",
+  "feature_flag_cache_ttl_ms": [
+    "undefined",
+    "number"
+  ],
   "surveys_request_timeout_ms": "number",
   "get_device_id": "(uuid: string) => string",
   "before_send": [

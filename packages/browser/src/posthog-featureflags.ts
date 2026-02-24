@@ -202,9 +202,8 @@ export class PostHogFeatureFlags {
      */
     private _isCacheStale(): boolean {
         return (
-            this._instance.persistence?.isFeatureFlagCacheStale(
-                this._instance.config.feature_flag_cache_ttl_ms
-            ) ?? false
+            this._instance.persistence?.isFeatureFlagCacheStale(this._instance.config.feature_flag_cache_ttl_ms) ??
+            false
         )
     }
 
