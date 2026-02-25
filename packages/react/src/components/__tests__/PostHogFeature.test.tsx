@@ -249,4 +249,31 @@ describe('PostHogFeature component', () => {
         fireEvent.click(screen.getByTestId('hi_example_feature_1_payload'))
         expect(posthog.capture).toHaveBeenCalledTimes(1)
     })
+
+    it('should not render when flag does not exist and no match is specified', () => {
+        render(
+            <PostHogProvider client={posthog}>
+                <PostHogFeature flag={'nonexistent_flag'}>
+                    <div data-testid="helloDiv">Hello</div>
+                </PostHogFeature>
+            </PostHogProvider>
+        )
+
+        expect(screen.queryByTestId('helloDiv')).not.toBeInTheDocument()
+        expect(posthog.capture).not.toHaveBeenCalled()
+    })
+
+    it('should render fallback when flag does not exist (like new-cta example)', () => {
+        render(
+            <PostHogProvider client={posthog}>
+                <PostHogFeature flag={'new-cta'} fallback={<div data-testid="oldButton">Old Button</div>}>
+                    <div data-testid="newButton">New Button</div>
+                </PostHogFeature>
+            </PostHogProvider>
+        )
+
+        expect(screen.queryByTestId('newButton')).not.toBeInTheDocument()
+        expect(screen.queryByTestId('oldButton')).toBeInTheDocument()
+        expect(posthog.capture).not.toHaveBeenCalled()
+    })
 })

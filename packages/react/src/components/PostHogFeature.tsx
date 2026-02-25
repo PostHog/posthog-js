@@ -31,21 +31,23 @@ export function PostHogFeature({
     const shouldTrackInteraction = trackInteraction ?? true
     const shouldTrackView = trackView ?? true
 
-    if (isUndefined(match) || variant === match) {
-        const childNode: React.ReactNode = isFunction(children) ? children(payload) : children
-        return (
-            <VisibilityAndClickTrackers
-                flag={flag}
-                options={visibilityObserverOptions}
-                trackInteraction={shouldTrackInteraction}
-                trackView={shouldTrackView}
-                onInteract={() => captureFeatureInteraction({ flag, posthog, flagVariant: variant })}
-                onView={() => captureFeatureView({ flag, posthog, flagVariant: variant })}
-                {...props}
-            >
-                {childNode}
-            </VisibilityAndClickTrackers>
-        )
+    if (variant) {
+        if (isUndefined(match) || variant === match) {
+            const childNode: React.ReactNode = isFunction(children) ? children(payload) : children
+            return (
+                <VisibilityAndClickTrackers
+                    flag={flag}
+                    options={visibilityObserverOptions}
+                    trackInteraction={shouldTrackInteraction}
+                    trackView={shouldTrackView}
+                    onInteract={() => captureFeatureInteraction({ flag, posthog, flagVariant: variant })}
+                    onView={() => captureFeatureView({ flag, posthog, flagVariant: variant })}
+                    {...props}
+                >
+                    {childNode}
+                </VisibilityAndClickTrackers>
+            )
+        }
     }
     return <>{fallback}</>
 }
