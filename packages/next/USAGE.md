@@ -12,8 +12,11 @@ Comprehensive reference for every feature in the `@posthog/next` package.
     - [Client Hooks](#client-hooks)
     - [Server-Side Usage](#server-side-usage)
 - [Pages Router Setup](#pages-router-setup)
-    - [Wrapping \_app](#wrapping-_app)
+    - [PostHogProvider (Pages)](#posthogprovider-pages)
+    - [Pageview Tracking (Pages)](#pageview-tracking-pages)
     - [Server-Side Props](#server-side-props)
+    - [Bootstrapping Flags (Pages)](#bootstrapping-flags-pages)
+
 - [Feature Flag Bootstrap](#feature-flag-bootstrap)
 - [Consent Management](#consent-management)
 - [Middleware Reference](#middleware-reference)
@@ -95,13 +98,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
 ```ts
 {
+    capture_pageview: false,
     persistence: 'localStorage+cookie',
     opt_out_capturing_persistence_type: 'cookie',
     opt_out_persistence_by_default: true,
 }
 ```
 
-These defaults ensure the server can read identity and consent state from cookies. You can override any of them via the `options` prop.
+These defaults disable automatic pageviews (so `PostHogPageView` doesn't cause duplicates) and ensure the server can read identity and consent state from cookies. You can override any of them via the `options` prop.
 
 **Static vs Dynamic rendering:**
 
@@ -204,69 +208,115 @@ The returned client is scoped to the current user via `enterContext()`. The user
 
 ## Pages Router Setup
 
-### Wrapping \_app
+### PostHogProvider (Pages)
 
-Use `withPostHogApp` to wrap your `_app` component with PostHog:
+Wrap your `_app` with `PostHogProvider` to initialize PostHog for all pages:
 
 ```tsx
 // pages/_app.tsx
 import type { AppProps } from 'next/app'
-import { withPostHogApp } from '@posthog/next/pages'
+import { PostHogProvider, PostHogPageView } from '@posthog/next/pages'
 
-function MyApp({ Component, pageProps }: AppProps) {
-    return <Component {...pageProps} />
+export default function App({ Component, pageProps }: AppProps) {
+    return (
+        <PostHogProvider apiKey={process.env.NEXT_PUBLIC_POSTHOG_KEY!} options={{ api_host: '/ingest' }}>
+            <PostHogPageView />
+            <Component {...pageProps} />
+        </PostHogProvider>
+    )
 }
-
-export default withPostHogApp(MyApp, {
-    apiKey: process.env.NEXT_PUBLIC_POSTHOG_KEY!,
-    options: {
-        api_host: 'https://us.i.posthog.com',
-    },
-})
 ```
 
-**Options:**
+**Props:**
 
-| Property  | Type                     | Description                           |
-| --------- | ------------------------ | ------------------------------------- |
-| `apiKey`  | `string`                 | PostHog project API key (required).   |
-| `options` | `Partial<PostHogConfig>` | `posthog-js` configuration overrides. |
+| Prop        | Type                     | Default     | Description                                                  |
+| ----------- | ------------------------ | ----------- | ------------------------------------------------------------ |
+| `apiKey`    | `string`                 | `NEXT_PUBLIC_POSTHOG_KEY` | PostHog project API key. Read from env var if omitted.       |
+| `options`   | `Partial<PostHogConfig>` | See below   | `posthog-js` configuration overrides.                        |
+| `bootstrap` | `BootstrapConfig`        | `undefined` | Server-evaluated bootstrap data from `getServerSidePostHog`. |
+| `children`  | `React.ReactNode`        | —           | Your app content.                                            |
 
-The same [default options](#posthogprovider) are applied automatically.
+The same [default options](#posthogprovider) are applied automatically. The `api_host` can also be set via the `NEXT_PUBLIC_POSTHOG_HOST` environment variable.
+
+### Pageview Tracking (Pages)
+
+`PostHogPageView` (from `@posthog/next/pages`) tracks route changes using `next/router`. Place it inside your `PostHogProvider`:
+
+```tsx
+import { PostHogPageView } from '@posthog/next/pages'
+
+// Inside your PostHogProvider in _app.tsx:
+;<PostHogPageView />
+```
+
+It captures a `$pageview` event on every `router.asPath` change, including query parameters.
 
 ### Server-Side Props
 
-Use `withPostHogServerProps` to access PostHog in `getServerSideProps`:
+Use `getServerSidePostHog` inside your existing `getServerSideProps` to access a PostHog server client scoped to the current user:
 
 ```tsx
 // pages/dashboard.tsx
-import { withPostHogServerProps } from '@posthog/next/pages'
+import type { GetServerSideProps } from 'next'
+import { getServerSidePostHog } from '@posthog/next/pages'
 
-export const getServerSideProps = withPostHogServerProps(
-    process.env.NEXT_PUBLIC_POSTHOG_KEY!,
-    async (context, posthog, distinctId) => {
-        // Evaluate flags for the current user
-        const showNewUI = await posthog.isFeatureEnabled('new-ui', distinctId)
+export const getServerSideProps: GetServerSideProps = async (ctx) => {
+    const posthog = getServerSidePostHog(ctx)
 
-        // Capture a server-side event
-        posthog.capture({ event: 'dashboard_viewed' })
+    // Evaluate flags for the current user
+    const result = await posthog.getFeatureFlagResult('new-ui')
 
-        return { props: { showNewUI } }
-    }
-)
+    // Capture a server-side event
+    posthog.capture({ event: 'dashboard_viewed' })
+
+    return { props: { showNewUI: result?.enabled ?? false } }
+}
 
 export default function Dashboard({ showNewUI }: { showNewUI: boolean }) {
     return <div>{showNewUI ? 'New UI' : 'Classic UI'}</div>
 }
 ```
 
-The handler receives three arguments:
+`getServerSidePostHog` returns a `posthog-node` client preconfigured with the current user's context (distinct ID, session ID, device ID) read from the PostHog cookie. Methods like `getAllFlags()`, `getFeatureFlagResult()`, and `capture()` automatically use this identity.
 
-| Argument     | Type                        | Description                                                           |
-| ------------ | --------------------------- | --------------------------------------------------------------------- |
-| `context`    | `GetServerSidePropsContext` | The standard Next.js context.                                         |
-| `posthog`    | `PostHog`                   | A `posthog-node` client scoped to the current user.                   |
-| `distinctId` | `string`                    | The user's distinct ID from the cookie (or a generated anonymous ID). |
+The API key defaults to `NEXT_PUBLIC_POSTHOG_KEY`. You can override it with an optional second argument: `getServerSidePostHog(ctx, 'phc_custom_key')`.
+
+### Bootstrapping Flags (Pages)
+
+To eliminate flag flicker on page load, evaluate flags server-side and pass them as bootstrap data to the provider:
+
+```tsx
+// pages/dashboard.tsx
+import type { GetServerSideProps } from 'next'
+import { getServerSidePostHog } from '@posthog/next/pages'
+
+export const getServerSideProps: GetServerSideProps = async (ctx) => {
+    const posthog = getServerSidePostHog(ctx)
+    const flags = await posthog.getAllFlagsAndPayloads()
+    return { props: { posthogBootstrap: flags } }
+}
+```
+
+Then wire the bootstrap data into the provider via `pageProps`:
+
+```tsx
+// pages/_app.tsx
+import type { AppProps } from 'next/app'
+import { PostHogProvider, PostHogPageView } from '@posthog/next/pages'
+
+export default function App({ Component, pageProps }: AppProps) {
+    return (
+        <PostHogProvider
+            apiKey={process.env.NEXT_PUBLIC_POSTHOG_KEY!}
+            options={{ api_host: '/ingest' }}
+            bootstrap={pageProps.posthogBootstrap}
+        >
+            <PostHogPageView />
+            <Component {...pageProps} />
+        </PostHogProvider>
+    )
+}
+```
 
 ---
 
@@ -505,11 +555,12 @@ interface PostHogProxyOptions {
 
 ### `@posthog/next/pages`
 
-| Export                                              | Description                                       |
-| --------------------------------------------------- | ------------------------------------------------- |
-| `withPostHogApp(App, config)`                       | HOC that wraps `_app` with PostHog.               |
-| `withPostHogServerProps(apiKey, handler, options?)` | Wraps `getServerSideProps` with a PostHog client. |
-| `WithPostHogAppOptions`                             | Type for `withPostHogApp` configuration.          |
+| Export                                         | Description                                                      |
+| ---------------------------------------------- | ---------------------------------------------------------------- |
+| `PostHogProvider`                              | Composable provider for `_app.tsx`.                              |
+| `PostHogPageView`                              | Pageview tracker using `next/router`.                            |
+| `getServerSidePostHog(ctx, apiKey?, options?)` | Returns a scoped `posthog-node` client for `getServerSideProps`. |
+| `PagesPostHogProviderProps`                    | Type for `PostHogProvider` props.                                |
 
 ---
 
@@ -532,7 +583,7 @@ The identity cookie is named `ph_<sanitized_key>_posthog` and contains JSON:
 
 `getPostHog()` (App Router) reuses `posthog-node` client instances across requests. Clients are cached by `apiKey:host` combination in a module-level `Map`. This avoids creating a new client on every request.
 
-In the Pages Router, `withPostHogServerProps` creates a fresh client per request since it cannot share a module-level cache across Page Router's execution model.
+In the Pages Router, `getServerSidePostHog` creates a fresh client per request since it cannot share a module-level cache across the Pages Router execution model.
 
 ### Client initialization
 

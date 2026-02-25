@@ -1,3 +1,4 @@
-export { withPostHogApp } from './pages/withPostHogApp'
-export type { WithPostHogAppOptions } from './pages/withPostHogApp'
-export { withPostHogServerProps } from './pages/withPostHogServerProps'
+export { PostHogProvider } from './pages/PostHogProvider'
+export type { PagesPostHogProviderProps } from './pages/PostHogProvider'
+export { getServerSidePostHog } from './pages/getServerSidePostHog'
+export { PostHogPageView } from './pages/PostHogPageView'

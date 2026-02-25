@@ -1,6 +1,30 @@
 import { uuidv7, isNoLike, isYesLike } from '@posthog/core'
 import { COOKIE_PREFIX, COOKIE_SUFFIX } from './constants'
 
+/**
+ * Minimal cookie-reading interface compatible with Next.js `cookies()`,
+ * `request.cookies`, and plain objects.
+ */
+export interface CookieStore {
+    get(name: string): { value: string } | undefined
+}
+
+/**
+ * Adapts a raw `Cookie` header string into a {@link CookieStore}.
+ */
+export function cookieStoreFromHeader(cookieHeader: string): CookieStore {
+    const cookies: Record<string, string> = {}
+    if (cookieHeader) {
+        for (const pair of cookieHeader.split(';')) {
+            const [key, ...valueParts] = pair.trim().split('=')
+            if (key) {
+                cookies[key.trim()] = decodeURIComponent(valueParts.join('=').trim())
+            }
+        }
+    }
+    return { get: (name: string) => (name in cookies ? { value: cookies[name] } : undefined) }
+}
+
 export interface PostHogCookieState {
     distinctId: string
     isIdentified: boolean
@@ -57,7 +81,7 @@ export function serializePostHogCookie(anonymousId: string): string {
  * with a `get(name)` method that returns `{ value: string } | undefined`.
  */
 export function readPostHogCookie(
-    cookies: { get(name: string): { value: string } | undefined },
+    cookies: CookieStore,
     apiKey: string
 ): PostHogCookieState | null {
     const cookieName = getPostHogCookieName(apiKey)
@@ -129,7 +153,7 @@ export interface ConsentConfig extends ConsentCookieConfig {
 }
 
 export function isOptedOut(
-    cookies: { get(name: string): { value: string } | undefined },
+    cookies: CookieStore,
     apiKey: string,
     config?: ConsentConfig
 ): boolean {
