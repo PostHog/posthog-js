@@ -65,7 +65,19 @@
         "./extensions": {
             "import": "./lib/src/extensions/extension-bundles.js",
             "types": "./lib/src/extensions/extension-bundles.d.ts"
-        }
+        },
+        "./react": {
+            "import": "./react/dist/esm/index.js",
+            "require": "./react/dist/umd/index.js",
+            "types": "./react/dist/types/index.d.ts"
+        },
+        "./react/*": {
+            "import": "./react/dist/esm/*/index.js",
+            "require": "./react/dist/umd/*/index.js",
+            "types": "./react/dist/types/*/index.d.ts"
+        },
+        "./dist/*": "./dist/*",
+        "./package.json": "./package.json"
     },
     "dependencies": {
         "@posthog/core": "workspace:*",
