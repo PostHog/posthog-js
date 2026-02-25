@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.354.2
+
+### Patch Changes
+
+- [#3153](https://github.com/PostHog/posthog-js/pull/3153) [`67cf41e`](https://github.com/PostHog/posthog-js/commit/67cf41e10cdca853b39f37d8b16b5dee37e0283a) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: Add additional legacy exports for fully qualified dist and lib exports
+  (2026-02-25)
+- Updated dependencies []:
+    - @posthog/types@1.354.2
+
 ## 1.354.1
 
 ### Patch Changes
