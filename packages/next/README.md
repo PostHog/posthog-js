@@ -5,7 +5,7 @@ The official PostHog integration for Next.js. Provides analytics, feature flags,
 ## Features
 
 - **App Router support** with a server-component `PostHogProvider` that bootstraps feature flags via SSR
-- **Pages Router support** via `withPostHogApp` and `withPostHogServerProps` higher-order functions
+- **Pages Router support** via `PostHogProvider`, `PostHogPageView`, and `getServerSidePostHog`
 - **Middleware** for identity cookie seeding and optional API proxying
 - **Server-side feature flags** via `getPostHog()` in server components and route handlers
 - **Automatic pageview tracking** with the `PostHogPageView` component
@@ -102,7 +102,7 @@ For detailed usage including Pages Router, consent management, middleware compos
 | `@posthog/next`            | Client + Server | `PostHogProvider`, `PostHogPageView`, hooks                     |
 | `@posthog/next/server`     | Server only     | `getPostHog()` for server components / route handlers           |
 | `@posthog/next/middleware` | Edge / Server   | `postHogMiddleware()` for identity seeding and proxying         |
-| `@posthog/next/pages`      | Client + Server | `withPostHogApp()`, `withPostHogServerProps()` for Pages Router |
+| `@posthog/next/pages`      | Client + Server | `PostHogProvider`, `PostHogPageView`, `getServerSidePostHog()` for Pages Router |
 
 ## Environment Variables
 
