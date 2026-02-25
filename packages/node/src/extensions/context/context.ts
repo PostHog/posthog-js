@@ -13,21 +13,26 @@ export class PostHogContext implements IPostHogContext {
   }
 
   run<T>(context: ContextData, fn: () => T, options?: ContextOptions): T {
-    const fresh = options?.fresh === true
+    return this.storage.run(this.resolve(context, options), fn)
+  }
 
-    if (fresh) {
-      return this.storage.run(context, fn)
-    } else {
-      const currentContext = this.get() || {}
-      const mergedContext: ContextData = {
-        distinctId: context.distinctId ?? currentContext.distinctId,
-        sessionId: context.sessionId ?? currentContext.sessionId,
-        properties: {
-          ...(currentContext.properties || {}),
-          ...(context.properties || {}),
-        },
-      }
-      return this.storage.run(mergedContext, fn)
+  enter(context: ContextData, options?: ContextOptions): void {
+    this.storage.enterWith(this.resolve(context, options))
+  }
+
+  private resolve(context: ContextData, options?: ContextOptions): ContextData {
+    if (options?.fresh === true) {
+      return context
+    }
+
+    const current = this.get() || {}
+    return {
+      distinctId: context.distinctId ?? current.distinctId,
+      sessionId: context.sessionId ?? current.sessionId,
+      properties: {
+        ...(current.properties || {}),
+        ...(context.properties || {}),
+      },
     }
   }
 }

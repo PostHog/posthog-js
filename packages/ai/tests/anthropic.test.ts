@@ -389,6 +389,25 @@ describe('PostHogAnthropic', () => {
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
       expect(properties['$ai_usage']).toBeDefined()
+      expect(properties['$ai_tokens_source']).toBe('sdk')
+    })
+
+    conditionalTest('should set tokens_source to passthrough when token properties are overridden', async () => {
+      const response = await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [{ role: 'user', content: 'Hello Claude' }],
+        max_tokens: 100,
+        posthogDistinctId: 'test-user-123',
+        posthogProperties: { $ai_input_tokens: 99999 },
+      })
+
+      expect(response).toEqual(mockResponse)
+
+      const captureMock = mockPostHogClient.capture as jest.Mock
+      const [captureArgs] = captureMock.mock.calls
+      const { properties } = captureArgs[0]
+      expect(properties['$ai_tokens_source']).toBe('passthrough')
+      expect(properties['$ai_input_tokens']).toBe(99999)
     })
 
     conditionalTest('should handle system prompts correctly', async () => {

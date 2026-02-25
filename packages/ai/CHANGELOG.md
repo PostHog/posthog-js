@@ -1,5 +1,14 @@
 # posthog-ai
 
+## 7.9.3
+
+### Patch Changes
+
+- [#3147](https://github.com/PostHog/posthog-js/pull/3147) [`b98aa23`](https://github.com/PostHog/posthog-js/commit/b98aa2386d7abc89fba46cbc86f121e331415a92) Thanks [@andrewm4894](https://github.com/andrewm4894)! - Add `$ai_tokens_source` property ("sdk" or "passthrough") to all `$ai_generation` events to detect when token values are externally overridden via `posthogProperties`
+  (2026-02-25)
+- Updated dependencies [[`d43e90d`](https://github.com/PostHog/posthog-js/commit/d43e90df464b697a3aa0b46084d97a773a699abd), [`d43e90d`](https://github.com/PostHog/posthog-js/commit/d43e90df464b697a3aa0b46084d97a773a699abd)]:
+  - posthog-node@5.26.0
+
 ## 7.9.2
 
 ### Patch Changes

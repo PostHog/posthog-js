@@ -4,6 +4,7 @@ import type {
   JsonType,
   PostHogFetchOptions,
   PostHogFetchResponse,
+  PostHogFlagsAndPayloadsResponse,
 } from '@posthog/core'
 import { ContextData, ContextOptions } from './extensions/context/types'
 
@@ -75,6 +76,21 @@ export type OverrideFeatureFlagsOptions =
   | string[]
   | Record<string, FeatureFlagValue>
   | FeatureFlagOverrideOptions
+
+export type BaseFlagEvaluationOptions = {
+  groups?: Record<string, string>
+  personProperties?: Record<string, string>
+  groupProperties?: Record<string, Record<string, string>>
+  onlyEvaluateLocally?: boolean
+  disableGeoip?: boolean
+}
+export type FlagEvaluationOptions = BaseFlagEvaluationOptions & {
+  sendFeatureFlagEvents?: boolean
+}
+
+export type AllFlagsOptions = BaseFlagEvaluationOptions & {
+  flagKeys?: string[]
+}
 
 export type FeatureFlagOverrideOptions = {
   /**
@@ -410,6 +426,39 @@ export interface IPostHog {
   ): Promise<JsonType | undefined>
 
   /**
+   * @description Get all feature flag values using distinctId from withContext().
+   */
+  getAllFlags(options?: AllFlagsOptions): Promise<Record<string, FeatureFlagValue>>
+
+  /**
+   * @description Get all feature flag values for a specific user.
+   *
+   * @param distinctId - The user's distinct ID
+   * @param options - Optional configuration for flag evaluation
+   * @returns Promise that resolves to a record of flag keys and their values
+   */
+  getAllFlags(distinctId: string, options?: AllFlagsOptions): Promise<Record<string, FeatureFlagValue>>
+
+  /**
+   * @description Get all feature flag values and payloads using distinctId from withContext().
+   */
+  getAllFlagsAndPayloads(options?: AllFlagsOptions): Promise<PostHogFlagsAndPayloadsResponse>
+
+  /**
+   * @description Get all feature flag values and payloads for a specific user.
+   *
+   * @param distinctId - The user's distinct ID
+   * @param options - Optional configuration for flag evaluation
+   * @returns Promise that resolves to flags and payloads
+   */
+  getAllFlagsAndPayloads(distinctId: string, options?: AllFlagsOptions): Promise<PostHogFlagsAndPayloadsResponse>
+
+  /**
+   * @description Get a feature flag result using distinctId from withContext().
+   */
+  getFeatureFlagResult(key: string, options?: FlagEvaluationOptions): Promise<FeatureFlagResult | undefined>
+
+  /**
    * @description Get the result of evaluating a feature flag, including its value and payload.
    * This is more efficient than calling getFeatureFlag and getFeatureFlagPayload separately when you need both.
    *
@@ -431,14 +480,7 @@ export interface IPostHog {
   getFeatureFlagResult(
     key: string,
     distinctId: string,
-    options?: {
-      groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
-      onlyEvaluateLocally?: boolean
-      sendFeatureFlagEvents?: boolean
-      disableGeoip?: boolean
-    }
+    options?: FlagEvaluationOptions
   ): Promise<FeatureFlagResult | undefined>
 
   /**
@@ -491,6 +533,15 @@ export interface IPostHog {
    * @returns The return value of the function
    */
   withContext<T>(data: Partial<ContextData>, fn: () => T, options?: ContextOptions): T
+
+  /**
+   * @description Set context without a callback wrapper. Must be called in the same
+   * async scope that makes PostHog calls. Prefer `withContext()` when you can wrap
+   * code in a callback.
+   * @param data Context data to apply (distinctId, sessionId, properties)
+   * @param options Context options (fresh)
+   */
+  enterContext(data: Partial<ContextData>, options?: ContextOptions): void
 
   /**
    * @description Get the current context data.

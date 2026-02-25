@@ -9,7 +9,14 @@ import {
     usePopupVisibility,
 } from '../../extensions/surveys'
 import { retrieveSurveyShadow } from '../../extensions/surveys/surveys-extension-utils'
-import { Survey, SurveyQuestionType, SurveySchedule, SurveyType, SurveyWidgetType } from '../../posthog-surveys-types'
+import {
+    Survey,
+    SurveyQuestionBranchingType,
+    SurveyQuestionType,
+    SurveySchedule,
+    SurveyType,
+    SurveyWidgetType,
+} from '../../posthog-surveys-types'
 
 import { afterAll, beforeAll, beforeEach } from '@jest/globals'
 import '@testing-library/jest-dom'
@@ -590,6 +597,96 @@ describe('SurveyManager', () => {
             expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
             const descriptionElement = surveyDiv.querySelector('.survey-question-description')
             expect(descriptionElement).not.toBeNull()
+        })
+    })
+
+    describe('renderSurvey with URL prefill that completes the survey', () => {
+        let surveyManager: SurveyManager
+        let originalLocation: Location
+
+        beforeEach(() => {
+            originalLocation = window.location
+            delete (window as any).location
+            window.location = { ...originalLocation, search: '' } as Location
+        })
+
+        afterEach(() => {
+            window.location = originalLocation
+        })
+
+        it.each([
+            {
+                scenario: 'positive rating (branches to end)',
+                search: '?q0=1',
+                shouldShowConfirmation: true,
+            },
+            {
+                scenario: 'negative rating (branches to next question)',
+                search: '?q0=2',
+                shouldShowConfirmation: false,
+            },
+        ])('should show confirmation=$shouldShowConfirmation for $scenario', ({ search, shouldShowConfirmation }) => {
+            const mockPH = createMockPostHog({
+                config: {
+                    token: 'test-token',
+                    api_host: 'https://test.com',
+                    surveys: { prefillFromUrl: true },
+                },
+                getActiveMatchingSurveys: jest.fn(),
+                get_session_replay_url: jest.fn(),
+                capture: jest.fn(),
+                featureFlags: { isFeatureEnabled: jest.fn().mockReturnValue(true) },
+            })
+
+            surveyManager = new SurveyManager(mockPH)
+
+            const survey: Survey = {
+                id: 'prefill-render-survey',
+                name: 'Prefill Render Survey',
+                type: SurveyType.Popover,
+                questions: [
+                    {
+                        id: 'q1',
+                        type: SurveyQuestionType.Rating,
+                        question: 'How was the draft?',
+                        scale: 2,
+                        display: 'emoji',
+                        skipSubmitButton: true,
+                        branching: {
+                            type: SurveyQuestionBranchingType.ResponseBased,
+                            responseValues: { positive: SurveyQuestionBranchingType.End },
+                        },
+                    },
+                    {
+                        id: 'q2',
+                        type: SurveyQuestionType.Open,
+                        question: 'Tell us more',
+                    },
+                ],
+                appearance: { displayThankYouMessage: true, thankYouMessageHeader: 'Thanks!' },
+                conditions: null,
+                start_date: '2021-01-01T00:00:00.000Z',
+                end_date: null,
+                current_iteration: null,
+                current_iteration_start_date: null,
+                feature_flag_keys: [],
+                linked_flag_key: null,
+                targeting_flag_key: null,
+                internal_targeting_flag_key: null,
+            } as unknown as Survey
+
+            window.location.search = search
+
+            const surveyDiv = document.createElement('div')
+            surveyManager.renderSurvey(survey, surveyDiv)
+
+            if (shouldShowConfirmation) {
+                expect(surveyDiv.getElementsByClassName('thank-you-message').length).toBe(1)
+                expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(0)
+            } else {
+                expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
+                expect(surveyDiv.getElementsByClassName('thank-you-message').length).toBe(0)
+            }
         })
     })
 

@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.353.0",
+    "version": "1.354.0",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
@@ -52,6 +52,21 @@
         "react/package.json",
         "react/surveys/package.json"
     ],
+    "exports": {
+        ".": {
+            "import": "./dist/module.js",
+            "require": "./dist/main.js",
+            "types": "./dist/module.d.ts"
+        },
+        "./slim": {
+            "import": "./dist/module.slim.js",
+            "types": "./dist/module.slim.d.ts"
+        },
+        "./extensions": {
+            "import": "./lib/src/extensions/extension-bundles.js",
+            "types": "./lib/src/extensions/extension-bundles.d.ts"
+        }
+    },
     "dependencies": {
         "@posthog/core": "workspace:*",
         "@posthog/types": "workspace:*",
