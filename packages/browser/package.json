@@ -54,29 +54,32 @@
     ],
     "exports": {
         ".": {
+            "types": "./dist/module.d.ts",
             "import": "./dist/module.js",
-            "require": "./dist/main.js",
-            "types": "./dist/module.d.ts"
+            "require": "./dist/main.js"
         },
         "./slim": {
-            "import": "./dist/module.slim.js",
-            "types": "./dist/module.slim.d.ts"
+            "types": "./dist/module.slim.d.ts",
+            "import": "./dist/module.slim.js"
         },
         "./extensions": {
-            "import": "./lib/src/extensions/extension-bundles.js",
-            "types": "./lib/src/extensions/extension-bundles.d.ts"
+            "types": "./lib/src/extensions/extension-bundles.d.ts",
+            "import": "./lib/src/extensions/extension-bundles.js"
         },
         "./react": {
+            "types": "./react/dist/types/index.d.ts",
             "import": "./react/dist/esm/index.js",
-            "require": "./react/dist/umd/index.js",
-            "types": "./react/dist/types/index.d.ts"
+            "require": "./react/dist/umd/index.js"
         },
         "./react/*": {
+            "types": "./react/dist/types/*/index.d.ts",
             "import": "./react/dist/esm/*/index.js",
-            "require": "./react/dist/umd/*/index.js",
-            "types": "./react/dist/types/*/index.d.ts"
+            "require": "./react/dist/umd/*/index.js"
         },
-        "./dist/*": "./dist/*",
+        "./dist/*.js": "./dist/*.js",
+        "./dist/*": "./dist/*.js",
+        "./lib/*.js": "./lib/*.js",
+        "./lib/*": "./lib/*.js",
         "./package.json": "./package.json"
     },
     "dependencies": {
