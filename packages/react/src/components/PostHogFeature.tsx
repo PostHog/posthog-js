@@ -31,7 +31,7 @@ export function PostHogFeature({
     const shouldTrackInteraction = trackInteraction ?? true
     const shouldTrackView = trackView ?? true
 
-    if (variant) {
+    if (variant !== undefined) {
         if (isUndefined(match) || variant === match) {
             const childNode: React.ReactNode = isFunction(children) ? children(payload) : children
             return (

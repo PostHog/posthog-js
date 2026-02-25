@@ -276,4 +276,16 @@ describe('PostHogFeature component', () => {
         expect(screen.queryByTestId('oldButton')).toBeInTheDocument()
         expect(posthog.capture).not.toHaveBeenCalled()
     })
+
+    it('should render content when match=false and flag variant is false', () => {
+        render(
+            <PostHogProvider client={posthog}>
+                <PostHogFeature flag={'test_false'} match={false}>
+                    <div data-testid="disabledUI">Show when disabled</div>
+                </PostHogFeature>
+            </PostHogProvider>
+        )
+
+        expect(screen.queryByTestId('disabledUI')).toBeInTheDocument()
+    })
 })
