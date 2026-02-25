@@ -46,11 +46,14 @@ const collectMethodsWithInheritance = (posthogClass, rootClass) => {
         const inheritanceResult = currentClass.findMembersWithInheritance();
         const members = inheritanceResult.items || [];
         
-        const methods = members.filter(member =>
-          (member.kind === ApiItemKind.Method && 
-          !member.name.startsWith('_') ) ||
-          member.kind === ApiItemKind.Constructor
-      );
+        const methods = members.filter(member => {
+          if (member.kind === ApiItemKind.Constructor) return true;
+          if (member.kind !== ApiItemKind.Method) return false;
+          // Exclude private-by-convention (leading _) and protected methods
+          if (member.name.startsWith('_')) return false;
+          if (member.isProtected) return false;
+          return true;
+        });
 
         // Add methods to map (child methods take precedence over parent methods)
         methods.forEach(method => {

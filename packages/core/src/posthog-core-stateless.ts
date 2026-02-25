@@ -289,7 +289,10 @@ export abstract class PostHogCoreStateless {
       },
     }
   }
-
+  
+  /**
+   * @internal
+   */
   public addPendingPromise<T>(promise: Promise<T>): Promise<T> {
     return this.promiseQueue.add(promise)
   }
