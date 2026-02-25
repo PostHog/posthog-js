@@ -1,4 +1,21 @@
-import { toContentString } from '../src/utils'
+import { toContentString, getTokensSource } from '../src/utils'
+
+describe('getTokensSource', () => {
+  it.each([
+    ['undefined properties', undefined, 'sdk'],
+    ['empty properties', {}, 'sdk'],
+    ['unrelated properties', { foo: 'bar' }, 'sdk'],
+    ['$ai_input_tokens override', { $ai_input_tokens: 999 }, 'passthrough'],
+    ['$ai_output_tokens override', { $ai_output_tokens: 999 }, 'passthrough'],
+    ['$ai_total_tokens override', { $ai_total_tokens: 999 }, 'passthrough'],
+    ['$ai_cache_read_input_tokens override', { $ai_cache_read_input_tokens: 500 }, 'passthrough'],
+    ['$ai_cache_creation_input_tokens override', { $ai_cache_creation_input_tokens: 200 }, 'passthrough'],
+    ['$ai_reasoning_tokens override', { $ai_reasoning_tokens: 300 }, 'passthrough'],
+    ['mixed override and custom', { $ai_input_tokens: 999, custom_key: 'value' }, 'passthrough'],
+  ])('%s → %s', (_name, props, expected) => {
+    expect(getTokensSource(props)).toBe(expected)
+  })
+})
 
 describe('toContentString', () => {
   describe('string inputs', () => {
