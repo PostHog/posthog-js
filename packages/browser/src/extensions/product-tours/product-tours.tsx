@@ -48,7 +48,10 @@ const logger = createLogger('[Product Tours]')
 const document = _document as Document
 const window = _window as Window & typeof globalThis
 
-// Tour condition checking - reuses the same URL matching logic as surveys
+// cache the last-checked URL to avoid unnecessary repeated checks on every tick
+let _lastUrlMatchHref: string | undefined
+const _urlMatchCache = new Map<string, boolean>() // tour ID : match result
+
 function doesTourUrlMatch(tour: ProductTour): boolean {
     const conditions = tour.conditions
     if (!conditions?.url) {
@@ -60,14 +63,28 @@ function doesTourUrlMatch(tour: ProductTour): boolean {
         return false
     }
 
-    const matchType = conditions.urlMatchType || SurveyMatchType.Icontains
-
-    if (matchType === SurveyMatchType.Exact) {
-        return normalizeUrl(href) === normalizeUrl(conditions.url)
+    if (href !== _lastUrlMatchHref) {
+        _urlMatchCache.clear()
+        _lastUrlMatchHref = href
     }
 
-    const targets = [conditions.url]
-    return propertyComparisons[matchType](targets, [href])
+    const cached = _urlMatchCache.get(tour.id)
+    if (!isUndefined(cached)) {
+        return cached
+    }
+
+    const matchType = conditions.urlMatchType || SurveyMatchType.Icontains
+    let result: boolean
+
+    if (matchType === SurveyMatchType.Exact) {
+        result = normalizeUrl(href) === normalizeUrl(conditions.url)
+    } else {
+        const targets = [conditions.url]
+        result = propertyComparisons[matchType](targets, [href])
+    }
+
+    _urlMatchCache.set(tour.id, result)
+    return result
 }
 
 function isTourInDateRange(tour: ProductTour): boolean {
