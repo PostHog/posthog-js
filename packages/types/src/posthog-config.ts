@@ -1188,6 +1188,24 @@ export interface PostHogConfig {
     surveys_request_timeout_ms: number
 
     /**
+     * Controls how often feature flags are automatically refreshed in long-running sessions.
+     *
+     * By default, feature flags are refreshed every 5 minutes (300000ms) to pick up server-side
+     * flag changes without requiring a page reload. This is useful for SPAs and long-running tabs.
+     *
+     * **Tradeoffs:**
+     * - **Shorter intervals**: Feature flag changes propagate faster, but increases network requests and server load.
+     * - **Longer intervals**: Reduces network traffic (better for mobile/battery), but flag changes take longer to propagate.
+     * - **Disabled (0)**: No background refreshes. Flags only update on page load or manual `reloadFeatureFlags()` calls.
+     *   Use this if you control flag updates manually or have infrequent flag changes.
+     *
+     * Note: Refreshes are automatically skipped when the browser tab is hidden.
+     *
+     * @default 300000 (5 minutes)
+     */
+    remote_config_refresh_interval_ms?: number
+
+    /**
      * Function to get the device ID.
      * This doesn't usually need to be set, but can be useful if you want to use a custom device ID.
      *
