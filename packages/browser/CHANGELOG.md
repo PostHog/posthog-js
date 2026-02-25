@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.354.1
+
+### Patch Changes
+
+- [#3148](https://github.com/PostHog/posthog-js/pull/3148) [`9ae20e7`](https://github.com/PostHog/posthog-js/commit/9ae20e7cde5d474da1d52ae3b77929b4f4adb54e) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: Expose all export paths
+  (2026-02-25)
+- Updated dependencies []:
+    - @posthog/types@1.354.1
+
 ## 1.354.0
 
 ### Minor Changes
