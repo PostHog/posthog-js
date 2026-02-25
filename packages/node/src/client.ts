@@ -29,6 +29,7 @@ import {
 } from './types'
 import {
   FeatureFlagsPoller,
+  type FeatureFlagEvaluationContext,
   RequiresServerEvaluation,
   InconclusiveMatchError,
 } from './extensions/feature-flags/feature-flags'
@@ -663,6 +664,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     personProperties = adjustedProperties.allPersonProperties
     groupProperties = adjustedProperties.allGroupProperties
+    const evaluationContext = this.createFeatureFlagEvaluationContext(
+      distinctId,
+      groups,
+      personProperties,
+      groupProperties
+    )
 
     // set defaults
     if (onlyEvaluateLocally == undefined) {
@@ -687,14 +694,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       const flag = this.featureFlagsPoller?.featureFlagsByKey[key]
       if (flag) {
         try {
-          const localResult = await this.featureFlagsPoller?.computeFlagAndPayloadLocally(
-            flag,
-            distinctId,
-            groups,
-            personProperties,
-            groupProperties,
-            matchValue
-          )
+          const localResult = await this.featureFlagsPoller?.computeFlagAndPayloadLocally(flag, evaluationContext, {
+            matchValue,
+          })
           if (localResult) {
             flagWasLocallyEvaluated = true
             const value = localResult.value
@@ -721,10 +723,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // Fall back to remote evaluation if needed
     if (!flagWasLocallyEvaluated && !onlyEvaluateLocally) {
       const flagsResponse = await super.getFeatureFlagDetailsStateless(
-        distinctId,
-        groups,
-        personProperties,
-        groupProperties,
+        evaluationContext.distinctId,
+        evaluationContext.groups,
+        evaluationContext.personProperties,
+        evaluationContext.groupProperties,
         disableGeoip,
         [key]
       )
@@ -1226,19 +1228,19 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     personProperties = adjustedProperties.allPersonProperties
     groupProperties = adjustedProperties.allGroupProperties
+    const evaluationContext = this.createFeatureFlagEvaluationContext(
+      distinctId,
+      groups,
+      personProperties,
+      groupProperties
+    )
 
     // set defaults
     if (onlyEvaluateLocally == undefined) {
       onlyEvaluateLocally = this.options.strictLocalEvaluation ?? false
     }
 
-    const localEvaluationResult = await this.featureFlagsPoller?.getAllFlagsAndPayloads(
-      distinctId,
-      groups,
-      personProperties,
-      groupProperties,
-      flagKeys
-    )
+    const localEvaluationResult = await this.featureFlagsPoller?.getAllFlagsAndPayloads(evaluationContext, flagKeys)
 
     let featureFlags = {}
     let featureFlagPayloads = {}
@@ -1251,10 +1253,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     if (fallbackToFlags && !onlyEvaluateLocally) {
       const remoteEvaluationResult = await super.getFeatureFlagsAndPayloadsStateless(
-        distinctId,
-        groups,
-        personProperties,
-        groupProperties,
+        evaluationContext.distinctId,
+        evaluationContext.groups,
+        evaluationContext.personProperties,
+        evaluationContext.groupProperties,
         disableGeoip,
         flagKeys
       )
@@ -1689,6 +1691,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     return { allPersonProperties, allGroupProperties }
+  }
+
+  private createFeatureFlagEvaluationContext(
+    distinctId: string,
+    groups?: Record<string, string>,
+    personProperties?: Record<string, any>,
+    groupProperties?: Record<string, Record<string, any>>
+  ): FeatureFlagEvaluationContext {
+    return {
+      distinctId,
+      groups: groups || {},
+      personProperties: personProperties || {},
+      groupProperties: groupProperties || {},
+      evaluationCache: {},
+    }
   }
 
   /**
