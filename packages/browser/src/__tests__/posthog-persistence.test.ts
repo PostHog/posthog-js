@@ -219,6 +219,24 @@ describe('persistence', () => {
             lib.clear()
         })
 
+        it('treats non-numeric evaluatedAt as stale when TTL is configured', () => {
+            const config = {
+                ...makePostHogConfig('test', persistenceMode),
+                feature_flag_cache_ttl_ms: 60 * 60 * 1000, // 1 hour TTL
+            }
+            const lib = new PostHogPersistence(config)
+
+            // Set evaluated_at to an ISO string instead of a timestamp
+            lib.register({
+                $enabled_feature_flags: { flag: 'variant' },
+                $feature_flag_evaluated_at: '2025-01-01T00:00:00Z',
+            })
+
+            // Should not include $feature/ properties since evaluatedAt is not a number
+            expect(lib.properties()).toEqual({})
+            lib.clear()
+        })
+
         it('should not return hidden properties()', () => {
             const initialPersonInfo = { r: 'https://referrer.example.com', u: 'https://initial-url.example.com' }
             library.register({

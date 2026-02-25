@@ -149,7 +149,12 @@ export class PostHogPersistence {
             return false
         }
         const evaluatedAt = this.props[PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]
-        return !evaluatedAt || Date.now() - evaluatedAt > effectiveTtl
+        // If evaluatedAt is missing or not a numeric timestamp, consider cache stale.
+        // This handles SDK upgrades where old cached flags lack evaluatedAt.
+        if (!evaluatedAt || typeof evaluatedAt !== 'number') {
+            return true
+        }
+        return Date.now() - evaluatedAt > effectiveTtl
     }
 
     properties(): Properties {
