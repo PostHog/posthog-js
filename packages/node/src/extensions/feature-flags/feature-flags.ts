@@ -299,6 +299,17 @@ class FeatureFlagsPoller {
         return false
       }
 
+      if (
+        flag.bucketing_identifier === 'device_id' &&
+        (personProperties?.$device_id === undefined ||
+          personProperties?.$device_id === null ||
+          personProperties?.$device_id === '')
+      ) {
+        this.logMsgIfDebug(() =>
+          console.warn(`[FEATURE FLAGS] Ignoring bucketing_identifier for group flag: ${flag.key}`)
+        )
+      }
+
       const focusedGroupProperties = groupProperties[groupName]
       return await this.matchFeatureFlagProperties(
         flag,
@@ -313,6 +324,11 @@ class FeatureFlagsPoller {
     } else {
       const bucketingValue = this.getBucketingValueForFlag(flag, distinctId, personProperties)
       if (bucketingValue === undefined) {
+        this.logMsgIfDebug(() =>
+          console.warn(
+            `[FEATURE FLAGS] Can't compute feature flag: ${flag.key} without $device_id, falling back to server evaluation`
+          )
+        )
         throw new InconclusiveMatchError(`Can't compute feature flag: ${flag.key} without $device_id`)
       }
       return await this.matchFeatureFlagProperties(
