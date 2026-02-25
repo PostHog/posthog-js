@@ -1,5 +1,26 @@
 # posthog-js
 
+## 1.354.0
+
+### Minor Changes
+
+- [#3080](https://github.com/PostHog/posthog-js/pull/3080) [`4d0c783`](https://github.com/PostHog/posthog-js/commit/4d0c783fadac64718da01d1773a65f1d350f8201) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Introduce internal config to improve tree-shaking
+  (2026-02-25)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.354.0
+
+## 1.353.1
+
+### Patch Changes
+
+- [#3143](https://github.com/PostHog/posthog-js/pull/3143) [`0b86924`](https://github.com/PostHog/posthog-js/commit/0b86924ac25445686618cf36c2bfe58f1bcee9e7) Thanks [@adboio](https://github.com/adboio)! - fix autofill bug in hosted surveys
+  (2026-02-24)
+- Updated dependencies []:
+    - @posthog/types@1.353.1
+
 ## 1.353.0
 
 ### Minor Changes

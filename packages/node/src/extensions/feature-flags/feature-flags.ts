@@ -58,6 +58,19 @@ type FeatureFlagsPollerOptions = {
   strictLocalEvaluation?: boolean
 }
 
+export type FeatureFlagEvaluationContext = {
+  distinctId: string
+  groups: Record<string, string>
+  personProperties: Record<string, any>
+  groupProperties: Record<string, Record<string, any>>
+  evaluationCache: Record<string, FeatureFlagValue>
+}
+
+type ComputeFlagAndPayloadOptions = {
+  matchValue?: FeatureFlagValue
+  skipLoadCheck?: boolean
+}
+
 class FeatureFlagsPoller {
   pollingInterval: number
   personalApiKey: string
@@ -122,6 +135,22 @@ class FeatureFlagsPoller {
     }
   }
 
+  private createEvaluationContext(
+    distinctId: string,
+    groups: Record<string, string> = {},
+    personProperties: Record<string, any> = {},
+    groupProperties: Record<string, Record<string, any>> = {},
+    evaluationCache: Record<string, FeatureFlagValue> = {}
+  ): FeatureFlagEvaluationContext {
+    return {
+      distinctId,
+      groups,
+      personProperties,
+      groupProperties,
+      evaluationCache,
+    }
+  }
+
   async getFeatureFlag(
     key: string,
     distinctId: string,
@@ -141,14 +170,9 @@ class FeatureFlagsPoller {
     featureFlag = this.featureFlagsByKey[key]
 
     if (featureFlag !== undefined) {
+      const evaluationContext = this.createEvaluationContext(distinctId, groups, personProperties, groupProperties)
       try {
-        const result = await this.computeFlagAndPayloadLocally(
-          featureFlag,
-          distinctId,
-          groups,
-          personProperties,
-          groupProperties
-        )
+        const result = await this.computeFlagAndPayloadLocally(featureFlag, evaluationContext)
         response = result.value
         this.logMsgIfDebug(() => console.debug(`Successfully computed flag locally: ${key} -> ${response}`))
       } catch (e) {
@@ -164,10 +188,7 @@ class FeatureFlagsPoller {
   }
 
   async getAllFlagsAndPayloads(
-    distinctId: string,
-    groups: Record<string, string> = {},
-    personProperties: Record<string, any> = {},
-    groupProperties: Record<string, Record<string, any>> = {},
+    evaluationContext: FeatureFlagEvaluationContext,
     flagKeysToExplicitlyEvaluate?: string[]
   ): Promise<{
     response: Record<string, FeatureFlagValue>
@@ -184,20 +205,17 @@ class FeatureFlagsPoller {
       ? flagKeysToExplicitlyEvaluate.map((key) => this.featureFlagsByKey[key]).filter(Boolean)
       : this.featureFlags
 
-    // Create a shared evaluation cache to prevent memory leaks when processing many flags
-    const sharedEvaluationCache: Record<string, FeatureFlagValue> = {}
+    const sharedEvaluationContext = {
+      ...evaluationContext,
+      evaluationCache: evaluationContext.evaluationCache ?? {},
+    }
 
     await Promise.all(
       flagsToEvaluate.map(async (flag) => {
         try {
           const { value: matchValue, payload: matchPayload } = await this.computeFlagAndPayloadLocally(
             flag,
-            distinctId,
-            groups,
-            personProperties,
-            groupProperties,
-            undefined /* matchValue */,
-            sharedEvaluationCache
+            sharedEvaluationContext
           )
           response[flag.key] = matchValue
           if (matchPayload) {
@@ -219,17 +237,14 @@ class FeatureFlagsPoller {
 
   async computeFlagAndPayloadLocally(
     flag: PostHogFeatureFlag,
-    distinctId: string,
-    groups: Record<string, string> = {},
-    personProperties: Record<string, any> = {},
-    groupProperties: Record<string, Record<string, any>> = {},
-    matchValue?: FeatureFlagValue,
-    evaluationCache?: Record<string, FeatureFlagValue>,
-    skipLoadCheck: boolean = false
+    evaluationContext: FeatureFlagEvaluationContext,
+    options: ComputeFlagAndPayloadOptions = {}
   ): Promise<{
     value: FeatureFlagValue
     payload: JsonType | null
   }> {
+    const { matchValue, skipLoadCheck = false } = options
+
     // Only load flags if not already loaded and not skipping the check
     if (!skipLoadCheck) {
       await this.loadFeatureFlags()
@@ -245,14 +260,7 @@ class FeatureFlagsPoller {
     if (matchValue !== undefined) {
       flagValue = matchValue
     } else {
-      flagValue = await this.computeFlagValueLocally(
-        flag,
-        distinctId,
-        groups,
-        personProperties,
-        groupProperties,
-        evaluationCache
-      )
+      flagValue = await this.computeFlagValueLocally(flag, evaluationContext)
     }
 
     // Always compute payload based on the final flagValue (whether provided or computed)
@@ -263,12 +271,10 @@ class FeatureFlagsPoller {
 
   private async computeFlagValueLocally(
     flag: PostHogFeatureFlag,
-    distinctId: string,
-    groups: Record<string, string> = {},
-    personProperties: Record<string, any> = {},
-    groupProperties: Record<string, Record<string, any>> = {},
-    evaluationCache: Record<string, FeatureFlagValue> = {}
+    evaluationContext: FeatureFlagEvaluationContext
   ): Promise<FeatureFlagValue> {
+    const { distinctId, groups, personProperties, groupProperties } = evaluationContext
+
     if (flag.ensure_experience_continuity) {
       throw new InconclusiveMatchError('Flag has experience continuity enabled')
     }
@@ -299,32 +305,30 @@ class FeatureFlagsPoller {
         return false
       }
 
+      if (
+        flag.bucketing_identifier === 'device_id' &&
+        (personProperties?.$device_id === undefined ||
+          personProperties?.$device_id === null ||
+          personProperties?.$device_id === '')
+      ) {
+        this.logMsgIfDebug(() =>
+          console.warn(`[FEATURE FLAGS] Ignoring bucketing_identifier for group flag: ${flag.key}`)
+        )
+      }
+
       const focusedGroupProperties = groupProperties[groupName]
-      return await this.matchFeatureFlagProperties(
-        flag,
-        groups[groupName],
-        focusedGroupProperties,
-        evaluationCache,
-        distinctId,
-        groups,
-        personProperties,
-        groupProperties
-      )
+      return await this.matchFeatureFlagProperties(flag, groups[groupName], focusedGroupProperties, evaluationContext)
     } else {
       const bucketingValue = this.getBucketingValueForFlag(flag, distinctId, personProperties)
       if (bucketingValue === undefined) {
+        this.logMsgIfDebug(() =>
+          console.warn(
+            `[FEATURE FLAGS] Can't compute feature flag: ${flag.key} without $device_id, falling back to server evaluation`
+          )
+        )
         throw new InconclusiveMatchError(`Can't compute feature flag: ${flag.key} without $device_id`)
       }
-      return await this.matchFeatureFlagProperties(
-        flag,
-        bucketingValue,
-        personProperties,
-        evaluationCache,
-        distinctId,
-        groups,
-        personProperties,
-        groupProperties
-      )
+      return await this.matchFeatureFlagProperties(flag, bucketingValue, personProperties, evaluationContext)
     }
   }
 
@@ -384,13 +388,10 @@ class FeatureFlagsPoller {
 
   private async evaluateFlagDependency(
     property: FlagProperty,
-    distinctId: string,
-    groups: Record<string, string>,
-    personProperties: Record<string, any>,
-    groupProperties: Record<string, Record<string, any>>,
     properties: Record<string, any>,
-    evaluationCache: Record<string, FeatureFlagValue>
+    evaluationContext: FeatureFlagEvaluationContext
   ): Promise<boolean> {
+    const { evaluationCache } = evaluationContext
     const targetFlagKey = property.key
 
     if (!this.featureFlagsByKey) {
@@ -434,14 +435,7 @@ class FeatureFlagsPoller {
         } else {
           // Reuse full flag evaluation so dependencies respect person vs group bucketing rules.
           try {
-            const depResult = await this.computeFlagValueLocally(
-              depFlag,
-              distinctId,
-              groups,
-              personProperties,
-              groupProperties,
-              evaluationCache
-            )
+            const depResult = await this.computeFlagValueLocally(depFlag, evaluationContext)
             evaluationCache[depFlagKey] = depResult
           } catch (error) {
             throw new InconclusiveMatchError(
@@ -486,11 +480,7 @@ class FeatureFlagsPoller {
     flag: PostHogFeatureFlag,
     bucketingValue: string,
     properties: Record<string, any>,
-    evaluationCache: Record<string, FeatureFlagValue> = {},
-    distinctId: string = bucketingValue,
-    groups: Record<string, string> = {},
-    personProperties: Record<string, any> = {},
-    groupProperties: Record<string, Record<string, any>> = {}
+    evaluationContext: FeatureFlagEvaluationContext
   ): Promise<FeatureFlagValue> {
     const flagFilters = flag.filters || {}
     const flagConditions = flagFilters.groups || []
@@ -499,19 +489,7 @@ class FeatureFlagsPoller {
 
     for (const condition of flagConditions) {
       try {
-        if (
-          await this.isConditionMatch(
-            flag,
-            bucketingValue,
-            condition,
-            properties,
-            evaluationCache,
-            distinctId,
-            groups,
-            personProperties,
-            groupProperties
-          )
-        ) {
+        if (await this.isConditionMatch(flag, bucketingValue, condition, properties, evaluationContext)) {
           const variantOverride = condition.variant
           const flagVariants = flagFilters.multivariate?.variants || []
           if (variantOverride && flagVariants.some((variant) => variant.key === variantOverride)) {
@@ -551,11 +529,7 @@ class FeatureFlagsPoller {
     bucketingValue: string,
     condition: FeatureFlagCondition,
     properties: Record<string, any>,
-    evaluationCache: Record<string, FeatureFlagValue> = {},
-    distinctId: string = bucketingValue,
-    groups: Record<string, string> = {},
-    personProperties: Record<string, any> = {},
-    groupProperties: Record<string, Record<string, any>> = {}
+    evaluationContext: FeatureFlagEvaluationContext
   ): Promise<boolean> {
     const rolloutPercentage = condition.rollout_percentage
     const warnFunction = (msg: string): void => {
@@ -569,15 +543,7 @@ class FeatureFlagsPoller {
         if (propertyType === 'cohort') {
           matches = matchCohort(prop, properties, this.cohorts, this.debugMode)
         } else if (propertyType === 'flag') {
-          matches = await this.evaluateFlagDependency(
-            prop,
-            distinctId,
-            groups,
-            personProperties,
-            groupProperties,
-            properties,
-            evaluationCache
-          )
+          matches = await this.evaluateFlagDependency(prop, properties, evaluationContext)
         } else {
           matches = matchProperty(prop, properties, warnFunction)
         }
