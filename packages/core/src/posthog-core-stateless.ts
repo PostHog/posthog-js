@@ -289,7 +289,7 @@ export abstract class PostHogCoreStateless {
       },
     }
   }
-  
+
   /**
    * @internal
    */
