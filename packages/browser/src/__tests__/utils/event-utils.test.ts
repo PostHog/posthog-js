@@ -6,6 +6,7 @@ import {
     getTimezoneOffset,
 } from '../../utils/event-utils'
 import * as globals from '../../utils/globals'
+import { isUndefined } from '@posthog/core'
 
 describe(`event-utils`, () => {
     describe('properties', () => {
@@ -64,6 +65,7 @@ describe(`event-utils`, () => {
         const originalMaxTouchPoints = Object.getOwnPropertyDescriptor(window.navigator, 'maxTouchPoints')
         const originalScreenWidth = Object.getOwnPropertyDescriptor(window.screen, 'width')
         const originalScreenHeight = Object.getOwnPropertyDescriptor(window.screen, 'height')
+        const originalDevicePixelRatio = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio')
 
         function mockNavigator(userAgentData: any, maxTouchPoints: number) {
             Object.defineProperty(window.navigator, 'userAgentData', {
@@ -76,9 +78,15 @@ describe(`event-utils`, () => {
             })
         }
 
-        function mockScreen(width: number, height: number) {
+        function mockScreen(width: number, height: number, devicePixelRatio?: number) {
             Object.defineProperty(window.screen, 'width', { value: width, configurable: true })
             Object.defineProperty(window.screen, 'height', { value: height, configurable: true })
+            if (!isUndefined(devicePixelRatio)) {
+                Object.defineProperty(window, 'devicePixelRatio', {
+                    value: devicePixelRatio,
+                    configurable: true,
+                })
+            }
         }
 
         beforeEach(() => {
@@ -101,6 +109,9 @@ describe(`event-utils`, () => {
             if (originalScreenHeight) {
                 Object.defineProperty(window.screen, 'height', originalScreenHeight)
             }
+            if (originalDevicePixelRatio) {
+                Object.defineProperty(window, 'devicePixelRatio', originalDevicePixelRatio)
+            }
         })
 
         it('should detect Android tablet when UA reports desktop but Client Hints says Android', () => {
@@ -114,6 +125,15 @@ describe(`event-utils`, () => {
         it('should detect Android phone when screen short side is under 600px', () => {
             mockNavigator({ platform: 'Android' }, 5)
             mockScreen(412, 915)
+
+            const properties = getEventProperties()
+            expect(properties['$device_type']).toBe('Mobile')
+        })
+
+        it('should normalize screen size by devicePixelRatio for accurate dp classification', () => {
+            mockNavigator({ platform: 'Android' }, 5)
+            // 1200x800 physical pixels at 2x DPR = 600x400 dp, short side 400dp = phone
+            mockScreen(1200, 800, 2)
 
             const properties = getEventProperties()
             expect(properties['$device_type']).toBe('Mobile')

@@ -283,7 +283,8 @@ export function getEventProperties(
         const screenWidth = window?.screen?.width ?? 0
         const screenHeight = window?.screen?.height ?? 0
         const shortSide = Math.min(screenWidth, screenHeight)
-        deviceType = shortSide >= 600 ? 'Tablet' : 'Mobile'
+        const shortSideDp = shortSide / (window?.devicePixelRatio ?? 1)
+        deviceType = shortSideDp >= 600 ? 'Tablet' : 'Mobile'
     }
 
     return extend(
