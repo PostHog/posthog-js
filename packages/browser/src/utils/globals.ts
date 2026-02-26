@@ -7,6 +7,7 @@ import {
     RemoteConfig,
     SiteAppLoader,
     SessionStartReason,
+    UserFeedbackRecordingResult,
 } from '../types'
 import type {
     ConversationsRemoteConfig,
@@ -176,6 +177,7 @@ export type PostHogExtensionKind =
     | 'product-tours'
     | 'dead-clicks-autocapture'
     | 'remote-config'
+    | 'feedback-recording'
     | ExternalExtensionKind
 
 export interface LazyLoadedSessionRecordingInterface {
@@ -196,6 +198,16 @@ export interface LazyLoadedSessionRecordingInterface {
 export interface LazyLoadedDeadClicksAutocaptureInterface {
     start: (observerTarget: Node) => void
     stop: () => void
+}
+
+export interface LazyLoadedFeedbackRecordingInterface {
+    launchFeedbackRecordingUI: (
+        onRecordingEnded: (result: UserFeedbackRecordingResult) => void,
+        onCancel: () => void
+    ) => void
+    cleanup: () => void
+    getCurrentFeedbackRecordingId: () => string | null
+    isFeedbackRecordingActive: () => boolean
 }
 
 export interface LazyLoadedConversationsInterface {
@@ -265,6 +277,7 @@ interface PostHogExtensions {
     }
     initSessionRecording?: (ph: PostHog) => LazyLoadedSessionRecordingInterface
     initConversations?: (config: ConversationsRemoteConfig, posthog: PostHog) => LazyLoadedConversationsInterface
+    initFeedbackRecording?: (posthog: PostHog) => LazyLoadedFeedbackRecordingInterface
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win

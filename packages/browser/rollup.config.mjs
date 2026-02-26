@@ -142,6 +142,7 @@ const plugins = (es5, noExternal) => [
                               '_batchKey',
                               '_noTruncate',
                               '_onCapture',
+                              '_experimental_disable_feedback_recording',
 
                               // used in surveys, however, this shouldn't be needed
                               // TODO: figure out how to remove them
@@ -207,6 +208,7 @@ const plugins = (es5, noExternal) => [
                               'posthog',
                               'version',
                               'surveys',
+                              'feedbackManager',
                               'calculateEventProperties',
 
                               // possibly used by naughty users - we should decide if we want make these part of the public API, but be cautious for now

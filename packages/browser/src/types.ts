@@ -17,6 +17,7 @@ import type { SessionRecording } from './extensions/replay/session-recording'
 import type { Heatmaps } from './heatmaps'
 import type { PostHogProductTours } from './posthog-product-tours'
 import type { SiteApps } from './site-apps'
+import type { FeedbackRecording } from './extensions/feedback-recording'
 
 type Extension<T> = new (...args: any[]) => T
 
@@ -28,7 +29,14 @@ type Extension<T> = new (...args: any[]) => T
 export type { Property, Properties, JsonType, JsonRecord } from '@posthog/types'
 
 // Capture types
-export type { KnownEventName, EventName, CaptureResult, CaptureOptions, BeforeSendFn } from '@posthog/types'
+export type {
+    KnownEventName,
+    EventName,
+    CaptureResult,
+    CaptureOptions,
+    BeforeSendFn,
+    UserFeedbackRecordingResult,
+} from '@posthog/types'
 
 // Feature flag types
 export type {
@@ -142,6 +150,7 @@ export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
         webVitalsAutocapture?: Extension<WebVitalsAutocapture>
         exceptionObserver?: Extension<ExceptionObserver>
         deadClicksAutocapture?: Extension<DeadClicksAutocapture>
+        feedbackRecording?: Extension<FeedbackRecording>
     }
 }
 
@@ -314,6 +323,11 @@ export interface RemoteConfig {
      * Whether product tours are enabled
      */
     productTours?: boolean
+
+    /**
+     * Whether feedback recording is enabled
+     */
+    feedbackRecording?: boolean
 
     /**
      * Parameters for the toolbar

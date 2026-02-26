@@ -84,3 +84,5 @@ export type { SurveyRenderReason } from './survey'
 
 // Toolbar types
 export type { ToolbarParams, ToolbarUserIntent, ToolbarSource, ToolbarVersion } from './toolbar'
+
+export type { UserFeedbackRecordingResult } from './feedback-recording'

@@ -103,6 +103,7 @@ import {
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
+import type { FeedbackRecording } from './extensions/feedback-recording'
 import type { Autocapture } from './autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
 import type { ExceptionObserver } from './extensions/exception-autocapture'
@@ -208,6 +209,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_product_tours: false,
     disable_external_dependency_loading: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
+    _experimental_disable_feedback_recording: true,
     secure_cookie: window?.location?.protocol === 'https:',
     ip: false,
     opt_out_capturing_by_default: false,
@@ -360,6 +362,7 @@ export class PostHog implements PostHogInterface {
     deadClicksAutocapture?: DeadClicksAutocapture
     historyAutocapture?: HistoryAutocapture
     productTours?: PostHogProductTours
+    feedbackRecording?: FeedbackRecording
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -762,6 +765,12 @@ export class PostHog implements PostHogInterface {
             })
         }
 
+        if (ext.feedbackRecording) {
+            initTasks.push(() => {
+                this.feedbackRecording = new ext.feedbackRecording!(this) as FeedbackRecording
+            })
+        }
+
         if (ext.heatmaps) {
             initTasks.push(() => {
                 this.heatmaps = new ext.heatmaps!(this) as Heatmaps
@@ -890,6 +899,7 @@ export class PostHog implements PostHogInterface {
         this.logs.onRemoteConfig(config)
         this.conversations.onRemoteConfig(config)
         this.productTours?.onRemoteConfig(config)
+        this.feedbackRecording?.onRemoteConfig(config)
         this.webVitalsAutocapture?.onRemoteConfig(config)
         this.exceptionObserver?.onRemoteConfig(config)
         this.exceptions.onRemoteConfig(config)

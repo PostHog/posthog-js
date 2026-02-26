@@ -28,6 +28,7 @@ import { HistoryAutocapture } from './history-autocapture'
 import { TracingHeaders } from './tracing-headers'
 import { WebVitalsAutocapture } from './web-vitals'
 import { SessionRecording } from './replay/session-recording'
+import { FeedbackRecording } from './feedback-recording'
 import { Heatmaps } from '../heatmaps'
 import { PostHogProductTours } from '../posthog-product-tours'
 import { SiteApps } from '../site-apps'
@@ -38,6 +39,7 @@ type ExtensionClasses = NonNullable<PostHogConfig['__extensionClasses']>
 /** Session replay and related extensions. */
 export const SessionReplayExtensions = {
     sessionRecording: SessionRecording,
+    feedbackRecording: FeedbackRecording,
 } as const satisfies ExtensionClasses
 
 /** Autocapture, click tracking, heatmaps, and web vitals. */
