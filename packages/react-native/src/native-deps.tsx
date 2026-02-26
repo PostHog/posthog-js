@@ -188,7 +188,7 @@ export const buildOptimisiticAsyncStorage = (): PostHogCustomStorage | undefined
 
           async setItem(key: string, value: string) {
             const file = new filesystem.File(filesystem.Paths.document, key)
-            file.write(value)
+            await file.write(value)
           },
         }
       }
