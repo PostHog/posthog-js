@@ -231,6 +231,7 @@
         "_inputRef",
         "_internalEventEmitter",
         "_internalFlagCheckSatisfied",
+        "_isActivatingTrigger",
         "_isBelowMinimumDuration",
         "_isCalled",
         "_isConsoleLogCaptureEnabled",
