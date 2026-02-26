@@ -94,7 +94,7 @@ export class RemoteConfigLoader {
             return
         }
 
-        this._instance.featureFlags.reloadFeatureFlags()
+        this._instance.reloadFeatureFlags()
     }
 
     private _startRefreshInterval(): void {
