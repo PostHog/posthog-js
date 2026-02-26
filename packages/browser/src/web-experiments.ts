@@ -14,6 +14,7 @@ import { isMatchingRegex } from './utils/regex-utils'
 import { logger } from './utils/logger'
 import { isLikelyBot } from './utils/blocked-uas'
 import { getCampaignParams } from './utils/event-utils'
+import { Extension } from './extensions/types'
 
 export const webExperimentUrlValidationMap: Record<
     WebExperimentUrlMatchType,
@@ -29,7 +30,7 @@ export const webExperimentUrlValidationMap: Record<
     is_not: (conditionsUrl, location) => location.href !== conditionsUrl,
 }
 
-export class WebExperiments {
+export class WebExperiments implements Extension {
     private _flagToExperiments?: Map<string, WebExperiment>
 
     constructor(private _instance: PostHog) {
@@ -37,6 +38,9 @@ export class WebExperiments {
             this.onFeatureFlags(flags)
         })
     }
+
+    // No-op: activation is driven by the onFeatureFlags callback registered in the constructor
+    initialize() {}
 
     onFeatureFlags(flags: string[]) {
         if (this._is_bot()) {
