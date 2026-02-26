@@ -32,10 +32,16 @@ import { Heatmaps } from '../heatmaps'
 import { PostHogProductTours } from '../posthog-product-tours'
 import { SiteApps } from '../site-apps'
 import { PostHogConfig } from '../types'
+import { PostHogSurveys } from '../posthog-surveys'
+import { Toolbar } from './toolbar'
+import { PostHogExceptions } from '../posthog-exceptions'
+import { WebExperiments } from '../web-experiments'
+import { PostHogConversations } from './conversations/posthog-conversations'
+import { PostHogLogs } from '../posthog-logs'
 
 type ExtensionClasses = NonNullable<PostHogConfig['__extensionClasses']>
 
-/** Session replay and related extensions. */
+/** Session replay. */
 export const SessionReplayExtensions = {
     sessionRecording: SessionRecording,
 } as const satisfies ExtensionClasses
@@ -52,6 +58,7 @@ export const AnalyticsExtensions = {
 /** Automatic exception and error capture. */
 export const ErrorTrackingExtensions = {
     exceptionObserver: ExceptionObserver,
+    exceptions: PostHogExceptions,
 } as const satisfies ExtensionClasses
 
 /** In-app product tours. */
@@ -69,6 +76,31 @@ export const TracingExtensions = {
     tracingHeaders: TracingHeaders,
 } as const satisfies ExtensionClasses
 
+/** In-app surveys. */
+export const SurveysExtensions = {
+    surveys: PostHogSurveys,
+} as const satisfies ExtensionClasses
+
+/** PostHog toolbar for visual element inspection and action setup. */
+export const ToolbarExtensions = {
+    toolbar: Toolbar,
+} as const satisfies ExtensionClasses
+
+/** Web experiments. */
+export const ExperimentsExtensions = {
+    experiments: WebExperiments,
+} as const satisfies ExtensionClasses
+
+/** In-app conversations. */
+export const ConversationsExtensions = {
+    conversations: PostHogConversations,
+} as const satisfies ExtensionClasses
+
+/** Console log capture. */
+export const LogsExtensions = {
+    logs: PostHogLogs,
+} as const satisfies ExtensionClasses
+
 /** All extensions — equivalent to the default `posthog-js` bundle. */
 export const AllExtensions = {
     ...SessionReplayExtensions,
@@ -77,4 +109,9 @@ export const AllExtensions = {
     ...ProductToursExtensions,
     ...SiteAppsExtensions,
     ...TracingExtensions,
+    ...SurveysExtensions,
+    ...ToolbarExtensions,
+    ...ExperimentsExtensions,
+    ...ConversationsExtensions,
+    ...LogsExtensions,
 } as const satisfies ExtensionClasses

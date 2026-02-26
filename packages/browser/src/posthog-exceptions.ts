@@ -1,4 +1,5 @@
 import { ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS, ERROR_TRACKING_SUPPRESSION_RULES } from './constants'
+import { Extension } from './extensions/types'
 import { PostHog } from './posthog-core'
 import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
@@ -22,7 +23,7 @@ export function buildErrorPropertiesBuilder() {
         ErrorTracking.createDefaultStackParser()
     )
 }
-export class PostHogExceptions {
+export class PostHogExceptions implements Extension {
     private readonly _instance: PostHog
     private _suppressionRules: ErrorTrackingSuppressionRule[] = []
     private _errorPropertiesBuilder: ErrorTracking.ErrorPropertiesBuilder = buildErrorPropertiesBuilder()

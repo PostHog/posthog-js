@@ -3,8 +3,9 @@ import { RemoteConfig } from './types'
 import { isNullish } from '@posthog/core'
 import { assignableWindow } from './utils/globals'
 import { createLogger } from './utils/logger'
+import { Extension } from './extensions/types'
 
-export class PostHogLogs {
+export class PostHogLogs implements Extension {
     private _isLogsEnabled: boolean = false
     private _isLoaded: boolean = false
 
@@ -12,6 +13,10 @@ export class PostHogLogs {
         if (this._instance && this._instance.config.logs?.captureConsoleLogs) {
             this._isLogsEnabled = true
         }
+    }
+
+    initialize() {
+        this.loadIfEnabled()
     }
 
     onRemoteConfig(response: RemoteConfig) {
