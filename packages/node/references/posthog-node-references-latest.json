@@ -1441,6 +1441,13 @@
       "example": "{\n    event?: string;\n    selector?: string;\n    text?: string;\n    text_matching?: ActionStepStringMatching;\n    href?: string;\n    href_matching?: ActionStepStringMatching;\n    url?: string;\n    url_matching?: ActionStepStringMatching;\n}"
     },
     {
+      "id": "AllFlagsOptions",
+      "name": "AllFlagsOptions",
+      "properties": [],
+      "path": "src/types.ts",
+      "example": "BaseFlagEvaluationOptions & {\n    flagKeys?: string[];\n}"
+    },
+    {
       "id": "BaseException",
       "name": "BaseException",
       "properties": [
@@ -1460,6 +1467,13 @@
       "path": "../core/src/error-tracking/types.ts"
     },
     {
+      "id": "BaseFlagEvaluationOptions",
+      "name": "BaseFlagEvaluationOptions",
+      "properties": [],
+      "path": "src/types.ts",
+      "example": "{\n    groups?: Record<string, string>;\n    personProperties?: Record<string, string>;\n    groupProperties?: Record<string, Record<string, string>>;\n    onlyEvaluateLocally?: boolean;\n    disableGeoip?: boolean;\n}"
+    },
+    {
       "id": "BasicSurveyQuestion",
       "name": "BasicSurveyQuestion",
       "properties": [],
@@ -1472,18 +1486,6 @@
       "properties": [],
       "path": "../core/src/types.ts",
       "example": "(event: CaptureEvent | null) => CaptureEvent | null"
-      "id": "AllFlagsOptions",
-      "name": "AllFlagsOptions",
-      "properties": [],
-      "path": "src/types.ts",
-      "example": "BaseFlagEvaluationOptions & {\n    flagKeys?: string[];\n}"
-    },
-    {
-      "id": "BaseFlagEvaluationOptions",
-      "name": "BaseFlagEvaluationOptions",
-      "properties": [],
-      "path": "src/types.ts",
-      "example": "{\n    groups?: Record<string, string>;\n    personProperties?: Record<string, string>;\n    groupProperties?: Record<string, Record<string, string>>;\n    onlyEvaluateLocally?: boolean;\n    disableGeoip?: boolean;\n}"
     },
     {
       "id": "BeforeSendFn",

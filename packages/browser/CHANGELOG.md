@@ -1,5 +1,26 @@
 # posthog-js
 
+## 1.356.0
+
+### Minor Changes
+
+- [#3142](https://github.com/PostHog/posthog-js/pull/3142) [`ec54fd8`](https://github.com/PostHog/posthog-js/commit/ec54fd8fcfda496879e456361fb97de504063393) Thanks [@dmarticus](https://github.com/dmarticus)! - Add feature_flag_cache_ttl_ms config to prevent stale flag values
+  (2026-02-26)
+
+### Patch Changes
+
+- [#3154](https://github.com/PostHog/posthog-js/pull/3154) [`a47179c`](https://github.com/PostHog/posthog-js/commit/a47179c1d007d17e2f65848c98b66cba2b706e65) Thanks [@slshults](https://github.com/slshults)! - fix: Improve tablet device type detection when Chrome sends desktop-like UA strings
+
+    Chrome on Android tablets defaults to "request desktop site" mode, sending a UA string
+    indistinguishable from desktop Linux. This uses the Client Hints API (navigator.userAgentData.platform)
+    and touch capability (navigator.maxTouchPoints) to correctly classify these devices as Tablet or Mobile
+    when UA-based detection falls through to the Desktop default. (2026-02-26)
+
+- [#3145](https://github.com/PostHog/posthog-js/pull/3145) [`d741668`](https://github.com/PostHog/posthog-js/commit/d741668f6f966c729308d3b71fd7deebe16411f0) Thanks [@dmarticus](https://github.com/dmarticus)! - Adds a remote_config_refresh_interval_ms config option to control how often feature flags are automatically refreshed in long-running sessions.
+  (2026-02-26)
+- Updated dependencies [[`ec54fd8`](https://github.com/PostHog/posthog-js/commit/ec54fd8fcfda496879e456361fb97de504063393), [`d741668`](https://github.com/PostHog/posthog-js/commit/d741668f6f966c729308d3b71fd7deebe16411f0)]:
+    - @posthog/types@1.356.0
+
 ## 1.355.0
 
 ### Minor Changes
