@@ -1,5 +1,41 @@
 # posthog-js
 
+## 1.354.4
+
+### Patch Changes
+
+- [#3152](https://github.com/PostHog/posthog-js/pull/3152) [`d6fd9c9`](https://github.com/PostHog/posthog-js/commit/d6fd9c9c60564da2b095e6b83100a45676ea0f12) Thanks [@ksvat](https://github.com/ksvat)! - add re-entrancy guard for cases where ALL + regex + event trigger matching is configured
+  (2026-02-26)
+- Updated dependencies []:
+    - @posthog/types@1.354.4
+
+## 1.354.3
+
+### Patch Changes
+
+- [#3113](https://github.com/PostHog/posthog-js/pull/3113) [`77261d8`](https://github.com/PostHog/posthog-js/commit/77261d8a27e64e2f7b80db60a25616e9f1aa0959) Thanks [@adboio](https://github.com/adboio)! - add product tours device type targeting
+  (2026-02-25)
+- Updated dependencies []:
+    - @posthog/types@1.354.3
+
+## 1.354.2
+
+### Patch Changes
+
+- [#3153](https://github.com/PostHog/posthog-js/pull/3153) [`67cf41e`](https://github.com/PostHog/posthog-js/commit/67cf41e10cdca853b39f37d8b16b5dee37e0283a) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: Add additional legacy exports for fully qualified dist and lib exports
+  (2026-02-25)
+- Updated dependencies []:
+    - @posthog/types@1.354.2
+
+## 1.354.1
+
+### Patch Changes
+
+- [#3148](https://github.com/PostHog/posthog-js/pull/3148) [`9ae20e7`](https://github.com/PostHog/posthog-js/commit/9ae20e7cde5d474da1d52ae3b77929b4f4adb54e) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: Expose all export paths
+  (2026-02-25)
+- Updated dependencies []:
+    - @posthog/types@1.354.1
+
 ## 1.354.0
 
 ### Minor Changes

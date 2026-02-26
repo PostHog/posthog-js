@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "1.354.4",
+    "version": "1.354.2",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -2869,10 +2869,6 @@
         {
           "type": "{\n        values: SurveyEventWithFilters[];\n    } | null",
           "name": "cancelEvents"
-        },
-        {
-          "type": "string[]",
-          "name": "deviceTypes"
         },
         {
           "type": "{\n        values: SurveyEventWithFilters[];\n    } | null",

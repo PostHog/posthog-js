@@ -110,8 +110,7 @@ export type PostHogSessionReplayConfig = {
    */
   maskAllSandboxedViews?: boolean
   /**
-   * Enable capturing of logcat as console events
-   * Android only
+   * Enable capturing of logs as console events
    * Default: true
    */
   captureLog?: boolean
