@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.355.0
+
+### Minor Changes
+
+- [#3109](https://github.com/PostHog/posthog-js/pull/3109) [`1d3f14c`](https://github.com/PostHog/posthog-js/commit/1d3f14cadfe49a83d70d1efd778c1a24268b0f4f) Thanks [@adboio](https://github.com/adboio)! - add product tour wait period support
+  (2026-02-26)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.355.0
+
 ## 1.354.4
 
 ### Patch Changes
