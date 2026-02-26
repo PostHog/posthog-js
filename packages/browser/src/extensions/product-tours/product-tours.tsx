@@ -21,6 +21,7 @@ import {
     getProductTourStylesheet,
     getStepImageUrls,
     hasElementTarget,
+    hasTourWaitPeriodPassed,
     normalizeUrl,
     resolveStepTranslation,
 } from './product-tours-utils'
@@ -37,6 +38,7 @@ import {
     TOUR_COMPLETED_KEY_PREFIX,
     TOUR_DISMISSED_KEY_PREFIX,
     ACTIVE_TOUR_SESSION_KEY,
+    LAST_SEEN_TOUR_DATE_KEY_PREFIX,
 } from './constants'
 import { doesTourActivateByAction, doesTourActivateByEvent } from '../../utils/product-tour-utils'
 import { TOOLBAR_ID } from '../../constants'
@@ -456,6 +458,13 @@ export class ProductTourManager {
                 break
         }
 
+        if (!hasTourWaitPeriodPassed(tour.conditions?.seenTourWaitPeriod)) {
+            logger.info(
+                `Cannot show tour ${tour.id}: user has seen a ${tour.conditions?.seenTourWaitPeriod?.types} tour within the last ${tour.conditions?.seenTourWaitPeriod?.days} days.`
+            )
+            return false
+        }
+
         if (!this._isProductToursFeatureFlagEnabled({ flagKey: tour.internal_targeting_flag_key })) {
             logger.info(`Tour ${tour.id} failed feature flag check: ${tour.internal_targeting_flag_key}`)
             return false
@@ -490,10 +499,12 @@ export class ProductTourManager {
                 [ProductTourEventProperties.TOUR_NAME]: tour.name,
                 [ProductTourEventProperties.TOUR_ITERATION]: tour.current_iteration || 1,
                 [ProductTourEventProperties.TOUR_RENDER_REASON]: renderReason,
+                [ProductTourEventProperties.TOUR_TYPE]: tour.tour_type,
             })
 
             if (!this._isPreviewMode) {
                 localStore._set(`${TOUR_SHOWN_KEY_PREFIX}${tour.id}`, true)
+                localStore._set(`${LAST_SEEN_TOUR_DATE_KEY_PREFIX}${tour.tour_type}`, new Date().toISOString())
 
                 this._instance.capture('$set', {
                     $set: { [`$product_tour_shown/${tour.id}`]: true },
@@ -1106,7 +1117,8 @@ export class ProductTourManager {
             if (
                 key?.startsWith(TOUR_SHOWN_KEY_PREFIX) ||
                 key?.startsWith(TOUR_COMPLETED_KEY_PREFIX) ||
-                key?.startsWith(TOUR_DISMISSED_KEY_PREFIX)
+                key?.startsWith(TOUR_DISMISSED_KEY_PREFIX) ||
+                key?.startsWith(LAST_SEEN_TOUR_DATE_KEY_PREFIX)
             ) {
                 keysToRemove.push(key)
             }
