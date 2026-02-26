@@ -160,44 +160,50 @@ export const buildOptimisiticAsyncStorage = (): PostHogCustomStorage | undefined
   // see https://github.com/PostHog/posthog-js-lite/blob/5fb7bee96f739b243dfea5589e2027f16629e8cd/posthog-react-native/src/optional/OptionalExpoFileSystem.ts#L7-L11
   const supportedPlatform = !isWeb() && !isMacOS()
 
-  // expo-54 uses expo-file-system v19 which removed the async methods and added new APIs
-  // here we try to use the legacy package for back compatibility
-  if (OptionalExpoFileSystemLegacy && supportedPlatform) {
-    const filesystem = OptionalExpoFileSystemLegacy
-    return buildLegacyStorage(filesystem)
-  }
+  // expo-file-system is only supported on native platforms (not web/macOS).
+  // See https://github.com/PostHog/posthog-js-lite/issues/140
+  if (supportedPlatform) {
+    // expo >= 54 and expo-file-system >= 19: prefer the new File/Paths API.
+    // We always check for the new API first because:
+    // - SDK 54 stable exports legacy methods (readAsStringAsync, writeAsStringAsync) that throw
+    //   a deprecation error when called, so existence checks alone are unreliable.
+    // - SDK 55+ has a working legacy subpath, but the new API is the recommended approach.
+    // See https://github.com/PostHog/posthog-js/issues/3151
+    if (OptionalExpoFileSystem) {
+      const filesystem = OptionalExpoFileSystem as any
 
-  // expo-54 and expo-file-system v19 new APIs support
-  if (OptionalExpoFileSystem && supportedPlatform) {
-    const filesystem = OptionalExpoFileSystem
+      if (filesystem.Paths && filesystem.File) {
+        return {
+          async getItem(key: string) {
+            try {
+              // File constructor accepts Directory instances and joins path segments
+              // See https://docs.expo.dev/versions/latest/sdk/filesystem/
+              const file = new filesystem.File(filesystem.Paths.document, key)
+              const stringContent = await file.text()
+              return stringContent
+            } catch (e) {
+              return null
+            }
+          },
 
+          async setItem(key: string, value: string) {
+            const file = new filesystem.File(filesystem.Paths.document, key)
+            file.write(value)
+          },
+        }
+      }
+    }
+
+    // Fallback to legacy APIs for older Expo versions (expo <= 53, expo-file-system <= 18).
+    // Try the legacy subpath first (available in SDK 55+), then the main module.
+    // We validate that readAsStringAsync is a real function before using it,
+    // to avoid calling deprecated stubs that throw at runtime (SDK 54 stable).
+    const legacyModule = (OptionalExpoFileSystemLegacy || OptionalExpoFileSystem) as any
     try {
-      const expoFileSystemLegacy = filesystem as any
-      // identify legacy APIs with older versions (expo <= 53 and expo-file-system <= 18)
-      if (expoFileSystemLegacy.readAsStringAsync) {
-        return buildLegacyStorage(filesystem)
+      if (legacyModule && typeof legacyModule.readAsStringAsync === 'function') {
+        return buildLegacyStorage(legacyModule)
       }
     } catch (e) {}
-
-    // expo >= 54 and expo-file-system >= 19
-    return {
-      async getItem(key: string) {
-        try {
-          const uri = ((filesystem as any).Paths?.document.info().uri || '') + key
-          const file = new (filesystem as any).File(uri)
-          const stringContent = await file.text()
-          return stringContent
-        } catch (e) {
-          return null
-        }
-      },
-
-      async setItem(key: string, value: string) {
-        const uri = ((filesystem as any).Paths?.document.info().uri || '') + key
-        const file = new (filesystem as any).File(uri)
-        file.write(value)
-      },
-    }
   }
 
   if (OptionalAsyncStorage) {
