@@ -315,7 +315,11 @@ const plugins = (es5, noExternal) => [
     },
 ]
 
-const entrypoints = fs.readdirSync('./src/entrypoints')
+const entryFilter = process.env.ENTRY
+const allEntrypoints = fs.readdirSync('./src/entrypoints')
+const entrypoints = entryFilter
+    ? allEntrypoints.filter((file) => file.startsWith(entryFilter))
+    : allEntrypoints
 
 const entrypointTargets = entrypoints.map((file) => {
     const fileParts = file.split('.')
