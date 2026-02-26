@@ -2258,6 +2258,7 @@ export class PostHog implements PostHogInterface {
     canRenderSurveyAsync(surveyId: string, forceReload = false): Promise<SurveyRenderReason> {
         return (
             this.surveys?.canRenderSurveyAsync(surveyId, forceReload) ??
+            // eslint-disable-next-line compat/compat
             Promise.resolve({ visible: false, disabledReason: 'Surveys module not available' })
         )
     }

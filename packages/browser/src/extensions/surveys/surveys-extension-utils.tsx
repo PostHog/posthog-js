@@ -84,7 +84,11 @@ export const defaultSurveyAppearance = {
     scrollbarTrackColor: 'var(--ph-survey-background-color)',
 } as const
 
-const BOTTOM_BORDER_SURVEY_POSITIONS: SurveyPosition[] = [SurveyPosition.Center, SurveyPosition.Left, SurveyPosition.Right]
+const BOTTOM_BORDER_SURVEY_POSITIONS: SurveyPosition[] = [
+    SurveyPosition.Center,
+    SurveyPosition.Left,
+    SurveyPosition.Right,
+]
 
 export const addSurveyCSSVariablesToElement = (
     element: HTMLElement,
