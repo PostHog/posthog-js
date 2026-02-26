@@ -23,6 +23,7 @@ import type { Toolbar } from './extensions/toolbar'
 import type { PostHogExceptions } from './posthog-exceptions'
 import type { WebExperiments } from './web-experiments'
 import type { PostHogConversations } from './extensions/conversations/posthog-conversations'
+import type { PostHogFeatureFlags } from './posthog-featureflags'
 import type { PostHogLogs } from './posthog-logs'
 
 // ============================================================================
@@ -137,6 +138,7 @@ export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
      * @internal
      */
     __extensionClasses?: {
+        exceptions?: ExtensionConstructor<PostHogExceptions>
         historyAutocapture?: ExtensionConstructor<HistoryAutocapture>
         tracingHeaders?: ExtensionConstructor<TracingHeaders>
         siteApps?: ExtensionConstructor<SiteApps>
@@ -147,11 +149,11 @@ export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
         webVitalsAutocapture?: ExtensionConstructor<WebVitalsAutocapture>
         exceptionObserver?: ExtensionConstructor<ExceptionObserver>
         deadClicksAutocapture?: ExtensionConstructor<DeadClicksAutocapture>
-        exceptions?: ExtensionConstructor<PostHogExceptions>
         surveys?: ExtensionConstructor<PostHogSurveys>
         toolbar?: ExtensionConstructor<Toolbar>
         experiments?: ExtensionConstructor<WebExperiments>
         conversations?: ExtensionConstructor<PostHogConversations>
+        featureFlags?: ExtensionConstructor<PostHogFeatureFlags>
         logs?: ExtensionConstructor<PostHogLogs>
     }
 }

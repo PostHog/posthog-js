@@ -17,6 +17,7 @@ import {
     OverrideFeatureFlagsOptions,
 } from './types'
 import { PostHogPersistence } from './posthog-persistence'
+import type { Extension } from './extensions/types'
 
 import {
     PERSISTENCE_EARLY_ACCESS_FEATURES,
@@ -181,7 +182,7 @@ export enum QuotaLimitedResource {
     Recordings = 'recordings',
 }
 
-export class PostHogFeatureFlags {
+export class PostHogFeatureFlags implements Extension {
     _override_warning: boolean = false
     featureFlagEventHandlers: FeatureFlagsCallback[]
     $anon_distinct_id: string | undefined
@@ -228,6 +229,63 @@ export class PostHogFeatureFlags {
 
     private _shouldIncludeEvaluationEnvironments(): boolean {
         return this._getValidEvaluationEnvironments().length > 0
+    }
+
+    initialize() {
+        const { config } = this._instance
+        const bootstrapFlags = config.bootstrap?.featureFlags ?? {}
+        const hasBootstrappedFlags = Object.keys(bootstrapFlags).length
+        if (hasBootstrappedFlags) {
+            const bootstrapPayloads = config.bootstrap?.featureFlagPayloads ?? {}
+            const activeFlags = Object.keys(bootstrapFlags)
+                .filter((flag) => !!bootstrapFlags[flag])
+                .reduce((res: Record<string, string | boolean>, key) => {
+                    res[key] = bootstrapFlags[key] || false
+                    return res
+                }, {})
+            const featureFlagPayloads = Object.keys(bootstrapPayloads)
+                .filter((key) => activeFlags[key])
+                .reduce((res: Record<string, JsonType>, key) => {
+                    if (bootstrapPayloads[key]) {
+                        res[key] = bootstrapPayloads[key]
+                    }
+                    return res
+                }, {})
+
+            this.receivedFeatureFlags({ featureFlags: activeFlags, featureFlagPayloads })
+        }
+    }
+
+    updateFlags(
+        flags: Record<string, boolean | string>,
+        payloads?: Record<string, JsonType>,
+        options?: { merge?: boolean }
+    ): void {
+        // If merging, combine with existing flags
+        const existingFlags = options?.merge ? this.getFlagVariants() : {}
+        const existingPayloads = options?.merge ? this.getFlagPayloads() : {}
+        const finalFlags = { ...existingFlags, ...flags }
+        const finalPayloads = { ...existingPayloads, ...payloads }
+
+        // Convert simple flags to v4 format to avoid deprecation warning
+        const flagDetails: Record<string, FeatureFlagDetail> = {}
+        for (const [key, value] of Object.entries(finalFlags)) {
+            const isVariant = typeof value === 'string'
+            flagDetails[key] = {
+                key,
+                enabled: isVariant ? true : Boolean(value),
+                variant: isVariant ? value : undefined,
+                reason: undefined,
+                // id: 0 indicates manually injected flags (not from server evaluation)
+                metadata: !isUndefined(finalPayloads?.[key])
+                    ? { id: 0, version: undefined, description: undefined, payload: finalPayloads[key] }
+                    : undefined,
+            }
+        }
+
+        this.receivedFeatureFlags({
+            flags: flagDetails,
+        })
     }
 
     get hasLoadedFlags(): boolean {
