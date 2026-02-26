@@ -1181,6 +1181,20 @@ export interface PostHogConfig {
     feature_flag_request_timeout_ms: number
 
     /**
+     * Sets the maximum age (in milliseconds) for cached feature flag values.
+     * When the cache is older than this value:
+     * - `getFeatureFlag()` will return `undefined` instead of stale cached values
+     * - `$feature/` properties will not be attached to events
+     * - A background refresh will be triggered automatically
+     *
+     * This prevents stale feature flag values from being used when the `/flags` request
+     * fails (e.g., due to ad blockers or network issues).
+     *
+     * When not set or set to `0`, cache expiration is disabled (cached values never expire).
+     */
+    feature_flag_cache_ttl_ms?: number
+
+    /**
      * Sets timeout for fetching surveys
      *
      * @default 10000

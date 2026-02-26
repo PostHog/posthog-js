@@ -10,6 +10,7 @@ import {
     INITIAL_PERSON_INFO,
     INITIAL_REFERRER_INFO,
     PERSISTENCE_RESERVED_PROPERTIES,
+    PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
 } from './constants'
 
 import { isUndefined } from '@posthog/core'
@@ -137,14 +138,37 @@ export class PostHogPersistence {
         return store
     }
 
+    /**
+     * Check if the feature flag cache is stale based on the configured TTL.
+     * @param ttl Optional TTL override (uses config value if not provided)
+     * @internal
+     */
+    _isFeatureFlagCacheStale(ttl?: number): boolean {
+        const effectiveTtl = ttl ?? this._config.feature_flag_cache_ttl_ms
+        if (!effectiveTtl || effectiveTtl <= 0) {
+            return false
+        }
+        const evaluatedAt = this.props[PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]
+        // If evaluatedAt is missing or not a numeric timestamp, consider cache stale.
+        // This handles SDK upgrades where old cached flags lack evaluatedAt.
+        if (!evaluatedAt || typeof evaluatedAt !== 'number') {
+            return true
+        }
+        return Date.now() - evaluatedAt > effectiveTtl
+    }
+
     properties(): Properties {
         const p: Properties = {}
+
         // Filter out reserved properties
-        each(this.props, function (v, k) {
+        each(this.props, (v, k) => {
             if (k === ENABLED_FEATURE_FLAGS && isObject(v)) {
-                const keys = Object.keys(v)
-                for (let i = 0; i < keys.length; i++) {
-                    p[`$feature/${keys[i]}`] = v[keys[i]]
+                // Skip $feature/ properties if cache is stale
+                if (!this._isFeatureFlagCacheStale()) {
+                    const keys = Object.keys(v)
+                    for (let i = 0; i < keys.length; i++) {
+                        p[`$feature/${keys[i]}`] = v[keys[i]]
+                    }
                 }
             } else if (!include(PERSISTENCE_RESERVED_PROPERTIES, k)) {
                 p[k] = v

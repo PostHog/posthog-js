@@ -22,6 +22,7 @@ import {
     PERSISTENCE_EARLY_ACCESS_FEATURES,
     PERSISTENCE_FEATURE_FLAG_DETAILS,
     PERSISTENCE_FEATURE_FLAG_ERRORS,
+    PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     ENABLED_FEATURE_FLAGS,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
@@ -57,7 +58,6 @@ const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
 const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
 const PERSISTENCE_FEATURE_FLAG_REQUEST_ID = '$feature_flag_request_id'
-const PERSISTENCE_FEATURE_FLAG_EVALUATED_AT = '$feature_flag_evaluated_at'
 
 export const filterActiveFeatureFlags = (featureFlags?: Record<string, string | boolean>) => {
     const activeFeatureFlags: Record<string, string | boolean> = {}
@@ -192,9 +192,37 @@ export class PostHogFeatureFlags {
     private _reloadDebouncer?: any
     private _flagsLoadedFromRemote: boolean = false
     private _hasLoggedDeprecationWarning: boolean = false
+    private _staleCacheRefreshTriggered: boolean = false
 
     constructor(private _instance: PostHog) {
         this.featureFlagEventHandlers = []
+    }
+
+    /**
+     * Check if the feature flag cache is stale based on the configured TTL.
+     */
+    private _isCacheStale(): boolean {
+        return (
+            this._instance.persistence?._isFeatureFlagCacheStale(this._instance.config.feature_flag_cache_ttl_ms) ??
+            false
+        )
+    }
+
+    /**
+     * Triggers a debounced reload when cache staleness is first detected.
+     * Returns true if cache is stale, false otherwise.
+     */
+    private _checkAndTriggerStaleRefresh(): boolean {
+        if (!this._isCacheStale()) {
+            return false
+        }
+        // Only trigger refresh once per stale period
+        if (!this._staleCacheRefreshTriggered && !this._requestInFlight) {
+            this._staleCacheRefreshTriggered = true
+            logger.warn('Feature flag cache is stale, triggering refresh...')
+            this.reloadFeatureFlags()
+        }
+        return true
     }
 
     private _getValidEvaluationEnvironments(): string[] {
@@ -559,6 +587,10 @@ export class PostHogFeatureFlags {
             logger.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
+        // Check if cache is stale and trigger refresh if needed
+        if (this._checkAndTriggerStaleRefresh()) {
+            return undefined
+        }
         const result = this.getFeatureFlagResult(key, options)
         return result?.variant ?? result?.enabled
     }
@@ -622,6 +654,10 @@ export class PostHogFeatureFlags {
         }
         if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
             logger.warn('getFeatureFlagResult for key "' + key + '" failed. Feature flags didn\'t load in time.')
+            return undefined
+        }
+        // Check if cache is stale and trigger refresh if needed
+        if (this._checkAndTriggerStaleRefresh()) {
             return undefined
         }
 
@@ -809,6 +845,12 @@ export class PostHogFeatureFlags {
         const currentFlagPayloads = this.getFlagPayloads()
         const currentFlagDetails = this.getFlagsWithDetails()
         parseFlagsResponse(response, this._instance.persistence, currentFlags, currentFlagPayloads, currentFlagDetails)
+
+        // Reset stale refresh flag when we successfully receive fresh flags
+        if (!errorsLoading) {
+            this._staleCacheRefreshTriggered = false
+        }
+
         this._fireFeatureFlagsCallbacks(errorsLoading)
     }
 
