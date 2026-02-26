@@ -56,6 +56,91 @@ describe(`event-utils`, () => {
         })
     })
 
+    describe('tablet detection via supplementary signals', () => {
+        const androidTabletDesktopUA =
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+
+        const originalUserAgentData = Object.getOwnPropertyDescriptor(window.navigator, 'userAgentData')
+        const originalMaxTouchPoints = Object.getOwnPropertyDescriptor(window.navigator, 'maxTouchPoints')
+        const originalScreenWidth = Object.getOwnPropertyDescriptor(window.screen, 'width')
+        const originalScreenHeight = Object.getOwnPropertyDescriptor(window.screen, 'height')
+
+        function mockNavigator(userAgentData: any, maxTouchPoints: number) {
+            Object.defineProperty(window.navigator, 'userAgentData', {
+                value: userAgentData,
+                configurable: true,
+            })
+            Object.defineProperty(window.navigator, 'maxTouchPoints', {
+                value: maxTouchPoints,
+                configurable: true,
+            })
+        }
+
+        function mockScreen(width: number, height: number) {
+            Object.defineProperty(window.screen, 'width', { value: width, configurable: true })
+            Object.defineProperty(window.screen, 'height', { value: height, configurable: true })
+        }
+
+        beforeEach(() => {
+            // @ts-expect-error ok to set global in test
+            globals['userAgent'] = androidTabletDesktopUA
+        })
+
+        afterEach(() => {
+            if (originalUserAgentData) {
+                Object.defineProperty(window.navigator, 'userAgentData', originalUserAgentData)
+            } else {
+                delete (window.navigator as any).userAgentData
+            }
+            if (originalMaxTouchPoints) {
+                Object.defineProperty(window.navigator, 'maxTouchPoints', originalMaxTouchPoints)
+            }
+            if (originalScreenWidth) {
+                Object.defineProperty(window.screen, 'width', originalScreenWidth)
+            }
+            if (originalScreenHeight) {
+                Object.defineProperty(window.screen, 'height', originalScreenHeight)
+            }
+        })
+
+        it('should detect Android tablet when UA reports desktop but Client Hints says Android', () => {
+            mockNavigator({ platform: 'Android' }, 5)
+            mockScreen(1280, 800)
+
+            const properties = getEventProperties()
+            expect(properties['$device_type']).toBe('Tablet')
+        })
+
+        it('should detect Android phone when screen short side is under 600px', () => {
+            mockNavigator({ platform: 'Android' }, 5)
+            mockScreen(412, 915)
+
+            const properties = getEventProperties()
+            expect(properties['$device_type']).toBe('Mobile')
+        })
+
+        it('should remain Desktop when Client Hints platform is not Android', () => {
+            mockNavigator({ platform: 'Linux' }, 0)
+
+            const properties = getEventProperties()
+            expect(properties['$device_type']).toBe('Desktop')
+        })
+
+        it('should remain Desktop when maxTouchPoints is 0', () => {
+            mockNavigator({ platform: 'Android' }, 0)
+
+            const properties = getEventProperties()
+            expect(properties['$device_type']).toBe('Desktop')
+        })
+
+        it('should remain Desktop when userAgentData is unavailable', () => {
+            mockNavigator(undefined, 5)
+
+            const properties = getEventProperties()
+            expect(properties['$device_type']).toBe('Desktop')
+        })
+    })
+
     describe('timezones', () => {
         it('should compute timezone', () => {
             const timezone = getTimezone()
