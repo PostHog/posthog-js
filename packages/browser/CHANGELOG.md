@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.354.4
+
+### Patch Changes
+
+- [#3152](https://github.com/PostHog/posthog-js/pull/3152) [`d6fd9c9`](https://github.com/PostHog/posthog-js/commit/d6fd9c9c60564da2b095e6b83100a45676ea0f12) Thanks [@ksvat](https://github.com/ksvat)! - add re-entrancy guard for cases where ALL + regex + event trigger matching is configured
+  (2026-02-26)
+- Updated dependencies []:
+    - @posthog/types@1.354.4
+
 ## 1.354.3
 
 ### Patch Changes
