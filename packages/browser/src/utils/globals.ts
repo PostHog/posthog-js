@@ -7,6 +7,7 @@ import {
     RemoteConfig,
     SiteAppLoader,
     SessionStartReason,
+    UserFeedbackRecordingResult,
 } from '../types'
 import type {
     ConversationsRemoteConfig,
@@ -197,6 +198,16 @@ export interface LazyLoadedDeadClicksAutocaptureInterface {
     stop: () => void
 }
 
+export interface LazyLoadedFeedbackRecordingInterface {
+    launchFeedbackRecordingUI: (
+        onRecordingEnded: (result: UserFeedbackRecordingResult) => void,
+        onCancel: () => void
+    ) => void
+    cleanup: () => void
+    getCurrentFeedbackRecordingId: () => string | null
+    isFeedbackRecordingActive: () => boolean
+}
+
 export interface LazyLoadedConversationsInterface {
     // Widget control
     show: () => void
@@ -232,7 +243,6 @@ interface PostHogExtensions {
     rrweb?: { record: any; version: string; wasMaxDepthReached?: () => boolean; resetMaxDepthState?: () => void }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
     generateSurveys?: (posthog: PostHog, isSurveysEnabled: boolean) => any | undefined
-    generateFeedbackRecording?: (posthog: PostHog) => any | undefined
     generateProductTours?: (posthog: PostHog, isEnabled: boolean) => any | undefined
     logs?: {
         initializeLogs?: (posthog: PostHog) => any | undefined
@@ -262,6 +272,7 @@ interface PostHogExtensions {
     }
     initSessionRecording?: (ph: PostHog) => LazyLoadedSessionRecordingInterface
     initConversations?: (config: ConversationsRemoteConfig, posthog: PostHog) => LazyLoadedConversationsInterface
+    initFeedbackRecording?: (posthog: PostHog) => LazyLoadedFeedbackRecordingInterface
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win
