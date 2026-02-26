@@ -127,7 +127,7 @@ describe('extension lifecycle', () => {
             const initializeSpy = jest.fn()
 
             class SpyExtension {
-                constructor(_instance: PostHog) {}
+                constructor() {}
                 initialize() {
                     initializeSpy()
                 }
@@ -147,7 +147,7 @@ describe('extension lifecycle', () => {
             PostHog.__defaultExtensionClasses = {}
 
             class MinimalExtension {
-                constructor(_instance: PostHog) {}
+                constructor() {}
             }
 
             const posthog = await createPosthogInstance(undefined, {
@@ -167,7 +167,7 @@ describe('extension lifecycle', () => {
             const onRemoteConfigSpy = jest.fn()
 
             class SpyExtension {
-                constructor(_instance: PostHog) {}
+                constructor() {}
                 onRemoteConfig(config: RemoteConfig) {
                     onRemoteConfigSpy(config)
                 }

@@ -387,16 +387,16 @@ export class PostHog implements PostHogInterface {
 
     _internalEventEmitter = new SimpleEventEmitter()
 
-    private readonly extensions: Extension[] = []
+    private readonly _extensions: Extension[] = []
 
     private _replaceExtension<T extends Extension>(oldExt: T | undefined, newExt: T): T {
         if (oldExt) {
-            const idx = this.extensions.indexOf(oldExt)
+            const idx = this._extensions.indexOf(oldExt)
             if (idx !== -1) {
-                this.extensions.splice(idx, 1)
+                this._extensions.splice(idx, 1)
             }
         }
-        this.extensions.push(newExt)
+        this._extensions.push(newExt)
         newExt.initialize?.()
         return newExt
     }
@@ -721,16 +721,16 @@ export class PostHog implements PostHogInterface {
         // Due to name mangling, we can't easily iterate and assign these extensions
         // The assignment needs to also be mangled. Thus, the loop is unrolled.
         if (ext.historyAutocapture) {
-            this.extensions.push((this.historyAutocapture = new ext.historyAutocapture(this)))
+            this._extensions.push((this.historyAutocapture = new ext.historyAutocapture(this)))
         }
         if (ext.tracingHeaders) {
-            this.extensions.push(new ext.tracingHeaders(this))
+            this._extensions.push(new ext.tracingHeaders(this))
         }
         if (ext.siteApps) {
-            this.extensions.push((this.siteApps = new ext.siteApps(this)))
+            this._extensions.push((this.siteApps = new ext.siteApps(this)))
         }
         if (ext.sessionRecording && !startInCookielessMode) {
-            this.extensions.push((this.sessionRecording = new ext.sessionRecording(this)))
+            this._extensions.push((this.sessionRecording = new ext.sessionRecording(this)))
         }
         if (!this.config.disable_scroll_properties) {
             initTasks.push(() => {
@@ -738,27 +738,27 @@ export class PostHog implements PostHogInterface {
             })
         }
         if (ext.autocapture) {
-            this.extensions.push((this.autocapture = new ext.autocapture(this)))
+            this._extensions.push((this.autocapture = new ext.autocapture(this)))
         }
         if (ext.productTours) {
-            this.extensions.push((this.productTours = new ext.productTours(this)))
+            this._extensions.push((this.productTours = new ext.productTours(this)))
         }
         if (ext.heatmaps) {
-            this.extensions.push((this.heatmaps = new ext.heatmaps(this)))
+            this._extensions.push((this.heatmaps = new ext.heatmaps(this)))
         }
         if (ext.webVitalsAutocapture) {
-            this.extensions.push((this.webVitalsAutocapture = new ext.webVitalsAutocapture(this)))
+            this._extensions.push((this.webVitalsAutocapture = new ext.webVitalsAutocapture(this)))
         }
         if (ext.exceptionObserver) {
-            this.extensions.push((this.exceptionObserver = new ext.exceptionObserver(this)))
+            this._extensions.push((this.exceptionObserver = new ext.exceptionObserver(this)))
         }
         if (ext.deadClicksAutocapture) {
-            this.extensions.push(
+            this._extensions.push(
                 (this.deadClicksAutocapture = new ext.deadClicksAutocapture(this, isDeadClicksEnabledForAutocapture))
             )
         }
 
-        this.extensions.forEach((extension) => {
+        this._extensions.forEach((extension) => {
             if (!extension.initialize) return
             initTasks.push(() => {
                 extension.initialize?.()
@@ -866,7 +866,7 @@ export class PostHog implements PostHogInterface {
             person_profiles: this._initialPersonProfilesConfig ? this._initialPersonProfilesConfig : 'identified_only',
         })
 
-        this.extensions.forEach((ext) => ext.onRemoteConfig?.(config))
+        this._extensions.forEach((ext) => ext.onRemoteConfig?.(config))
 
         // Hardcoded extensions (not yet tree-shakable)
         this.surveys.onRemoteConfig(config)
