@@ -6201,4 +6201,101 @@ describe('strictLocalEvaluation option', () => {
     expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
     expect(result).toBe(true)
   })
+
+  it('includes local evaluation timestamps functionality', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 42,
+          name: 'Simple Flag',
+          key: 'simple-flag',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+    }
+
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    // Wait for flags to load
+    await jest.runOnlyPendingTimersAsync()
+
+    // Verify flag definitions loaded timestamp is available
+    const flagDefinitionsLoadedAt = posthog.featureFlagsPoller?.getFlagDefinitionsLoadedAt()
+    expect(flagDefinitionsLoadedAt).toBeDefined()
+    expect(typeof flagDefinitionsLoadedAt).toBe('number')
+    expect(flagDefinitionsLoadedAt).toBeGreaterThan(0)
+
+    // Create evaluation context to test timestamp caching
+    const evaluationContext = {
+      distinctId: 'user-123',
+      groups: {},
+      personProperties: {},
+      groupProperties: {},
+      evaluationCache: {},
+      evaluationTimestampCache: {},
+    }
+
+    // Get feature flag to trigger evaluation timestamp caching
+    const flag = posthog.featureFlagsPoller?.featureFlagsByKey['simple-flag']
+    expect(flag).toBeDefined()
+
+    if (flag && posthog.featureFlagsPoller) {
+      const result = await posthog.featureFlagsPoller.computeFlagAndPayloadLocally(flag, evaluationContext)
+      expect(result.value).toBe(true)
+
+      // Check if evaluation timestamp was cached
+      const flagEvaluatedAt = posthog.featureFlagsPoller.getFlagEvaluatedAt('simple-flag', evaluationContext)
+      expect(flagEvaluatedAt).toBeDefined()
+      expect(typeof flagEvaluatedAt).toBe('number')
+      expect(flagEvaluatedAt).toBeGreaterThan(0)
+    }
+  })
+
+  it('tracks flag definitions loaded timestamp', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Test Flag',
+          key: 'test-flag',
+          active: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+    }
+
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      sendFeatureFlagEvent: true, // Explicitly enable feature flag events
+      ...posthogImmediateResolveOptions,
+    })
+
+    // Wait for flags to load
+    await jest.runOnlyPendingTimersAsync()
+
+    // Check that flag definitions loaded timestamp is available
+    const flagDefinitionsLoadedAt = posthog.featureFlagsPoller?.getFlagDefinitionsLoadedAt()
+    expect(flagDefinitionsLoadedAt).toBeDefined()
+    expect(typeof flagDefinitionsLoadedAt).toBe('number')
+    expect(flagDefinitionsLoadedAt).toBeGreaterThan(0)
+  })
 })

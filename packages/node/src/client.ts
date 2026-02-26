@@ -824,6 +824,20 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           $feature_flag_evaluated_at: evaluatedAt,
         }
 
+        // Add local evaluation timestamps when flag was evaluated locally
+        if (flagWasLocallyEvaluated && this.featureFlagsPoller) {
+          const flagDefinitionsLoadedAt = this.featureFlagsPoller.getFlagDefinitionsLoadedAt()
+          const flagEvaluatedAt = this.featureFlagsPoller.getFlagEvaluatedAt(key, evaluationContext)
+
+          if (flagDefinitionsLoadedAt !== undefined) {
+            properties.$feature_flag_definitions_loaded_at = flagDefinitionsLoadedAt
+          }
+          if (flagEvaluatedAt !== undefined) {
+            // Override the $feature_flag_evaluated_at for locally evaluated flags
+            properties.$feature_flag_evaluated_at = flagEvaluatedAt
+          }
+        }
+
         if (featureFlagError) {
           properties.$feature_flag_error = featureFlagError
         }
@@ -1755,6 +1769,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       personProperties: personProperties || {},
       groupProperties: groupProperties || {},
       evaluationCache: {},
+      evaluationTimestampCache: {},
     }
   }
 
