@@ -28,7 +28,7 @@ describe('RemoteConfigLoader', () => {
             _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
             _shouldDisableFlags: () =>
                 posthog.config.advanced_disable_flags || posthog.config.advanced_disable_decide || false,
-            featureFlags: {
+            _featureFlags: {
                 ensureFlagsLoaded: jest.fn(),
             },
             reloadFeatureFlags: jest.fn(),
@@ -121,9 +121,9 @@ describe('RemoteConfigLoader', () => {
             new RemoteConfigLoader(posthog).load()
 
             if (shouldReload) {
-                expect(posthog.featureFlags.ensureFlagsLoaded).toHaveBeenCalled()
+                expect(posthog._featureFlags?.ensureFlagsLoaded).toHaveBeenCalled()
             } else {
-                expect(posthog.featureFlags.ensureFlagsLoaded).not.toHaveBeenCalled()
+                expect(posthog._featureFlags?.ensureFlagsLoaded).not.toHaveBeenCalled()
             }
         })
 
@@ -140,7 +140,7 @@ describe('RemoteConfigLoader', () => {
             // Should still call _onRemoteConfig with empty object so extensions start
             expect(posthog._onRemoteConfig).toHaveBeenCalledWith({})
             // Should still attempt to load flags
-            expect(posthog.featureFlags.ensureFlagsLoaded).toHaveBeenCalled()
+            expect(posthog._featureFlags?.ensureFlagsLoaded).toHaveBeenCalled()
         })
 
         it('does not call ensureFlagsLoaded when advanced_disable_feature_flags_on_first_load is true', () => {
@@ -156,7 +156,7 @@ describe('RemoteConfigLoader', () => {
             new RemoteConfigLoader(posthog).load()
 
             expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ...config, hasFeatureFlags: true })
-            expect(posthog.featureFlags.ensureFlagsLoaded).not.toHaveBeenCalled()
+            expect(posthog._featureFlags?.ensureFlagsLoaded).not.toHaveBeenCalled()
         })
     })
 
