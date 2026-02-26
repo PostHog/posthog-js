@@ -6,10 +6,10 @@ import { assignableWindow, document } from './utils/globals'
 
 const logger = createLogger('[RemoteConfig]')
 
-// Refresh interval for feature flags in long-running sessions.
+// Default refresh interval for feature flags in long-running sessions.
 // 5 minutes balances freshness with server load - flags typically don't change
 // frequently, and most sessions are shorter than this anyway.
-const REFRESH_INTERVAL = 5 * 60 * 1000
+const DEFAULT_REFRESH_INTERVAL = 5 * 60 * 1000
 
 export class RemoteConfigLoader {
     private _refreshInterval: ReturnType<typeof setInterval> | undefined
@@ -102,9 +102,16 @@ export class RemoteConfigLoader {
             return
         }
 
+        const intervalMs = this._instance.config.remote_config_refresh_interval_ms ?? DEFAULT_REFRESH_INTERVAL
+
+        // Allow users to disable periodic refresh by setting interval to 0
+        if (intervalMs === 0) {
+            return
+        }
+
         this._refreshInterval = setInterval(() => {
             this.refresh()
-        }, REFRESH_INTERVAL)
+        }, intervalMs)
     }
 
     private _onRemoteConfig(config?: RemoteConfig): void {

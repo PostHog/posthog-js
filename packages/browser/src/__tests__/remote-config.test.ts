@@ -248,4 +248,58 @@ describe('RemoteConfigLoader', () => {
             loader.stop()
         })
     })
+
+    describe('configurable refresh interval', () => {
+        const config = { surveys: true } as RemoteConfig
+
+        beforeEach(() => {
+            assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                [posthog.config.token]: { config, siteApps: [] },
+            }
+        })
+
+        it('uses custom refresh interval when configured', () => {
+            const customInterval = 10 * 60 * 1000 // 10 minutes
+            posthog.config.remote_config_refresh_interval_ms = customInterval
+
+            const loader = new RemoteConfigLoader(posthog)
+            loader.load()
+
+            // Default interval (5 min) should not trigger refresh
+            jest.advanceTimersByTime(5 * 60 * 1000)
+            expect(posthog.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
+
+            // Custom interval (10 min) should trigger refresh
+            jest.advanceTimersByTime(5 * 60 * 1000) // total: 10 minutes
+            expect(posthog.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+
+            loader.stop()
+        })
+
+        it('disables periodic refresh when interval is 0', () => {
+            posthog.config.remote_config_refresh_interval_ms = 0
+
+            const loader = new RemoteConfigLoader(posthog)
+            loader.load()
+
+            // Even after a long time, no refresh should occur
+            jest.advanceTimersByTime(30 * 60 * 1000) // 30 minutes
+            expect(posthog.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
+
+            loader.stop()
+        })
+
+        it('uses default interval when config is undefined', () => {
+            posthog.config.remote_config_refresh_interval_ms = undefined
+
+            const loader = new RemoteConfigLoader(posthog)
+            loader.load()
+
+            // Should use default 5 minute interval
+            jest.advanceTimersByTime(5 * 60 * 1000)
+            expect(posthog.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+
+            loader.stop()
+        })
+    })
 })
