@@ -35,6 +35,6 @@
         "@rslib/core": "catalog:",
         "@types/jest": "catalog:",
         "jest": "catalog:",
-        "rollup": "~4.53.2"
+        "rollup": "~2.80.0"
     }
 }

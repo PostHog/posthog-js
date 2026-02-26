@@ -58,7 +58,7 @@
         "react": "catalog:",
         "react-dom": "catalog:",
         "react-test-renderer": "catalog:",
-        "rollup": "^2.35.1",
+        "rollup": "^2.80.0",
         "rollup-plugin-copy": "^3.5.0",
         "tslib": "catalog:",
         "typescript": "catalog:"
