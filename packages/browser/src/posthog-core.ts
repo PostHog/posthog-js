@@ -103,7 +103,7 @@ import {
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
-import { FeedbackRecording } from './extensions/feedback-recording'
+import type { FeedbackRecording } from './extensions/feedback-recording'
 import type { Autocapture } from './autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
 import type { ExceptionObserver } from './extensions/exception-autocapture'
@@ -765,9 +765,11 @@ export class PostHog implements PostHogInterface {
             })
         }
 
-        initTasks.push(() => {
-            this.feedbackRecording = new FeedbackRecording(this)
-        })
+        if (ext.feedbackRecording) {
+            initTasks.push(() => {
+                this.feedbackRecording = new ext.feedbackRecording!(this) as FeedbackRecording
+            })
+        }
 
         if (ext.heatmaps) {
             initTasks.push(() => {
