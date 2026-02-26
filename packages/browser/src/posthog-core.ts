@@ -1,4 +1,3 @@
-import { Autocapture } from './autocapture'
 import Config from './config'
 import { ConsentManager, ConsentStatus } from './consent'
 import {
@@ -11,20 +10,14 @@ import {
     SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
 } from './constants'
-import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
-import { ExceptionObserver } from './extensions/exception-autocapture'
-import { HistoryAutocapture } from './extensions/history-autocapture'
+import { isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
 import { Toolbar } from './extensions/toolbar'
-import { TracingHeaders } from './extensions/tracing-headers'
-import { WebVitalsAutocapture } from './extensions/web-vitals'
-import { Heatmaps } from './heatmaps'
 import { PageViewManager } from './page-view'
 import { PostHogExceptions } from './posthog-exceptions'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
-import { PostHogProductTours } from './posthog-product-tours'
 import { PostHogSurveys } from './posthog-surveys'
 import { PostHogConversations } from './extensions/conversations/posthog-conversations'
 import {
@@ -43,7 +36,6 @@ import { RetryQueue } from './retry-queue'
 import { ScrollManager } from './scroll-manager'
 import { SessionPropsManager } from './session-props'
 import { SessionIdManager } from './sessionid'
-import { SiteApps } from './site-apps'
 import { localStore } from './storage'
 import {
     CaptureOptions,
@@ -56,6 +48,7 @@ import {
     ExceptionAutoCaptureConfig,
     FeatureFlagDetail,
     FeatureFlagsCallback,
+    FeatureFlagOptions,
     FeatureFlagResult,
     JsonType,
     OverrideConfig,
@@ -110,8 +103,16 @@ import {
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
-import { SessionRecording } from './extensions/replay/session-recording'
 import { FeedbackRecording } from './extensions/feedback-recording'
+import type { Autocapture } from './autocapture'
+import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
+import type { ExceptionObserver } from './extensions/exception-autocapture'
+import type { HistoryAutocapture } from './extensions/history-autocapture'
+import type { WebVitalsAutocapture } from './extensions/web-vitals'
+import type { Heatmaps } from './heatmaps'
+import type { PostHogProductTours } from './posthog-product-tours'
+import type { SiteApps } from './site-apps'
+import type { SessionRecording } from './extensions/replay/session-recording'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -136,6 +137,11 @@ Globals should be all caps
 type OnlyValidKeys<T, Shape> = T extends Shape ? (Exclude<keyof T, keyof Shape> extends never ? T : never) : never
 
 const instances: Record<string, PostHog> = {}
+
+// Tracks re-entrant calls to _execute_array. Used to detect when a third-party
+// Proxy (e.g., TikTok's in-app browser) wraps window.posthog and converts method
+// calls into push() calls, which would otherwise cause infinite recursion.
+let _executeArrayDepth = 0
 
 // some globals for comparisons
 const __NOOP = () => {}
@@ -324,6 +330,8 @@ class DeprecatedWebPerformanceObserver {
  * @constructor
  */
 export class PostHog implements PostHogInterface {
+    static __defaultExtensionClasses: PostHogConfig['__extensionClasses'] = {}
+
     __loaded: boolean
     config: PostHogConfig
     _originalUserConfig?: Partial<PostHogConfig>
@@ -369,6 +377,7 @@ export class PostHog implements PostHogInterface {
     compression?: Compression
     __request_queue: QueuedRequestWithOptions[]
     _pendingRemoteConfig?: RemoteConfig
+    _remoteConfigLoader?: RemoteConfigLoader
     analyticsDefaultEndpoint: string
     version: string = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
@@ -528,6 +537,8 @@ export class PostHog implements PostHogInterface {
 
         if (config.person_profiles) {
             this._initialPersonProfilesConfig = config.person_profiles
+        } else if (config.process_person) {
+            this._initialPersonProfilesConfig = config.process_person
         }
 
         this.set_config(
@@ -692,24 +703,32 @@ export class PostHog implements PostHogInterface {
         // eslint-disable-next-line compat/compat
         const initStartTime = performance.now()
 
-        this.historyAutocapture = new HistoryAutocapture(this)
-        this.historyAutocapture.startIfEnabled()
+        const ext = { ...PostHog.__defaultExtensionClasses, ...this.config.__extensionClasses }
+
+        if (ext.historyAutocapture) {
+            this.historyAutocapture = new ext.historyAutocapture(this) as HistoryAutocapture
+            this.historyAutocapture.startIfEnabled()
+        }
 
         // Build queue of extension initialization tasks
         const initTasks: Array<() => void> = []
 
-        initTasks.push(() => {
-            new TracingHeaders(this).startIfEnabledOrStop()
-        })
-
-        initTasks.push(() => {
-            this.siteApps = new SiteApps(this)
-            this.siteApps?.init()
-        })
-
-        if (!startInCookielessMode) {
+        if (ext.tracingHeaders) {
             initTasks.push(() => {
-                this.sessionRecording = new SessionRecording(this)
+                new ext.tracingHeaders!(this).startIfEnabledOrStop()
+            })
+        }
+
+        if (ext.siteApps) {
+            initTasks.push(() => {
+                this.siteApps = new ext.siteApps!(this) as SiteApps
+                this.siteApps?.init()
+            })
+        }
+
+        if (!startInCookielessMode && ext.sessionRecording) {
+            initTasks.push(() => {
+                this.sessionRecording = new ext.sessionRecording!(this) as SessionRecording
                 this.sessionRecording.startIfEnabledOrStop()
             })
         }
@@ -720,10 +739,12 @@ export class PostHog implements PostHogInterface {
             })
         }
 
-        initTasks.push(() => {
-            this.autocapture = new Autocapture(this)
-            this.autocapture.startIfEnabled()
-        })
+        if (ext.autocapture) {
+            initTasks.push(() => {
+                this.autocapture = new ext.autocapture!(this) as Autocapture
+                this.autocapture.startIfEnabled()
+            })
+        }
 
         initTasks.push(() => {
             this.surveys.loadIfEnabled()
@@ -737,33 +758,46 @@ export class PostHog implements PostHogInterface {
             this.conversations.loadIfEnabled()
         })
 
-        initTasks.push(() => {
-            this.productTours = new PostHogProductTours(this)
-            this.productTours.loadIfEnabled()
-        })
+        if (ext.productTours) {
+            initTasks.push(() => {
+                this.productTours = new ext.productTours!(this) as PostHogProductTours
+                this.productTours.loadIfEnabled()
+            })
+        }
 
         initTasks.push(() => {
             this.feedbackRecording = new FeedbackRecording(this)
         })
 
-        initTasks.push(() => {
-            this.heatmaps = new Heatmaps(this)
-            this.heatmaps.startIfEnabled()
-        })
+        if (ext.heatmaps) {
+            initTasks.push(() => {
+                this.heatmaps = new ext.heatmaps!(this) as Heatmaps
+                this.heatmaps.startIfEnabled()
+            })
+        }
 
-        initTasks.push(() => {
-            this.webVitalsAutocapture = new WebVitalsAutocapture(this)
-        })
+        if (ext.webVitalsAutocapture) {
+            initTasks.push(() => {
+                this.webVitalsAutocapture = new ext.webVitalsAutocapture!(this) as WebVitalsAutocapture
+            })
+        }
 
-        initTasks.push(() => {
-            this.exceptionObserver = new ExceptionObserver(this)
-            this.exceptionObserver.startIfEnabledOrStop()
-        })
+        if (ext.exceptionObserver) {
+            initTasks.push(() => {
+                this.exceptionObserver = new ext.exceptionObserver!(this) as ExceptionObserver
+                this.exceptionObserver.startIfEnabledOrStop()
+            })
+        }
 
-        initTasks.push(() => {
-            this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
-            this.deadClicksAutocapture.startIfEnabledOrStop()
-        })
+        if (ext.deadClicksAutocapture) {
+            initTasks.push(() => {
+                this.deadClicksAutocapture = new ext.deadClicksAutocapture!(
+                    this,
+                    isDeadClicksEnabledForAutocapture
+                ) as DeadClicksAutocapture
+                this.deadClicksAutocapture.startIfEnabledOrStop()
+            })
+        }
 
         // Replay any pending remote config that arrived before extensions were ready
         initTasks.push(() => {
@@ -900,8 +934,8 @@ export class PostHog implements PostHogInterface {
             }, 1)
         }
 
-        new RemoteConfigLoader(this).load()
-        this.featureFlags.flags()
+        this._remoteConfigLoader = new RemoteConfigLoader(this)
+        this._remoteConfigLoader.load()
     }
 
     _start_queue_if_opted_in(): void {
@@ -1007,50 +1041,59 @@ export class PostHog implements PostHogInterface {
      * @param {Array} array
      */
     _execute_array(array: SnippetArrayItem[]): void {
-        let fn_name
-        const alias_calls: SnippetArrayItem[] = []
-        const other_calls: SnippetArrayItem[] = []
-        const capturing_calls: SnippetArrayItem[] = []
-        eachArray(array, (item) => {
-            if (item) {
-                fn_name = item[0]
-                if (isArray(fn_name)) {
-                    capturing_calls.push(item) // chained call e.g. posthog.get_group().set()
-                } else if (isFunction(item)) {
-                    ;(item as any).call(this)
-                } else if (isArray(item) && fn_name === 'alias') {
-                    alias_calls.push(item)
-                } else if (isArray(item) && fn_name.indexOf('capture') !== -1 && isFunction((this as any)[fn_name])) {
-                    capturing_calls.push(item)
-                } else {
-                    other_calls.push(item)
-                }
-            }
-        })
-
-        const execute = function (calls: SnippetArrayItem[], thisArg: any) {
-            eachArray(
-                calls,
-                function (item) {
-                    if (isArray(item[0])) {
-                        // chained call
-                        let caller = thisArg
-                        each(item, function (call) {
-                            caller = caller[call[0]].apply(caller, call.slice(1))
-                        })
+        _executeArrayDepth++
+        try {
+            let fn_name
+            const alias_calls: SnippetArrayItem[] = []
+            const other_calls: SnippetArrayItem[] = []
+            const capturing_calls: SnippetArrayItem[] = []
+            eachArray(array, (item) => {
+                if (item) {
+                    fn_name = item[0]
+                    if (isArray(fn_name)) {
+                        capturing_calls.push(item) // chained call e.g. posthog.get_group().set()
+                    } else if (isFunction(item)) {
+                        ;(item as any).call(this)
+                    } else if (isArray(item) && fn_name === 'alias') {
+                        alias_calls.push(item)
+                    } else if (
+                        isArray(item) &&
+                        fn_name.indexOf('capture') !== -1 &&
+                        isFunction((this as any)[fn_name])
+                    ) {
+                        capturing_calls.push(item)
                     } else {
-                        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                        // @ts-ignore
-                        this[item[0]].apply(this, item.slice(1))
+                        other_calls.push(item)
                     }
-                },
-                thisArg
-            )
-        }
+                }
+            })
 
-        execute(alias_calls, this)
-        execute(other_calls, this)
-        execute(capturing_calls, this)
+            const execute = function (calls: SnippetArrayItem[], thisArg: any) {
+                eachArray(
+                    calls,
+                    function (item) {
+                        if (isArray(item[0])) {
+                            // chained call
+                            let caller = thisArg
+                            each(item, function (call) {
+                                caller = caller[call[0]].apply(caller, call.slice(1))
+                            })
+                        } else {
+                            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                            // @ts-ignore
+                            this[item[0]].apply(this, item.slice(1))
+                        }
+                    },
+                    thisArg
+                )
+            }
+
+            execute(alias_calls, this)
+            execute(other_calls, this)
+            execute(capturing_calls, this)
+        } finally {
+            _executeArrayDepth--
+        }
     }
 
     _hasBootstrappedFeatureFlags(): boolean {
@@ -1075,6 +1118,19 @@ export class PostHog implements PostHogInterface {
      * @param {Array} item A [function_name, args...] array to be executed
      */
     push(item: SnippetArrayItem): void {
+        if (_executeArrayDepth > 0 && isArray(item) && isString(item[0])) {
+            // push() is being called while _execute_array is already running.
+            // This happens when a third-party Proxy (e.g., TikTok's in-app browser)
+            // wraps window.posthog and converts method calls into push() calls,
+            // creating an infinite loop: _execute_array -> this[method] -> Proxy ->
+            // push -> _execute_array -> ...
+            // Dispatch directly from the prototype to break the cycle.
+            const fn = (PostHog.prototype as any)[item[0]]
+            if (isFunction(fn)) {
+                fn.apply(this, item.slice(1))
+            }
+            return
+        }
         this._execute_array([item])
     }
 
@@ -1148,6 +1204,12 @@ export class PostHog implements PostHogInterface {
                 'Invalid `$current_url` property provided to `posthog.capture`. Input must be a string. Ignoring provided value.'
             )
             delete properties?.$current_url
+        }
+
+        if (event_name === '$exception' && !options?._originatedFromCaptureException) {
+            logger.warn(
+                "Using `posthog.capture('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureException(error)` instead, which attaches required metadata automatically."
+            )
         }
 
         // update persistence
@@ -1651,8 +1713,9 @@ export class PostHog implements PostHogInterface {
      *
      * @param {Object|String} prop Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
+     *                        If {fresh: true}, we won't return cached values from localStorage - only values loaded from the server.
      */
-    getFeatureFlag(key: string, options?: { send_event?: boolean }): boolean | string | undefined {
+    getFeatureFlag(key: string, options?: FeatureFlagOptions): boolean | string | undefined {
         return this.featureFlags.getFeatureFlag(key, options)
     }
 
@@ -1708,9 +1771,10 @@ export class PostHog implements PostHogInterface {
      * @param {string} key Key of the feature flag.
      * @param {Object} [options] Options for the feature flag lookup.
      * @param {boolean} [options.send_event=true] If false, won't send the $feature_flag_called event.
+     * @param {boolean} [options.fresh=false] If true, won't return cached values from localStorage - only values loaded from the server.
      * @returns {FeatureFlagResult | undefined} The feature flag result including key, enabled, variant, and payload.
      */
-    getFeatureFlagResult(key: string, options?: { send_event?: boolean }): FeatureFlagResult | undefined {
+    getFeatureFlagResult(key: string, options?: FeatureFlagOptions): FeatureFlagResult | undefined {
         return this.featureFlags.getFeatureFlagResult(key, options)
     }
 
@@ -1743,8 +1807,9 @@ export class PostHog implements PostHogInterface {
      *
      * @param {Object|String} prop Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
+     *                        If {fresh: true}, we won't return cached values from localStorage - only values loaded from the server.
      */
-    isFeatureEnabled(key: string, options?: { send_event: boolean }): boolean | undefined {
+    isFeatureEnabled(key: string, options?: FeatureFlagOptions): boolean | undefined {
         return this.featureFlags.isFeatureEnabled(key, options)
     }
 
@@ -2623,6 +2688,9 @@ export class PostHog implements PostHogInterface {
         this.persistence?.clear()
         this.sessionPersistence?.clear()
         this.surveys.reset()
+        // Stop the refresh interval before resetting flags — featureFlags.reset() clears
+        // the debouncer, so if the order were reversed a pending refresh could fire after reset.
+        this._remoteConfigLoader?.stop()
         this.featureFlags.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
@@ -3331,8 +3399,12 @@ export class PostHog implements PostHogInterface {
             if (this.persistence) {
                 this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
             }
-            this.sessionRecording = new SessionRecording(this)
-            this.sessionRecording.startIfEnabledOrStop()
+            const SessionRecordingClass =
+                this.config.__extensionClasses?.sessionRecording ?? PostHog.__defaultExtensionClasses?.sessionRecording
+            if (SessionRecordingClass) {
+                this.sessionRecording = new SessionRecordingClass(this) as SessionRecording
+                this.sessionRecording.startIfEnabledOrStop()
+            }
         }
 
         this.consent.optInOut(true)

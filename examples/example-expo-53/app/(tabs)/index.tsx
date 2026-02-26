@@ -1,5 +1,5 @@
 import { Image } from 'expo-image'
-import { Platform, StyleSheet } from 'react-native'
+import { Platform, StyleSheet, Button, View } from 'react-native'
 
 import { HelloWave } from '@/components/HelloWave'
 import ParallaxScrollView from '@/components/ParallaxScrollView'
@@ -12,10 +12,38 @@ export default function HomeScreen() {
   const [buttonText, setButtonText] = useState(
     `Tap the Explore tab to learn more about what's included in this starter app.`
   )
+  const [replayStatus, setReplayStatus] = useState('Unknown')
 
   const handleClick = () => {
     posthog.capture('button_clicked', { name: 'example' })
     setButtonText('button_clicked' + new Date().toISOString())
+  }
+
+  const handleStartRecording = async (resumeCurrent: boolean) => {
+    try {
+      await posthog.startSessionRecording(resumeCurrent)
+      setReplayStatus(`Started (resume=${resumeCurrent})`)
+    } catch (e) {
+      setReplayStatus(`Error: ${e}`)
+    }
+  }
+
+  const handleStopRecording = async () => {
+    try {
+      await posthog.stopSessionRecording()
+      setReplayStatus('Stopped')
+    } catch (e) {
+      setReplayStatus(`Error: ${e}`)
+    }
+  }
+
+  const handleCheckStatus = async () => {
+    try {
+      const isActive = await posthog.isSessionReplayActive()
+      setReplayStatus(`Active: ${isActive}`)
+    } catch (e) {
+      setReplayStatus(`Error: ${e}`)
+    }
   }
 
   return (
@@ -55,6 +83,16 @@ export default function HomeScreen() {
           <ThemedText type="defaultSemiBold">app-example</ThemedText>.
         </ThemedText>
       </ThemedView>
+      <ThemedView style={styles.stepContainer}>
+        <ThemedText type="subtitle">Session Replay Controls</ThemedText>
+        <ThemedText>Status: {replayStatus}</ThemedText>
+        <View style={styles.buttonContainer}>
+          <Button title="Start (Resume)" onPress={() => handleStartRecording(true)} />
+          <Button title="Start (New)" onPress={() => handleStartRecording(false)} />
+          <Button title="Stop" onPress={handleStopRecording} />
+          <Button title="Check Status" onPress={handleCheckStatus} />
+        </View>
+      </ThemedView>
     </ParallaxScrollView>
   )
 }
@@ -68,6 +106,10 @@ const styles = StyleSheet.create({
   stepContainer: {
     gap: 8,
     marginBottom: 8,
+  },
+  buttonContainer: {
+    gap: 8,
+    marginTop: 8,
   },
   reactLogo: {
     height: 178,

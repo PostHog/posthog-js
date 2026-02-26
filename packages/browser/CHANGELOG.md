@@ -1,5 +1,191 @@
 # posthog-js
 
+## 1.354.4
+
+### Patch Changes
+
+- [#3152](https://github.com/PostHog/posthog-js/pull/3152) [`d6fd9c9`](https://github.com/PostHog/posthog-js/commit/d6fd9c9c60564da2b095e6b83100a45676ea0f12) Thanks [@ksvat](https://github.com/ksvat)! - add re-entrancy guard for cases where ALL + regex + event trigger matching is configured
+  (2026-02-26)
+- Updated dependencies []:
+    - @posthog/types@1.354.4
+
+## 1.354.3
+
+### Patch Changes
+
+- [#3113](https://github.com/PostHog/posthog-js/pull/3113) [`77261d8`](https://github.com/PostHog/posthog-js/commit/77261d8a27e64e2f7b80db60a25616e9f1aa0959) Thanks [@adboio](https://github.com/adboio)! - add product tours device type targeting
+  (2026-02-25)
+- Updated dependencies []:
+    - @posthog/types@1.354.3
+
+## 1.354.2
+
+### Patch Changes
+
+- [#3153](https://github.com/PostHog/posthog-js/pull/3153) [`67cf41e`](https://github.com/PostHog/posthog-js/commit/67cf41e10cdca853b39f37d8b16b5dee37e0283a) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: Add additional legacy exports for fully qualified dist and lib exports
+  (2026-02-25)
+- Updated dependencies []:
+    - @posthog/types@1.354.2
+
+## 1.354.1
+
+### Patch Changes
+
+- [#3148](https://github.com/PostHog/posthog-js/pull/3148) [`9ae20e7`](https://github.com/PostHog/posthog-js/commit/9ae20e7cde5d474da1d52ae3b77929b4f4adb54e) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: Expose all export paths
+  (2026-02-25)
+- Updated dependencies []:
+    - @posthog/types@1.354.1
+
+## 1.354.0
+
+### Minor Changes
+
+- [#3080](https://github.com/PostHog/posthog-js/pull/3080) [`4d0c783`](https://github.com/PostHog/posthog-js/commit/4d0c783fadac64718da01d1773a65f1d350f8201) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Introduce internal config to improve tree-shaking
+  (2026-02-25)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.354.0
+
+## 1.353.1
+
+### Patch Changes
+
+- [#3143](https://github.com/PostHog/posthog-js/pull/3143) [`0b86924`](https://github.com/PostHog/posthog-js/commit/0b86924ac25445686618cf36c2bfe58f1bcee9e7) Thanks [@adboio](https://github.com/adboio)! - fix autofill bug in hosted surveys
+  (2026-02-24)
+- Updated dependencies []:
+    - @posthog/types@1.353.1
+
+## 1.353.0
+
+### Minor Changes
+
+- [#3135](https://github.com/PostHog/posthog-js/pull/3135) [`fba7e5b`](https://github.com/PostHog/posthog-js/commit/fba7e5bcf67d3a7e5b55b6bb95a0dcb637f56f6a) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Persist $user_state to cookie for server-side access
+  (2026-02-23)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.353.0
+
+## 1.352.1
+
+### Patch Changes
+
+- [#3129](https://github.com/PostHog/posthog-js/pull/3129) [`6bfa003`](https://github.com/PostHog/posthog-js/commit/6bfa003116aa8ef65fe605c29ffee711f4d39b74) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: no need to put rrweb and friends directly on window in posthog-recorder
+  (2026-02-23)
+
+- [#3131](https://github.com/PostHog/posthog-js/pull/3131) [`ad26474`](https://github.com/PostHog/posthog-js/commit/ad26474d8964798ee3e10b6cfdf14f1cbd0969ac) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Fix issue with toolbar interferring distinct id in conversations
+  (2026-02-23)
+- Updated dependencies []:
+    - @posthog/types@1.352.1
+
+## 1.352.0
+
+### Minor Changes
+
+- [#3121](https://github.com/PostHog/posthog-js/pull/3121) [`c3c9780`](https://github.com/PostHog/posthog-js/commit/c3c978053bda3466df47e244ec05812aecd01f1f) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Ability to retrieve previous conversations
+  (2026-02-20)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.352.0
+
+## 1.351.4
+
+### Patch Changes
+
+- [#3119](https://github.com/PostHog/posthog-js/pull/3119) [`2649a9a`](https://github.com/PostHog/posthog-js/commit/2649a9a6eeef19c67036c1298b5b5b6ba61eda8e) Thanks [@dmarticus](https://github.com/dmarticus)! - Adds a fresh option to getFeatureFlag(), getFeatureFlagResult(), and isFeatureEnabled() that only returns values loaded from the server, not cached localStorage values.
+  (2026-02-19)
+- Updated dependencies [[`2649a9a`](https://github.com/PostHog/posthog-js/commit/2649a9a6eeef19c67036c1298b5b5b6ba61eda8e)]:
+    - @posthog/types@1.351.4
+
+## 1.351.3
+
+### Patch Changes
+
+- [#3098](https://github.com/PostHog/posthog-js/pull/3098) [`1a53e8c`](https://github.com/PostHog/posthog-js/commit/1a53e8c7042575905e9fd9efa7b336c51f110e60) Thanks [@adboio](https://github.com/adboio)! - add animation option for tour banners
+  (2026-02-19)
+- Updated dependencies []:
+    - @posthog/types@1.351.3
+
+## 1.351.2
+
+### Patch Changes
+
+- [#3096](https://github.com/PostHog/posthog-js/pull/3096) [`d964a31`](https://github.com/PostHog/posthog-js/commit/d964a31414cbf5358e22af1e383ba44e1801ccdb) Thanks [@adboio](https://github.com/adboio)! - add banner click tracking for tours
+  (2026-02-19)
+- Updated dependencies []:
+    - @posthog/types@1.351.2
+
+## 1.351.1
+
+### Patch Changes
+
+- [#3112](https://github.com/PostHog/posthog-js/pull/3112) [`c0b911d`](https://github.com/PostHog/posthog-js/commit/c0b911da06333e4fbc153c7ccaec5552127cc78b) Thanks [@adboio](https://github.com/adboio)! - prevent infinite recursion bug with 3rd party proxy on posthog
+  (2026-02-18)
+- Updated dependencies []:
+    - @posthog/types@1.351.1
+
+## 1.351.0
+
+### Minor Changes
+
+- [#3115](https://github.com/PostHog/posthog-js/pull/3115) [`8655261`](https://github.com/PostHog/posthog-js/commit/8655261ad362c0001f1c86a5330b634421143733) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Strip markdown in tickets list
+  (2026-02-18)
+
+### Patch Changes
+
+- [#3107](https://github.com/PostHog/posthog-js/pull/3107) [`9dbc05e`](https://github.com/PostHog/posthog-js/commit/9dbc05ed65ddc8c37c9262b9aebfc51d0c748971) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - warning on manual capture('$exception')
+  (2026-02-18)
+- Updated dependencies [[`9dbc05e`](https://github.com/PostHog/posthog-js/commit/9dbc05ed65ddc8c37c9262b9aebfc51d0c748971)]:
+    - @posthog/types@1.351.0
+    - @posthog/core@1.23.1
+
+## 1.350.0
+
+### Minor Changes
+
+- [#2895](https://github.com/PostHog/posthog-js/pull/2895) [`1b47203`](https://github.com/PostHog/posthog-js/commit/1b47203a5cc1b8f76e224101975e462cd777e2ee) Thanks [@benjackwhite](https://github.com/benjackwhite)! - RemoteConfig (config.js) has been loaded for ages and is in use by us in production. This PR makes it the sole config loading mechanism for posthog-js, removing the legacy /flags/?v=2&config=true path and the \_\_preview_remote_config gate.
+  (2026-02-17)
+
+### Patch Changes
+
+- Updated dependencies [[`1b47203`](https://github.com/PostHog/posthog-js/commit/1b47203a5cc1b8f76e224101975e462cd777e2ee)]:
+    - @posthog/types@1.350.0
+
+## 1.349.0
+
+### Minor Changes
+
+- [#3105](https://github.com/PostHog/posthog-js/pull/3105) [`f707ec9`](https://github.com/PostHog/posthog-js/commit/f707ec95e4b718bffe48e3e6be9afbc855b39f8f) Thanks [@adboio](https://github.com/adboio)! - add support for product tours localization
+  (2026-02-17)
+
+### Patch Changes
+
+- Updated dependencies [[`f707ec9`](https://github.com/PostHog/posthog-js/commit/f707ec95e4b718bffe48e3e6be9afbc855b39f8f)]:
+    - @posthog/types@1.349.0
+
+## 1.348.0
+
+### Minor Changes
+
+- [#3108](https://github.com/PostHog/posthog-js/pull/3108) [`c4ca045`](https://github.com/PostHog/posthog-js/commit/c4ca0450e6bbd39e7e90c442776ba0cf0b848ce4) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Support multiple tickets
+  (2026-02-17)
+
+### Patch Changes
+
+- [#3104](https://github.com/PostHog/posthog-js/pull/3104) [`b11c3c5`](https://github.com/PostHog/posthog-js/commit/b11c3c58fe14121cda89bc48aeabf817ae44a8d0) Thanks [@adboio](https://github.com/adboio)! - support customizable survey step button texts in product tours
+  (2026-02-17)
+
+- [#3081](https://github.com/PostHog/posthog-js/pull/3081) [`d36a6ed`](https://github.com/PostHog/posthog-js/commit/d36a6ed75c68742b07863fed0e7a64ad3f842c8d) Thanks [@adboio](https://github.com/adboio)! - move tour event names to constants
+  (2026-02-17)
+- Updated dependencies [[`e962f01`](https://github.com/PostHog/posthog-js/commit/e962f01c80476b9325f0bbb4ca591820cfb9f338)]:
+    - @posthog/core@1.23.0
+    - @posthog/types@1.348.0
+
 ## 1.347.2
 
 ### Patch Changes

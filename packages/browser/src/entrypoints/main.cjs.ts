@@ -1,3 +1,4 @@
+import './default-extensions'
 import './external-scripts-loader'
 import { init_as_module } from '../posthog-core'
 export { PostHog } from '../posthog-core'

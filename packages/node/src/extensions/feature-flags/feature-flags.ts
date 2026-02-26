@@ -58,6 +58,19 @@ type FeatureFlagsPollerOptions = {
   strictLocalEvaluation?: boolean
 }
 
+export type FeatureFlagEvaluationContext = {
+  distinctId: string
+  groups: Record<string, string>
+  personProperties: Record<string, any>
+  groupProperties: Record<string, Record<string, any>>
+  evaluationCache: Record<string, FeatureFlagValue>
+}
+
+type ComputeFlagAndPayloadOptions = {
+  matchValue?: FeatureFlagValue
+  skipLoadCheck?: boolean
+}
+
 class FeatureFlagsPoller {
   pollingInterval: number
   personalApiKey: string
@@ -122,12 +135,28 @@ class FeatureFlagsPoller {
     }
   }
 
+  private createEvaluationContext(
+    distinctId: string,
+    groups: Record<string, string> = {},
+    personProperties: Record<string, any> = {},
+    groupProperties: Record<string, Record<string, any>> = {},
+    evaluationCache: Record<string, FeatureFlagValue> = {}
+  ): FeatureFlagEvaluationContext {
+    return {
+      distinctId,
+      groups,
+      personProperties,
+      groupProperties,
+      evaluationCache,
+    }
+  }
+
   async getFeatureFlag(
     key: string,
     distinctId: string,
     groups: Record<string, string> = {},
-    personProperties: Record<string, string> = {},
-    groupProperties: Record<string, Record<string, string>> = {}
+    personProperties: Record<string, any> = {},
+    groupProperties: Record<string, Record<string, any>> = {}
   ): Promise<FeatureFlagValue | undefined> {
     await this.loadFeatureFlags()
 
@@ -141,14 +170,9 @@ class FeatureFlagsPoller {
     featureFlag = this.featureFlagsByKey[key]
 
     if (featureFlag !== undefined) {
+      const evaluationContext = this.createEvaluationContext(distinctId, groups, personProperties, groupProperties)
       try {
-        const result = await this.computeFlagAndPayloadLocally(
-          featureFlag,
-          distinctId,
-          groups,
-          personProperties,
-          groupProperties
-        )
+        const result = await this.computeFlagAndPayloadLocally(featureFlag, evaluationContext)
         response = result.value
         this.logMsgIfDebug(() => console.debug(`Successfully computed flag locally: ${key} -> ${response}`))
       } catch (e) {
@@ -164,10 +188,7 @@ class FeatureFlagsPoller {
   }
 
   async getAllFlagsAndPayloads(
-    distinctId: string,
-    groups: Record<string, string> = {},
-    personProperties: Record<string, string> = {},
-    groupProperties: Record<string, Record<string, string>> = {},
+    evaluationContext: FeatureFlagEvaluationContext,
     flagKeysToExplicitlyEvaluate?: string[]
   ): Promise<{
     response: Record<string, FeatureFlagValue>
@@ -184,20 +205,17 @@ class FeatureFlagsPoller {
       ? flagKeysToExplicitlyEvaluate.map((key) => this.featureFlagsByKey[key]).filter(Boolean)
       : this.featureFlags
 
-    // Create a shared evaluation cache to prevent memory leaks when processing many flags
-    const sharedEvaluationCache: Record<string, FeatureFlagValue> = {}
+    const sharedEvaluationContext = {
+      ...evaluationContext,
+      evaluationCache: evaluationContext.evaluationCache ?? {},
+    }
 
     await Promise.all(
       flagsToEvaluate.map(async (flag) => {
         try {
           const { value: matchValue, payload: matchPayload } = await this.computeFlagAndPayloadLocally(
             flag,
-            distinctId,
-            groups,
-            personProperties,
-            groupProperties,
-            undefined /* matchValue */,
-            sharedEvaluationCache
+            sharedEvaluationContext
           )
           response[flag.key] = matchValue
           if (matchPayload) {
@@ -219,17 +237,14 @@ class FeatureFlagsPoller {
 
   async computeFlagAndPayloadLocally(
     flag: PostHogFeatureFlag,
-    distinctId: string,
-    groups: Record<string, string> = {},
-    personProperties: Record<string, string> = {},
-    groupProperties: Record<string, Record<string, string>> = {},
-    matchValue?: FeatureFlagValue,
-    evaluationCache?: Record<string, FeatureFlagValue>,
-    skipLoadCheck: boolean = false
+    evaluationContext: FeatureFlagEvaluationContext,
+    options: ComputeFlagAndPayloadOptions = {}
   ): Promise<{
     value: FeatureFlagValue
     payload: JsonType | null
   }> {
+    const { matchValue, skipLoadCheck = false } = options
+
     // Only load flags if not already loaded and not skipping the check
     if (!skipLoadCheck) {
       await this.loadFeatureFlags()
@@ -245,14 +260,7 @@ class FeatureFlagsPoller {
     if (matchValue !== undefined) {
       flagValue = matchValue
     } else {
-      flagValue = await this.computeFlagValueLocally(
-        flag,
-        distinctId,
-        groups,
-        personProperties,
-        groupProperties,
-        evaluationCache
-      )
+      flagValue = await this.computeFlagValueLocally(flag, evaluationContext)
     }
 
     // Always compute payload based on the final flagValue (whether provided or computed)
@@ -263,12 +271,10 @@ class FeatureFlagsPoller {
 
   private async computeFlagValueLocally(
     flag: PostHogFeatureFlag,
-    distinctId: string,
-    groups: Record<string, string> = {},
-    personProperties: Record<string, string> = {},
-    groupProperties: Record<string, Record<string, string>> = {},
-    evaluationCache: Record<string, FeatureFlagValue> = {}
+    evaluationContext: FeatureFlagEvaluationContext
   ): Promise<FeatureFlagValue> {
+    const { distinctId, groups, personProperties, groupProperties } = evaluationContext
+
     if (flag.ensure_experience_continuity) {
       throw new InconclusiveMatchError('Flag has experience continuity enabled')
     }
@@ -299,11 +305,54 @@ class FeatureFlagsPoller {
         return false
       }
 
+      if (
+        flag.bucketing_identifier === 'device_id' &&
+        (personProperties?.$device_id === undefined ||
+          personProperties?.$device_id === null ||
+          personProperties?.$device_id === '')
+      ) {
+        this.logMsgIfDebug(() =>
+          console.warn(`[FEATURE FLAGS] Ignoring bucketing_identifier for group flag: ${flag.key}`)
+        )
+      }
+
       const focusedGroupProperties = groupProperties[groupName]
-      return await this.matchFeatureFlagProperties(flag, groups[groupName], focusedGroupProperties, evaluationCache)
+      return await this.matchFeatureFlagProperties(flag, groups[groupName], focusedGroupProperties, evaluationContext)
     } else {
-      return await this.matchFeatureFlagProperties(flag, distinctId, personProperties, evaluationCache)
+      const bucketingValue = this.getBucketingValueForFlag(flag, distinctId, personProperties)
+      if (bucketingValue === undefined) {
+        this.logMsgIfDebug(() =>
+          console.warn(
+            `[FEATURE FLAGS] Can't compute feature flag: ${flag.key} without $device_id, falling back to server evaluation`
+          )
+        )
+        throw new InconclusiveMatchError(`Can't compute feature flag: ${flag.key} without $device_id`)
+      }
+      return await this.matchFeatureFlagProperties(flag, bucketingValue, personProperties, evaluationContext)
     }
+  }
+
+  private getBucketingValueForFlag(
+    flag: PostHogFeatureFlag,
+    distinctId: string,
+    properties: Record<string, any>
+  ): string | undefined {
+    if (flag.filters?.aggregation_group_type_index != undefined) {
+      // Group flags are bucketed by group key in computeFlagValueLocally.
+      // If a group flag appears in dependency evaluation, ignore bucketing_identifier
+      // to preserve existing behavior and avoid requiring $device_id unexpectedly.
+      return distinctId
+    }
+
+    if (flag.bucketing_identifier === 'device_id') {
+      const deviceId = properties?.$device_id
+      if (deviceId === undefined || deviceId === null || deviceId === '') {
+        return undefined
+      }
+      return deviceId
+    }
+
+    return distinctId
   }
 
   private getFeatureFlagPayload(key: string, flagValue: FeatureFlagValue): JsonType | null {
@@ -339,10 +388,10 @@ class FeatureFlagsPoller {
 
   private async evaluateFlagDependency(
     property: FlagProperty,
-    distinctId: string,
-    properties: Record<string, string>,
-    evaluationCache: Record<string, FeatureFlagValue>
+    properties: Record<string, any>,
+    evaluationContext: FeatureFlagEvaluationContext
   ): Promise<boolean> {
+    const { evaluationCache } = evaluationContext
     const targetFlagKey = property.key
 
     if (!this.featureFlagsByKey) {
@@ -384,12 +433,11 @@ class FeatureFlagsPoller {
           // Inactive flag evaluates to false
           evaluationCache[depFlagKey] = false
         } else {
-          // Recursively evaluate the dependency
+          // Reuse full flag evaluation so dependencies respect person vs group bucketing rules.
           try {
-            const depResult = await this.matchFeatureFlagProperties(depFlag, distinctId, properties, evaluationCache)
+            const depResult = await this.computeFlagValueLocally(depFlag, evaluationContext)
             evaluationCache[depFlagKey] = depResult
           } catch (error) {
-            // If we can't evaluate a dependency, store throw InconclusiveMatchError(`Missing flag dependency '${depFlagKey}' for flag '${targetFlagKey}'`)
             throw new InconclusiveMatchError(
               `Error evaluating flag dependency '${depFlagKey}' for flag '${targetFlagKey}': ${error}`
             )
@@ -430,9 +478,9 @@ class FeatureFlagsPoller {
 
   async matchFeatureFlagProperties(
     flag: PostHogFeatureFlag,
-    distinctId: string,
-    properties: Record<string, string>,
-    evaluationCache: Record<string, FeatureFlagValue> = {}
+    bucketingValue: string,
+    properties: Record<string, any>,
+    evaluationContext: FeatureFlagEvaluationContext
   ): Promise<FeatureFlagValue> {
     const flagFilters = flag.filters || {}
     const flagConditions = flagFilters.groups || []
@@ -441,13 +489,13 @@ class FeatureFlagsPoller {
 
     for (const condition of flagConditions) {
       try {
-        if (await this.isConditionMatch(flag, distinctId, condition, properties, evaluationCache)) {
+        if (await this.isConditionMatch(flag, bucketingValue, condition, properties, evaluationContext)) {
           const variantOverride = condition.variant
           const flagVariants = flagFilters.multivariate?.variants || []
           if (variantOverride && flagVariants.some((variant) => variant.key === variantOverride)) {
             result = variantOverride
           } else {
-            result = (await this.getMatchingVariant(flag, distinctId)) || true
+            result = (await this.getMatchingVariant(flag, bucketingValue)) || true
           }
           break
         }
@@ -478,10 +526,10 @@ class FeatureFlagsPoller {
 
   async isConditionMatch(
     flag: PostHogFeatureFlag,
-    distinctId: string,
+    bucketingValue: string,
     condition: FeatureFlagCondition,
-    properties: Record<string, string>,
-    evaluationCache: Record<string, FeatureFlagValue> = {}
+    properties: Record<string, any>,
+    evaluationContext: FeatureFlagEvaluationContext
   ): Promise<boolean> {
     const rolloutPercentage = condition.rollout_percentage
     const warnFunction = (msg: string): void => {
@@ -495,7 +543,7 @@ class FeatureFlagsPoller {
         if (propertyType === 'cohort') {
           matches = matchCohort(prop, properties, this.cohorts, this.debugMode)
         } else if (propertyType === 'flag') {
-          matches = await this.evaluateFlagDependency(prop, distinctId, properties, evaluationCache)
+          matches = await this.evaluateFlagDependency(prop, properties, evaluationContext)
         } else {
           matches = matchProperty(prop, properties, warnFunction)
         }
@@ -510,15 +558,15 @@ class FeatureFlagsPoller {
       }
     }
 
-    if (rolloutPercentage != undefined && (await _hash(flag.key, distinctId)) > rolloutPercentage / 100.0) {
+    if (rolloutPercentage != undefined && (await _hash(flag.key, bucketingValue)) > rolloutPercentage / 100.0) {
       return false
     }
 
     return true
   }
 
-  async getMatchingVariant(flag: PostHogFeatureFlag, distinctId: string): Promise<FeatureFlagValue | undefined> {
-    const hashValue = await _hash(flag.key, distinctId, 'variant')
+  async getMatchingVariant(flag: PostHogFeatureFlag, bucketingValue: string): Promise<FeatureFlagValue | undefined> {
+    const hashValue = await _hash(flag.key, bucketingValue, 'variant')
     const matchingVariant = this.variantLookupTable(flag).find((variant) => {
       return hashValue >= variant.valueMin && hashValue < variant.valueMax
     })
@@ -904,12 +952,12 @@ class FeatureFlagsPoller {
   }
 }
 
-// # This function takes a distinct_id and a feature flag key and returns a float between 0 and 1.
-// # Given the same distinct_id and key, it'll always return the same float. These floats are
+// # This function takes a bucketing identifier and a feature flag key and returns a float between 0 and 1.
+// # Given the same bucketing identifier and key, it'll always return the same float. These floats are
 // # uniformly distributed between 0 and 1, so if we want to show this feature to 20% of traffic
-// # we can do _hash(key, distinct_id) < 0.2
-async function _hash(key: string, distinctId: string, salt: string = ''): Promise<number> {
-  const hashString = await hashSHA1(`${key}.${distinctId}${salt}`)
+// # we can do _hash(key, bucketing_identifier) < 0.2
+async function _hash(key: string, bucketingValue: string, salt: string = ''): Promise<number> {
+  const hashString = await hashSHA1(`${key}.${bucketingValue}${salt}`)
   return parseInt(hashString.slice(0, 15), 16) / LONG_SCALE
 }
 

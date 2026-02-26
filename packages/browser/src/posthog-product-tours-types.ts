@@ -22,6 +22,9 @@ export interface ProductTourBannerConfig {
         link?: string
         tourId?: string
     }
+    animation?: {
+        duration?: number
+    }
 }
 
 /** Button actions available on modal steps */
@@ -54,6 +57,8 @@ export interface ProductTourSurveyQuestion {
     lowerBoundLabel?: string
     /** Label for high end of rating scale (e.g., "Very likely") */
     upperBoundLabel?: string
+    submitButtonText?: string
+    backButtonText?: string
 }
 
 export interface ProductTourStep {
@@ -82,6 +87,22 @@ export interface ProductTourStep {
     buttons?: ProductTourStepButtons
     /** Banner configuration (only for banner steps) */
     bannerConfig?: ProductTourBannerConfig
+    /** translation data for this tour step */
+    translations?: Record<string, ProductTourStepTranslation>
+}
+
+/** all translatable content for a given tour step */
+export interface ProductTourStepTranslation {
+    content?: ProductTourStep['content']
+    contentHtml?: ProductTourStep['contentHtml']
+    buttons?: {
+        primary?: Pick<ProductTourStepButton, 'text'>
+        secondary?: Pick<ProductTourStepButton, 'text'>
+    }
+    survey?: Pick<
+        ProductTourSurveyQuestion,
+        'questionText' | 'lowerBoundLabel' | 'upperBoundLabel' | 'submitButtonText' | 'backButtonText'
+    >
 }
 
 export interface ProductTourConditions {
@@ -99,6 +120,7 @@ export interface ProductTourConditions {
         values: SurveyActionType[]
     } | null
     linkedFlagVariant?: string
+    deviceTypes?: string[]
 }
 
 export interface ProductTourAppearance {
@@ -168,4 +190,47 @@ export const DEFAULT_PRODUCT_TOUR_APPEARANCE: Required<ProductTourAppearance> = 
 export interface ShowTourOptions {
     reason?: ProductTourRenderReason
     enableStrictValidation?: boolean
+}
+
+export enum ProductTourEventName {
+    SHOWN = 'product tour shown',
+    DISMISSED = 'product tour dismissed',
+    COMPLETED = 'product tour completed',
+    STEP_SHOWN = 'product tour step shown',
+    STEP_COMPLETED = 'product tour step completed',
+    BUTTON_CLICKED = 'product tour button clicked',
+    STEP_SELECTOR_FAILED = 'product tour step selector failed',
+    BANNER_CONTAINER_SELECTOR_FAILED = 'product tour banner container selector failed',
+    BANNER_ACTION_CLICKED = 'product tour banner action clicked',
+}
+
+export enum ProductTourEventProperties {
+    TOUR_ID = '$product_tour_id',
+    TOUR_NAME = '$product_tour_name',
+    TOUR_ITERATION = '$product_tour_iteration',
+    TOUR_RENDER_REASON = '$product_tour_render_reason',
+    TOUR_STEP_ID = '$product_tour_step_id',
+    TOUR_STEP_ORDER = '$product_tour_step_order',
+    TOUR_STEP_TYPE = '$product_tour_step_type',
+    TOUR_DISMISS_REASON = '$product_tour_dismiss_reason',
+    TOUR_BUTTON_TEXT = '$product_tour_button_text',
+    TOUR_BUTTON_ACTION = '$product_tour_button_action',
+    TOUR_BUTTON_LINK = '$product_tour_button_link',
+    TOUR_BUTTON_TOUR_ID = '$product_tour_button_tour_id',
+    TOUR_STEPS_COUNT = '$product_tour_steps_count',
+    TOUR_STEP_SELECTOR = '$product_tour_step_selector',
+    TOUR_STEP_SELECTOR_FOUND = '$product_tour_step_selector_found',
+    TOUR_STEP_ELEMENT_TAG = '$product_tour_step_element_tag',
+    TOUR_STEP_ELEMENT_ID = '$product_tour_step_element_id',
+    TOUR_STEP_ELEMENT_CLASSES = '$product_tour_step_element_classes',
+    TOUR_STEP_ELEMENT_TEXT = '$product_tour_step_element_text',
+    TOUR_ERROR = '$product_tour_error',
+    TOUR_MATCHES_COUNT = '$product_tour_matches_count',
+    TOUR_FAILURE_PHASE = '$product_tour_failure_phase',
+    TOUR_WAITED_FOR_ELEMENT = '$product_tour_waited_for_element',
+    TOUR_WAIT_DURATION_MS = '$product_tour_wait_duration_ms',
+    TOUR_BANNER_SELECTOR = '$product_tour_banner_selector',
+    TOUR_LINKED_SURVEY_ID = '$product_tour_linked_survey_id',
+    USE_MANUAL_SELECTOR = '$use_manual_selector',
+    INFERENCE_DATA_PRESENT = '$inference_data_present',
 }

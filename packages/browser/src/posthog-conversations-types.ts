@@ -323,6 +323,73 @@ export interface GetTicketsResponse {
 }
 
 /**
+ * Payload for restoring ticket access from a one-time token
+ */
+export interface RestoreFromTokenPayload {
+    /**
+     * Opaque one-time restore token from email link
+     */
+    restore_token: string
+
+    /**
+     * Current browser widget session ID requesting restore
+     */
+    widget_session_id: string
+
+    /**
+     * Optional distinct ID for debugging/observability
+     */
+    distinct_id?: string
+
+    /**
+     * Optional current URL for backend observability
+     */
+    current_url?: string
+}
+
+export type RestoreFromTokenStatus = 'success' | 'expired' | 'invalid' | 'used'
+
+/**
+ * Response from restore token exchange endpoint
+ */
+export interface RestoreFromTokenResponse {
+    /**
+     * Restore result
+     */
+    status: RestoreFromTokenStatus
+
+    /**
+     * Canonical widget session ID to use after restore
+     */
+    widget_session_id?: string
+
+    /**
+     * Migrated ticket IDs, if any
+     */
+    migrated_ticket_ids?: string[]
+
+    /**
+     * Optional machine-readable backend code
+     */
+    code?: string
+}
+
+/**
+ * Payload for requesting a self-service restore link email
+ */
+export interface RequestRestoreLinkPayload {
+    email: string
+    request_url: string
+}
+
+/**
+ * Response from self-service restore link request
+ */
+export interface RequestRestoreLinkResponse {
+    ok: true
+}
+
+/**
  * User traits to send with messages
  */
 export interface ConversationsTraits {

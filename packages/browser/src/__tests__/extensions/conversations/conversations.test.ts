@@ -22,6 +22,9 @@ describe('PostHogConversations', () => {
             hide: jest.fn(),
             reset: jest.fn(),
             isVisible: jest.fn().mockReturnValue(true),
+            requestRestoreLink: jest.fn(),
+            restoreFromToken: jest.fn(),
+            restoreFromUrlToken: jest.fn(),
         } as ConversationsManager
 
         // Setup mock PostHog instance
@@ -155,6 +158,13 @@ describe('PostHogConversations', () => {
 
             conversations.loadIfEnabled()
             expect(assignableWindow.__PosthogExtensions__?.loadExternalDependency).toHaveBeenCalledTimes(1)
+        })
+
+        it('should not load for toolbar internal instance', () => {
+            mockPostHog.config.name = 'ph_toolbar_internal'
+            conversations.onRemoteConfig(validRemoteConfig as RemoteConfig)
+
+            expect(assignableWindow.__PosthogExtensions__?.loadExternalDependency).not.toHaveBeenCalled()
         })
 
         it('should not load if conversations are disabled', () => {

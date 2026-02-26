@@ -483,4 +483,60 @@ describe('posthog core', () => {
             })
         })
     })
+
+    describe('_execute_array and push re-entrancy guard', () => {
+        it('should not infinitely recurse when push is called re-entrantly (e.g., TikTok Proxy)', () => {
+            const posthog = defaultPostHog()
+
+            // Simulate TikTok's in-app browser Proxy behavior:
+            // When _execute_array dispatches a method via this[method](),
+            // a Proxy intercepts it and calls push() instead, which would
+            // re-enter _execute_array and cause infinite recursion.
+            const origCapture = posthog.capture.bind(posthog)
+            let callCount = 0
+            posthog.capture = function (...args: any[]) {
+                callCount++
+                if (callCount > 100) {
+                    throw new Error('Infinite recursion detected')
+                }
+                // Simulate what TikTok's Proxy does: convert the method call
+                // to a push() call
+                posthog.push(['capture', ...args])
+            } as any
+
+            // This should not throw RangeError: Maximum call stack size exceeded
+            expect(() => {
+                posthog.push(['capture', 'test-event', { foo: 'bar' }])
+            }).not.toThrow()
+
+            // Restore original capture to verify it was called via prototype
+            posthog.capture = origCapture
+        })
+
+        it('should execute methods normally when no Proxy interference', () => {
+            const posthog = defaultPostHog()
+            const captureSpy = jest.spyOn(posthog, 'capture').mockImplementation()
+
+            posthog.push(['capture', 'test-event', { foo: 'bar' }])
+
+            expect(captureSpy).toHaveBeenCalledWith('test-event', { foo: 'bar' })
+            captureSpy.mockRestore()
+        })
+
+        it('should handle _execute_array with array of commands', () => {
+            const posthog = defaultPostHog()
+            const registerSpy = jest.spyOn(posthog, 'register').mockImplementation()
+            const captureSpy = jest.spyOn(posthog, 'capture').mockImplementation()
+
+            posthog._execute_array([
+                ['register', { key: 'value' }],
+                ['capture', 'test-event'],
+            ])
+
+            expect(registerSpy).toHaveBeenCalledWith({ key: 'value' })
+            expect(captureSpy).toHaveBeenCalledWith('test-event')
+            registerSpy.mockRestore()
+            captureSpy.mockRestore()
+        })
+    })
 })

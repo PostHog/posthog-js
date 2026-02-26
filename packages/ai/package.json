@@ -1,6 +1,6 @@
 {
   "name": "@posthog/ai",
-  "version": "7.8.11",
+  "version": "7.9.3",
   "description": "PostHog Node.js AI integrations",
   "repository": {
     "type": "git",
@@ -23,6 +23,8 @@
   },
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.8",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-trace-base": "^2.2.0",
     "@babel/preset-env": "catalog:",
     "@babel/preset-typescript": "catalog:",
     "@posthog-tooling/rollup-utils": "workspace:*",
@@ -45,20 +47,28 @@
     "node": "^20.20.0 || >=22.22.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.74.0",
-    "@google/genai": "^1.40.0",
-    "@langchain/core": "^1.1.17",
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@google/genai": "^1.42.0",
+    "@langchain/core": "^1.1.27",
     "@posthog/core": "workspace:*",
-    "langchain": "^1.2.3",
-    "openai": "^6.17.0",
+    "langchain": "^1.2.25",
+    "openai": "^6.22.0",
     "uuid": "^11.1.0",
     "zod": "^4.1.13"
   },
   "peerDependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-trace-base": "^2.2.0",
     "@ai-sdk/provider": "^2.0.0 || ^3.0.0",
     "posthog-node": "^5.0.0"
   },
   "peerDependenciesMeta": {
+    "@opentelemetry/api": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-trace-base": {
+      "optional": true
+    },
     "@ai-sdk/provider": {
       "optional": true
     }
@@ -91,6 +101,11 @@
       "require": "./dist/vercel/index.cjs",
       "import": "./dist/vercel/index.mjs",
       "types": "./dist/vercel/index.d.ts"
+    },
+    "./otel": {
+      "require": "./dist/otel/index.cjs",
+      "import": "./dist/otel/index.mjs",
+      "types": "./dist/otel/index.d.ts"
     },
     "./langchain": {
       "require": "./dist/langchain/index.cjs",

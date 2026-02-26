@@ -6,7 +6,7 @@ import { cancelSVG } from '../../surveys/icons'
 export interface ProductTourBannerProps {
     step: ProductTourStep
     onDismiss: () => void
-    onTriggerTour?: () => void
+    onActionClick?: () => void
     displayFrequency?: ProductTourDisplayFrequency
 }
 
@@ -17,15 +17,16 @@ interface BannerWrapperProps {
 
 interface LinkWrapperProps extends BannerWrapperProps {
     href: string
+    onClick?: () => void
 }
 
 interface ButtonWrapperProps extends BannerWrapperProps {
     onClick: () => void
 }
 
-function LinkWrapper({ class: className, href, children }: LinkWrapperProps): h.JSX.Element {
+function LinkWrapper({ class: className, href, onClick, children }: LinkWrapperProps): h.JSX.Element {
     return (
-        <a class={className} href={href} target="_blank" rel="noopener noreferrer">
+        <a class={className} href={href} target="_blank" rel="noopener noreferrer" onClick={onClick}>
             {children}
         </a>
     )
@@ -55,10 +56,20 @@ function StaticWrapper({ class: className, children }: BannerWrapperProps): h.JS
     return <div class={className}>{children}</div>
 }
 
-export function ProductTourBanner({
+export function ProductTourBanner(props: ProductTourBannerProps) {
+    return (
+        <div class="ph-tour-banner-wrapper">
+            <div class="ph-tour-banner-slide">
+                <ProductTourBannerInner {...props} />
+            </div>
+        </div>
+    )
+}
+
+function ProductTourBannerInner({
     step,
     onDismiss,
-    onTriggerTour,
+    onActionClick,
     displayFrequency,
 }: ProductTourBannerProps): h.JSX.Element {
     const config = step.bannerConfig ?? { behavior: 'sticky' }
@@ -97,15 +108,15 @@ export function ProductTourBanner({
 
     if (action?.type === 'link' && action.link) {
         return (
-            <LinkWrapper class={classNames} href={action.link}>
+            <LinkWrapper class={classNames} href={action.link} onClick={onActionClick}>
                 {content}
             </LinkWrapper>
         )
     }
 
-    if (action?.type === 'trigger_tour' && onTriggerTour) {
+    if (action?.type === 'trigger_tour' && onActionClick) {
         return (
-            <ButtonWrapper class={classNames} onClick={onTriggerTour}>
+            <ButtonWrapper class={classNames} onClick={onActionClick}>
                 {content}
             </ButtonWrapper>
         )

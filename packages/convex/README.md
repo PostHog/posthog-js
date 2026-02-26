@@ -235,7 +235,7 @@ All feature flag methods accept optional `groups`, `personProperties`, `groupPro
 
 ## 📦 Example
 
-See the [example app](./example) for a working demo.
+See the [example app](../../examples/example-convex/) for a working demo.
 
 ## 🛠️ Development
 

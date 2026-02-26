@@ -2,7 +2,7 @@ name: New PR
 
 on:
     pull_request:
-        types: [opened]
+        types: [opened, edited, reopened]
 
 jobs:
     check-description:
@@ -17,8 +17,8 @@ jobs:
               run: |
                   FILTERED_BODY=$( \
                       sed -r -e \
-                      '/^(\.\.\.)|(\*)|(##? )|(- \[)/d' \
-                      <<< $RAW_BODY \
+                      '/^[[:space:]]*(\.\.\.|##?[[:space:]]|-[[:space:]]*\[)/d' \
+                      <<< "$RAW_BODY" \
                   )
                   echo "::debug::Filtered PR body to $FILTERED_BODY"
                   if [[ -z "${FILTERED_BODY//[[:space:]]/}" ]]; then
@@ -27,7 +27,7 @@ jobs:
                       echo "is-shame-worthy=false" >> "$GITHUB_OUTPUT"
                   fi
               env:
-                  RAW_BODY: ${{ github.event.pull_request.body }}
+                  RAW_BODY: ${{ github.event.pull_request.body || '' }}
 
             - name: Shame if PR has no description
               if: steps.is-shame-worthy.outputs.is-shame-worthy == 'true'

@@ -15,6 +15,8 @@ import type {
     GetTicketsOptions,
     GetTicketsResponse,
     MarkAsReadResponse,
+    RestoreFromTokenResponse,
+    RequestRestoreLinkResponse,
     SendMessageResponse,
     UserProvidedTraits,
 } from '../posthog-conversations-types'
@@ -222,6 +224,9 @@ export interface LazyLoadedConversationsInterface {
     getMessages: (ticketId?: string, after?: string) => Promise<GetMessagesResponse>
     markAsRead: (ticketId?: string) => Promise<MarkAsReadResponse>
     getTickets: (options?: GetTicketsOptions) => Promise<GetTicketsResponse>
+    requestRestoreLink: (email: string) => Promise<RequestRestoreLinkResponse>
+    restoreFromToken: (restoreToken: string) => Promise<RestoreFromTokenResponse>
+    restoreFromUrlToken: () => Promise<RestoreFromTokenResponse | null>
     getCurrentTicketId: () => string | null
     getWidgetSessionId: () => string
 }

@@ -1,5 +1,51 @@
 # posthog-ai
 
+## 7.9.3
+
+### Patch Changes
+
+- [#3147](https://github.com/PostHog/posthog-js/pull/3147) [`b98aa23`](https://github.com/PostHog/posthog-js/commit/b98aa2386d7abc89fba46cbc86f121e331415a92) Thanks [@andrewm4894](https://github.com/andrewm4894)! - Add `$ai_tokens_source` property ("sdk" or "passthrough") to all `$ai_generation` events to detect when token values are externally overridden via `posthogProperties`
+  (2026-02-25)
+- Updated dependencies [[`d43e90d`](https://github.com/PostHog/posthog-js/commit/d43e90df464b697a3aa0b46084d97a773a699abd), [`d43e90d`](https://github.com/PostHog/posthog-js/commit/d43e90df464b697a3aa0b46084d97a773a699abd)]:
+  - posthog-node@5.26.0
+
+## 7.9.2
+
+### Patch Changes
+
+- [#3137](https://github.com/PostHog/posthog-js/pull/3137) [`7d92690`](https://github.com/PostHog/posthog-js/commit/7d926905db1be3072518c654ccec75554b0bbc8b) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates: - Updated dependency [`@langchain/core@^1.1.27` ↗︎](https://www.npmjs.com/package/@langchain/core/v/1.1.27) (from `^1.1.17`, in `dependencies`) (2026-02-24)
+
+## 7.9.1
+
+### Patch Changes
+
+- [#3133](https://github.com/PostHog/posthog-js/pull/3133) [`9138eec`](https://github.com/PostHog/posthog-js/commit/9138eec407fed080050961db12e8d22d5ec24d63) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates: - Updated dependency [`@anthropic-ai/sdk@^0.78.0` ↗︎](https://www.npmjs.com/package/@anthropic-ai/sdk/v/0.78.0) (from `^0.74.0`, in `dependencies`) - Updated dependency [`@google/genai@^1.42.0` ↗︎](https://www.npmjs.com/package/@google/genai/v/1.42.0) (from `^1.40.0`, in `dependencies`) - Updated dependency [`langchain@^1.2.25` ↗︎](https://www.npmjs.com/package/langchain/v/1.2.25) (from `^1.2.3`, in `dependencies`) - Updated dependency [`openai@^6.22.0` ↗︎](https://www.npmjs.com/package/openai/v/6.22.0) (from `^6.17.0`, in `dependencies`) (2026-02-23)
+
+## 7.9.0
+
+### Minor Changes
+
+- [#3103](https://github.com/PostHog/posthog-js/pull/3103) [`526520a`](https://github.com/PostHog/posthog-js/commit/526520a6f1b09bdc847e3156807e11be0fdf052d) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Added AI SDK OTEL span processing pipeline
+  (2026-02-18)
+
+## 7.8.13
+
+### Patch Changes
+
+- Updated dependencies [[`9dbc05e`](https://github.com/PostHog/posthog-js/commit/9dbc05ed65ddc8c37c9262b9aebfc51d0c748971)]:
+  - @posthog/core@1.23.1
+  - posthog-node@5.24.17
+
+## 7.8.12
+
+### Patch Changes
+
+- [#3102](https://github.com/PostHog/posthog-js/pull/3102) [`f505865`](https://github.com/PostHog/posthog-js/commit/f505865d6000228458f5cb2d63296c228f4d0cd6) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Bind prompt fetches to both credentials by requiring `projectApiKey` and adding `token=<projectApiKey>` to prompt API reads.
+  (2026-02-17)
+- Updated dependencies [[`e962f01`](https://github.com/PostHog/posthog-js/commit/e962f01c80476b9325f0bbb4ca591820cfb9f338)]:
+  - @posthog/core@1.23.0
+  - posthog-node@5.24.16
+
 ## 7.8.11
 
 ### Patch Changes

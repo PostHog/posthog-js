@@ -3879,4 +3879,71 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording.started).toBe(true)
         })
     })
+
+    describe('trigger activation re-entry guard', () => {
+        it('prevents infinite recursion with triggerMatchType=all and both event + URL triggers', () => {
+            // Regression test for infinite recursion bug where custom events emitted during
+            // trigger activation would cause _activateTrigger to be called again before
+            // persistence had updated, creating an infinite loop and freezing the browser.
+            // This specifically tests the 'all' mode scenario where both triggers must match.
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['test_event'],
+                        urlTriggers: [{ url: 'https://has-to-be-present-or-invalid.com', matching: 'regex' }],
+                        triggerMatchType: 'all',
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Emit some events first to simulate buffering
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
+            // Spy on _activateTrigger to count how many times it's called
+            const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+            const activateTriggerSpy = jest.spyOn(lazyRecorder as any, '_activateTrigger')
+
+            // Trigger the event - with 'all' mode and both triggers configured,
+            // this would cause infinite recursion without the re-entry guard
+            simpleEventEmitter.emit('eventCaptured', { event: 'test_event' })
+
+            // Without the fix, this would be called dozens/hundreds of times causing a freeze
+            // With the fix, it should be called a reasonable number of times (1-2)
+            expect(activateTriggerSpy.mock.calls.length).toBeLessThan(5)
+
+            // With 'all' mode, both triggers need to match before going active
+            // So status may still be buffering if URL hasn't matched yet
+            expect(['buffering', 'active']).toContain(sessionRecording.status)
+        })
+
+        it('allows trigger activation to complete successfully with re-entry guard', () => {
+            // Verify that the re-entry guard doesn't break normal trigger activation
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['button_clicked'],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Add some events to buffer
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            // Trigger activation
+            simpleEventEmitter.emit('eventCaptured', { event: 'button_clicked' })
+
+            // Verify trigger activated successfully
+            expect(sessionRecording.status).toBe('active')
+            expect(posthog.capture).toHaveBeenCalled()
+        })
+    })
 })

@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.347.2",
+    "version": "1.354.4",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
@@ -52,6 +52,36 @@
         "react/package.json",
         "react/surveys/package.json"
     ],
+    "exports": {
+        ".": {
+            "types": "./dist/module.d.ts",
+            "import": "./dist/module.js",
+            "require": "./dist/main.js"
+        },
+        "./slim": {
+            "types": "./dist/module.slim.d.ts",
+            "import": "./dist/module.slim.js"
+        },
+        "./extensions": {
+            "types": "./lib/src/extensions/extension-bundles.d.ts",
+            "import": "./lib/src/extensions/extension-bundles.js"
+        },
+        "./react": {
+            "types": "./react/dist/types/index.d.ts",
+            "import": "./react/dist/esm/index.js",
+            "require": "./react/dist/umd/index.js"
+        },
+        "./react/*": {
+            "types": "./react/dist/types/*/index.d.ts",
+            "import": "./react/dist/esm/*/index.js",
+            "require": "./react/dist/umd/*/index.js"
+        },
+        "./dist/*.js": "./dist/*.js",
+        "./dist/*": "./dist/*.js",
+        "./lib/*.js": "./lib/*.js",
+        "./lib/*": "./lib/*.js",
+        "./package.json": "./package.json"
+    },
     "dependencies": {
         "@posthog/core": "workspace:*",
         "@posthog/types": "workspace:*",

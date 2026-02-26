@@ -105,11 +105,6 @@ export const PERSISTENCE_RESERVED_PROPERTIES = [
     INITIAL_REFERRER_INFO,
     ENABLE_PERSON_PROCESSING,
     INITIAL_PERSON_INFO,
-    // Conversations keys (defined in lazy-loaded extension)
-    '$conversations_widget_session_id',
-    '$conversations_ticket_id',
-    '$conversations_widget_state',
-    '$conversations_user_traits',
 ]
 
 export const SURVEYS_REQUEST_TIMEOUT_MS = 10000

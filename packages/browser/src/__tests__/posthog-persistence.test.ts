@@ -225,17 +225,29 @@ describe('persistence', () => {
                 })}`
             )
 
+            lib.set_property(USER_STATE, 'identified')
+            expect(document.cookie).toContain(
+                `ph__posthog=${encode({
+                    $device_id: 'device-123',
+                    distinct_id: 'test',
+                    $sesid: [1000, 'sid', 2000],
+                    $initial_person_info: { u: 'https://www.example.com', r: 'https://www.referrer.com' },
+                    $user_state: 'identified',
+                })}`
+            )
+
             // Clear localstorage to simulate being on a different domain
             localStorage.clear()
 
             const newLib = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
 
-            // $device_id should be recovered from cookies after localStorage is cleared
+            // Cookie-persisted properties should be recovered after localStorage is cleared
             expect(newLib.props).toEqual({
                 distinct_id: 'test',
                 $device_id: 'device-123',
                 $sesid: [1000, 'sid', 2000],
                 $initial_person_info: { u: 'https://www.example.com', r: 'https://www.referrer.com' },
+                $user_state: 'identified',
             })
         })
 

@@ -1397,6 +1397,16 @@ export interface PostHogConfig {
      */
     internal_or_test_user_hostname?: string | RegExp | null
 
+    /**
+     * Display language override for Product Tours.
+     *
+     * Must be a valid BCP 47 language code.
+     *
+     * In the future this will be used for Surveys and other products that
+     * deliver in-app experiences to end-users.
+     */
+    override_display_language?: string | null
+
     // ------- PREVIEW CONFIGS -------
 
     /**
@@ -1405,12 +1415,6 @@ export interface PostHogConfig {
      * (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID, X-POSTHOG-WINDOW-ID)
      * */
     __add_tracing_headers?: string[]
-
-    /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * Enables the new RemoteConfig approach to loading config instead of /flags?v=2&config=true
-     * */
-    __preview_remote_config?: boolean
 
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION

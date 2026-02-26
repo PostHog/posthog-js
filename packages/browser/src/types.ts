@@ -6,6 +6,20 @@ import { ConversationsRemoteConfig } from './posthog-conversations-types'
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SAMPLED } from './extensions/replay/external/triggerMatching'
 
+// Extension class types for __extensionClasses (type-only, no bundle impact)
+import type { Autocapture } from './autocapture'
+import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
+import type { ExceptionObserver } from './extensions/exception-autocapture'
+import type { HistoryAutocapture } from './extensions/history-autocapture'
+import type { TracingHeaders } from './extensions/tracing-headers'
+import type { WebVitalsAutocapture } from './extensions/web-vitals'
+import type { SessionRecording } from './extensions/replay/session-recording'
+import type { Heatmaps } from './heatmaps'
+import type { PostHogProductTours } from './posthog-product-tours'
+import type { SiteApps } from './site-apps'
+
+type Extension<T> = new (...args: any[]) => T
+
 // ============================================================================
 // Re-export public types from @posthog/types
 // ============================================================================
@@ -30,6 +44,7 @@ export type {
     FeatureFlagMetadata,
     EvaluationReason,
     FeatureFlagResult,
+    FeatureFlagOptions,
     RemoteConfigFeatureFlagCallback,
     EarlyAccessFeature,
     EarlyAccessFeatureStage,
@@ -116,6 +131,25 @@ export type PostHogInterface = Omit<BasePostHogInterface, 'config' | 'init'>
  */
 export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
     loaded: (posthog: PostHogInterface) => void
+
+    /**
+     * Internal: Extension class overrides for tree-shaking support.
+     * When provided, these classes are used instead of the default imports.
+     * This enables entrypoints to control which extensions are bundled.
+     * @internal
+     */
+    __extensionClasses?: {
+        historyAutocapture?: Extension<HistoryAutocapture>
+        tracingHeaders?: Extension<TracingHeaders>
+        siteApps?: Extension<SiteApps>
+        sessionRecording?: Extension<SessionRecording>
+        autocapture?: Extension<Autocapture>
+        productTours?: Extension<PostHogProductTours>
+        heatmaps?: Extension<Heatmaps>
+        webVitalsAutocapture?: Extension<WebVitalsAutocapture>
+        exceptionObserver?: Extension<ExceptionObserver>
+        deadClicksAutocapture?: Extension<DeadClicksAutocapture>
+    }
 }
 
 // See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
@@ -345,8 +379,7 @@ export interface RemoteConfig {
 }
 
 /**
- * Flags returns feature flags and their payloads, and optionally returns everything else from the remote config
- * assuming it's called with `config=true`
+ * Flags returns feature flags and their payloads
  */
 export interface FlagsResponse extends RemoteConfig {
     featureFlags: Record<string, string | boolean>

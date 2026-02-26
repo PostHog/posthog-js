@@ -649,14 +649,14 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "string",
     "RegExp"
   ],
+  "override_display_language": [
+    "undefined",
+    "null",
+    "string"
+  ],
   "__add_tracing_headers": [
     "undefined",
     "string[]"
-  ],
-  "__preview_remote_config": [
-    "undefined",
-    "false",
-    "true"
   ],
   "__preview_flags_v2": [
     "undefined",

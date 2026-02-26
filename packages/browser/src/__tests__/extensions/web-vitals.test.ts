@@ -6,6 +6,7 @@ import { PostHog } from '../../posthog-core'
 import { FlagsResponse, PerformanceCaptureConfig, RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
 import { assignableWindow } from '../../utils/globals'
 import { DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
+import { WEB_VITALS_ENABLED_SERVER_SIDE, WEB_VITALS_ALLOWED_METRICS } from '../../constants'
 
 jest.useFakeTimers()
 
@@ -287,6 +288,44 @@ describe('web vitals', () => {
             } as RemoteConfig)
 
             expect(loadScriptMock).toHaveBeenCalledWith(expect.anything(), expectedBundle, expect.any(Function))
+        })
+    })
+
+    describe('onRemoteConfig empty config handling', () => {
+        beforeEach(async () => {
+            beforeSendMock = jest.fn()
+            posthog = await createPosthogInstance(uuidv7(), {
+                before_send: beforeSendMock,
+            })
+        })
+
+        it('does not overwrite persistence when called with empty config', () => {
+            // Set up existing persisted values
+            posthog.persistence!.register({
+                [WEB_VITALS_ENABLED_SERVER_SIDE]: true,
+                [WEB_VITALS_ALLOWED_METRICS]: ['LCP', 'FCP'],
+            })
+
+            // Call with empty config (simulating config fetch failure)
+            posthog.webVitalsAutocapture!.onRemoteConfig({} as RemoteConfig)
+
+            // Should NOT have overwritten the existing values
+            expect(posthog.persistence!.props[WEB_VITALS_ENABLED_SERVER_SIDE]).toBe(true)
+            expect(posthog.persistence!.props[WEB_VITALS_ALLOWED_METRICS]).toEqual(['LCP', 'FCP'])
+        })
+
+        it('updates persistence when capturePerformance key is present', () => {
+            posthog.persistence!.register({
+                [WEB_VITALS_ENABLED_SERVER_SIDE]: true,
+                [WEB_VITALS_ALLOWED_METRICS]: ['LCP', 'FCP'],
+            })
+
+            posthog.webVitalsAutocapture!.onRemoteConfig({
+                capturePerformance: { web_vitals: false, web_vitals_allowed_metrics: ['CLS'] },
+            } as RemoteConfig)
+
+            expect(posthog.persistence!.props[WEB_VITALS_ENABLED_SERVER_SIDE]).toBe(false)
+            expect(posthog.persistence!.props[WEB_VITALS_ALLOWED_METRICS]).toEqual(['CLS'])
         })
     })
 

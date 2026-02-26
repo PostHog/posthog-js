@@ -1,5 +1,37 @@
 # posthog-react-native
 
+## 4.36.0
+
+### Minor Changes
+
+- [#3010](https://github.com/PostHog/posthog-js/pull/3010) [`da31ef8`](https://github.com/PostHog/posthog-js/commit/da31ef8bebc85e1e85425c7b4ec8abe425052dde) Thanks [@ioannisj](https://github.com/ioannisj)! - feat: add manual session replay control
+
+  New methods for programmatic control of session recording:
+  - `startSessionRecording(resumeCurrent?: boolean)` - Start or resume session recording. Pass `false` to start a new session.
+  - `stopSessionRecording()` - Stop the current session recording.
+  - `isSessionReplayActive()` - Check if session replay is currently active.
+
+  **Note:** Requires `posthog-react-native-session-replay` version 1.3.0 or higher. Users with older plugin versions will see a warning when calling these methods. (2026-02-20)
+
+## 4.35.1
+
+### Patch Changes
+
+- Updated dependencies [[`9dbc05e`](https://github.com/PostHog/posthog-js/commit/9dbc05ed65ddc8c37c9262b9aebfc51d0c748971)]:
+  - @posthog/core@1.23.1
+
+## 4.35.0
+
+### Minor Changes
+
+- [#3086](https://github.com/PostHog/posthog-js/pull/3086) [`e962f01`](https://github.com/PostHog/posthog-js/commit/e962f01c80476b9325f0bbb4ca591820cfb9f338) Thanks [@marandaneto](https://github.com/marandaneto)! - feat: support remote config for error tracking, session replay capture performance and capture logs
+  (2026-02-17)
+
+### Patch Changes
+
+- Updated dependencies [[`e962f01`](https://github.com/PostHog/posthog-js/commit/e962f01c80476b9325f0bbb4ca591820cfb9f338)]:
+  - @posthog/core@1.23.0
+
 ## 4.34.0
 
 ### Minor Changes

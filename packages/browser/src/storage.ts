@@ -7,6 +7,7 @@ import {
     INITIAL_PERSON_INFO,
     SESSION_ID,
     SESSION_RECORDING_IS_SAMPLED,
+    USER_STATE,
 } from './constants'
 
 import { isNull, isUndefined } from '@posthog/core'
@@ -266,6 +267,7 @@ const COOKIE_PERSISTED_PROPERTIES = [
     SESSION_RECORDING_IS_SAMPLED,
     ENABLE_PERSON_PROCESSING,
     INITIAL_PERSON_INFO,
+    USER_STATE,
 ]
 
 /**

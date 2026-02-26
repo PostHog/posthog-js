@@ -323,6 +323,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _forceAllowLocalhostNetworkCapture = false
     private _stopRrweb: listenerHandler | undefined = undefined
     private _lastActivityTimestamp: number = Date.now()
+    private _isActivatingTrigger: boolean = false
     /**
      * if pageview capture is disabled,
      * then we can manually track href changes
@@ -685,16 +686,27 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _activateTrigger(triggerType: TriggerType) {
-        if (this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING) {
-            // status is stored separately for URL and event triggers
-            this._instance?.persistence?.register({
-                [triggerType === 'url'
-                    ? SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION
-                    : SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION]: this._sessionId,
-            })
+        // Prevent re-entry: if we're already activating a trigger, skip to avoid infinite recursion
+        // This can happen when _reportStarted emits custom events that match the trigger condition
+        if (this._isActivatingTrigger) {
+            return
+        }
 
-            this._flushBuffer()
-            this._reportStarted((triggerType + '_trigger_matched') as SessionStartReason)
+        if (this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING) {
+            this._isActivatingTrigger = true
+            try {
+                // status is stored separately for URL and event triggers
+                this._instance?.persistence?.register({
+                    [triggerType === 'url'
+                        ? SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION
+                        : SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION]: this._sessionId,
+                })
+
+                this._flushBuffer()
+                this._reportStarted((triggerType + '_trigger_matched') as SessionStartReason)
+            } finally {
+                this._isActivatingTrigger = false
+            }
         }
     }
 

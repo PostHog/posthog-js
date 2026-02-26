@@ -165,6 +165,12 @@ export type PostHogCaptureOptions = {
   /** If provided overrides the auto-generated timestamp */
   timestamp?: Date
   disableGeoip?: boolean
+  /**
+   * Internal flag set by captureException() to indicate this $exception
+   * event originated from the proper exception capture path. Used to warn users who call
+   * capture('$exception') directly.
+   */
+  _originatedFromCaptureException?: boolean
 }
 
 export type PostHogFetchResponse = {
@@ -225,6 +231,28 @@ export type PostHogRemoteConfig = {
    * Indicates if the team has any flags enabled (if not we don't need to load them)
    */
   hasFeatureFlags?: boolean
+
+  /**
+   * Error tracking remote config.
+   * Either a boolean (false = disabled) or a map with configuration.
+   * When a map, `autocaptureExceptions` (boolean) controls whether automatic exception capture is enabled remotely.
+   */
+  errorTracking?:
+    | boolean
+    | {
+        [key: string]: JsonType
+      }
+
+  /**
+   * Capture performance remote config.
+   * Either a boolean (false = disabled) or a map with configuration.
+   * When a map, `network_timing` (boolean) controls whether network timing capture is enabled remotely.
+   */
+  capturePerformance?:
+    | boolean
+    | {
+        [key: string]: JsonType
+      }
 }
 
 export type FeatureFlagValue = string | boolean

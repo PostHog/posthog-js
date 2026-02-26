@@ -14,16 +14,28 @@ import { act } from '@testing-library/preact'
 // Mock the persistence layer
 jest.mock('../../../extensions/conversations/external/persistence', () => {
     return {
-        ConversationsPersistence: jest.fn().mockImplementation(() => ({
-            getOrCreateWidgetSessionId: jest.fn().mockReturnValue('test-widget-session-id'),
-            loadTicketId: jest.fn().mockReturnValue(null),
-            saveTicketId: jest.fn(),
-            loadWidgetState: jest.fn().mockReturnValue('closed'),
-            saveWidgetState: jest.fn(),
-            loadUserTraits: jest.fn().mockReturnValue(null),
-            saveUserTraits: jest.fn(),
-            clearWidgetSessionId: jest.fn(),
-        })),
+        ConversationsPersistence: jest.fn().mockImplementation(() => {
+            let storedTicketId: string | null = null
+            return {
+                getOrCreateWidgetSessionId: jest.fn().mockReturnValue('test-widget-session-id'),
+                setWidgetSessionId: jest.fn(),
+                loadTicketId: jest.fn(() => storedTicketId),
+                saveTicketId: jest.fn((ticketId: string) => {
+                    storedTicketId = ticketId
+                }),
+                clearTicketId: jest.fn(() => {
+                    storedTicketId = null
+                }),
+                loadWidgetState: jest.fn().mockReturnValue('closed'),
+                saveWidgetState: jest.fn(),
+                loadUserTraits: jest.fn().mockReturnValue(null),
+                saveUserTraits: jest.fn(),
+                clearWidgetSessionId: jest.fn(),
+                clearAll: jest.fn(() => {
+                    storedTicketId = null
+                }),
+            }
+        }),
     }
 })
 
@@ -31,6 +43,7 @@ describe('ConversationsManager', () => {
     let manager: ConversationsManager
     let mockPosthog: PostHog
     let mockConfig: ConversationsRemoteConfig
+    let mockRestoreResponse: { statusCode: number; json?: Record<string, any> }
 
     const mockMessages: Message[] = [
         {
@@ -72,12 +85,26 @@ describe('ConversationsManager', () => {
         unread_count: 0,
     })
 
+    const createMockGetTicketsResponse = () => ({
+        results: [],
+        has_more: false,
+    })
+
     beforeEach(() => {
         // Clear DOM and mocks
         document.body.innerHTML = ''
         localStorage.clear()
         jest.clearAllMocks()
         jest.useFakeTimers()
+        window.history.replaceState({}, '', '/')
+        mockRestoreResponse = {
+            statusCode: 200,
+            json: {
+                status: 'success',
+                widget_session_id: 'restored-widget-session-id',
+                migrated_ticket_ids: ['ticket-restored-1'],
+            },
+        }
 
         // Mock scrollIntoView which is not implemented in JSDOM
         Element.prototype.scrollIntoView = jest.fn()
@@ -104,6 +131,13 @@ describe('ConversationsManager', () => {
                         statusCode: 200,
                         json: createMockSendMessageResponse(),
                     })
+                } else if (method === 'POST' && url.endsWith('/widget/restore')) {
+                    options.callback(mockRestoreResponse)
+                } else if (method === 'POST' && url.includes('/widget/restore/request')) {
+                    options.callback({
+                        statusCode: 200,
+                        json: { ok: true },
+                    })
                 } else if (url.includes('/read') && method === 'POST') {
                     options.callback({
                         statusCode: 200,
@@ -114,12 +148,18 @@ describe('ConversationsManager', () => {
                         statusCode: 200,
                         json: createMockGetMessagesResponse(),
                     })
+                } else if (url.includes('/widget/tickets') && method === 'GET') {
+                    options.callback({
+                        statusCode: 200,
+                        json: createMockGetTicketsResponse(),
+                    })
                 }
             }),
             requestRouter: {
                 endpointFor: jest.fn((type: string, path: string) => `https://test.posthog.com${path}`),
             },
             get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
+            get_property: jest.fn().mockReturnValue(undefined),
             get_session_id: jest.fn().mockReturnValue('test-session-id-123'),
             get_session_replay_url: jest.fn().mockReturnValue('https://app.posthog.com/replay/test-session?t=100'),
             persistence: {
@@ -145,9 +185,18 @@ describe('ConversationsManager', () => {
         }
     })
 
+    // Helper to flush promises (needed because widget initialization is async)
+    const flushPromises = async () => {
+        await act(async () => {
+            await Promise.resolve()
+            jest.runAllTimers()
+        })
+    }
+
     describe('initialization', () => {
-        it('should initialize and render the widget when widgetEnabled is true', () => {
+        it('should initialize and render the widget when widgetEnabled is true', async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
 
             const container = document.getElementById('ph-conversations-widget-container')
             expect(container).toBeInTheDocument()
@@ -177,8 +226,9 @@ describe('ConversationsManager', () => {
             )
         })
 
-        it('should capture $conversations_widget_loaded event when widget is rendered', () => {
+        it('should capture $conversations_widget_loaded event when widget is rendered', async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
 
             expect(mockPosthog.capture).toHaveBeenCalledWith(
                 '$conversations_widget_loaded',
@@ -214,9 +264,99 @@ describe('ConversationsManager', () => {
         })
     })
 
-    describe('show and hide', () => {
-        beforeEach(() => {
+    describe('restore token flow', () => {
+        it('should call restore endpoint when restore token exists in URL', async () => {
+            window.history.replaceState({}, '', '/?ph_conv_restore=restore-token-1')
+
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            expect(mockPosthog._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    method: 'POST',
+                    url: expect.stringContaining('/api/conversations/v1/widget/restore'),
+                    data: expect.objectContaining({
+                        restore_token: 'restore-token-1',
+                        widget_session_id: 'test-widget-session-id',
+                    }),
+                })
+            )
+        })
+
+        it('should apply restored ticket/session and clear restore token from URL', async () => {
+            window.history.replaceState({}, '', '/?ph_conv_restore=restore-token-2')
+
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            expect(manager.getWidgetSessionId()).toBe('restored-widget-session-id')
+            expect(manager.getCurrentTicketId()).toBe('ticket-restored-1')
+            expect(window.location.search).toBe('')
+        })
+
+        it('should keep local session when backend returns invalid status and clear URL', async () => {
+            mockRestoreResponse = {
+                statusCode: 200,
+                json: { status: 'invalid' },
+            }
+            window.history.replaceState({}, '', '/?ph_conv_restore=restore-token-3')
+
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            expect(manager.getWidgetSessionId()).toBe('test-widget-session-id')
+            expect(window.location.search).toBe('')
+        })
+
+        it('should preserve existing local session unless backend returns replacement', async () => {
+            mockRestoreResponse = {
+                statusCode: 200,
+                json: {
+                    status: 'success',
+                    migrated_ticket_ids: ['ticket-unchanged-session'],
+                },
+            }
+            window.history.replaceState({}, '', '/?ph_conv_restore=restore-token-4')
+
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            expect(manager.getWidgetSessionId()).toBe('test-widget-session-id')
+            expect(manager.getCurrentTicketId()).toBe('ticket-unchanged-session')
+        })
+
+        it('should clear restore token from URL when restore request fails', async () => {
+            mockRestoreResponse = {
+                statusCode: 500,
+                json: {
+                    detail: 'Internal server error',
+                },
+            }
+            window.history.replaceState({}, '', '/?ph_conv_restore=restore-token-5')
+
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            expect(window.location.search).toBe('')
+        })
+
+        it('should clear restore token from URL when restoreFromToken is called directly', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+            window.history.replaceState({}, '', '/?ph_conv_restore=manual-token')
+
+            await act(async () => {
+                await manager.restoreFromToken('manual-token')
+            })
+
+            expect(window.location.search).toBe('')
+        })
+    })
+
+    describe('show and hide', () => {
+        beforeEach(async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
         })
 
         it('should render widget to DOM when show() is called', () => {
@@ -237,7 +377,7 @@ describe('ConversationsManager', () => {
             expect(manager.isVisible()).toBe(false)
         })
 
-        it('should re-render widget when show() is called after hide()', () => {
+        it('should re-render widget when show() is called after hide()', async () => {
             act(() => {
                 manager.hide()
             })
@@ -246,12 +386,13 @@ describe('ConversationsManager', () => {
             act(() => {
                 manager.show()
             })
+            await flushPromises()
 
             expect(document.getElementById('ph-conversations-widget-container')).toBeInTheDocument()
             expect(manager.isVisible()).toBe(true)
         })
 
-        it('should respect saved widget state when re-rendering', () => {
+        it('should respect saved widget state when re-rendering', async () => {
             // Widget starts closed by default
             // The persistence mock returns 'closed' for loadWidgetState
             // so re-rendering should keep it closed
@@ -262,6 +403,7 @@ describe('ConversationsManager', () => {
             act(() => {
                 manager.show()
             })
+            await flushPromises()
 
             // Widget should be rendered but in closed state (not forced open)
             expect(manager.isVisible()).toBe(true)
@@ -269,8 +411,9 @@ describe('ConversationsManager', () => {
     })
 
     describe('isVisible', () => {
-        it('should return true when widget is rendered', () => {
+        it('should return true when widget is rendered', async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
 
             expect(manager.isVisible()).toBe(true)
         })
@@ -287,7 +430,7 @@ describe('ConversationsManager', () => {
     })
 
     describe('show() with widgetEnabled: false', () => {
-        it('should render the widget when show() is called even if widgetEnabled was false', () => {
+        it('should render the widget when show() is called even if widgetEnabled was false', async () => {
             const configWithWidgetDisabled = {
                 ...mockConfig,
                 widgetEnabled: false,
@@ -302,13 +445,14 @@ describe('ConversationsManager', () => {
             act(() => {
                 manager.show()
             })
+            await flushPromises()
 
             // Now widget should be rendered
             expect(document.getElementById('ph-conversations-widget-container')).toBeInTheDocument()
             expect(manager.isVisible()).toBe(true)
         })
 
-        it('should capture $conversations_widget_loaded when show() triggers widget rendering', () => {
+        it('should capture $conversations_widget_loaded when show() triggers widget rendering', async () => {
             const configWithWidgetDisabled = {
                 ...mockConfig,
                 widgetEnabled: false,
@@ -320,6 +464,7 @@ describe('ConversationsManager', () => {
             act(() => {
                 manager.show()
             })
+            await flushPromises()
 
             expect(mockPosthog.capture).toHaveBeenCalledWith(
                 '$conversations_widget_loaded',
@@ -331,8 +476,11 @@ describe('ConversationsManager', () => {
     })
 
     describe('sendMessage', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+            // Clear mocks after initialization (which calls getTickets)
+            jest.clearAllMocks()
         })
 
         it('should send a message through the API', async () => {
@@ -542,6 +690,7 @@ describe('ConversationsManager', () => {
     describe('message polling', () => {
         beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
             // Send a message to create a ticket
             await act(async () => {
                 await manager.sendMessage('Hello!')
@@ -585,11 +734,22 @@ describe('ConversationsManager', () => {
             const getMessagesCall = calls.find((call) => call[0].url.includes('/widget/messages/'))
             expect(getMessagesCall[0].url).not.toContain('distinct_id=')
         })
+
+        it('should not poll while restore request view is active', async () => {
+            manager['_currentView'] = 'restore_request'
+
+            act(() => {
+                jest.advanceTimersByTime(5000)
+            })
+
+            expect(mockPosthog._send_request).not.toHaveBeenCalled()
+        })
     })
 
     describe('identify handling', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
         })
 
         it('should set up identify listener', () => {
@@ -602,8 +762,9 @@ describe('ConversationsManager', () => {
     })
 
     describe('destroy', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
         })
 
         // Note: This test is skipped because Jest fake timers interact poorly with
@@ -634,8 +795,9 @@ describe('ConversationsManager', () => {
     })
 
     describe('API integration', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
         })
 
         describe('sendMessage API', () => {
@@ -780,11 +942,45 @@ describe('ConversationsManager', () => {
                 expect(manager['_currentTicketId']).toBe('marked-ticket-999')
             })
         })
+
+        describe('requestRestoreLink API', () => {
+            it('should request restore link with normalized email and request_url', async () => {
+                await act(async () => {
+                    const response = await manager.requestRestoreLink('  TEST@Example.com ')
+                    expect(response).toEqual({ ok: true })
+                })
+
+                expect(mockPosthog._send_request).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        method: 'POST',
+                        url: expect.stringContaining('/api/conversations/v1/widget/restore/request'),
+                        data: expect.objectContaining({
+                            email: 'test@example.com',
+                            request_url: window.location.href,
+                        }),
+                    })
+                )
+            })
+
+            it('should not include request_url in query params for restore link request', async () => {
+                await act(async () => {
+                    await manager.requestRestoreLink('test@example.com')
+                })
+
+                expect(mockPosthog._send_request).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        method: 'POST',
+                        url: expect.not.stringContaining('request_url='),
+                    })
+                )
+            })
+        })
     })
 
     describe('persistence integration', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
         })
 
         it('should save ticket ID after sending message', async () => {
@@ -795,7 +991,7 @@ describe('ConversationsManager', () => {
             expect(manager['_currentTicketId']).toBe('ticket-123')
         })
 
-        it('should load saved widget state when re-rendered after hide', () => {
+        it('should load saved widget state when re-rendered after hide', async () => {
             // Hide the widget
             act(() => {
                 manager.hide()
@@ -806,6 +1002,7 @@ describe('ConversationsManager', () => {
             act(() => {
                 manager.show()
             })
+            await flushPromises()
             expect(manager.isVisible()).toBe(true)
             // Widget state is loaded from persistence in _initializeWidget
             // The persistence mock returns 'closed' for loadWidgetState
