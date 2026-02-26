@@ -149,7 +149,7 @@ const buildLegacyStorage = (filesystem: any): PostHogCustomStorage => {
   }
 }
 
-export const buildOptimisiticAsyncStorage = (): PostHogCustomStorage | undefined => {
+export const buildOptimisticAsyncStorage = (): PostHogCustomStorage | undefined => {
   // On web platform during SSR (no window), skip file storage
   // The caller will fall back to memory storage
   if (isWeb() && typeof (GLOBAL_OBJ as any)?.window === 'undefined') {

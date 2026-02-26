@@ -18,7 +18,7 @@ import {
 } from '@posthog/core'
 import { PostHogRNStorage, PostHogRNSyncMemoryStorage } from './storage'
 import { version } from './version'
-import { buildOptimisiticAsyncStorage, getAppProperties } from './native-deps'
+import { buildOptimisticAsyncStorage, getAppProperties } from './native-deps'
 import {
   PostHogAutocaptureOptions,
   PostHogCustomAppProperties,
@@ -183,7 +183,7 @@ export class PostHog extends PostHogCore {
 
     let theStorage: PostHogCustomStorage | undefined
     if (this._persistence === 'file') {
-      theStorage = options?.customStorage ?? buildOptimisiticAsyncStorage()
+      theStorage = options?.customStorage ?? buildOptimisticAsyncStorage()
     }
 
     if (theStorage) {

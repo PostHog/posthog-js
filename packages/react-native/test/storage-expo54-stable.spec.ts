@@ -43,7 +43,7 @@ jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }))
 
-import { buildOptimisiticAsyncStorage } from '../src/native-deps'
+import { buildOptimisticAsyncStorage } from '../src/native-deps'
 import { OptionalExpoFileSystem } from '../src/optional/OptionalExpoFileSystem'
 
 describe('Expo SDK 54 stable - new File API detection', () => {
@@ -55,12 +55,12 @@ describe('Expo SDK 54 stable - new File API detection', () => {
   })
 
   it('should use new File/Paths API when both new and deprecated legacy APIs are present', () => {
-    const storage = buildOptimisiticAsyncStorage()
+    const storage = buildOptimisticAsyncStorage()
     expect(storage).toBeDefined()
   })
 
   it('should pass Paths.document directory and key to File constructor', async () => {
-    const storage = buildOptimisiticAsyncStorage()!
+    const storage = buildOptimisticAsyncStorage()!
 
     const result = await storage.getItem('test-key')
     expect(result).toBe('stored-value')
@@ -69,7 +69,7 @@ describe('Expo SDK 54 stable - new File API detection', () => {
   })
 
   it('should use File.write for setItem', () => {
-    const storage = buildOptimisiticAsyncStorage()!
+    const storage = buildOptimisticAsyncStorage()!
 
     storage.setItem('test-key', 'test-value')
     expect((OptionalExpoFileSystem as any).File).toHaveBeenCalledWith(mockDocument, 'test-key')
@@ -79,7 +79,7 @@ describe('Expo SDK 54 stable - new File API detection', () => {
   it('should return null when getItem fails', async () => {
     mockFileText.mockRejectedValue(new Error('File not found'))
 
-    const storage = buildOptimisiticAsyncStorage()!
+    const storage = buildOptimisticAsyncStorage()!
     const result = await storage.getItem('nonexistent-key')
     expect(result).toBeNull()
   })

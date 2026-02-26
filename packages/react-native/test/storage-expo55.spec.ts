@@ -47,7 +47,7 @@ jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }))
 
-import { buildOptimisiticAsyncStorage } from '../src/native-deps'
+import { buildOptimisticAsyncStorage } from '../src/native-deps'
 import { OptionalExpoFileSystem } from '../src/optional/OptionalExpoFileSystem'
 
 describe('Expo SDK 55 - prefers new File API over working legacy subpath', () => {
@@ -59,7 +59,7 @@ describe('Expo SDK 55 - prefers new File API over working legacy subpath', () =>
   })
 
   it('should use new File/Paths API even when legacy subpath is available', () => {
-    const storage = buildOptimisiticAsyncStorage()
+    const storage = buildOptimisticAsyncStorage()
     expect(storage).toBeDefined()
 
     // Verify it uses new API
@@ -73,7 +73,7 @@ describe('Expo SDK 55 - prefers new File API over working legacy subpath', () =>
   })
 
   it('should read using new File API, not legacy', async () => {
-    const storage = buildOptimisiticAsyncStorage()!
+    const storage = buildOptimisticAsyncStorage()!
 
     const result = await storage.getItem('test-key')
     expect(result).toBe('stored-value')
