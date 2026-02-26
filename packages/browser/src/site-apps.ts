@@ -1,3 +1,4 @@
+import type { Extension } from './extensions/types'
 import { PostHog } from './posthog-core'
 import { CaptureResult, Properties, RemoteConfig, SiteApp, SiteAppGlobals, SiteAppLoader } from './types'
 import { assignableWindow } from './utils/globals'
@@ -5,7 +6,7 @@ import { createLogger } from './utils/logger'
 
 const logger = createLogger('[SiteApps]')
 
-export class SiteApps {
+export class SiteApps implements Extension {
     apps: Record<string, SiteApp>
 
     private _stopBuffering?: () => void
@@ -36,7 +37,7 @@ export class SiteApps {
         return assignableWindow._POSTHOG_REMOTE_CONFIG?.[this._instance.config.token]?.siteApps
     }
 
-    init() {
+    initialize() {
         if (this.isEnabled) {
             const stop = this._instance._addCaptureHook(this._eventCollector.bind(this))
             this._stopBuffering = () => {

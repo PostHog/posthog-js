@@ -110,7 +110,7 @@ describe('SiteApps', () => {
     describe('init', () => {
         it('adds eventCollector as a capture hook', () => {
             expect(siteAppsInstance['_stopBuffering']).toBeUndefined()
-            siteAppsInstance.init()
+            siteAppsInstance.initialize()
 
             expect(posthog._addCaptureHook).toHaveBeenCalledWith(expect.any(Function))
             expect(siteAppsInstance['_stopBuffering']).toEqual(expect.any(Function))
@@ -118,7 +118,7 @@ describe('SiteApps', () => {
 
         it('does not add eventCollector as a capture hook if disabled', () => {
             posthog.config.opt_in_site_apps = false
-            siteAppsInstance.init()
+            siteAppsInstance.initialize()
 
             expect(posthog._addCaptureHook).not.toHaveBeenCalled()
             expect(siteAppsInstance['_stopBuffering']).toBeUndefined()
@@ -127,7 +127,7 @@ describe('SiteApps', () => {
 
     describe('eventCollector', () => {
         beforeEach(() => {
-            siteAppsInstance.init()
+            siteAppsInstance.initialize()
         })
 
         it('collects events if enabled after init', () => {
@@ -225,7 +225,7 @@ describe('SiteApps', () => {
     describe('legacy site apps loading', () => {
         beforeEach(() => {
             posthog.config.opt_in_site_apps = true
-            siteAppsInstance.init()
+            siteAppsInstance.initialize()
         })
 
         it('loads stops buffering if no site apps', () => {
@@ -335,7 +335,7 @@ describe('SiteApps', () => {
                 },
             } as any
 
-            siteAppsInstance.init()
+            siteAppsInstance.initialize()
         }
 
         beforeEach(() => {

@@ -13,6 +13,7 @@ import { includes } from '@posthog/core'
 import { addEventListener, extendArray } from './utils'
 import { maskQueryParams } from './utils/request-utils'
 import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from './utils/event-utils'
+import type { Extension } from './extensions/types'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
 
@@ -50,7 +51,7 @@ function shouldPoll(document: Document | undefined): boolean {
     return document?.visibilityState === 'visible'
 }
 
-export class Heatmaps {
+export class Heatmaps implements Extension {
     instance: PostHog
     rageclicks: RageClick
     _enabledServerSide: boolean = false
@@ -69,6 +70,10 @@ export class Heatmaps {
         this.instance = instance
         this._enabledServerSide = !!this.instance.persistence?.props[HEATMAPS_ENABLED_SERVER_SIDE]
         this.rageclicks = new RageClick(instance.config.rageclick)
+    }
+
+    initialize() {
+        this.startIfEnabled()
     }
 
     public get flushIntervalMilliseconds(): number {
