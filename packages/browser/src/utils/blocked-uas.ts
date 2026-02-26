@@ -12,6 +12,7 @@ export interface NavigatorUAData {
         brand: string
         version: string
     }[]
+    platform?: string
 }
 declare global {
     interface Navigator {
