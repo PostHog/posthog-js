@@ -7,6 +7,7 @@ import { ConversationsRemoteConfig } from './posthog-conversations-types'
 import type { SAMPLED } from './extensions/replay/external/triggerMatching'
 
 // Extension class types for __extensionClasses (type-only, no bundle impact)
+import type { ExtensionConstructor } from './extensions/types'
 import type { Autocapture } from './autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
 import type { ExceptionObserver } from './extensions/exception-autocapture'
@@ -17,8 +18,6 @@ import type { SessionRecording } from './extensions/replay/session-recording'
 import type { Heatmaps } from './heatmaps'
 import type { PostHogProductTours } from './posthog-product-tours'
 import type { SiteApps } from './site-apps'
-
-type Extension<T> = new (...args: any[]) => T
 
 // ============================================================================
 // Re-export public types from @posthog/types
@@ -132,16 +131,16 @@ export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
      * @internal
      */
     __extensionClasses?: {
-        historyAutocapture?: Extension<HistoryAutocapture>
-        tracingHeaders?: Extension<TracingHeaders>
-        siteApps?: Extension<SiteApps>
-        sessionRecording?: Extension<SessionRecording>
-        autocapture?: Extension<Autocapture>
-        productTours?: Extension<PostHogProductTours>
-        heatmaps?: Extension<Heatmaps>
-        webVitalsAutocapture?: Extension<WebVitalsAutocapture>
-        exceptionObserver?: Extension<ExceptionObserver>
-        deadClicksAutocapture?: Extension<DeadClicksAutocapture>
+        historyAutocapture?: ExtensionConstructor<HistoryAutocapture>
+        tracingHeaders?: ExtensionConstructor<TracingHeaders>
+        siteApps?: ExtensionConstructor<SiteApps>
+        sessionRecording?: ExtensionConstructor<SessionRecording>
+        autocapture?: ExtensionConstructor<Autocapture>
+        productTours?: ExtensionConstructor<PostHogProductTours>
+        heatmaps?: ExtensionConstructor<Heatmaps>
+        webVitalsAutocapture?: ExtensionConstructor<WebVitalsAutocapture>
+        exceptionObserver?: ExtensionConstructor<ExceptionObserver>
+        deadClicksAutocapture?: ExtensionConstructor<DeadClicksAutocapture>
     }
 }
 

@@ -5,6 +5,7 @@ import { RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
 import { isArray, isNullish } from '@posthog/core'
 import { assignableWindow } from './utils/globals'
+import { Extension } from './extensions/types'
 
 const logger = createLogger('[Product Tours]')
 
@@ -31,13 +32,17 @@ const isProductToursEnabled = (instance: PostHog): boolean => {
     return !!instance.persistence?.get_property(PRODUCT_TOURS_ENABLED_SERVER_SIDE)
 }
 
-export class PostHogProductTours {
+export class PostHogProductTours implements Extension {
     private _instance: PostHog
     private _productTourManager: ProductTourManagerInterface | null = null
     private _cachedTours: ProductTour[] | null = null
 
     constructor(instance: PostHog) {
         this._instance = instance
+    }
+
+    initialize() {
+        this.loadIfEnabled()
     }
 
     onRemoteConfig(response: RemoteConfig): void {
