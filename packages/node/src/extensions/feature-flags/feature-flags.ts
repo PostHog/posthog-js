@@ -608,7 +608,6 @@ class FeatureFlagsPoller {
     this.groupTypeMapping = flagData.groupTypeMapping
     this.cohorts = flagData.cohorts
     this.loadedSuccessfullyOnce = true
-    this.flagDefinitionsLoadedAt = Date.now()
   }
 
   /**
@@ -861,6 +860,8 @@ class FeatureFlagsPoller {
           }
 
           this.updateFlagState(flagData)
+          // Set timestamp to when definitions were actually fetched from server
+          this.flagDefinitionsLoadedAt = Date.now()
           this.clearBackoff()
 
           if (this.cacheProvider && shouldFetch) {
