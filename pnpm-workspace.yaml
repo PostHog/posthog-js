@@ -47,6 +47,7 @@ minimumReleaseAgeExclude:
   - "@posthog/rrweb-snapshot@0.0.42"
   - "@posthog/rrdom@0.0.42"
   - "@posthog/cli"
+  - "posthog-react-native-session-replay"
 
 supportedArchitectures:
   cpu: [x64, arm64v8, arm64]
