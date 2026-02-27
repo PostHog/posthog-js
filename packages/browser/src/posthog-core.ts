@@ -436,6 +436,17 @@ export class PostHog implements PostHogInterface {
         this.requestRouter = new RequestRouter(this)
         this.consent = new ConsentManager(this)
         this.externalIntegrations = new ExternalIntegrations(this)
+
+        // Eagerly construct extensions from default classes so they're available before init().
+        // For the slim bundle, these remain undefined until _initExtensions sets them from config.
+        const ext = PostHog.__defaultExtensionClasses ?? {}
+        this.toolbar = ext.toolbar && new ext.toolbar(this)
+        this.surveys = ext.surveys && new ext.surveys(this)
+        this.conversations = ext.conversations && new ext.conversations(this)
+        this.logs = ext.logs && new ext.logs(this)
+        this.experiments = ext.experiments && new ext.experiments(this)
+        this.exceptions = ext.exceptions && new ext.exceptions(this)
+
         // NOTE: See the property definition for deprecation notice
         this.people = {
             set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
@@ -713,7 +724,7 @@ export class PostHog implements PostHogInterface {
         // Due to name mangling, we can't easily iterate and assign these extensions
         // The assignment needs to also be mangled. Thus, the loop is unrolled.
         if (ext.exceptions) {
-            this._extensions.push((this.exceptions = new ext.exceptions(this)))
+            this._extensions.push((this.exceptions = this.exceptions ?? new ext.exceptions(this)))
         }
         if (ext.historyAutocapture) {
             this._extensions.push((this.historyAutocapture = new ext.historyAutocapture(this)))
@@ -736,13 +747,13 @@ export class PostHog implements PostHogInterface {
             this._extensions.push((this.autocapture = new ext.autocapture(this)))
         }
         if (ext.surveys) {
-            this._extensions.push((this.surveys = new ext.surveys(this)))
+            this._extensions.push((this.surveys = this.surveys ?? new ext.surveys(this)))
         }
         if (ext.logs) {
-            this._extensions.push((this.logs = new ext.logs(this)))
+            this._extensions.push((this.logs = this.logs ?? new ext.logs(this)))
         }
         if (ext.conversations) {
-            this._extensions.push((this.conversations = new ext.conversations(this)))
+            this._extensions.push((this.conversations = this.conversations ?? new ext.conversations(this)))
         }
         if (ext.productTours) {
             this._extensions.push((this.productTours = new ext.productTours(this)))
@@ -762,10 +773,10 @@ export class PostHog implements PostHogInterface {
             )
         }
         if (ext.toolbar) {
-            this._extensions.push((this.toolbar = new ext.toolbar(this)))
+            this._extensions.push((this.toolbar = this.toolbar ?? new ext.toolbar(this)))
         }
         if (ext.experiments) {
-            this._extensions.push((this.experiments = new ext.experiments(this)))
+            this._extensions.push((this.experiments = this.experiments ?? new ext.experiments(this)))
         }
 
         this._extensions.forEach((extension) => {
