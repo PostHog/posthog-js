@@ -64,7 +64,6 @@ export type FeatureFlagEvaluationContext = {
   personProperties: Record<string, any>
   groupProperties: Record<string, Record<string, any>>
   evaluationCache: Record<string, FeatureFlagValue>
-  evaluationTimestampCache: Record<string, number>
 }
 
 type ComputeFlagAndPayloadOptions = {
@@ -142,8 +141,7 @@ class FeatureFlagsPoller {
     groups: Record<string, string> = {},
     personProperties: Record<string, any> = {},
     groupProperties: Record<string, Record<string, any>> = {},
-    evaluationCache: Record<string, FeatureFlagValue> = {},
-    evaluationTimestampCache: Record<string, number> = {}
+    evaluationCache: Record<string, FeatureFlagValue> = {}
   ): FeatureFlagEvaluationContext {
     return {
       distinctId,
@@ -151,7 +149,6 @@ class FeatureFlagsPoller {
       personProperties,
       groupProperties,
       evaluationCache,
-      evaluationTimestampCache,
     }
   }
 
@@ -178,8 +175,6 @@ class FeatureFlagsPoller {
       try {
         const result = await this.computeFlagAndPayloadLocally(featureFlag, evaluationContext)
         response = result.value
-        // Cache the evaluation timestamp
-        evaluationContext.evaluationTimestampCache[key] = Date.now()
         this.logMsgIfDebug(() => console.debug(`Successfully computed flag locally: ${key} -> ${response}`))
       } catch (e) {
         if (e instanceof RequiresServerEvaluation || e instanceof InconclusiveMatchError) {
@@ -214,7 +209,6 @@ class FeatureFlagsPoller {
     const sharedEvaluationContext = {
       ...evaluationContext,
       evaluationCache: evaluationContext.evaluationCache ?? {},
-      evaluationTimestampCache: evaluationContext.evaluationTimestampCache ?? {},
     }
 
     await Promise.all(
@@ -228,8 +222,6 @@ class FeatureFlagsPoller {
           if (matchPayload) {
             payloads[flag.key] = matchPayload
           }
-          // Cache the evaluation timestamp
-          sharedEvaluationContext.evaluationTimestampCache[flag.key] = Date.now()
         } catch (e) {
           if (e instanceof RequiresServerEvaluation || e instanceof InconclusiveMatchError) {
             this.logMsgIfDebug(() => console.debug(`${e.name} when computing flag locally: ${flag.key}: ${e.message}`))
@@ -706,14 +698,6 @@ class FeatureFlagsPoller {
    */
   getFlagDefinitionsLoadedAt(): number | undefined {
     return this.flagDefinitionsLoadedAt
-  }
-
-  /**
-   * Returns the timestamp (in milliseconds) when a specific flag was last evaluated locally.
-   * Returns undefined if the flag has not been evaluated yet.
-   */
-  getFlagEvaluatedAt(flagKey: string, evaluationContext: FeatureFlagEvaluationContext): number | undefined {
-    return evaluationContext.evaluationTimestampCache[flagKey]
   }
 
   /**

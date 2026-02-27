@@ -6239,30 +6239,26 @@ describe('strictLocalEvaluation option', () => {
     expect(typeof flagDefinitionsLoadedAt).toBe('number')
     expect(flagDefinitionsLoadedAt).toBeGreaterThan(0)
 
-    // Create evaluation context to test timestamp caching
-    const evaluationContext = {
-      distinctId: 'user-123',
-      groups: {},
-      personProperties: {},
-      groupProperties: {},
-      evaluationCache: {},
-      evaluationTimestampCache: {},
-    }
+    // Test that locally evaluated flags include evaluation timestamps
+    const capturedEvents: any[] = []
+    posthog.capture = jest.fn().mockImplementation((event) => {
+      capturedEvents.push(event)
+    })
 
-    // Get feature flag to trigger evaluation timestamp caching
-    const flag = posthog.featureFlagsPoller?.featureFlagsByKey['simple-flag']
-    expect(flag).toBeDefined()
+    // Call getFeatureFlag which should trigger local evaluation and send a $feature_flag_called event
+    const beforeCall = Date.now()
+    const result = await posthog.getFeatureFlag('simple-flag', 'user-123')
+    const afterCall = Date.now()
 
-    if (flag && posthog.featureFlagsPoller) {
-      const result = await posthog.featureFlagsPoller.computeFlagAndPayloadLocally(flag, evaluationContext)
-      expect(result.value).toBe(true)
+    expect(result).toBe(true)
+    expect(capturedEvents).toHaveLength(1)
 
-      // Check if evaluation timestamp was cached
-      const flagEvaluatedAt = posthog.featureFlagsPoller.getFlagEvaluatedAt('simple-flag', evaluationContext)
-      expect(flagEvaluatedAt).toBeDefined()
-      expect(typeof flagEvaluatedAt).toBe('number')
-      expect(flagEvaluatedAt).toBeGreaterThan(0)
-    }
+    const event = capturedEvents[0]
+    expect(event.event).toBe('$feature_flag_called')
+    expect(event.properties.locally_evaluated).toBe(true)
+    expect(event.properties.$feature_flag_definitions_loaded_at).toBe(flagDefinitionsLoadedAt)
+    expect(event.properties.$feature_flag_evaluated_at).toBeGreaterThanOrEqual(beforeCall)
+    expect(event.properties.$feature_flag_evaluated_at).toBeLessThanOrEqual(afterCall)
   })
 
   it('tracks flag definitions loaded timestamp', async () => {
