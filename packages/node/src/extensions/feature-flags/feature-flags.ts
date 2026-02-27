@@ -95,6 +95,7 @@ class FeatureFlagsPoller {
   private flagsEtag?: string
   private nextFetchAllowedAt?: number
   private strictLocalEvaluation: boolean
+  private flagDefinitionsLoadedAt?: number
 
   constructor({
     pollingInterval,
@@ -691,6 +692,14 @@ class FeatureFlagsPoller {
   }
 
   /**
+   * Returns the timestamp (in milliseconds) when flag definitions were last loaded.
+   * Returns undefined if flags have not been loaded yet.
+   */
+  getFlagDefinitionsLoadedAt(): number | undefined {
+    return this.flagDefinitionsLoadedAt
+  }
+
+  /**
    * If a client is misconfigured with an invalid or improper API key, the polling interval is doubled each time
    * until a successful request is made, up to a maximum of 60 seconds.
    *
@@ -851,6 +860,8 @@ class FeatureFlagsPoller {
           }
 
           this.updateFlagState(flagData)
+          // Set timestamp to when definitions were actually fetched from server
+          this.flagDefinitionsLoadedAt = Date.now()
           this.clearBackoff()
 
           if (this.cacheProvider && shouldFetch) {
