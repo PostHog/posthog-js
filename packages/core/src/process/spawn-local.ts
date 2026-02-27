@@ -5,12 +5,7 @@ const MAX_RETRY_DELAY_MS = 1000
 
 // Patterns in stderr that indicate a transient race condition when multiple
 // parallel builds try to download the posthog-cli binary at the same time.
-const RETRYABLE_STDERR_PATTERNS = [
-  /errno: -88/,
-  /code: 'Unknown system error -88'/,
-  /code: 'ETXTBSY'/,
-  /errno: -26/,
-]
+const RETRYABLE_STDERR_PATTERNS = [/errno: -88/, /code: 'Unknown system error -88'/, /code: 'ETXTBSY'/, /errno: -26/]
 
 async function spawnOnce(
   executable: string,
@@ -67,7 +62,9 @@ export async function spawnLocal(
       const stderr = error instanceof Error ? error.message : ''
       if (attempt < MAX_RETRIES && RETRYABLE_STDERR_PATTERNS.some((p) => p.test(stderr))) {
         const delay = Math.floor(Math.random() * MAX_RETRY_DELAY_MS)
-        console.warn(`[posthog] spawnLocal: retrying after transient error (attempt ${attempt + 1}/${MAX_RETRIES}, delay ${delay}ms)`)
+        console.warn(
+          `[posthog] spawnLocal: retrying after transient error (attempt ${attempt + 1}/${MAX_RETRIES}, delay ${delay}ms)`
+        )
         await new Promise((resolve) => setTimeout(resolve, delay))
       } else {
         if (stderr) process.stderr.write(stderr)
