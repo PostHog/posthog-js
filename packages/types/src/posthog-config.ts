@@ -878,7 +878,7 @@ export interface PostHogConfig {
 
     /**
      * Determines whether PostHog should enable recording console logs.
-     * 
+     *
      * This is related to the Session Recording feature. For more session recording
      * settings, see the `session_recording` and `capture_performance` configuration option.
      * When undefined, it falls back to the remote config setting.
@@ -1030,7 +1030,7 @@ export interface PostHogConfig {
 
     /**
      * Determines the session recording options.
-     * 
+     *
      * For more session recording settings, see the `enable_recording_console_log` and `capture_performance` configuration option.
      *
      * @see `SessionRecordingOptions`
@@ -1263,7 +1263,7 @@ export interface PostHogConfig {
     /**
      * Determines whether to capture performance metrics.
      * These include Network Timing for Session Replay and Web Vitals.
-     * 
+     *
      * The `network_timing` option is only used by the Session Replay feature.
      * For more session recording settings, see the `session_recording` and `enable_recording_console_log` configuration option.
      *
