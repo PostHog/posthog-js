@@ -81,6 +81,32 @@ describe('__extensionClasses enrollment', () => {
         expect(posthog.autocapture).toBeInstanceOf(MockAutocapture)
     })
 
+    it('eagerly constructs extensions from defaults before init()', () => {
+        PostHog.__defaultExtensionClasses = AllExtensions
+
+        const posthog = new PostHog()
+
+        expect(posthog.toolbar).toBeDefined()
+        expect(posthog.surveys).toBeDefined()
+        expect(posthog.conversations).toBeDefined()
+        expect(posthog.logs).toBeDefined()
+        expect(posthog.experiments).toBeDefined()
+        expect(posthog.exceptions).toBeDefined()
+    })
+
+    it('does not eagerly construct extensions when no defaults exist', () => {
+        PostHog.__defaultExtensionClasses = {}
+
+        const posthog = new PostHog()
+
+        expect(posthog.toolbar).toBeUndefined()
+        expect(posthog.surveys).toBeUndefined()
+        expect(posthog.conversations).toBeUndefined()
+        expect(posthog.logs).toBeUndefined()
+        expect(posthog.experiments).toBeUndefined()
+        expect(posthog.exceptions).toBeUndefined()
+    })
+
     it('default extensions are used when __extensionClasses is not provided', async () => {
         PostHog.__defaultExtensionClasses = AllExtensions
 
