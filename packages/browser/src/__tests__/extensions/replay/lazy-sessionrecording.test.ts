@@ -311,7 +311,7 @@ describe('Lazy SessionRecording', () => {
 
     describe('before remote cofig', () => {
         it('is not enabled no matter what', () => {
-            expect(sessionRecording.status).toBe('lazy_loading')
+            expect(sessionRecording.status).toBe('pending_config')
         })
 
         it('does not load script if disable_session_recording passed', () => {
@@ -2972,7 +2972,7 @@ describe('Lazy SessionRecording', () => {
         it('can be paused while waiting for flag', () => {
             fakeNavigateTo('https://test.com/blocked')
 
-            expect(sessionRecording.status).toEqual('lazy_loading')
+            expect(sessionRecording.status).toEqual('pending_config')
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -3819,49 +3819,16 @@ describe('Lazy SessionRecording', () => {
         })
     })
 
-    describe('stale config retry on script loaded', () => {
-        const FIVE_MINUTES_IN_MS = 5 * 60 * 1000
-
+    describe('wait for fresh config before starting', () => {
         beforeEach(() => {
             addRRwebToWindow()
         })
 
-        it('requests fresh config when persisted config is stale', () => {
+        it('does not start recording until fresh config arrives', () => {
             posthog.persistence?.register({
                 [SESSION_RECORDING_REMOTE_CONFIG]: {
                     enabled: true,
                     endpoint: '/s/',
-                    cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000,
-                },
-            })
-
-            sessionRecording.startIfEnabledOrStop()
-
-            expect(mockRemoteConfigLoad).toHaveBeenCalledTimes(1)
-            expect(sessionRecording.started).toBe(false)
-        })
-
-        it('does not request fresh config more than once', () => {
-            posthog.persistence?.register({
-                [SESSION_RECORDING_REMOTE_CONFIG]: {
-                    enabled: true,
-                    endpoint: '/s/',
-                    cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000,
-                },
-            })
-
-            sessionRecording.startIfEnabledOrStop()
-            sessionRecording.startIfEnabledOrStop()
-
-            expect(mockRemoteConfigLoad).toHaveBeenCalledTimes(1)
-        })
-
-        it('starts recording after fresh config arrives', () => {
-            posthog.persistence?.register({
-                [SESSION_RECORDING_REMOTE_CONFIG]: {
-                    enabled: true,
-                    endpoint: '/s/',
-                    cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000,
                 },
             })
 
@@ -3877,6 +3844,161 @@ describe('Lazy SessionRecording', () => {
             )
 
             expect(sessionRecording.started).toBe(true)
+        })
+
+        it('does not request fresh config more than once when restarting with stale config', () => {
+            // Tests the _hasRequestedConfigRefresh guard in the stop/restart scenario
+            // When recording stops and restarts later with stale config, should only request once
+            // even if startIfEnabledOrStop is called multiple times before config arrives
+
+            const FIVE_MINUTES_IN_MS = 5 * 60 * 1000
+
+            // First, start recording normally with fresh config
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            expect(sessionRecording.started).toBe(true)
+
+            // Stop recording (simulates stop trigger)
+            sessionRecording.stopRecording()
+            expect(sessionRecording.started).toBe(false)
+
+            // Simulate time passing - config becomes stale
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: {
+                    enabled: true,
+                    endpoint: '/s/',
+                    cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000,
+                },
+            })
+
+            // Clear any previous calls
+            mockRemoteConfigLoad.mockClear()
+
+            // Try to start again - config is stale, should request refresh
+            sessionRecording.startIfEnabledOrStop()
+            expect(mockRemoteConfigLoad).toHaveBeenCalledTimes(1)
+
+            // Try to start again before config arrives - should NOT request again
+            sessionRecording.startIfEnabledOrStop()
+            expect(mockRemoteConfigLoad).toHaveBeenCalledTimes(1) // Still 1, not 2
+        })
+
+        it('recording starts when fresh config arrives after stop/restart with stale config', () => {
+            // Tests the deferred start flow in stop/restart scenario
+            // Recording stops → config becomes stale → start requested → waits for fresh config → starts
+
+            const FIVE_MINUTES_IN_MS = 5 * 60 * 1000
+
+            // First, start recording normally with fresh config
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            expect(sessionRecording.started).toBe(true)
+
+            // Stop recording (simulates stop trigger)
+            sessionRecording.stopRecording()
+            expect(sessionRecording.started).toBe(false)
+
+            // Simulate time passing - config becomes stale
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: {
+                    enabled: true,
+                    endpoint: '/s/',
+                    cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000,
+                },
+            })
+
+            // Try to start again with stale config - should NOT start yet
+            sessionRecording.startIfEnabledOrStop()
+            expect(sessionRecording.started).toBe(false)
+
+            // Fresh config arrives
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            // Now recording should start
+            expect(sessionRecording.started).toBe(true)
+        })
+    })
+
+    describe('trigger activation re-entry guard', () => {
+        it('prevents infinite recursion with triggerMatchType=all and both event + URL triggers', () => {
+            // Regression test for infinite recursion bug where custom events emitted during
+            // trigger activation would cause _activateTrigger to be called again before
+            // persistence had updated, creating an infinite loop and freezing the browser.
+            // This specifically tests the 'all' mode scenario where both triggers must match.
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['test_event'],
+                        urlTriggers: [{ url: 'https://has-to-be-present-or-invalid.com', matching: 'regex' }],
+                        triggerMatchType: 'all',
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Emit some events first to simulate buffering
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
+            // Spy on _activateTrigger to count how many times it's called
+            const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+            const activateTriggerSpy = jest.spyOn(lazyRecorder as any, '_activateTrigger')
+
+            // Trigger the event - with 'all' mode and both triggers configured,
+            // this would cause infinite recursion without the re-entry guard
+            simpleEventEmitter.emit('eventCaptured', { event: 'test_event' })
+
+            // Without the fix, this would be called dozens/hundreds of times causing a freeze
+            // With the fix, it should be called a reasonable number of times (1-2)
+            expect(activateTriggerSpy.mock.calls.length).toBeLessThan(5)
+
+            // With 'all' mode, both triggers need to match before going active
+            // So status may still be buffering if URL hasn't matched yet
+            expect(['buffering', 'active']).toContain(sessionRecording.status)
+        })
+
+        it('allows trigger activation to complete successfully with re-entry guard', () => {
+            // Verify that the re-entry guard doesn't break normal trigger activation
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['button_clicked'],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Add some events to buffer
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            // Trigger activation
+            simpleEventEmitter.emit('eventCaptured', { event: 'button_clicked' })
+
+            // Verify trigger activated successfully
+            expect(sessionRecording.status).toBe('active')
+            expect(posthog.capture).toHaveBeenCalled()
         })
     })
 })

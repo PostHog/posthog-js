@@ -1,0 +1,2656 @@
+{
+  "id": "posthog-node",
+  "hogRef": "0.3",
+  "info": {
+    "version": "5.25.0",
+    "id": "posthog-node",
+    "title": "PostHog Node.js SDK",
+    "description": "PostHog Node.js SDK allows you to capture events and send them to PostHog from your Node.js applications.",
+    "slugPrefix": "posthog-node",
+    "specUrl": "https://github.com/PostHog/posthog-js"
+  },
+  "classes": [
+    {
+      "id": "PostHog",
+      "title": "PostHog",
+      "functions": [
+        {
+          "category": "",
+          "details": null,
+          "id": "getLibraryId",
+          "showDocs": true,
+          "title": "getLibraryId",
+          "examples": [
+            {
+              "id": "getlibraryid",
+              "name": "Generated example for getLibraryId",
+              "code": "// Generated example for getLibraryId\nposthog.getLibraryId();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "string",
+            "name": "string"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Initialization",
+          "description": "Initialize a new PostHog client instance.",
+          "details": null,
+          "id": "PostHog",
+          "showDocs": true,
+          "title": "PostHog",
+          "examples": [
+            {
+              "id": "basic_initialization",
+              "name": "Basic initialization",
+              "code": "\n\n// Basic initialization\nconst client = new PostHogBackendClient(\n  'your-api-key',\n  { host: 'https://app.posthog.com' }\n)\n\n\n"
+            },
+            {
+              "id": "with_personal_api_key",
+              "name": "With personal API key",
+              "code": "\n\n// With personal API key\nconst client = new PostHogBackendClient(\n  'your-api-key',\n  {\n    host: 'https://app.posthog.com',\n    personalApiKey: 'your-personal-api-key'\n  }\n)\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "Your PostHog project API key",
+              "isOptional": false,
+              "type": "string",
+              "name": "apiKey"
+            },
+            {
+              "description": "Configuration options for the client",
+              "isOptional": true,
+              "type": "PostHogOptions",
+              "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "any",
+            "name": "any"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Identification",
+          "description": "Create an alias to link two distinct IDs together.",
+          "details": null,
+          "id": "alias",
+          "showDocs": true,
+          "title": "alias",
+          "examples": [
+            {
+              "id": "link_an_anonymous_user_to_an_identified_user",
+              "name": "Link an anonymous user to an identified user",
+              "code": "\n\n// Link an anonymous user to an identified user\nclient.alias({\n  distinctId: 'anonymous_123',\n  alias: 'user_456'\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The alias data containing distinctId and alias",
+              "isOptional": false,
+              "type": "{\n        distinctId: string;\n        alias: string;\n        disableGeoip?: boolean;\n    }",
+              "name": "data"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Identification",
+          "description": "Create an alias to link two distinct IDs together immediately (synchronously).",
+          "details": null,
+          "id": "aliasImmediate",
+          "showDocs": true,
+          "title": "aliasImmediate",
+          "examples": [
+            {
+              "id": "link_an_anonymous_user_to_an_identified_user_immediately",
+              "name": "Link an anonymous user to an identified user immediately",
+              "code": "\n\n// Link an anonymous user to an identified user immediately\nawait client.aliasImmediate({\n  distinctId: 'anonymous_123',\n  alias: 'user_456'\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The alias data containing distinctId and alias",
+              "isOptional": false,
+              "type": "{\n        distinctId: string;\n        alias: string;\n        disableGeoip?: boolean;\n    }",
+              "name": "data"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Capture",
+          "description": "Capture an event manually.",
+          "details": null,
+          "id": "capture",
+          "showDocs": true,
+          "title": "capture",
+          "examples": [
+            {
+              "id": "basic_capture",
+              "name": "Basic capture",
+              "code": "\n\n// Basic capture\nclient.capture({\n  distinctId: 'user_123',\n  event: 'button_clicked',\n  properties: { button_color: 'red' }\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The event properties",
+              "isOptional": false,
+              "type": "EventMessage",
+              "name": "props"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Error tracking",
+          "description": "Capture an error exception as an event.",
+          "details": null,
+          "id": "captureException",
+          "showDocs": true,
+          "title": "captureException",
+          "examples": [
+            {
+              "id": "capture_an_error_with_user_id",
+              "name": "Capture an error with user ID",
+              "code": "\n\n// Capture an error with user ID\ntry {\n  // Some risky operation\n  riskyOperation()\n} catch (error) {\n  client.captureException(error, 'user_123')\n}\n\n\n"
+            },
+            {
+              "id": "capture_with_additional_properties",
+              "name": "Capture with additional properties",
+              "code": "\n\n// Capture with additional properties\ntry {\n  apiCall()\n} catch (error) {\n  client.captureException(error, 'user_123', {\n    endpoint: '/api/users',\n    method: 'POST',\n    status_code: 500\n  })\n}\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The error to capture",
+              "isOptional": false,
+              "type": "unknown",
+              "name": "error"
+            },
+            {
+              "description": "Optional user distinct ID",
+              "isOptional": true,
+              "type": "string",
+              "name": "distinctId"
+            },
+            {
+              "description": "Optional additional properties to include",
+              "isOptional": true,
+              "type": "Record<string | number, any>",
+              "name": "additionalProperties"
+            },
+            {
+              "description": "",
+              "isOptional": true,
+              "type": "EventMessage['uuid']",
+              "name": "uuid"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Error tracking",
+          "description": "Capture an error exception as an event immediately (synchronously).",
+          "details": null,
+          "id": "captureExceptionImmediate",
+          "showDocs": true,
+          "title": "captureExceptionImmediate",
+          "examples": [
+            {
+              "id": "capture_an_error_immediately_with_user_id",
+              "name": "Capture an error immediately with user ID",
+              "code": "\n\n// Capture an error immediately with user ID\ntry {\n  // Some risky operation\n  riskyOperation()\n} catch (error) {\n  await client.captureExceptionImmediate(error, 'user_123')\n}\n\n\n"
+            },
+            {
+              "id": "capture_with_additional_properties",
+              "name": "Capture with additional properties",
+              "code": "\n\n// Capture with additional properties\ntry {\n  apiCall()\n} catch (error) {\n  await client.captureExceptionImmediate(error, 'user_123', {\n    endpoint: '/api/users',\n    method: 'POST',\n    status_code: 500\n  })\n}\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The error to capture",
+              "isOptional": false,
+              "type": "unknown",
+              "name": "error"
+            },
+            {
+              "description": "Optional user distinct ID",
+              "isOptional": true,
+              "type": "string",
+              "name": "distinctId"
+            },
+            {
+              "description": "Optional additional properties to include",
+              "isOptional": true,
+              "type": "Record<string | number, any>",
+              "name": "additionalProperties"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Capture",
+          "description": "Capture an event immediately (synchronously).",
+          "details": null,
+          "id": "captureImmediate",
+          "showDocs": true,
+          "title": "captureImmediate",
+          "examples": [
+            {
+              "id": "basic_immediate_capture",
+              "name": "Basic immediate capture",
+              "code": "\n\n// Basic immediate capture\nawait client.captureImmediate({\n  distinctId: 'user_123',\n  event: 'button_clicked',\n  properties: { button_color: 'red' }\n})\n\n\n"
+            },
+            {
+              "id": "with_feature_flags",
+              "name": "With feature flags",
+              "code": "\n\n// With feature flags\nawait client.captureImmediate({\n  distinctId: 'user_123',\n  event: 'user_action',\n  sendFeatureFlags: true\n})\n\n\n"
+            },
+            {
+              "id": "with_custom_feature_flags_options",
+              "name": "With custom feature flags options",
+              "code": "\n\n// With custom feature flags options\nawait client.captureImmediate({\n  distinctId: 'user_123',\n  event: 'user_action',\n  sendFeatureFlags: {\n    onlyEvaluateLocally: true,\n    personProperties: { plan: 'premium' },\n    groupProperties: { org: { tier: 'enterprise' } }\n    flagKeys: ['flag1', 'flag2']\n  }\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The event properties",
+              "isOptional": false,
+              "type": "EventMessage",
+              "name": "props"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Initialization",
+          "description": "Enable or disable debug logging.",
+          "details": null,
+          "id": "debug",
+          "showDocs": true,
+          "title": "debug",
+          "examples": [
+            {
+              "id": "enable_debug_logging",
+              "name": "Enable debug logging",
+              "code": "\n\n// Enable debug logging\nclient.debug(true)\n\n\n"
+            },
+            {
+              "id": "disable_debug_logging",
+              "name": "Disable debug logging",
+              "code": "\n\n// Disable debug logging\nclient.debug(false)\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "Whether to enable debug logging",
+              "isOptional": true,
+              "type": "boolean",
+              "name": "enabled"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Privacy",
+          "description": "Disable the PostHog client (opt-out).",
+          "details": null,
+          "id": "disable",
+          "showDocs": true,
+          "title": "disable",
+          "examples": [
+            {
+              "id": "disable_client",
+              "name": "Disable client",
+              "code": "\n\n// Disable client\nawait client.disable()\n// Client is now disabled and will not capture events\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Privacy",
+          "description": "Enable the PostHog client (opt-in).",
+          "details": null,
+          "id": "enable",
+          "showDocs": true,
+          "title": "enable",
+          "examples": [
+            {
+              "id": "enable_client",
+              "name": "Enable client",
+              "code": "\n\n// Enable client\nawait client.enable()\n// Client is now enabled and will capture events\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Feature flags",
+          "description": "Get all feature flag values for a specific user.",
+          "details": null,
+          "id": "getAllFlags",
+          "showDocs": true,
+          "title": "getAllFlags",
+          "examples": [
+            {
+              "id": "get_all_flags_for_a_user",
+              "name": "Get all flags for a user",
+              "code": "\n\n// Get all flags for a user\nconst allFlags = await client.getAllFlags('user_123')\nconsole.log('User flags:', allFlags)\n// Output: { 'flag-1': 'variant-a', 'flag-2': false, 'flag-3': 'variant-b' }\n\n\n"
+            },
+            {
+              "id": "with_specific_flag_keys",
+              "name": "With specific flag keys",
+              "code": "\n\n// With specific flag keys\nconst specificFlags = await client.getAllFlags('user_123', {\n  flagKeys: ['flag-1', 'flag-2']\n})\n\n\n"
+            },
+            {
+              "id": "with_groups_and_properties",
+              "name": "With groups and properties",
+              "code": "\n\n// With groups and properties\nconst orgFlags = await client.getAllFlags('user_123', {\n  groups: { organization: 'acme-corp' },\n  personProperties: { plan: 'enterprise' }\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The user's distinct ID",
+              "isOptional": false,
+              "type": "string",
+              "name": "distinctId"
+            },
+            {
+              "description": "Optional configuration for flag evaluation",
+              "isOptional": true,
+              "type": "{\n        groups?: Record<string, string>;\n        personProperties?: Record<string, string>;\n        groupProperties?: Record<string, Record<string, string>>;\n        onlyEvaluateLocally?: boolean;\n        disableGeoip?: boolean;\n        flagKeys?: string[];\n    }",
+              "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<Record<string, FeatureFlagValue>>",
+            "name": "Promise<Record<string, FeatureFlagValue>>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Feature flags",
+          "description": "Get all feature flag values and payloads for a specific user.",
+          "details": null,
+          "id": "getAllFlagsAndPayloads",
+          "showDocs": true,
+          "title": "getAllFlagsAndPayloads",
+          "examples": [
+            {
+              "id": "get_all_flags_and_payloads_for_a_user",
+              "name": "Get all flags and payloads for a user",
+              "code": "\n\n// Get all flags and payloads for a user\nconst result = await client.getAllFlagsAndPayloads('user_123')\nconsole.log('Flags:', result.featureFlags)\nconsole.log('Payloads:', result.featureFlagPayloads)\n\n\n"
+            },
+            {
+              "id": "with_specific_flag_keys",
+              "name": "With specific flag keys",
+              "code": "\n\n// With specific flag keys\nconst result = await client.getAllFlagsAndPayloads('user_123', {\n  flagKeys: ['flag-1', 'flag-2']\n})\n\n\n"
+            },
+            {
+              "id": "only_evaluate_locally",
+              "name": "Only evaluate locally",
+              "code": "\n\n// Only evaluate locally\nconst result = await client.getAllFlagsAndPayloads('user_123', {\n  onlyEvaluateLocally: true\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The user's distinct ID",
+              "isOptional": false,
+              "type": "string",
+              "name": "distinctId"
+            },
+            {
+              "description": "Optional configuration for flag evaluation",
+              "isOptional": true,
+              "type": "{\n        groups?: Record<string, string>;\n        personProperties?: Record<string, string>;\n        groupProperties?: Record<string, Record<string, string>>;\n        onlyEvaluateLocally?: boolean;\n        disableGeoip?: boolean;\n        flagKeys?: string[];\n    }",
+              "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<PostHogFlagsAndPayloadsResponse>",
+            "name": "Promise<PostHogFlagsAndPayloadsResponse>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Context",
+          "description": "Get the current context data.",
+          "details": null,
+          "id": "getContext",
+          "showDocs": true,
+          "title": "getContext",
+          "examples": [
+            {
+              "id": "get_current_context_within_a_withcontext_block",
+              "name": "Get current context within a withContext block",
+              "code": "\n\n// Get current context within a withContext block\nposthog.withContext({ distinctId: 'user_123' }, () => {\n  const context = posthog.getContext()\n  console.log(context?.distinctId) // 'user_123'\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "ContextData | undefined",
+            "name": "ContextData | undefined"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Identification",
+          "description": "Get the custom user agent string for this client.",
+          "details": null,
+          "id": "getCustomUserAgent",
+          "showDocs": true,
+          "title": "getCustomUserAgent",
+          "examples": [
+            {
+              "id": "get_user_agent",
+              "name": "Get user agent",
+              "code": "\n\n// Get user agent\nconst userAgent = client.getCustomUserAgent()\n// Returns: \"posthog-node/5.7.0\"\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "string",
+            "name": "string"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Feature flags",
+          "description": "Get the value of a feature flag for a specific user.",
+          "details": null,
+          "id": "getFeatureFlag",
+          "showDocs": true,
+          "title": "getFeatureFlag",
+          "examples": [
+            {
+              "id": "basic_feature_flag_check",
+              "name": "Basic feature flag check",
+              "code": "\n\n// Basic feature flag check\nconst flagValue = await client.getFeatureFlag('new-feature', 'user_123')\nif (flagValue === 'variant-a') {\n  // Show variant A\n} else if (flagValue === 'variant-b') {\n  // Show variant B\n} else {\n  // Flag is disabled or not found\n}\n\n\n"
+            },
+            {
+              "id": "with_groups_and_properties",
+              "name": "With groups and properties",
+              "code": "\n\n// With groups and properties\nconst flagValue = await client.getFeatureFlag('org-feature', 'user_123', {\n  groups: { organization: 'acme-corp' },\n  personProperties: { plan: 'enterprise' },\n  groupProperties: { organization: { tier: 'premium' } }\n})\n\n\n"
+            },
+            {
+              "id": "only_evaluate_locally",
+              "name": "Only evaluate locally",
+              "code": "\n\n// Only evaluate locally\nconst flagValue = await client.getFeatureFlag('local-flag', 'user_123', {\n  onlyEvaluateLocally: true\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The feature flag key",
+              "isOptional": false,
+              "type": "string",
+              "name": "key"
+            },
+            {
+              "description": "The user's distinct ID",
+              "isOptional": false,
+              "type": "string",
+              "name": "distinctId"
+            },
+            {
+              "description": "Optional configuration for flag evaluation",
+              "isOptional": true,
+              "type": "{\n        groups?: Record<string, string>;\n        personProperties?: Record<string, string>;\n        groupProperties?: Record<string, Record<string, string>>;\n        onlyEvaluateLocally?: boolean;\n        sendFeatureFlagEvents?: boolean;\n        disableGeoip?: boolean;\n    }",
+              "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<FeatureFlagValue | undefined>",
+            "name": "Promise<FeatureFlagValue | undefined>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Feature flags",
+          "description": "Get the payload for a feature flag.",
+          "details": null,
+          "id": "getFeatureFlagPayload",
+          "showDocs": true,
+          "title": "getFeatureFlagPayload",
+          "examples": [
+            {
+              "id": "get_payload_for_a_feature_flag",
+              "name": "Get payload for a feature flag",
+              "code": "\n\n// Get payload for a feature flag\nconst payload = await client.getFeatureFlagPayload('flag-key', 'user_123')\nif (payload) {\n  console.log('Flag payload:', payload)\n}\n\n\n"
+            },
+            {
+              "id": "get_payload_with_specific_match_value",
+              "name": "Get payload with specific match value",
+              "code": "\n\n// Get payload with specific match value\nconst payload = await client.getFeatureFlagPayload('flag-key', 'user_123', 'variant-a')\n\n\n"
+            },
+            {
+              "id": "with_groups_and_properties",
+              "name": "With groups and properties",
+              "code": "\n\n// With groups and properties\nconst payload = await client.getFeatureFlagPayload('org-flag', 'user_123', undefined, {\n  groups: { organization: 'acme-corp' },\n  personProperties: { plan: 'enterprise' }\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The feature flag key",
+              "isOptional": false,
+              "type": "string",
+              "name": "key"
+            },
+            {
+              "description": "The user's distinct ID",
+              "isOptional": false,
+              "type": "string",
+              "name": "distinctId"
+            },
+            {
+              "description": "Optional match value to get payload for",
+              "isOptional": true,
+              "type": "FeatureFlagValue",
+              "name": "matchValue"
+            },
+            {
+              "description": "Optional configuration for flag evaluation",
+              "isOptional": true,
+              "type": "{\n        groups?: Record<string, string>;\n        personProperties?: Record<string, string>;\n        groupProperties?: Record<string, Record<string, string>>;\n        onlyEvaluateLocally?: boolean;\n        sendFeatureFlagEvents?: boolean;\n        disableGeoip?: boolean;\n    }",
+              "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<JsonType | undefined>",
+            "name": "Promise<JsonType | undefined>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Feature flags",
+          "description": "Get the result of evaluating a feature flag, including its value and payload. This is more efficient than calling getFeatureFlag and getFeatureFlagPayload separately when you need both.",
+          "details": null,
+          "id": "getFeatureFlagResult",
+          "showDocs": true,
+          "title": "getFeatureFlagResult",
+          "examples": [
+            {
+              "id": "get_flag_result",
+              "name": "Get flag result",
+              "code": "\n\n// Get flag result\nconst result = await client.getFeatureFlagResult('my-flag', 'user_123')\nif (result) {\n  console.log('Flag enabled:', result.enabled)\n  console.log('Variant:', result.variant)\n  console.log('Payload:', result.payload)\n}\n\n\n"
+            },
+            {
+              "id": "with_groups_and_properties",
+              "name": "With groups and properties",
+              "code": "\n\n// With groups and properties\nconst result = await client.getFeatureFlagResult('org-feature', 'user_123', {\n  groups: { organization: 'acme-corp' },\n  personProperties: { plan: 'enterprise' }\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The feature flag key",
+              "isOptional": false,
+              "type": "string",
+              "name": "key"
+            },
+            {
+              "description": "The user's distinct ID",
+              "isOptional": false,
+              "type": "string",
+              "name": "distinctId"
+            },
+            {
+              "description": "Optional configuration for flag evaluation",
+              "isOptional": true,
+              "type": "{\n        groups?: Record<string, string>;\n        personProperties?: Record<string, string>;\n        groupProperties?: Record<string, Record<string, string>>;\n        onlyEvaluateLocally?: boolean;\n        sendFeatureFlagEvents?: boolean;\n        disableGeoip?: boolean;\n    }",
+              "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<FeatureFlagResult | undefined>",
+            "name": "Promise<FeatureFlagResult | undefined>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Initialization",
+          "description": "Get the library version from package.json.",
+          "details": null,
+          "id": "getLibraryVersion",
+          "showDocs": true,
+          "title": "getLibraryVersion",
+          "examples": [
+            {
+              "id": "get_version",
+              "name": "Get version",
+              "code": "\n\n// Get version\nconst version = client.getLibraryVersion()\nconsole.log(`Using PostHog SDK version: ${version}`)\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "string",
+            "name": "string"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Initialization",
+          "description": "Get a persisted property value from memory storage.",
+          "details": null,
+          "id": "getPersistedProperty",
+          "showDocs": true,
+          "title": "getPersistedProperty",
+          "examples": [
+            {
+              "id": "get_user_id",
+              "name": "Get user ID",
+              "code": "\n\n// Get user ID\nconst userId = client.getPersistedProperty('userId')\n\n\n"
+            },
+            {
+              "id": "get_session_id",
+              "name": "Get session ID",
+              "code": "\n\n// Get session ID\nconst sessionId = client.getPersistedProperty('sessionId')\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The property key to retrieve",
+              "isOptional": false,
+              "type": "PostHogPersistedProperty",
+              "name": "key"
+            }
+          ],
+          "returnType": {
+            "id": "any | undefined",
+            "name": "any | undefined"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Feature flags",
+          "description": "Get the remote config payload for a feature flag.",
+          "details": null,
+          "id": "getRemoteConfigPayload",
+          "showDocs": true,
+          "title": "getRemoteConfigPayload",
+          "examples": [
+            {
+              "id": "get_remote_config_payload",
+              "name": "Get remote config payload",
+              "code": "\n\n// Get remote config payload\nconst payload = await client.getRemoteConfigPayload('flag-key')\nif (payload) {\n  console.log('Remote config payload:', payload)\n}\n\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The feature flag key",
+              "isOptional": false,
+              "type": "string",
+              "name": "flagKey"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<JsonType | undefined>",
+            "name": "Promise<JsonType | undefined>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Identification",
+          "description": "Create or update a group and its properties.",
+          "details": null,
+          "id": "groupIdentify",
+          "showDocs": true,
+          "title": "groupIdentify",
+          "examples": [
+            {
+              "id": "create_a_company_group",
+              "name": "Create a company group",
+              "code": "\n\n// Create a company group\nclient.groupIdentify({\n  groupType: 'company',\n  groupKey: 'acme-corp',\n  properties: {\n    name: 'Acme Corporation',\n    industry: 'Technology',\n    employee_count: 500\n  },\n  distinctId: 'user_123'\n})\n\n\n"
+            },
+            {
+              "id": "update_organization_properties",
+              "name": "Update organization properties",
+              "code": "\n\n// Update organization properties\nclient.groupIdentify({\n  groupType: 'organization',\n  groupKey: 'org-456',\n  properties: {\n    plan: 'enterprise',\n    region: 'US-West'\n  }\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "GroupIdentifyMessage",
+              "name": "{ groupType, groupKey, properties, distinctId, disableGeoip }"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Identification",
+          "description": "Identify a user and set their properties.",
+          "details": null,
+          "id": "identify",
+          "showDocs": true,
+          "title": "identify",
+          "examples": [
+            {
+              "id": "basic_identify_with_properties",
+              "name": "Basic identify with properties",
+              "code": "\n\n// Basic identify with properties\nclient.identify({\n  distinctId: 'user_123',\n  properties: {\n    name: 'John Doe',\n    email: 'john@example.com',\n    plan: 'premium'\n  }\n})\n\n\n"
+            },
+            {
+              "id": "using_$set_and_$set_once",
+              "name": "Using $set and $set_once",
+              "code": "\n\n// Using $set and $set_once\nclient.identify({\n  distinctId: 'user_123',\n  properties: {\n    $set: { name: 'John Doe', email: 'john@example.com' },\n    $set_once: { first_login: new Date().toISOString() }\n    $anon_distinct_id: 'anonymous_user_456'\n  }\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "IdentifyMessage",
+              "name": "{ distinctId, properties, disableGeoip }"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Identification",
+          "description": "Identify a user and set their properties immediately (synchronously).",
+          "details": null,
+          "id": "identifyImmediate",
+          "showDocs": true,
+          "title": "identifyImmediate",
+          "examples": [
+            {
+              "id": "basic_immediate_identify",
+              "name": "Basic immediate identify",
+              "code": "\n\n// Basic immediate identify\nawait client.identifyImmediate({\n  distinctId: 'user_123',\n  properties: {\n    name: 'John Doe',\n    email: 'john@example.com'\n  }\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "IdentifyMessage",
+              "name": "{ distinctId, properties, disableGeoip }"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Feature flags",
+          "description": "Check if a feature flag is enabled for a specific user.",
+          "details": null,
+          "id": "isFeatureEnabled",
+          "showDocs": true,
+          "title": "isFeatureEnabled",
+          "examples": [
+            {
+              "id": "basic_feature_flag_check",
+              "name": "Basic feature flag check",
+              "code": "\n\n// Basic feature flag check\nconst isEnabled = await client.isFeatureEnabled('new-feature', 'user_123')\nif (isEnabled) {\n  // Feature is enabled\n  console.log('New feature is active')\n} else {\n  // Feature is disabled\n  console.log('New feature is not active')\n}\n\n\n"
+            },
+            {
+              "id": "with_groups_and_properties",
+              "name": "With groups and properties",
+              "code": "\n\n// With groups and properties\nconst isEnabled = await client.isFeatureEnabled('org-feature', 'user_123', {\n  groups: { organization: 'acme-corp' },\n  personProperties: { plan: 'enterprise' }\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The feature flag key",
+              "isOptional": false,
+              "type": "string",
+              "name": "key"
+            },
+            {
+              "description": "The user's distinct ID",
+              "isOptional": false,
+              "type": "string",
+              "name": "distinctId"
+            },
+            {
+              "description": "Optional configuration for flag evaluation",
+              "isOptional": true,
+              "type": "{\n        groups?: Record<string, string>;\n        personProperties?: Record<string, string>;\n        groupProperties?: Record<string, Record<string, string>>;\n        onlyEvaluateLocally?: boolean;\n        sendFeatureFlagEvents?: boolean;\n        disableGeoip?: boolean;\n    }",
+              "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<boolean | undefined>",
+            "name": "Promise<boolean | undefined>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Feature flags",
+          "description": "Check if local evaluation of feature flags is ready.",
+          "details": null,
+          "id": "isLocalEvaluationReady",
+          "showDocs": true,
+          "title": "isLocalEvaluationReady",
+          "examples": [
+            {
+              "id": "check_if_ready",
+              "name": "Check if ready",
+              "code": "\n\n// Check if ready\nif (client.isLocalEvaluationReady()) {\n  // Local evaluation is ready, can evaluate flags locally\n  const flag = await client.getFeatureFlag('flag-key', 'user_123')\n} else {\n  // Local evaluation not ready, will use remote evaluation\n  const flag = await client.getFeatureFlag('flag-key', 'user_123')\n}\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "boolean",
+            "name": "boolean"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Feature flags",
+          "description": "Override feature flags locally. Useful for testing and local development. Overridden flags take precedence over both local evaluation and remote evaluation.",
+          "details": null,
+          "id": "overrideFeatureFlags",
+          "showDocs": true,
+          "title": "overrideFeatureFlags",
+          "examples": [
+            {
+              "id": "clear_all_overrides",
+              "name": "Clear all overrides",
+              "code": "\n\n// Clear all overrides\nclient.overrideFeatureFlags(false)\n\n// Enable a list of flags (sets them to true)\nclient.overrideFeatureFlags(['flag-a', 'flag-b'])\n\n// Set specific flag values/variants\nclient.overrideFeatureFlags({ 'my-flag': 'variant-a', 'other-flag': true })\n\n// Set both flags and payloads\nclient.overrideFeatureFlags({\n  flags: { 'my-flag': 'variant-a' },\n  payloads: { 'my-flag': { discount: 20 } }\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "Flag overrides configuration",
+              "isOptional": false,
+              "type": "OverrideFeatureFlagsOptions",
+              "name": "overrides"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "",
+          "details": null,
+          "id": "prepareEventMessage",
+          "showDocs": true,
+          "title": "prepareEventMessage",
+          "examples": [
+            {
+              "id": "prepareeventmessage",
+              "name": "Generated example for prepareEventMessage",
+              "code": "// Generated example for prepareEventMessage\nposthog.prepareEventMessage();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "EventMessage",
+              "name": "props"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<{\n        distinctId: string;\n        event: string;\n        properties: PostHogEventProperties;\n        options: PostHogCaptureOptions;\n    }>",
+            "name": "Promise<{\n        distinctId: string;\n        event: string;\n        properties: PostHogEventProperties;\n        options: PostHogCaptureOptions;\n    }>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Feature flags",
+          "description": "Reload feature flag definitions from the server for local evaluation.",
+          "details": null,
+          "id": "reloadFeatureFlags",
+          "showDocs": true,
+          "title": "reloadFeatureFlags",
+          "examples": [
+            {
+              "id": "force_reload_of_feature_flags",
+              "name": "Force reload of feature flags",
+              "code": "\n\n// Force reload of feature flags\nawait client.reloadFeatureFlags()\nconsole.log('Feature flags reloaded')\n\n\n"
+            },
+            {
+              "id": "reload_before_checking_a_specific_flag",
+              "name": "Reload before checking a specific flag",
+              "code": "\n\n// Reload before checking a specific flag\nawait client.reloadFeatureFlags()\nconst flag = await client.getFeatureFlag('flag-key', 'user_123')\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Initialization",
+          "description": "Set a persisted property value in memory storage.",
+          "details": null,
+          "id": "setPersistedProperty",
+          "showDocs": true,
+          "title": "setPersistedProperty",
+          "examples": [
+            {
+              "id": "set_user_id",
+              "name": "Set user ID",
+              "code": "\n\n// Set user ID\nclient.setPersistedProperty('userId', 'user_123')\n\n\n"
+            },
+            {
+              "id": "set_session_id",
+              "name": "Set session ID",
+              "code": "\n\n// Set session ID\nclient.setPersistedProperty('sessionId', 'session_456')\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The property key to set",
+              "isOptional": false,
+              "type": "PostHogPersistedProperty",
+              "name": "key"
+            },
+            {
+              "description": "The value to store (null to remove)",
+              "isOptional": false,
+              "type": "any | null",
+              "name": "value"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Feature flags",
+          "description": "Wait for local evaluation of feature flags to be ready.",
+          "details": null,
+          "id": "waitForLocalEvaluationReady",
+          "showDocs": true,
+          "title": "waitForLocalEvaluationReady",
+          "examples": [
+            {
+              "id": "wait_for_local_evaluation",
+              "name": "Wait for local evaluation",
+              "code": "\n\n// Wait for local evaluation\nconst isReady = await client.waitForLocalEvaluationReady()\nif (isReady) {\n  console.log('Local evaluation is ready')\n} else {\n  console.log('Local evaluation timed out')\n}\n\n\n"
+            },
+            {
+              "id": "wait_with_custom_timeout",
+              "name": "Wait with custom timeout",
+              "code": "\n\n// Wait with custom timeout\nconst isReady = await client.waitForLocalEvaluationReady(10000) // 10 seconds\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "Timeout in milliseconds (default: 30000)",
+              "isOptional": true,
+              "type": "number",
+              "name": "timeoutMs"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<boolean>",
+            "name": "Promise<boolean>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Context",
+          "description": "Run a function with specific context that will be applied to all events captured within that context. It propagates the context to all subsequent calls down the call stack. Context properties like tags and sessionId will be automatically attached to all events. By default, nested contexts inherit from parent contexts. Use `{ fresh: true }` to start with a clean context.",
+          "details": null,
+          "id": "withContext",
+          "showDocs": true,
+          "title": "withContext",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nposthog.withContext({ distinctId: 'user_123' }, () => {\n  posthog.capture({ event: 'button clicked' })\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "Context data to apply (sessionId, distinctId, properties, enableExceptionAutocapture)",
+              "isOptional": false,
+              "type": "Partial<ContextData>",
+              "name": "data"
+            },
+            {
+              "description": "Function to run with the context",
+              "isOptional": false,
+              "type": "() => T",
+              "name": "fn"
+            },
+            {
+              "description": "Context options (fresh: true to start with clean context instead of inheriting)",
+              "isOptional": true,
+              "type": "ContextOptions",
+              "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "T",
+            "name": "T"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "",
+          "details": null,
+          "id": "fetch",
+          "showDocs": true,
+          "title": "fetch",
+          "examples": [
+            {
+              "id": "fetch",
+              "name": "Generated example for fetch",
+              "code": "// Generated example for fetch\nposthog.fetch();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "string",
+              "name": "url"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "PostHogFetchOptions",
+              "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<PostHogFetchResponse>",
+            "name": "Promise<PostHogFetchResponse>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Initialization",
+          "description": "Flushes the queue of pending events.\nThis function will return a promise that will resolve when the flush is complete, or reject if there was an error (for example if the server or network is down).\nIf there is already a flush in progress, this function will wait for that flush to complete.\nIt's recommended to do error handling in the callback of the promise.",
+          "details": null,
+          "id": "flush",
+          "showDocs": true,
+          "title": "flush",
+          "examples": [
+            {
+              "id": "flush_with_error_handling",
+              "name": "flush with error handling",
+              "code": "\n\n// flush with error handling\nposthog.flush().then(() => {\n  console.log('Flush complete')\n}).catch((err) => {\n  console.error('Flush failed', err)\n})\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "",
+          "description": "* ** SURVEYS *",
+          "details": null,
+          "id": "getSurveysStateless",
+          "showDocs": true,
+          "title": "getSurveysStateless",
+          "examples": [
+            {
+              "id": "getsurveysstateless",
+              "name": "Generated example for getSurveysStateless",
+              "code": "// Generated example for getSurveysStateless\nposthog.getSurveysStateless();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "Promise<SurveyResponse['surveys']>",
+            "name": "Promise<SurveyResponse['surveys']>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "",
+          "details": null,
+          "id": "on",
+          "showDocs": true,
+          "title": "on",
+          "examples": [
+            {
+              "id": "on",
+              "name": "Generated example for on",
+              "code": "// Generated example for on\nposthog.on();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "string",
+              "name": "event"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "(...args: any[]) => void",
+              "name": "cb"
+            }
+          ],
+          "returnType": {
+            "id": "() => void",
+            "name": "() => void"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "",
+          "details": null,
+          "id": "optIn",
+          "showDocs": true,
+          "title": "optIn",
+          "examples": [
+            {
+              "id": "optin",
+              "name": "Generated example for optIn",
+              "code": "// Generated example for optIn\nposthog.optIn();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "",
+          "details": null,
+          "id": "optOut",
+          "showDocs": true,
+          "title": "optOut",
+          "examples": [
+            {
+              "id": "optout",
+              "name": "Generated example for optOut",
+              "code": "// Generated example for optOut\nposthog.optOut();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "",
+          "details": null,
+          "id": "register",
+          "showDocs": true,
+          "title": "register",
+          "examples": [
+            {
+              "id": "register",
+              "name": "Generated example for register",
+              "code": "// Generated example for register\nposthog.register();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "PostHogEventProperties",
+              "name": "properties"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Initialization",
+          "description": "Shuts down the PostHog instance and ensures all events are sent.\nCall shutdown() once before the process exits to ensure that all events have been sent and all promises have resolved. Do not use this function if you intend to keep using this PostHog instance after calling it. Use flush() for per-request cleanup instead.",
+          "details": null,
+          "id": "shutdown",
+          "showDocs": true,
+          "title": "shutdown",
+          "examples": [
+            {
+              "id": "shutdown_before_process_exit",
+              "name": "shutdown before process exit",
+              "code": "\n\n// shutdown before process exit\nprocess.on('SIGINT', async () => {\n  await posthog.shutdown()\n  process.exit(0)\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "Maximum time to wait for shutdown in milliseconds",
+              "isOptional": true,
+              "type": "number",
+              "name": "shutdownTimeoutMs"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "",
+          "details": null,
+          "id": "unregister",
+          "showDocs": true,
+          "title": "unregister",
+          "examples": [
+            {
+              "id": "unregister",
+              "name": "Generated example for unregister",
+              "code": "// Generated example for unregister\nposthog.unregister();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "string",
+              "name": "property"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        }
+      ]
+    }
+  ],
+  "types": [
+    {
+      "id": "_SentryEvent",
+      "name": "_SentryEvent",
+      "properties": [],
+      "path": "src/extensions/sentry-integration.ts"
+    },
+    {
+      "id": "_SentryEventProcessor",
+      "name": "_SentryEventProcessor",
+      "properties": [],
+      "path": "src/extensions/sentry-integration.ts"
+    },
+    {
+      "id": "_SentryHub",
+      "name": "_SentryHub",
+      "properties": [],
+      "path": "src/extensions/sentry-integration.ts"
+    },
+    {
+      "id": "_SentryIntegration",
+      "name": "_SentryIntegration",
+      "properties": [
+        {
+          "type": "string",
+          "name": "name"
+        }
+      ],
+      "path": "src/extensions/sentry-integration.ts"
+    },
+    {
+      "id": "_SentryIntegrationClass",
+      "name": "_SentryIntegrationClass",
+      "properties": [
+        {
+          "type": "string",
+          "name": "name"
+        }
+      ],
+      "path": "src/extensions/sentry-integration.ts"
+    },
+    {
+      "id": "ActionStepStringMatching",
+      "name": "ActionStepStringMatching",
+      "properties": [
+        {
+          "type": "\"contains\"",
+          "name": "Contains"
+        },
+        {
+          "type": "\"exact\"",
+          "name": "Exact"
+        },
+        {
+          "type": "\"regex\"",
+          "name": "Regex"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "ActionStepType",
+      "name": "ActionStepType",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    event?: string;\n    selector?: string;\n    text?: string;\n    text_matching?: ActionStepStringMatching;\n    href?: string;\n    href_matching?: ActionStepStringMatching;\n    url?: string;\n    url_matching?: ActionStepStringMatching;\n}"
+    },
+    {
+      "id": "BaseException",
+      "name": "BaseException",
+      "properties": [
+        {
+          "type": "boolean",
+          "name": "synthetic"
+        },
+        {
+          "type": "string",
+          "name": "type"
+        },
+        {
+          "type": "string",
+          "name": "value"
+        }
+      ],
+      "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "BasicSurveyQuestion",
+      "name": "BasicSurveyQuestion",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.Open;\n}"
+    },
+    {
+      "id": "BeforeSendFn_2",
+      "name": "BeforeSendFn_2",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(event: CaptureEvent | null) => CaptureEvent | null"
+    },
+    {
+      "id": "BeforeSendFn",
+      "name": "BeforeSendFn",
+      "properties": [],
+      "path": "src/types.ts",
+      "example": "(event: EventMessage | null) => EventMessage | null"
+    },
+    {
+      "id": "CaptureEvent",
+      "name": "CaptureEvent",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    uuid?: string;\n    event: string;\n    properties?: PostHogEventProperties;\n    $set?: PostHogEventProperties;\n    $set_once?: PostHogEventProperties;\n    timestamp?: Date;\n}"
+    },
+    {
+      "id": "ChunkIdMapType",
+      "name": "ChunkIdMapType",
+      "properties": [],
+      "path": "../core/src/error-tracking/types.ts",
+      "example": "Record<string, string>"
+    },
+    {
+      "id": "Coercer",
+      "name": "Coercer",
+      "properties": [],
+      "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "CoercingContext",
+      "name": "CoercingContext",
+      "properties": [
+        {
+          "type": "(input: unknown) => ExceptionLike",
+          "name": "apply"
+        },
+        {
+          "type": "(input: unknown) => ExceptionLike | undefined",
+          "name": "next"
+        }
+      ],
+      "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "Compression",
+      "name": "Compression",
+      "properties": [
+        {
+          "type": "\"base64\"",
+          "name": "Base64"
+        },
+        {
+          "type": "\"gzip-js\"",
+          "name": "GZipJS"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "ContextData",
+      "name": "ContextData",
+      "properties": [
+        {
+          "type": "string",
+          "name": "distinctId"
+        },
+        {
+          "type": "Record<string, any>",
+          "name": "properties"
+        },
+        {
+          "type": "string",
+          "name": "sessionId"
+        }
+      ],
+      "path": "src/extensions/context/types.ts"
+    },
+    {
+      "id": "ContextOptions",
+      "name": "ContextOptions",
+      "properties": [
+        {
+          "description": "If true, replaces the current context entirely. If false, merges with the existing context (new values override existing ones).   false",
+          "type": "boolean",
+          "name": "fresh"
+        }
+      ],
+      "path": "src/extensions/context/types.ts"
+    },
+    {
+      "id": "EndBranching",
+      "name": "EndBranching",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    type: SurveyQuestionBranchingType.End;\n}"
+    },
+    {
+      "id": "ErrorProperties",
+      "name": "ErrorProperties",
+      "properties": [
+        {
+          "type": "SeverityLevel",
+          "name": "$exception_level"
+        },
+        {
+          "type": "Exception[]",
+          "name": "$exception_list"
+        }
+      ],
+      "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "ErrorTrackingCoercer",
+      "name": "ErrorTrackingCoercer",
+      "properties": [],
+      "path": "../core/src/error-tracking/types.ts",
+      "example": "Coercer<T, ExceptionLike | undefined, CoercingContext>"
+    },
+    {
+      "id": "EvaluationReason",
+      "name": "EvaluationReason",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    code: string | undefined;\n    condition_index: number | undefined;\n    description: string | undefined;\n}"
+    },
+    {
+      "id": "EventHint",
+      "name": "EventHint",
+      "properties": [
+        {
+          "type": "Partial<Mechanism>",
+          "name": "mechanism"
+        },
+        {
+          "type": "number",
+          "name": "skipFirstLines"
+        },
+        {
+          "type": "Error | null",
+          "name": "syntheticException"
+        }
+      ],
+      "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "EventMessage",
+      "name": "EventMessage",
+      "properties": [],
+      "path": "src/types.ts",
+      "example": "Omit<IdentifyMessage, 'distinctId'> & {\n    distinctId?: string;\n    event: string;\n    groups?: Record<string, string | number>;\n    sendFeatureFlags?: boolean | SendFeatureFlagsOptions;\n    timestamp?: Date;\n    uuid?: string;\n    _originatedFromCaptureException?: boolean;\n}"
+    },
+    {
+      "id": "Exception",
+      "name": "Exception",
+      "properties": [
+        {
+          "type": "Mechanism",
+          "name": "mechanism"
+        },
+        {
+          "type": "string",
+          "name": "module"
+        },
+        {
+          "type": "{\n        frames?: StackFrame[];\n        type: 'raw';\n    }",
+          "name": "stacktrace"
+        },
+        {
+          "type": "number",
+          "name": "thread_id"
+        },
+        {
+          "type": "string",
+          "name": "type"
+        },
+        {
+          "type": "string",
+          "name": "value"
+        }
+      ],
+      "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "ExceptionLike",
+      "name": "ExceptionLike",
+      "properties": [
+        {
+          "type": "ExceptionLike",
+          "name": "cause"
+        },
+        {
+          "type": "SeverityLevel",
+          "name": "level"
+        },
+        {
+          "type": "string",
+          "name": "stack"
+        }
+      ],
+      "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "ExceptionList",
+      "name": "ExceptionList",
+      "properties": [],
+      "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "ExpressErrorMiddleware",
+      "name": "ExpressErrorMiddleware",
+      "properties": [],
+      "path": "src/extensions/express.ts",
+      "example": "(error: MiddlewareError, req: Request, res: Response, next: (error: MiddlewareError) => void) => void"
+    },
+    {
+      "id": "ExpressMiddleware",
+      "name": "ExpressMiddleware",
+      "properties": [],
+      "path": "src/extensions/express.ts",
+      "example": "(req: Request, res: Response, next: () => void) => void"
+    },
+    {
+      "id": "FeatureFlagBucketingIdentifier",
+      "name": "FeatureFlagBucketingIdentifier",
+      "properties": [],
+      "path": "src/types.ts",
+      "example": "\"distinct_id\" | \"device_id\""
+    },
+    {
+      "id": "FeatureFlagCondition",
+      "name": "FeatureFlagCondition",
+      "properties": [],
+      "path": "src/types.ts",
+      "example": "{\n    properties: FlagProperty[];\n    rollout_percentage?: number;\n    variant?: string;\n}"
+    },
+    {
+      "id": "FeatureFlagDetail",
+      "name": "FeatureFlagDetail",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    key: string;\n    enabled: boolean;\n    variant: string | undefined;\n    reason: EvaluationReason | undefined;\n    metadata: FeatureFlagMetadata | undefined;\n    failed?: boolean;\n}"
+    },
+    {
+      "id": "FeatureFlagErrorType",
+      "name": "FeatureFlagErrorType",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "\"apiError\""
+    },
+    {
+      "id": "FeatureFlagMetadata",
+      "name": "FeatureFlagMetadata",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    id: number | undefined;\n    version: number | undefined;\n    description: string | undefined;\n    payload: string | undefined;\n}"
+    },
+    {
+      "id": "FeatureFlagOverrideOptions",
+      "name": "FeatureFlagOverrideOptions",
+      "properties": [],
+      "path": "src/types.ts",
+      "example": "{\n    flags?: false | string[] | Record<string, FeatureFlagValue>;\n    payloads?: false | Record<string, JsonType>;\n}"
+    },
+    {
+      "id": "FeatureFlagRequestError",
+      "name": "FeatureFlagRequestError",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    type: 'timeout' | 'connection_error' | 'api_error' | 'unknown_error';\n    statusCode?: number;\n}"
+    },
+    {
+      "id": "FeatureFlagResult",
+      "name": "FeatureFlagResult",
+      "properties": [],
+      "path": "src/types.ts",
+      "example": "{\n    key: string;\n    enabled: boolean;\n    variant: string | undefined;\n    payload: JsonType | undefined;\n}"
+    },
+    {
+      "id": "FeatureFlagValue",
+      "name": "FeatureFlagValue",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "string | boolean"
+    },
+    {
+      "id": "FlagDefinitionCacheData",
+      "name": "FlagDefinitionCacheData",
+      "properties": [
+        {
+          "description": "Cohort property groups for local evaluation",
+          "type": "Record<string, PropertyGroup>",
+          "name": "cohorts"
+        },
+        {
+          "description": "Array of feature flag definitions",
+          "type": "PostHogFeatureFlag[]",
+          "name": "flags"
+        },
+        {
+          "description": "Mapping of group type index to group name",
+          "type": "Record<string, string>",
+          "name": "groupTypeMapping"
+        }
+      ],
+      "path": "src/extensions/feature-flags/cache.ts"
+    },
+    {
+      "id": "FlagDefinitionCacheProvider",
+      "name": "FlagDefinitionCacheProvider",
+      "properties": [],
+      "path": "src/extensions/feature-flags/cache.ts"
+    },
+    {
+      "id": "FlagProperty",
+      "name": "FlagProperty",
+      "properties": [],
+      "path": "src/types.ts",
+      "example": "{\n    key: string;\n    type?: string;\n    value: FlagPropertyValue;\n    operator?: string;\n    negation?: boolean;\n    dependency_chain?: string[];\n}"
+    },
+    {
+      "id": "FlagPropertyValue",
+      "name": "FlagPropertyValue",
+      "properties": [],
+      "path": "src/types.ts",
+      "example": "string | number | (string | number)[] | boolean"
+    },
+    {
+      "id": "GetFlagsResult",
+      "name": "GetFlagsResult",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    success: true;\n    response: PostHogFeatureFlagsResponse;\n} | {\n    success: false;\n    error: FeatureFlagRequestError;\n}"
+    },
+    {
+      "id": "GetModuleFn",
+      "name": "GetModuleFn",
+      "properties": [],
+      "path": "../core/src/error-tracking/types.ts",
+      "example": "(filename: string | undefined) => string | undefined"
+    },
+    {
+      "id": "GroupIdentifyMessage",
+      "name": "GroupIdentifyMessage",
+      "properties": [],
+      "path": "src/types.ts",
+      "example": "{\n    groupType: string;\n    groupKey: string;\n    properties?: Record<string | number, any>;\n    distinctId?: string;\n    disableGeoip?: boolean;\n}"
+    },
+    {
+      "id": "IdentifyMessage",
+      "name": "IdentifyMessage",
+      "properties": [],
+      "path": "src/types.ts",
+      "example": "{\n    distinctId: string;\n    properties?: Record<string | number, any>;\n    disableGeoip?: boolean;\n}"
+    },
+    {
+      "id": "IPostHog",
+      "name": "IPostHog",
+      "properties": [],
+      "path": "src/types.ts"
+    },
+    {
+      "id": "IPostHogContext",
+      "name": "IPostHogContext",
+      "properties": [],
+      "path": "src/extensions/context/types.ts"
+    },
+    {
+      "id": "JsonType",
+      "name": "JsonType",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "string | number | boolean | null | {\n    [key: string]: JsonType;\n} | Array<JsonType> | JsonType[]"
+    },
+    {
+      "id": "LinkSurveyQuestion",
+      "name": "LinkSurveyQuestion",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.Link;\n    link?: string;\n}"
+    },
+    {
+      "id": "Logger",
+      "name": "Logger",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    info: (...args: any[]) => void;\n    warn: (...args: any[]) => void;\n    error: (...args: any[]) => void;\n    critical: (...args: any[]) => void;\n    createLogger: (prefix: string) => Logger;\n}"
+    },
+    {
+      "id": "Mechanism",
+      "name": "Mechanism",
+      "properties": [
+        {
+          "type": "boolean",
+          "name": "handled"
+        },
+        {
+          "type": "string",
+          "name": "source"
+        },
+        {
+          "type": "boolean",
+          "name": "synthetic"
+        },
+        {
+          "type": "'generic' | 'onunhandledrejection' | 'onuncaughtexception' | 'onconsole' | 'middleware'",
+          "name": "type"
+        }
+      ],
+      "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "MiddlewareError",
+      "name": "MiddlewareError",
+      "properties": [
+        {
+          "type": "{\n        statusCode?: number | string;\n    }",
+          "name": "output"
+        },
+        {
+          "type": "number | string",
+          "name": "status_code"
+        },
+        {
+          "type": "number | string",
+          "name": "status"
+        },
+        {
+          "type": "number | string",
+          "name": "statusCode"
+        }
+      ],
+      "path": "src/extensions/express.ts"
+    },
+    {
+      "id": "MultipleSurveyQuestion",
+      "name": "MultipleSurveyQuestion",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.SingleChoice | SurveyQuestionType.MultipleChoice;\n    choices: string[];\n    hasOpenChoice?: boolean;\n    shuffleOptions?: boolean;\n    skipSubmitButton?: boolean;\n}"
+    },
+    {
+      "id": "NextQuestionBranching",
+      "name": "NextQuestionBranching",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    type: SurveyQuestionBranchingType.NextQuestion;\n}"
+    },
+    {
+      "id": "ObjectLike",
+      "name": "ObjectLike",
+      "properties": [],
+      "path": "../core/src/error-tracking/coercers/object-coercer.ts",
+      "example": "Record<string, unknown>"
+    },
+    {
+      "id": "OverrideFeatureFlagsOptions",
+      "name": "OverrideFeatureFlagsOptions",
+      "properties": [],
+      "path": "src/types.ts",
+      "example": "false | string[] | Record<string, FeatureFlagValue> | FeatureFlagOverrideOptions"
+    },
+    {
+      "id": "ParsedException",
+      "name": "ParsedException",
+      "properties": [
+        {
+          "type": "ParsedException",
+          "name": "cause"
+        },
+        {
+          "type": "StackFrame[]",
+          "name": "stack"
+        }
+      ],
+      "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "ParsingContext",
+      "name": "ParsingContext",
+      "properties": [
+        {
+          "type": "ChunkIdMapType",
+          "name": "chunkIdMap"
+        },
+        {
+          "type": "number",
+          "name": "skipFirstLines"
+        }
+      ],
+      "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "PartialWithRequired",
+      "name": "PartialWithRequired",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "keyof T> = {\n    [P in K]: T[P];\n} & {\n    [P in Exclude<keyof T, K>]?: T[P];\n}"
+    },
+    {
+      "id": "Platform",
+      "name": "Platform",
+      "properties": [],
+      "path": "../core/src/error-tracking/types.ts",
+      "example": "\"node:javascript\" | \"web:javascript\" | \"hermes\""
+    },
+    {
+      "id": "PolymorphicEvent",
+      "name": "PolymorphicEvent",
+      "properties": [
+        {
+          "type": "unknown",
+          "name": "currentTarget"
+        },
+        {
+          "type": "unknown",
+          "name": "target"
+        },
+        {
+          "type": "string",
+          "name": "type"
+        }
+      ],
+      "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "PostHogCaptureOptions",
+      "name": "PostHogCaptureOptions",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    uuid?: string;\n    timestamp?: Date;\n    disableGeoip?: boolean;\n    _originatedFromCaptureException?: boolean;\n}"
+    },
+    {
+      "id": "PostHogCoreOptions",
+      "name": "PostHogCoreOptions",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    host?: string;\n    flushAt?: number;\n    flushInterval?: number;\n    maxBatchSize?: number;\n    maxQueueSize?: number;\n    disabled?: boolean;\n    defaultOptIn?: boolean;\n    sendFeatureFlagEvent?: boolean;\n    preloadFeatureFlags?: boolean;\n    disableRemoteConfig?: boolean;\n    disableSurveys?: boolean;\n    bootstrap?: {\n        distinctId?: string;\n        isIdentifiedId?: boolean;\n        featureFlags?: Record<string, FeatureFlagValue>;\n        featureFlagPayloads?: Record<string, JsonType>;\n    };\n    fetchRetryCount?: number;\n    fetchRetryDelay?: number;\n    requestTimeout?: number;\n    featureFlagsRequestTimeoutMs?: number;\n    remoteConfigRequestTimeoutMs?: number;\n    sessionExpirationTimeSeconds?: number;\n    disableCompression?: boolean;\n    disableGeoip?: boolean;\n    historicalMigration?: boolean;\n    evaluationContexts?: readonly string[];\n    evaluationEnvironments?: readonly string[];\n    personProfiles?: 'always' | 'identified_only' | 'never';\n    before_send?: BeforeSendFn | BeforeSendFn[];\n}"
+    },
+    {
+      "id": "PostHogEventProperties",
+      "name": "PostHogEventProperties",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    [key: string]: JsonType;\n}"
+    },
+    {
+      "id": "PostHogFeatureFlag",
+      "name": "PostHogFeatureFlag",
+      "properties": [],
+      "path": "src/types.ts",
+      "example": "{\n    id: number;\n    name: string;\n    key: string;\n    bucketing_identifier?: FeatureFlagBucketingIdentifier;\n    filters?: {\n        aggregation_group_type_index?: number;\n        groups?: FeatureFlagCondition[];\n        multivariate?: {\n            variants: {\n                key: string;\n                rollout_percentage: number;\n            }[];\n        };\n        payloads?: Record<string, string>;\n    };\n    deleted: boolean;\n    active: boolean;\n    rollout_percentage: null | number;\n    ensure_experience_continuity: boolean;\n    experiment_set: number[];\n}"
+    },
+    {
+      "id": "PostHogFeatureFlagDetails",
+      "name": "PostHogFeatureFlagDetails",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "\"flags\" | \"featureFlags\" | \"featureFlagPayloads\" | \"requestId\""
+    },
+    {
+      "id": "PostHogFeatureFlagsResponse",
+      "name": "PostHogFeatureFlagsResponse",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "\"flags\" | \"featureFlags\" | \"featureFlagPayloads\" | \"requestId\""
+    },
+    {
+      "id": "PostHogFetchOptions",
+      "name": "PostHogFetchOptions",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    method: 'GET' | 'POST' | 'PUT' | 'PATCH';\n    mode?: 'no-cors';\n    credentials?: 'omit';\n    headers: {\n        [key: string]: string;\n    };\n    body?: string | Blob;\n    signal?: AbortSignal;\n}"
+    },
+    {
+      "id": "PostHogFetchResponse",
+      "name": "PostHogFetchResponse",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    status: number;\n    text: () => Promise<string>;\n    json: () => Promise<any>;\n    headers?: {\n        get(name: string): string | null;\n    };\n}"
+    },
+    {
+      "id": "PostHogFlagsAndPayloadsResponse",
+      "name": "PostHogFlagsAndPayloadsResponse",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "\"featureFlags\" | \"featureFlagPayloads\""
+    },
+    {
+      "id": "PostHogFlagsResponse",
+      "name": "PostHogFlagsResponse",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "Omit<PostHogRemoteConfig, 'hasFeatureFlags'> & {\n    featureFlags: {\n        [key: string]: FeatureFlagValue;\n    };\n    featureFlagPayloads: {\n        [key: string]: JsonType;\n    };\n    flags: {\n        [key: string]: FeatureFlagDetail;\n    };\n    errorsWhileComputingFlags: boolean;\n    sessionRecording?: boolean | {\n        [key: string]: JsonType;\n    };\n    quotaLimited?: string[];\n    requestId?: string;\n    evaluatedAt?: number;\n}"
+    },
+    {
+      "id": "PostHogOptions",
+      "name": "PostHogOptions",
+      "properties": [],
+      "path": "src/types.ts",
+      "example": "Omit<PostHogCoreOptions, 'before_send'> & {\n    persistence?: 'memory';\n    personalApiKey?: string;\n    privacyMode?: boolean;\n    enableExceptionAutocapture?: boolean;\n    featureFlagsPollingInterval?: number;\n    maxCacheSize?: number;\n    fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>;\n    enableLocalEvaluation?: boolean;\n    flagDefinitionCacheProvider?: FlagDefinitionCacheProvider;\n    before_send?: BeforeSendFn | BeforeSendFn[];\n    evaluationContexts?: readonly string[];\n    evaluationEnvironments?: readonly string[];\n    custom_blocked_useragents?: string[];\n    __preview_capture_bot_pageviews?: boolean;\n    strictLocalEvaluation?: boolean;\n}"
+    },
+    {
+      "id": "PostHogPersistedProperty",
+      "name": "PostHogPersistedProperty",
+      "properties": [
+        {
+          "type": "\"anonymous_id\"",
+          "name": "AnonymousId"
+        },
+        {
+          "type": "\"bootstrap_feature_flag_details\"",
+          "name": "BootstrapFeatureFlagDetails"
+        },
+        {
+          "type": "\"bootstrap_feature_flag_payloads\"",
+          "name": "BootstrapFeatureFlagPayloads"
+        },
+        {
+          "type": "\"bootstrap_feature_flags\"",
+          "name": "BootstrapFeatureFlags"
+        },
+        {
+          "type": "\"distinct_id\"",
+          "name": "DistinctId"
+        },
+        {
+          "type": "\"enable_person_processing\"",
+          "name": "EnablePersonProcessing"
+        },
+        {
+          "type": "\"feature_flag_details\"",
+          "name": "FeatureFlagDetails"
+        },
+        {
+          "type": "\"feature_flag_payloads\"",
+          "name": "FeatureFlagPayloads"
+        },
+        {
+          "type": "\"feature_flags\"",
+          "name": "FeatureFlags"
+        },
+        {
+          "type": "\"flags_endpoint_was_hit\"",
+          "name": "FlagsEndpointWasHit"
+        },
+        {
+          "type": "\"group_properties\"",
+          "name": "GroupProperties"
+        },
+        {
+          "type": "\"installed_app_build\"",
+          "name": "InstalledAppBuild"
+        },
+        {
+          "type": "\"installed_app_version\"",
+          "name": "InstalledAppVersion"
+        },
+        {
+          "type": "\"opted_out\"",
+          "name": "OptedOut"
+        },
+        {
+          "type": "\"override_feature_flags\"",
+          "name": "OverrideFeatureFlags"
+        },
+        {
+          "type": "\"person_mode\"",
+          "name": "PersonMode"
+        },
+        {
+          "type": "\"person_properties\"",
+          "name": "PersonProperties"
+        },
+        {
+          "type": "\"props\"",
+          "name": "Props"
+        },
+        {
+          "type": "\"queue\"",
+          "name": "Queue"
+        },
+        {
+          "type": "\"remote_config\"",
+          "name": "RemoteConfig"
+        },
+        {
+          "type": "\"session_id\"",
+          "name": "SessionId"
+        },
+        {
+          "type": "\"session_timestamp\"",
+          "name": "SessionLastTimestamp"
+        },
+        {
+          "type": "\"session_replay\"",
+          "name": "SessionReplay"
+        },
+        {
+          "type": "\"session_start_timestamp\"",
+          "name": "SessionStartTimestamp"
+        },
+        {
+          "type": "\"survey_last_seen_date\"",
+          "name": "SurveyLastSeenDate"
+        },
+        {
+          "type": "\"surveys\"",
+          "name": "Surveys"
+        },
+        {
+          "type": "\"surveys_seen\"",
+          "name": "SurveysSeen"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "PostHogRemoteConfig",
+      "name": "PostHogRemoteConfig",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    sessionRecording?: boolean | {\n        [key: string]: JsonType;\n    };\n    supportedCompression?: Compression[];\n    surveys?: boolean | Survey[];\n    hasFeatureFlags?: boolean;\n    errorTracking?: boolean | {\n        [key: string]: JsonType;\n    };\n    capturePerformance?: boolean | {\n        [key: string]: JsonType;\n    };\n}"
+    },
+    {
+      "id": "PreviouslyCapturedError",
+      "name": "PreviouslyCapturedError",
+      "properties": [
+        {
+          "type": "boolean",
+          "name": "__posthog_previously_captured_error"
+        }
+      ],
+      "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "PrimitiveType",
+      "name": "PrimitiveType",
+      "properties": [],
+      "path": "../core/src/error-tracking/coercers/primitive-coercer.ts",
+      "example": "null | undefined | boolean | number | string | symbol | bigint"
+    },
+    {
+      "id": "PropertyGroup",
+      "name": "PropertyGroup",
+      "properties": [],
+      "path": "src/types.ts",
+      "example": "{\n    type: 'AND' | 'OR';\n    values: PropertyGroup[] | FlagProperty[];\n}"
+    },
+    {
+      "id": "RatingSurveyQuestion",
+      "name": "RatingSurveyQuestion",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.Rating;\n    display: SurveyRatingDisplay;\n    scale: 2 | 3 | 5 | 7 | 10;\n    lowerBoundLabel: string;\n    upperBoundLabel: string;\n    skipSubmitButton?: boolean;\n}"
+    },
+    {
+      "id": "ResponseBasedBranching",
+      "name": "ResponseBasedBranching",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    type: SurveyQuestionBranchingType.ResponseBased;\n    responseValues: Record<string, any>;\n}"
+    },
+    {
+      "id": "RetriableOptions",
+      "name": "RetriableOptions",
+      "properties": [
+        {
+          "type": "(err: unknown) => boolean",
+          "name": "retryCheck"
+        },
+        {
+          "type": "number",
+          "name": "retryCount"
+        },
+        {
+          "type": "number",
+          "name": "retryDelay"
+        }
+      ],
+      "path": "../core/src/utils/index.ts"
+    },
+    {
+      "id": "SendFeatureFlagsOptions",
+      "name": "SendFeatureFlagsOptions",
+      "properties": [],
+      "path": "src/types.ts",
+      "example": "{\n    onlyEvaluateLocally?: boolean;\n    personProperties?: Record<string, any>;\n    groupProperties?: Record<string, Record<string, any>>;\n    flagKeys?: string[];\n}"
+    },
+    {
+      "id": "SentryIntegrationOptions",
+      "name": "SentryIntegrationOptions",
+      "properties": [],
+      "path": "src/extensions/sentry-integration.ts",
+      "example": "{\n    organization?: string;\n    projectId?: number;\n    prefix?: string;\n    severityAllowList?: CoreErrorTracking.SeverityLevel[] | '*';\n    sendExceptionsToPostHog?: boolean;\n}"
+    },
+    {
+      "id": "SeverityLevel",
+      "name": "SeverityLevel",
+      "properties": [],
+      "path": "../core/src/error-tracking/types.ts",
+      "example": "(typeof severityLevels)[number]"
+    },
+    {
+      "id": "SpecificQuestionBranching",
+      "name": "SpecificQuestionBranching",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    type: SurveyQuestionBranchingType.SpecificQuestion;\n    index: number;\n}"
+    },
+    {
+      "id": "StackFrame",
+      "name": "StackFrame",
+      "properties": [
+        {
+          "type": "string",
+          "name": "abs_path"
+        },
+        {
+          "type": "string",
+          "name": "addr_mode"
+        },
+        {
+          "type": "string",
+          "name": "chunk_id"
+        },
+        {
+          "type": "number",
+          "name": "colno"
+        },
+        {
+          "type": "string",
+          "name": "context_line"
+        },
+        {
+          "type": "string",
+          "name": "filename"
+        },
+        {
+          "type": "string",
+          "name": "function"
+        },
+        {
+          "type": "boolean",
+          "name": "in_app"
+        },
+        {
+          "type": "string",
+          "name": "instruction_addr"
+        },
+        {
+          "type": "number",
+          "name": "lineno"
+        },
+        {
+          "type": "string",
+          "name": "module"
+        },
+        {
+          "type": "Platform",
+          "name": "platform"
+        },
+        {
+          "type": "string[]",
+          "name": "post_context"
+        },
+        {
+          "type": "string[]",
+          "name": "pre_context"
+        },
+        {
+          "type": "{\n        [key: string]: JsonType;\n    }",
+          "name": "vars"
+        }
+      ],
+      "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "StackFrameModifierFn",
+      "name": "StackFrameModifierFn",
+      "properties": [],
+      "path": "../core/src/error-tracking/types.ts",
+      "example": "(frames: StackFrame[]) => Promise<StackFrame[]>"
+    },
+    {
+      "id": "StackLineParser",
+      "name": "StackLineParser",
+      "properties": [],
+      "path": "../core/src/error-tracking/types.ts",
+      "example": "(line: string, platform: Platform) => StackFrame | undefined"
+    },
+    {
+      "id": "StackParser",
+      "name": "StackParser",
+      "properties": [],
+      "path": "../core/src/error-tracking/types.ts",
+      "example": "(stack: string, skipFirstLines?: number) => StackFrame[]"
+    },
+    {
+      "id": "Survey",
+      "name": "Survey",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    id: string;\n    name: string;\n    description?: string;\n    type: SurveyType;\n    feature_flag_keys?: {\n        key: string;\n        value?: string;\n    }[];\n    linked_flag_key?: string;\n    targeting_flag_key?: string;\n    internal_targeting_flag_key?: string;\n    questions: SurveyQuestion[];\n    appearance?: SurveyAppearance;\n    conditions?: {\n        url?: string;\n        selector?: string;\n        seenSurveyWaitPeriodInDays?: number;\n        urlMatchType?: SurveyMatchType;\n        events?: {\n            repeatedActivation?: boolean;\n            values?: {\n                name: string;\n            }[];\n        };\n        actions?: {\n            values: SurveyActionType[];\n        };\n        deviceTypes?: string[];\n        deviceTypesMatchType?: SurveyMatchType;\n        linkedFlagVariant?: string;\n    };\n    start_date?: string;\n    end_date?: string;\n    current_iteration?: number;\n    current_iteration_start_date?: string;\n    schedule?: SurveySchedule;\n}"
+    },
+    {
+      "id": "SurveyActionType",
+      "name": "SurveyActionType",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    id: number;\n    name?: string;\n    steps?: ActionStepType[];\n}"
+    },
+    {
+      "id": "SurveyAppearance",
+      "name": "SurveyAppearance",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    backgroundColor?: string;\n    textColor?: string;\n    submitButtonColor?: string;\n    submitButtonText?: string;\n    submitButtonTextColor?: string;\n    ratingButtonColor?: string;\n    ratingButtonActiveColor?: string;\n    inputBackground?: string;\n    inputTextColor?: string;\n    autoDisappear?: boolean;\n    displayThankYouMessage?: boolean;\n    thankYouMessageHeader?: string;\n    thankYouMessageDescription?: string;\n    thankYouMessageDescriptionContentType?: SurveyQuestionDescriptionContentType;\n    thankYouMessageCloseButtonText?: string;\n    borderColor?: string;\n    position?: SurveyPosition;\n    placeholder?: string;\n    shuffleQuestions?: boolean;\n    surveyPopupDelaySeconds?: number;\n    widgetType?: SurveyWidgetType;\n    widgetSelector?: string;\n    widgetLabel?: string;\n    widgetColor?: string;\n}"
+    },
+    {
+      "id": "SurveyMatchType",
+      "name": "SurveyMatchType",
+      "properties": [
+        {
+          "type": "\"exact\"",
+          "name": "Exact"
+        },
+        {
+          "type": "\"icontains\"",
+          "name": "Icontains"
+        },
+        {
+          "type": "\"is_not\"",
+          "name": "IsNot"
+        },
+        {
+          "type": "\"not_icontains\"",
+          "name": "NotIcontains"
+        },
+        {
+          "type": "\"not_regex\"",
+          "name": "NotRegex"
+        },
+        {
+          "type": "\"regex\"",
+          "name": "Regex"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "SurveyPosition",
+      "name": "SurveyPosition",
+      "properties": [
+        {
+          "type": "\"center\"",
+          "name": "Center"
+        },
+        {
+          "type": "\"left\"",
+          "name": "Left"
+        },
+        {
+          "type": "\"middle_center\"",
+          "name": "MiddleCenter"
+        },
+        {
+          "type": "\"middle_left\"",
+          "name": "MiddleLeft"
+        },
+        {
+          "type": "\"middle_right\"",
+          "name": "MiddleRight"
+        },
+        {
+          "type": "\"right\"",
+          "name": "Right"
+        },
+        {
+          "type": "\"top_center\"",
+          "name": "TopCenter"
+        },
+        {
+          "type": "\"top_left\"",
+          "name": "TopLeft"
+        },
+        {
+          "type": "\"top_right\"",
+          "name": "TopRight"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "SurveyQuestion",
+      "name": "SurveyQuestion",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "BasicSurveyQuestion | LinkSurveyQuestion | RatingSurveyQuestion | MultipleSurveyQuestion"
+    },
+    {
+      "id": "SurveyQuestionBase",
+      "name": "SurveyQuestionBase",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    question: string;\n    id: string;\n    description?: string;\n    descriptionContentType?: SurveyQuestionDescriptionContentType;\n    optional?: boolean;\n    buttonText?: string;\n    originalQuestionIndex: number;\n    branching?: NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching;\n    validation?: SurveyValidationRule[];\n}"
+    },
+    {
+      "id": "SurveyQuestionBranchingType",
+      "name": "SurveyQuestionBranchingType",
+      "properties": [
+        {
+          "type": "\"end\"",
+          "name": "End"
+        },
+        {
+          "type": "\"next_question\"",
+          "name": "NextQuestion"
+        },
+        {
+          "type": "\"response_based\"",
+          "name": "ResponseBased"
+        },
+        {
+          "type": "\"specific_question\"",
+          "name": "SpecificQuestion"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "SurveyQuestionDescriptionContentType",
+      "name": "SurveyQuestionDescriptionContentType",
+      "properties": [
+        {
+          "type": "\"html\"",
+          "name": "Html"
+        },
+        {
+          "type": "\"text\"",
+          "name": "Text"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "SurveyQuestionType",
+      "name": "SurveyQuestionType",
+      "properties": [
+        {
+          "type": "\"link\"",
+          "name": "Link"
+        },
+        {
+          "type": "\"multiple_choice\"",
+          "name": "MultipleChoice"
+        },
+        {
+          "type": "\"open\"",
+          "name": "Open"
+        },
+        {
+          "type": "\"rating\"",
+          "name": "Rating"
+        },
+        {
+          "type": "\"single_choice\"",
+          "name": "SingleChoice"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "SurveyRatingDisplay",
+      "name": "SurveyRatingDisplay",
+      "properties": [
+        {
+          "type": "\"emoji\"",
+          "name": "Emoji"
+        },
+        {
+          "type": "\"number\"",
+          "name": "Number"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "SurveyResponse",
+      "name": "SurveyResponse",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "{\n    surveys: Survey[];\n}"
+    },
+    {
+      "id": "SurveySchedule",
+      "name": "SurveySchedule",
+      "properties": [
+        {
+          "type": "\"always\"",
+          "name": "Always"
+        },
+        {
+          "type": "\"once\"",
+          "name": "Once"
+        },
+        {
+          "type": "\"recurring\"",
+          "name": "Recurring"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "SurveyType",
+      "name": "SurveyType",
+      "properties": [
+        {
+          "type": "\"api\"",
+          "name": "API"
+        },
+        {
+          "type": "\"external_survey\"",
+          "name": "ExternalSurvey"
+        },
+        {
+          "type": "\"popover\"",
+          "name": "Popover"
+        },
+        {
+          "type": "\"widget\"",
+          "name": "Widget"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "SurveyValidationRule",
+      "name": "SurveyValidationRule",
+      "properties": [
+        {
+          "type": "string",
+          "name": "errorMessage"
+        },
+        {
+          "type": "SurveyValidationType",
+          "name": "type"
+        },
+        {
+          "type": "number",
+          "name": "value"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "SurveyValidationType",
+      "name": "SurveyValidationType",
+      "properties": [
+        {
+          "type": "\"max_length\"",
+          "name": "MaxLength"
+        },
+        {
+          "type": "\"min_length\"",
+          "name": "MinLength"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "SurveyWidgetType",
+      "name": "SurveyWidgetType",
+      "properties": [
+        {
+          "type": "\"button\"",
+          "name": "Button"
+        },
+        {
+          "type": "\"selector\"",
+          "name": "Selector"
+        },
+        {
+          "type": "\"tab\"",
+          "name": "Tab"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    }
+  ],
+  "categories": [
+    "Initialization",
+    "Identification",
+    "Capture",
+    "Error tracking",
+    "Privacy",
+    "Feature flags",
+    "Context"
+  ]
+}

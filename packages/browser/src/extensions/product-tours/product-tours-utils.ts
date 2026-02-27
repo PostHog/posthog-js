@@ -6,15 +6,19 @@ import {
     ProductTourSelectorError,
     ProductTourStep,
     DEFAULT_PRODUCT_TOUR_APPEARANCE,
+    ProductTourWaitPeriod,
 } from '../../posthog-product-tours-types'
 import { findElement } from './element-inference'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
 import { document as _document, window as _window } from '../../utils/globals'
 import { getFontFamily, getContrastingTextColor, hexToRgba } from '../surveys/surveys-extension-utils'
 import { createLogger } from '../../utils/logger'
+import { localStore } from '../../storage'
+import { LAST_SEEN_TOUR_DATE_KEY_PREFIX } from './constants'
 
 import productTourStyles from './product-tour.css'
 import { isUndefined } from '@posthog/core'
+import { hasPeriodPassed } from '../utils/matcher-utils'
 
 const logger = createLogger('[Product Tours]')
 
@@ -351,4 +355,38 @@ export function getStepHtml(step: ProductTourStep): string {
 
     // backwards compat, will be deprecated
     return renderTipTapContent(step.content)
+}
+
+export function hasTourWaitPeriodPassed(seenTourWaitPeriod?: ProductTourWaitPeriod): boolean {
+    if (!seenTourWaitPeriod) {
+        return true
+    }
+
+    const { days, types } = seenTourWaitPeriod
+    if (!days || !types || types.length === 0) {
+        return true
+    }
+
+    let mostRecentDate: Date | null = null
+
+    for (const type of types) {
+        const raw = localStore._get(`${LAST_SEEN_TOUR_DATE_KEY_PREFIX}${type}`)
+        if (raw) {
+            try {
+                const stored = JSON.parse(raw)
+                const date = new Date(stored)
+                if (!isNaN(date.getTime()) && (!mostRecentDate || date > mostRecentDate)) {
+                    mostRecentDate = date
+                }
+            } catch {
+                // ignore malformed entries
+            }
+        }
+    }
+
+    if (!mostRecentDate) {
+        return true
+    }
+
+    return hasPeriodPassed(days, mostRecentDate)
 }

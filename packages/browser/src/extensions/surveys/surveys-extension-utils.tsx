@@ -12,7 +12,7 @@ import {
     SurveyType,
     SurveyWidgetType,
 } from '../../posthog-surveys-types'
-import { document as _document, window as _window, userAgent } from '../../utils/globals'
+import { document as _document, window as _window } from '../../utils/globals'
 import {
     getSurveyInteractionProperty,
     getSurveySeenKey,
@@ -23,7 +23,6 @@ import {
 } from '../../utils/survey-utils'
 import { isArray, isNullish } from '@posthog/core'
 
-import { detectDeviceType } from '@posthog/core'
 import { propertyComparisons } from '../../utils/property-utils'
 import { Properties, PropertyMatchType } from '../../types'
 import { Z_INDEX_SURVEYS } from '../../constants'
@@ -33,6 +32,7 @@ const window = _window as Window & typeof globalThis
 const document = _document as Document
 import surveyStyles from './survey.css'
 import { useContext } from 'preact/hooks'
+import { doesDeviceTypeMatch, hasPeriodPassed } from '../utils/matcher-utils'
 
 export function getFontFamily(fontFamily?: string): string {
     if (fontFamily === 'inherit') {
@@ -612,14 +612,7 @@ const LAST_SEEN_SURVEY_DATE_KEY = 'lastSeenSurveyDate'
 
 export const hasWaitPeriodPassed = (waitPeriodInDays: number | undefined): boolean => {
     const lastSeenSurveyDate = localStorage.getItem(LAST_SEEN_SURVEY_DATE_KEY)
-    if (!waitPeriodInDays || !lastSeenSurveyDate) {
-        return true
-    }
-
-    const today = new Date()
-    const diff = Math.abs(today.getTime() - new Date(lastSeenSurveyDate).getTime())
-    const diffDaysFromToday = Math.ceil(diff / (1000 * 3600 * 24))
-    return diffDaysFromToday > waitPeriodInDays
+    return hasPeriodPassed(waitPeriodInDays, lastSeenSurveyDate)
 }
 
 interface SurveyContextProps {
@@ -686,19 +679,7 @@ export function doesSurveyUrlMatch(survey: Pick<Survey, 'conditions'>): boolean 
 }
 
 export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
-    if (!survey.conditions?.deviceTypes || survey.conditions?.deviceTypes.length === 0) {
-        return true
-    }
-    // if we dont know the device type, assume it is not a match
-    if (!userAgent) {
-        return false
-    }
-
-    const deviceType = detectDeviceType(userAgent)
-    return propertyComparisons[defaultMatchType(survey.conditions?.deviceTypesMatchType)](
-        survey.conditions.deviceTypes,
-        [deviceType]
-    )
+    return doesDeviceTypeMatch(survey.conditions?.deviceTypes, survey.conditions?.deviceTypesMatchType)
 }
 
 export function doesSurveyMatchSelector(survey: Survey): boolean {

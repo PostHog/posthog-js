@@ -1,6 +1,6 @@
 {
   "name": "@posthog/ai",
-  "version": "7.9.1",
+  "version": "7.9.3",
   "description": "PostHog Node.js AI integrations",
   "repository": {
     "type": "git",
@@ -49,7 +49,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@google/genai": "^1.42.0",
-    "@langchain/core": "^1.1.17",
+    "@langchain/core": "^1.1.27",
     "@posthog/core": "workspace:*",
     "langchain": "^1.2.25",
     "openai": "^6.22.0",

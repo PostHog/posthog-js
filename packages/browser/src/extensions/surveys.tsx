@@ -376,8 +376,9 @@ export class SurveyManager {
     }
 
     public renderSurvey = (survey: Survey, selector: Element, properties?: Properties): void => {
+        let isSurveyCompleted = false
         if (this._posthog.config?.surveys?.prefillFromUrl) {
-            this._handleUrlPrefill(survey)
+            isSurveyCompleted = this._handleUrlPrefill(survey)
         }
 
         render(
@@ -387,28 +388,29 @@ export class SurveyManager {
                 removeSurveyFromFocus={this._removeSurveyFromFocus}
                 isPopup={false}
                 properties={properties}
+                isSurveyCompleted={isSurveyCompleted}
             />,
             selector
         )
     }
 
-    private _handleUrlPrefill(survey: Survey): void {
+    private _handleUrlPrefill(survey: Survey): boolean {
         // Only handle prefill once per survey session to avoid overwriting in-progress responses
         if (this._prefillHandledSurveys.has(survey.id)) {
-            return
+            return false
         }
 
         const { params } = extractPrefillParamsFromUrl(window.location.search)
 
         if (Object.keys(params).length === 0) {
-            return
+            return false
         }
 
         logger.info('[Survey Prefill] Detected URL prefill parameters')
 
         const result = this._processPrefillData(survey, params)
         if (!result) {
-            return
+            return false
         }
 
         const { responses, submissionId, isSurveyCompleted, skippedResponses } = result
@@ -431,6 +433,8 @@ export class SurveyManager {
 
         // Mark this survey as having been prefilled
         this._prefillHandledSurveys.add(survey.id)
+
+        return isSurveyCompleted
     }
 
     /**

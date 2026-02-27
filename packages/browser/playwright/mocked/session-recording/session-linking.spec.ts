@@ -1,5 +1,5 @@
 import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
+import { start, waitForSessionRecordingToStart } from '../utils/setup'
 
 const startOptions = {
     options: {
@@ -25,6 +25,7 @@ test.describe('Session Recording - Session Linking', () => {
                 await start(startOptions, page, context)
             },
         })
+        await waitForSessionRecordingToStart(page)
         await page.expectCapturedEventsToBe(['$pageview'])
         await page.resetCapturedEvents()
     })

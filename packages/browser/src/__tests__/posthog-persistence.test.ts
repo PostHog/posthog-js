@@ -156,6 +156,87 @@ describe('persistence', () => {
             })
         })
 
+        it('skips $feature/ properties when cache is stale and TTL is configured', () => {
+            const config = {
+                ...makePostHogConfig('test', persistenceMode),
+                feature_flag_cache_ttl_ms: 60 * 60 * 1000, // 1 hour TTL
+            }
+            const lib = new PostHogPersistence(config)
+
+            // Set evaluated_at to 2 hours ago (stale)
+            const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000
+            lib.register({
+                $enabled_feature_flags: { flag: 'variant', other: true },
+                $feature_flag_evaluated_at: twoHoursAgo,
+            })
+
+            // Should not include $feature/ properties since cache is stale
+            expect(lib.properties()).toEqual({})
+            lib.clear()
+        })
+
+        it('includes $feature/ properties when cache is fresh', () => {
+            const config = {
+                ...makePostHogConfig('test', persistenceMode),
+                feature_flag_cache_ttl_ms: 60 * 60 * 1000, // 1 hour TTL
+            }
+            const lib = new PostHogPersistence(config)
+
+            // Set evaluated_at to 30 minutes ago (fresh)
+            const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000
+            lib.register({
+                $enabled_feature_flags: { flag: 'variant', other: true },
+                $feature_flag_evaluated_at: thirtyMinutesAgo,
+            })
+
+            // Should include $feature/ properties since cache is fresh
+            expect(lib.properties()).toEqual({
+                '$feature/flag': 'variant',
+                '$feature/other': true,
+            })
+            lib.clear()
+        })
+
+        it('includes $feature/ properties when TTL is not configured', () => {
+            const config = {
+                ...makePostHogConfig('test', persistenceMode),
+                // No feature_flag_cache_ttl_ms set
+            }
+            const lib = new PostHogPersistence(config)
+
+            // Set evaluated_at to a year ago
+            const oneYearAgo = Date.now() - 365 * 24 * 60 * 60 * 1000
+            lib.register({
+                $enabled_feature_flags: { flag: 'variant', other: true },
+                $feature_flag_evaluated_at: oneYearAgo,
+            })
+
+            // Should include $feature/ properties since TTL is not configured
+            expect(lib.properties()).toEqual({
+                '$feature/flag': 'variant',
+                '$feature/other': true,
+            })
+            lib.clear()
+        })
+
+        it('treats non-numeric evaluatedAt as stale when TTL is configured', () => {
+            const config = {
+                ...makePostHogConfig('test', persistenceMode),
+                feature_flag_cache_ttl_ms: 60 * 60 * 1000, // 1 hour TTL
+            }
+            const lib = new PostHogPersistence(config)
+
+            // Set evaluated_at to an ISO string instead of a timestamp
+            lib.register({
+                $enabled_feature_flags: { flag: 'variant' },
+                $feature_flag_evaluated_at: '2025-01-01T00:00:00Z',
+            })
+
+            // Should not include $feature/ properties since evaluatedAt is not a number
+            expect(lib.properties()).toEqual({})
+            lib.clear()
+        })
+
         it('should not return hidden properties()', () => {
             const initialPersonInfo = { r: 'https://referrer.example.com', u: 'https://initial-url.example.com' }
             library.register({
@@ -225,17 +306,29 @@ describe('persistence', () => {
                 })}`
             )
 
+            lib.set_property(USER_STATE, 'identified')
+            expect(document.cookie).toContain(
+                `ph__posthog=${encode({
+                    $device_id: 'device-123',
+                    distinct_id: 'test',
+                    $sesid: [1000, 'sid', 2000],
+                    $initial_person_info: { u: 'https://www.example.com', r: 'https://www.referrer.com' },
+                    $user_state: 'identified',
+                })}`
+            )
+
             // Clear localstorage to simulate being on a different domain
             localStorage.clear()
 
             const newLib = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
 
-            // $device_id should be recovered from cookies after localStorage is cleared
+            // Cookie-persisted properties should be recovered after localStorage is cleared
             expect(newLib.props).toEqual({
                 distinct_id: 'test',
                 $device_id: 'device-123',
                 $sesid: [1000, 'sid', 2000],
                 $initial_person_info: { u: 'https://www.example.com', r: 'https://www.referrer.com' },
+                $user_state: 'identified',
             })
         })
 

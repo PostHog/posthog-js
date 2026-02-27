@@ -273,13 +273,27 @@ export function getEventProperties(
         ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
         : []
     const [os_name, os_version] = detectOS(userAgent)
+
+    // Chrome on Android tablets defaults to "request desktop site" mode, sending
+    // a desktop-like UA (e.g. "X11; Linux x86_64"). The UA-based detectDeviceType()
+    // falls through to "Desktop". We use the Client Hints API and touch capability
+    // to catch this case — the browser reports the true platform even when the UA lies.
+    let deviceType = detectDeviceType(userAgent)
+    if (deviceType === 'Desktop' && navigator?.userAgentData?.platform === 'Android' && navigator?.maxTouchPoints > 0) {
+        const screenWidth = window?.screen?.width ?? 0
+        const screenHeight = window?.screen?.height ?? 0
+        const shortSide = Math.min(screenWidth, screenHeight)
+        const shortSideDp = shortSide / (window?.devicePixelRatio ?? 1)
+        deviceType = shortSideDp >= 600 ? 'Tablet' : 'Mobile'
+    }
+
     return extend(
         stripEmptyProperties({
             $os: os_name,
             $os_version: os_version,
             $browser: detectBrowser(userAgent, navigator.vendor),
             $device: detectDevice(userAgent),
-            $device_type: detectDeviceType(userAgent),
+            $device_type: deviceType,
             $timezone: getTimezone(),
             $timezone_offset: getTimezoneOffset(),
         }),

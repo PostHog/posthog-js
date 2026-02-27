@@ -13,6 +13,7 @@ export const SAMPLED = 'sampled'
 export const ACTIVE = 'active'
 export const BUFFERING = 'buffering'
 export const PAUSED = 'paused'
+export const PENDING_CONFIG = 'pending_config'
 export const LAZY_LOADING = 'lazy_loading'
 
 const TRIGGER = 'trigger'
@@ -48,7 +49,7 @@ export type TriggerStatus = (typeof triggerStatuses)[number]
  * the sample rate determined this session should be sent to the server.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const sessionRecordingStatuses = [DISABLED, SAMPLED, ACTIVE, BUFFERING, PAUSED, LAZY_LOADING] as const
+const sessionRecordingStatuses = [DISABLED, SAMPLED, ACTIVE, BUFFERING, PAUSED, PENDING_CONFIG, LAZY_LOADING] as const
 export type SessionRecordingStatus = (typeof sessionRecordingStatuses)[number]
 
 // while we have both lazy and eager loaded replay we might get either type of config
@@ -224,7 +225,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
     checkUrlTriggerConditions(
         onPause: () => void,
         onResume: () => void,
-        onActivate: (triggerType: TriggerType) => void,
+        onActivate: (triggerType: TriggerType, matchDetail?: string) => void,
         sessionId: string
     ) {
         if (typeof window === 'undefined' || !window.location.href) {
@@ -254,7 +255,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         const urlMatches = sessionRecordingUrlTriggerMatches(url, this._urlTriggers, this._compiledTriggerRegexes)
 
         if (!isActivated && urlMatches) {
-            onActivate('url')
+            onActivate('url', url)
         }
     }
 
@@ -370,6 +371,21 @@ export class EventTriggerMatching implements TriggerStatusMatching {
             $sdk_debug_replay_event_trigger_status: result,
         })
         return result
+    }
+
+    checkEventTriggerConditions(
+        eventName: string,
+        onActivate: (triggerType: TriggerType, matchDetail?: string) => void,
+        sessionId: string
+    ) {
+        if (this._eventTriggers.length === 0) {
+            return
+        }
+
+        const isActivated = this._eventTriggerStatus(sessionId) === TRIGGER_ACTIVATED
+        if (!isActivated && this._eventTriggers.includes(eventName)) {
+            onActivate('event', eventName)
+        }
     }
 
     stop(): void {

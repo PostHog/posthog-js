@@ -58,6 +58,7 @@ export const PRODUCT_TOURS_ACTIVATED = '$product_tours_activated'
 export const CONVERSATIONS = '$conversations'
 export const FLAG_CALL_REPORTED = '$flag_call_reported'
 export const PERSISTENCE_FEATURE_FLAG_ERRORS = '$feature_flag_errors'
+export const PERSISTENCE_FEATURE_FLAG_EVALUATED_AT = '$feature_flag_evaluated_at'
 export const USER_STATE = '$user_state'
 export const CLIENT_SESSION_PROPS = '$client_session_props'
 export const CAPTURE_RATE_LIMIT = '$capture_rate_limit'
@@ -99,6 +100,7 @@ export const PERSISTENCE_RESERVED_PROPERTIES = [
     SURVEYS,
     FLAG_CALL_REPORTED,
     PERSISTENCE_FEATURE_FLAG_ERRORS,
+    PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     CLIENT_SESSION_PROPS,
     CAPTURE_RATE_LIMIT,
     INITIAL_CAMPAIGN_PARAMS,

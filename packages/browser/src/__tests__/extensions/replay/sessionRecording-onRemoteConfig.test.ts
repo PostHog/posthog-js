@@ -278,7 +278,7 @@ describe('SessionRecording', () => {
         })
 
         it('emit is not active until flags is called', () => {
-            expect(sessionRecording['status']).toBe('lazy_loading')
+            expect(sessionRecording['status']).toBe('pending_config')
 
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
             expect(sessionRecording['status']).toBe('active')
@@ -337,7 +337,7 @@ describe('SessionRecording', () => {
             sessionRecording.onRemoteConfig(makeFlagsResponse({}))
 
             expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBe(undefined)
-            expect(sessionRecording.status).toBe('lazy_loading')
+            expect(sessionRecording.status).toBe('pending_config')
         })
 
         it('stores response in persistence if recording is false from the server', () => {
@@ -373,6 +373,66 @@ describe('SessionRecording', () => {
             expect(loadScriptMock).toHaveBeenCalled()
             expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).enabled).toBe(true)
             expect(sessionRecording['_lazyLoadedSessionRecording']['_endpoint']).toEqual('/ses/')
+        })
+
+        it('does not start recording before remote config is received', () => {
+            // Set stale config in persistence (simulating cached/CDN config)
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: {
+                    enabled: true,
+                    endpoint: '/s/',
+                    urlTriggers: [],
+                },
+            })
+
+            // Try to start without receiving remote config
+            sessionRecording.startIfEnabledOrStop()
+
+            // Should not have started recording yet
+            expect(loadScriptMock).not.toHaveBeenCalled()
+            expect(sessionRecording.status).toBe('pending_config')
+
+            // Now receive remote config
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/' },
+                })
+            )
+
+            // Should now start
+            expect(loadScriptMock).toHaveBeenCalled()
+            expect(sessionRecording.status).toBe('active')
+        })
+
+        it('discards buffer on beforeunload if status is buffering', () => {
+            // Set persistence to simulate config exists
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: {
+                    enabled: true,
+                    endpoint: '/s/',
+                },
+            })
+
+            // Receive config to start recording
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', urlTriggers: [{ url: 'example.com', matching: 'regex' }] },
+                })
+            )
+
+            // Should be buffering (waiting for trigger)
+            expect(sessionRecording.status).toBe('buffering')
+
+            const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+            const clearBufferSpy = jest.spyOn(lazyRecorder as any, '_clearBuffer')
+            const flushBufferSpy = jest.spyOn(lazyRecorder as any, '_flushBuffer')
+
+            // Trigger beforeunload
+            window.dispatchEvent(new Event('beforeunload'))
+
+            // Should have cleared buffer, not flushed it
+            expect(clearBufferSpy).toHaveBeenCalled()
+            expect(flushBufferSpy).not.toHaveBeenCalled()
         })
     })
 })

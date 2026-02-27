@@ -641,11 +641,12 @@ a.ph-tour-banner {
     border-radius: 4px;
     cursor: pointer;
     color: var(--ph-tour-text-secondary-color);
-    transition: background 0.15s ease, color 0.15s ease;
+    transition:
+        background 0.15s ease,
+        color 0.15s ease;
 }
 
 .ph-tour-banner-dismiss:hover {
     background: rgba(0, 0, 0, 0.08);
     color: var(--ph-tour-text-color);
 }
-

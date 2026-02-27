@@ -1,5 +1,14 @@
 # @posthog/react
 
+## 1.8.1
+
+### Patch Changes
+
+- [#3146](https://github.com/PostHog/posthog-js/pull/3146) [`85030ed`](https://github.com/PostHog/posthog-js/commit/85030edfe9737d30d78a589462f4c9388f9ea057) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Fix PostHogFeature component to properly handle undefined flags and false values
+  (2026-02-25)
+- Updated dependencies [[`4d0c783`](https://github.com/PostHog/posthog-js/commit/4d0c783fadac64718da01d1773a65f1d350f8201)]:
+    - posthog-js@1.354.0
+
 ## 1.8.0
 
 ### Minor Changes

@@ -18,6 +18,22 @@ type EmbeddingCreateParams = OpenAIOrignal.EmbeddingCreateParams
 type TranscriptionCreateParams = OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateParams
 type AnthropicTool = AnthropicOriginal.Tool
 
+const TOKEN_PROPERTY_KEYS = new Set([
+  '$ai_input_tokens',
+  '$ai_output_tokens',
+  '$ai_cache_read_input_tokens',
+  '$ai_cache_creation_input_tokens',
+  '$ai_total_tokens',
+  '$ai_reasoning_tokens',
+])
+
+export function getTokensSource(posthogProperties?: Record<string, unknown>): string {
+  if (posthogProperties && Object.keys(posthogProperties).some((key) => TOKEN_PROPERTY_KEYS.has(key))) {
+    return 'passthrough'
+  }
+  return 'sdk'
+}
+
 // limit large outputs by truncating to 200kb (approx 200k bytes)
 export const MAX_OUTPUT_SIZE = 200000
 const STRING_FORMAT = 'utf8'
@@ -727,6 +743,7 @@ export const sendEventToPosthog = async ({
     $ai_trace_id: traceId,
     $ai_base_url: baseURL,
     ...params.posthogProperties,
+    $ai_tokens_source: getTokensSource(params.posthogProperties),
     ...(distinctId ? {} : { $process_person_profile: false }),
     ...(tools ? { $ai_tools: tools } : {}),
     ...errorData,

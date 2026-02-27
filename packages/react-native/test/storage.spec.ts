@@ -8,7 +8,7 @@ jest.mock('../src/optional/OptionalExpoFileSystem', () => ({
 }))
 
 import { PostHogRNStorage } from '../src/storage'
-import { buildOptimisiticAsyncStorage } from '../src/native-deps'
+import { buildOptimisticAsyncStorage } from '../src/native-deps'
 import { OptionalExpoFileSystem } from '../src/optional/OptionalExpoFileSystem'
 
 const mockedOptionalFileSystem = jest.mocked(OptionalExpoFileSystem, true)
@@ -35,7 +35,7 @@ describe('PostHog React Native', () => {
         return res
       })
 
-      storage = new PostHogRNStorage(buildOptimisiticAsyncStorage())
+      storage = new PostHogRNStorage(buildOptimisticAsyncStorage())
     })
 
     it('should load storage from the file system', async () => {

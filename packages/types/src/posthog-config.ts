@@ -1181,11 +1181,43 @@ export interface PostHogConfig {
     feature_flag_request_timeout_ms: number
 
     /**
+     * Sets the maximum age (in milliseconds) for cached feature flag values.
+     * When the cache is older than this value:
+     * - `getFeatureFlag()` will return `undefined` instead of stale cached values
+     * - `$feature/` properties will not be attached to events
+     * - A background refresh will be triggered automatically
+     *
+     * This prevents stale feature flag values from being used when the `/flags` request
+     * fails (e.g., due to ad blockers or network issues).
+     *
+     * When not set or set to `0`, cache expiration is disabled (cached values never expire).
+     */
+    feature_flag_cache_ttl_ms?: number
+
+    /**
      * Sets timeout for fetching surveys
      *
      * @default 10000
      */
     surveys_request_timeout_ms: number
+
+    /**
+     * Controls how often feature flags are automatically refreshed in long-running sessions.
+     *
+     * By default, feature flags are refreshed every 5 minutes (300000ms) to pick up server-side
+     * flag changes without requiring a page reload. This is useful for SPAs and long-running tabs.
+     *
+     * **Tradeoffs:**
+     * - **Shorter intervals**: Feature flag changes propagate faster, but increases network requests and server load.
+     * - **Longer intervals**: Reduces network traffic (better for mobile/battery), but flag changes take longer to propagate.
+     * - **Disabled (0)**: No background refreshes. Flags only update on page load or manual `reloadFeatureFlags()` calls.
+     *   Use this if you control flag updates manually or have infrequent flag changes.
+     *
+     * Note: Refreshes are automatically skipped when the browser tab is hidden.
+     *
+     * @default 300000 (5 minutes)
+     */
+    remote_config_refresh_interval_ms?: number
 
     /**
      * Function to get the device ID.

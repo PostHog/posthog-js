@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.36.1
+
+### Patch Changes
+
+- [#3156](https://github.com/PostHog/posthog-js/pull/3156) [`6fb72c3`](https://github.com/PostHog/posthog-js/commit/6fb72c361e4c8092979843aa7ad47aa6c2216ef4) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: expo-file-system detection broken on Expo SDK 54 stable
+  (2026-02-26)
+
 ## 4.36.0
 
 ### Minor Changes
