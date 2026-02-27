@@ -281,6 +281,7 @@ export function getEventProperties(
             $browser: detectBrowser(userAgent, navigator.vendor),
             $device: detectDevice(userAgent),
             $device_type: detectDeviceType(userAgent, {
+                // eslint-disable-next-line compat/compat
                 userAgentDataPlatform: navigator?.userAgentData?.platform,
                 maxTouchPoints: navigator?.maxTouchPoints,
                 screenWidth: window?.screen?.width,
