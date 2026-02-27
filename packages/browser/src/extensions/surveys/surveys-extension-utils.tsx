@@ -443,7 +443,7 @@ export const sendSurveyEvent = ({
         })),
         [SurveyEventProperties.SURVEY_SUBMISSION_ID]: surveySubmissionId,
         [SurveyEventProperties.SURVEY_COMPLETED]: isSurveyCompleted,
-        ...(surveyLanguage && { $survey_language: surveyLanguage }),
+        $survey_language: surveyLanguage,
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         ...responses,
         ...properties,

@@ -2,77 +2,47 @@ import { PostHog } from '../posthog-core'
 import { Survey, SurveyQuestion } from '../posthog-surveys-types'
 import { STORED_PERSON_PROPERTIES_KEY } from '../constants'
 import { createLogger } from './logger'
+import { getBrowserLanguage } from './event-utils'
+import { findBestTranslationMatch } from './language-utils'
 
 const logger = createLogger('[SurveyTranslations]')
 
 /**
- * Detects the user's language from person properties
- * @param instance - PostHog instance to retrieve person properties
+ * Detects the user's language using priority order:
+ * 1. config.override_display_language (explicit override)
+ * 2. navigator.language (browser language)
+ * 3. person properties 'language' (allows programmatic control via posthog.identify())
+ *
+ * TODO: Consider adding dynamic language change detection in the future:
+ * - Listen to 'languagechange' event on window (https://developer.mozilla.org/en-US/docs/Web/API/Window/languagechange_event)
+ * - Listen to config changes (once we add config change events to PostHog core)
+ * - Re-render survey when language changes mid-session
+ *
+ * @param instance - PostHog instance to retrieve config and person properties
  * @returns The detected language code (e.g., 'fr', 'es', 'en-US') or null if not found
  */
 export function detectUserLanguage(instance: PostHog): string | null {
+    const configLanguage = instance.config.override_display_language
+    if (configLanguage) {
+        logger.info(`Using config.override_display_language: ${configLanguage}`)
+        return configLanguage
+    }
+
+    const browserLanguage = getBrowserLanguage()
+    if (browserLanguage) {
+        logger.info(`Using browser language: ${browserLanguage}`)
+        return browserLanguage
+    }
+
     const personProperties = instance.get_property(STORED_PERSON_PROPERTIES_KEY) || {}
-    const language = personProperties['language']
+    const personLanguage = personProperties['language']
 
-    if (typeof language === 'string' && language.trim()) {
-        return language.trim()
+    if (typeof personLanguage === 'string' && personLanguage.trim()) {
+        logger.info(`Using person property language: ${personLanguage}`)
+        return personLanguage.trim()
     }
 
-    return null
-}
-
-/**
- * Normalizes a language code to lowercase for consistent matching
- * @param languageCode - The language code to normalize (e.g., 'FR', 'en-US')
- * @returns Normalized language code (e.g., 'fr', 'en-us')
- */
-function normalizeLanguageCode(languageCode: string): string {
-    return languageCode.toLowerCase()
-}
-
-/**
- * Extracts the base language from a language variant
- * @param languageCode - The full language code (e.g., 'en-US', 'fr-CA')
- * @returns The base language code (e.g., 'en', 'fr')
- */
-function getBaseLanguage(languageCode: string): string {
-    return languageCode.split('-')[0]
-}
-
-/**
- * Finds the best matching translation for a given language code
- * Tries: exact match -> base language fallback -> null
- * @param translations - Available translations object
- * @param targetLanguage - The target language code
- * @returns The best matching language key or null
- */
-function findBestTranslationMatch(
-    translations: Record<string, any> | undefined,
-    targetLanguage: string
-): string | null {
-    if (!translations || !targetLanguage) {
-        return null
-    }
-
-    const normalizedTarget = normalizeLanguageCode(targetLanguage)
-
-    // Try exact match first (case-insensitive)
-    const exactMatch = Object.keys(translations).find((key) => normalizeLanguageCode(key) === normalizedTarget)
-    if (exactMatch) {
-        logger.info(`Found exact translation match: ${exactMatch}`)
-        return exactMatch
-    }
-
-    // Try base language fallback (e.g., fr-CA -> fr)
-    if (normalizedTarget.includes('-')) {
-        const baseLanguage = getBaseLanguage(normalizedTarget)
-        const baseMatch = Object.keys(translations).find((key) => normalizeLanguageCode(key) === baseLanguage)
-        if (baseMatch) {
-            logger.info(`Found base language translation match: ${baseMatch} (from ${targetLanguage})`)
-            return baseMatch
-        }
-    }
-
+    logger.info('No user language detected')
     return null
 }
 

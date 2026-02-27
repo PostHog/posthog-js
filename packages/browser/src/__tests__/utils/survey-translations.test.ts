@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-import { describe, it, expect, beforeEach } from '@jest/globals'
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals'
 import { detectUserLanguage, applySurveyTranslationForUser } from '../../utils/survey-translations'
 import { Survey, SurveyType, SurveyQuestionType } from '../../posthog-surveys-types'
 import { PostHog } from '../../posthog-core'
@@ -8,26 +8,72 @@ import { STORED_PERSON_PROPERTIES_KEY } from '../../constants'
 
 describe('Survey Translations', () => {
     let mockPostHog: PostHog
+    const originalNavigator = global.navigator
 
     beforeEach(() => {
         mockPostHog = {
             get_property: jest.fn(),
+            config: {},
         } as unknown as PostHog
+        
+        // Reset navigator mock
+        Object.defineProperty(global, 'navigator', {
+            value: { language: undefined },
+            writable: true,
+            configurable: true,
+        })
+    })
+
+    afterEach(() => {
+        // Restore original navigator
+        Object.defineProperty(global, 'navigator', {
+            value: originalNavigator,
+            writable: true,
+            configurable: true,
+        })
     })
 
     describe('detectUserLanguage', () => {
-        it('should return language from person properties', () => {
+        it('should prioritize config.override_display_language over all other sources', () => {
+            mockPostHog.config.override_display_language = 'de'
+            ;(global.navigator as any).language = 'fr'
             ;(mockPostHog.get_property as jest.Mock).mockReturnValue({
-                language: 'fr',
+                language: 'es',
+            })
+
+            const result = detectUserLanguage(mockPostHog)
+
+            expect(result).toBe('de')
+        })
+
+        it('should use browser language when config override is not set', () => {
+            mockPostHog.config.override_display_language = null
+            ;(global.navigator as any).language = 'fr'
+            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({
+                language: 'es',
             })
 
             const result = detectUserLanguage(mockPostHog)
 
             expect(result).toBe('fr')
+        })
+
+        it('should fall back to person properties when config and browser language are not available', () => {
+            mockPostHog.config.override_display_language = null
+            ;(global.navigator as any).language = undefined
+            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({
+                language: 'es',
+            })
+
+            const result = detectUserLanguage(mockPostHog)
+
+            expect(result).toBe('es')
             expect(mockPostHog.get_property).toHaveBeenCalledWith(STORED_PERSON_PROPERTIES_KEY)
         })
 
-        it('should return null when language property is not set', () => {
+        it('should return null when no language source is available', () => {
+            mockPostHog.config.override_display_language = null
+            ;(global.navigator as any).language = undefined
             ;(mockPostHog.get_property as jest.Mock).mockReturnValue({
                 some_other_property: 'value',
             })
@@ -37,23 +83,9 @@ describe('Survey Translations', () => {
             expect(result).toBeNull()
         })
 
-        it('should return null when person properties is empty', () => {
-            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({})
-
-            const result = detectUserLanguage(mockPostHog)
-
-            expect(result).toBeNull()
-        })
-
-        it('should return null when person properties is undefined', () => {
-            ;(mockPostHog.get_property as jest.Mock).mockReturnValue(undefined)
-
-            const result = detectUserLanguage(mockPostHog)
-
-            expect(result).toBeNull()
-        })
-
-        it('should trim whitespace from language value', () => {
+        it('should trim whitespace from person property language value', () => {
+            mockPostHog.config.override_display_language = null
+            ;(global.navigator as any).language = undefined
             ;(mockPostHog.get_property as jest.Mock).mockReturnValue({
                 language: '  es  ',
             })
@@ -63,7 +95,9 @@ describe('Survey Translations', () => {
             expect(result).toBe('es')
         })
 
-        it('should return null for empty string language', () => {
+        it('should return null for empty string person property language', () => {
+            mockPostHog.config.override_display_language = null
+            ;(global.navigator as any).language = undefined
             ;(mockPostHog.get_property as jest.Mock).mockReturnValue({
                 language: '   ',
             })
@@ -73,7 +107,9 @@ describe('Survey Translations', () => {
             expect(result).toBeNull()
         })
 
-        it('should return null for non-string language values', () => {
+        it('should handle non-string person property language values', () => {
+            mockPostHog.config.override_display_language = null
+            ;(global.navigator as any).language = undefined
             ;(mockPostHog.get_property as jest.Mock).mockReturnValue({
                 language: 123,
             })

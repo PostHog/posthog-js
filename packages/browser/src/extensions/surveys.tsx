@@ -1044,7 +1044,7 @@ export function usePopupVisibility(
                     [SurveyEventProperties.SURVEY_ID]: survey.id,
                     [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
                     [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
-                    ...(surveyLanguage && { $survey_language: surveyLanguage }),
+                    $survey_language: surveyLanguage,
                     sessionRecordingUrl: posthog.get_session_replay_url?.(),
                 })
             }
@@ -1168,7 +1168,9 @@ export function SurveyPopup({
         isSurveySent || previewPageIndex === survey.questions.length || isSurveyCompleted === true
 
     const surveyContextValue = useMemo(() => {
-        const getInProgressSurvey = getInProgressSurveyState(survey)
+        const existingInProgressSurvey = getInProgressSurveyState(survey)
+        const surveySubmissionId = existingInProgressSurvey?.surveySubmissionId || uuidv7()
+
         return {
             isPreviewMode,
             previewPageIndex: previewPageIndex,
@@ -1177,7 +1179,7 @@ export function SurveyPopup({
                 onPopupSurveyDismissed()
             },
             isPopup: isPopup || false,
-            surveySubmissionId: getInProgressSurvey?.surveySubmissionId || uuidv7(),
+            surveySubmissionId,
             onPreviewSubmit,
             posthog,
             properties,
@@ -1194,6 +1196,24 @@ export function SurveyPopup({
         properties,
         surveyLanguage,
     ])
+
+    // Persist surveyLanguage to InProgressSurveyState immediately on mount so that
+    // dismissed/abandoned events can include $survey_language even if the user never
+    // answers a question (and thus never triggers onNextButtonClick).
+    useEffect(() => {
+        if (isPreviewMode) {
+            return
+        }
+        const existingState = getInProgressSurveyState(survey)
+        if (!existingState || existingState.surveyLanguage === undefined) {
+            setInProgressSurveyState(survey, {
+                surveySubmissionId: surveyContextValue.surveySubmissionId,
+                responses: existingState?.responses || {},
+                lastQuestionIndex: existingState?.lastQuestionIndex || 0,
+                surveyLanguage: surveyLanguage ?? null,
+            })
+        }
+    }, []) // intentionally empty — run once on mount
 
     if (!isPopupVisible) {
         return null
