@@ -614,7 +614,7 @@ export class SurveyManager {
             return true
         }
         const surveysActivatedByEventsOrActions: string[] | undefined =
-            this._posthog.surveys._surveyEventReceiver?.getSurveys()
+            this._posthog.surveys?._surveyEventReceiver?.getSurveys()
         return !!surveysActivatedByEventsOrActions?.includes(survey.id)
     }
 
@@ -632,7 +632,7 @@ export class SurveyManager {
     }
 
     public getActiveMatchingSurveys = (callback: SurveyCallback, forceReload = false): void => {
-        this._posthog?.surveys.getSurveys((surveys) => {
+        this._posthog?.surveys?.getSurveys((surveys) => {
             const targetingMatchedSurveys = surveys.filter((survey) => {
                 const eligibility = this.checkSurveyEligibility(survey)
                 return (

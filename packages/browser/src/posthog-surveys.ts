@@ -1,5 +1,6 @@
 import { SURVEYS } from './constants'
 import { SurveyManager } from './extensions/surveys'
+import type { Extension } from './extensions/types'
 import { PostHog } from './posthog-core'
 import {
     DisplaySurveyOptions,
@@ -22,7 +23,7 @@ import {
 } from './utils/survey-utils'
 import { isNullish, isUndefined, isArray } from '@posthog/core'
 
-export class PostHogSurveys {
+export class PostHogSurveys implements Extension {
     // this is set to undefined until the remote config is loaded
     // then it's set to true if there are surveys to load
     // or false if there are no surveys to load
@@ -42,6 +43,10 @@ export class PostHogSurveys {
         // we set this to undefined here because we need the persistence storage for this type
         // but that's not initialized until loadIfEnabled is called.
         this._surveyEventReceiver = null
+    }
+
+    initialize() {
+        this.loadIfEnabled()
     }
 
     onRemoteConfig(response: RemoteConfig) {

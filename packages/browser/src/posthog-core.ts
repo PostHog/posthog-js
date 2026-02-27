@@ -13,22 +13,17 @@ import {
 import { isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
-import { Toolbar } from './extensions/toolbar'
 import { PageViewManager } from './page-view'
-import { PostHogExceptions } from './posthog-exceptions'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
-import { PostHogSurveys } from './posthog-surveys'
-import { PostHogConversations } from './extensions/conversations/posthog-conversations'
 import {
-    DisplaySurveyOptions,
-    SurveyCallback,
+    type DisplaySurveyOptions,
+    type SurveyCallback,
     SurveyEventName,
     SurveyEventProperties,
-    SurveyRenderReason,
+    type SurveyRenderReason,
 } from './posthog-surveys-types'
 import { ProductTourEventName, ProductTourEventProperties } from './posthog-product-tours-types'
-import { PostHogLogs } from './posthog-logs'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
@@ -102,7 +97,6 @@ import {
     isBoolean,
 } from '@posthog/core'
 import { uuidv7 } from './uuidv7'
-import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
 import type { Extension } from './extensions/types'
 import type { Autocapture } from './autocapture'
@@ -111,9 +105,15 @@ import type { ExceptionObserver } from './extensions/exception-autocapture'
 import type { HistoryAutocapture } from './extensions/history-autocapture'
 import type { WebVitalsAutocapture } from './extensions/web-vitals'
 import type { Heatmaps } from './heatmaps'
+import type { PostHogConversations } from './extensions/conversations/posthog-conversations'
+import type { PostHogExceptions } from './posthog-exceptions'
+import type { PostHogLogs } from './posthog-logs'
 import type { PostHogProductTours } from './posthog-product-tours'
+import type { PostHogSurveys } from './posthog-surveys'
 import type { SiteApps } from './site-apps'
 import type { SessionRecording } from './extensions/replay/session-recording'
+import type { Toolbar } from './extensions/toolbar'
+import type { WebExperiments } from './web-experiments'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -340,12 +340,12 @@ export class PostHog implements PostHogInterface {
     scrollManager: ScrollManager
     pageViewManager: PageViewManager
     featureFlags: PostHogFeatureFlags
-    surveys: PostHogSurveys
-    conversations: PostHogConversations
-    logs: PostHogLogs
-    experiments: WebExperiments
-    toolbar: Toolbar
-    exceptions: PostHogExceptions
+    surveys?: PostHogSurveys
+    conversations?: PostHogConversations
+    logs?: PostHogLogs
+    experiments?: WebExperiments
+    toolbar?: Toolbar
+    exceptions?: PostHogExceptions
     consent: ConsentManager
 
     // These are instance-specific state created after initialisation
@@ -430,18 +430,23 @@ export class PostHog implements PostHogInterface {
         this._initialPersonProfilesConfig = null
         this._cachedPersonProperties = null
         this.featureFlags = new PostHogFeatureFlags(this)
-        this.toolbar = new Toolbar(this)
         this.scrollManager = new ScrollManager(this)
         this.pageViewManager = new PageViewManager(this)
-        this.surveys = new PostHogSurveys(this)
-        this.conversations = new PostHogConversations(this)
-        this.logs = new PostHogLogs(this)
-        this.experiments = new WebExperiments(this)
-        this.exceptions = new PostHogExceptions(this)
         this.rateLimiter = new RateLimiter(this)
         this.requestRouter = new RequestRouter(this)
         this.consent = new ConsentManager(this)
         this.externalIntegrations = new ExternalIntegrations(this)
+
+        // Eagerly construct extensions from default classes so they're available before init().
+        // For the slim bundle, these remain undefined until _initExtensions sets them from config.
+        const ext = PostHog.__defaultExtensionClasses ?? {}
+        this.toolbar = ext.toolbar && new ext.toolbar(this)
+        this.surveys = ext.surveys && new ext.surveys(this)
+        this.conversations = ext.conversations && new ext.conversations(this)
+        this.logs = ext.logs && new ext.logs(this)
+        this.experiments = ext.experiments && new ext.experiments(this)
+        this.exceptions = ext.exceptions && new ext.exceptions(this)
+
         // NOTE: See the property definition for deprecation notice
         this.people = {
             set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
@@ -688,8 +693,6 @@ export class PostHog implements PostHogInterface {
             passive: false,
         })
 
-        this.toolbar.maybeLoadToolbar()
-
         // We want to avoid promises for IE11 compatibility, so we use callbacks here
         if (config.segment) {
             setupSegmentIntegration(this, () => this._loaded())
@@ -720,6 +723,9 @@ export class PostHog implements PostHogInterface {
 
         // Due to name mangling, we can't easily iterate and assign these extensions
         // The assignment needs to also be mangled. Thus, the loop is unrolled.
+        if (ext.exceptions) {
+            this._extensions.push((this.exceptions = this.exceptions ?? new ext.exceptions(this)))
+        }
         if (ext.historyAutocapture) {
             this._extensions.push((this.historyAutocapture = new ext.historyAutocapture(this)))
         }
@@ -740,6 +746,15 @@ export class PostHog implements PostHogInterface {
         if (ext.autocapture) {
             this._extensions.push((this.autocapture = new ext.autocapture(this)))
         }
+        if (ext.surveys) {
+            this._extensions.push((this.surveys = this.surveys ?? new ext.surveys(this)))
+        }
+        if (ext.logs) {
+            this._extensions.push((this.logs = this.logs ?? new ext.logs(this)))
+        }
+        if (ext.conversations) {
+            this._extensions.push((this.conversations = this.conversations ?? new ext.conversations(this)))
+        }
         if (ext.productTours) {
             this._extensions.push((this.productTours = new ext.productTours(this)))
         }
@@ -757,23 +772,18 @@ export class PostHog implements PostHogInterface {
                 (this.deadClicksAutocapture = new ext.deadClicksAutocapture(this, isDeadClicksEnabledForAutocapture))
             )
         }
+        if (ext.toolbar) {
+            this._extensions.push((this.toolbar = this.toolbar ?? new ext.toolbar(this)))
+        }
+        if (ext.experiments) {
+            this._extensions.push((this.experiments = this.experiments ?? new ext.experiments(this)))
+        }
 
         this._extensions.forEach((extension) => {
             if (!extension.initialize) return
             initTasks.push(() => {
                 extension.initialize?.()
             })
-        })
-
-        // Init hardcoded extensions (not yet tree-shakable)
-        initTasks.push(() => {
-            this.surveys.loadIfEnabled()
-        })
-        initTasks.push(() => {
-            this.logs.loadIfEnabled()
-        })
-        initTasks.push(() => {
-            this.conversations.loadIfEnabled()
         })
 
         // Replay any pending remote config that arrived before extensions were ready
@@ -867,12 +877,6 @@ export class PostHog implements PostHogInterface {
         })
 
         this._extensions.forEach((ext) => ext.onRemoteConfig?.(config))
-
-        // Hardcoded extensions (not yet tree-shakable)
-        this.surveys.onRemoteConfig(config)
-        this.logs.onRemoteConfig(config)
-        this.conversations.onRemoteConfig(config)
-        this.exceptions.onRemoteConfig(config)
     }
 
     _loaded(): void {
@@ -927,7 +931,7 @@ export class PostHog implements PostHogInterface {
     }
 
     _handle_unload(): void {
-        this.surveys.handlePageUnload()
+        this.surveys?.handlePageUnload()
 
         if (!this.config.request_batching) {
             if (this._shouldCapturePageleave()) {
@@ -2067,6 +2071,10 @@ export class PostHog implements PostHogInterface {
      * @returns {Function} A function that can be called to unsubscribe the listener.
      */
     onSurveysLoaded(callback: SurveyCallback): () => void {
+        if (!this.surveys) {
+            callback([], { isLoaded: false, error: 'Surveys module not available' })
+            return () => {}
+        }
         return this.surveys.onSurveysLoaded(callback)
     }
 
@@ -2112,7 +2120,9 @@ export class PostHog implements PostHogInterface {
      * @param {Boolean} [forceReload] Optional boolean to force an API call for updated surveys
      */
     getSurveys(callback: SurveyCallback, forceReload = false): void {
-        this.surveys.getSurveys(callback, forceReload)
+        this.surveys
+            ? this.surveys.getSurveys(callback, forceReload)
+            : callback([], { isLoaded: false, error: 'Surveys module not available' })
     }
 
     /**
@@ -2133,7 +2143,9 @@ export class PostHog implements PostHogInterface {
      * @param {Boolean} [forceReload] Whether to force a reload of the surveys.
      */
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false): void {
-        this.surveys.getActiveMatchingSurveys(callback, forceReload)
+        this.surveys
+            ? this.surveys.getActiveMatchingSurveys(callback, forceReload)
+            : callback([], { isLoaded: false, error: 'Surveys module not available' })
     }
 
     /**
@@ -2159,7 +2171,7 @@ export class PostHog implements PostHogInterface {
      * @param {String} selector The selector of the HTML element to render the survey on.
      */
     renderSurvey(surveyId: string, selector: string): void {
-        this.surveys.renderSurvey(surveyId, selector)
+        this.surveys?.renderSurvey(surveyId, selector)
     }
 
     /**
@@ -2196,7 +2208,7 @@ export class PostHog implements PostHogInterface {
      * {@label Surveys}
      */
     displaySurvey(surveyId: string, options: DisplaySurveyOptions = DEFAULT_DISPLAY_SURVEY_OPTIONS): void {
-        this.surveys.displaySurvey(surveyId, options)
+        this.surveys?.displaySurvey(surveyId, options)
     }
 
     /**
@@ -2205,7 +2217,7 @@ export class PostHog implements PostHogInterface {
      * {@label Surveys}
      */
     cancelPendingSurvey(surveyId: string): void {
-        this.surveys.cancelPendingSurvey(surveyId)
+        this.surveys?.cancelPendingSurvey(surveyId)
     }
 
     /**
@@ -2222,7 +2234,12 @@ export class PostHog implements PostHogInterface {
      * @returns A SurveyRenderReason object indicating if the survey can be rendered.
      */
     canRenderSurvey(surveyId: string): SurveyRenderReason | null {
-        return this.surveys.canRenderSurvey(surveyId)
+        return (
+            this.surveys?.canRenderSurvey(surveyId) ?? {
+                visible: false,
+                disabledReason: 'Surveys module not available',
+            }
+        )
     }
 
     /**
@@ -2250,7 +2267,11 @@ export class PostHog implements PostHogInterface {
      * @returns A SurveyRenderReason object indicating if the survey can be rendered.
      */
     canRenderSurveyAsync(surveyId: string, forceReload = false): Promise<SurveyRenderReason> {
-        return this.surveys.canRenderSurveyAsync(surveyId, forceReload)
+        return (
+            this.surveys?.canRenderSurveyAsync(surveyId, forceReload) ??
+            // eslint-disable-next-line compat/compat
+            Promise.resolve({ visible: false, disabledReason: 'Surveys module not available' })
+        )
     }
 
     /**
@@ -2668,7 +2689,7 @@ export class PostHog implements PostHogInterface {
         this.consent.reset()
         this.persistence?.clear()
         this.sessionPersistence?.clear()
-        this.surveys.reset()
+        this.surveys?.reset()
         // Stop the refresh interval before resetting flags — featureFlags.reset() clears
         // the debouncer, so if the order were reversed a pending refresh could fire after reset.
         this._remoteConfigLoader?.stop()
@@ -2918,7 +2939,7 @@ export class PostHog implements PostHogInterface {
             this.heatmaps?.startIfEnabled()
             this.exceptionObserver?.startIfEnabledOrStop()
             this.deadClicksAutocapture?.startIfEnabledOrStop()
-            this.surveys.loadIfEnabled()
+            this.surveys?.loadIfEnabled()
             this._sync_opt_out_with_persistence()
             this.externalIntegrations?.startIfEnabledOrStop()
         }
@@ -3060,6 +3081,8 @@ export class PostHog implements PostHogInterface {
      * @returns {CaptureResult} The result of the capture
      */
     captureException(error: unknown, additionalProperties?: Properties): CaptureResult | undefined {
+        if (!this.exceptions) return
+
         const syntheticException = new Error('PostHog syntheticException')
         const errorToProperties = this.exceptions.buildProperties(error, {
             handled: true,
@@ -3130,7 +3153,7 @@ export class PostHog implements PostHogInterface {
      */
 
     loadToolbar(params: ToolbarParams): boolean {
-        return this.toolbar.loadToolbar(params)
+        return this.toolbar?.loadToolbar(params) ?? false
     }
 
     /**
@@ -3402,7 +3425,7 @@ export class PostHog implements PostHogInterface {
 
         // Reinitialize surveys if we're in cookieless mode and just opted in
         if (this.config.cookieless_mode == 'on_reject') {
-            this.surveys.loadIfEnabled()
+            this.surveys?.loadIfEnabled()
         }
 
         // Don't capture if captureEventName is null or false

@@ -142,7 +142,7 @@ export function createEventProcessor(
         }
 
         if (sendExceptionsToPostHog) {
-            _posthog.exceptions.sendExceptionEvent(data)
+            _posthog.exceptions?.sendExceptionEvent(data)
         }
 
         return event
