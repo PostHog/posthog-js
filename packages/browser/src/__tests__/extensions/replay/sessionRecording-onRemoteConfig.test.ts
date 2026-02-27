@@ -361,6 +361,71 @@ describe('SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_sampleRate']).toBe(0.7)
         })
 
+        it('local sampleRate takes precedence over remote config', () => {
+            posthog.config.session_recording.sampleRate = 0.3
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate: '0.70' },
+                })
+            )
+
+            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).sampleRate).toBe(0.3)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_sampleRate']).toBe(0.3)
+        })
+
+        it('local sampleRate of 0 takes precedence over remote config', () => {
+            posthog.config.session_recording.sampleRate = 0
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate: '0.70' },
+                })
+            )
+
+            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).sampleRate).toBe(0)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_sampleRate']).toBe(0)
+        })
+
+        it('falls back to remote config when local sampleRate is undefined', () => {
+            posthog.config.session_recording.sampleRate = undefined
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate: '0.50' },
+                })
+            )
+
+            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).sampleRate).toBe(0.5)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_sampleRate']).toBe(0.5)
+        })
+
+        it('ignores local sampleRate greater than 1 and falls back to remote config', () => {
+            posthog.config.session_recording.sampleRate = 1.5
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate: '0.70' },
+                })
+            )
+
+            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).sampleRate).toBe(0.7)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_sampleRate']).toBe(0.7)
+        })
+
+        it('ignores local sampleRate less than 0 and falls back to remote config', () => {
+            posthog.config.session_recording.sampleRate = -0.5
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate: '0.70' },
+                })
+            )
+
+            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).sampleRate).toBe(0.7)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_sampleRate']).toBe(0.7)
+        })
+
         it('starts session recording, saves setting and endpoint when enabled', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: undefined })
             sessionRecording.onRemoteConfig(

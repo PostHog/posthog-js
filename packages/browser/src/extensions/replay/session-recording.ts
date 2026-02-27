@@ -156,7 +156,17 @@ export class SessionRecording {
                 const sessionRecordingConfigResponse =
                     response.sessionRecording === false ? undefined : response.sessionRecording
 
-                const receivedSampleRate = sessionRecordingConfigResponse?.sampleRate
+                let localSampleRate = this._instance.config.session_recording?.sampleRate
+                if (!isNullish(localSampleRate) && (localSampleRate < 0 || localSampleRate > 1)) {
+                    logger.warn(
+                        'session_recording.sampleRate must be between 0 and 1. Ignoring invalid value:',
+                        localSampleRate
+                    )
+                    localSampleRate = undefined
+                }
+                const receivedSampleRate = !isNullish(localSampleRate)
+                    ? localSampleRate
+                    : sessionRecordingConfigResponse?.sampleRate
 
                 const parsedSampleRate = isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
                 if (isNullish(parsedSampleRate)) {
