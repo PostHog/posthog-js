@@ -442,6 +442,7 @@ export class PostHog implements PostHogInterface {
         // Eagerly construct extensions from default classes so they're available before init().
         // For the slim bundle, these remain undefined until _initExtensions sets them from config.
         const ext = PostHog.__defaultExtensionClasses ?? {}
+        this._featureFlags = ext.featureFlags && new ext.featureFlags(this)
         this.toolbar = ext.toolbar && new ext.toolbar(this)
         this.surveys = ext.surveys && new ext.surveys(this)
         this.conversations = ext.conversations && new ext.conversations(this)
@@ -707,7 +708,7 @@ export class PostHog implements PostHogInterface {
         // Due to name mangling, we can't easily iterate and assign these extensions
         // The assignment needs to also be mangled. Thus, the loop is unrolled.
         if (ext.featureFlags) {
-            this._extensions.push((this._featureFlags = new ext.featureFlags(this)))
+            this._extensions.push((this._featureFlags = this.featureFlags ?? new ext.featureFlags(this)))
         }
         if (ext.exceptions) {
             this._extensions.push((this.exceptions = this.exceptions ?? new ext.exceptions(this)))
