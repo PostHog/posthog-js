@@ -94,7 +94,7 @@ export class RemoteConfigLoader {
             return
         }
 
-        this._instance.featureFlags.reloadFeatureFlags()
+        this._instance.reloadFeatureFlags()
     }
 
     private _startRefreshInterval(): void {
@@ -125,7 +125,7 @@ export class RemoteConfigLoader {
 
         if (config?.hasFeatureFlags !== false) {
             if (!this._instance.config.advanced_disable_feature_flags_on_first_load) {
-                this._instance.featureFlags.ensureFlagsLoaded()
+                this._instance._featureFlags?.ensureFlagsLoaded()
             }
         }
     }

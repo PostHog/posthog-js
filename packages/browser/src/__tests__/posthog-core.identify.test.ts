@@ -31,7 +31,7 @@ describe('identify()', () => {
 
         instance = Object.assign(posthog, {
             register: jest.fn(),
-            featureFlags: {
+            _featureFlags: {
                 setAnonymousDistinctId: jest.fn(),
                 setPersonPropertiesForFlags: jest.fn(),
                 reloadFeatureFlags: jest.fn(),

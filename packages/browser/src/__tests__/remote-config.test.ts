@@ -28,10 +28,10 @@ describe('RemoteConfigLoader', () => {
             _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
             _shouldDisableFlags: () =>
                 posthog.config.advanced_disable_flags || posthog.config.advanced_disable_decide || false,
-            featureFlags: {
+            _featureFlags: {
                 ensureFlagsLoaded: jest.fn(),
-                reloadFeatureFlags: jest.fn(),
             },
+            reloadFeatureFlags: jest.fn(),
             requestRouter: new RequestRouter(createMockPostHog({ config: defaultConfig })),
         })
     })
@@ -121,9 +121,9 @@ describe('RemoteConfigLoader', () => {
             new RemoteConfigLoader(posthog).load()
 
             if (shouldReload) {
-                expect(posthog.featureFlags.ensureFlagsLoaded).toHaveBeenCalled()
+                expect(posthog._featureFlags?.ensureFlagsLoaded).toHaveBeenCalled()
             } else {
-                expect(posthog.featureFlags.ensureFlagsLoaded).not.toHaveBeenCalled()
+                expect(posthog._featureFlags?.ensureFlagsLoaded).not.toHaveBeenCalled()
             }
         })
 
@@ -140,7 +140,7 @@ describe('RemoteConfigLoader', () => {
             // Should still call _onRemoteConfig with empty object so extensions start
             expect(posthog._onRemoteConfig).toHaveBeenCalledWith({})
             // Should still attempt to load flags
-            expect(posthog.featureFlags.ensureFlagsLoaded).toHaveBeenCalled()
+            expect(posthog._featureFlags?.ensureFlagsLoaded).toHaveBeenCalled()
         })
 
         it('does not call ensureFlagsLoaded when advanced_disable_feature_flags_on_first_load is true', () => {
@@ -156,7 +156,7 @@ describe('RemoteConfigLoader', () => {
             new RemoteConfigLoader(posthog).load()
 
             expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ...config, hasFeatureFlags: true })
-            expect(posthog.featureFlags.ensureFlagsLoaded).not.toHaveBeenCalled()
+            expect(posthog._featureFlags?.ensureFlagsLoaded).not.toHaveBeenCalled()
         })
     })
 
@@ -165,7 +165,7 @@ describe('RemoteConfigLoader', () => {
             const loader = new RemoteConfigLoader(posthog)
             loader.refresh()
 
-            expect(posthog.featureFlags.reloadFeatureFlags).toHaveBeenCalled()
+            expect(posthog.reloadFeatureFlags).toHaveBeenCalled()
             expect(posthog._send_request).not.toHaveBeenCalled()
             expect(posthog._onRemoteConfig).not.toHaveBeenCalled()
         })
@@ -176,7 +176,7 @@ describe('RemoteConfigLoader', () => {
             const loader = new RemoteConfigLoader(posthog)
             loader.refresh()
 
-            expect(posthog.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
+            expect(posthog.reloadFeatureFlags).not.toHaveBeenCalled()
         })
     })
 
@@ -193,13 +193,13 @@ describe('RemoteConfigLoader', () => {
             loader.load()
 
             jest.advanceTimersByTime(5 * 60 * 1000)
-            expect(posthog.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
 
             loader.stop()
 
             jest.advanceTimersByTime(5 * 60 * 1000)
             // Should not be called again after stop
-            expect(posthog.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
         })
     })
 
@@ -221,7 +221,7 @@ describe('RemoteConfigLoader', () => {
 
             // Interval fires while hidden — should be a no-op
             jest.advanceTimersByTime(5 * 60 * 1000)
-            expect(posthog.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
+            expect(posthog.reloadFeatureFlags).not.toHaveBeenCalled()
 
             loader.stop()
             Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
@@ -236,14 +236,14 @@ describe('RemoteConfigLoader', () => {
 
             // Interval fires while hidden — no refresh
             jest.advanceTimersByTime(5 * 60 * 1000)
-            expect(posthog.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
+            expect(posthog.reloadFeatureFlags).not.toHaveBeenCalled()
 
             // Tab becomes visible
             Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
 
             // Next interval fires while visible — should refresh
             jest.advanceTimersByTime(5 * 60 * 1000)
-            expect(posthog.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
 
             loader.stop()
         })

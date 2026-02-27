@@ -14,7 +14,6 @@ import { isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-auto
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
 import { PageViewManager } from './page-view'
-import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import {
     type DisplaySurveyOptions,
@@ -42,7 +41,6 @@ import {
     EarlyAccessFeatureStage,
     EventName,
     ExceptionAutoCaptureConfig,
-    FeatureFlagDetail,
     FeatureFlagsCallback,
     FeatureFlagOptions,
     FeatureFlagResult,
@@ -98,7 +96,8 @@ import {
 } from '@posthog/core'
 import { uuidv7 } from './uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
-import type { Extension } from './extensions/types'
+import { FEATURE_FLAGS_STUB } from './posthog-featureflags-stub'
+import type { PostHogSurveys } from './posthog-surveys'
 import type { Autocapture } from './autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
 import type { ExceptionObserver } from './extensions/exception-autocapture'
@@ -109,10 +108,11 @@ import type { PostHogConversations } from './extensions/conversations/posthog-co
 import type { PostHogExceptions } from './posthog-exceptions'
 import type { PostHogLogs } from './posthog-logs'
 import type { PostHogProductTours } from './posthog-product-tours'
-import type { PostHogSurveys } from './posthog-surveys'
 import type { SiteApps } from './site-apps'
 import type { SessionRecording } from './extensions/replay/session-recording'
+import type { Extension } from './extensions/types'
 import type { Toolbar } from './extensions/toolbar'
+import type { PostHogFeatureFlags } from './posthog-featureflags'
 import type { WebExperiments } from './web-experiments'
 
 /*
@@ -144,7 +144,6 @@ const instances: Record<string, PostHog> = {}
 // calls into push() calls, which would otherwise cause infinite recursion.
 let _executeArrayDepth = 0
 
-// some globals for comparisons
 const __NOOP = () => {}
 
 const PRIMARY_INSTANCE_NAME = 'posthog'
@@ -339,7 +338,7 @@ export class PostHog implements PostHogInterface {
     rateLimiter: RateLimiter
     scrollManager: ScrollManager
     pageViewManager: PageViewManager
-    featureFlags: PostHogFeatureFlags
+    _featureFlags?: PostHogFeatureFlags
     surveys?: PostHogSurveys
     conversations?: PostHogConversations
     logs?: PostHogLogs
@@ -401,14 +400,18 @@ export class PostHog implements PostHogInterface {
         return newExt
     }
 
+    get featureFlags(): PostHogFeatureFlags {
+        return this._featureFlags ?? FEATURE_FLAGS_STUB
+    }
+
     // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
     /** @deprecated Use `flagsEndpointWasHit` instead.  We migrated to using a new feature flag endpoint and the new method is more semantically accurate */
     public get decideEndpointWasHit(): boolean {
-        return this.featureFlags?.hasLoadedFlags ?? false
+        return this._featureFlags?.hasLoadedFlags ?? false
     }
 
     public get flagsEndpointWasHit(): boolean {
-        return this.featureFlags?.hasLoadedFlags ?? false
+        return this._featureFlags?.hasLoadedFlags ?? false
     }
 
     /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */
@@ -429,7 +432,6 @@ export class PostHog implements PostHogInterface {
         this._visibilityStateListener = null
         this._initialPersonProfilesConfig = null
         this._cachedPersonProperties = null
-        this.featureFlags = new PostHogFeatureFlags(this)
         this.scrollManager = new ScrollManager(this)
         this.pageViewManager = new PageViewManager(this)
         this.rateLimiter = new RateLimiter(this)
@@ -440,6 +442,7 @@ export class PostHog implements PostHogInterface {
         // Eagerly construct extensions from default classes so they're available before init().
         // For the slim bundle, these remain undefined until _initExtensions sets them from config.
         const ext = PostHog.__defaultExtensionClasses ?? {}
+        this._featureFlags = ext.featureFlags && new ext.featureFlags(this)
         this.toolbar = ext.toolbar && new ext.toolbar(this)
         this.surveys = ext.surveys && new ext.surveys(this)
         this.conversations = ext.conversations && new ext.conversations(this)
@@ -642,25 +645,6 @@ export class PostHog implements PostHogInterface {
             })
         }
 
-        if (this._hasBootstrappedFeatureFlags()) {
-            const activeFlags = Object.keys(config.bootstrap?.featureFlags || {})
-                .filter((flag) => !!config.bootstrap?.featureFlags?.[flag])
-                .reduce((res: Record<string, string | boolean>, key) => {
-                    res[key] = config.bootstrap?.featureFlags?.[key] || false
-                    return res
-                }, {})
-            const featureFlagPayloads = Object.keys(config.bootstrap?.featureFlagPayloads || {})
-                .filter((key) => activeFlags[key])
-                .reduce((res: Record<string, JsonType>, key) => {
-                    if (config.bootstrap?.featureFlagPayloads?.[key]) {
-                        res[key] = config.bootstrap?.featureFlagPayloads?.[key]
-                    }
-                    return res
-                }, {})
-
-            this.featureFlags.receivedFeatureFlags({ featureFlags: activeFlags, featureFlagPayloads })
-        }
-
         if (startInCookielessMode) {
             this.register_once(
                 {
@@ -723,6 +707,9 @@ export class PostHog implements PostHogInterface {
 
         // Due to name mangling, we can't easily iterate and assign these extensions
         // The assignment needs to also be mangled. Thus, the loop is unrolled.
+        if (ext.featureFlags) {
+            this._extensions.push((this._featureFlags = this.featureFlags ?? new ext.featureFlags(this)))
+        }
         if (ext.exceptions) {
             this._extensions.push((this.exceptions = this.exceptions ?? new ext.exceptions(this)))
         }
@@ -1069,13 +1056,6 @@ export class PostHog implements PostHogInterface {
         } finally {
             _executeArrayDepth--
         }
-    }
-
-    _hasBootstrappedFeatureFlags(): boolean {
-        return (
-            (this.config.bootstrap?.featureFlags && Object.keys(this.config.bootstrap?.featureFlags).length > 0) ||
-            false
-        )
     }
 
     /**
@@ -1701,7 +1681,7 @@ export class PostHog implements PostHogInterface {
      *                        If {fresh: true}, we won't return cached values from localStorage - only values loaded from the server.
      */
     getFeatureFlag(key: string, options?: FeatureFlagOptions): boolean | string | undefined {
-        return this.featureFlags.getFeatureFlag(key, options)
+        return this._featureFlags?.getFeatureFlag(key, options)
     }
 
     /**
@@ -1724,7 +1704,7 @@ export class PostHog implements PostHogInterface {
      * @param {Object|String} prop Key of the feature flag.
      */
     getFeatureFlagPayload(key: string): JsonType {
-        return this.featureFlags.getFeatureFlagPayload(key)
+        return this._featureFlags?.getFeatureFlagPayload(key)
     }
 
     /**
@@ -1760,7 +1740,7 @@ export class PostHog implements PostHogInterface {
      * @returns {FeatureFlagResult | undefined} The feature flag result including key, enabled, variant, and payload.
      */
     getFeatureFlagResult(key: string, options?: FeatureFlagOptions): FeatureFlagResult | undefined {
-        return this.featureFlags.getFeatureFlagResult(key, options)
+        return this._featureFlags?.getFeatureFlagResult(key, options)
     }
 
     /**
@@ -1795,7 +1775,7 @@ export class PostHog implements PostHogInterface {
      *                        If {fresh: true}, we won't return cached values from localStorage - only values loaded from the server.
      */
     isFeatureEnabled(key: string, options?: FeatureFlagOptions): boolean | undefined {
-        return this.featureFlags.isFeatureEnabled(key, options)
+        return this._featureFlags?.isFeatureEnabled(key, options)
     }
 
     /**
@@ -1811,7 +1791,7 @@ export class PostHog implements PostHogInterface {
      * @public
      */
     reloadFeatureFlags(): void {
-        this.featureFlags.reloadFeatureFlags()
+        this._featureFlags?.reloadFeatureFlags()
     }
 
     /**
@@ -1855,31 +1835,7 @@ export class PostHog implements PostHogInterface {
         payloads?: Record<string, JsonType>,
         options?: { merge?: boolean }
     ): void {
-        // If merging, combine with existing flags
-        const existingFlags = options?.merge ? this.featureFlags.getFlagVariants() : {}
-        const existingPayloads = options?.merge ? this.featureFlags.getFlagPayloads() : {}
-        const finalFlags = { ...existingFlags, ...flags }
-        const finalPayloads = { ...existingPayloads, ...payloads }
-
-        // Convert simple flags to v4 format to avoid deprecation warning
-        const flagDetails: Record<string, FeatureFlagDetail> = {}
-        for (const [key, value] of Object.entries(finalFlags)) {
-            const isVariant = typeof value === 'string'
-            flagDetails[key] = {
-                key,
-                enabled: isVariant ? true : Boolean(value),
-                variant: isVariant ? value : undefined,
-                reason: undefined,
-                // id: 0 indicates manually injected flags (not from server evaluation)
-                metadata: !isUndefined(finalPayloads?.[key])
-                    ? { id: 0, version: undefined, description: undefined, payload: finalPayloads[key] }
-                    : undefined,
-            }
-        }
-
-        this.featureFlags.receivedFeatureFlags({
-            flags: flagDetails,
-        })
+        this._featureFlags?.updateFlags(flags, payloads, options)
     }
 
     /**
@@ -1932,7 +1888,7 @@ export class PostHog implements PostHogInterface {
      * @param {String} [stage] The stage of the feature flag to update.
      */
     updateEarlyAccessFeatureEnrollment(key: string, isEnrolled: boolean, stage?: string): void {
-        this.featureFlags.updateEarlyAccessFeatureEnrollment(key, isEnrolled, stage)
+        this._featureFlags?.updateEarlyAccessFeatureEnrollment(key, isEnrolled, stage)
     }
 
     /**
@@ -1985,7 +1941,7 @@ export class PostHog implements PostHogInterface {
         force_reload = false,
         stages?: EarlyAccessFeatureStage[]
     ): void {
-        return this.featureFlags.getEarlyAccessFeatures(callback, force_reload, stages)
+        return this._featureFlags?.getEarlyAccessFeatures(callback, force_reload, stages)
     }
 
     /**
@@ -2049,7 +2005,11 @@ export class PostHog implements PostHogInterface {
      * @returns A function that can be called to unsubscribe the listener. Used by `useEffect` when the component unmounts.
      */
     onFeatureFlags(callback: FeatureFlagsCallback): () => void {
-        return this.featureFlags.onFeatureFlags(callback)
+        if (!this._featureFlags) {
+            callback([], {}, { errorsLoading: true })
+            return () => {}
+        }
+        return this._featureFlags.onFeatureFlags(callback)
     }
 
     /**
@@ -2401,7 +2361,7 @@ export class PostHog implements PostHogInterface {
 
             // let the reload feature flag request know to send this previous distinct id
             // for flag consistency
-            this.featureFlags.setAnonymousDistinctId(previous_distinct_id)
+            this._featureFlags?.setAnonymousDistinctId(previous_distinct_id)
         } else if (userPropertiesToSet || userPropertiesToSetOnce) {
             // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
             // and if so, send a $set event
@@ -2585,7 +2545,7 @@ export class PostHog implements PostHogInterface {
      * @param {Boolean} [reloadFeatureFlags] Whether to reload feature flags.
      */
     setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
-        this.featureFlags.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
+        this._featureFlags?.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
     /**
@@ -2601,7 +2561,7 @@ export class PostHog implements PostHogInterface {
      * ```
      */
     resetPersonPropertiesForFlags(): void {
-        this.featureFlags.resetPersonPropertiesForFlags()
+        this._featureFlags?.resetPersonPropertiesForFlags()
     }
 
     /**
@@ -2633,7 +2593,7 @@ export class PostHog implements PostHogInterface {
         if (!this._requirePersonProcessing('posthog.setGroupPropertiesForFlags')) {
             return
         }
-        this.featureFlags.setGroupPropertiesForFlags(properties, reloadFeatureFlags)
+        this._featureFlags?.setGroupPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
     /**
@@ -2649,7 +2609,7 @@ export class PostHog implements PostHogInterface {
      * ```
      */
     resetGroupPropertiesForFlags(group_type?: string): void {
-        this.featureFlags.resetGroupPropertiesForFlags(group_type)
+        this._featureFlags?.resetGroupPropertiesForFlags(group_type)
     }
 
     /**
@@ -2693,7 +2653,7 @@ export class PostHog implements PostHogInterface {
         // Stop the refresh interval before resetting flags — featureFlags.reset() clears
         // the debouncer, so if the order were reversed a pending refresh could fire after reset.
         this._remoteConfigLoader?.stop()
-        this.featureFlags.reset()
+        this._featureFlags?.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
         this._cachedPersonProperties = null
