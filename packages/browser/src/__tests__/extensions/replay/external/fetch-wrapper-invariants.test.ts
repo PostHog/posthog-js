@@ -40,6 +40,11 @@ function setupWrappedFetch(downstreamFetch: typeof fetch): { wrappedFetch: typeo
 }
 
 describe('fetch wrapper', () => {
+    // Use fake timers to prevent getRequestPerformanceEntry retry timeouts
+    // from keeping the Jest worker alive after tests complete.
+    beforeEach(() => jest.useFakeTimers())
+    afterEach(() => jest.useRealTimers())
+
     describe('does not throw for valid inputs', () => {
         let wrappedFetch: typeof fetch
         let cleanup: () => void
