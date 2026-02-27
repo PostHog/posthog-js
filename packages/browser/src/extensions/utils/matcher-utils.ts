@@ -1,5 +1,5 @@
 import { detectDeviceType } from '@posthog/core'
-import { userAgent } from '../../utils/globals'
+import { navigator, userAgent, window } from '../../utils/globals'
 import { propertyComparisons } from '../../utils/property-utils'
 import { PropertyMatchType } from '../../types'
 
@@ -10,7 +10,13 @@ export function doesDeviceTypeMatch(deviceTypes?: string[], matchType?: Property
     if (!userAgent) {
         return false
     }
-    const deviceType = detectDeviceType(userAgent)
+    const deviceType = detectDeviceType(userAgent, {
+        userAgentDataPlatform: navigator?.userAgentData?.platform,
+        maxTouchPoints: navigator?.maxTouchPoints,
+        screenWidth: window?.screen?.width,
+        screenHeight: window?.screen?.height,
+        devicePixelRatio: window?.devicePixelRatio,
+    })
     return propertyComparisons[matchType ?? 'icontains'](deviceTypes, [deviceType])
 }
 

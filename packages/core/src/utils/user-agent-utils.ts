@@ -336,7 +336,16 @@ export const detectDevice = function (user_agent: string): string {
   }
 }
 
-export const detectDeviceType = function (user_agent: string): string {
+export const detectDeviceType = function (
+  user_agent: string,
+  options?: {
+    userAgentDataPlatform?: string
+    maxTouchPoints?: number
+    screenWidth?: number
+    screenHeight?: number
+    devicePixelRatio?: number
+  }
+): string {
   const device = detectDevice(user_agent)
   if (
     device === IPAD ||
@@ -352,7 +361,16 @@ export const detectDeviceType = function (user_agent: string): string {
     return 'Wearable'
   } else if (device) {
     return MOBILE
-  } else {
-    return 'Desktop'
   }
+
+  // Chrome on Android tablets defaults to "request desktop site" mode, sending
+  // a desktop-like UA (e.g. "X11; Linux x86_64") indistinguishable from desktop Linux.
+  // The Client Hints API reports the true platform even when the UA lies.
+  if (options?.userAgentDataPlatform === 'Android' && (options?.maxTouchPoints ?? 0) > 0) {
+    const shortSide = Math.min(options?.screenWidth ?? 0, options?.screenHeight ?? 0)
+    const shortSideDp = shortSide / (options?.devicePixelRatio ?? 1)
+    return shortSideDp >= 600 ? TABLET : MOBILE
+  }
+
+  return 'Desktop'
 }
