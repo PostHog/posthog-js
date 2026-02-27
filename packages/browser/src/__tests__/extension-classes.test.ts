@@ -88,6 +88,7 @@ describe('__extensionClasses enrollment', () => {
 
         const posthog = new PostHog()
 
+        expect(posthog._featureFlags).toBeDefined()
         expect(posthog.toolbar).toBeDefined()
         expect(posthog.surveys).toBeDefined()
         expect(posthog.conversations).toBeDefined()
@@ -101,6 +102,7 @@ describe('__extensionClasses enrollment', () => {
 
         const posthog = new PostHog()
 
+        expect(posthog._featureFlags).toBeUndefined()
         expect(posthog.toolbar).toBeUndefined()
         expect(posthog.surveys).toBeUndefined()
         expect(posthog.conversations).toBeUndefined()
