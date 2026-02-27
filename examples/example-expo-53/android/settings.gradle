@@ -1,8 +1,28 @@
 pluginManagement {
+  // Ensure 'node' is on the PATH for all Gradle child processes (e.g. when launched from Android Studio).
+  // Android Studio doesn't inherit the shell's PATH, so Homebrew/nvm node isn't found.
+  // Modifying a ProcessBuilder's environment() mutates the global ProcessEnvironment.theEnvironment,
+  // making 'node' available to all subsequently spawned processes (including Gradle plugins).
+  def nodeDir = null
+  for (candidate in ["/opt/homebrew/bin/node", "/usr/local/bin/node", System.getenv("HOME") + "/.nvm/current/bin/node"]) {
+    if (new File(candidate).exists()) {
+      nodeDir = new File(candidate).getParent()
+      break
+    }
+  }
+  if (nodeDir != null) {
+    def processEnv = new ProcessBuilder().environment()
+    def currentPath = processEnv.get("PATH") ?: ""
+    if (!currentPath.contains(nodeDir)) {
+      processEnv.put("PATH", nodeDir + File.pathSeparator + currentPath)
+    }
+  }
+  def nodeBinary = nodeDir ? nodeDir + "/node" : "node"
+
   def reactNativeGradlePlugin = new File(
     providers.exec {
       workingDir(rootDir)
-      commandLine("node", "--print", "require.resolve('@react-native/gradle-plugin/package.json', { paths: [require.resolve('react-native/package.json')] })")
+      commandLine(nodeBinary, "--print", "require.resolve('@react-native/gradle-plugin/package.json', { paths: [require.resolve('react-native/package.json')] })")
     }.standardOutput.asText.get().trim()
   ).getParentFile().absolutePath
   includeBuild(reactNativeGradlePlugin)
@@ -10,7 +30,7 @@ pluginManagement {
   def expoPluginsPath = new File(
     providers.exec {
       workingDir(rootDir)
-      commandLine("node", "--print", "require.resolve('expo-modules-autolinking/package.json', { paths: [require.resolve('expo/package.json')] })")
+      commandLine(nodeBinary, "--print", "require.resolve('expo-modules-autolinking/package.json', { paths: [require.resolve('expo/package.json')] })")
     }.standardOutput.asText.get().trim(),
     "../android/expo-gradle-plugin"
   ).absolutePath
