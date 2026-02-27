@@ -1,5 +1,5 @@
 import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
+import { start, waitForSessionRecordingToStart } from '../utils/setup'
 import { Page } from '@playwright/test'
 
 async function ensureRecordingIsStopped(page: Page) {
@@ -88,6 +88,7 @@ test.describe('Session recording - idle timeout behavior', () => {
                 await start(startOptions, page, context)
             },
         })
+        await waitForSessionRecordingToStart(page)
         await page.expectCapturedEventsToBe(['$pageview'])
         await page.resetCapturedEvents()
     })

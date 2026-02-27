@@ -37,7 +37,6 @@ import { MutationThrottler } from './mutation-throttler'
 import { createLogger } from '../../../utils/logger'
 import {
     clampToRange,
-    includes,
     isBoolean,
     isFunction,
     isNull,
@@ -685,7 +684,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         logger.info('recording resumed')
     }
 
-    private _activateTrigger(triggerType: TriggerType) {
+    private _activateTrigger(triggerType: TriggerType, matchDetail?: string) {
         // Prevent re-entry: if we're already activating a trigger, skip to avoid infinite recursion
         // This can happen when _reportStarted emits custom events that match the trigger condition
         if (this._isActivatingTrigger) {
@@ -703,7 +702,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 })
 
                 this._flushBuffer()
-                this._reportStarted((triggerType + '_trigger_matched') as SessionStartReason)
+                this._reportStarted((triggerType + '_trigger_matched') as SessionStartReason, {
+                    [triggerType === 'url' ? 'matchedUrl' : 'matchedEvent']: matchDetail,
+                })
             } finally {
                 this._isActivatingTrigger = false
             }
@@ -995,7 +996,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._urlTriggerMatching.checkUrlTriggerConditions(
             () => this._pauseRecording(),
             () => this._resumeRecording(),
-            (triggerType) => this._activateTrigger(triggerType),
+            (triggerType, matchDetail) => this._activateTrigger(triggerType, matchDetail),
             this.sessionId
         )
         // always have to check if the URL is blocked really early,
@@ -1346,6 +1347,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _onBeforeUnload = (): void => {
+        // If still buffering (waiting for triggers), discard the buffer
+        if (this.status === BUFFERING) {
+            this._clearBuffer()
+            return
+        }
+
         this._flushBuffer()
     }
 
@@ -1369,8 +1376,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $session_recording_start_reason: startReason,
         })
         logger.info(startReason.replace('_', ' '), tagPayload)
-        if (!includes(['recording_initialized', 'session_id_changed'], startReason)) {
-            this._tryAddCustomEvent(startReason, tagPayload)
+        if (startReason !== 'session_id_changed') {
+            this._tryAddCustomEvent('$recording_started', {
+                reason: startReason,
+                ...tagPayload,
+            })
         }
     }
 
@@ -1517,9 +1527,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // If anything could go wrong here, it has the potential to block the main loop,
             // so we catch all errors.
             try {
-                if (this._eventTriggerMatching._eventTriggers.includes(event.event)) {
-                    this._activateTrigger('event')
-                }
+                this._eventTriggerMatching.checkEventTriggerConditions(
+                    event.event,
+                    (triggerType, matchDetail) => this._activateTrigger(triggerType, matchDetail),
+                    this.sessionId
+                )
             } catch (e) {
                 logger.error('Could not activate event trigger', e)
             }

@@ -175,3 +175,33 @@ export async function start(
         await flagsMock
     }
 }
+
+/**
+ * Wait for session recording to actually start after remote config is received
+ * This is needed because session recording now waits for fresh remote config before starting
+ */
+export async function waitForSessionRecordingToStart(page: Page, timeout = 5000): Promise<void> {
+    await page.waitForFunction(
+        () => {
+            const ph = (window as any).posthog
+            return ph?.sessionRecording?.started === true
+        },
+        { timeout }
+    )
+}
+
+/**
+ * Wait for remote config to be received and processed
+ * Use this when recording might not start due to triggers/sampling, but you need config to be loaded
+ * After config is received, status changes from 'pending_config' through 'lazy_loading' to 'active', 'buffering', or 'disabled'
+ */
+export async function waitForRemoteConfig(page: Page, timeout = 5000): Promise<void> {
+    await page.waitForFunction(
+        () => {
+            const ph = (window as any).posthog
+            const status = ph?.sessionRecording?.status
+            return status !== 'pending_config' && status !== 'lazy_loading' && status !== undefined
+        },
+        { timeout }
+    )
+}
