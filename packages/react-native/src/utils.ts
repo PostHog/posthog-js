@@ -69,3 +69,42 @@ export function getRemoteConfigBool(
   }
   return defaultValue
 }
+
+/**
+ * Reads a numeric value from a remote config object field.
+ *
+ * Remote config values may be either numbers or numeric strings.
+ *
+ * @param field The remote config field (e.g. `response.sessionRecording`)
+ * @param key The key to read (e.g. `'sampleRate'`)
+ */
+export function getRemoteConfigNumber(
+  field: boolean | { [key: string]: JsonType } | undefined,
+  key: string
+): number | undefined {
+  if (field == null || typeof field === 'boolean' || typeof field !== 'object') {
+    return undefined
+  }
+
+  const value = field[key]
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed === '') {
+      return undefined
+    }
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+
+  return undefined
+}
+
+/**
+ * Checks whether a value is a valid session replay sample rate in the inclusive range [0, 1].
+ */
+export function isValidSampleRate(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1
+}
