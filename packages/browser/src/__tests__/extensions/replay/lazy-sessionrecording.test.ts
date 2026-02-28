@@ -3071,6 +3071,80 @@ describe('Lazy SessionRecording', () => {
         })
     })
 
+    describe('when rrweb record() returns undefined', () => {
+        it('does not report recording as started', () => {
+            loadScriptMock.mockImplementation((_ph: any, _path: any, callback: any) => {
+                assignableWindow.__PosthogExtensions__.rrweb = {
+                    record: jest.fn(() => undefined),
+                    version: 'fake',
+                    wasMaxDepthReached: jest.fn(() => false),
+                    resetMaxDepthState: jest.fn(),
+                }
+                assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = jest.fn()
+                assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = jest.fn()
+                assignableWindow.__PosthogExtensions__.initSessionRecording = () => {
+                    return new LazyLoadedSessionRecording(posthog)
+                }
+                callback()
+            })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(sessionRecording.started).toEqual(false)
+            expect(sessionRecording.status).toEqual('rrweb_error')
+        })
+
+        it('recovers when rrweb starts successfully on retry', () => {
+            let recordCallCount = 0
+            loadScriptMock.mockImplementation((_ph: any, _path: any, callback: any) => {
+                assignableWindow.__PosthogExtensions__.rrweb = {
+                    record: jest.fn(({ emit }) => {
+                        recordCallCount++
+                        if (recordCallCount === 1) {
+                            return undefined
+                        }
+                        _emit = emit
+                        return () => {}
+                    }),
+                    version: 'fake',
+                    wasMaxDepthReached: jest.fn(() => false),
+                    resetMaxDepthState: jest.fn(),
+                }
+                assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = jest.fn(() => {
+                    _emit(createFullSnapshot())
+                })
+                assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = jest.fn()
+                assignableWindow.__PosthogExtensions__.initSessionRecording = () => {
+                    return new LazyLoadedSessionRecording(posthog)
+                }
+                callback()
+            })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(sessionRecording.started).toEqual(false)
+            expect(sessionRecording.status).toEqual('rrweb_error')
+
+            // simulate session rotation triggering a restart
+            sessionRecording['_lazyLoadedSessionRecording']!.start()
+
+            expect(sessionRecording.started).toEqual(true)
+            expect(sessionRecording.status).not.toEqual('rrweb_error')
+        })
+    })
+
     describe('buffering minimum duration', () => {
         it('can report no duration when no data', () => {
             sessionRecording.onRemoteConfig(
