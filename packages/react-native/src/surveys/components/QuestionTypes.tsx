@@ -6,6 +6,8 @@ import {
   DissatisfiedEmoji,
   NeutralEmoji,
   SatisfiedEmoji,
+  StarEmptyIcon,
+  StarFilledIcon,
   ThumbsDownEmoji,
   ThumbsUpEmoji,
   VeryDissatisfiedEmoji,
@@ -205,6 +207,28 @@ export function RatingQuestion({
                       }
                     }}
                   />
+                )
+              })}
+            </View>
+          )}
+          {question.display === SurveyRatingDisplay.Star && (
+            <View style={styles.ratingOptionsEmoji}>
+              {fiveScaleNumbers.map((num, idx) => {
+                const filled = rating !== null && num <= rating
+                const Icon = filled ? StarFilledIcon : StarEmptyIcon
+                return (
+                  <TouchableOpacity
+                    key={idx}
+                    style={styles.ratingsEmoji}
+                    onPress={() => {
+                      setRating(num)
+                      if (question.skipSubmitButton) {
+                        onSubmit(num)
+                      }
+                    }}
+                  >
+                    <Icon fill={filled ? appearance.ratingButtonActiveColor : appearance.ratingButtonColor} />
+                  </TouchableOpacity>
                 )
               })}
             </View>

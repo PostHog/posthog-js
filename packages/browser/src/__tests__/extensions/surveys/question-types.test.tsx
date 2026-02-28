@@ -516,4 +516,82 @@ describe('RatingQuestion', () => {
             expect(screen.queryByText(mockAppearance.submitButtonText)).toBeInTheDocument()
         })
     })
+
+    describe('star display', () => {
+        const ratingStarQuestion: RatingSurveyQuestion = {
+            type: SurveyQuestionType.Rating,
+            question: 'How would you rate your experience?',
+            description: 'Scale from 1 to 5',
+            display: 'star',
+            scale: 5,
+            lowerBoundLabel: 'Bad',
+            upperBoundLabel: 'Good',
+        }
+
+        it('renders 5 star buttons', () => {
+            render(<RatingQuestion {...baseProps} question={ratingStarQuestion} initialValue={null} />)
+            const buttons = screen.getAllByRole('button')
+            const starButtons = buttons.filter((btn) => btn.textContent !== mockAppearance.submitButtonText)
+            expect(starButtons).toHaveLength(5)
+        })
+
+        it('fills stars up to the selected rating', () => {
+            render(<RatingQuestion {...baseProps} question={ratingStarQuestion} initialValue={3} />)
+            const starButtons = screen
+                .getAllByRole('button')
+                .filter((btn) => btn.textContent !== mockAppearance.submitButtonText)
+            expect(starButtons[0]).toHaveClass('rating-active')
+            expect(starButtons[1]).toHaveClass('rating-active')
+            expect(starButtons[2]).toHaveClass('rating-active')
+            expect(starButtons[3]).not.toHaveClass('rating-active')
+            expect(starButtons[4]).not.toHaveClass('rating-active')
+        })
+
+        it('updates rating on click', () => {
+            render(<RatingQuestion {...baseProps} question={ratingStarQuestion} initialValue={null} />)
+            const starButton = screen.getByRole('button', { name: 'Rate 4' })
+            fireEvent.click(starButton)
+
+            const starButtons = screen
+                .getAllByRole('button')
+                .filter((btn) => btn.textContent !== mockAppearance.submitButtonText)
+            // Stars 1-4 should be filled
+            expect(starButtons[0]).toHaveClass('rating-active')
+            expect(starButtons[1]).toHaveClass('rating-active')
+            expect(starButtons[2]).toHaveClass('rating-active')
+            expect(starButtons[3]).toHaveClass('rating-active')
+            expect(starButtons[4]).not.toHaveClass('rating-active')
+        })
+
+        it('submits immediately with skipSubmitButton', () => {
+            const onSubmitMock = jest.fn()
+            const skipQuestion = { ...ratingStarQuestion, skipSubmitButton: true }
+            render(<RatingQuestion {...baseProps} onSubmit={onSubmitMock} question={skipQuestion} />)
+
+            const starButton = screen.getByRole('button', { name: 'Rate 3' })
+            fireEvent.click(starButton)
+
+            expect(onSubmitMock).toHaveBeenCalledWith(3)
+        })
+
+        it('calls onSubmit with the selected rating', () => {
+            const onSubmitMock = jest.fn()
+            render(
+                <RatingQuestion
+                    {...baseProps}
+                    onSubmit={onSubmitMock}
+                    question={ratingStarQuestion}
+                    initialValue={null}
+                />
+            )
+
+            const starButton = screen.getByRole('button', { name: 'Rate 5' })
+            fireEvent.click(starButton)
+
+            const submitButton = screen.getByText(mockAppearance.submitButtonText)
+            fireEvent.click(submitButton)
+
+            expect(onSubmitMock).toHaveBeenCalledWith(5)
+        })
+    })
 })

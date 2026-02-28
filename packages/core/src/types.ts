@@ -548,6 +548,7 @@ export type RatingSurveyQuestion = SurveyQuestionBase & {
 export enum SurveyRatingDisplay {
   Number = 'number',
   Emoji = 'emoji',
+  Star = 'star',
 }
 
 export type MultipleSurveyQuestion = SurveyQuestionBase & {

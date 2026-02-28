@@ -22,6 +22,8 @@ import {
     dissatisfiedEmoji,
     neutralEmoji,
     satisfiedEmoji,
+    starEmptyIcon,
+    starFilledIcon,
     thumbsDownEmoji,
     thumbsUpEmoji,
     veryDissatisfiedEmoji,
@@ -290,6 +292,32 @@ export function RatingQuestion({
                                                 }
                                             }}
                                         />
+                                    )
+                                })}
+                            </div>
+                        )}
+                        {question.display === 'star' && (
+                            <div className="rating-options-star">
+                                {fiveScaleNumbers.map((num, idx) => {
+                                    const filled = rating !== null && num <= rating
+                                    return (
+                                        <button
+                                            aria-label={`Rate ${num}`}
+                                            className={`ratings-star question-${displayQuestionIndex}-rating-${num} ${
+                                                filled ? 'rating-active' : ''
+                                            }`}
+                                            value={num}
+                                            key={idx}
+                                            type="button"
+                                            onClick={() => {
+                                                setRating(num)
+                                                if (question.skipSubmitButton) {
+                                                    handleSubmit(num)
+                                                }
+                                            }}
+                                        >
+                                            {filled ? starFilledIcon : starEmptyIcon}
+                                        </button>
                                     )
                                 })}
                             </div>
