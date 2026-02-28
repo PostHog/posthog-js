@@ -6,3 +6,4 @@ export {
     sessionRecordingLoggerForPostHogInstance,
     browserConsoleLogger,
 } from './posthogReduxLogger'
+export { posthogZustandTracker } from './posthogZustandLogger'

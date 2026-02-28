@@ -55,9 +55,9 @@ export interface StateEvent {
     payload?: any
     timestamp: number
     executionTimeMs?: number
-    prevState: any
-    nextState: any
-    changedState: any
+    prevState?: any
+    nextState?: any
+    changedState?: any
 }
 
 export type PostHogStateLogger = (title: string, stateEvent: StateEvent) => void
