@@ -148,6 +148,18 @@ export class SessionRecording {
         this._instance.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
     }
 
+    private _validateSampleRate(rate: unknown, source: string): number | null {
+        if (isNullish(rate)) {
+            return null
+        }
+        const parsed = parseFloat(rate as string)
+        if (isNaN(parsed) || parsed < 0 || parsed > 1) {
+            logger.warn(`${source} must be between 0 and 1. Ignoring invalid value:`, rate)
+            return null
+        }
+        return parsed
+    }
+
     private _persistRemoteConfig(response: RemoteConfig): void {
         if (this._instance.persistence) {
             const persistence = this._instance.persistence
@@ -156,9 +168,15 @@ export class SessionRecording {
                 const sessionRecordingConfigResponse =
                     response.sessionRecording === false ? undefined : response.sessionRecording
 
-                const receivedSampleRate = sessionRecordingConfigResponse?.sampleRate
-
-                const parsedSampleRate = isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
+                const localSampleRate = this._validateSampleRate(
+                    this._instance.config.session_recording?.sampleRate,
+                    'session_recording.sampleRate'
+                )
+                const remoteSampleRate = this._validateSampleRate(
+                    sessionRecordingConfigResponse?.sampleRate,
+                    'remote config sampleRate'
+                )
+                const parsedSampleRate = localSampleRate ?? remoteSampleRate
                 if (isNullish(parsedSampleRate)) {
                     this._resetSampling()
                 }
