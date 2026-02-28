@@ -24,7 +24,7 @@ const SIXTY_FOUR_KILOBYTES = 64 * 1024
 const KEEP_ALIVE_THRESHOLD = SIXTY_FOUR_KILOBYTES * 0.8
 type EncodedBody = {
     contentType: string
-    body: string | BlobPart
+    body: string | BlobPart | ArrayBuffer
     estimatedSize: number
 }
 
@@ -75,11 +75,10 @@ const encodePostData = ({ data, compression }: RequestWithOptions): EncodedBody 
 
     if (compression === Compression.GZipJS) {
         const gzipData = gzipSync(strToU8(jsonStringify(data)), { mtime: 0 })
-        const blob = new Blob([gzipData], { type: CONTENT_TYPE_PLAIN })
         return {
             contentType: CONTENT_TYPE_PLAIN,
-            body: blob,
-            estimatedSize: blob.size,
+            body: gzipData.buffer.slice(gzipData.byteOffset, gzipData.byteOffset + gzipData.byteLength) as ArrayBuffer,
+            estimatedSize: gzipData.byteLength,
         }
     }
 
