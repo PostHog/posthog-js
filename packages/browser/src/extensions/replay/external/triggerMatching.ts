@@ -51,7 +51,16 @@ export type TriggerStatus = (typeof triggerStatuses)[number]
  * the sample rate determined this session should be sent to the server.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const sessionRecordingStatuses = [DISABLED, SAMPLED, ACTIVE, BUFFERING, PAUSED, PENDING_CONFIG, LAZY_LOADING, RRWEB_ERROR] as const
+const sessionRecordingStatuses = [
+    DISABLED,
+    SAMPLED,
+    ACTIVE,
+    BUFFERING,
+    PAUSED,
+    PENDING_CONFIG,
+    LAZY_LOADING,
+    RRWEB_ERROR,
+] as const
 export type SessionRecordingStatus = (typeof sessionRecordingStatuses)[number]
 
 // while we have both lazy and eager loaded replay we might get either type of config
