@@ -155,14 +155,14 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
     question.originalQuestionIndex = idx
   })
 
-  // TODO: shuffle questions
+  // Don't shuffle questions when partial responses are enabled to maintain
+  // consistent question-response ID correlation
+  if (!survey.appearance?.shuffleQuestions || survey.enable_partial_responses) {
+    return survey.questions
+  }
+
+  // TODO: implement shuffle when needed
   return survey.questions
-
-  // if (!survey.appearance?.shuffleQuestions) {
-  //   return survey.questions
-  // }
-
-  // return reverseIfUnshuffled(survey.questions, shuffle(survey.questions))
 }
 
 export const hasEvents = (survey: Survey): boolean => {

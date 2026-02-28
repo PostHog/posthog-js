@@ -1,5 +1,5 @@
-import { sendSurveyEvent } from '../src/surveys/components/Surveys'
-import { Survey, SurveyQuestion } from '@posthog/core'
+import { sendSurveyEvent, dismissedSurveyEvent } from '../src/surveys/components/Surveys'
+import { Survey, SurveyQuestion, SurveyType } from '@posthog/core'
 
 describe('sendSurveyEvent', () => {
   let mockPostHog: any
@@ -13,6 +13,7 @@ describe('sendSurveyEvent', () => {
   const createMockSurvey = (overrides: Partial<Survey> = {}): Survey => ({
     id: 'test-survey-id',
     name: 'Test Survey',
+    type: SurveyType.Popover,
     questions: [
       {
         id: 'question-1',
@@ -39,7 +40,13 @@ describe('sendSurveyEvent', () => {
         '$survey_response_question-2': 'Great service!',
       }
 
-      sendSurveyEvent(responses, survey, mockPostHog)
+      sendSurveyEvent({
+        responses,
+        survey,
+        posthog: mockPostHog,
+        surveySubmissionId: 'test-submission-id',
+        isSurveyCompleted: true,
+      })
 
       expect(mockPostHog.capture).toHaveBeenCalledWith('survey sent', {
         $survey_name: 'Test Survey',
@@ -56,6 +63,8 @@ describe('sendSurveyEvent', () => {
             response: 'Great service!',
           },
         ],
+        $survey_submission_id: 'test-submission-id',
+        $survey_completed: true,
         '$survey_response_question-1': 4,
         '$survey_response_question-2': 'Great service!',
         $survey_response: 4,
@@ -64,6 +73,25 @@ describe('sendSurveyEvent', () => {
           '$survey_responded/test-survey-id': true,
         },
       })
+    })
+
+    it('should capture partial response when isSurveyCompleted is false', () => {
+      const survey = createMockSurvey()
+      const responses = {
+        '$survey_response_question-1': 4,
+      }
+
+      sendSurveyEvent({
+        responses,
+        survey,
+        posthog: mockPostHog,
+        surveySubmissionId: 'test-submission-id',
+        isSurveyCompleted: false,
+      })
+
+      const captureCall = mockPostHog.capture.mock.calls[0][1]
+      expect(captureCall.$survey_completed).toBe(false)
+      expect(captureCall.$survey_submission_id).toBe('test-submission-id')
     })
   })
 
@@ -78,7 +106,13 @@ describe('sendSurveyEvent', () => {
         '$survey_response_question-2': 'Great service!',
       }
 
-      sendSurveyEvent(responses, survey, mockPostHog)
+      sendSurveyEvent({
+        responses,
+        survey,
+        posthog: mockPostHog,
+        surveySubmissionId: 'test-submission-id',
+        isSurveyCompleted: true,
+      })
 
       expect(mockPostHog.capture).toHaveBeenCalledWith('survey sent', {
         $survey_name: 'Test Survey',
@@ -97,6 +131,8 @@ describe('sendSurveyEvent', () => {
             response: 'Great service!',
           },
         ],
+        $survey_submission_id: 'test-submission-id',
+        $survey_completed: true,
         '$survey_response_question-1': 4,
         '$survey_response_question-2': 'Great service!',
         $survey_response: 4,
@@ -114,7 +150,13 @@ describe('sendSurveyEvent', () => {
       })
       const responses = { '$survey_response_question-1': 3 }
 
-      sendSurveyEvent(responses, survey, mockPostHog)
+      sendSurveyEvent({
+        responses,
+        survey,
+        posthog: mockPostHog,
+        surveySubmissionId: 'test-submission-id',
+        isSurveyCompleted: true,
+      })
 
       const captureCall = mockPostHog.capture.mock.calls[0][1]
       expect(captureCall).not.toHaveProperty('$survey_iteration')
@@ -132,7 +174,13 @@ describe('sendSurveyEvent', () => {
         '$survey_response_question-2': 'This is a text response',
       }
 
-      sendSurveyEvent(responses, survey, mockPostHog)
+      sendSurveyEvent({
+        responses,
+        survey,
+        posthog: mockPostHog,
+        surveySubmissionId: 'test-submission-id',
+        isSurveyCompleted: true,
+      })
 
       const captureCall = mockPostHog.capture.mock.calls[0][1]
       expect(captureCall.$survey_questions[1].response).toBe('This is a text response')
@@ -144,7 +192,13 @@ describe('sendSurveyEvent', () => {
         '$survey_response_question-1': 5,
       }
 
-      sendSurveyEvent(responses, survey, mockPostHog)
+      sendSurveyEvent({
+        responses,
+        survey,
+        posthog: mockPostHog,
+        surveySubmissionId: 'test-submission-id',
+        isSurveyCompleted: true,
+      })
 
       const captureCall = mockPostHog.capture.mock.calls[0][1]
       expect(captureCall.$survey_questions[0].response).toBe(5)
@@ -158,6 +212,7 @@ describe('sendSurveyEvent', () => {
             question: 'Select all that apply',
             type: 'multiple_choice',
             choices: ['Option 1', 'Option 2', 'Option 3'],
+            originalQuestionIndex: 0,
           } as SurveyQuestion,
         ],
       })
@@ -166,7 +221,13 @@ describe('sendSurveyEvent', () => {
         '$survey_response_question-multi': originalArray,
       }
 
-      sendSurveyEvent(responses, survey, mockPostHog)
+      sendSurveyEvent({
+        responses,
+        survey,
+        posthog: mockPostHog,
+        surveySubmissionId: 'test-submission-id',
+        isSurveyCompleted: true,
+      })
 
       const captureCall = mockPostHog.capture.mock.calls[0][1]
       const responseArray = captureCall.$survey_questions[0].response
@@ -181,7 +242,13 @@ describe('sendSurveyEvent', () => {
         '$survey_response_question-1': null,
       }
 
-      sendSurveyEvent(responses, survey, mockPostHog)
+      sendSurveyEvent({
+        responses,
+        survey,
+        posthog: mockPostHog,
+        surveySubmissionId: 'test-submission-id',
+        isSurveyCompleted: true,
+      })
 
       const captureCall = mockPostHog.capture.mock.calls[0][1]
       expect(captureCall.$survey_questions[0].response).toBeNull()
@@ -194,7 +261,13 @@ describe('sendSurveyEvent', () => {
         // question-2 has no response
       }
 
-      sendSurveyEvent(responses, survey, mockPostHog)
+      sendSurveyEvent({
+        responses,
+        survey,
+        posthog: mockPostHog,
+        surveySubmissionId: 'test-submission-id',
+        isSurveyCompleted: true,
+      })
 
       const captureCall = mockPostHog.capture.mock.calls[0][1]
       expect(captureCall.$survey_questions[0].response).toBe(4)
@@ -207,7 +280,13 @@ describe('sendSurveyEvent', () => {
       const survey = createMockSurvey()
       const responses = {}
 
-      sendSurveyEvent(responses, survey, mockPostHog)
+      sendSurveyEvent({
+        responses,
+        survey,
+        posthog: mockPostHog,
+        surveySubmissionId: 'test-submission-id',
+        isSurveyCompleted: true,
+      })
 
       const captureCall = mockPostHog.capture.mock.calls[0][1]
       expect(captureCall.$set).toEqual({
@@ -221,7 +300,13 @@ describe('sendSurveyEvent', () => {
       })
       const responses = {}
 
-      sendSurveyEvent(responses, survey, mockPostHog)
+      sendSurveyEvent({
+        responses,
+        survey,
+        posthog: mockPostHog,
+        surveySubmissionId: 'test-submission-id',
+        isSurveyCompleted: true,
+      })
 
       const captureCall = mockPostHog.capture.mock.calls[0][1]
       expect(captureCall.$set).toEqual({
@@ -239,17 +324,20 @@ describe('sendSurveyEvent', () => {
             question: 'Rate us',
             type: 'rating',
             scale: 10,
+            originalQuestionIndex: 0,
           } as SurveyQuestion,
           {
             id: 'multi-q',
             question: 'Select options',
             type: 'multiple_choice',
             choices: ['A', 'B', 'C'],
+            originalQuestionIndex: 1,
           } as SurveyQuestion,
           {
             id: 'text-q',
             question: 'Comments',
             type: 'open',
+            originalQuestionIndex: 2,
           } as SurveyQuestion,
         ],
       })
@@ -259,7 +347,13 @@ describe('sendSurveyEvent', () => {
         '$survey_response_text-q': 'Good job!',
       }
 
-      sendSurveyEvent(responses, survey, mockPostHog)
+      sendSurveyEvent({
+        responses,
+        survey,
+        posthog: mockPostHog,
+        surveySubmissionId: 'test-submission-id',
+        isSurveyCompleted: true,
+      })
 
       const captureCall = mockPostHog.capture.mock.calls[0][1]
       expect(captureCall.$survey_questions).toEqual([
@@ -277,6 +371,148 @@ describe('sendSurveyEvent', () => {
           id: 'text-q',
           question: 'Comments',
           response: 'Good job!',
+        },
+      ])
+    })
+  })
+})
+
+describe('dismissedSurveyEvent', () => {
+  let mockPostHog: any
+
+  beforeEach(() => {
+    mockPostHog = {
+      capture: jest.fn(),
+    }
+  })
+
+  const createMockSurvey = (overrides: Partial<Survey> = {}): Survey => ({
+    id: 'test-survey-id',
+    name: 'Test Survey',
+    type: SurveyType.Popover,
+    questions: [
+      {
+        id: 'question-1',
+        question: 'How satisfied are you?',
+        type: 'rating',
+        scale: 5,
+        originalQuestionIndex: 0,
+      } as SurveyQuestion,
+      {
+        id: 'question-2',
+        question: 'Any additional comments?',
+        type: 'open',
+        originalQuestionIndex: 1,
+      } as SurveyQuestion,
+    ],
+    ...overrides,
+  })
+
+  describe('partial response handling', () => {
+    it('should set $survey_partially_completed to true when responses exist', () => {
+      const survey = createMockSurvey()
+      const responses = {
+        '$survey_response_question-1': 4,
+      }
+
+      dismissedSurveyEvent({
+        survey,
+        posthog: mockPostHog,
+        responses,
+        surveySubmissionId: 'test-submission-id',
+      })
+
+      const captureCall = mockPostHog.capture.mock.calls[0][1]
+      expect(captureCall.$survey_partially_completed).toBe(true)
+      expect(captureCall.$survey_submission_id).toBe('test-submission-id')
+    })
+
+    it('should set $survey_partially_completed to false when no responses', () => {
+      const survey = createMockSurvey()
+
+      dismissedSurveyEvent({
+        survey,
+        posthog: mockPostHog,
+        responses: {},
+      })
+
+      const captureCall = mockPostHog.capture.mock.calls[0][1]
+      expect(captureCall.$survey_partially_completed).toBe(false)
+    })
+
+    it('should set $survey_partially_completed to false when responses is undefined', () => {
+      const survey = createMockSurvey()
+
+      dismissedSurveyEvent({
+        survey,
+        posthog: mockPostHog,
+      })
+
+      const captureCall = mockPostHog.capture.mock.calls[0][1]
+      expect(captureCall.$survey_partially_completed).toBe(false)
+    })
+
+    it('should set $survey_partially_completed to false when all responses are null', () => {
+      const survey = createMockSurvey()
+
+      dismissedSurveyEvent({
+        survey,
+        posthog: mockPostHog,
+        responses: {
+          '$survey_response_question-1': null,
+        },
+      })
+
+      const captureCall = mockPostHog.capture.mock.calls[0][1]
+      expect(captureCall.$survey_partially_completed).toBe(false)
+    })
+
+    it('should include responses in the event', () => {
+      const survey = createMockSurvey()
+      const responses = {
+        '$survey_response_question-1': 4,
+        '$survey_response_question-2': 'Great!',
+      }
+
+      dismissedSurveyEvent({
+        survey,
+        posthog: mockPostHog,
+        responses,
+        surveySubmissionId: 'test-submission-id',
+      })
+
+      const captureCall = mockPostHog.capture.mock.calls[0][1]
+      expect(captureCall['$survey_response_question-1']).toBe(4)
+      expect(captureCall['$survey_response_question-2']).toBe('Great!')
+      // Old format responses
+      expect(captureCall.$survey_response).toBe(4)
+      expect(captureCall.$survey_response_1).toBe('Great!')
+    })
+
+    it('should include $survey_questions with responses', () => {
+      const survey = createMockSurvey()
+      const responses = {
+        '$survey_response_question-1': 4,
+      }
+
+      dismissedSurveyEvent({
+        survey,
+        posthog: mockPostHog,
+        responses,
+        surveySubmissionId: 'test-submission-id',
+      })
+
+      const captureCall = mockPostHog.capture.mock.calls[0][1]
+      expect(captureCall.$survey_questions).toEqual([
+        {
+          id: 'question-1',
+          question: 'How satisfied are you?',
+          response: 4,
+        },
+        {
+          id: 'question-2',
+          question: 'Any additional comments?',
+          response: undefined,
         },
       ])
     })

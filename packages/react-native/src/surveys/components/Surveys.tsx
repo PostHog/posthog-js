@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import { ScrollView, StyleProp, ViewStyle } from 'react-native'
 
 import { getDisplayOrderQuestions, getNextSurveyStep, SurveyAppearanceTheme } from '../surveys-utils'
@@ -9,6 +9,8 @@ import {
   maybeAdd,
   SurveyQuestionBranchingType,
   isUndefined,
+  isNullish,
+  uuidv7,
 } from '@posthog/core'
 import { LinkQuestion, MultipleChoiceQuestion, OpenTextQuestion, RatingQuestion } from './QuestionTypes'
 import { PostHog } from '../../posthog-rn'
@@ -51,13 +53,25 @@ const getSurveyResponseValue = (responses: Record<string, string | number | stri
   return response
 }
 
-export const sendSurveyEvent = (
-  responses: Record<string, string | number | string[] | null> = {},
-  survey: Survey,
+export type SurveyResponses = Record<string, string | number | string[] | null>
+
+interface SendSurveyEventArgs {
+  responses?: SurveyResponses
+  survey: Survey
   posthog: PostHog
-): void => {
+  surveySubmissionId: string
+  isSurveyCompleted: boolean
+}
+
+export const sendSurveyEvent = ({
+  responses = {},
+  survey,
+  posthog,
+  surveySubmissionId,
+  isSurveyCompleted,
+}: SendSurveyEventArgs): void => {
   // map question ids also to the old format for back compatibility
-  const oldFormatResponses: Record<string, string | number | string[] | null> = {}
+  const oldFormatResponses: SurveyResponses = {}
   survey.questions.forEach((question: SurveyQuestion) => {
     const oldResponseKey = getSurveyOldResponseKey(question.originalQuestionIndex)
     const response = getSurveyResponseValue(responses, question.id)
@@ -80,6 +94,8 @@ export const sendSurveyEvent = (
       question: question.question,
       response: getSurveyResponseValue(responses, question.id),
     })),
+    $survey_submission_id: surveySubmissionId,
+    $survey_completed: isSurveyCompleted,
     ...allResponses,
     $set: {
       [getSurveyInteractionProperty(survey, 'responded')]: true,
@@ -87,16 +103,65 @@ export const sendSurveyEvent = (
   })
 }
 
-export const dismissedSurveyEvent = (survey: Survey, posthog: PostHog): void => {
+/**
+ * Checks if the responses object has any non-null values
+ */
+const surveyHasResponses = (responses: SurveyResponses | undefined): boolean => {
+  return Object.values(responses || {}).filter((resp) => !isNullish(resp)).length > 0
+}
+
+interface DismissedSurveyEventArgs {
+  survey: Survey
+  posthog: PostHog
+  responses?: SurveyResponses
+  surveySubmissionId?: string
+}
+
+export const dismissedSurveyEvent = ({
+  survey,
+  posthog,
+  responses,
+  surveySubmissionId,
+}: DismissedSurveyEventArgs): void => {
+  // map question ids also to the old format for back compatibility
+  const oldFormatResponses: SurveyResponses = {}
+  if (responses) {
+    survey.questions.forEach((question: SurveyQuestion) => {
+      const oldResponseKey = getSurveyOldResponseKey(question.originalQuestionIndex)
+      const response = getSurveyResponseValue(responses, question.id)
+      if (!isUndefined(response)) {
+        oldFormatResponses[oldResponseKey] = response
+      }
+    })
+  }
+
   posthog.capture('survey dismissed', {
     $survey_name: survey.name,
     $survey_id: survey.id,
     ...maybeAdd('$survey_iteration', survey.current_iteration),
     ...maybeAdd('$survey_iteration_start_date', survey.current_iteration_start_date),
+    $survey_partially_completed: surveyHasResponses(responses),
+    $survey_questions: survey.questions.map((question: SurveyQuestion) => ({
+      id: question.id,
+      question: question.question,
+      response: getSurveyResponseValue(responses || {}, question.id),
+    })),
+    ...maybeAdd('$survey_submission_id', surveySubmissionId),
+    ...responses,
+    ...oldFormatResponses,
     $set: {
       [getSurveyInteractionProperty(survey, 'dismissed')]: true,
     },
   })
+}
+
+export interface QuestionsProps {
+  survey: Survey
+  appearance: SurveyAppearanceTheme
+  styleOverrides?: StyleProp<ViewStyle>
+  onSubmit: () => void
+  /** Callback to share current responses with parent, called on each response change */
+  onResponsesChange?: (responses: SurveyResponses, surveySubmissionId: string) => void
 }
 
 export function Questions({
@@ -104,42 +169,54 @@ export function Questions({
   appearance,
   styleOverrides,
   onSubmit,
-}: {
-  survey: Survey
-  appearance: SurveyAppearanceTheme
-  styleOverrides?: StyleProp<ViewStyle>
-  onSubmit: () => void
-}): JSX.Element {
-  const [questionsResponses, setQuestionsResponses] = useState({})
+  onResponsesChange,
+}: QuestionsProps): JSX.Element {
+  const [questionsResponses, setQuestionsResponses] = useState<SurveyResponses>({})
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
   const posthog = usePostHog()
+
+  // Generate a unique submission ID for this survey session (persists across questions)
+  const surveySubmissionIdRef = useRef<string>(uuidv7())
+  const surveySubmissionId = surveySubmissionIdRef.current
 
   const onNextButtonClick = ({
     res,
     originalQuestionIndex,
     questionId,
-  }: // displayQuestionIndex,
-  {
+  }: {
     res: string | string[] | number | null
     originalQuestionIndex: number
     questionId: string
-    // displayQuestionIndex: number
   }): void => {
     const responseKey = getSurveyNewResponseKey(questionId)
 
-    const allResponses = {
+    const allResponses: SurveyResponses = {
       ...questionsResponses,
       [responseKey]: res,
     }
     setQuestionsResponses(allResponses)
 
+    // Notify parent of response changes (for partial response tracking)
+    onResponsesChange?.(allResponses, surveySubmissionId)
+
     // Get the next question index based on conditional logic
     const nextStep = getNextSurveyStep(survey, originalQuestionIndex, res)
+    const isSurveyCompleted = nextStep === SurveyQuestionBranchingType.End
 
-    if (nextStep === SurveyQuestionBranchingType.End) {
+    // Send event after each question if partial responses enabled, or only at the end
+    if (survey.enable_partial_responses || isSurveyCompleted) {
+      sendSurveyEvent({
+        responses: allResponses,
+        survey,
+        posthog,
+        surveySubmissionId,
+        isSurveyCompleted,
+      })
+    }
+
+    if (isSurveyCompleted) {
       // End the survey
-      sendSurveyEvent(allResponses, survey, posthog)
       onSubmit()
     } else {
       // Move to the next question
@@ -162,7 +239,6 @@ export function Questions({
             res,
             originalQuestionIndex: question.originalQuestionIndex,
             questionId: question.id,
-            // displayQuestionIndex: currentQuestionIndex,
           }),
       })}
     </ScrollView>
