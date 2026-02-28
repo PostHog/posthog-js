@@ -1,7 +1,13 @@
-import type { Plugin, OutputOptions, OutputAsset, OutputChunk } from 'rollup'
-import { spawnLocal, resolveBinaryPath, LogLevel } from '@posthog/core/process'
+import type { Plugin, OutputOptions, OutputAsset, OutputChunk, SourceMapInput } from 'rollup'
+import {
+    spawnLocal,
+    resolveBinaryPath,
+    LogLevel,
+    computeChunkId,
+    buildCodeSnippet,
+    buildChunkComment,
+} from '@posthog/core/process'
 import path from 'node:path'
-import fs from 'node:fs/promises'
 
 export interface PostHogRollupPluginOptions {
     personalApiKey: string
@@ -39,8 +45,13 @@ interface ResolvedPostHogRollupPluginOptions {
     }
 }
 
+// Maps chunk filename to its computed chunk ID, shared between renderChunk and generateBundle
+type ChunkIdMap = Map<string, string>
+
 export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOptions) {
     const posthogOptions = resolveOptions(userOptions)
+    const chunkIdMap: ChunkIdMap = new Map()
+
     return {
         name: 'posthog-rollup-plugin',
 
@@ -54,15 +65,70 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
             },
         },
 
+        renderChunk: {
+            order: 'post' as const,
+            handler(code: string, chunk: { fileName: string }) {
+                if (!posthogOptions.sourcemaps.enabled) return null
+
+                // Compute deterministic chunk ID from pre-injection code.
+                // The source map is not yet finalized at renderChunk time, so we hash
+                // only the code. This is still deterministic: identical code always
+                // produces the same chunk ID.
+                const chunkId = computeChunkId(code, '')
+                chunkIdMap.set(chunk.fileName, chunkId)
+
+                const snippet = buildCodeSnippet(chunkId)
+                const comment = buildChunkComment(chunkId)
+
+                // Rollup automatically adjusts source maps when renderChunk returns
+                // modified code. Using an empty-mappings map tells Rollup this is
+                // an identity transform (only column offsets on line 1 are slightly
+                // shifted by the snippet length — acceptable for error tracking).
+                return {
+                    code: snippet + code + comment,
+                    map: { mappings: '' } as SourceMapInput,
+                }
+            },
+        },
+
+        generateBundle: {
+            order: 'post' as const,
+            handler(_options: OutputOptions, bundle: { [fileName: string]: OutputAsset | OutputChunk }) {
+                if (!posthogOptions.sourcemaps.enabled) return
+
+                // Stamp chunk_id into source map JSON files so the CLI upload can read them
+                for (const [fileName, chunkId] of chunkIdMap) {
+                    const mapFileName = `${fileName}.map`
+                    const mapAsset = bundle[mapFileName]
+
+                    if (mapAsset && mapAsset.type === 'asset') {
+                        try {
+                            const mapJson = JSON.parse(mapAsset.source.toString())
+                            mapJson.chunk_id = chunkId
+                            ;(mapAsset as OutputAsset).source = JSON.stringify(mapJson)
+                        } catch {
+                            // Skip if source map isn't valid JSON
+                        }
+                    }
+
+                    // Also update chunk.map if present
+                    const chunk = bundle[fileName]
+                    if (chunk && chunk.type === 'chunk' && chunk.map) {
+                        ;(chunk.map as unknown as Record<string, unknown>).chunk_id = chunkId
+                    }
+                }
+
+                chunkIdMap.clear()
+            },
+        },
+
         writeBundle: {
-            // Write bundle is executed in parallel, make it sequential to ensure correct order
             sequential: true,
             async handler(options: OutputOptions, bundle: { [fileName: string]: OutputAsset | OutputChunk }) {
                 if (!posthogOptions.sourcemaps.enabled) return
-                const args = ['sourcemap', 'process']
+                const args = ['sourcemap', 'upload']
                 const cliPath = posthogOptions.cliBinaryPath
-                const chunks: { [fileName: string]: OutputChunk } = {}
-                const basePaths = []
+                const basePaths: string[] = []
 
                 if (options.dir) {
                     basePaths.push(options.dir)
@@ -72,19 +138,21 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                     basePaths.push(path.dirname(options.file))
                 }
 
+                let hasChunks = false
+
                 for (const fileName in bundle) {
                     const chunk = bundle[fileName]
                     const isJsFile = /\.(js|mjs|cjs)$/.test(fileName)
                     if (chunk.type === 'chunk' && isJsFile) {
                         const chunkPath = path.resolve(...basePaths, fileName)
-                        chunks[chunkPath] = chunk
                         args.push('--file', chunkPath)
+                        hasChunks = true
                     }
                 }
 
-                if (Object.keys(chunks).length === 0) {
+                if (!hasChunks) {
                     console.log(
-                        'No chunks found, skipping sourcemap processing for this stage. Your build may be multi-stage and this stage may not be relevant'
+                        'No chunks found, skipping sourcemap upload for this stage. Your build may be multi-stage and this stage may not be relevant'
                     )
                     return
                 }
@@ -112,15 +180,6 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                     stdio: 'inherit',
                     cwd: process.cwd(),
                 })
-
-                // we need to update code for others plugins to work
-                await Promise.all(
-                    Object.entries(chunks).map(([chunkPath, chunk]) =>
-                        fs.readFile(chunkPath, 'utf8').then((content) => {
-                            chunk.code = content
-                        })
-                    )
-                )
             },
         },
     } as Plugin
