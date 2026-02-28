@@ -333,6 +333,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      */
     private _queuedRRWebEvents: QueuedRRWebEvent[] = []
     private _isIdle: boolean | 'unknown' = 'unknown'
+    private _rrwebError = false
     private _maxDepthExceeded = false
 
     private _linkedFlagMatching: LinkedFlagMatching
@@ -813,6 +814,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._makeSamplingDecision(this.sessionId)
         this._startRecorder()
 
+        if (!this.isStarted) {
+            this._rrwebError = true
+            return
+        }
+
         // calling addEventListener multiple times is safe and will not add duplicates
         addEventListener(window, 'beforeunload', this._onBeforeUnload)
         addEventListener(window, 'offline', this._onOffline)
@@ -1124,6 +1130,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             isRecordingEnabled: true,
             // things that do still vary
             isSampled: this._isSampled,
+            rrwebError: this._rrwebError,
             urlTriggerMatching: this._urlTriggerMatching,
             eventTriggerMatching: this._eventTriggerMatching,
             linkedFlagMatching: this._linkedFlagMatching,
@@ -1635,6 +1642,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             plugins: activePlugins,
             ...sessionRecordingOptions,
         })
+
+        if (!this._stopRrweb) {
+            this._rrwebError = true
+            logger.error(
+                'rrweb failed to start - Loss of recording data is possible. Check the browser console for rrweb errors.'
+            )
+            return
+        }
+
+        this._rrwebError = false
 
         // We reset the last activity timestamp, resetting the idle timer
         this._lastActivityTimestamp = Date.now()
