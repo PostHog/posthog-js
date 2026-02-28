@@ -814,8 +814,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._makeSamplingDecision(this.sessionId)
         this._startRecorder()
 
-        if (!this.isStarted) {
-            this._rrwebError = true
+        if (this._rrwebError) {
             return
         }
 
@@ -1557,6 +1556,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_replay_flushed_size: this._flushedSizeTracker?.currentTrackedSize,
             $sdk_debug_replay_full_snapshots: this._fullSnapshotTimestamps,
             $snapshot_max_depth_exceeded: this._maxDepthExceeded,
+            $sdk_debug_replay_rrweb_error: this._rrwebError,
         }
     }
 
