@@ -112,6 +112,17 @@ const sanitizeOpenAIImage = (item: unknown): unknown => {
     }
   }
 
+  // Handle video_url format
+  if (item.type === 'video_url' && 'video_url' in item && isObject(item.video_url) && 'url' in item.video_url) {
+    return {
+      ...item,
+      video_url: {
+        ...item.video_url,
+        url: redactBase64DataUrl(item.video_url.url),
+      },
+    }
+  }
+
   // Handle audio format
   if (item.type === 'audio' && 'data' in item) {
     if (isMultimodalEnabled()) return item
