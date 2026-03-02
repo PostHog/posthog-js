@@ -48,6 +48,9 @@ describe('PostHogFeature component', () => {
             isFeatureEnabled: (flag: string) => !!FEATURE_FLAG_STATUS[flag],
             getFeatureFlag: (flag: string) => FEATURE_FLAG_STATUS[flag],
             getFeatureFlagPayload: (flag: string) => FEATURE_FLAG_PAYLOADS[flag],
+            getFeatureFlagResult: (flag: string) => ({
+                payload: FEATURE_FLAG_PAYLOADS[flag],
+            }),
             onFeatureFlags: (callback: any) => {
                 const activeFlags: string[] = []
                 for (const flag in FEATURE_FLAG_STATUS) {
