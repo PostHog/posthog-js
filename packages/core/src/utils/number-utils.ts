@@ -69,7 +69,7 @@ export function getRemoteConfigNumber(
   field: boolean | { [key: string]: JsonType } | undefined,
   key: string
 ): number | undefined {
-  if (field == null || typeof field === 'boolean' || typeof field !== 'object') {
+  if (field == null || typeof field !== 'object') {
     return undefined
   }
 
