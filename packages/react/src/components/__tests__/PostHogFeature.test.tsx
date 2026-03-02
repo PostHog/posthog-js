@@ -51,7 +51,8 @@ describe('PostHogFeature component', () => {
             getFeatureFlagResult: (flag: string) => ({
                 key: flag,
                 enabled: !!FEATURE_FLAG_STATUS[flag],
-                variant: typeof FEATURE_FLAG_STATUS[flag] === 'string' ? FEATURE_FLAG_STATUS[flag] as string : undefined,
+                variant:
+                    typeof FEATURE_FLAG_STATUS[flag] === 'string' ? (FEATURE_FLAG_STATUS[flag] as string) : undefined,
                 payload: FEATURE_FLAG_PAYLOADS[flag],
             }),
             onFeatureFlags: (callback: any) => {
