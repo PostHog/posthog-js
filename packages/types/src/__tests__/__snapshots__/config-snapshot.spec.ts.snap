@@ -411,6 +411,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "undefined",
       "false",
       "true"
+    ],
+    "sampleRate": [
+      "undefined",
+      "number"
     ]
   },
   "error_tracking": {

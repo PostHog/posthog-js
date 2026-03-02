@@ -527,6 +527,17 @@ export interface SessionRecordingOptions {
      * @default false
      */
     strictMinimumDuration?: boolean
+
+    /**
+     * The sample rate for session recordings, a number between 0 and 1.
+     * For example, 0.5 means roughly 50% of sessions will be recorded.
+     *
+     * When `undefined`, falls back to the remote config setting.
+     * When set, takes precedence over the remote config.
+     *
+     * @default undefined
+     */
+    sampleRate?: number
 }
 
 // we used to call a request that was sent to the queue with options attached `RequestQueueOptions`
@@ -867,6 +878,9 @@ export interface PostHogConfig {
 
     /**
      * Determines whether PostHog should enable recording console logs.
+     *
+     * This is related to the Session Recording feature. For more session recording
+     * settings, see the `session_recording` and `capture_performance` configuration option.
      * When undefined, it falls back to the remote config setting.
      *
      * @default undefined
@@ -1016,6 +1030,8 @@ export interface PostHogConfig {
 
     /**
      * Determines the session recording options.
+     *
+     * For more session recording settings, see the `enable_recording_console_log` and `capture_performance` configuration option.
      *
      * @see `SessionRecordingOptions`
      * @default {}
@@ -1246,7 +1262,10 @@ export interface PostHogConfig {
 
     /**
      * Determines whether to capture performance metrics.
-     * These include Network Timing and Web Vitals.
+     * These include Network Timing for Session Replay and Web Vitals.
+     *
+     * The `network_timing` option is only used by the Session Replay feature.
+     * For more session recording settings, see the `session_recording` and `enable_recording_console_log` configuration option.
      *
      * When `undefined`, fallback to the remote configuration.
      * If `false`, neither network timing nor web vitals will work.
