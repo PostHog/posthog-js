@@ -4,6 +4,7 @@ import {
   matchProperty,
   InconclusiveMatchError,
   relativeDateParseForFeatureFlagMatching,
+  parseSemver,
 } from '@/extensions/feature-flags/feature-flags'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation, waitForPromises } from './utils'
 
@@ -2990,6 +2991,410 @@ describe('match properties', () => {
     expect(() => matchProperty(property_a, { key: 'random' })).toThrow(
       new InconclusiveMatchError('Unknown operator: is_unknown')
     )
+  })
+})
+
+describe('semver parsing', () => {
+  it('parses basic semver strings', () => {
+    expect(parseSemver('1.2.3')).toEqual([1, 2, 3])
+    expect(parseSemver('0.0.0')).toEqual([0, 0, 0])
+    expect(parseSemver('10.20.30')).toEqual([10, 20, 30])
+  })
+
+  it('strips v prefix', () => {
+    expect(parseSemver('v1.2.3')).toEqual([1, 2, 3])
+    expect(parseSemver('V1.2.3')).toEqual([1, 2, 3])
+  })
+
+  it('strips leading and trailing whitespace', () => {
+    expect(parseSemver('  1.2.3  ')).toEqual([1, 2, 3])
+    expect(parseSemver('\t1.2.3\n')).toEqual([1, 2, 3])
+  })
+
+  it('strips pre-release and build metadata', () => {
+    expect(parseSemver('1.2.3-alpha')).toEqual([1, 2, 3])
+    expect(parseSemver('1.2.3-alpha.1')).toEqual([1, 2, 3])
+    expect(parseSemver('1.2.3+build')).toEqual([1, 2, 3])
+    expect(parseSemver('1.2.3-alpha+build')).toEqual([1, 2, 3])
+    expect(parseSemver('1.2.3-rc.1+build.123')).toEqual([1, 2, 3])
+  })
+
+  it('defaults missing components to 0', () => {
+    expect(parseSemver('1.2')).toEqual([1, 2, 0])
+    expect(parseSemver('1')).toEqual([1, 0, 0])
+  })
+
+  it('ignores extra components beyond third', () => {
+    expect(parseSemver('1.2.3.4')).toEqual([1, 2, 3])
+    expect(parseSemver('1.2.3.4.5.6')).toEqual([1, 2, 3])
+  })
+
+  it('handles leading zeros', () => {
+    expect(parseSemver('01.02.03')).toEqual([1, 2, 3])
+  })
+
+  it('throws on invalid input', () => {
+    expect(() => parseSemver('')).toThrow(InconclusiveMatchError)
+    expect(() => parseSemver('.1.2')).toThrow(InconclusiveMatchError)
+    expect(() => parseSemver('abc')).toThrow(InconclusiveMatchError)
+    expect(() => parseSemver('a.b.c')).toThrow(InconclusiveMatchError)
+    expect(() => parseSemver('1.2.three')).toThrow(InconclusiveMatchError)
+  })
+})
+
+describe('semver operators', () => {
+  describe('semver_eq', () => {
+    it('matches equal versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: '1.2.3' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '0.0.0', operator: 'semver_eq' }, { version: '0.0.0' })).toBe(true)
+    })
+
+    it('matches with v prefix', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: 'v1.2.3' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: 'v1.2.3', operator: 'semver_eq' }, { version: '1.2.3' })).toBe(true)
+    })
+
+    it('matches with pre-release stripped', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: '1.2.3-alpha' })).toBe(
+        true
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3-alpha', operator: 'semver_eq' }, { version: '1.2.3' })).toBe(
+        true
+      )
+    })
+
+    it('matches partial versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2', operator: 'semver_eq' }, { version: '1.2.0' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1', operator: 'semver_eq' }, { version: '1.0.0' })).toBe(true)
+    })
+
+    it('does not match different versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: '1.2.4' })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: '1.3.3' })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: '2.2.3' })).toBe(false)
+    })
+  })
+
+  describe('semver_neq', () => {
+    it('matches different versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_neq' }, { version: '1.2.4' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_neq' }, { version: '2.0.0' })).toBe(true)
+    })
+
+    it('does not match equal versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_neq' }, { version: '1.2.3' })).toBe(
+        false
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_neq' }, { version: 'v1.2.3' })).toBe(
+        false
+      )
+    })
+  })
+
+  describe('semver_gt', () => {
+    it('matches greater versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gt' }, { version: '1.2.4' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gt' }, { version: '1.3.0' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gt' }, { version: '2.0.0' })).toBe(true)
+    })
+
+    it('does not match equal or lesser versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gt' }, { version: '1.2.3' })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gt' }, { version: '1.2.2' })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gt' }, { version: '0.9.9' })).toBe(false)
+    })
+  })
+
+  describe('semver_gte', () => {
+    it('matches greater or equal versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gte' }, { version: '1.2.3' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gte' }, { version: '1.2.4' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gte' }, { version: '2.0.0' })).toBe(true)
+    })
+
+    it('does not match lesser versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gte' }, { version: '1.2.2' })).toBe(
+        false
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gte' }, { version: '0.9.9' })).toBe(
+        false
+      )
+    })
+  })
+
+  describe('semver_lt', () => {
+    it('matches lesser versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lt' }, { version: '1.2.2' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lt' }, { version: '1.1.9' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lt' }, { version: '0.9.9' })).toBe(true)
+    })
+
+    it('does not match equal or greater versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lt' }, { version: '1.2.3' })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lt' }, { version: '1.2.4' })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lt' }, { version: '2.0.0' })).toBe(false)
+    })
+  })
+
+  describe('semver_lte', () => {
+    it('matches lesser or equal versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lte' }, { version: '1.2.3' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lte' }, { version: '1.2.2' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lte' }, { version: '0.9.9' })).toBe(true)
+    })
+
+    it('does not match greater versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lte' }, { version: '1.2.4' })).toBe(
+        false
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lte' }, { version: '2.0.0' })).toBe(
+        false
+      )
+    })
+  })
+
+  describe('semver_tilde', () => {
+    // ~1.2.3 means >=1.2.3 and <1.3.0
+    it('matches versions in tilde range', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_tilde' }, { version: '1.2.3' })).toBe(
+        true
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_tilde' }, { version: '1.2.4' })).toBe(
+        true
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_tilde' }, { version: '1.2.99' })).toBe(
+        true
+      )
+    })
+
+    it('does not match versions outside tilde range', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_tilde' }, { version: '1.2.2' })).toBe(
+        false
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_tilde' }, { version: '1.3.0' })).toBe(
+        false
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_tilde' }, { version: '2.0.0' })).toBe(
+        false
+      )
+    })
+
+    it('handles edge cases at boundaries', () => {
+      // Lower bound is inclusive
+      expect(matchProperty({ key: 'version', value: '1.0.0', operator: 'semver_tilde' }, { version: '1.0.0' })).toBe(
+        true
+      )
+      // Upper bound is exclusive
+      expect(matchProperty({ key: 'version', value: '1.0.0', operator: 'semver_tilde' }, { version: '1.1.0' })).toBe(
+        false
+      )
+    })
+  })
+
+  describe('semver_caret', () => {
+    // ^1.2.3 means >=1.2.3 <2.0.0 (major > 0)
+    describe('when major > 0', () => {
+      it('matches versions in caret range', () => {
+        expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_caret' }, { version: '1.2.3' })).toBe(
+          true
+        )
+        expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_caret' }, { version: '1.2.4' })).toBe(
+          true
+        )
+        expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_caret' }, { version: '1.9.9' })).toBe(
+          true
+        )
+        expect(
+          matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_caret' }, { version: '1.99.99' })
+        ).toBe(true)
+      })
+
+      it('does not match versions outside caret range', () => {
+        expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_caret' }, { version: '1.2.2' })).toBe(
+          false
+        )
+        expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_caret' }, { version: '2.0.0' })).toBe(
+          false
+        )
+        expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_caret' }, { version: '0.9.9' })).toBe(
+          false
+        )
+      })
+    })
+
+    // ^0.2.3 means >=0.2.3 <0.3.0 (major = 0, minor > 0)
+    describe('when major = 0 and minor > 0', () => {
+      it('matches versions in caret range', () => {
+        expect(matchProperty({ key: 'version', value: '0.2.3', operator: 'semver_caret' }, { version: '0.2.3' })).toBe(
+          true
+        )
+        expect(matchProperty({ key: 'version', value: '0.2.3', operator: 'semver_caret' }, { version: '0.2.4' })).toBe(
+          true
+        )
+        expect(matchProperty({ key: 'version', value: '0.2.3', operator: 'semver_caret' }, { version: '0.2.99' })).toBe(
+          true
+        )
+      })
+
+      it('does not match versions outside caret range', () => {
+        expect(matchProperty({ key: 'version', value: '0.2.3', operator: 'semver_caret' }, { version: '0.2.2' })).toBe(
+          false
+        )
+        expect(matchProperty({ key: 'version', value: '0.2.3', operator: 'semver_caret' }, { version: '0.3.0' })).toBe(
+          false
+        )
+        expect(matchProperty({ key: 'version', value: '0.2.3', operator: 'semver_caret' }, { version: '1.0.0' })).toBe(
+          false
+        )
+      })
+    })
+
+    // ^0.0.3 means >=0.0.3 <0.0.4 (major = 0, minor = 0)
+    describe('when major = 0 and minor = 0', () => {
+      it('matches exact patch version only', () => {
+        expect(matchProperty({ key: 'version', value: '0.0.3', operator: 'semver_caret' }, { version: '0.0.3' })).toBe(
+          true
+        )
+      })
+
+      it('does not match different patch versions', () => {
+        expect(matchProperty({ key: 'version', value: '0.0.3', operator: 'semver_caret' }, { version: '0.0.2' })).toBe(
+          false
+        )
+        expect(matchProperty({ key: 'version', value: '0.0.3', operator: 'semver_caret' }, { version: '0.0.4' })).toBe(
+          false
+        )
+        expect(matchProperty({ key: 'version', value: '0.0.3', operator: 'semver_caret' }, { version: '0.1.0' })).toBe(
+          false
+        )
+      })
+    })
+  })
+
+  describe('semver_wildcard', () => {
+    // 1.* means >=1.0.0 <2.0.0
+    describe('major wildcard (X.*)', () => {
+      it('matches versions in range', () => {
+        expect(matchProperty({ key: 'version', value: '1.*', operator: 'semver_wildcard' }, { version: '1.0.0' })).toBe(
+          true
+        )
+        expect(matchProperty({ key: 'version', value: '1.*', operator: 'semver_wildcard' }, { version: '1.5.5' })).toBe(
+          true
+        )
+        expect(
+          matchProperty({ key: 'version', value: '1.*', operator: 'semver_wildcard' }, { version: '1.99.99' })
+        ).toBe(true)
+      })
+
+      it('does not match versions outside range', () => {
+        expect(matchProperty({ key: 'version', value: '1.*', operator: 'semver_wildcard' }, { version: '0.9.9' })).toBe(
+          false
+        )
+        expect(matchProperty({ key: 'version', value: '1.*', operator: 'semver_wildcard' }, { version: '2.0.0' })).toBe(
+          false
+        )
+      })
+    })
+
+    // 1.2.* means >=1.2.0 <1.3.0
+    describe('minor wildcard (X.Y.*)', () => {
+      it('matches versions in range', () => {
+        expect(
+          matchProperty({ key: 'version', value: '1.2.*', operator: 'semver_wildcard' }, { version: '1.2.0' })
+        ).toBe(true)
+        expect(
+          matchProperty({ key: 'version', value: '1.2.*', operator: 'semver_wildcard' }, { version: '1.2.5' })
+        ).toBe(true)
+        expect(
+          matchProperty({ key: 'version', value: '1.2.*', operator: 'semver_wildcard' }, { version: '1.2.99' })
+        ).toBe(true)
+      })
+
+      it('does not match versions outside range', () => {
+        expect(
+          matchProperty({ key: 'version', value: '1.2.*', operator: 'semver_wildcard' }, { version: '1.1.9' })
+        ).toBe(false)
+        expect(
+          matchProperty({ key: 'version', value: '1.2.*', operator: 'semver_wildcard' }, { version: '1.3.0' })
+        ).toBe(false)
+      })
+    })
+  })
+
+  describe('error handling', () => {
+    it('throws InconclusiveMatchError for missing property key', () => {
+      expect(() =>
+        matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { other_key: '1.2.3' })
+      ).toThrow(InconclusiveMatchError)
+    })
+
+    it('returns false for null property value', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: null })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gt' }, { version: null })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_tilde' }, { version: null })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_caret' }, { version: null })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.*', operator: 'semver_wildcard' }, { version: null })).toBe(
+        false
+      )
+    })
+
+    it('returns false for undefined property value', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: undefined })).toBe(
+        false
+      )
+    })
+
+    it('throws InconclusiveMatchError for invalid override value', () => {
+      expect(() =>
+        matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: 'not-a-version' })
+      ).toThrow(InconclusiveMatchError)
+      expect(() => matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: '' })).toThrow(
+        InconclusiveMatchError
+      )
+    })
+
+    it('throws InconclusiveMatchError for invalid flag value', () => {
+      expect(() =>
+        matchProperty({ key: 'version', value: 'not-a-version', operator: 'semver_eq' }, { version: '1.2.3' })
+      ).toThrow(InconclusiveMatchError)
+    })
+  })
+
+  describe('edge cases', () => {
+    it('handles whitespace in values', () => {
+      expect(matchProperty({ key: 'version', value: '  1.2.3  ', operator: 'semver_eq' }, { version: '1.2.3' })).toBe(
+        true
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: '  1.2.3  ' })).toBe(
+        true
+      )
+    })
+
+    it('handles leading zeros', () => {
+      expect(matchProperty({ key: 'version', value: '01.02.03', operator: 'semver_eq' }, { version: '1.2.3' })).toBe(
+        true
+      )
+    })
+
+    it('handles 4-part versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3.4', operator: 'semver_eq' }, { version: '1.2.3' })).toBe(
+        true
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: '1.2.3.4' })).toBe(
+        true
+      )
+    })
+
+    it('handles numeric property values', () => {
+      // Numbers get converted to strings
+      expect(matchProperty({ key: 'version', value: '1.0.0', operator: 'semver_eq' }, { version: 1 })).toBe(true)
+    })
+
+    it('pre-release suffixes are stripped on both sides', () => {
+      expect(
+        matchProperty({ key: 'version', value: '1.2.3-beta.1', operator: 'semver_eq' }, { version: '1.2.3-alpha.2' })
+      ).toBe(true)
+    })
   })
 })
 
