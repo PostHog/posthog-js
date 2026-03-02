@@ -43,5 +43,3 @@ export function isWindows(): boolean {
 }
 
 export const isHermes = () => !!GLOBAL_OBJ.HermesInternal
-
-
