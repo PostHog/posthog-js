@@ -215,6 +215,35 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
    * @default false
    */
   strictLocalEvaluation?: boolean
+  /**
+   * Provides the API to extend the lifetime of a serverless invocation until
+   * background work (like flushing analytics events) completes after the response
+   * is sent.
+   *
+   * @experimental Subject to change in a minor release.
+   *
+   * @example
+   * // Vercel
+   * import { waitUntil } from '@vercel/functions'
+   * new PostHog('key', { waitUntil })
+   */
+  waitUntil?: (promise: Promise<unknown>) => void
+  /**
+   * Debounce interval in milliseconds for the `waitUntil`-based flush.
+   * After the last event is enqueued, the SDK waits this long before flushing.
+   *
+   * @experimental Subject to change in a minor release.
+   * @default 50
+   */
+  waitUntilDebounceMs?: number
+  /**
+   * Maximum time in milliseconds to debounce before forcing a flush.
+   * Prevents starvation from rapid concurrent captures.
+   *
+   * @experimental Subject to change in a minor release.
+   * @default 500
+   */
+  waitUntilMaxWaitMs?: number
 }
 
 export type PostHogFeatureFlag = {
