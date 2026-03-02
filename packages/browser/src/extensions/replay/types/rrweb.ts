@@ -104,7 +104,7 @@ export type recordOptions = {
 
 // Replication of `record` from inside `@rrweb/record`
 export type rrwebRecord = {
-    (options: recordOptions): () => void
+    (options: recordOptions): (() => void) | undefined
     addCustomEvent: (tag: string, payload: any) => void
     takeFullSnapshot: () => void
     mirror: {

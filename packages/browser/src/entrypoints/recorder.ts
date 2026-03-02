@@ -1,3 +1,6 @@
+// This file is kept only for backwards compatibility.
+// In almost every case, if you are manually importing a file you should use posthog-recorder instead.
+
 import { record as rrwebRecord } from '@rrweb/record'
 import { getRecordConsolePlugin } from '@rrweb/rrweb-plugin-console-record'
 import { getRecordNetworkPlugin } from '../extensions/replay/external/network-plugin'

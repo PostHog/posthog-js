@@ -448,6 +448,7 @@
         "_resumeRecording",
         "_resumeSavedTour",
         "_retryQueue",
+        "_rrwebError",
         "_runBeforeSend",
         "_sampleRate",
         "_samplingSessionListener",

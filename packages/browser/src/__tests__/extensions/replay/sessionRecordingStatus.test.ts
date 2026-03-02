@@ -8,6 +8,7 @@ import {
     LinkedFlagMatching,
     PAUSED,
     RecordingTriggersStatus,
+    RRWEB_ERROR,
     SAMPLED,
     SessionRecordingStatus,
     TRIGGER_ACTIVATED,
@@ -30,6 +31,7 @@ const defaultTriggersStatus: RecordingTriggersStatus = {
     receivedFlags: true,
     isRecordingEnabled: true,
     isSampled: undefined,
+    rrwebError: false,
     urlTriggerMatching: {
         onRemoteConfig: () => {},
         _instance: fakePostHog,
@@ -58,6 +60,31 @@ const makeLinkedFlagMatcher = (linkedFlag: string | null, linkedFlagSeen: boolea
 
 const testCases: TestConfig[] = [
     // Basic states
+    {
+        name: 'rrweb error',
+        config: { rrwebError: true },
+        anyMatchExpected: RRWEB_ERROR,
+        allMatchExpected: RRWEB_ERROR,
+    },
+    {
+        name: 'rrweb error overrides sampling true',
+        config: { rrwebError: true, isSampled: true },
+        anyMatchExpected: RRWEB_ERROR,
+        allMatchExpected: RRWEB_ERROR,
+    },
+    {
+        name: 'rrweb error overrides active trigger',
+        config: {
+            rrwebError: true,
+            urlTriggerMatching: {
+                ...defaultTriggersStatus.urlTriggerMatching,
+                _instance: fakePostHog,
+                triggerStatus: () => TRIGGER_ACTIVATED,
+            } as unknown as URLTriggerMatching,
+        },
+        anyMatchExpected: RRWEB_ERROR,
+        allMatchExpected: RRWEB_ERROR,
+    },
     {
         name: 'flags not received',
         config: { receivedFlags: false },

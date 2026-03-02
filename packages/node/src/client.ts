@@ -821,7 +821,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           locally_evaluated: flagWasLocallyEvaluated,
           [`$feature/${key}`]: response,
           $feature_flag_request_id: requestId,
-          $feature_flag_evaluated_at: evaluatedAt,
+          $feature_flag_evaluated_at: flagWasLocallyEvaluated ? Date.now() : evaluatedAt,
+        }
+
+        // Add local evaluation definition load timestamp
+        if (flagWasLocallyEvaluated && this.featureFlagsPoller) {
+          const flagDefinitionsLoadedAt = this.featureFlagsPoller.getFlagDefinitionsLoadedAt()
+
+          if (flagDefinitionsLoadedAt !== undefined) {
+            properties.$feature_flag_definitions_loaded_at = flagDefinitionsLoadedAt
+          }
         }
 
         if (featureFlagError) {

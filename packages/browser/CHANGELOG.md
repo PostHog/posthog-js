@@ -1,5 +1,26 @@
 # posthog-js
 
+## 1.356.2
+
+### Patch Changes
+
+- [#3174](https://github.com/PostHog/posthog-js/pull/3174) [`e9127d8`](https://github.com/PostHog/posthog-js/commit/e9127d8d98f21886d1ca2f3b193a443c7a837b5f) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Detect and report when rrweb fails to initialize. rrweb's `record()` silently swallows startup errors and returns `undefined`, which previously left the SDK reporting an active recording status while capturing zero data. The SDK now checks the return value and reports a new `rrweb_error` status, making the failure visible in debug properties.
+  (2026-03-02)
+
+- [#3175](https://github.com/PostHog/posthog-js/pull/3175) [`6ee5f12`](https://github.com/PostHog/posthog-js/commit/6ee5f12254f8504ea317d587ba9244775f0e4344) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Fix memory leak in canvas recording on Safari < 16.4 where ImageBitmaps were never closed when OffscreenCanvas was unavailable in the web worker.
+  (2026-03-02)
+
+- [#3178](https://github.com/PostHog/posthog-js/pull/3178) [`186871a`](https://github.com/PostHog/posthog-js/commit/186871a277928a4c6ad010fc9b2ea6525cc3f61e) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Skip canvas FPS recording entirely on browsers without OffscreenCanvas support (Safari < 16.4) instead of running a wasteful requestAnimationFrame loop that can never produce data. Also includes displayWidth/displayHeight in canvas mutation data for correct replay sizing.
+  (2026-03-02)
+
+- [#3176](https://github.com/PostHog/posthog-js/pull/3176) [`87bae20`](https://github.com/PostHog/posthog-js/commit/87bae20a1ff9a7153a699e8e81de3ea16db2541e) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: Drop explicit exports
+  (2026-03-02)
+
+- [#3172](https://github.com/PostHog/posthog-js/pull/3172) [`2e46959`](https://github.com/PostHog/posthog-js/commit/2e46959e3b88a6571d1a0e60cdd0ef5a2db1a02b) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: Compressed requests use ArrayBuffer
+  (2026-03-02)
+- Updated dependencies []:
+    - @posthog/types@1.356.2
+
 ## 1.356.1
 
 ### Patch Changes

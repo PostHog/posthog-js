@@ -1,6 +1,7 @@
 /* eslint-disable compat/compat */
 /// <reference lib="dom" />
 
+import { TextDecoder } from 'util'
 import { extendURLParams, request } from '../request'
 import { Compression, RequestWithOptions } from '../types'
 
@@ -400,14 +401,10 @@ describe('request', () => {
                     })
                 )
                 expect(mockedXHR.send).toHaveBeenCalledTimes(1)
-                expect(mockedXHR.send.mock.calls[0][0]).toBeInstanceOf(Blob)
-                // Decode and check the blob content
+                expect(mockedXHR.send.mock.calls[0][0]).toBeInstanceOf(ArrayBuffer)
+                // Decode and check the ArrayBuffer content
 
-                const res = await new Promise((resolve) => {
-                    const reader = new FileReader()
-                    reader.onload = () => resolve(reader.result)
-                    reader.readAsText(mockedXHR.send.mock.calls[0][0])
-                })
+                const res = new TextDecoder().decode(mockedXHR.send.mock.calls[0][0] as ArrayBuffer)
 
                 expect(res).toMatchInlineSnapshot(`
                 "�      �VJ��W�RJJ,R� ��+�
@@ -505,15 +502,11 @@ describe('request', () => {
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
                     'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=gzip-js&beacon=1',
-                    expect.any(Blob)
+                    expect.any(ArrayBuffer)
                 )
-                const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
+                const arrayBuffer = mockedNavigator?.sendBeacon.mock.calls[0][1] as ArrayBuffer
 
-                const reader = new FileReader()
-                const result = await new Promise((resolve) => {
-                    reader.onload = () => resolve(reader.result)
-                    reader.readAsText(blob)
-                })
+                const result = new TextDecoder().decode(arrayBuffer)
 
                 expect(result).toMatchInlineSnapshot(`
                 "�      �VJ��W�RJJ,R� ��+�

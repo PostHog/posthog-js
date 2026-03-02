@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.26.1
+
+### Patch Changes
+
+- [#3163](https://github.com/PostHog/posthog-js/pull/3163) [`0dc03b0`](https://github.com/PostHog/posthog-js/commit/0dc03b02c6dc69dab3038efa2d2a56785e2fa276) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Improve local feature flag evaluation debugging by adding timestamp tracking. Locally evaluated flags now include timing information in `$feature_flag_called` events to help debug cache TTL and timing issues, matching what's available for remote evaluation.
+  (2026-03-02)
+
 ## 5.26.0
 
 ### Minor Changes

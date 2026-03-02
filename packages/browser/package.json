@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.356.1",
+    "version": "1.356.2",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
@@ -52,36 +52,6 @@
         "react/package.json",
         "react/surveys/package.json"
     ],
-    "exports": {
-        ".": {
-            "types": "./dist/module.d.ts",
-            "import": "./dist/module.js",
-            "require": "./dist/main.js"
-        },
-        "./slim": {
-            "types": "./dist/module.slim.d.ts",
-            "import": "./dist/module.slim.js"
-        },
-        "./extensions": {
-            "types": "./lib/src/extensions/extension-bundles.d.ts",
-            "import": "./lib/src/extensions/extension-bundles.js"
-        },
-        "./react": {
-            "types": "./react/dist/types/index.d.ts",
-            "import": "./react/dist/esm/index.js",
-            "require": "./react/dist/umd/index.js"
-        },
-        "./react/*": {
-            "types": "./react/dist/types/*/index.d.ts",
-            "import": "./react/dist/esm/*/index.js",
-            "require": "./react/dist/umd/*/index.js"
-        },
-        "./dist/*.js": "./dist/*.js",
-        "./dist/*": "./dist/*.js",
-        "./lib/*.js": "./lib/*.js",
-        "./lib/*": "./lib/*.js",
-        "./package.json": "./package.json"
-    },
     "dependencies": {
         "@posthog/core": "workspace:*",
         "@posthog/types": "workspace:*",
@@ -108,9 +78,9 @@
         "@jest/globals": "^29.7.0",
         "@playwright/test": "^1.52.0",
         "@posthog-tooling/rollup-utils": "workspace:*",
-        "@posthog/rrweb-plugin-console-record": "^0.0.42",
-        "@posthog/rrweb-record": "^0.0.42",
-        "@posthog/rrweb-types": "^0.0.42",
+        "@posthog/rrweb-plugin-console-record": "^0.0.44",
+        "@posthog/rrweb-record": "^0.0.44",
+        "@posthog/rrweb-types": "^0.0.44",
         "@rollup/plugin-babel": "^6.0.4",
         "@rollup/plugin-commonjs": "^28.0.6",
         "@rollup/plugin-json": "^6.1.0",

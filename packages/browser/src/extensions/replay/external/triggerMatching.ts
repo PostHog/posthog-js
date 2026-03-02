@@ -15,6 +15,7 @@ export const BUFFERING = 'buffering'
 export const PAUSED = 'paused'
 export const PENDING_CONFIG = 'pending_config'
 export const LAZY_LOADING = 'lazy_loading'
+export const RRWEB_ERROR = 'rrweb_error'
 
 const TRIGGER = 'trigger'
 export const TRIGGER_ACTIVATED = TRIGGER + '_activated'
@@ -25,6 +26,7 @@ export interface RecordingTriggersStatus {
     get receivedFlags(): boolean
     get isRecordingEnabled(): false | true | undefined
     get isSampled(): false | true | null
+    get rrwebError(): boolean
     get urlTriggerMatching(): URLTriggerMatching
     get eventTriggerMatching(): EventTriggerMatching
     get linkedFlagMatching(): LinkedFlagMatching
@@ -49,7 +51,16 @@ export type TriggerStatus = (typeof triggerStatuses)[number]
  * the sample rate determined this session should be sent to the server.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const sessionRecordingStatuses = [DISABLED, SAMPLED, ACTIVE, BUFFERING, PAUSED, PENDING_CONFIG, LAZY_LOADING] as const
+const sessionRecordingStatuses = [
+    DISABLED,
+    SAMPLED,
+    ACTIVE,
+    BUFFERING,
+    PAUSED,
+    PENDING_CONFIG,
+    LAZY_LOADING,
+    RRWEB_ERROR,
+] as const
 export type SessionRecordingStatus = (typeof sessionRecordingStatuses)[number]
 
 // while we have both lazy and eager loaded replay we might get either type of config
@@ -395,6 +406,10 @@ export class EventTriggerMatching implements TriggerStatusMatching {
 
 // we need a no-op matcher before we can lazy-load the other matches, since all matchers wait on remote config anyway
 export function nullMatchSessionRecordingStatus(triggersStatus: RecordingTriggersStatus): SessionRecordingStatus {
+    if (triggersStatus.rrwebError) {
+        return RRWEB_ERROR
+    }
+
     if (!triggersStatus.isRecordingEnabled) {
         return DISABLED
     }
@@ -403,6 +418,10 @@ export function nullMatchSessionRecordingStatus(triggersStatus: RecordingTrigger
 }
 
 export function anyMatchSessionRecordingStatus(triggersStatus: RecordingTriggersStatus): SessionRecordingStatus {
+    if (triggersStatus.rrwebError) {
+        return RRWEB_ERROR
+    }
+
     if (!triggersStatus.receivedFlags) {
         return BUFFERING
     }
@@ -446,6 +465,10 @@ export function anyMatchSessionRecordingStatus(triggersStatus: RecordingTriggers
 }
 
 export function allMatchSessionRecordingStatus(triggersStatus: RecordingTriggersStatus): SessionRecordingStatus {
+    if (triggersStatus.rrwebError) {
+        return RRWEB_ERROR
+    }
+
     if (!triggersStatus.receivedFlags) {
         return BUFFERING
     }
