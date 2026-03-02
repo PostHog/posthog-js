@@ -1,5 +1,12 @@
 # @posthog/react
 
+## 1.8.2
+
+### Patch Changes
+
+- [#3182](https://github.com/PostHog/posthog-js/pull/3182) [`2304af0`](https://github.com/PostHog/posthog-js/commit/2304af092b4da4d5480f40f1fb8f748ce89e8c25) Thanks [@marandaneto](https://github.com/marandaneto)! - refactor: use `getFeatureFlagResult` instead of deprecated `getFeatureFlagPayload` internally
+  (2026-03-02)
+
 ## 1.8.1
 
 ### Patch Changes
