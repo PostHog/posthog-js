@@ -11,7 +11,7 @@ import { RemoteConfigLoader } from '../../remote-config'
 import { Properties, RemoteConfig, SessionRecordingPersistedConfig, SessionStartReason } from '../../types'
 import { type eventWithTime } from './types/rrweb-types'
 
-import { isNullish, isUndefined } from '@posthog/core'
+import { isNullish, isNumber, isUndefined, isValidSampleRate } from '@posthog/core'
 import { createLogger } from '../../utils/logger'
 import {
     assignableWindow,
@@ -152,8 +152,8 @@ export class SessionRecording {
         if (isNullish(rate)) {
             return null
         }
-        const parsed = parseFloat(rate as string)
-        if (isNaN(parsed) || parsed < 0 || parsed > 1) {
+        const parsed = isNumber(rate) ? rate : parseFloat(rate as string)
+        if (!isValidSampleRate(parsed)) {
             logger.warn(`${source} must be between 0 and 1. Ignoring invalid value:`, rate)
             return null
         }

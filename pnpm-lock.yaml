@@ -817,8 +817,8 @@ importers:
         specifier: 0.83.1
         version: 0.83.1
       posthog-react-native-session-replay:
-        specifier: ^1.2.0
-        version: 1.2.0(react-native@0.69.12(@babel/core@7.28.5)(@babel/preset-env@7.28.5(@babel/core@7.28.5))(react@18.2.0))(react@18.2.0)
+        specifier: ^1.5.0
+        version: 1.5.0(react-native@0.69.12(@babel/core@7.28.5)(@babel/preset-env@7.28.5(@babel/core@7.28.5))(react@18.2.0))(react@18.2.0)
       react:
         specifier: 18.2.0
         version: 18.2.0
@@ -11020,8 +11020,8 @@ packages:
     resolution: {integrity: sha512-3Ybi1tAuwAP9s0r1UQ2J4n5Y0G05bJkpUIO0/bI9MhwmD70S5aTWbXGBwxHrelT+XM1k6dM0pk+SwNkpTRN7Pg==}
     engines: {node: ^10 || ^12 || >=14}
 
-  posthog-react-native-session-replay@1.2.0:
-    resolution: {integrity: sha512-WPJR6cYhsFtzTCU8AZ7Z5AvOH1SCcF3IID/9r2MKVqI8KBVCOe02k4OHaClA7jHMEDcYYAYp+0keJnRVe8nFhA==}
+  posthog-react-native-session-replay@1.5.0:
+    resolution: {integrity: sha512-3XYGSpaWDfB0s4WrZlekN+dNO/kVSWCPAUBDmayIbFfL7SJ1OTCoYQrJp+JJdm8Wf+wJmrAv7LoPOvl/mY5A0g==}
     peerDependencies:
       react: '*'
       react-native: '*'
@@ -27383,7 +27383,7 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  posthog-react-native-session-replay@1.2.0(react-native@0.69.12(@babel/core@7.28.5)(@babel/preset-env@7.28.5(@babel/core@7.28.5))(react@18.2.0))(react@18.2.0):
+  posthog-react-native-session-replay@1.5.0(react-native@0.69.12(@babel/core@7.28.5)(@babel/preset-env@7.28.5(@babel/core@7.28.5))(react@18.2.0))(react@18.2.0):
     dependencies:
       react: 18.2.0
       react-native: 0.69.12(@babel/core@7.28.5)(@babel/preset-env@7.28.5(@babel/core@7.28.5))(react@18.2.0)

@@ -148,6 +148,12 @@ export type PostHogSessionReplayConfig = {
    * Default: true
    */
   captureNetworkTelemetry?: boolean
+  /**
+   * Session replay sample rate between 0 and 1
+   * Local config has precedence over remote config when both are set.
+   * If undefined, sampling is controlled by remote config (when available).
+   */
+  sampleRate?: number
 }
 
 export interface PostHogCustomStorage {
