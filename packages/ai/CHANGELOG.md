@@ -1,5 +1,14 @@
 # posthog-ai
 
+## 7.9.4
+
+### Patch Changes
+
+- [#3180](https://github.com/PostHog/posthog-js/pull/3180) [`42b4223`](https://github.com/PostHog/posthog-js/commit/42b4223a89e4e1a1e14cdda83773117033870579) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates: - Updated dependency [`@google/genai@^1.43.0` ↗︎](https://www.npmjs.com/package/@google/genai/v/1.43.0) (from `^1.42.0`, in `dependencies`) - Updated dependency [`@langchain/core@^1.1.29` ↗︎](https://www.npmjs.com/package/@langchain/core/v/1.1.29) (from `^1.1.27`, in `dependencies`) - Updated dependency [`langchain@^1.2.28` ↗︎](https://www.npmjs.com/package/langchain/v/1.2.28) (from `^1.2.25`, in `dependencies`) - Updated dependency [`openai@^6.25.0` ↗︎](https://www.npmjs.com/package/openai/v/6.25.0) (from `^6.22.0`, in `dependencies`) (2026-03-02)
+- Updated dependencies [[`5e8d5fc`](https://github.com/PostHog/posthog-js/commit/5e8d5fc9c12e5545e015c9c5556167b9fb279347)]:
+  - @posthog/core@1.23.2
+  - posthog-node@5.26.2
+
 ## 7.9.3
 
 ### Patch Changes

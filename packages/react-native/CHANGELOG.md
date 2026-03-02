@@ -1,5 +1,14 @@
 # posthog-react-native
 
+## 4.37.1
+
+### Patch Changes
+
+- [#3185](https://github.com/PostHog/posthog-js/pull/3185) [`5e8d5fc`](https://github.com/PostHog/posthog-js/commit/5e8d5fc9c12e5545e015c9c5556167b9fb279347) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: export getRemoteConfigBool, getRemoteConfigNumber, and isValidSampleRate from @posthog/core
+  (2026-03-02)
+- Updated dependencies [[`5e8d5fc`](https://github.com/PostHog/posthog-js/commit/5e8d5fc9c12e5545e015c9c5556167b9fb279347)]:
+  - @posthog/core@1.23.2
+
 ## 4.37.0
 
 ### Minor Changes
