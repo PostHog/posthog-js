@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.357.0
+
+### Minor Changes
+
+- [#3169](https://github.com/PostHog/posthog-js/pull/3169) [`4f885c0`](https://github.com/PostHog/posthog-js/commit/4f885c067f3e46398629f4163a204206e71d4757) Thanks [@marandaneto](https://github.com/marandaneto)! - feat: add local sampleRate config for session recording
+  (2026-03-02)
+
 ## 1.356.2
 
 ## 1.356.1

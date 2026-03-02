@@ -1,5 +1,19 @@
 # posthog-js
 
+## 1.357.0
+
+### Minor Changes
+
+- [#3169](https://github.com/PostHog/posthog-js/pull/3169) [`4f885c0`](https://github.com/PostHog/posthog-js/commit/4f885c067f3e46398629f4163a204206e71d4757) Thanks [@marandaneto](https://github.com/marandaneto)! - feat: add local sampleRate config for session recording
+  (2026-03-02)
+
+### Patch Changes
+
+- [#3179](https://github.com/PostHog/posthog-js/pull/3179) [`0dce119`](https://github.com/PostHog/posthog-js/commit/0dce11905e62737033f59294252f5f390212cf33) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Bump @posthog/rrweb-\* to 0.0.45 — reuses a single OffscreenCanvas in the canvas recording worker instead of allocating a new one per frame, fixing a memory leak in Safari where GPU-backed canvas resources were not being garbage collected promptly
+  (2026-03-02)
+- Updated dependencies [[`4f885c0`](https://github.com/PostHog/posthog-js/commit/4f885c067f3e46398629f4163a204206e71d4757)]:
+    - @posthog/types@1.357.0
+
 ## 1.356.2
 
 ### Patch Changes

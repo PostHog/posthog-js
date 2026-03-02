@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.37.0
+
+### Minor Changes
+
+- [#3134](https://github.com/PostHog/posthog-js/pull/3134) [`eb12d0c`](https://github.com/PostHog/posthog-js/commit/eb12d0cd0a36cdb053f08ce4dfbcecdc62ece2bd) Thanks [@marandaneto](https://github.com/marandaneto)! - feat: support session replay sampleRate config
+  (2026-03-02)
+
 ## 4.36.1
 
 ### Patch Changes
