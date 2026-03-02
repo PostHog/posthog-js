@@ -554,6 +554,7 @@
         "_urlTriggerStatus",
         "_urlTriggers",
         "_validateEmail",
+        "_validateSampleRate",
         "_visibilityChangeListener",
         "_visibilityStateListener",
         "_widgetRef",
