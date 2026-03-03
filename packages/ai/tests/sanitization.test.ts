@@ -668,6 +668,24 @@ describe('Base64 image redaction', () => {
         expect(result[0].content[0].image_url.url).toBe('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...')
       })
 
+      it('should preserve videos when flag is enabled', () => {
+        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
+        const input = [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'video_url',
+                video_url: { url: 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28y...' },
+              },
+            ],
+          },
+        ]
+
+        const result = sanitize(input, 'openai-chat-completions') as any
+        expect(result[0].content[0].video_url.url).toBe('data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28y...')
+      })
+
       it('should redact audio when flag is disabled', () => {
         delete process.env._INTERNAL_LLMA_MULTIMODAL
         const input = [
