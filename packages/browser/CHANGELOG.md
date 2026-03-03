@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.357.2
+
+### Patch Changes
+
+- [#3170](https://github.com/PostHog/posthog-js/pull/3170) [`f485c92`](https://github.com/PostHog/posthog-js/commit/f485c9217d17aae68ceb257420463946163d0060) Thanks [@slshults](https://github.com/slshults)! - fix: Move tablet detection logic into detectDeviceType for consistent classification across all call sites
+  (2026-03-03)
+- Updated dependencies []:
+    - @posthog/types@1.357.2
+
 ## 1.357.1
 
 ### Patch Changes
