@@ -416,6 +416,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   groups(groups: PostHogGroupProperties): void {
     this.wrap(() => {
+      if (this._personProfiles === 'never') {
+        this._logger.error('posthog.group was called, but personProfiles is set to "never". This call will be ignored.')
+        return
+      }
+
       // Get persisted groups
       const existingGroups = this.props.$groups || {}
 
@@ -456,6 +461,13 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     options?: PostHogCaptureOptions
   ): void {
     this.wrap(() => {
+      if (this._personProfiles === 'never') {
+        this._logger.error(
+          'posthog.groupIdentify was called, but personProfiles is set to "never". This call will be ignored.'
+        )
+        return
+      }
+
       const distinctId = this.getDistinctId()
       const eventProperties = this.enrichProperties({})
       super.groupIdentifyStateless(groupType, groupKey, groupProperties, options, distinctId, eventProperties)

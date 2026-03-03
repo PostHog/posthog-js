@@ -2494,6 +2494,13 @@ export class PostHog implements PostHogInterface {
             return
         }
 
+        if (this.config.person_profiles === 'never') {
+            this.logger.error(
+                'posthog.group was called, but process_person is set to "never". This call will be ignored.'
+            )
+            return
+        }
+
         const existingGroups = this.getGroups()
 
         // if group key changes, remove stored group properties
@@ -2609,6 +2616,12 @@ export class PostHog implements PostHogInterface {
      * @param {Boolean} [reloadFeatureFlags] Whether to reload feature flags.
      */
     setGroupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags = true): void {
+        if (this.config.person_profiles === 'never') {
+            this.logger.error(
+                'posthog.setGroupPropertiesForFlags was called, but process_person is set to "never". This call will be ignored.'
+            )
+            return
+        }
         this.featureFlags.setGroupPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
