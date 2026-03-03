@@ -33,6 +33,7 @@ import type { PostHogLogs } from './posthog-logs'
  * Augmented by the slim bundle entry point to mark tree-shakeable extensions
  * as optional. Empty by default (full bundle), meaning extensions are guaranteed.
  */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface TreeShakeableConfig {}
 
 /**
