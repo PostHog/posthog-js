@@ -547,7 +547,8 @@ describe('person processing', () => {
     })
 
     describe('group', () => {
-        it('should start person processing for identified_only users', async () => {
+        it('should NOT start person processing for identified_only users', async () => {
+            // Groups are independent of person processing - group() should not trigger person processing
             // arrange
             const { posthog, beforeSendMock } = await setup('identified_only')
 
@@ -561,9 +562,9 @@ describe('person processing', () => {
             expect(eventBeforeGroup[0].properties.$process_person_profile).toEqual(false)
             const groupIdentify = beforeSendMock.mock.calls[1]
             expect(groupIdentify[0].event).toEqual('$groupidentify')
-            expect(groupIdentify[0].properties.$process_person_profile).toEqual(true)
+            expect(groupIdentify[0].properties.$process_person_profile).toEqual(false)
             const eventAfterGroup = beforeSendMock.mock.calls[2]
-            expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(true)
+            expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(false)
         })
 
         it('should send the $groupidentify event even if person_processing is set to never', async () => {
@@ -577,11 +578,8 @@ describe('person processing', () => {
             posthog.capture('custom event after group')
 
             // assert
-            // setGroupPropertiesForFlags still has a person processing check
-            expect(mockLogger.error).toBeCalledTimes(1)
-            expect(mockLogger.error).toHaveBeenCalledWith(
-                'posthog.setGroupPropertiesForFlags was called, but process_person is set to "never". This call will be ignored.'
-            )
+            // setGroupPropertiesForFlags no longer has a person processing check
+            expect(mockLogger.error).toBeCalledTimes(0)
 
             // $groupidentify is sent (groups are independent of person processing)
             expect(beforeSendMock).toBeCalledTimes(3)

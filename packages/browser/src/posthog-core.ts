@@ -2609,9 +2609,6 @@ export class PostHog implements PostHogInterface {
      * @param {Boolean} [reloadFeatureFlags] Whether to reload feature flags.
      */
     setGroupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags = true): void {
-        if (!this._requirePersonProcessing('posthog.setGroupPropertiesForFlags')) {
-            return
-        }
         this.featureFlags.setGroupPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
@@ -3215,7 +3212,6 @@ export class PostHog implements PostHogInterface {
             this.config.person_profiles === 'never' ||
             (this.config.person_profiles === 'identified_only' &&
                 !this._isIdentified() &&
-                isEmptyObject(this.getGroups()) &&
                 !this.persistence?.props?.[ALIAS_ID_KEY] &&
                 !this.persistence?.props?.[ENABLE_PERSON_PROCESSING])
         )
