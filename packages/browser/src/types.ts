@@ -26,6 +26,22 @@ import type { PostHogConversations } from './extensions/conversations/posthog-co
 import type { PostHogLogs } from './posthog-logs'
 
 // ============================================================================
+// Tree-shakeable extension types
+// ============================================================================
+
+/**
+ * Augmented by the slim bundle entry point to mark tree-shakeable extensions
+ * as optional. Empty by default (full bundle), meaning extensions are guaranteed.
+ */
+export interface TreeShakeableConfig {}
+
+/**
+ * For the full bundle (default), resolves to T (extensions guaranteed present).
+ * For the slim bundle (augmented with { optional: true }), resolves to T | undefined.
+ */
+export type TreeShakeable<T> = 'optional' extends keyof TreeShakeableConfig ? T | undefined : T
+
+// ============================================================================
 // Re-export public types from @posthog/types
 // ============================================================================
 

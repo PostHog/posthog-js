@@ -58,6 +58,7 @@ import {
     SnippetArrayItem,
     ToolbarParams,
     PostHogInterface,
+    TreeShakeable,
 } from './types'
 import {
     _copyAndTruncateStrings,
@@ -340,12 +341,12 @@ export class PostHog implements PostHogInterface {
     scrollManager: ScrollManager
     pageViewManager: PageViewManager
     featureFlags: PostHogFeatureFlags
-    surveys?: PostHogSurveys
-    conversations?: PostHogConversations
-    logs?: PostHogLogs
-    experiments?: WebExperiments
-    toolbar?: Toolbar
-    exceptions?: PostHogExceptions
+    surveys: TreeShakeable<PostHogSurveys>
+    conversations: TreeShakeable<PostHogConversations>
+    logs: TreeShakeable<PostHogLogs>
+    experiments: TreeShakeable<WebExperiments>
+    toolbar: TreeShakeable<Toolbar>
+    exceptions: TreeShakeable<PostHogExceptions>
     consent: ConsentManager
 
     // These are instance-specific state created after initialisation
