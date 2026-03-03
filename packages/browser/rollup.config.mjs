@@ -365,6 +365,33 @@ const entrypointTargets = entrypoints.map((file) => {
     }
 })
 
+/**
+ * rollup-plugin-dts doesn't resolve `declare module` augmentations that target
+ * modules being inlined. Relative paths like `'../types'` become dangling in
+ * the bundled output. This plugin repoints them to the package name so
+ * TypeScript's module augmentation merging works correctly for consumers.
+ */
+function fixDtsModuleAugmentation() {
+    const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf-8'))
+    const pkgDir = path.resolve('.')
+
+    return {
+        name: 'fix-dts-module-augmentation',
+        generateBundle(options, bundle) {
+            const outputDir = options.dir ? path.resolve(options.dir) : path.dirname(path.resolve(options.file))
+            for (const chunk of Object.values(bundle)) {
+                if (!chunk.code) continue
+                const chunkPath = path.resolve(outputDir, chunk.fileName)
+                const modulePath = `${pkg.name}/${path.relative(pkgDir, chunkPath).replace(/\.d\.ts$/, '')}`
+                chunk.code = chunk.code.replace(
+                    /declare module ['"]\.\.?\/[^'"]+['"]/g,
+                    `declare module '${modulePath}'`
+                )
+            }
+        },
+    }
+}
+
 const typeTargets = entrypoints
     .filter((file) => file.endsWith('.es.ts'))
     .map((file) => {
@@ -383,6 +410,7 @@ const typeTargets = entrypoints
                 dts({
                     exclude: [],
                 }),
+                fixDtsModuleAugmentation(),
             ],
         }
     })
