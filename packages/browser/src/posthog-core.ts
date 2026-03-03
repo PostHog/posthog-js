@@ -2495,7 +2495,7 @@ export class PostHog implements PostHogInterface {
         }
 
         if (this.config.person_profiles === 'never') {
-            this.logger.error(
+            logger.error(
                 'posthog.group was called, but process_person is set to "never". This call will be ignored.'
             )
             return
@@ -2617,7 +2617,7 @@ export class PostHog implements PostHogInterface {
      */
     setGroupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags = true): void {
         if (this.config.person_profiles === 'never') {
-            this.logger.error(
+            logger.error(
                 'posthog.setGroupPropertiesForFlags was called, but process_person is set to "never". This call will be ignored.'
             )
             return
