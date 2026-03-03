@@ -2495,9 +2495,7 @@ export class PostHog implements PostHogInterface {
         }
 
         if (this.config.person_profiles === 'never') {
-            logger.error(
-                'posthog.group was called, but process_person is set to "never". This call will be ignored.'
-            )
+            logger.error('posthog.group was called, but process_person is set to "never". This call will be ignored.')
             return
         }
 
