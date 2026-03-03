@@ -1,5 +1,19 @@
 # posthog-js
 
+## 1.358.0
+
+### Minor Changes
+
+- [#3165](https://github.com/PostHog/posthog-js/pull/3165) [`0e08337`](https://github.com/PostHog/posthog-js/commit/0e083378a1ee9133427b40b0a9350f7cfc902244) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Tree-shake surveys, toolbar, exceptions, conversations, logs, experiments
+  (2026-03-03)
+
+### Patch Changes
+
+- [#3164](https://github.com/PostHog/posthog-js/pull/3164) [`20c1ff2`](https://github.com/PostHog/posthog-js/commit/20c1ff2ac07705303aaf329a5b0143e89adec453) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add Extension interface for tree-shakable extensions
+  (2026-03-03)
+- Updated dependencies []:
+    - @posthog/types@1.358.0
+
 ## 1.357.2
 
 ### Patch Changes

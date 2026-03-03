@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 7.9.5
+
+### Patch Changes
+
+- [#3194](https://github.com/PostHog/posthog-js/pull/3194) [`eccec25`](https://github.com/PostHog/posthog-js/commit/eccec25c613387d7fbf44cd4eae2de9a9b630e39) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Sanitize inline base64 video_url's in chat completions calls, which is supported by OpenRouter for video understanding models
+  (2026-03-03)
+
 ## 7.9.4
 
 ### Patch Changes
