@@ -6,6 +6,7 @@ import { createLogger } from '../utils/logger'
 import { window, document, assignableWindow } from '../utils/globals'
 import { TOOLBAR_ID } from '../constants'
 import { isFunction, isNullish } from '@posthog/core'
+import { Extension } from './types'
 
 // TRICKY: Many web frameworks will modify the route on load, potentially before posthog is initialized.
 // To get ahead of this we grab it as soon as the posthog-js is parsed
@@ -23,7 +24,7 @@ enum ToolbarState {
     LOADED = 2,
 }
 
-export class Toolbar {
+export class Toolbar implements Extension {
     instance: PostHog
 
     constructor(instance: PostHog) {
@@ -37,6 +38,10 @@ export class Toolbar {
 
     private _getToolbarState(): ToolbarState {
         return assignableWindow['ph_toolbar_state'] ?? ToolbarState.UNINITIALIZED
+    }
+
+    initialize(): boolean {
+        return this.maybeLoadToolbar()
     }
 
     /**

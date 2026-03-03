@@ -18,6 +18,29 @@ import type { SessionRecording } from './extensions/replay/session-recording'
 import type { Heatmaps } from './heatmaps'
 import type { PostHogProductTours } from './posthog-product-tours'
 import type { SiteApps } from './site-apps'
+import type { PostHogSurveys } from './posthog-surveys'
+import type { Toolbar } from './extensions/toolbar'
+import type { PostHogExceptions } from './posthog-exceptions'
+import type { WebExperiments } from './web-experiments'
+import type { PostHogConversations } from './extensions/conversations/posthog-conversations'
+import type { PostHogLogs } from './posthog-logs'
+
+// ============================================================================
+// Tree-shakeable extension types
+// ============================================================================
+
+/**
+ * Augmented by the slim bundle entry point to mark tree-shakeable extensions
+ * as optional. Empty by default (full bundle), meaning extensions are guaranteed.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface TreeShakeableConfig {}
+
+/**
+ * For the full bundle (default), resolves to T (extensions guaranteed present).
+ * For the slim bundle (augmented with { optional: true }), resolves to T | undefined.
+ */
+export type TreeShakeable<T> = 'optional' extends keyof TreeShakeableConfig ? T | undefined : T
 
 // ============================================================================
 // Re-export public types from @posthog/types
@@ -141,6 +164,12 @@ export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
         webVitalsAutocapture?: ExtensionConstructor<WebVitalsAutocapture>
         exceptionObserver?: ExtensionConstructor<ExceptionObserver>
         deadClicksAutocapture?: ExtensionConstructor<DeadClicksAutocapture>
+        exceptions?: ExtensionConstructor<PostHogExceptions>
+        surveys?: ExtensionConstructor<PostHogSurveys>
+        toolbar?: ExtensionConstructor<Toolbar>
+        experiments?: ExtensionConstructor<WebExperiments>
+        conversations?: ExtensionConstructor<PostHogConversations>
+        logs?: ExtensionConstructor<PostHogLogs>
     }
 }
 

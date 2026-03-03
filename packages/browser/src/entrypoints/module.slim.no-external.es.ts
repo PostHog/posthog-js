@@ -1,4 +1,11 @@
 import { init_as_module } from '../posthog-core'
+
+declare module '../types' {
+    interface TreeShakeableConfig {
+        optional: true
+    }
+}
+
 export { PostHog } from '../posthog-core'
 export * from '../types'
 export * from '../posthog-surveys-types'

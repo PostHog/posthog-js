@@ -84,6 +84,12 @@ export const defaultSurveyAppearance = {
     scrollbarTrackColor: 'var(--ph-survey-background-color)',
 } as const
 
+const BOTTOM_BORDER_SURVEY_POSITIONS: SurveyPosition[] = [
+    SurveyPosition.Center,
+    SurveyPosition.Left,
+    SurveyPosition.Right,
+]
+
 export const addSurveyCSSVariablesToElement = (
     element: HTMLElement,
     type: SurveyType,
@@ -93,7 +99,7 @@ export const addSurveyCSSVariablesToElement = (
     const hostStyle = element.style
 
     const surveyHasBottomBorder =
-        ![SurveyPosition.Center, SurveyPosition.Left, SurveyPosition.Right].includes(effectiveAppearance.position) ||
+        !BOTTOM_BORDER_SURVEY_POSITIONS.includes(effectiveAppearance.position) ||
         (type === SurveyType.Widget && appearance?.widgetType === SurveyWidgetType.Tab)
 
     hostStyle.setProperty('--ph-survey-font-family', getFontFamily(effectiveAppearance.fontFamily))

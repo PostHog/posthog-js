@@ -161,6 +161,6 @@ export class ExceptionObserver {
             return
         }
 
-        this._instance.exceptions.sendExceptionEvent(errorProperties)
+        this._instance.exceptions?.sendExceptionEvent(errorProperties)
     }
 }
