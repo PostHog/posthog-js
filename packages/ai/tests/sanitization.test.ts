@@ -25,6 +25,7 @@ const sanitize = (data: unknown, provider: string): unknown => {
 describe('Base64 image redaction', () => {
   const sampleBase64Image = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
   const sampleBase64Png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA...'
+  const sampleBase64Video = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28y...'
 
   describe('redactBase64DataUrl', () => {
     it('should redact base64 data URLs', () => {
@@ -147,6 +148,48 @@ describe('Base64 image redaction', () => {
 
       const result = sanitize(input, 'openai-chat-completions') as any
       expect(result[0].content[0].image_url.url).toBe('https://example.com/image.jpg')
+    })
+
+    it('should redact base64 videos in OpenAI message format', () => {
+      const input = [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Describe this video',
+            },
+            {
+              type: 'video_url',
+              video_url: {
+                url: sampleBase64Video,
+              },
+            },
+          ],
+        },
+      ]
+
+      const result = sanitize(input, 'openai-chat-completions') as any
+      expect(result[0].content[1].video_url.url).toBe('[base64 image redacted]')
+    })
+
+    it('should preserve regular video URLs in OpenAI format', () => {
+      const input = [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'video_url',
+              video_url: {
+                url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+              },
+            },
+          ],
+        },
+      ]
+
+      const result = sanitize(input, 'openai-chat-completions') as any
+      expect(result[0].content[0].video_url.url).toBe('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
     })
 
     it('should handle messages without content arrays', () => {
@@ -623,6 +666,24 @@ describe('Base64 image redaction', () => {
 
         const result = sanitize(input, 'openai-chat-completions') as any
         expect(result[0].content[0].image_url.url).toBe('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...')
+      })
+
+      it('should preserve videos when flag is enabled', () => {
+        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
+        const input = [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'video_url',
+                video_url: { url: 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28y...' },
+              },
+            ],
+          },
+        ]
+
+        const result = sanitize(input, 'openai-chat-completions') as any
+        expect(result[0].content[0].video_url.url).toBe('data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28y...')
       })
 
       it('should redact audio when flag is disabled', () => {
