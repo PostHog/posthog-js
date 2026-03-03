@@ -104,6 +104,7 @@ import {
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
+import type { Extension } from './extensions/types'
 import type { Autocapture } from './autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
 import type { ExceptionObserver } from './extensions/exception-autocapture'
@@ -385,6 +386,20 @@ export class PostHog implements PostHogInterface {
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
 
     _internalEventEmitter = new SimpleEventEmitter()
+
+    private readonly _extensions: Extension[] = []
+
+    private _replaceExtension<T extends Extension>(oldExt: T | undefined, newExt: T): T {
+        if (oldExt) {
+            const idx = this._extensions.indexOf(oldExt)
+            if (idx !== -1) {
+                this._extensions.splice(idx, 1)
+            }
+        }
+        this._extensions.push(newExt)
+        newExt.initialize?.()
+        return newExt
+    }
 
     // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
     /** @deprecated Use `flagsEndpointWasHit` instead.  We migrated to using a new feature flag endpoint and the new method is more semantically accurate */
@@ -700,98 +715,66 @@ export class PostHog implements PostHogInterface {
         // we don't support IE11 anymore, so performance.now is safe
         // eslint-disable-next-line compat/compat
         const initStartTime = performance.now()
-
         const ext = { ...PostHog.__defaultExtensionClasses, ...this.config.__extensionClasses }
-
-        if (ext.historyAutocapture) {
-            this.historyAutocapture = new ext.historyAutocapture(this) as HistoryAutocapture
-            this.historyAutocapture.startIfEnabled()
-        }
-
-        // Build queue of extension initialization tasks
         const initTasks: Array<() => void> = []
 
+        // Due to name mangling, we can't easily iterate and assign these extensions
+        // The assignment needs to also be mangled. Thus, the loop is unrolled.
+        if (ext.historyAutocapture) {
+            this._extensions.push((this.historyAutocapture = new ext.historyAutocapture(this)))
+        }
         if (ext.tracingHeaders) {
-            initTasks.push(() => {
-                new ext.tracingHeaders!(this).startIfEnabledOrStop()
-            })
+            this._extensions.push(new ext.tracingHeaders(this))
         }
-
         if (ext.siteApps) {
-            initTasks.push(() => {
-                this.siteApps = new ext.siteApps!(this) as SiteApps
-                this.siteApps?.init()
-            })
+            this._extensions.push((this.siteApps = new ext.siteApps(this)))
         }
-
-        if (!startInCookielessMode && ext.sessionRecording) {
-            initTasks.push(() => {
-                this.sessionRecording = new ext.sessionRecording!(this) as SessionRecording
-                this.sessionRecording.startIfEnabledOrStop()
-            })
+        if (ext.sessionRecording && !startInCookielessMode) {
+            this._extensions.push((this.sessionRecording = new ext.sessionRecording(this)))
         }
-
         if (!this.config.disable_scroll_properties) {
             initTasks.push(() => {
                 this.scrollManager.startMeasuringScrollPosition()
             })
         }
-
         if (ext.autocapture) {
-            initTasks.push(() => {
-                this.autocapture = new ext.autocapture!(this) as Autocapture
-                this.autocapture.startIfEnabled()
-            })
+            this._extensions.push((this.autocapture = new ext.autocapture(this)))
+        }
+        if (ext.productTours) {
+            this._extensions.push((this.productTours = new ext.productTours(this)))
+        }
+        if (ext.heatmaps) {
+            this._extensions.push((this.heatmaps = new ext.heatmaps(this)))
+        }
+        if (ext.webVitalsAutocapture) {
+            this._extensions.push((this.webVitalsAutocapture = new ext.webVitalsAutocapture(this)))
+        }
+        if (ext.exceptionObserver) {
+            this._extensions.push((this.exceptionObserver = new ext.exceptionObserver(this)))
+        }
+        if (ext.deadClicksAutocapture) {
+            this._extensions.push(
+                (this.deadClicksAutocapture = new ext.deadClicksAutocapture(this, isDeadClicksEnabledForAutocapture))
+            )
         }
 
+        this._extensions.forEach((extension) => {
+            if (!extension.initialize) return
+            initTasks.push(() => {
+                extension.initialize?.()
+            })
+        })
+
+        // Init hardcoded extensions (not yet tree-shakable)
         initTasks.push(() => {
             this.surveys.loadIfEnabled()
         })
-
         initTasks.push(() => {
             this.logs.loadIfEnabled()
         })
-
         initTasks.push(() => {
             this.conversations.loadIfEnabled()
         })
-
-        if (ext.productTours) {
-            initTasks.push(() => {
-                this.productTours = new ext.productTours!(this) as PostHogProductTours
-                this.productTours.loadIfEnabled()
-            })
-        }
-
-        if (ext.heatmaps) {
-            initTasks.push(() => {
-                this.heatmaps = new ext.heatmaps!(this) as Heatmaps
-                this.heatmaps.startIfEnabled()
-            })
-        }
-
-        if (ext.webVitalsAutocapture) {
-            initTasks.push(() => {
-                this.webVitalsAutocapture = new ext.webVitalsAutocapture!(this) as WebVitalsAutocapture
-            })
-        }
-
-        if (ext.exceptionObserver) {
-            initTasks.push(() => {
-                this.exceptionObserver = new ext.exceptionObserver!(this) as ExceptionObserver
-                this.exceptionObserver.startIfEnabledOrStop()
-            })
-        }
-
-        if (ext.deadClicksAutocapture) {
-            initTasks.push(() => {
-                this.deadClicksAutocapture = new ext.deadClicksAutocapture!(
-                    this,
-                    isDeadClicksEnabledForAutocapture
-                ) as DeadClicksAutocapture
-                this.deadClicksAutocapture.startIfEnabledOrStop()
-            })
-        }
 
         // Replay any pending remote config that arrived before extensions were ready
         initTasks.push(() => {
@@ -883,18 +866,13 @@ export class PostHog implements PostHogInterface {
             person_profiles: this._initialPersonProfilesConfig ? this._initialPersonProfilesConfig : 'identified_only',
         })
 
-        this.siteApps?.onRemoteConfig(config)
-        this.sessionRecording?.onRemoteConfig(config)
-        this.autocapture?.onRemoteConfig(config)
-        this.heatmaps?.onRemoteConfig(config)
+        this._extensions.forEach((ext) => ext.onRemoteConfig?.(config))
+
+        // Hardcoded extensions (not yet tree-shakable)
         this.surveys.onRemoteConfig(config)
         this.logs.onRemoteConfig(config)
         this.conversations.onRemoteConfig(config)
-        this.productTours?.onRemoteConfig(config)
-        this.webVitalsAutocapture?.onRemoteConfig(config)
-        this.exceptionObserver?.onRemoteConfig(config)
         this.exceptions.onRemoteConfig(config)
-        this.deadClicksAutocapture?.onRemoteConfig(config)
     }
 
     _loaded(): void {
@@ -3405,8 +3383,10 @@ export class PostHog implements PostHogInterface {
             const SessionRecordingClass =
                 this.config.__extensionClasses?.sessionRecording ?? PostHog.__defaultExtensionClasses?.sessionRecording
             if (SessionRecordingClass) {
-                this.sessionRecording = new SessionRecordingClass(this) as SessionRecording
-                this.sessionRecording.startIfEnabledOrStop()
+                this.sessionRecording = this._replaceExtension(
+                    this.sessionRecording,
+                    new SessionRecordingClass(this) as SessionRecording
+                )
             }
         }
 

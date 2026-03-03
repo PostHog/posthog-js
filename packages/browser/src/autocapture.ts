@@ -27,6 +27,7 @@ import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
 import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
 import { includes } from '@posthog/core'
+import type { Extension } from './extensions/types'
 
 const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
 
@@ -232,7 +233,7 @@ export function autocapturePropertiesForElement(
     return { props }
 }
 
-export class Autocapture {
+export class Autocapture implements Extension {
     instance: PostHog
     _initialized: boolean = false
     _isDisabledServerSide: boolean | null = null
@@ -244,6 +245,10 @@ export class Autocapture {
         this.instance = instance
         this.rageclicks = new RageClick(instance.config.rageclick)
         this._elementSelectors = null
+    }
+
+    initialize() {
+        this.startIfEnabled()
     }
 
     private get _config(): AutocaptureConfig {

@@ -2,14 +2,19 @@ import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 import { isUndefined } from '@posthog/core'
+import type { Extension } from './types'
 
 const logger = createLogger('[TracingHeaders]')
 
-export class TracingHeaders {
+export class TracingHeaders implements Extension {
     private _restoreXHRPatch: (() => void) | undefined = undefined
     private _restoreFetchPatch: (() => void) | undefined = undefined
 
     constructor(private readonly _instance: PostHog) {}
+
+    initialize() {
+        this.startIfEnabledOrStop()
+    }
 
     private _loadScript(cb: () => void): void {
         if (assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns) {
