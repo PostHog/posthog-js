@@ -132,7 +132,7 @@ export class RemoteConfigLoader {
 
         if (config?.hasFeatureFlags !== false) {
             if (!this._instance.config.advanced_disable_feature_flags_on_first_load) {
-                this._instance._featureFlags?.ensureFlagsLoaded()
+                this._instance.featureFlags.ensureFlagsLoaded()
             }
         }
     }

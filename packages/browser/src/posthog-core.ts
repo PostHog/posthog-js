@@ -339,7 +339,6 @@ export class PostHog implements PostHogInterface {
     rateLimiter: RateLimiter
     scrollManager: ScrollManager
     pageViewManager: PageViewManager
-    _featureFlags: TreeShakeable<PostHogFeatureFlags>
     surveys: TreeShakeable<PostHogSurveys>
     conversations: TreeShakeable<PostHogConversations>
     logs: TreeShakeable<PostHogLogs>
@@ -387,6 +386,7 @@ export class PostHog implements PostHogInterface {
 
     _internalEventEmitter = new SimpleEventEmitter()
 
+    private _featureFlags?: TreeShakeable<PostHogFeatureFlags>
     private readonly _extensions: Extension[] = []
 
     private _replaceExtension<T extends Extension>(oldExt: T | undefined, newExt: T): T {
