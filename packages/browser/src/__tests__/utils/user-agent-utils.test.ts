@@ -260,6 +260,59 @@ describe('user-agent-utils', () => {
             expect(detectBrowser(ua, vendor)).toBe('Safari')
         })
 
+        describe('detectDeviceType with options', () => {
+            const desktopUA =
+                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+
+            it('should detect Tablet when desktop UA + Android platform + touch + tablet screen', () => {
+                expect(
+                    detectDeviceType(desktopUA, {
+                        userAgentDataPlatform: 'Android',
+                        maxTouchPoints: 5,
+                        screenWidth: 1280,
+                        screenHeight: 800,
+                    })
+                ).toBe('Tablet')
+            })
+
+            it('should detect Mobile when desktop UA + Android platform + touch + phone screen', () => {
+                expect(
+                    detectDeviceType(desktopUA, {
+                        userAgentDataPlatform: 'Android',
+                        maxTouchPoints: 5,
+                        screenWidth: 412,
+                        screenHeight: 915,
+                    })
+                ).toBe('Mobile')
+            })
+
+            it('should detect Mobile when desktop UA + Android platform + touch + high DPR phone screen', () => {
+                // 1200x800 physical at 2x DPR = 600x400 dp, short side 400dp = phone
+                expect(
+                    detectDeviceType(desktopUA, {
+                        userAgentDataPlatform: 'Android',
+                        maxTouchPoints: 5,
+                        screenWidth: 1200,
+                        screenHeight: 800,
+                        devicePixelRatio: 2,
+                    })
+                ).toBe('Mobile')
+            })
+
+            it('should detect Desktop when desktop UA + no options (backwards compat)', () => {
+                expect(detectDeviceType(desktopUA)).toBe('Desktop')
+            })
+
+            it('should remain Desktop when desktop UA + Linux platform + touch', () => {
+                expect(
+                    detectDeviceType(desktopUA, {
+                        userAgentDataPlatform: 'Linux',
+                        maxTouchPoints: 5,
+                    })
+                ).toBe('Desktop')
+            })
+        })
+
         test('osVersion', () => {
             const osVersions = {
                 // Windows Phone

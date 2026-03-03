@@ -20,7 +20,15 @@ const getDeviceType = (): string => {
     // Check user agent to determine if it's desktop or mobile
     const ua = typeof navigator !== 'undefined' && navigator.userAgent ? navigator.userAgent : ''
 
-    deviceType = detectDeviceType(ua)
+    const nav = typeof navigator !== 'undefined' ? (navigator as any) : undefined
+    const win = typeof (globalThis as any).window !== 'undefined' ? (globalThis as any).window : undefined
+    deviceType = detectDeviceType(ua, {
+      userAgentDataPlatform: nav?.userAgentData?.platform,
+      maxTouchPoints: nav?.maxTouchPoints,
+      screenWidth: win?.screen?.width,
+      screenHeight: win?.screen?.height,
+      devicePixelRatio: win?.devicePixelRatio,
+    })
   }
   return deviceType
 }
