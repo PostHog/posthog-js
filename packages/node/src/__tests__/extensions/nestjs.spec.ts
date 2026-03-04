@@ -8,6 +8,12 @@ jest.mock('../../version', () => ({ version: '1.2.3' }))
 
 const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
 
+const waitForFlushTimer = async (): Promise<void> => {
+  await waitForPromises()
+  jest.runOnlyPendingTimers()
+  await waitForPromises()
+}
+
 const getLastBatchEvents = (): any[] | undefined => {
   expect(mockedFetch).toHaveBeenCalledWith('http://example.com/batch/', expect.objectContaining({ method: 'POST' }))
 
@@ -51,13 +57,13 @@ const createMockCallHandler = (error?: Error) => ({
 describe('PostHogInterceptor', () => {
   let posthog: PostHog
 
-  jest.useFakeTimers()
-
   beforeEach(() => {
     posthog = new PostHog('TEST_API_KEY', {
       host: 'http://example.com',
       fetchRetryCount: 0,
       disableCompression: true,
+      flushAt: 1,
+      flushInterval: 0,
     })
 
     mockedFetch.mockResolvedValue({
@@ -123,10 +129,7 @@ describe('PostHogInterceptor', () => {
       }
 
       await lastValueFrom(interceptor.intercept(context, handler))
-
-      await waitForPromises()
-      jest.runOnlyPendingTimers()
-      await waitForPromises()
+      await waitForFlushTimer()
 
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toBeDefined()
@@ -152,10 +155,7 @@ describe('PostHogInterceptor', () => {
       const context = createMockContext()
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
-
-      await waitForPromises()
-      jest.runOnlyPendingTimers()
-      await waitForPromises()
+      await waitForFlushTimer()
 
       const batchCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/batch/'))
       expect(batchCalls.length).toBe(0)
@@ -203,10 +203,7 @@ describe('PostHogInterceptor', () => {
       })
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
-
-      await waitForPromises()
-      jest.runOnlyPendingTimers()
-      await waitForPromises()
+      await waitForFlushTimer()
 
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toBeDefined()
@@ -231,6 +228,8 @@ describe('PostHogInterceptor', () => {
       const context = createMockContext()
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
+      await waitForFlushTimer()
+
       const batchCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/batch/'))
       expect(batchCalls.length).toBe(0)
     })
@@ -247,10 +246,7 @@ describe('PostHogInterceptor', () => {
       const context = createMockContext({ headers: {} })
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
-
-      await waitForPromises()
-      jest.runOnlyPendingTimers()
-      await waitForPromises()
+      await waitForFlushTimer()
 
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toBeDefined()
@@ -271,10 +267,7 @@ describe('PostHogInterceptor', () => {
       })
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
-
-      await waitForPromises()
-      jest.runOnlyPendingTimers()
-      await waitForPromises()
+      await waitForFlushTimer()
 
       const batchEvents = getLastBatchEvents()
       expect(batchEvents![0].properties.$ip).toBe('10.0.0.1')
@@ -287,10 +280,7 @@ describe('PostHogInterceptor', () => {
       })
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
-
-      await waitForPromises()
-      jest.runOnlyPendingTimers()
-      await waitForPromises()
+      await waitForFlushTimer()
 
       const batchEvents = getLastBatchEvents()
       expect(batchEvents![0].properties.$ip).toBe('10.0.0.1')
@@ -302,10 +292,7 @@ describe('PostHogInterceptor', () => {
       const context = createMockContext()
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
-
-      await waitForPromises()
-      jest.runOnlyPendingTimers()
-      await waitForPromises()
+      await waitForFlushTimer()
 
       const batchCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/batch/'))
       expect(batchCalls.length).toBe(0)
@@ -317,10 +304,7 @@ describe('PostHogInterceptor', () => {
       const context = createMockContext()
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
-
-      await waitForPromises()
-      jest.runOnlyPendingTimers()
-      await waitForPromises()
+      await waitForFlushTimer()
 
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toBeDefined()
@@ -339,10 +323,7 @@ describe('PostHogInterceptor', () => {
       const context = createMockContext()
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
-
-      await waitForPromises()
-      jest.runOnlyPendingTimers()
-      await waitForPromises()
+      await waitForFlushTimer()
 
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toBeDefined()
