@@ -36,7 +36,8 @@ export interface PostHogInterceptorOptions {
 function getClientIp(headers: Record<string, any>, request: any): string | undefined {
   const forwarded = headers['x-forwarded-for']
   if (forwarded) {
-    return String(forwarded).split(',')[0]?.trim()
+    const ip = String(forwarded).split(',')[0].trim()
+    if (ip) return ip
   }
   return request?.socket?.remoteAddress
 }
