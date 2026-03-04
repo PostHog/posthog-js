@@ -246,9 +246,11 @@ describe(`SessionRecording utility functions`, () => {
 
     describe('splitBuffer', () => {
         it('should return the same buffer if size is less than SEVEN_MEGABYTES', () => {
+            const perEventSize = (5 * 1024 * 1024) / 100
             const buffer = {
                 size: 5 * 1024 * 1024,
                 data: new Array(100).fill(0),
+                sizes: new Array(100).fill(perEventSize),
                 sessionId: 'session1',
                 windowId: 'window1',
             }
@@ -259,30 +261,37 @@ describe(`SessionRecording utility functions`, () => {
 
         it('should split the buffer into two halves if size is greater than or equal to SEVEN_MEGABYTES', () => {
             const data = new Array(100).fill(0)
-            const expectedSize = estimateSize(new Array(50).fill(0))
+            const perEventSize = estimateSize(0)
+            const sizes = new Array(100).fill(perEventSize)
+            const totalSize = sizes.reduce((a: number, b: number) => a + b, 0)
             const buffer = {
-                size: estimateSize(data),
+                size: totalSize,
                 data: data,
+                sizes: sizes,
                 sessionId: 'session1',
                 windowId: 'window1',
             }
 
             // size limit just below the size of the buffer
-            const result = splitBuffer(buffer, 200)
+            const result = splitBuffer(buffer, totalSize - 1)
+            const expectedHalfSize = 50 * perEventSize
 
             expect(result).toHaveLength(2)
             expect(result[0].data).toEqual(buffer.data.slice(0, 50))
-            expect(result[0].size).toEqual(expectedSize)
+            expect(result[0].size).toEqual(expectedHalfSize)
             expect(result[1].data).toEqual(buffer.data.slice(50))
-            expect(result[1].size).toEqual(expectedSize)
+            expect(result[1].size).toEqual(expectedHalfSize)
         })
 
         it('should recursively split the buffer until each part is smaller than SEVEN_MEGABYTES', () => {
             const largeDataArray = new Array(100).fill('a'.repeat(1024 * 1024))
-            const largeDataSize = estimateSize(largeDataArray) // >100mb
+            const perEventSize = estimateSize('a'.repeat(1024 * 1024))
+            const sizes = new Array(100).fill(perEventSize)
+            const totalSize = sizes.reduce((a: number, b: number) => a + b, 0)
             const buffer = {
-                size: largeDataSize,
+                size: totalSize,
                 data: largeDataArray,
+                sizes: sizes,
                 sessionId: 'session1',
                 windowId: 'window1',
             }
@@ -298,18 +307,18 @@ describe(`SessionRecording utility functions`, () => {
                 partTotal += part.size
             })
 
-            // it's a bit bigger because we have extra square brackets and commas when stringified
-            expect(partTotal).toBeGreaterThan(largeDataSize)
-            // but not much bigger!
-            expect(partTotal).toBeLessThan(largeDataSize * 1.001)
+            // sum of per-event sizes equals the original total
+            expect(partTotal).toEqual(totalSize)
             // we sent the same data overall
             expect(JSON.stringify(sentArray)).toEqual(JSON.stringify(largeDataArray))
         })
 
         it('should handle buffer with size exactly SEVEN_MEGABYTES', () => {
+            const perEventSize = SEVEN_MEGABYTES / 100
             const buffer = {
                 size: SEVEN_MEGABYTES,
                 data: new Array(100).fill(0),
+                sizes: new Array(100).fill(perEventSize),
                 sessionId: 'session1',
                 windowId: 'window1',
             }
@@ -325,6 +334,7 @@ describe(`SessionRecording utility functions`, () => {
             const buffer = {
                 size: 10 * 1024 * 1024,
                 data: [0],
+                sizes: [10 * 1024 * 1024],
                 sessionId: 'session1',
                 windowId: 'window1',
             }

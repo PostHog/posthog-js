@@ -119,18 +119,20 @@ export const SEVEN_MEGABYTES = 1024 * 1024 * 7 * 0.9 // ~7mb (with some wiggle r
 export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_MEGABYTES): SnapshotBuffer[] {
     if (buffer.size >= sizeLimit && buffer.data.length > 1) {
         const half = Math.floor(buffer.data.length / 2)
-        const firstHalf = buffer.data.slice(0, half)
-        const secondHalf = buffer.data.slice(half)
+        const firstHalfSizes = buffer.sizes.slice(0, half)
+        const secondHalfSizes = buffer.sizes.slice(half)
         return [
             splitBuffer({
-                size: estimateSize(firstHalf),
-                data: firstHalf,
+                size: firstHalfSizes.reduce((a, b) => a + b, 0),
+                data: buffer.data.slice(0, half),
+                sizes: firstHalfSizes,
                 sessionId: buffer.sessionId,
                 windowId: buffer.windowId,
             }),
             splitBuffer({
-                size: estimateSize(secondHalf),
-                data: secondHalf,
+                size: secondHalfSizes.reduce((a, b) => a + b, 0),
+                data: buffer.data.slice(half),
+                sizes: secondHalfSizes,
                 sessionId: buffer.sessionId,
                 windowId: buffer.windowId,
             }),
