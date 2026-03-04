@@ -85,6 +85,11 @@
       "require": "./dist/entrypoints/index.edge.js",
       "default": "./dist/entrypoints/index.edge.js"
     },
+    "./nestjs": {
+      "types": "./dist/entrypoints/nestjs.d.ts",
+      "import": "./dist/entrypoints/nestjs.mjs",
+      "require": "./dist/entrypoints/nestjs.js"
+    },
     "./experimental": {
       "types": "./dist/experimental.d.ts"
     }
