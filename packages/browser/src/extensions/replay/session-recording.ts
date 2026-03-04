@@ -20,7 +20,14 @@ import {
     window,
 } from '../../utils/globals'
 import { RECORDING_REMOTE_CONFIG_TTL_MS } from './external/lazy-loaded-session-recorder'
-import { DISABLED, LAZY_LOADING, PENDING_CONFIG, SessionRecordingStatus, TriggerType } from './external/triggerMatching'
+import {
+    AWAITING_CONFIG,
+    DISABLED,
+    LAZY_LOADING,
+    MISSING_CONFIG,
+    SessionRecordingStatus,
+    TriggerType,
+} from './external/triggerMatching'
 import type { Extension } from '../types'
 
 const LOGGER_PREFIX = '[SessionRecording]'
@@ -29,8 +36,7 @@ const logger = createLogger(LOGGER_PREFIX)
 export class SessionRecording implements Extension {
     _forceAllowLocalhostNetworkCapture: boolean = false
 
-    private _receivedFlags: boolean = false
-    private _hasRequestedConfigRefresh: boolean = false
+    private _recordingStatus: SessionRecordingStatus = DISABLED
 
     private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
@@ -39,25 +45,11 @@ export class SessionRecording implements Extension {
         return !!this._lazyLoadedSessionRecording?.isStarted
     }
 
-    /**
-     * defaults to pending_config until a remote config response is received
-     * transitions to lazy_loading while the recording script is being loaded
-     * once loaded, status is delegated to the lazy-loaded recorder (active, buffering, disabled, etc.)
-     */
     get status(): SessionRecordingStatus {
-        if (this._lazyLoadedSessionRecording) {
-            return this._lazyLoadedSessionRecording.status
+        if (this._recordingStatus === AWAITING_CONFIG || this._recordingStatus === MISSING_CONFIG) {
+            return this._recordingStatus
         }
-
-        if (!this._receivedFlags) {
-            return PENDING_CONFIG
-        }
-
-        if (!this._isRecordingEnabled) {
-            return DISABLED
-        }
-
-        return LAZY_LOADING
+        return this._lazyLoadedSessionRecording?.status ?? this._recordingStatus
     }
 
     constructor(private readonly _instance: PostHog) {
@@ -83,11 +75,6 @@ export class SessionRecording implements Extension {
     }
 
     startIfEnabledOrStop(startReason?: SessionStartReason) {
-        // Wait for fresh remote config before starting recording
-        if (!this._receivedFlags) {
-            return
-        }
-
         if (this._isRecordingEnabled && this._lazyLoadedSessionRecording?.isStarted) {
             return
         }
@@ -104,6 +91,7 @@ export class SessionRecording implements Extension {
             this._lazyLoadAndStart(startReason)
             logger.info('starting')
         } else {
+            this._recordingStatus = DISABLED
             this.stopRecording()
         }
     }
@@ -120,6 +108,10 @@ export class SessionRecording implements Extension {
         // replay waits for both local and remote config before starting
         if (!this._isRecordingEnabled) {
             return
+        }
+
+        if (this._recordingStatus !== AWAITING_CONFIG && this._recordingStatus !== MISSING_CONFIG) {
+            this._recordingStatus = LAZY_LOADING
         }
 
         // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
@@ -147,6 +139,12 @@ export class SessionRecording implements Extension {
         this._persistFlagsOnSessionListener?.()
         this._persistFlagsOnSessionListener = undefined
         this._lazyLoadedSessionRecording?.stop()
+    }
+
+    private _discardRecording() {
+        this._persistFlagsOnSessionListener?.()
+        this._persistFlagsOnSessionListener = undefined
+        this._lazyLoadedSessionRecording?.discard()
     }
 
     private _resetSampling() {
@@ -225,19 +223,20 @@ export class SessionRecording implements Extension {
 
     onRemoteConfig(response: RemoteConfig) {
         if (!('sessionRecording' in response)) {
-            // if sessionRecording is not in the response, we do nothing
-            logger.info('skipping remote config with no sessionRecording', response)
+            if (this._recordingStatus === AWAITING_CONFIG) {
+                this._recordingStatus = MISSING_CONFIG
+                logger.warn('config refresh failed, recording will not start until page reload')
+            }
+            this.startIfEnabledOrStop()
             return
         }
         if (response.sessionRecording === false) {
-            // remotely disabled
-            this._receivedFlags = true
+            this._persistRemoteConfig(response)
+            this._discardRecording()
             return
         }
 
-        this._hasRequestedConfigRefresh = false
         this._persistRemoteConfig(response)
-        this._receivedFlags = true
         this.startIfEnabledOrStop()
     }
 
@@ -262,7 +261,7 @@ export class SessionRecording implements Extension {
             return false
         }
         const config = typeof persistedConfig === 'object' ? persistedConfig : JSON.parse(persistedConfig)
-        const cacheTimestamp = config.cache_timestamp ?? Date.now()
+        const cacheTimestamp = config.cache_timestamp ?? 0
         return Date.now() - cacheTimestamp <= RECORDING_REMOTE_CONFIG_TTL_MS
     }
 
@@ -280,14 +279,16 @@ export class SessionRecording implements Extension {
         }
 
         if (!this._isRemoteConfigFresh()) {
-            if (!this._hasRequestedConfigRefresh) {
-                this._hasRequestedConfigRefresh = true
-                logger.info('persisted remote config is stale, requesting fresh config before starting')
-                new RemoteConfigLoader(this._instance).load()
+            if (this._recordingStatus === MISSING_CONFIG || this._recordingStatus === AWAITING_CONFIG) {
+                return
             }
+            this._recordingStatus = AWAITING_CONFIG
+            logger.info('persisted remote config is stale, requesting fresh config before starting')
+            new RemoteConfigLoader(this._instance).load()
             return
         }
 
+        this._recordingStatus = LAZY_LOADING
         this._lazyLoadedSessionRecording.start(startReason)
     }
 
