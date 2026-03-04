@@ -103,6 +103,7 @@ describe('getPostHog', () => {
 
         expect(mockEnterContext).toHaveBeenCalledWith({
             distinctId: 'user_abc',
+            sessionId: 'session-123',
             properties: { $session_id: 'session-123', $device_id: 'device_xyz' },
         })
     })

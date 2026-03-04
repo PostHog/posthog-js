@@ -34,9 +34,12 @@ export interface PagesPostHogProviderProps {
  * }
  * ```
  */
+let apiKeyWarned = false
+
 export function PostHogProvider({ apiKey: apiKeyProp, clientOptions, bootstrap, children }: PagesPostHogProviderProps) {
     const apiKey = resolveApiKey(apiKeyProp)
-    if (!apiKey.startsWith('phc_')) {
+    if (!apiKeyWarned && !apiKey.startsWith('phc_')) {
+        apiKeyWarned = true
         console.warn(`[PostHog Next.js] apiKey "${apiKey}" does not start with "phc_". This may not be a valid PostHog project API key.`)
     }
 

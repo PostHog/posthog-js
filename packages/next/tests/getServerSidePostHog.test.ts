@@ -57,6 +57,7 @@ describe('getServerSidePostHog', () => {
         await getServerSidePostHog(ctx, 'phc_test123')
         expect(mockEnterContext).toHaveBeenCalledWith({
             distinctId: 'user_abc',
+            sessionId: 'session-123',
             properties: { $session_id: 'session-123', $device_id: 'device_xyz' },
         })
     })

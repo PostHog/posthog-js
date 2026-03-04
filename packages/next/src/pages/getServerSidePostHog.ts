@@ -42,7 +42,7 @@ export async function getServerSidePostHog(
     if (!isOptedOut(cookieStore, resolvedApiKey)) {
         const state = readPostHogCookie(cookieStore, resolvedApiKey)
         const properties = cookieStateToProperties(state)
-        client.enterContext({ distinctId: state?.distinctId, properties })
+        client.enterContext({ distinctId: state?.distinctId, sessionId: state?.sessionId, properties })
     }
 
     return client

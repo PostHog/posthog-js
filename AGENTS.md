@@ -35,6 +35,7 @@ The repository contains the following SDK packages in `./packages/`:
 | `react/`         | `@posthog/react`         | React components and hooks                      |
 | `react-native/`  | `posthog-react-native`   | React Native mobile SDK                         |
 | `nuxt/`          | `@posthog/nuxt`          | Nuxt framework module                           |
+| `next/`          | `@posthog/next`          | Next.js framework module                        |
 | `nextjs-config/` | `@posthog/nextjs-config` | Next.js configuration helper                    |
 | `types/`         | `@posthog/types`         | TypeScript type definitions for the SDK         |
 

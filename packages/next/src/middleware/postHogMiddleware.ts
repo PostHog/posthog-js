@@ -158,6 +158,7 @@ export function postHogMiddleware(config: PostHogMiddlewareOptions = {}) {
             response.cookies.set(cookieName, serializePostHogCookie(distinctId), {
                 path: '/',
                 sameSite: 'lax',
+                secure: request.nextUrl.protocol === 'https:',
                 maxAge: config.cookieMaxAgeSeconds ?? COOKIE_MAX_AGE_SECONDS,
                 httpOnly: false,
             })

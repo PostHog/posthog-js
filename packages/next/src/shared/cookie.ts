@@ -1,4 +1,4 @@
-import { uuidv7, isNoLike, isYesLike } from '@posthog/core'
+import { uuidv7, isNoLike } from '@posthog/core'
 import { COOKIE_PREFIX, COOKIE_SUFFIX } from './constants'
 
 /**
@@ -46,15 +46,6 @@ export function getPostHogCookieName(apiKey: string): string {
     return `${COOKIE_PREFIX}${sanitized}${COOKIE_SUFFIX}`
 }
 
-/**
- * Parses a PostHog cookie value and extracts identity information.
- *
- * The cookie value is a JSON object containing `distinct_id` and `$user_state`.
- * A user is considered identified if `$user_state` is `'identified'`.
- *
- * @param cookieValue - The raw cookie string value
- * @returns Parsed identity state, or null if the cookie is missing/invalid
- */
 /**
  * Serializes an anonymous ID into the JSON format posthog-js expects.
  *
@@ -106,6 +97,15 @@ export function cookieStateToProperties(state: PostHogCookieState | null): Recor
     return Object.keys(props).length > 0 ? props : undefined
 }
 
+/**
+ * Parses a PostHog cookie value and extracts identity information.
+ *
+ * The cookie value is a JSON object containing `distinct_id` and `$user_state`.
+ * A user is considered identified if `$user_state` is `'identified'`.
+ *
+ * @param cookieValue - The raw cookie string value
+ * @returns Parsed identity state, or null if the cookie is missing/invalid
+ */
 export function parsePostHogCookie(cookieValue: string): PostHogCookieState | null {
     if (!cookieValue) {
         return null

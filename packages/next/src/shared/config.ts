@@ -38,8 +38,9 @@ export function resolveApiKey(apiKey?: string): string {
  * - `persistence: 'localStorage+cookie'` — already the posthog-js default, made explicit
  * - `opt_out_capturing_persistence_type: 'cookie'` — writes consent state to a cookie
  *   so middleware/server components can read it (posthog-js default is 'localStorage')
- * - `opt_out_persistence_by_default: true` — clears the identity cookie on opt-out
- *   so the server never sees stale identifiers after consent is withdrawn
+ * - `opt_out_persistence_by_default: true` — when opted out, disables persistence
+ *   so posthog-js does not write cookies or localStorage; the middleware
+ *   handles deleting the identity cookie separately
  *
  * Users can override any of these via the `options` prop on PostHogProvider.
  */

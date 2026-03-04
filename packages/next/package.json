@@ -1,6 +1,6 @@
 {
     "name": "@posthog/next",
-    "version": "0.0.1",
+    "version": "0.0.0",
     "description": "PostHog integration for Next.js",
     "repository": {
         "type": "git",
@@ -27,7 +27,7 @@
                 "types": "./dist/index.react-server.d.ts",
                 "default": "./dist/index.react-server.js"
             },
-            "types": "./dist/index.react-server.d.ts",
+            "types": "./dist/index.d.ts",
             "default": "./dist/index.js"
         },
         "./server": {
@@ -44,7 +44,7 @@
         }
     },
     "main": "./dist/index.js",
-    "types": "./dist/index.react-server.d.ts",
+    "types": "./dist/index.d.ts",
     "files": [
         "dist",
         "src",

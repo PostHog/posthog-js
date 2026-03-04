@@ -262,7 +262,7 @@ import type { GetServerSideProps } from 'next'
 import { getServerSidePostHog } from '@posthog/next/pages'
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
-    const posthog = getServerSidePostHog(ctx)
+    const posthog = await getServerSidePostHog(ctx)
 
     // Evaluate flags for the current user
     const result = await posthog.getFeatureFlagResult('new-ui')
@@ -400,7 +400,7 @@ The package applies these defaults to ensure the server can read consent:
 ```ts
 {
     opt_out_capturing_persistence_type: 'cookie',   // write consent to a cookie (not localStorage)
-    opt_out_persistence_by_default: true,           // clear identity cookie on opt-out
+    opt_out_persistence_by_default: true,           // disable persistence when opted out
 }
 ```
 
