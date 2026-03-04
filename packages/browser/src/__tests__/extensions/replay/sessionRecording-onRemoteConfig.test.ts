@@ -31,6 +31,7 @@ jest.mock('../../../config', () => ({ LIB_VERSION: '0.0.1' }))
 
 const EMPTY_BUFFER = {
     data: [],
+    sizes: [],
     sessionId: null,
     size: 0,
     windowId: null,
@@ -247,6 +248,7 @@ describe('SessionRecording', () => {
             _emit(metaSnapshot)
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
                 data: [metaSnapshot],
+                sizes: [48],
                 sessionId: sessionId,
                 size: 48,
                 windowId: 'windowId',
@@ -271,6 +273,7 @@ describe('SessionRecording', () => {
             _emit(fullSnapshot)
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
                 data: [fullSnapshot],
+                sizes: [20],
                 sessionId: sessionId,
                 size: 20,
                 windowId: 'windowId',

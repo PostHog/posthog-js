@@ -62,6 +62,7 @@ jest.mock('../../../remote-config', () => ({
 
 const EMPTY_BUFFER = {
     data: [],
+    sizes: [],
     sessionId: null,
     size: 0,
     windowId: null,
@@ -755,6 +756,7 @@ describe('Lazy SessionRecording', () => {
                 // the buffer starts out empty
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
                     data: [],
+                    sizes: [],
                     sessionId: sessionId,
                     size: 0,
                     windowId: 'windowId',
@@ -787,6 +789,7 @@ describe('Lazy SessionRecording', () => {
                 // but all events are buffered
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
                     data: [a, b, c, createFullSnapshot({}), d],
+                    sizes: expect.any(Array),
                     sessionId: sessionId,
                     size: 442,
                     windowId: expect.any(String),
@@ -835,6 +838,7 @@ describe('Lazy SessionRecording', () => {
                 // buffer contains event allowed when idle
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
                     data: [createIncrementalSnapshot({})],
+                    sizes: [30],
                     sessionId: sessionId,
                     size: 30,
                     windowId: 'windowId',
@@ -882,6 +886,7 @@ describe('Lazy SessionRecording', () => {
 
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
                     data: [],
+                    sizes: [],
                     sessionId: sessionId,
                     size: 0,
                     windowId: 'windowId',
@@ -902,6 +907,7 @@ describe('Lazy SessionRecording', () => {
 
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
                     data: [],
+                    sizes: [],
                     sessionId: sessionId,
                     size: 0,
                     windowId: 'windowId',
@@ -922,6 +928,7 @@ describe('Lazy SessionRecording', () => {
 
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
                     data: [],
+                    sizes: [],
                     sessionId: sessionId,
                     size: 0,
                     windowId: 'windowId',
@@ -990,6 +997,7 @@ describe('Lazy SessionRecording', () => {
                 const firstSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
                     data: [firstSnapshotEvent],
+                    sizes: [68],
                     sessionId: firstSessionId,
                     size: 68,
                     windowId: expect.any(String),
@@ -1009,6 +1017,7 @@ describe('Lazy SessionRecording', () => {
                 // the second snapshot remains buffered in memory
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
                     data: [firstSnapshotEvent, secondSnapshot],
+                    sizes: expect.any(Array),
                     sessionId: firstSessionId,
                     size: 186,
                     windowId: expect.any(String),
@@ -1027,6 +1036,7 @@ describe('Lazy SessionRecording', () => {
                     data: [
                         // buffer is flushed on switch to idle
                     ],
+                    sizes: [],
                     sessionId: firstSessionId,
                     size: 0,
                     windowId: expect.any(String),
@@ -1060,6 +1070,7 @@ describe('Lazy SessionRecording', () => {
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
                     // as we return from idle we will capture a full snapshot _before_ the fourth snapshot
                     data: [fourthSnapshot],
+                    sizes: [68],
                     sessionId: firstSessionId,
                     size: 68,
                     windowId: expect.any(String),
@@ -1086,6 +1097,7 @@ describe('Lazy SessionRecording', () => {
                 const firstSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
                     data: [firstSnapshotEvent],
+                    sizes: [68],
                     sessionId: firstSessionId,
                     size: 68,
                     windowId: expect.any(String),
@@ -1105,6 +1117,7 @@ describe('Lazy SessionRecording', () => {
                 // the second snapshot remains buffered in memory
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
                     data: [firstSnapshotEvent, secondSnapshot],
+                    sizes: expect.any(Array),
                     sessionId: firstSessionId,
                     size: 186,
                     windowId: expect.any(String),
@@ -1125,6 +1138,7 @@ describe('Lazy SessionRecording', () => {
                     data: [
                         // the buffer is flushed on switch to idle
                     ],
+                    sizes: [],
                     sessionId: firstSessionId,
                     size: 0,
                     windowId: expect.any(String),
@@ -1178,6 +1192,7 @@ describe('Lazy SessionRecording', () => {
                 )
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
                     data: [fourthSnapshot],
+                    sizes: [68],
                     sessionId: rotatedSessionId,
                     size: 68,
                     windowId: expect.any(String),
@@ -1583,6 +1598,7 @@ describe('Lazy SessionRecording', () => {
                         type: 3,
                     },
                 ],
+                sizes: [30],
                 size: 30,
                 // session id and window id are not null 🚀
                 sessionId: sessionId,
@@ -1818,6 +1834,7 @@ describe('Lazy SessionRecording', () => {
                         type: 3,
                     },
                 ],
+                sizes: [39],
                 sessionId: sessionId,
                 size: 39,
                 windowId: 'windowId',
@@ -1914,6 +1931,7 @@ describe('Lazy SessionRecording', () => {
                         type: 2,
                     },
                 ],
+                sizes: [149],
                 sessionId: sessionId,
                 size: 149,
                 windowId: 'windowId',
@@ -3616,6 +3634,7 @@ describe('Lazy SessionRecording', () => {
             sessionRecording['_lazyLoadedSessionRecording']['_buffer'] = {
                 size: 0,
                 data: [],
+                sizes: [],
                 sessionId: newSessionId,
                 windowId: newWindowId,
             }

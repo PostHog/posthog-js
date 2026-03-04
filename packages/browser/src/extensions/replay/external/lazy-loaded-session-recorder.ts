@@ -120,6 +120,7 @@ interface SessionIdlePayload {
 export interface SnapshotBuffer {
     size: number
     data: any[]
+    sizes: number[]
     sessionId: string
     windowId: string
 }
@@ -292,18 +293,20 @@ export const SEVEN_MEGABYTES = 1024 * 1024 * 7 * 0.9 // ~7mb (with some wiggle r
 export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_MEGABYTES): SnapshotBuffer[] {
     if (buffer.size >= sizeLimit && buffer.data.length > 1) {
         const half = Math.floor(buffer.data.length / 2)
-        const firstHalf = buffer.data.slice(0, half)
-        const secondHalf = buffer.data.slice(half)
+        const firstHalfSizes = buffer.sizes.slice(0, half)
+        const secondHalfSizes = buffer.sizes.slice(half)
         return [
             splitBuffer({
-                size: estimateSize(firstHalf),
-                data: firstHalf,
+                size: firstHalfSizes.reduce((a, b) => a + b, 0),
+                data: buffer.data.slice(0, half),
+                sizes: firstHalfSizes,
                 sessionId: buffer.sessionId,
                 windowId: buffer.windowId,
             }),
             splitBuffer({
-                size: estimateSize(secondHalf),
-                data: secondHalf,
+                size: secondHalfSizes.reduce((a, b) => a + b, 0),
+                data: buffer.data.slice(half),
+                sizes: secondHalfSizes,
                 sessionId: buffer.sessionId,
                 windowId: buffer.windowId,
             }),
@@ -1296,6 +1299,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._buffer.size += properties.$snapshot_bytes
         this._buffer.data.push(properties.$snapshot_data)
+        this._buffer.sizes.push(properties.$snapshot_bytes)
 
         if (!this._flushBufferTimer && !this._isIdle) {
             this._flushBufferTimer = setTimeout(() => {
@@ -1335,7 +1339,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
         if (lastMetaIndex >= 0) {
             this._buffer.data = this._buffer.data.slice(lastMetaIndex)
-            this._buffer.size = this._buffer.data.reduce((acc, curr) => acc + estimateSize(curr), 0)
+            this._buffer.sizes = this._buffer.sizes.slice(lastMetaIndex)
+            this._buffer.size = this._buffer.sizes.reduce((a, b) => a + b, 0)
             return this._buffer
         } else {
             return this._clearBuffer()
@@ -1346,6 +1351,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._buffer = {
             size: 0,
             data: [],
+            sizes: [],
             sessionId: this._sessionId,
             windowId: this._windowId,
         }
