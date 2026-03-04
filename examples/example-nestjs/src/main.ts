@@ -3,7 +3,7 @@
 import 'reflect-metadata'
 import { NestFactory } from '@nestjs/core'
 import { PostHog } from 'posthog-node'
-import { PostHogExceptionInterceptor } from 'posthog-node/nestjs'
+import { PostHogInterceptor } from 'posthog-node/nestjs'
 import { AppModule } from './app.module'
 
 const { POSTHOG_PROJECT_API_KEY, POSTHOG_HOST } = process.env
@@ -18,7 +18,7 @@ posthog.debug()
 async function bootstrap() {
     const app = await NestFactory.create(AppModule)
 
-    app.useGlobalInterceptors(new PostHogExceptionInterceptor(posthog))
+    app.useGlobalInterceptors(new PostHogInterceptor(posthog))
 
     await app.listen(8030)
     console.log('⚡: NestJS server is running at http://localhost:8030')

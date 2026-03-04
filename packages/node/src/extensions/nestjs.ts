@@ -23,24 +23,47 @@ interface NestInterceptor<T = any, R = any> {
   intercept(context: ExecutionContext, next: CallHandler<T>): Observable<R>
 }
 
-export class PostHogExceptionInterceptor implements NestInterceptor {
-  private posthog: PostHogBackendClient
+export interface PostHogInterceptorOptions {
+  captureExceptions?: boolean
+}
 
-  constructor(posthog: PostHogBackendClient) {
+export class PostHogInterceptor implements NestInterceptor {
+  private posthog: PostHogBackendClient
+  private captureExceptions: boolean
+
+  constructor(posthog: PostHogBackendClient, options?: PostHogInterceptorOptions) {
     this.posthog = posthog
+    this.captureExceptions = options?.captureExceptions ?? true
   }
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const httpHost = context.switchToHttp()
+    const request = httpHost.getRequest()
+    const response = httpHost.getResponse()
+
+    const headers = request?.headers ?? {}
+    const sessionId: string | undefined = headers['x-posthog-session-id']
+    const distinctId: string | undefined = headers['x-posthog-distinct-id']
+
+    this.posthog.enterContext({
+      sessionId,
+      distinctId,
+      properties: {
+        $current_url: request?.url,
+        $request_method: request?.method,
+        $request_path: request?.path ?? request?.url,
+        $user_agent: headers['user-agent'],
+        $ip: headers['x-forwarded-for'] || request?.socket?.remoteAddress,
+      },
+    })
+
+    if (!this.captureExceptions) {
+      return next.handle()
+    }
+
     return next.handle().pipe(
       catchError((exception: unknown) => {
         if (!ErrorTracking.isPreviouslyCapturedError(exception)) {
-          const httpHost = context.switchToHttp()
-          const request = httpHost.getRequest()
-          const response = httpHost.getResponse()
-
-          const headers = request?.headers ?? {}
-          const sessionId: string | undefined = headers['x-posthog-session-id']
-          const distinctId: string | undefined = headers['x-posthog-distinct-id']
           const syntheticException = new Error('Synthetic exception')
           const hint: CoreErrorTracking.EventHint = {
             mechanism: { type: 'middleware', handled: false },
