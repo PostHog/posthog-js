@@ -75,7 +75,7 @@ export class PostHogInterceptor implements NestInterceptor {
     const sessionId: string | undefined = headers['x-posthog-session-id']
     const distinctId: string | undefined = headers['x-posthog-distinct-id']
 
-    this.posthog.enterContext({
+    const contextData = {
       sessionId,
       distinctId,
       properties: {
@@ -85,45 +85,59 @@ export class PostHogInterceptor implements NestInterceptor {
         $user_agent: headers['user-agent'],
         $ip: getClientIp(headers, request),
       },
-    })
-
-    if (!this.captureExceptions) {
-      return next.handle()
     }
 
-    return next.handle().pipe(
-      catchError((exception: unknown) => {
-        if (ErrorTracking.isPreviouslyCapturedError(exception)) {
-          return throwError(() => exception)
-        }
+    const buildPipeline = () => {
+      let source = next.handle()
 
-        const status = getExceptionStatus(exception)
-        if (status !== undefined && status < this.minStatusToCapture) {
-          return throwError(() => exception)
-        }
+      if (this.captureExceptions) {
+        source = source.pipe(
+          catchError((exception: unknown) => {
+            if (ErrorTracking.isPreviouslyCapturedError(exception)) {
+              return throwError(() => exception)
+            }
 
-        const syntheticException = new Error('Synthetic exception')
-        const hint: CoreErrorTracking.EventHint = {
-          mechanism: { type: 'middleware', handled: false },
-          syntheticException,
-        }
+            const status = getExceptionStatus(exception)
+            if (status !== undefined && status < this.minStatusToCapture) {
+              return throwError(() => exception)
+            }
 
-        this.posthog.addPendingPromise(
-          ErrorTracking.buildEventMessage(exception, hint, distinctId, {
-            $session_id: sessionId,
-            $current_url: request?.url,
-            $request_method: request?.method,
-            $request_path: request?.path ?? request?.url,
-            $user_agent: headers['user-agent'],
-            $response_status_code: status ?? response?.statusCode,
-            $ip: getClientIp(headers, request),
-          }).then((msg) => {
-            this.posthog.capture(msg)
+            const syntheticException = new Error('Synthetic exception')
+            const hint: CoreErrorTracking.EventHint = {
+              mechanism: { type: 'middleware', handled: false },
+              syntheticException,
+            }
+
+            this.posthog.addPendingPromise(
+              ErrorTracking.buildEventMessage(exception, hint, distinctId, {
+                $session_id: sessionId,
+                $current_url: request?.url,
+                $request_method: request?.method,
+                $request_path: request?.path ?? request?.url,
+                $user_agent: headers['user-agent'],
+                $response_status_code: status ?? response?.statusCode,
+                $ip: getClientIp(headers, request),
+              }).then((msg) => {
+                this.posthog.capture(msg)
+              })
+            )
+
+            return throwError(() => exception)
           })
         )
+      }
 
-        return throwError(() => exception)
+      return source
+    }
+
+    // Wrap in a new Observable so that subscription (and the entire handler
+    // execution) runs inside withContext's AsyncLocalStorage.run() scope.
+    // This ensures context is properly isolated per request and cleaned up
+    // automatically, unlike enterContext which can leak across requests.
+    return new Observable((subscriber) => {
+      this.posthog.withContext(contextData, () => {
+        buildPipeline().subscribe(subscriber)
       })
-    )
+    })
   }
 }
