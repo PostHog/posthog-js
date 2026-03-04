@@ -1,1 +1,2 @@
-packages: []
+pnpmfile: ../.pnpmfile.cjs
+nodeLinker: "hoisted"

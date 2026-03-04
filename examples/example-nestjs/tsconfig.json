@@ -1,6 +1,6 @@
 {
     "compilerOptions": {
-        "module": "commonjs",
+        "module": "Node16",
         "declaration": true,
         "removeComments": true,
         "emitDecoratorMetadata": true,
@@ -9,6 +9,7 @@
         "target": "ES2021",
         "sourceMap": true,
         "outDir": "./dist",
+        "moduleResolution": "nodenext",
         "baseUrl": "./",
         "incremental": true,
         "skipLibCheck": true,
