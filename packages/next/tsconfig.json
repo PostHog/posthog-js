@@ -11,9 +11,8 @@
         "isolatedModules": true,
         "lib": ["ES2022", "DOM"],
         "outDir": "dist",
-        "rootDir": "src",
-        "types": ["node", "jest"]
+        "rootDir": "."
     },
-    "include": ["src"],
+    "include": ["src", "tests"],
     "exclude": ["node_modules", "dist"]
 }
