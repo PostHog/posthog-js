@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.27.0
+
+### Minor Changes
+
+- [#3187](https://github.com/PostHog/posthog-js/pull/3187) [`2eff595`](https://github.com/PostHog/posthog-js/commit/2eff595e137f2b430092ec4330a42261fb470764) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Accept a `waitUntil` method for serverless environments
+  (2026-03-04)
+
 ## 5.26.2
 
 ### Patch Changes
