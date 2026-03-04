@@ -492,14 +492,14 @@ function _checkForCannotReadResponseBody({
 function _tryReadBody(r: Request | Response): Promise<string> {
     // there are now already multiple places where we're using Promise...
     // eslint-disable-next-line compat/compat
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         const timeout = setTimeout(() => resolve('[SessionReplay] Timeout while trying to read body'), 500)
         try {
             r.clone()
                 .text()
                 .then(
                     (txt) => resolve(txt),
-                    (reason) => reject(reason)
+                    (reason) => resolve('[SessionReplay] Failed to read body: ' + reason)
                 )
                 .finally(() => clearTimeout(timeout))
         } catch {
