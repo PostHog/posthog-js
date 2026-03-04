@@ -267,11 +267,11 @@ describe('RemoteConfigLoader', () => {
 
             // Default interval (5 min) should not trigger refresh
             jest.advanceTimersByTime(5 * 60 * 1000)
-            expect(posthog.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
+            expect(posthog.reloadFeatureFlags).not.toHaveBeenCalled()
 
             // Custom interval (10 min) should trigger refresh
             jest.advanceTimersByTime(5 * 60 * 1000) // total: 10 minutes
-            expect(posthog.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
 
             loader.stop()
         })
@@ -284,7 +284,7 @@ describe('RemoteConfigLoader', () => {
 
             // Even after a long time, no refresh should occur
             jest.advanceTimersByTime(30 * 60 * 1000) // 30 minutes
-            expect(posthog.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
+            expect(posthog.reloadFeatureFlags).not.toHaveBeenCalled()
 
             loader.stop()
         })
@@ -297,7 +297,7 @@ describe('RemoteConfigLoader', () => {
 
             // Should use default 5 minute interval
             jest.advanceTimersByTime(5 * 60 * 1000)
-            expect(posthog.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
 
             loader.stop()
         })
