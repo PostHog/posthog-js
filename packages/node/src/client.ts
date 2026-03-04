@@ -46,6 +46,9 @@ const MINIMUM_POLLING_INTERVAL = 100
 const THIRTY_SECONDS = 30 * 1000
 const MAX_CACHE_SIZE = 50 * 1000
 
+const WAITUNTIL_DEBOUNCE_MS = 50
+const WAITUNTIL_MAX_WAIT_MS = 500
+
 // The actual exported Nodejs API.
 export abstract class PostHogBackendClient extends PostHogCoreStateless implements IPostHog {
   private _memoryStorage = new PostHogMemoryStorage()
@@ -61,6 +64,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private _payloadOverrides?: Record<string, JsonType>
 
   distinctIdHasSentFlagCalls: Record<string, string[]>
+
+  // waitUntil debounce state (per-instance)
+  private _waitUntilCycle?: {
+    resolve: () => void
+    startedAt: number
+    timer: ReturnType<typeof setTimeout> | undefined
+  }
 
   /**
    * Initialize a new PostHog client instance.
@@ -102,6 +112,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         ? Math.max(options.featureFlagsPollingInterval, MINIMUM_POLLING_INTERVAL)
         : THIRTY_SECONDS
 
+    if (typeof options.waitUntilDebounceMs === 'number') {
+      this.options.waitUntilDebounceMs = Math.max(options.waitUntilDebounceMs, 0)
+    }
+    if (typeof options.waitUntilMaxWaitMs === 'number') {
+      this.options.waitUntilMaxWaitMs = Math.max(options.waitUntilMaxWaitMs, 0)
+    }
+
     if (options.personalApiKey) {
       if (options.personalApiKey.includes('phc_')) {
         throw new Error(
@@ -136,6 +153,93 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.errorTracking = new ErrorTracking(this, options, this._logger)
     this.distinctIdHasSentFlagCalls = {}
     this.maxCacheSize = options.maxCacheSize || MAX_CACHE_SIZE
+  }
+
+  protected override enqueue(type: string, message: any, options?: PostHogCaptureOptions): void {
+    super.enqueue(type, message, options)
+    this.scheduleDebouncedFlush()
+  }
+
+  override async flush(): Promise<void> {
+    const flushPromise = super.flush()
+    const waitUntil = this.options.waitUntil
+    // Only register when no debounce promise is already keeping runtime alive
+    if (waitUntil && !this._waitUntilCycle) {
+      try {
+        waitUntil(flushPromise.catch(() => {}))
+      } catch {
+        // waitUntil may throw outside request context
+      }
+    }
+    return flushPromise
+  }
+
+  private scheduleDebouncedFlush(): void {
+    // `waitUntil` is a serverless construct
+    // if it doesn't exist, we can skip all the debounce logic and flush as normal
+    const waitUntil = this.options.waitUntil
+    if (!waitUntil) {
+      return
+    }
+
+    if (this.disabled || this.optedOut) {
+      return
+    }
+
+    if (!this._waitUntilCycle) {
+      let resolve: () => void
+      const promise = new Promise<void>((r) => {
+        resolve = r
+      })
+      try {
+        waitUntil(promise)
+      } catch {
+        // waitUntil may throw outside request context
+        return
+      }
+      this._waitUntilCycle = { resolve: resolve!, startedAt: Date.now(), timer: undefined }
+    }
+
+    // Max time cap: if we've been debouncing too long, flush now to prevent
+    // starvation from rapid concurrent captures. I.e., don't let a steady
+    // stream of captures keep pushing the flush back indefinitely.
+    const elapsed = Date.now() - this._waitUntilCycle.startedAt
+    const maxWaitMs = this.options.waitUntilMaxWaitMs ?? WAITUNTIL_MAX_WAIT_MS
+    const flushNow = elapsed >= maxWaitMs
+
+    if (this._waitUntilCycle.timer !== undefined) {
+      clearTimeout(this._waitUntilCycle.timer)
+    }
+
+    if (flushNow) {
+      void this.resolveWaitUntilFlush()
+      return
+    }
+
+    const debounceMs = this.options.waitUntilDebounceMs ?? WAITUNTIL_DEBOUNCE_MS
+    this._waitUntilCycle.timer = safeSetTimeout(() => {
+      void this.resolveWaitUntilFlush()
+    }, debounceMs)
+  }
+
+  private _consumeWaitUntilCycle(): (() => void) | undefined {
+    const cycle = this._waitUntilCycle
+    if (cycle) {
+      clearTimeout(cycle.timer)
+      this._waitUntilCycle = undefined
+    }
+    return cycle?.resolve
+  }
+
+  private async resolveWaitUntilFlush(): Promise<void> {
+    const resolve = this._consumeWaitUntilCycle()
+    try {
+      await super.flush()
+    } catch {
+      // Flush errors are already logged by flush() internals
+    } finally {
+      resolve?.()
+    }
   }
 
   /**
@@ -1592,9 +1696,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns Promise that resolves when shutdown is complete
    */
   async _shutdown(shutdownTimeoutMs?: number): Promise<void> {
+    // Cancel any pending debounced flush — shutdown will flush directly.
+    const resolve = this._consumeWaitUntilCycle()
+
     this.featureFlagsPoller?.stopPoller(shutdownTimeoutMs)
     this.errorTracking.shutdown()
-    return super._shutdown(shutdownTimeoutMs)
+    try {
+      return await super._shutdown(shutdownTimeoutMs)
+    } finally {
+      resolve?.()
+    }
   }
 
   private async _requestRemoteConfigPayload(flagKey: string): Promise<PostHogFetchResponse | undefined> {
