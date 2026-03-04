@@ -23,17 +23,47 @@ interface NestInterceptor<T = any, R = any> {
   intercept(context: ExecutionContext, next: CallHandler<T>): Observable<R>
 }
 
+export interface ExceptionCaptureOptions {
+  /** Minimum HTTP status code to capture. Exceptions with a lower status (e.g. 4xx) are skipped. @default 500 */
+  minStatusToCapture?: number
+}
+
 export interface PostHogInterceptorOptions {
-  captureExceptions?: boolean
+  /** Enable exception capture. Pass `true` for defaults or an object to configure. @default false */
+  captureExceptions?: boolean | ExceptionCaptureOptions
+}
+
+function getClientIp(headers: Record<string, any>, request: any): string | undefined {
+  const forwarded = headers['x-forwarded-for']
+  if (forwarded) {
+    return String(forwarded).split(',')[0]?.trim()
+  }
+  return request?.socket?.remoteAddress
+}
+
+function getExceptionStatus(exception: unknown): number | undefined {
+  if (
+    exception &&
+    typeof exception === 'object' &&
+    'getStatus' in exception &&
+    typeof (exception as any).getStatus === 'function'
+  ) {
+    const status = (exception as any).getStatus()
+    return typeof status === 'number' ? status : undefined
+  }
+  return undefined
 }
 
 export class PostHogInterceptor implements NestInterceptor {
   private posthog: PostHogBackendClient
   private captureExceptions: boolean
+  private minStatusToCapture: number
 
   constructor(posthog: PostHogBackendClient, options?: PostHogInterceptorOptions) {
     this.posthog = posthog
-    this.captureExceptions = options?.captureExceptions ?? true
+    const capture = options?.captureExceptions
+    this.captureExceptions = !!capture
+    this.minStatusToCapture = (typeof capture === 'object' ? capture.minStatusToCapture : undefined) ?? 500
   }
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
@@ -53,7 +83,7 @@ export class PostHogInterceptor implements NestInterceptor {
         $request_method: request?.method,
         $request_path: request?.path ?? request?.url,
         $user_agent: headers['user-agent'],
-        $ip: headers['x-forwarded-for'] || request?.socket?.remoteAddress,
+        $ip: getClientIp(headers, request),
       },
     })
 
@@ -63,27 +93,34 @@ export class PostHogInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       catchError((exception: unknown) => {
-        if (!ErrorTracking.isPreviouslyCapturedError(exception)) {
-          const syntheticException = new Error('Synthetic exception')
-          const hint: CoreErrorTracking.EventHint = {
-            mechanism: { type: 'middleware', handled: false },
-            syntheticException,
-          }
-
-          this.posthog.addPendingPromise(
-            ErrorTracking.buildEventMessage(exception, hint, distinctId, {
-              $session_id: sessionId,
-              $current_url: request?.url,
-              $request_method: request?.method,
-              $request_path: request?.path ?? request?.url,
-              $user_agent: headers['user-agent'],
-              $response_status_code: response?.statusCode,
-              $ip: headers['x-forwarded-for'] || request?.socket?.remoteAddress,
-            }).then((msg) => {
-              this.posthog.capture(msg)
-            })
-          )
+        if (ErrorTracking.isPreviouslyCapturedError(exception)) {
+          return throwError(() => exception)
         }
+
+        const status = getExceptionStatus(exception)
+        if (status !== undefined && status < this.minStatusToCapture) {
+          return throwError(() => exception)
+        }
+
+        const syntheticException = new Error('Synthetic exception')
+        const hint: CoreErrorTracking.EventHint = {
+          mechanism: { type: 'middleware', handled: false },
+          syntheticException,
+        }
+
+        this.posthog.addPendingPromise(
+          ErrorTracking.buildEventMessage(exception, hint, distinctId, {
+            $session_id: sessionId,
+            $current_url: request?.url,
+            $request_method: request?.method,
+            $request_path: request?.path ?? request?.url,
+            $user_agent: headers['user-agent'],
+            $response_status_code: status ?? response?.statusCode,
+            $ip: getClientIp(headers, request),
+          }).then((msg) => {
+            this.posthog.capture(msg)
+          })
+        )
 
         return throwError(() => exception)
       })

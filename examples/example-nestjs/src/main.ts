@@ -18,7 +18,7 @@ posthog.debug()
 async function bootstrap() {
     const app = await NestFactory.create(AppModule)
 
-    app.useGlobalInterceptors(new PostHogInterceptor(posthog))
+    app.useGlobalInterceptors(new PostHogInterceptor(posthog, { captureExceptions: true }))
 
     await app.listen(8030)
     console.log('⚡: NestJS server is running at http://localhost:8030')

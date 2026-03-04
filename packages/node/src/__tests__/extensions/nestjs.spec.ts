@@ -50,7 +50,6 @@ const createMockCallHandler = (error?: Error) => ({
 
 describe('PostHogInterceptor', () => {
   let posthog: PostHog
-  let interceptor: PostHogInterceptor
 
   jest.useFakeTimers()
 
@@ -60,8 +59,6 @@ describe('PostHogInterceptor', () => {
       fetchRetryCount: 0,
       disableCompression: true,
     })
-
-    interceptor = new PostHogInterceptor(posthog)
 
     mockedFetch.mockResolvedValue({
       status: 200,
@@ -76,6 +73,7 @@ describe('PostHogInterceptor', () => {
 
   describe('context propagation', () => {
     it('should set context from request headers', async () => {
+      const interceptor = new PostHogInterceptor(posthog)
       const context = createMockContext({
         headers: {
           'x-posthog-session-id': 'session-123',
@@ -109,6 +107,7 @@ describe('PostHogInterceptor', () => {
     })
 
     it('should propagate context to capture calls in handler', async () => {
+      const interceptor = new PostHogInterceptor(posthog)
       const context = createMockContext({
         headers: {
           'x-posthog-session-id': 'session-abc',
@@ -137,9 +136,57 @@ describe('PostHogInterceptor', () => {
       expect(event.distinct_id).toBe('user-xyz')
       expect(event.properties.$session_id).toBe('session-abc')
     })
+
+    it('should pass through successful responses', async () => {
+      const interceptor = new PostHogInterceptor(posthog)
+      const context = createMockContext()
+      const handler = { handle: () => of({ success: true }) }
+
+      const result = await lastValueFrom(interceptor.intercept(context, handler))
+      expect(result).toEqual({ success: true })
+    })
+
+    it('should not capture exceptions by default', async () => {
+      const interceptor = new PostHogInterceptor(posthog)
+      const error = new Error('should not be captured')
+      const context = createMockContext()
+
+      await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
+
+      await waitForPromises()
+      jest.runOnlyPendingTimers()
+      await waitForPromises()
+
+      const batchCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/batch/'))
+      expect(batchCalls.length).toBe(0)
+    })
+
+    it('should extract first IP from comma-separated x-forwarded-for', async () => {
+      const interceptor = new PostHogInterceptor(posthog)
+      const context = createMockContext({
+        headers: { 'x-forwarded-for': '10.0.0.1, 172.16.0.1, 192.168.1.1' },
+      })
+
+      let capturedContext: any
+      const handler = {
+        handle: () => {
+          capturedContext = posthog.getContext()
+          return of({ success: true })
+        },
+      }
+
+      await lastValueFrom(interceptor.intercept(context, handler))
+      expect(capturedContext.properties.$ip).toBe('10.0.0.1')
+    })
   })
 
-  describe('exception capture', () => {
+  describe('exception capture (captureExceptions: true)', () => {
+    let interceptor: PostHogInterceptor
+
+    beforeEach(() => {
+      interceptor = new PostHogInterceptor(posthog, { captureExceptions: true })
+    })
+
     it('should capture exception with correct properties', async () => {
       const error = new Error('test NestJS error')
       const context = createMockContext({
@@ -184,7 +231,6 @@ describe('PostHogInterceptor', () => {
       const context = createMockContext()
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
-      // Only the /batch/ call from context setup, no exception capture
       const batchCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/batch/'))
       expect(batchCalls.length).toBe(0)
     })
@@ -233,17 +279,29 @@ describe('PostHogInterceptor', () => {
       const batchEvents = getLastBatchEvents()
       expect(batchEvents![0].properties.$ip).toBe('10.0.0.1')
     })
-  })
 
-  describe('captureExceptions option', () => {
-    it('should not capture exceptions when captureExceptions is false', async () => {
-      const noExceptionInterceptor = new PostHogInterceptor(posthog, { captureExceptions: false })
-      const error = new Error('should not be captured')
+    it('should extract first IP from comma-separated x-forwarded-for', async () => {
+      const error = new Error('multi ip error')
+      const context = createMockContext({
+        headers: { 'x-forwarded-for': '10.0.0.1, 172.16.0.1, 192.168.1.1' },
+      })
+
+      await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
+
+      await waitForPromises()
+      jest.runOnlyPendingTimers()
+      await waitForPromises()
+
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents![0].properties.$ip).toBe('10.0.0.1')
+    })
+
+    it('should skip 4xx HttpException-like errors by default', async () => {
+      const error: any = new Error('Not Found')
+      error.getStatus = () => 404
       const context = createMockContext()
 
-      await expect(
-        lastValueFrom(noExceptionInterceptor.intercept(context, createMockCallHandler(error)))
-      ).rejects.toThrow(error)
+      await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
 
       await waitForPromises()
       jest.runOnlyPendingTimers()
@@ -253,36 +311,42 @@ describe('PostHogInterceptor', () => {
       expect(batchCalls.length).toBe(0)
     })
 
-    it('should still set context when captureExceptions is false', async () => {
-      const noExceptionInterceptor = new PostHogInterceptor(posthog, { captureExceptions: false })
-      const context = createMockContext({
-        headers: {
-          'x-posthog-session-id': 'session-ctx',
-          'x-posthog-distinct-id': 'user-ctx',
-        },
-      })
-
-      let capturedContext: any
-      const handler = {
-        handle: () => {
-          capturedContext = posthog.getContext()
-          return of({ success: true })
-        },
-      }
-
-      await lastValueFrom(noExceptionInterceptor.intercept(context, handler))
-
-      expect(capturedContext).toBeDefined()
-      expect(capturedContext.sessionId).toBe('session-ctx')
-      expect(capturedContext.distinctId).toBe('user-ctx')
-    })
-
-    it('should pass through successful responses', async () => {
+    it('should capture 5xx HttpException-like errors', async () => {
+      const error: any = new Error('Internal Server Error')
+      error.getStatus = () => 500
       const context = createMockContext()
-      const handler = { handle: () => of({ success: true }) }
 
-      const result = await lastValueFrom(interceptor.intercept(context, handler))
-      expect(result).toEqual({ success: true })
+      await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
+
+      await waitForPromises()
+      jest.runOnlyPendingTimers()
+      await waitForPromises()
+
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents).toBeDefined()
+      expect(batchEvents![0].event).toBe('$exception')
+      expect(batchEvents![0].properties.$response_status_code).toBe(500)
+    })
+  })
+
+  describe('exception capture with custom minStatusToCapture', () => {
+    it('should capture 4xx when minStatusToCapture is set to 400', async () => {
+      const interceptor = new PostHogInterceptor(posthog, {
+        captureExceptions: { minStatusToCapture: 400 },
+      })
+      const error: any = new Error('Not Found')
+      error.getStatus = () => 404
+      const context = createMockContext()
+
+      await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
+
+      await waitForPromises()
+      jest.runOnlyPendingTimers()
+      await waitForPromises()
+
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents).toBeDefined()
+      expect(batchEvents![0].event).toBe('$exception')
     })
   })
 })
