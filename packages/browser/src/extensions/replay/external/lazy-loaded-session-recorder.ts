@@ -84,6 +84,7 @@ const ONE_KB = 1024
 
 const ONE_MINUTE = 1000 * 60
 const FIVE_MINUTES = ONE_MINUTE * 5
+const ONE_HOUR = ONE_MINUTE * 60
 
 /**
  * Extracts the network_timing value from a capturePerformance config.
@@ -94,7 +95,7 @@ function networkTimingFromConfig(config: boolean | PerformanceCaptureConfig | un
 }
 
 export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
-export const RECORDING_REMOTE_CONFIG_TTL_MS = FIVE_MINUTES
+export const RECORDING_REMOTE_CONFIG_TTL_MS = ONE_HOUR
 export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
@@ -726,10 +727,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Only check TTL if recording hasn't started yet
         // Once started, trust the config until a hard page load
         if (!this.isStarted) {
-            // default to now so that older persisted configs without a cache_timestamp
-            // are treated as fresh instead of being cleared on every read
-            // they come from versions of the code that will never set a cache_timestamp
-            const cacheTimestamp = parsedConfig.cache_timestamp ?? Date.now()
+            const cacheTimestamp = parsedConfig.cache_timestamp ?? 0
             if (Date.now() - cacheTimestamp > RECORDING_REMOTE_CONFIG_TTL_MS) {
                 logger.info('persisted remote config for session recording is stale and will be ignored', {
                     cacheTimestamp,
@@ -940,14 +938,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
-    stop() {
+    private _teardown() {
         window?.removeEventListener('beforeunload', this._onBeforeUnload)
         window?.removeEventListener('offline', this._onOffline)
         window?.removeEventListener('online', this._onOnline)
         window?.removeEventListener('visibilitychange', this._onVisibilityChange)
 
-        this._flushBuffer()
-        this._clearBuffer()
         clearInterval(this._fullSnapshotTimer)
         this._clearFlushBufferTimer()
 
@@ -975,8 +971,19 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._stopRrweb?.()
         this._stopRrweb = undefined
+    }
 
+    stop() {
+        this._flushBuffer()
+        this._clearBuffer()
+        this._teardown()
         logger.info('stopped')
+    }
+
+    discard() {
+        this._clearBuffer()
+        this._teardown()
+        logger.info('discarded')
     }
 
     onRRwebEmit(rawEvent: eventWithTime) {

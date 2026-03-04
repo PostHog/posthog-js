@@ -47,6 +47,7 @@ import {
     LazyLoadedSessionRecording,
     RECORDING_IDLE_THRESHOLD_MS,
     RECORDING_MAX_EVENT_SIZE,
+    RECORDING_REMOTE_CONFIG_TTL_MS,
 } from '../../../extensions/replay/external/lazy-loaded-session-recorder'
 
 // Type and source defined here designate a non-user-generated recording event
@@ -309,9 +310,9 @@ describe('Lazy SessionRecording', () => {
         window!.location = originalLocation
     })
 
-    describe('before remote cofig', () => {
-        it('is not enabled no matter what', () => {
-            expect(sessionRecording.status).toBe('pending_config')
+    describe('before remote config', () => {
+        it('is disabled without persisted config', () => {
+            expect(sessionRecording.status).toBe('disabled')
         })
 
         it('does not load script if disable_session_recording passed', () => {
@@ -361,17 +362,17 @@ describe('Lazy SessionRecording', () => {
         })
 
         describe('remote config cache invalidation', () => {
-            const FIVE_MINUTES_IN_MS = 5 * 60 * 1000
+            const CONFIG_TTL = RECORDING_REMOTE_CONFIG_TTL_MS
 
             it.each([
                 [
-                    'ignores config with stale cache_timestamp (> 5 minutes old)',
-                    { enabled: true, endpoint: '/s/', cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000 },
+                    'ignores config with stale cache_timestamp (> 1 hour old)',
+                    { enabled: true, endpoint: '/s/', cache_timestamp: Date.now() - CONFIG_TTL - 1000 },
                     false,
                 ],
                 [
-                    'uses config with fresh cache_timestamp (< 5 minutes old)',
-                    { enabled: true, endpoint: '/s/', cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS + 60000 },
+                    'uses config with fresh cache_timestamp (< 1 hour old)',
+                    { enabled: true, endpoint: '/s/', cache_timestamp: Date.now() - CONFIG_TTL + 60000 },
                     true,
                 ],
                 [
@@ -397,7 +398,7 @@ describe('Lazy SessionRecording', () => {
                 }
             })
 
-            it('treats legacy config without cache_timestamp as fresh', () => {
+            it('treats legacy config without cache_timestamp as stale', () => {
                 sessionRecording.stopRecording()
 
                 posthog.persistence?.register({
@@ -405,8 +406,7 @@ describe('Lazy SessionRecording', () => {
                 })
 
                 const result = sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']
-                expect(result?.enabled).toBe(true)
-                expect(result?.endpoint).toBe('/s/')
+                expect(result).toBeUndefined()
             })
 
             it('trusts stale config once recording has started (long-lived SPA)', () => {
@@ -417,7 +417,7 @@ describe('Lazy SessionRecording', () => {
                     [SESSION_RECORDING_REMOTE_CONFIG]: {
                         enabled: true,
                         endpoint: '/s/',
-                        cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000,
+                        cache_timestamp: Date.now() - CONFIG_TTL - 1000,
                     },
                 })
 
@@ -2972,7 +2972,7 @@ describe('Lazy SessionRecording', () => {
         it('can be paused while waiting for flag', () => {
             fakeNavigateTo('https://test.com/blocked')
 
-            expect(sessionRecording.status).toEqual('pending_config')
+            expect(sessionRecording.status).toEqual('disabled')
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -3898,26 +3898,32 @@ describe('Lazy SessionRecording', () => {
             addRRwebToWindow()
         })
 
-        it('does not start recording until fresh config arrives', () => {
+        it('starts recording from fresh persisted config without waiting for remote config', () => {
             posthog.persistence?.register({
                 [SESSION_RECORDING_REMOTE_CONFIG]: {
                     enabled: true,
                     endpoint: '/s/',
+                    cache_timestamp: Date.now(),
+                },
+            })
+
+            sessionRecording.startIfEnabledOrStop()
+            expect(sessionRecording.started).toBe(true)
+        })
+
+        it('does not start recording from stale persisted config', () => {
+            const CONFIG_TTL = RECORDING_REMOTE_CONFIG_TTL_MS
+
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: {
+                    enabled: true,
+                    endpoint: '/s/',
+                    cache_timestamp: Date.now() - CONFIG_TTL - 1000,
                 },
             })
 
             sessionRecording.startIfEnabledOrStop()
             expect(sessionRecording.started).toBe(false)
-
-            sessionRecording.onRemoteConfig(
-                makeFlagsResponse({
-                    sessionRecording: {
-                        endpoint: '/s/',
-                    },
-                })
-            )
-
-            expect(sessionRecording.started).toBe(true)
         })
 
         it('does not request fresh config more than once when restarting with stale config', () => {
@@ -3925,7 +3931,7 @@ describe('Lazy SessionRecording', () => {
             // When recording stops and restarts later with stale config, should only request once
             // even if startIfEnabledOrStop is called multiple times before config arrives
 
-            const FIVE_MINUTES_IN_MS = 5 * 60 * 1000
+            const CONFIG_TTL = RECORDING_REMOTE_CONFIG_TTL_MS
 
             // First, start recording normally with fresh config
             sessionRecording.onRemoteConfig(
@@ -3946,7 +3952,7 @@ describe('Lazy SessionRecording', () => {
                 [SESSION_RECORDING_REMOTE_CONFIG]: {
                     enabled: true,
                     endpoint: '/s/',
-                    cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000,
+                    cache_timestamp: Date.now() - CONFIG_TTL - 1000,
                 },
             })
 
@@ -3966,7 +3972,7 @@ describe('Lazy SessionRecording', () => {
             // Tests the deferred start flow in stop/restart scenario
             // Recording stops → config becomes stale → start requested → waits for fresh config → starts
 
-            const FIVE_MINUTES_IN_MS = 5 * 60 * 1000
+            const CONFIG_TTL = RECORDING_REMOTE_CONFIG_TTL_MS
 
             // First, start recording normally with fresh config
             sessionRecording.onRemoteConfig(
@@ -3987,7 +3993,7 @@ describe('Lazy SessionRecording', () => {
                 [SESSION_RECORDING_REMOTE_CONFIG]: {
                     enabled: true,
                     endpoint: '/s/',
-                    cache_timestamp: Date.now() - FIVE_MINUTES_IN_MS - 1000,
+                    cache_timestamp: Date.now() - CONFIG_TTL - 1000,
                 },
             })
 

@@ -22,7 +22,10 @@ import {
     anyMatchSessionRecordingStatus,
     OrTriggerMatching,
 } from '../../../extensions/replay/external/triggerMatching'
-import { LazyLoadedSessionRecording } from '../../../extensions/replay/external/lazy-loaded-session-recorder'
+import {
+    LazyLoadedSessionRecording,
+    RECORDING_REMOTE_CONFIG_TTL_MS,
+} from '../../../extensions/replay/external/lazy-loaded-session-recorder'
 import { createMockPostHog, createMockConfig } from '../../helpers/posthog-instance'
 
 // Type and source defined here designate a non-user-generated recording event
@@ -277,8 +280,8 @@ describe('SessionRecording', () => {
             })
         })
 
-        it('emit is not active until flags is called', () => {
-            expect(sessionRecording['status']).toBe('pending_config')
+        it('status is disabled until config enables recording', () => {
+            expect(sessionRecording['status']).toBe('disabled')
 
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
             expect(sessionRecording['status']).toBe('active')
@@ -337,7 +340,7 @@ describe('SessionRecording', () => {
             sessionRecording.onRemoteConfig(makeFlagsResponse({}))
 
             expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBe(undefined)
-            expect(sessionRecording.status).toBe('pending_config')
+            expect(sessionRecording.status).toBe('disabled')
         })
 
         it('stores response in persistence if recording is false from the server', () => {
@@ -346,6 +349,34 @@ describe('SessionRecording', () => {
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: false }))
 
             expect(sessionRecording.status).toBe('disabled')
+        })
+
+        it('discards recording when server disables it after starting from cached config', () => {
+            // Fresh cached config from previous page load
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: {
+                    enabled: true,
+                    endpoint: '/s/',
+                    cache_timestamp: Date.now(),
+                },
+            })
+
+            // Recording starts from cache
+            sessionRecording.startIfEnabledOrStop()
+            expect(loadScriptMock).toHaveBeenCalled()
+            expect(sessionRecording.status).toBe('active')
+
+            const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+            const discardSpy = jest.spyOn(lazyRecorder!, 'discard')
+            const flushSpy = jest.spyOn(lazyRecorder as any, '_flushBuffer')
+
+            // Server responds with recording disabled
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: false }))
+
+            expect(discardSpy).toHaveBeenCalled()
+            expect(flushSpy).not.toHaveBeenCalled()
+            expect(sessionRecording['_persistFlagsOnSessionListener']).toBeUndefined()
+            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).enabled).toBe(false)
         })
 
         it('stores sample rate', () => {
@@ -440,33 +471,72 @@ describe('SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_endpoint']).toEqual('/ses/')
         })
 
-        it('does not start recording before remote config is received', () => {
-            // Set stale config in persistence (simulating cached/CDN config)
+        it('starts recording from persisted config when remote config fetch fails', () => {
+            // Fresh config in persistence (simulating cache from previous page load)
             posthog.persistence?.register({
                 [SESSION_RECORDING_REMOTE_CONFIG]: {
                     enabled: true,
                     endpoint: '/s/',
-                    urlTriggers: [],
+                    cache_timestamp: Date.now(),
                 },
             })
 
-            // Try to start without receiving remote config
-            sessionRecording.startIfEnabledOrStop()
+            // Remote config fetch fails — empty object, no sessionRecording key
+            sessionRecording.onRemoteConfig(makeFlagsResponse({}))
 
-            // Should not have started recording yet
-            expect(loadScriptMock).not.toHaveBeenCalled()
-            expect(sessionRecording.status).toBe('pending_config')
-
-            // Now receive remote config
-            sessionRecording.onRemoteConfig(
-                makeFlagsResponse({
-                    sessionRecording: { endpoint: '/s/' },
-                })
-            )
-
-            // Should now start
+            // Should fall back to persisted config and start recording
             expect(loadScriptMock).toHaveBeenCalled()
             expect(sessionRecording.status).toBe('active')
+        })
+
+        it('does not start recording when config fetch fails and no persisted config exists', () => {
+            posthog.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: undefined })
+
+            // Remote config fetch fails
+            sessionRecording.onRemoteConfig(makeFlagsResponse({}))
+
+            // No persisted config to fall back to
+            expect(loadScriptMock).not.toHaveBeenCalled()
+            expect(sessionRecording.status).toBe('disabled')
+        })
+
+        it('awaits config when config fetch fails and persisted config is stale', () => {
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: {
+                    enabled: true,
+                    endpoint: '/s/',
+                    cache_timestamp: Date.now() - RECORDING_REMOTE_CONFIG_TTL_MS - 1000,
+                },
+            })
+
+            // Remote config fetch fails
+            sessionRecording.onRemoteConfig(makeFlagsResponse({}))
+
+            // Script loads, refresh requested — waiting for fresh config
+            expect(loadScriptMock).toHaveBeenCalled()
+            expect(sessionRecording.status).toBe('awaiting_config')
+        })
+
+        it('transitions to missing_config when config refresh fails', () => {
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: {
+                    enabled: true,
+                    endpoint: '/s/',
+                    cache_timestamp: Date.now() - RECORDING_REMOTE_CONFIG_TTL_MS - 1000,
+                },
+            })
+
+            // First failure: triggers refresh
+            sessionRecording.onRemoteConfig(makeFlagsResponse({}))
+            expect(sessionRecording.status).toBe('awaiting_config')
+
+            // Second failure: refresh came back empty, now missing
+            sessionRecording.onRemoteConfig(makeFlagsResponse({}))
+            expect(sessionRecording.status).toBe('missing_config')
+
+            // Third failure: stays missing
+            sessionRecording.onRemoteConfig(makeFlagsResponse({}))
+            expect(sessionRecording.status).toBe('missing_config')
         })
 
         it('discards buffer on beforeunload if status is buffering', () => {
