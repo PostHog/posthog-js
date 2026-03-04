@@ -10,7 +10,7 @@ export async function getPostHog(apiKey?: string, options?: Partial<PostHogOptio
     const resolvedApiKey = resolveApiKey(apiKey)
     const host = options?.host ?? process.env.NEXT_PUBLIC_POSTHOG_HOST
     const resolvedOptions = host ? { ...options, host } : options
-    const client = getOrCreateNodeClient(resolvedApiKey, resolvedOptions)
+    const client = await getOrCreateNodeClient(resolvedApiKey, resolvedOptions)
     const cookieStore = await cookies()
 
     if (!isOptedOut(cookieStore, resolvedApiKey)) {

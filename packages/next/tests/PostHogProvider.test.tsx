@@ -50,11 +50,11 @@ describe('PostHogProvider', () => {
         expect(screen.getByTestId('child')).toBeInTheDocument()
     })
 
-    it('passes apiKey and options to ClientPostHogProvider', async () => {
-        const options = { api_host: 'https://custom.posthog.com' }
+    it('passes apiKey and clientOptions to ClientPostHogProvider', async () => {
+        const clientOptions = { api_host: 'https://custom.posthog.com' }
         const element = await PostHogProvider({
             apiKey: 'phc_test123',
-            options,
+            clientOptions,
             children: <div>Child</div>,
         })
         render(element)
@@ -97,10 +97,10 @@ describe('PostHogProvider', () => {
             )
         })
 
-        it('allows user options to override defaults', async () => {
+        it('allows user clientOptions to override defaults', async () => {
             const element = await PostHogProvider({
                 apiKey: 'phc_test123',
-                options: {
+                clientOptions: {
                     persistence: 'memory',
                     opt_out_persistence_by_default: false,
                 },
@@ -189,7 +189,7 @@ describe('PostHogProvider', () => {
             )
         })
 
-        it('reads api_host from NEXT_PUBLIC_POSTHOG_HOST when not in options', async () => {
+        it('reads api_host from NEXT_PUBLIC_POSTHOG_HOST when not in clientOptions', async () => {
             process.env.NEXT_PUBLIC_POSTHOG_HOST = 'https://eu.posthog.com'
             const element = await PostHogProvider({
                 apiKey: 'phc_test123',
@@ -203,11 +203,11 @@ describe('PostHogProvider', () => {
             )
         })
 
-        it('prefers options.api_host over env var', async () => {
+        it('prefers clientOptions.api_host over env var', async () => {
             process.env.NEXT_PUBLIC_POSTHOG_HOST = 'https://eu.posthog.com'
             const element = await PostHogProvider({
                 apiKey: 'phc_test123',
-                options: { api_host: 'https://custom.posthog.com' },
+                clientOptions: { api_host: 'https://custom.posthog.com' },
                 children: <div>Child</div>,
             })
             render(element)
@@ -427,7 +427,7 @@ describe('PostHogProvider', () => {
 
             const element = await PostHogProvider({
                 apiKey: 'phc_test123',
-                options: { opt_out_capturing_by_default: true },
+                clientOptions: { opt_out_capturing_by_default: true },
                 bootstrapFlags: true,
                 children: <div>Child</div>,
             })

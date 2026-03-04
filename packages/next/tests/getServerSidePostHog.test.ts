@@ -33,7 +33,7 @@ describe('getServerSidePostHog', () => {
         delete process.env.NEXT_PUBLIC_POSTHOG_KEY
     })
 
-    it('returns a posthog client', () => {
+    it('returns a posthog client', async () => {
         const ctx = createMockContext({
             ph_phc_test123_posthog: JSON.stringify({
                 distinct_id: 'user_abc',
@@ -41,11 +41,11 @@ describe('getServerSidePostHog', () => {
             }),
         })
 
-        const posthog = getServerSidePostHog(ctx, 'phc_test123')
+        const posthog = await getServerSidePostHog(ctx, 'phc_test123')
         expect(posthog).toBeDefined()
     })
 
-    it('calls enterContext with distinctId and properties', () => {
+    it('calls enterContext with distinctId and properties', async () => {
         const ctx = createMockContext({
             ph_phc_test123_posthog: JSON.stringify({
                 distinct_id: 'user_abc',
@@ -54,14 +54,14 @@ describe('getServerSidePostHog', () => {
             }),
         })
 
-        getServerSidePostHog(ctx, 'phc_test123')
+        await getServerSidePostHog(ctx, 'phc_test123')
         expect(mockEnterContext).toHaveBeenCalledWith({
             distinctId: 'user_abc',
             properties: { $session_id: 'session-123', $device_id: 'device_xyz' },
         })
     })
 
-    it('reads apiKey from NEXT_PUBLIC_POSTHOG_KEY env when not provided', () => {
+    it('reads apiKey from NEXT_PUBLIC_POSTHOG_KEY env when not provided', async () => {
         process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_env_key'
         const ctx = createMockContext({
             ph_phc_env_key_posthog: JSON.stringify({
@@ -70,15 +70,15 @@ describe('getServerSidePostHog', () => {
             }),
         })
 
-        getServerSidePostHog(ctx)
+        await getServerSidePostHog(ctx)
         expect(mockEnterContext).toHaveBeenCalledWith({
             distinctId: 'user_abc',
             properties: { $device_id: 'device_xyz' },
         })
     })
 
-    it('throws when no apiKey provided and env not set', () => {
+    it('throws when no apiKey provided and env not set', async () => {
         const ctx = createMockContext({})
-        expect(() => getServerSidePostHog(ctx)).toThrow('apiKey is required')
+        await expect(getServerSidePostHog(ctx)).rejects.toThrow('apiKey is required')
     })
 })

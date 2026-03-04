@@ -3,6 +3,7 @@ import type { PostHogConfig } from 'posthog-js'
 import { ClientPostHogProvider } from '../client/ClientPostHogProvider'
 import type { BootstrapConfig } from '../client/ClientPostHogProvider'
 import { cookies } from 'next/headers'
+import type { PostHogOptions } from 'posthog-node'
 import { getOrCreateNodeClient } from '../server/nodeClientCache'
 import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey } from '../shared/config'
 import { readPostHogCookie, isOptedOut } from '../shared/cookie'
@@ -33,8 +34,10 @@ export interface PostHogProviderProps {
      * If omitted, reads from `NEXT_PUBLIC_POSTHOG_KEY` env var.
      */
     apiKey?: string
-    /** Optional posthog-js configuration overrides */
-    options?: Partial<PostHogConfig>
+    /** Optional posthog-js configuration overrides. */
+    clientOptions?: Partial<PostHogConfig>
+    /** Options passed to the posthog-node client used for server-side flag evaluation. */
+    serverOptions?: Partial<PostHogOptions>
     /**
      * Enable server-side feature flag evaluation for bootstrap.
      *
@@ -64,16 +67,16 @@ export interface PostHogProviderProps {
  * All PostHog hooks (`usePostHog`, `useFeatureFlagEnabled`, etc.)
  * require this provider as an ancestor.
  */
-export async function PostHogProvider({ apiKey: apiKeyProp, options, bootstrapFlags, children }: PostHogProviderProps) {
+export async function PostHogProvider({ apiKey: apiKeyProp, clientOptions, serverOptions, bootstrapFlags, children }: PostHogProviderProps) {
     const apiKey = resolveApiKey(apiKeyProp)
     if (!apiKey.startsWith('phc_')) {
         console.warn(`[PostHog Next.js] apiKey "${apiKey}" does not start with "phc_". This may not be a valid PostHog project API key.`)
     }
 
-    const host = options?.api_host ?? process.env.NEXT_PUBLIC_POSTHOG_HOST
+    const host = clientOptions?.api_host ?? process.env.NEXT_PUBLIC_POSTHOG_HOST
     const resolvedOptions: Partial<PostHogConfig> = {
         ...NEXTJS_CLIENT_DEFAULTS,
-        ...options,
+        ...clientOptions,
         ...(host ? { api_host: host } : {}),
     }
 
@@ -81,7 +84,7 @@ export async function PostHogProvider({ apiKey: apiKeyProp, options, bootstrapFl
 
     if (bootstrapFlags) {
         try {
-            bootstrap = await evaluateFlags(apiKey, resolvedOptions, bootstrapFlags)
+            bootstrap = await evaluateFlags(apiKey, resolvedOptions, bootstrapFlags, serverOptions)
 
             // Considering we've just evaluated flags via SSR, there's no need to immediately
             // reload them from the client.
@@ -98,26 +101,11 @@ export async function PostHogProvider({ apiKey: apiKeyProp, options, bootstrapFl
     )
 }
 
-/**
- * React.cache-wrapped flag evaluation.
- *
- * Deduplicates posthog-node calls within a single RSC render pass.
- * All arguments are primitives so React.cache's reference-equality
- * check works correctly. The `optionsJson` parameter is a serialized
- * options object forwarded to posthog-node's getAllFlagsAndPayloads.
- */
-const cachedFetchFlags = React.cache(
-    async (apiKey: string, host: string, distinctId: string, optionsJson: string) => {
-        const client = getOrCreateNodeClient(apiKey, host ? { host } : undefined)
-        const options = JSON.parse(optionsJson)
-        return client.getAllFlagsAndPayloads(distinctId, options)
-    }
-)
-
 async function evaluateFlags(
     apiKey: string,
     options: Partial<PostHogConfig> | undefined,
-    bootstrapFlags: boolean | BootstrapFlagsConfig
+    bootstrapFlags: boolean | BootstrapFlagsConfig,
+    serverOptions?: Partial<PostHogOptions>
 ): Promise<BootstrapConfig | undefined> {
     const cookieStore = await cookies()
 
@@ -130,12 +118,11 @@ async function evaluateFlags(
         return undefined
     }
 
+    const host = options?.api_host ?? ''
+    const nodeOptions: Partial<PostHogOptions> = { ...serverOptions, ...(host ? { host } : {}) }
+    const client = await getOrCreateNodeClient(apiKey, nodeOptions)
+
     const { flags: flagKeys, ...flagOptions } = typeof bootstrapFlags === 'object' ? bootstrapFlags : {}
     const allFlagsOptions: AllFlagsOptions = { ...flagOptions, ...(flagKeys ? { flagKeys } : {}) }
-    return cachedFetchFlags(
-        apiKey,
-        options?.api_host ?? '',
-        cookieState.distinctId,
-        JSON.stringify(allFlagsOptions)
-    )
+    return client.getAllFlagsAndPayloads(cookieState.distinctId, allFlagsOptions)
 }

@@ -52,9 +52,9 @@ describe('Pages PostHogProvider', () => {
         )
     })
 
-    it('allows user options to override defaults', () => {
+    it('allows user clientOptions to override defaults', () => {
         render(
-            <PostHogProvider apiKey="phc_test123" options={{ persistence: 'memory' }}>
+            <PostHogProvider apiKey="phc_test123" clientOptions={{ persistence: 'memory' }}>
                 <div>Child</div>
             </PostHogProvider>
         )

@@ -71,7 +71,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <body>
                 <PostHogProvider
                     apiKey={process.env.NEXT_PUBLIC_POSTHOG_KEY!}
-                    options={{ api_host: '/ingest' }}
+                    clientOptions={{ api_host: '/ingest' }}
                     bootstrapFlags
                 >
                     <Suspense fallback={null}>
@@ -90,7 +90,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 | Prop             | Type                              | Default                   | Description                                                                                        |
 | ---------------- | --------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------- |
 | `apiKey`         | `string`                          | `NEXT_PUBLIC_POSTHOG_KEY` | PostHog project API key. Read from env var if omitted.                                             |
-| `options`        | `Partial<PostHogConfig>`          | See below                 | `posthog-js` configuration overrides.                                                              |
+| `clientOptions`  | `Partial<PostHogConfig>`          | See below                 | `posthog-js` configuration overrides.                                                              |
+| `serverOptions`  | `Partial<PostHogOptions>`         | `undefined`               | `posthog-node` configuration overrides for server-side flag evaluation.                            |
 | `bootstrapFlags` | `boolean \| BootstrapFlagsConfig` | `undefined`               | Enable server-side feature flag evaluation. See [Feature Flag Bootstrap](#feature-flag-bootstrap). |
 | `children`       | `React.ReactNode`                 | —                         | Your app content.                                                                                  |
 
@@ -105,7 +106,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 }
 ```
 
-These defaults disable automatic pageviews (so `PostHogPageView` doesn't cause duplicates) and ensure the server can read identity and consent state from cookies. You can override any of them via the `options` prop.
+These defaults disable automatic pageviews (so `PostHogPageView` doesn't cause duplicates) and ensure the server can read identity and consent state from cookies. You can override any of them via the `clientOptions` prop.
 
 **Static vs Dynamic rendering:**
 
@@ -219,7 +220,7 @@ import { PostHogProvider, PostHogPageView } from '@posthog/next/pages'
 
 export default function App({ Component, pageProps }: AppProps) {
     return (
-        <PostHogProvider apiKey={process.env.NEXT_PUBLIC_POSTHOG_KEY!} options={{ api_host: '/ingest' }}>
+        <PostHogProvider apiKey={process.env.NEXT_PUBLIC_POSTHOG_KEY!} clientOptions={{ api_host: '/ingest' }}>
             <PostHogPageView />
             <Component {...pageProps} />
         </PostHogProvider>
@@ -232,7 +233,7 @@ export default function App({ Component, pageProps }: AppProps) {
 | Prop        | Type                     | Default     | Description                                                  |
 | ----------- | ------------------------ | ----------- | ------------------------------------------------------------ |
 | `apiKey`    | `string`                 | `NEXT_PUBLIC_POSTHOG_KEY` | PostHog project API key. Read from env var if omitted.       |
-| `options`   | `Partial<PostHogConfig>` | See below   | `posthog-js` configuration overrides.                        |
+| `clientOptions` | `Partial<PostHogConfig>` | See below   | `posthog-js` configuration overrides.                        |
 | `bootstrap` | `BootstrapConfig`        | `undefined` | Server-evaluated bootstrap data from `getServerSidePostHog`. |
 | `children`  | `React.ReactNode`        | —           | Your app content.                                            |
 
@@ -308,7 +309,7 @@ export default function App({ Component, pageProps }: AppProps) {
     return (
         <PostHogProvider
             apiKey={process.env.NEXT_PUBLIC_POSTHOG_KEY!}
-            options={{ api_host: '/ingest' }}
+            clientOptions={{ api_host: '/ingest' }}
             bootstrap={pageProps.posthogBootstrap}
         >
             <PostHogPageView />
@@ -367,7 +368,7 @@ Pass an object to control evaluation:
 2. It calls `posthog-node`'s `getAllFlagsAndPayloads()` with the user's `distinctId`
 3. Results are passed as `bootstrap` data to `posthog-js`
 4. `advanced_disable_feature_flags_on_first_load` is set to `true` so the client doesn't re-fetch flags
-5. The evaluation is deduplicated within a render pass via `React.cache()`
+5. The node client is cached and reused across requests
 
 ### Trade-offs
 
@@ -417,7 +418,7 @@ export default postHogMiddleware({
 And on the client:
 
 ```tsx
-<PostHogProvider options={{ opt_out_capturing_by_default: true }}>
+<PostHogProvider clientOptions={{ opt_out_capturing_by_default: true }}>
 ```
 
 When opt-out is the default, no identity cookie is seeded and no flags are evaluated until the user explicitly opts in.
@@ -445,10 +446,10 @@ export default postHogMiddleware({
 })
 ```
 
-When using the proxy, set `api_host` to the path prefix in your provider options:
+When using the proxy, set `api_host` to the path prefix in your provider `clientOptions`:
 
 ```tsx
-<PostHogProvider options={{ api_host: '/ingest' }}>
+<PostHogProvider clientOptions={{ api_host: '/ingest' }}>
 ```
 
 **How it works:** Requests matching the path prefix (e.g., `/ingest/e`, `/ingest/decide`) are rewritten to the PostHog ingest host via `NextResponse.rewrite()`. The path prefix is stripped and the remaining path and query string are forwarded.
@@ -581,9 +582,7 @@ The identity cookie is named `ph_<sanitized_key>_posthog` and contains JSON:
 
 ### Server client caching
 
-`getPostHog()` (App Router) reuses `posthog-node` client instances across requests. Clients are cached by `apiKey:host` combination in a module-level `Map`. This avoids creating a new client on every request.
-
-In the Pages Router, `getServerSidePostHog` creates a fresh client per request since it cannot share a module-level cache across the Pages Router execution model.
+Both `getPostHog()` (App Router) and `getServerSidePostHog()` (Pages Router) reuse `posthog-node` client instances across requests. Clients are cached by `apiKey:host` combination in a module-level `Map`. Per-request isolation is achieved via `enterContext()` which uses `AsyncLocalStorage`.
 
 ### Client initialization
 
@@ -597,8 +596,4 @@ On the server, `getPostHog()` calls `client.enterContext()` to scope the shared 
 
 ## Known Gaps
 
-### No server-side configuration on `PostHogProvider`
-
-The `options` prop on `PostHogProvider` only accepts `posthog-js` (client-side) configuration. There is no way to pass `posthog-node` options for the server-side bootstrap flag evaluation. The provider extracts `api_host` from the client options and maps it to the node client's `host`, but other `posthog-node` settings (e.g., `featureFlagsPollingInterval`, `requestTimeout`) cannot be configured through the provider.
-
-**Workaround:** Use `getPostHog()` from `@posthog/next/server` directly, which accepts `posthog-node` options as its second argument.
+This section is intentionally kept as a placeholder for future gaps.

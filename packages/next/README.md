@@ -56,7 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     return (
         <html lang="en">
             <body>
-                <PostHogProvider options={{ api_host: '/ingest' }} bootstrapFlags>
+                <PostHogProvider clientOptions={{ api_host: '/ingest' }} bootstrapFlags>
                     <PostHogPageView />
                     {children}
                 </PostHogProvider>
@@ -97,11 +97,11 @@ For detailed usage including Pages Router, consent management, middleware compos
 
 ## Entry Points
 
-| Import path                | Environment     | Purpose                                                         |
-| -------------------------- | --------------- | --------------------------------------------------------------- |
-| `@posthog/next`            | Client + Server | `PostHogProvider`, `PostHogPageView`, hooks                     |
-| `@posthog/next/server`     | Server only     | `getPostHog()` for server components / route handlers           |
-| `@posthog/next/middleware` | Edge / Server   | `postHogMiddleware()` for identity seeding and proxying         |
+| Import path                | Environment     | Purpose                                                                         |
+| -------------------------- | --------------- | ------------------------------------------------------------------------------- |
+| `@posthog/next`            | Client + Server | `PostHogProvider`, `PostHogPageView`, hooks                                     |
+| `@posthog/next/server`     | Server only     | `getPostHog()` for server components / route handlers                           |
+| `@posthog/next/middleware` | Edge / Server   | `postHogMiddleware()` for identity seeding and proxying                         |
 | `@posthog/next/pages`      | Client + Server | `PostHogProvider`, `PostHogPageView`, `getServerSidePostHog()` for Pages Router |
 
 ## Environment Variables

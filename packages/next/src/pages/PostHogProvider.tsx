@@ -10,7 +10,7 @@ export interface PagesPostHogProviderProps {
      */
     apiKey?: string
     /** Optional posthog-js configuration overrides. */
-    options?: Partial<PostHogConfig>
+    clientOptions?: Partial<PostHogConfig>
     /** Server-evaluated bootstrap data from getServerSidePostHog. */
     bootstrap?: BootstrapConfig
     children: React.ReactNode
@@ -34,16 +34,16 @@ export interface PagesPostHogProviderProps {
  * }
  * ```
  */
-export function PostHogProvider({ apiKey: apiKeyProp, options, bootstrap, children }: PagesPostHogProviderProps) {
+export function PostHogProvider({ apiKey: apiKeyProp, clientOptions, bootstrap, children }: PagesPostHogProviderProps) {
     const apiKey = resolveApiKey(apiKeyProp)
     if (!apiKey.startsWith('phc_')) {
         console.warn(`[PostHog Next.js] apiKey "${apiKey}" does not start with "phc_". This may not be a valid PostHog project API key.`)
     }
 
-    const host = options?.api_host ?? process.env.NEXT_PUBLIC_POSTHOG_HOST
+    const host = clientOptions?.api_host ?? process.env.NEXT_PUBLIC_POSTHOG_HOST
     const resolvedOptions: Partial<PostHogConfig> = {
         ...NEXTJS_CLIENT_DEFAULTS,
-        ...options,
+        ...clientOptions,
         ...(host ? { api_host: host } : {}),
     }
 

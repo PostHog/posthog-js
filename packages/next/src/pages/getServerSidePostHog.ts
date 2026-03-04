@@ -1,6 +1,6 @@
 import type { GetServerSidePropsContext } from 'next'
-import { PostHog } from 'posthog-node'
-import type { PostHogOptions } from 'posthog-node'
+import type { PostHogOptions, IPostHog } from 'posthog-node'
+import { getOrCreateNodeClient } from '../server/nodeClientCache'
 import { cookieStoreFromHeader, readPostHogCookie, cookieStateToProperties, isOptedOut } from '../shared/cookie'
 import { resolveApiKey } from '../shared/config'
 
@@ -21,21 +21,21 @@ import { resolveApiKey } from '../shared/config'
  * import { getServerSidePostHog } from '@posthog/next/pages'
  *
  * export const getServerSideProps: GetServerSideProps = async (ctx) => {
- *   const posthog = getServerSidePostHog(ctx)
+ *   const posthog = await getServerSidePostHog(ctx)
  *   const flags = await posthog.getAllFlagsAndPayloads()
  *   return { props: { posthogBootstrap: flags } }
  * }
  * ```
  */
-export function getServerSidePostHog(
+export async function getServerSidePostHog(
     ctx: GetServerSidePropsContext,
     apiKey?: string,
     options?: Partial<PostHogOptions>
-): PostHog {
+): Promise<IPostHog> {
     const resolvedApiKey = resolveApiKey(apiKey)
     const host = options?.host ?? process.env.NEXT_PUBLIC_POSTHOG_HOST
     const resolvedOptions = host ? { ...options, host } : options
-    const client = new PostHog(resolvedApiKey, resolvedOptions)
+    const client = await getOrCreateNodeClient(resolvedApiKey, resolvedOptions)
 
     const cookieStore = cookieStoreFromHeader(ctx.req.headers.cookie || '')
 
