@@ -3040,6 +3040,13 @@ describe('semver parsing', () => {
     expect(() => parseSemver('a.b.c')).toThrow(InconclusiveMatchError)
     expect(() => parseSemver('1.2.three')).toThrow(InconclusiveMatchError)
   })
+
+  it('throws on malformed version with trailing non-numeric characters', () => {
+    // parseInt('3alpha', 10) returns 3, but we should reject this
+    expect(() => parseSemver('1.2.3alpha')).toThrow(InconclusiveMatchError)
+    expect(() => parseSemver('1.2alpha.3')).toThrow(InconclusiveMatchError)
+    expect(() => parseSemver('1alpha.2.3')).toThrow(InconclusiveMatchError)
+  })
 })
 
 describe('semver operators', () => {

@@ -1082,32 +1082,29 @@ function matchProperty(
       }
       return overrideDate > parsedDate
     }
-    case 'semver_eq':
-    case 'semver_neq':
-    case 'semver_gt':
-    case 'semver_gte':
-    case 'semver_lt':
+    case 'semver_eq': {
+      const cmp = compareSemverTuples(parseSemver(String(overrideValue)), parseSemver(String(value)))
+      return cmp === 0
+    }
+    case 'semver_neq': {
+      const cmp = compareSemverTuples(parseSemver(String(overrideValue)), parseSemver(String(value)))
+      return cmp !== 0
+    }
+    case 'semver_gt': {
+      const cmp = compareSemverTuples(parseSemver(String(overrideValue)), parseSemver(String(value)))
+      return cmp > 0
+    }
+    case 'semver_gte': {
+      const cmp = compareSemverTuples(parseSemver(String(overrideValue)), parseSemver(String(value)))
+      return cmp >= 0
+    }
+    case 'semver_lt': {
+      const cmp = compareSemverTuples(parseSemver(String(overrideValue)), parseSemver(String(value)))
+      return cmp < 0
+    }
     case 'semver_lte': {
-      const overrideParsed = parseSemver(String(overrideValue))
-      const flagParsed = parseSemver(String(value))
-      const cmp = compareSemverTuples(overrideParsed, flagParsed)
-
-      switch (operator) {
-        case 'semver_eq':
-          return cmp === 0
-        case 'semver_neq':
-          return cmp !== 0
-        case 'semver_gt':
-          return cmp > 0
-        case 'semver_gte':
-          return cmp >= 0
-        case 'semver_lt':
-          return cmp < 0
-        case 'semver_lte':
-          return cmp <= 0
-        default:
-          throw new InconclusiveMatchError(`Unknown semver operator: ${operator}`)
-      }
+      const cmp = compareSemverTuples(parseSemver(String(overrideValue)), parseSemver(String(value)))
+      return cmp <= 0
     }
     case 'semver_tilde': {
       const overrideParsed = parseSemver(String(overrideValue))
@@ -1302,11 +1299,10 @@ function parseSemver(value: string): SemverTuple {
     if (part === undefined || part === '') {
       return 0
     }
-    const num = parseInt(part, 10)
-    if (isNaN(num)) {
+    if (!/^\d+$/.test(part)) {
       throw new InconclusiveMatchError(`Invalid semver: ${value}`)
     }
-    return num
+    return parseInt(part, 10)
   }
 
   const major = parsePart(parts[0])
