@@ -1,3 +1,6 @@
+import { Observable, throwError } from 'rxjs'
+import { catchError } from 'rxjs/operators'
+
 import ErrorTracking from './error-tracking'
 import { PostHogBackendClient } from '../client'
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
@@ -8,50 +11,59 @@ interface HttpArgumentsHost {
   getResponse<T = any>(): T
 }
 
-interface ArgumentsHost {
+interface ExecutionContext {
   switchToHttp(): HttpArgumentsHost
 }
 
-interface ExceptionFilter {
-  catch(exception: unknown, host: ArgumentsHost): void
+interface CallHandler<T = any> {
+  handle(): Observable<T>
 }
 
-export class PostHogExceptionFilter implements ExceptionFilter {
+interface NestInterceptor<T = any, R = any> {
+  intercept(context: ExecutionContext, next: CallHandler<T>): Observable<R>
+}
+
+export class PostHogExceptionInterceptor implements NestInterceptor {
   private posthog: PostHogBackendClient
 
   constructor(posthog: PostHogBackendClient) {
     this.posthog = posthog
   }
 
-  catch(exception: unknown, host: ArgumentsHost): void {
-    if (ErrorTracking.isPreviouslyCapturedError(exception)) {
-      throw exception
-    }
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    return next.handle().pipe(
+      catchError((exception: unknown) => {
+        if (!ErrorTracking.isPreviouslyCapturedError(exception)) {
+          const httpHost = context.switchToHttp()
+          const request = httpHost.getRequest()
+          const response = httpHost.getResponse()
 
-    const httpHost = host.switchToHttp()
-    const request = httpHost.getRequest()
-    const response = httpHost.getResponse()
+          const headers = request?.headers ?? {}
+          const sessionId: string | undefined = headers['x-posthog-session-id']
+          const distinctId: string | undefined = headers['x-posthog-distinct-id']
+          const syntheticException = new Error('Synthetic exception')
+          const hint: CoreErrorTracking.EventHint = {
+            mechanism: { type: 'middleware', handled: false },
+            syntheticException,
+          }
 
-    const headers = request?.headers ?? {}
-    const sessionId: string | undefined = headers['x-posthog-session-id']
-    const distinctId: string | undefined = headers['x-posthog-distinct-id']
-    const syntheticException = new Error('Synthetic exception')
-    const hint: CoreErrorTracking.EventHint = { mechanism: { type: 'middleware', handled: false }, syntheticException }
+          this.posthog.addPendingPromise(
+            ErrorTracking.buildEventMessage(exception, hint, distinctId, {
+              $session_id: sessionId,
+              $current_url: request?.url,
+              $request_method: request?.method,
+              $request_path: request?.path ?? request?.url,
+              $user_agent: headers['user-agent'],
+              $response_status_code: response?.statusCode,
+              $ip: headers['x-forwarded-for'] || request?.socket?.remoteAddress,
+            }).then((msg) => {
+              this.posthog.capture(msg)
+            })
+          )
+        }
 
-    this.posthog.addPendingPromise(
-      ErrorTracking.buildEventMessage(exception, hint, distinctId, {
-        $session_id: sessionId,
-        $current_url: request?.url,
-        $request_method: request?.method,
-        $request_path: request?.path ?? request?.url,
-        $user_agent: headers['user-agent'],
-        $response_status_code: response?.statusCode,
-        $ip: headers['x-forwarded-for'] || request?.socket?.remoteAddress,
-      }).then((msg) => {
-        this.posthog.capture(msg)
+        return throwError(() => exception)
       })
     )
-
-    throw exception
   }
 }

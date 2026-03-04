@@ -1,5 +1,7 @@
+import { of, throwError, lastValueFrom } from 'rxjs'
+
 import { PostHog } from '@/entrypoints/index.node'
-import { PostHogExceptionFilter } from '@/extensions/nestjs'
+import { PostHogExceptionInterceptor } from '@/extensions/nestjs'
 import { waitForPromises } from '../utils'
 
 jest.mock('../../version', () => ({ version: '1.2.3' }))
@@ -16,7 +18,7 @@ const getLastBatchEvents = (): any[] | undefined => {
   return JSON.parse((call[1] as any).body as any).batch
 }
 
-const createMockHost = (overrides?: {
+const createMockContext = (overrides?: {
   headers?: Record<string, string>
   url?: string
   method?: string
@@ -42,9 +44,13 @@ const createMockHost = (overrides?: {
   }
 }
 
-describe('PostHogExceptionFilter', () => {
+const createMockCallHandler = (error?: Error) => ({
+  handle: () => (error ? throwError(() => error) : of(undefined)),
+})
+
+describe('PostHogExceptionInterceptor', () => {
   let posthog: PostHog
-  let filter: PostHogExceptionFilter
+  let interceptor: PostHogExceptionInterceptor
 
   jest.useFakeTimers()
 
@@ -55,7 +61,7 @@ describe('PostHogExceptionFilter', () => {
       disableCompression: true,
     })
 
-    filter = new PostHogExceptionFilter(posthog)
+    interceptor = new PostHogExceptionInterceptor(posthog)
 
     mockedFetch.mockResolvedValue({
       status: 200,
@@ -70,7 +76,7 @@ describe('PostHogExceptionFilter', () => {
 
   it('should capture exception with correct properties', async () => {
     const error = new Error('test NestJS error')
-    const host = createMockHost({
+    const context = createMockContext({
       headers: {
         'x-posthog-session-id': 'session-123',
         'x-posthog-distinct-id': 'user-456',
@@ -83,7 +89,7 @@ describe('PostHogExceptionFilter', () => {
       remoteAddress: '192.168.1.1',
     })
 
-    expect(() => filter.catch(error, host)).toThrow(error)
+    await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
 
     await waitForPromises()
     jest.runOnlyPendingTimers()
@@ -106,27 +112,36 @@ describe('PostHogExceptionFilter', () => {
     expect(event.properties.$exception_list).toBeDefined()
   })
 
-  it('should skip previously captured errors', () => {
+  it('should skip previously captured errors', async () => {
     const error = new Error('already captured') as any
     error.__posthog_previously_captured_error = true
-    const host = createMockHost()
+    const context = createMockContext()
 
-    expect(() => filter.catch(error, host)).toThrow(error)
+    await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
     expect(mockedFetch).not.toHaveBeenCalled()
   })
 
-  it('should re-throw the exception', () => {
+  it('should re-throw the exception', async () => {
     const error = new Error('should be re-thrown')
-    const host = createMockHost()
+    const context = createMockContext()
 
-    expect(() => filter.catch(error, host)).toThrow(error)
+    await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
+  })
+
+  it('should pass through successful responses', async () => {
+    const context = createMockContext()
+    const handler = { handle: () => of({ success: true }) }
+
+    const result = await lastValueFrom(interceptor.intercept(context, handler))
+    expect(result).toEqual({ success: true })
+    expect(mockedFetch).not.toHaveBeenCalled()
   })
 
   it('should handle missing headers gracefully', async () => {
     const error = new Error('no headers error')
-    const host = createMockHost({ headers: {} })
+    const context = createMockContext({ headers: {} })
 
-    expect(() => filter.catch(error, host)).toThrow(error)
+    await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
 
     await waitForPromises()
     jest.runOnlyPendingTimers()
@@ -138,7 +153,6 @@ describe('PostHogExceptionFilter', () => {
 
     const event = batchEvents![0]
     expect(event.event).toBe('$exception')
-    // Without distinct_id header, should use generated UUID
     expect(event.distinct_id).toBeDefined()
     expect(event.properties.$session_id).toBeUndefined()
     expect(event.properties.$user_agent).toBeUndefined()
@@ -146,12 +160,12 @@ describe('PostHogExceptionFilter', () => {
 
   it('should use x-forwarded-for over socket remoteAddress', async () => {
     const error = new Error('ip test error')
-    const host = createMockHost({
+    const context = createMockContext({
       headers: { 'x-forwarded-for': '10.0.0.1' },
       remoteAddress: '127.0.0.1',
     })
 
-    expect(() => filter.catch(error, host)).toThrow(error)
+    await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
 
     await waitForPromises()
     jest.runOnlyPendingTimers()
