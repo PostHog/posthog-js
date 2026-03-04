@@ -216,6 +216,17 @@ jobs:
           build: true
       - run: pnpm test:functional
 
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup environment
+        uses: ./.github/actions/setup
+      - name: Typecheck
+        run: pnpm typecheck
+        working-directory: packages/browser
+
   lint:
     name: Lint
     runs-on: ubuntu-22.04
