@@ -54,15 +54,17 @@ export function ConsentBanner() {
         )
     }
 
-    return ( consent &&
-        <div className="fixed bottom-4 right-4 z-50">
-            <button
-                onClick={reset}
-                className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
-                title="Reset consent for testing"
-            >
-                Reset consent ({consent})
-            </button>
-        </div>
+    return (
+        consent && (
+            <div className="fixed bottom-4 right-4 z-50">
+                <button
+                    onClick={reset}
+                    className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
+                    title="Reset consent for testing"
+                >
+                    Reset consent ({consent})
+                </button>
+            </div>
+        )
     )
 }

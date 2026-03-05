@@ -1,5 +1,5 @@
 {
-    "name": "@posthog/next-example-app-router",
+    "name": "example-next-app-router",
     "version": "0.0.0",
     "private": true,
     "scripts": {
@@ -8,10 +8,8 @@
         "start": "next start"
     },
     "dependencies": {
-        "@posthog/next": "workspace:*",
+        "@posthog/next": "*",
         "next": "^15.0.0",
-        "posthog-js": "workspace:*",
-        "posthog-node": "workspace:*",
         "react": "^19.0.0",
         "react-dom": "^19.0.0"
     },

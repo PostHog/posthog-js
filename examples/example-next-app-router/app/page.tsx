@@ -15,17 +15,17 @@ const demos = [
     {
         title: 'Client Hooks',
         href: '/client-hooks',
-        description: 'Use React hooks like useFeatureFlagEnabled and useActiveFeatureFlags.',
+        description: 'Use React hooks like useFeatureFlag and useActiveFeatureFlags.',
+    },
+    {
+        title: 'SSR Bootstrap',
+        href: '/ssr-bootstrap',
+        description: 'Feature flags available on first render with no flicker, using server-side bootstrap.',
     },
     {
         title: 'Event Capture',
         href: '/capture',
         description: 'Capture custom events from client components with posthog.capture().',
-    },
-    {
-        title: 'Middleware Rewrites',
-        href: '/middleware-demo',
-        description: 'Flag-based URL rewrites at the edge using postHogMiddleware.',
     },
 ]
 

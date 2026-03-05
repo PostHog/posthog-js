@@ -1,9 +1,10 @@
 import Link from 'next/link'
-import { getPostHog } from '@posthog/next/server'
+import { getPostHog } from '@posthog/next'
 
 export default async function ServerFlagsPage() {
     const posthog = await getPostHog()
     const allFlags = await posthog.getAllFlags()
+    const { distinctId, sessionId } = posthog.getContext() ?? {}
 
     posthog.capture({ event: 'server_flags_page_viewed' })
 
@@ -12,14 +13,21 @@ export default async function ServerFlagsPage() {
             <h1 className="text-2xl font-bold mb-2">Server-Side Feature Flags</h1>
             <p className="text-gray-600 mb-6">
                 This page is a server component. It uses <code className="bg-gray-100 px-1 rounded">getPostHog</code>{' '}
-                from <code className="bg-gray-100 px-1 rounded">@posthog/next/server</code> to evaluate feature flags
-                and capture events server-side.
+                from <code className="bg-gray-100 px-1 rounded">@posthog/next</code> to evaluate feature flags and
+                capture events server-side.
             </p>
 
             <div className="bg-white rounded-lg border border-gray-200 p-6 mb-4">
                 <h2 className="font-semibold mb-2">Identity</h2>
+                <p className="text-sm">
+                    Distinct ID: <code className="bg-gray-100 px-1 rounded">{distinctId ?? 'unknown'}</code>
+                </p>
+                <p className="text-sm">
+                    Session ID: <code className="bg-gray-100 px-1 rounded">{sessionId ?? 'unknown'}</code>
+                </p>
                 <p className="text-sm text-gray-500 mt-1">
-                    Identity is automatically read from the PostHog cookie set by posthog-js on the client. Try logging in on the{' '}
+                    Identity is automatically read from the PostHog cookie set by posthog-js on the client. Try logging
+                    in on the{' '}
                     <Link href="/auth" className="text-blue-600 underline">
                         Auth page
                     </Link>{' '}

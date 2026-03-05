@@ -8,8 +8,8 @@ const links = [
     { href: '/auth', label: 'Auth' },
     { href: '/server-flags', label: 'Server Flags' },
     { href: '/client-hooks', label: 'Client Hooks' },
+    { href: '/ssr-bootstrap', label: 'SSR Bootstrap' },
     { href: '/capture', label: 'Capture' },
-    { href: '/middleware-demo', label: 'Middleware' },
 ]
 
 export function Nav() {

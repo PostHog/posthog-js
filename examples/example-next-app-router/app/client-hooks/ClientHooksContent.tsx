@@ -23,6 +23,10 @@ export default function ClientHooksContent() {
                         Distinct ID:{' '}
                         <code className="bg-gray-100 px-1 rounded">{posthog?.get_distinct_id() ?? 'loading...'}</code>
                     </p>
+                    <p className="text-sm">
+                        Session ID:{' '}
+                        <code className="bg-gray-100 px-1 rounded">{posthog?.get_session_id() ?? 'loading...'}</code>
+                    </p>
                 </HookCard>
 
                 <HookCard title="useFeatureFlag('example-flag')">
