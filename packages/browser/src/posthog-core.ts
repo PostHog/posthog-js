@@ -709,7 +709,7 @@ export class PostHog implements PostHogInterface {
         // Due to name mangling, we can't easily iterate and assign these extensions
         // The assignment needs to also be mangled. Thus, the loop is unrolled.
         if (ext.featureFlags) {
-            this._extensions.push((this._featureFlags = this.featureFlags ?? new ext.featureFlags(this)))
+            this._extensions.push((this._featureFlags = this._featureFlags ?? new ext.featureFlags(this)))
         }
         if (ext.exceptions) {
             this._extensions.push((this.exceptions = this.exceptions ?? new ext.exceptions(this)))
