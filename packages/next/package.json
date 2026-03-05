@@ -1,0 +1,91 @@
+{
+    "name": "@posthog/next",
+    "version": "0.0.0",
+    "description": "PostHog integration for Next.js",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/PostHog/posthog-js.git",
+        "directory": "packages/next"
+    },
+    "author": {
+        "name": "PostHog",
+        "email": "hey@posthog.com",
+        "url": "https://posthog.com"
+    },
+    "type": "module",
+    "license": "MIT",
+    "keywords": [
+        "posthog",
+        "nextjs",
+        "analytics",
+        "feature-flags"
+    ],
+    "sideEffects": false,
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "edge-light": "./dist/index.edge.js",
+            "edge": "./dist/index.edge.js",
+            "worker": "./dist/index.edge.js",
+            "browser": "./dist/index.client.js",
+            "react-server": "./dist/index.js",
+            "default": "./dist/index.client.js"
+        },
+        "./pages": {
+            "types": "./dist/pages.d.ts",
+            "default": "./dist/pages.js"
+        }
+    },
+    "main": "./dist/index.client.js",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist",
+        "src",
+        "!src/__tests__"
+    ],
+    "scripts": {
+        "clean": "rimraf dist",
+        "build": "tsgo -p tsconfig.build.json",
+        "dev": "tsgo -p tsconfig.build.json --watch",
+        "test:unit": "jest",
+        "test": "pnpm test:unit",
+        "lint": "eslint src",
+        "lint:fix": "eslint src --fix",
+        "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+    },
+    "dependencies": {
+        "@posthog/core": "workspace:*",
+        "posthog-js": "workspace:*",
+        "posthog-node": "workspace:*",
+        "server-only": "^0.0.1"
+    },
+    "devDependencies": {
+        "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@testing-library/jest-dom": "^6.6.3",
+        "@testing-library/react": "^16.1.0",
+        "@types/jest": "^29.5.14",
+        "@types/react": "^19.0.0",
+        "@typescript/native-preview": "7.0.0-dev.20260216.1",
+        "@vercel/functions": "^3.4.3",
+        "jest": "^29.7.0",
+        "jest-environment-jsdom": "^29.7.0",
+        "next": "^15.0.0",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0",
+        "ts-jest": "^29.2.5",
+        "typescript": "catalog:"
+    },
+    "peerDependencies": {
+        "@vercel/functions": ">=1.0.0",
+        "next": ">=13.0.0",
+        "react": ">=18.0.0",
+        "react-dom": ">=18.0.0"
+    },
+    "peerDependenciesMeta": {
+        "@vercel/functions": {
+            "optional": true
+        }
+    },
+    "packageManager": "pnpm@10.23.0"
+}
