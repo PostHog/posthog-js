@@ -228,6 +228,57 @@ describe('logs entrypoint', () => {
                 host: 'example.com',
             })
         })
+
+        it('should use custom serviceName from config when provided', () => {
+            const postHogWithServiceName = {
+                ...mockPostHog,
+                config: {
+                    ...mockPostHog.config,
+                    logs: { serviceName: 'my-custom-service' },
+                },
+            } as unknown as PostHog
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(postHogWithServiceName)
+
+            expect(mockResourceFromAttributes).toHaveBeenCalledWith({
+                'service.name': 'my-custom-service',
+                host: 'example.com',
+                'session.id': 'session-123',
+                'window.id': 'window-456',
+            })
+        })
+
+        it('should fall back to default service name when serviceName is not provided', () => {
+            const postHogWithoutServiceName = {
+                ...mockPostHog,
+                config: {
+                    ...mockPostHog.config,
+                    logs: { captureConsoleLogs: true },
+                },
+            } as unknown as PostHog
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(postHogWithoutServiceName)
+
+            expect(mockResourceFromAttributes).toHaveBeenCalledWith({
+                'service.name': 'posthog-browser-logs',
+                host: 'example.com',
+                'session.id': 'session-123',
+                'window.id': 'window-456',
+            })
+        })
+
+        it('should fall back to default service name when logs config is undefined', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            expect(mockResourceFromAttributes).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    'service.name': 'posthog-browser-logs',
+                })
+            )
+        })
     })
 
     describe('console wrapping behavior', () => {
