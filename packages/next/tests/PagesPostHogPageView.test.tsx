@@ -58,4 +58,17 @@ describe('Pages PostHogPageView', () => {
         render(<PostHogPageView />)
         expect(mockCapture).not.toHaveBeenCalled()
     })
+
+    it('captures pageview once router becomes ready', () => {
+        mockRouter = { asPath: '/initial', isReady: false }
+        const { rerender } = render(<PostHogPageView />)
+        expect(mockCapture).not.toHaveBeenCalled()
+
+        mockRouter = { asPath: '/initial', isReady: true }
+        rerender(<PostHogPageView />)
+        expect(mockCapture).toHaveBeenCalledTimes(1)
+        expect(mockCapture).toHaveBeenCalledWith('$pageview', {
+            $current_url: '/initial',
+        })
+    })
 })
