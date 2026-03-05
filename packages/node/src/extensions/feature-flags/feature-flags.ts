@@ -1082,6 +1082,45 @@ function matchProperty(
       }
       return overrideDate > parsedDate
     }
+    case 'semver_eq': {
+      const cmp = compareSemverTuples(parseSemver(String(overrideValue)), parseSemver(String(value)))
+      return cmp === 0
+    }
+    case 'semver_neq': {
+      const cmp = compareSemverTuples(parseSemver(String(overrideValue)), parseSemver(String(value)))
+      return cmp !== 0
+    }
+    case 'semver_gt': {
+      const cmp = compareSemverTuples(parseSemver(String(overrideValue)), parseSemver(String(value)))
+      return cmp > 0
+    }
+    case 'semver_gte': {
+      const cmp = compareSemverTuples(parseSemver(String(overrideValue)), parseSemver(String(value)))
+      return cmp >= 0
+    }
+    case 'semver_lt': {
+      const cmp = compareSemverTuples(parseSemver(String(overrideValue)), parseSemver(String(value)))
+      return cmp < 0
+    }
+    case 'semver_lte': {
+      const cmp = compareSemverTuples(parseSemver(String(overrideValue)), parseSemver(String(value)))
+      return cmp <= 0
+    }
+    case 'semver_tilde': {
+      const overrideParsed = parseSemver(String(overrideValue))
+      const { lower, upper } = computeTildeBounds(String(value))
+      return compareSemverTuples(overrideParsed, lower) >= 0 && compareSemverTuples(overrideParsed, upper) < 0
+    }
+    case 'semver_caret': {
+      const overrideParsed = parseSemver(String(overrideValue))
+      const { lower, upper } = computeCaretBounds(String(value))
+      return compareSemverTuples(overrideParsed, lower) >= 0 && compareSemverTuples(overrideParsed, upper) < 0
+    }
+    case 'semver_wildcard': {
+      const overrideParsed = parseSemver(String(overrideValue))
+      const { lower, upper } = computeWildcardBounds(String(value))
+      return compareSemverTuples(overrideParsed, lower) >= 0 && compareSemverTuples(overrideParsed, upper) < 0
+    }
     default:
       throw new InconclusiveMatchError(`Unknown operator: ${operator}`)
   }
@@ -1233,6 +1272,132 @@ function isValidRegex(regex: string): boolean {
   }
 }
 
+type SemverTuple = [number, number, number]
+
+/**
+ * Parse a version string into a [major, minor, patch] tuple.
+ * - Strips leading/trailing whitespace
+ * - Strips 'v' or 'V' prefix
+ * - Strips pre-release and build metadata (-alpha, +build)
+ * - Defaults missing components to 0
+ * - Ignores extra components beyond the third
+ * - Throws InconclusiveMatchError for invalid input
+ */
+function parseSemver(value: string): SemverTuple {
+  const text = String(value).trim().replace(/^[vV]/, '')
+
+  // Strip pre-release and build metadata
+  const baseVersion = text.split('-')[0].split('+')[0]
+
+  if (!baseVersion || baseVersion.startsWith('.')) {
+    throw new InconclusiveMatchError(`Invalid semver: ${value}`)
+  }
+
+  const parts = baseVersion.split('.')
+
+  const parsePart = (part: string | undefined): number => {
+    if (part === undefined || part === '') {
+      return 0
+    }
+    if (!/^\d+$/.test(part)) {
+      throw new InconclusiveMatchError(`Invalid semver: ${value}`)
+    }
+    return parseInt(part, 10)
+  }
+
+  const major = parsePart(parts[0])
+  const minor = parsePart(parts[1])
+  const patch = parsePart(parts[2])
+
+  return [major, minor, patch]
+}
+
+/**
+ * Compare two semver tuples.
+ * Returns -1 if a < b, 0 if a == b, 1 if a > b
+ */
+function compareSemverTuples(a: SemverTuple, b: SemverTuple): number {
+  for (let i = 0; i < 3; i++) {
+    if (a[i] < b[i]) return -1
+    if (a[i] > b[i]) return 1
+  }
+  return 0
+}
+
+/**
+ * Compute bounds for tilde operator: ~X.Y.Z means >=X.Y.Z and <X.(Y+1).0
+ */
+function computeTildeBounds(value: string): { lower: SemverTuple; upper: SemverTuple } {
+  const parsed = parseSemver(value)
+  const lower: SemverTuple = [parsed[0], parsed[1], parsed[2]]
+  const upper: SemverTuple = [parsed[0], parsed[1] + 1, 0]
+  return { lower, upper }
+}
+
+/**
+ * Compute bounds for caret operator:
+ * - ^X.Y.Z where X > 0: >=X.Y.Z <(X+1).0.0
+ * - ^0.Y.Z where Y > 0: >=0.Y.Z <0.(Y+1).0
+ * - ^0.0.Z: >=0.0.Z <0.0.(Z+1)
+ */
+function computeCaretBounds(value: string): { lower: SemverTuple; upper: SemverTuple } {
+  const parsed = parseSemver(value)
+  const [major, minor, patch] = parsed
+  const lower: SemverTuple = [major, minor, patch]
+
+  let upper: SemverTuple
+  if (major > 0) {
+    upper = [major + 1, 0, 0]
+  } else if (minor > 0) {
+    upper = [0, minor + 1, 0]
+  } else {
+    upper = [0, 0, patch + 1]
+  }
+
+  return { lower, upper }
+}
+
+/**
+ * Compute bounds for wildcard operator:
+ * - "X.*" or "X" with wildcard: >=X.0.0 <(X+1).0.0
+ * - "X.Y.*": >=X.Y.0 <X.(Y+1).0
+ */
+function computeWildcardBounds(value: string): { lower: SemverTuple; upper: SemverTuple } {
+  const text = String(value).trim().replace(/^[vV]/, '')
+
+  // Remove trailing .* or *
+  const cleanedText = text.replace(/\.\*$/, '').replace(/\*$/, '')
+
+  if (!cleanedText) {
+    throw new InconclusiveMatchError(`Invalid wildcard semver: ${value}`)
+  }
+
+  const parts = cleanedText.split('.')
+  const major = parseInt(parts[0], 10)
+  if (isNaN(major)) {
+    throw new InconclusiveMatchError(`Invalid wildcard semver: ${value}`)
+  }
+
+  let lower: SemverTuple
+  let upper: SemverTuple
+
+  if (parts.length === 1) {
+    // X.* pattern
+    lower = [major, 0, 0]
+    upper = [major + 1, 0, 0]
+  } else {
+    // X.Y.* pattern
+    const minor = parseInt(parts[1], 10)
+    if (isNaN(minor)) {
+      throw new InconclusiveMatchError(`Invalid wildcard semver: ${value}`)
+    }
+    lower = [major, minor, 0]
+    upper = [major, minor + 1, 0]
+  }
+
+  return { lower, upper }
+}
+
 function convertToDateTime(value: FlagPropertyValue | Date): Date {
   if (value instanceof Date) {
     return value
@@ -1288,6 +1453,7 @@ export {
   FeatureFlagsPoller,
   matchProperty,
   relativeDateParseForFeatureFlagMatching,
+  parseSemver,
   InconclusiveMatchError,
   RequiresServerEvaluation,
   ClientError,

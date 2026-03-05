@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.27.0",
+  "version": "5.28.0",
   "description": "PostHog Node.js integration",
   "repository": {
     "type": "git",
@@ -45,7 +45,16 @@
     "@types/express": "^5.0.5",
     "@types/jest": "catalog:",
     "@types/node": "^20.0.0",
-    "jest": "catalog:"
+    "jest": "catalog:",
+    "rxjs": "^7.8.0"
+  },
+  "peerDependencies": {
+    "rxjs": "^7.0.0"
+  },
+  "peerDependenciesMeta": {
+    "rxjs": {
+      "optional": true
+    }
   },
   "keywords": [
     "posthog",
@@ -84,6 +93,11 @@
       "import": "./dist/entrypoints/index.edge.mjs",
       "require": "./dist/entrypoints/index.edge.js",
       "default": "./dist/entrypoints/index.edge.js"
+    },
+    "./nestjs": {
+      "types": "./dist/entrypoints/nestjs.d.ts",
+      "import": "./dist/entrypoints/nestjs.mjs",
+      "require": "./dist/entrypoints/nestjs.js"
     },
     "./experimental": {
       "types": "./dist/experimental.d.ts"

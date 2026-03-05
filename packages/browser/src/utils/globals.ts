@@ -181,6 +181,7 @@ export type PostHogExtensionKind =
 export interface LazyLoadedSessionRecordingInterface {
     start: (startReason?: SessionStartReason) => void
     stop: () => void
+    discard: () => void
     sessionId: string
     status: SessionRecordingStatus
     onRRwebEmit: (rawEvent: eventWithTime) => void

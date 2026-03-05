@@ -13,8 +13,9 @@ export const SAMPLED = 'sampled'
 export const ACTIVE = 'active'
 export const BUFFERING = 'buffering'
 export const PAUSED = 'paused'
-export const PENDING_CONFIG = 'pending_config'
 export const LAZY_LOADING = 'lazy_loading'
+export const AWAITING_CONFIG = 'awaiting_config'
+export const MISSING_CONFIG = 'missing_config'
 export const RRWEB_ERROR = 'rrweb_error'
 
 const TRIGGER = 'trigger'
@@ -57,8 +58,9 @@ const sessionRecordingStatuses = [
     ACTIVE,
     BUFFERING,
     PAUSED,
-    PENDING_CONFIG,
     LAZY_LOADING,
+    AWAITING_CONFIG,
+    MISSING_CONFIG,
     RRWEB_ERROR,
 ] as const
 export type SessionRecordingStatus = (typeof sessionRecordingStatuses)[number]
