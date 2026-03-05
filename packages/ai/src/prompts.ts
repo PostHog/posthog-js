@@ -173,9 +173,15 @@ export class Prompts {
    */
   clearCache(name?: string): void {
     if (name !== undefined) {
-      const prefix = `${name}::`
+      const latestKey = this.getCacheKey(name)
+      const versionPrefix = `${name}::version:`
       for (const key of this.cache.keys()) {
-        if (key.startsWith(prefix)) {
+        if (key === latestKey) {
+          this.cache.delete(key)
+          continue
+        }
+
+        if (key.startsWith(versionPrefix) && /^\d+$/.test(key.slice(versionPrefix.length))) {
           this.cache.delete(key)
         }
       }

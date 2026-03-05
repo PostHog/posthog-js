@@ -702,5 +702,37 @@ describe('Prompts', () => {
       await expect(prompts.get('test-prompt', { version: 1 })).resolves.toBe('Version 1 prompt refreshed')
       expect(mockFetch).toHaveBeenCalledTimes(4)
     })
+
+    it('should not clear cache entries for other prompt names that share the same prefix', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, name: 'foo', prompt: 'Foo latest' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, name: 'foo::bar', prompt: 'Foo bar latest' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, name: 'foo', prompt: 'Foo latest refreshed' }),
+        })
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      await prompts.get('foo')
+      await prompts.get('foo::bar')
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+
+      prompts.clearCache('foo')
+
+      await expect(prompts.get('foo')).resolves.toBe('Foo latest refreshed')
+      await expect(prompts.get('foo::bar')).resolves.toBe('Foo bar latest')
+      expect(mockFetch).toHaveBeenCalledTimes(3)
+    })
   })
 })
