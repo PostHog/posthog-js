@@ -8,8 +8,9 @@ import { PostHog } from '../posthog-core'
 import { isNull, isObject } from '@posthog/core'
 
 const setupOpenTelemetry = (posthog: PostHog) => {
+    const serviceName = posthog.config.logs?.serviceName || 'posthog-browser-logs'
     let attributes: Record<string, string> = {
-        'service.name': 'posthog-browser-logs',
+        'service.name': serviceName,
         host: assignableWindow.location.host,
     }
 
