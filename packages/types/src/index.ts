@@ -84,3 +84,6 @@ export type { SurveyRenderReason } from './survey'
 
 // Toolbar types
 export type { ToolbarParams, ToolbarUserIntent, ToolbarSource, ToolbarVersion } from './toolbar'
+
+// Tree-shakeable extension types
+export type { TreeShakeableConfig, TreeShakeable } from './tree-shakeable'
