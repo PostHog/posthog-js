@@ -70,10 +70,10 @@ export class PostHogInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const httpHost = context.switchToHttp()
     const request = httpHost.getRequest()
-    const response = httpHost.getResponse()
 
     const headers = request?.headers ?? {}
     const sessionId: string | undefined = headers['x-posthog-session-id']
+    const windowId: string | undefined = headers['x-posthog-window-id']
     const distinctId: string | undefined = headers['x-posthog-distinct-id']
 
     const contextData = {
@@ -83,12 +83,13 @@ export class PostHogInterceptor implements NestInterceptor {
         $current_url: request?.url,
         $request_method: request?.method,
         $request_path: request?.path ?? request?.url,
+        $window_id: windowId,
         $user_agent: headers['user-agent'],
         $ip: getClientIp(headers, request),
       },
     }
 
-    const buildPipeline = () => {
+    return this.posthog.withContext(contextData, () => {
       let source = next.handle()
 
       if (this.captureExceptions) {
@@ -97,48 +98,16 @@ export class PostHogInterceptor implements NestInterceptor {
             if (ErrorTracking.isPreviouslyCapturedError(exception)) {
               return throwError(() => exception)
             }
-
             const status = getExceptionStatus(exception)
             if (status !== undefined && status < this.minStatusToCapture) {
               return throwError(() => exception)
             }
-
-            const syntheticException = new Error('Synthetic exception')
-            const hint: CoreErrorTracking.EventHint = {
-              mechanism: { type: 'middleware', handled: false },
-              syntheticException,
-            }
-
-            this.posthog.addPendingPromise(
-              ErrorTracking.buildEventMessage(exception, hint, distinctId, {
-                $session_id: sessionId,
-                $current_url: request?.url,
-                $request_method: request?.method,
-                $request_path: request?.path ?? request?.url,
-                $user_agent: headers['user-agent'],
-                $response_status_code: status ?? response?.statusCode,
-                $ip: getClientIp(headers, request),
-              }).then((msg) => {
-                this.posthog.capture(msg)
-              })
-            )
-
+            this.posthog.captureException(exception, distinctId)
             return throwError(() => exception)
           })
         )
       }
-
       return source
-    }
-
-    // Wrap in a new Observable so that subscription (and the entire handler
-    // execution) runs inside withContext's AsyncLocalStorage.run() scope.
-    // This ensures context is properly isolated per request and cleaned up
-    // automatically, unlike enterContext which can leak across requests.
-    return new Observable((subscriber) => {
-      this.posthog.withContext(contextData, () => {
-        buildPipeline().subscribe(subscriber)
-      })
     })
   }
 }
