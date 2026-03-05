@@ -53,9 +53,7 @@ describe('ClientPostHogProvider', () => {
                 <div>Child</div>
             </ClientPostHogProvider>
         )
-        expect(mockPostHogProvider).toHaveBeenCalledWith(
-            expect.objectContaining({ client: mockPostHogJs })
-        )
+        expect(mockPostHogProvider).toHaveBeenCalledWith(expect.objectContaining({ client: mockPostHogJs }))
     })
 
     it('merges bootstrap into options when provided', () => {
@@ -124,15 +122,15 @@ describe('ClientPostHogProvider', () => {
         expect(mockPostHogJs.init).not.toHaveBeenCalled()
     })
 
-    it('throws when apiKey is empty', () => {
-        const consoleSpy = jest.spyOn(console, 'error').mockImplementation()
-        expect(() =>
-            render(
-                <ClientPostHogProvider apiKey="">
-                    <div>Child</div>
-                </ClientPostHogProvider>
-            )
-        ).toThrow('[PostHog Next.js] apiKey is required')
-        consoleSpy.mockRestore()
+    it('renders children and warns when apiKey is empty', () => {
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+        render(
+            <ClientPostHogProvider apiKey="">
+                <div data-testid="child">Child</div>
+            </ClientPostHogProvider>
+        )
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('apiKey is required'))
+        expect(screen.getByTestId('child')).toBeInTheDocument()
+        warnSpy.mockRestore()
     })
 })

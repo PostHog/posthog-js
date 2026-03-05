@@ -94,9 +94,12 @@ export async function PostHogProvider({
         try {
             bootstrap = await evaluateFlags(apiKey, resolvedOptions, bootstrapFlags, serverOptions)
 
-            // Considering we've just evaluated flags via SSR, there's no need to immediately
-            // reload them from the client.
-            resolvedOptions.advanced_disable_feature_flags_on_first_load = true
+            // Only disable the first-load fetch when we actually have bootstrap data.
+            // If evaluateFlags returned undefined (no cookie, opted-out), the client
+            // still needs to fetch flags on first load.
+            if (bootstrap) {
+                resolvedOptions.advanced_disable_feature_flags_on_first_load = true
+            }
         } catch (error) {
             console.warn('[PostHog Next.js] Failed to evaluate bootstrap flags:', error)
         }
