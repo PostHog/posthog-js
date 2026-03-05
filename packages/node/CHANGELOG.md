@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.28.0
+
+### Minor Changes
+
+- [#3197](https://github.com/PostHog/posthog-js/pull/3197) [`33e9fb4`](https://github.com/PostHog/posthog-js/commit/33e9fb4b3fae3676e10bdc2b0990e8ec229dd5be) Thanks [@hpouillot](https://github.com/hpouillot)! - Add nestjs integration with interceptor for context propagation
+  (2026-03-05)
+
 ## 5.27.1
 
 ### Patch Changes
