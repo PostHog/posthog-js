@@ -306,7 +306,6 @@ export interface RemoteConfig {
      */
     logs?: {
         captureConsoleLogs?: boolean
-        serviceName?: string
     }
 
     /**
