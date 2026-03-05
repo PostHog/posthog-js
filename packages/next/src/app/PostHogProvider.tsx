@@ -76,6 +76,7 @@ export async function PostHogProvider({
 }: PostHogProviderProps) {
     const apiKey = resolveApiKey(apiKeyProp)
     if (!apiKey.startsWith('phc_')) {
+        // eslint-disable-next-line no-console
         console.warn(
             `[PostHog Next.js] apiKey "${apiKey}" does not start with "phc_". This may not be a valid PostHog project API key.`
         )
@@ -101,6 +102,7 @@ export async function PostHogProvider({
                 resolvedOptions.advanced_disable_feature_flags_on_first_load = true
             }
         } catch (error) {
+            // eslint-disable-next-line no-console
             console.warn('[PostHog Next.js] Failed to evaluate bootstrap flags:', error)
         }
     }

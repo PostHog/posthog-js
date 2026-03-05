@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { isFunction } from '@posthog/core'
 import type { PostHogOptions, IPostHog } from 'posthog-node'
 import { cookies } from 'next/headers'
 import { getOrCreateNodeClient } from './nodeClientCache'
@@ -56,7 +57,7 @@ export async function getPostHog(apiKey?: string, options?: Partial<PostHogOptio
                 return Reflect.get(target, prop, receiver)
             }
             const value = Reflect.get(target, prop, receiver)
-            if (typeof value === 'function') {
+            if (isFunction(value)) {
                 return (...args: unknown[]) => target.withContext(contextData, () => value.apply(target, args))
             }
             return value

@@ -30,9 +30,7 @@ describe('Pages PostHogProvider', () => {
                 <div>Child</div>
             </PostHogProvider>
         )
-        expect(mockClientPostHogProvider).toHaveBeenCalledWith(
-            expect.objectContaining({ apiKey: 'phc_test123' })
-        )
+        expect(mockClientPostHogProvider).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'phc_test123' }))
     })
 
     it('applies NEXTJS_CLIENT_DEFAULTS to options', () => {
@@ -92,8 +90,6 @@ describe('Pages PostHogProvider', () => {
                 <div>Child</div>
             </PostHogProvider>
         )
-        expect(mockClientPostHogProvider).toHaveBeenCalledWith(
-            expect.objectContaining({ bootstrap })
-        )
+        expect(mockClientPostHogProvider).toHaveBeenCalledWith(expect.objectContaining({ bootstrap }))
     })
 })

@@ -148,9 +148,7 @@ describe('PostHogProvider', () => {
             children: <div>Child</div>,
         })
         render(element)
-        expect(warnSpy).toHaveBeenCalledWith(
-            expect.stringContaining('does not start with "phc_"')
-        )
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('does not start with "phc_"'))
         warnSpy.mockRestore()
     })
 
@@ -172,9 +170,7 @@ describe('PostHogProvider', () => {
                 children: <div>Child</div>,
             })
             render(element)
-            expect(mockClientProvider).toHaveBeenCalledWith(
-                expect.objectContaining({ apiKey: 'phc_from_env' })
-            )
+            expect(mockClientProvider).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'phc_from_env' }))
         })
 
         it('prefers apiKey prop over env var', async () => {
@@ -184,9 +180,7 @@ describe('PostHogProvider', () => {
                 children: <div>Child</div>,
             })
             render(element)
-            expect(mockClientProvider).toHaveBeenCalledWith(
-                expect.objectContaining({ apiKey: 'phc_from_prop' })
-            )
+            expect(mockClientProvider).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'phc_from_prop' }))
         })
 
         it('reads api_host from NEXT_PUBLIC_POSTHOG_HOST when not in clientOptions', async () => {
@@ -220,7 +214,11 @@ describe('PostHogProvider', () => {
     })
 
     describe('with bootstrapFlags', () => {
-        const identifiedCookieValue = JSON.stringify({ distinct_id: 'user_abc', $device_id: 'device_xyz', $user_state: 'identified' })
+        const identifiedCookieValue = JSON.stringify({
+            distinct_id: 'user_abc',
+            $device_id: 'device_xyz',
+            $user_state: 'identified',
+        })
         const anonymousCookieValue = JSON.stringify({ distinct_id: 'device_xyz', $device_id: 'device_xyz' })
 
         function setupCookieMock(cookieValue: string) {
@@ -357,7 +355,6 @@ describe('PostHogProvider', () => {
                 })
             )
         })
-
     })
 
     describe('consent awareness', () => {
@@ -399,9 +396,7 @@ describe('PostHogProvider', () => {
             render(element)
 
             expect(mockGetAllFlagsAndPayloads).not.toHaveBeenCalled()
-            expect(mockClientProvider).toHaveBeenCalledWith(
-                expect.objectContaining({ bootstrap: undefined })
-            )
+            expect(mockClientProvider).toHaveBeenCalledWith(expect.objectContaining({ bootstrap: undefined }))
         })
 
         it('evaluates flags when consent cookie is 1', async () => {
@@ -434,9 +429,7 @@ describe('PostHogProvider', () => {
             render(element)
 
             expect(mockGetAllFlagsAndPayloads).not.toHaveBeenCalled()
-            expect(mockClientProvider).toHaveBeenCalledWith(
-                expect.objectContaining({ bootstrap: undefined })
-            )
+            expect(mockClientProvider).toHaveBeenCalledWith(expect.objectContaining({ bootstrap: undefined }))
         })
 
         it('evaluates flags when no consent cookie and opt_out_capturing_by_default is false (default)', async () => {

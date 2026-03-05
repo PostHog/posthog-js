@@ -40,7 +40,10 @@ export function PostHogProvider({ apiKey: apiKeyProp, clientOptions, bootstrap, 
     const apiKey = resolveApiKey(apiKeyProp)
     if (!apiKeyWarned && !apiKey.startsWith('phc_')) {
         apiKeyWarned = true
-        console.warn(`[PostHog Next.js] apiKey "${apiKey}" does not start with "phc_". This may not be a valid PostHog project API key.`)
+        // eslint-disable-next-line no-console
+        console.warn(
+            `[PostHog Next.js] apiKey "${apiKey}" does not start with "phc_". This may not be a valid PostHog project API key.`
+        )
     }
 
     const host = clientOptions?.api_host ?? process.env.NEXT_PUBLIC_POSTHOG_HOST

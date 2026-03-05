@@ -97,10 +97,10 @@ For detailed usage including Pages Router, consent management, middleware compos
 
 ## Entry Points
 
-| Import path           | Environment     | Purpose                                                                         |
-| --------------------- | --------------- | ------------------------------------------------------------------------------- |
+| Import path           | Environment     | Purpose                                                                            |
+| --------------------- | --------------- | ---------------------------------------------------------------------------------- |
 | `@posthog/next`       | Client + Server | `PostHogProvider`, `PostHogPageView`, hooks, `getPostHog()`, `postHogMiddleware()` |
-| `@posthog/next/pages` | Client + Server | `PostHogProvider`, `PostHogPageView`, `getServerSidePostHog()` for Pages Router |
+| `@posthog/next/pages` | Client + Server | `PostHogProvider`, `PostHogPageView`, `getServerSidePostHog()` for Pages Router    |
 
 ## Environment Variables
 

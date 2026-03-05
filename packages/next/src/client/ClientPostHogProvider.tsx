@@ -33,6 +33,7 @@ export interface ClientPostHogProviderProps {
  */
 export function ClientPostHogProvider({ apiKey, options, bootstrap, children }: ClientPostHogProviderProps) {
     if (!apiKey) {
+        // eslint-disable-next-line no-console
         console.warn('[PostHog Next.js] apiKey is required — PostHog will not be initialized')
         return <>{children}</>
     }

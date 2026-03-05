@@ -230,12 +230,12 @@ export default function App({ Component, pageProps }: AppProps) {
 
 **Props:**
 
-| Prop        | Type                     | Default     | Description                                                  |
-| ----------- | ------------------------ | ----------- | ------------------------------------------------------------ |
-| `apiKey`    | `string`                 | `NEXT_PUBLIC_POSTHOG_KEY` | PostHog project API key. Read from env var if omitted.       |
-| `clientOptions` | `Partial<PostHogConfig>` | See below   | `posthog-js` configuration overrides.                        |
-| `bootstrap` | `BootstrapConfig`        | `undefined` | Server-evaluated bootstrap data from `getServerSidePostHog`. |
-| `children`  | `React.ReactNode`        | —           | Your app content.                                            |
+| Prop            | Type                     | Default                   | Description                                                  |
+| --------------- | ------------------------ | ------------------------- | ------------------------------------------------------------ |
+| `apiKey`        | `string`                 | `NEXT_PUBLIC_POSTHOG_KEY` | PostHog project API key. Read from env var if omitted.       |
+| `clientOptions` | `Partial<PostHogConfig>` | See below                 | `posthog-js` configuration overrides.                        |
+| `bootstrap`     | `BootstrapConfig`        | `undefined`               | Server-evaluated bootstrap data from `getServerSidePostHog`. |
+| `children`      | `React.ReactNode`        | —                         | Your app content.                                            |
 
 The same [default options](#posthogprovider) are applied automatically. The `api_host` can also be set via the `NEXT_PUBLIC_POSTHOG_HOST` environment variable.
 
@@ -521,9 +521,9 @@ interface PostHogProxyOptions {
 | `useFeatureFlag`                | Hook returning a feature flag's value.                           |
 | `useActiveFeatureFlags`         | Hook returning all active flag keys.                             |
 | `PostHogFeature`                | Component for conditional rendering based on a flag.             |
-| `getPostHog(apiKey?, options?)` | Returns a `posthog-node` client scoped to the current user.     |
+| `getPostHog(apiKey?, options?)` | Returns a `posthog-node` client scoped to the current user.      |
 | `postHogMiddleware(options?)`   | Creates a Next.js middleware function.                           |
-| `DEFAULT_INGEST_PATH`           | The default proxy path prefix (`'/ingest'`).                    |
+| `DEFAULT_INGEST_PATH`           | The default proxy path prefix (`'/ingest'`).                     |
 
 **Client context** (the same, minus server-only exports):
 
@@ -537,12 +537,12 @@ interface PostHogProxyOptions {
 
 **Types** (available in both contexts):
 
-| Export                       | Description                         |
-| ---------------------------- | ----------------------------------- |
-| `PostHogProviderProps`       | Props for `PostHogProvider`.        |
-| `BootstrapFlagsConfig`       | Configuration for `bootstrapFlags`. |
-| `PostHogMiddlewareOptions`   | Type for middleware configuration.  |
-| `PostHogProxyOptions`        | Type for proxy configuration.       |
+| Export                     | Description                         |
+| -------------------------- | ----------------------------------- |
+| `PostHogProviderProps`     | Props for `PostHogProvider`.        |
+| `BootstrapFlagsConfig`     | Configuration for `bootstrapFlags`. |
+| `PostHogMiddlewareOptions` | Type for middleware configuration.  |
+| `PostHogProxyOptions`      | Type for proxy configuration.       |
 
 ### `@posthog/next/pages`
 

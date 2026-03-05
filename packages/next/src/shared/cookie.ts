@@ -1,4 +1,4 @@
-import { uuidv7, isNoLike } from '@posthog/core'
+import { uuidv7, isNoLike, isArray } from '@posthog/core'
 import { COOKIE_PREFIX, COOKIE_SUFFIX } from './constants'
 
 /**
@@ -71,10 +71,7 @@ export function serializePostHogCookie(anonymousId: string): string {
  * Compatible with Next.js `cookies()`, `request.cookies`, and any object
  * with a `get(name)` method that returns `{ value: string } | undefined`.
  */
-export function readPostHogCookie(
-    cookies: CookieStore,
-    apiKey: string
-): PostHogCookieState | null {
+export function readPostHogCookie(cookies: CookieStore, apiKey: string): PostHogCookieState | null {
     const cookieName = getPostHogCookieName(apiKey)
     const cookie = cookies.get(cookieName)
     return cookie ? parsePostHogCookie(cookie.value) : null
@@ -118,7 +115,7 @@ export function parsePostHogCookie(cookieValue: string): PostHogCookieState | nu
         }
 
         // $sesid is stored as [lastActivityTimestamp, sessionId, sessionStartTimestamp]
-        const sesid = Array.isArray(parsed.$sesid) ? parsed.$sesid[1] : undefined
+        const sesid = isArray(parsed.$sesid) ? parsed.$sesid[1] : undefined
 
         return {
             distinctId: String(parsed.distinct_id),
@@ -152,11 +149,7 @@ export interface ConsentConfig extends ConsentCookieConfig {
     opt_out_capturing_by_default?: boolean
 }
 
-export function isOptedOut(
-    cookies: CookieStore,
-    apiKey: string,
-    config?: ConsentConfig
-): boolean {
+export function isOptedOut(cookies: CookieStore, apiKey: string, config?: ConsentConfig): boolean {
     const cookieName = getConsentCookieName(apiKey, config)
     const cookie = cookies.get(cookieName)
 
