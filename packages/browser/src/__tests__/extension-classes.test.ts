@@ -4,6 +4,8 @@ import { AllExtensions } from '../extensions/extension-bundles'
 import { Autocapture } from '../autocapture'
 import { SessionRecording } from '../extensions/replay/session-recording'
 import { createPosthogInstance } from './helpers/posthog-instance'
+import { uuidv7 } from '../uuidv7'
+import { assignableWindow } from '../utils/globals'
 
 describe('__extensionClasses enrollment', () => {
     let savedDefaults: PostHogConfig['__extensionClasses']
@@ -86,6 +88,7 @@ describe('__extensionClasses enrollment', () => {
 
         const posthog = new PostHog()
 
+        expect(posthog._featureFlags).toBeDefined()
         expect(posthog.toolbar).toBeDefined()
         expect(posthog.surveys).toBeDefined()
         expect(posthog.conversations).toBeDefined()
@@ -99,6 +102,7 @@ describe('__extensionClasses enrollment', () => {
 
         const posthog = new PostHog()
 
+        expect(posthog._featureFlags).toBeUndefined()
         expect(posthog.toolbar).toBeUndefined()
         expect(posthog.surveys).toBeUndefined()
         expect(posthog.conversations).toBeUndefined()
@@ -156,6 +160,7 @@ describe('extension lifecycle', () => {
                 'exceptionObserver',
                 'exceptions',
                 'experiments',
+                'featureFlags',
                 'heatmaps',
                 'historyAutocapture',
                 'logs',
@@ -285,6 +290,101 @@ describe('extension lifecycle', () => {
             posthog.getActiveMatchingSurveys(callback)
 
             expect(callback).toHaveBeenCalledWith([], { isLoaded: false, error: 'Surveys module not available' })
+        })
+
+        it('featureFlags getter returns a stub when extension is not loaded', async () => {
+            PostHog.__defaultExtensionClasses = {}
+
+            const posthog = await createPosthogInstance(undefined, {
+                __preview_deferred_init_extensions: false,
+                capture_pageview: false,
+            })
+
+            expect((posthog as any)._featureFlags).toBeUndefined()
+
+            // The getter should return a stub, not throw
+            const flags = posthog.featureFlags
+            expect(flags).toBeDefined()
+            expect(flags.getFeatureFlag('test')).toBeUndefined()
+            expect(flags.isFeatureEnabled('test')).toBeUndefined()
+        })
+
+        it('onFeatureFlags calls back with error when extension is not loaded', async () => {
+            PostHog.__defaultExtensionClasses = {}
+
+            const posthog = await createPosthogInstance(undefined, {
+                __preview_deferred_init_extensions: false,
+                capture_pageview: false,
+            })
+
+            const callback = jest.fn()
+            const unsubscribe = posthog.onFeatureFlags(callback)
+
+            expect(callback).toHaveBeenCalledWith([], {}, { errorsLoading: true })
+            expect(unsubscribe).toEqual(expect.any(Function))
+        })
+
+        it('getFeatureFlag returns undefined when extension is not loaded', async () => {
+            PostHog.__defaultExtensionClasses = {}
+
+            const posthog = await createPosthogInstance(undefined, {
+                __preview_deferred_init_extensions: false,
+                capture_pageview: false,
+            })
+
+            expect(posthog.getFeatureFlag('test-flag')).toBeUndefined()
+        })
+
+        it('reloadFeatureFlags is a no-op when extension is not loaded', async () => {
+            PostHog.__defaultExtensionClasses = {}
+
+            const posthog = await createPosthogInstance(undefined, {
+                __preview_deferred_init_extensions: false,
+                capture_pageview: false,
+            })
+
+            expect(() => posthog.reloadFeatureFlags()).not.toThrow()
+        })
+    })
+
+    describe('with AllExtensions loaded', () => {
+        it('featureFlags getter returns the real instance', async () => {
+            PostHog.__defaultExtensionClasses = AllExtensions
+
+            const posthog = await createPosthogInstance(undefined, {
+                __preview_deferred_init_extensions: false,
+                capture_pageview: false,
+            })
+
+            expect((posthog as any)._featureFlags).toBeDefined()
+            expect(posthog.featureFlags).toBe((posthog as any)._featureFlags)
+        })
+
+        it('bootstrap feature flags work through extension initialize()', async () => {
+            PostHog.__defaultExtensionClasses = AllExtensions
+            const token = uuidv7()
+
+            assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                [token]: { config: {}, siteApps: [] },
+            } as any
+
+            const posthog = await createPosthogInstance(token, {
+                __preview_deferred_init_extensions: false,
+                capture_pageview: false,
+                bootstrap: {
+                    featureFlags: {
+                        'test-flag': true,
+                        'variant-flag': 'control',
+                        'disabled-flag': false,
+                    },
+                },
+            })
+
+            expect(posthog.getFeatureFlag('test-flag')).toBe(true)
+            expect(posthog.getFeatureFlag('variant-flag')).toBe('control')
+            // Disabled flags should not be returned
+            expect(posthog.getFeatureFlag('disabled-flag')).toBeUndefined()
+            expect(posthog.flagsEndpointWasHit).toBe(true)
         })
     })
 })
