@@ -4,7 +4,7 @@ import path from 'node:path'
 import fs from 'node:fs/promises'
 
 export interface PostHogRollupPluginOptions {
-    personalApiKey: string
+    personalApiKey?: string
     /** @deprecated Use projectId instead */
     envId?: string
     projectId?: string
@@ -127,16 +127,23 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
 }
 
 function resolveOptions(userOptions: PostHogRollupPluginOptions): ResolvedPostHogRollupPluginOptions {
-    const projectId = userOptions.projectId ?? userOptions.envId
+    const personalApiKey =
+        userOptions.personalApiKey || process.env.POSTHOG_PERSONAL_API_KEY || process.env.POSTHOG_CLI_API_KEY
+    const projectId =
+        userOptions.projectId || userOptions.envId || process.env.POSTHOG_PROJECT_ID || process.env.POSTHOG_CLI_PROJECT_ID
     if (!projectId) {
-        throw new Error('projectId is required (envId is deprecated)')
-    } else if (!userOptions.personalApiKey) {
-        throw new Error('personalApiKey is required')
+        throw new Error(
+            'projectId is required. Either pass it as an option or set the POSTHOG_PROJECT_ID environment variable. See https://posthog.com/docs/error-tracking/upload-source-maps'
+        )
+    } else if (!personalApiKey) {
+        throw new Error(
+            'personalApiKey is required. Either pass it as an option or set the POSTHOG_PERSONAL_API_KEY environment variable. See https://posthog.com/docs/error-tracking/upload-source-maps'
+        )
     }
     const userSourcemaps = userOptions.sourcemaps ?? {}
     const posthogOptions: ResolvedPostHogRollupPluginOptions = {
-        host: userOptions.host || 'https://us.i.posthog.com',
-        personalApiKey: userOptions.personalApiKey,
+        host: userOptions.host || process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+        personalApiKey,
         projectId,
         cliBinaryPath:
             userOptions.cliBinaryPath ??

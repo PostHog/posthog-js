@@ -29,7 +29,9 @@
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
+        "@types/jest": "catalog:",
         "jest": "catalog:",
+        "ts-jest": "catalog:",
         "webpack": "^5"
     },
     "scripts": {

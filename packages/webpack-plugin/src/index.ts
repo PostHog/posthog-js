@@ -15,11 +15,11 @@ export class PosthogWebpackPlugin {
         this.resolvedConfig = resolveConfig(pluginConfig)
         assertValue(
             this.resolvedConfig.personalApiKey,
-            `Personal API key not provided. If you are using turbo, make sure to add env variables to your turbo config`
+            `Personal API key not provided. Pass it as the personalApiKey option or set the POSTHOG_PERSONAL_API_KEY environment variable. If you are using turbo, make sure to add env variables to your turbo config. See https://posthog.com/docs/error-tracking/upload-source-maps`
         )
         assertValue(
             this.resolvedConfig.projectId,
-            `projectId (or deprecated envId) not provided. If you are using turbo, make sure to add env variables to your turbo config`
+            `Project ID not provided. Pass it as the projectId option or set the POSTHOG_PROJECT_ID environment variable. If you are using turbo, make sure to add env variables to your turbo config. See https://posthog.com/docs/error-tracking/upload-source-maps`
         )
     }
 
