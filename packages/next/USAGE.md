@@ -45,7 +45,7 @@ The middleware serves two purposes: seeding the PostHog identity cookie on first
 
 ```ts
 // middleware.ts
-import { postHogMiddleware } from '@posthog/next/middleware'
+import { postHogMiddleware } from '@posthog/next'
 
 export default postHogMiddleware({ proxy: true })
 
@@ -173,7 +173,7 @@ export function NewBanner() {
 Use `getPostHog()` in server components, route handlers, and server actions to evaluate flags and capture events server-side. The returned client is preconfigured with the current user's context (distinct ID, session ID, and device ID) read from the PostHog cookie, so all flag evaluations and captured events are automatically attributed to the correct user.
 
 ```tsx
-import { getPostHog } from '@posthog/next/server'
+import { getPostHog } from '@posthog/next'
 
 export default async function DashboardPage() {
     const posthog = await getPostHog()
@@ -462,7 +462,7 @@ Pass an existing `NextResponse` to compose PostHog middleware with your own:
 // middleware.ts
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { postHogMiddleware } from '@posthog/next/middleware'
+import { postHogMiddleware } from '@posthog/next'
 
 export default async function middleware(request: NextRequest) {
     // Your custom middleware logic
@@ -513,16 +513,19 @@ interface PostHogProxyOptions {
 
 **Server context** (React Server Components):
 
-| Export                  | Description                                                      |
-| ----------------------- | ---------------------------------------------------------------- |
-| `PostHogProvider`       | Async server component that wraps your app with PostHog context. |
-| `PostHogPageView`       | Client component for automatic pageview tracking.                |
-| `usePostHog`            | Hook returning the `posthog-js` client instance.                 |
-| `useFeatureFlag`        | Hook returning a feature flag's value.                           |
-| `useActiveFeatureFlags` | Hook returning all active flag keys.                             |
-| `PostHogFeature`        | Component for conditional rendering based on a flag.             |
+| Export                          | Description                                                      |
+| ------------------------------- | ---------------------------------------------------------------- |
+| `PostHogProvider`               | Async server component that wraps your app with PostHog context. |
+| `PostHogPageView`               | Client component for automatic pageview tracking.                |
+| `usePostHog`                    | Hook returning the `posthog-js` client instance.                 |
+| `useFeatureFlag`                | Hook returning a feature flag's value.                           |
+| `useActiveFeatureFlags`         | Hook returning all active flag keys.                             |
+| `PostHogFeature`                | Component for conditional rendering based on a flag.             |
+| `getPostHog(apiKey?, options?)` | Returns a `posthog-node` client scoped to the current user.     |
+| `postHogMiddleware(options?)`   | Creates a Next.js middleware function.                           |
+| `DEFAULT_INGEST_PATH`           | The default proxy path prefix (`'/ingest'`).                    |
 
-**Client context** (the same, minus `PostHogProvider`):
+**Client context** (the same, minus server-only exports):
 
 | Export                  | Description                                          |
 | ----------------------- | ---------------------------------------------------- |
@@ -534,25 +537,12 @@ interface PostHogProxyOptions {
 
 **Types** (available in both contexts):
 
-| Export                 | Description                         |
-| ---------------------- | ----------------------------------- |
-| `PostHogProviderProps` | Props for `PostHogProvider`.        |
-| `BootstrapFlagsConfig` | Configuration for `bootstrapFlags`. |
-
-### `@posthog/next/server`
-
-| Export                          | Description                                                 |
-| ------------------------------- | ----------------------------------------------------------- |
-| `getPostHog(apiKey?, options?)` | Returns a `posthog-node` client scoped to the current user. |
-
-### `@posthog/next/middleware`
-
-| Export                        | Description                                  |
-| ----------------------------- | -------------------------------------------- |
-| `postHogMiddleware(options?)` | Creates a Next.js middleware function.       |
-| `DEFAULT_INGEST_PATH`         | The default proxy path prefix (`'/ingest'`). |
-| `PostHogMiddlewareOptions`    | Type for middleware configuration.           |
-| `PostHogProxyOptions`         | Type for proxy configuration.                |
+| Export                       | Description                         |
+| ---------------------------- | ----------------------------------- |
+| `PostHogProviderProps`       | Props for `PostHogProvider`.        |
+| `BootstrapFlagsConfig`       | Configuration for `bootstrapFlags`. |
+| `PostHogMiddlewareOptions`   | Type for middleware configuration.  |
+| `PostHogProxyOptions`        | Type for proxy configuration.       |
 
 ### `@posthog/next/pages`
 

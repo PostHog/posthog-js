@@ -67,10 +67,18 @@ export interface PostHogProviderProps {
  * All PostHog hooks (`usePostHog`, `useFeatureFlagEnabled`, etc.)
  * require this provider as an ancestor.
  */
-export async function PostHogProvider({ apiKey: apiKeyProp, clientOptions, serverOptions, bootstrapFlags, children }: PostHogProviderProps) {
+export async function PostHogProvider({
+    apiKey: apiKeyProp,
+    clientOptions,
+    serverOptions,
+    bootstrapFlags,
+    children,
+}: PostHogProviderProps) {
     const apiKey = resolveApiKey(apiKeyProp)
     if (!apiKey.startsWith('phc_')) {
-        console.warn(`[PostHog Next.js] apiKey "${apiKey}" does not start with "phc_". This may not be a valid PostHog project API key.`)
+        console.warn(
+            `[PostHog Next.js] apiKey "${apiKey}" does not start with "phc_". This may not be a valid PostHog project API key.`
+        )
     }
 
     const host = clientOptions?.api_host ?? process.env.NEXT_PUBLIC_POSTHOG_HOST
@@ -118,7 +126,7 @@ async function evaluateFlags(
         return undefined
     }
 
-    const host = options?.api_host ?? ''
+    const host = serverOptions?.host ?? process.env.NEXT_PUBLIC_POSTHOG_HOST
     const nodeOptions: Partial<PostHogOptions> = { ...serverOptions, ...(host ? { host } : {}) }
     const client = await getOrCreateNodeClient(apiKey, nodeOptions)
 

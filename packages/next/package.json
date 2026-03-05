@@ -23,27 +23,20 @@
     "sideEffects": false,
     "exports": {
         ".": {
-            "react-server": {
-                "types": "./dist/index.react-server.d.ts",
-                "default": "./dist/index.react-server.js"
-            },
             "types": "./dist/index.d.ts",
-            "default": "./dist/index.js"
-        },
-        "./server": {
-            "types": "./dist/server.d.ts",
-            "default": "./dist/server.js"
-        },
-        "./middleware": {
-            "types": "./dist/middleware.d.ts",
-            "default": "./dist/middleware.js"
+            "edge-light": "./dist/index.edge.js",
+            "edge": "./dist/index.edge.js",
+            "worker": "./dist/index.edge.js",
+            "browser": "./dist/index.client.js",
+            "react-server": "./dist/index.js",
+            "default": "./dist/index.client.js"
         },
         "./pages": {
             "types": "./dist/pages.d.ts",
             "default": "./dist/pages.js"
         }
     },
-    "main": "./dist/index.js",
+    "main": "./dist/index.client.js",
     "types": "./dist/index.d.ts",
     "files": [
         "dist",
@@ -58,10 +51,12 @@
         "test": "pnpm test:unit",
         "lint": "eslint src",
         "lint:fix": "eslint src --fix",
-        "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build"
+        "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },
     "dependencies": {
         "@posthog/core": "workspace:*",
+        "@posthog/react": "workspace:*",
         "posthog-js": "workspace:*",
         "posthog-node": "workspace:*",
         "server-only": "^0.0.1"

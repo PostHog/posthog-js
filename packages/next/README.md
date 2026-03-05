@@ -37,7 +37,7 @@ NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com  # optional
 
 ```ts
 // middleware.ts
-import { postHogMiddleware } from '@posthog/next/middleware'
+import { postHogMiddleware } from '@posthog/next'
 
 export default postHogMiddleware({ proxy: true })
 
@@ -83,7 +83,7 @@ export function MyComponent() {
 
 ```tsx
 // In a server component
-import { getPostHog } from '@posthog/next/server'
+import { getPostHog } from '@posthog/next'
 
 export default async function Page() {
     const posthog = await getPostHog()
@@ -97,12 +97,10 @@ For detailed usage including Pages Router, consent management, middleware compos
 
 ## Entry Points
 
-| Import path                | Environment     | Purpose                                                                         |
-| -------------------------- | --------------- | ------------------------------------------------------------------------------- |
-| `@posthog/next`            | Client + Server | `PostHogProvider`, `PostHogPageView`, hooks                                     |
-| `@posthog/next/server`     | Server only     | `getPostHog()` for server components / route handlers                           |
-| `@posthog/next/middleware` | Edge / Server   | `postHogMiddleware()` for identity seeding and proxying                         |
-| `@posthog/next/pages`      | Client + Server | `PostHogProvider`, `PostHogPageView`, `getServerSidePostHog()` for Pages Router |
+| Import path           | Environment     | Purpose                                                                         |
+| --------------------- | --------------- | ------------------------------------------------------------------------------- |
+| `@posthog/next`       | Client + Server | `PostHogProvider`, `PostHogPageView`, hooks, `getPostHog()`, `postHogMiddleware()` |
+| `@posthog/next/pages` | Client + Server | `PostHogProvider`, `PostHogPageView`, `getServerSidePostHog()` for Pages Router |
 
 ## Environment Variables
 

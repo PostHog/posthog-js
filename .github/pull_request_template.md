@@ -20,6 +20,7 @@
 - [ ] @posthog/react
 - [ ] @posthog/ai
 - [ ] @posthog/convex
+- [ ] @posthog/next
 - [ ] @posthog/nextjs-config
 - [ ] @posthog/nuxt
 - [ ] @posthog/rollup-plugin

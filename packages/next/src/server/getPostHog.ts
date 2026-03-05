@@ -9,10 +9,9 @@ import { resolveApiKey } from '../shared/config'
 /**
  * Returns a PostHog server client scoped to the current request.
  *
- * Reads the user's identity from the PostHog cookie and sets it as
- * context via `enterContext()`. The returned client is ready to use —
- * methods like `getAllFlags()`, `getFeatureFlagResult()`, and `capture()`
- * automatically use the current user's identity.
+ * Reads the user's identity from the PostHog cookie and returns a
+ * request-scoped client. Methods like `getAllFlags()`, `getFeatureFlagResult()`,
+ * and `capture()` automatically use the current user's identity.
  *
  * Calls `cookies()` internally, which opts the route into dynamic rendering.
  *
@@ -22,7 +21,7 @@ import { resolveApiKey } from '../shared/config'
  *
  * @example
  * ```ts
- * import { getPostHog } from '@posthog/next/server'
+ * import { getPostHog } from '@posthog/next'
  *
  * export default async function Page() {
  *     const posthog = await getPostHog()
@@ -39,11 +38,25 @@ export async function getPostHog(apiKey?: string, options?: Partial<PostHogOptio
     const client = await getOrCreateNodeClient(resolvedApiKey, resolvedOptions)
     const cookieStore = await cookies()
 
-    if (!isOptedOut(cookieStore, resolvedApiKey)) {
-        const state = readPostHogCookie(cookieStore, resolvedApiKey)
-        const properties = cookieStateToProperties(state)
-        client.enterContext({ distinctId: state?.distinctId, sessionId: state?.sessionId, properties })
+    if (isOptedOut(cookieStore, resolvedApiKey)) {
+        return client
     }
 
-    return client
+    const state = readPostHogCookie(cookieStore, resolvedApiKey)
+    const properties = cookieStateToProperties(state)
+    const contextData = { distinctId: state?.distinctId, sessionId: state?.sessionId, properties }
+
+    // Wrap the shared client in a Proxy that applies request-scoped context
+    // to every method call. We can't use enterContext() here because
+    // AsyncLocalStorage.enterWith() doesn't propagate back to the caller
+    // across the await boundary of this async function.
+    return new Proxy(client, {
+        get(target, prop, receiver) {
+            const value = Reflect.get(target, prop, receiver)
+            if (typeof value === 'function') {
+                return (...args: unknown[]) => target.withContext(contextData, () => value.apply(target, args))
+            }
+            return value
+        },
+    }) as IPostHog
 }

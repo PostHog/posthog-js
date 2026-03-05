@@ -106,7 +106,7 @@ function rewriteToPostHog(request: NextRequest, config: ResolvedRewriteConfig): 
  * @example Standalone (simplest — reads apiKey from NEXT_PUBLIC_POSTHOG_KEY)
  * ```ts
  * // middleware.ts
- * import { postHogMiddleware } from '@posthog/next/middleware'
+ * import { postHogMiddleware } from '@posthog/next'
  *
  * export default postHogMiddleware({ proxy: true })
  *
@@ -115,7 +115,7 @@ function rewriteToPostHog(request: NextRequest, config: ResolvedRewriteConfig): 
  *
  * @example Composed with other middleware
  * ```ts
- * import { postHogMiddleware } from '@posthog/next/middleware'
+ * import { postHogMiddleware } from '@posthog/next'
  *
  * export default async function middleware(request: NextRequest) {
  *   const response = otherMiddleware(request)
