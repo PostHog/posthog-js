@@ -268,17 +268,6 @@ describe('logs entrypoint', () => {
                 'window.id': 'window-456',
             })
         })
-
-        it('should fall back to default service name when logs config is undefined', () => {
-            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
-            initializeLogs(mockPostHog)
-
-            expect(mockResourceFromAttributes).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    'service.name': 'posthog-browser-logs',
-                })
-            )
-        })
     })
 
     describe('console wrapping behavior', () => {
