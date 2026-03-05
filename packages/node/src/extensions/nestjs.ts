@@ -3,7 +3,6 @@ import { catchError } from 'rxjs/operators'
 
 import ErrorTracking from './error-tracking'
 import { PostHogBackendClient } from '../client'
-import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 
 // Local interfaces to avoid runtime dependency on @nestjs/common
 interface HttpArgumentsHost {
