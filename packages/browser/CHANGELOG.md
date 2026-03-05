@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.359.0
+
+### Minor Changes
+
+- [#3166](https://github.com/PostHog/posthog-js/pull/3166) [`9180726`](https://github.com/PostHog/posthog-js/commit/91807266924dd6bf4689d94f1480158c38ec7ca3) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Tree-shake feature flags
+  (2026-03-05)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.359.0
+
 ## 1.358.1
 
 ### Patch Changes
