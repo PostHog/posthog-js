@@ -968,12 +968,12 @@ export class ProductTourManager {
         if (!flagKey) {
             return true
         }
-        const isFeatureEnabled = !!this._instance.featureFlags.isFeatureEnabled(flagKey, {
+        const isFeatureEnabled = !!this._instance.featureFlags?.isFeatureEnabled(flagKey, {
             send_event: !flagKey.startsWith(PRODUCT_TOUR_TARGETING_FLAG_PREFIX),
         })
         let flagVariantCheck = true
         if (flagVariant) {
-            const flagVariantValue = this._instance.featureFlags.getFeatureFlag(flagKey, { send_event: false })
+            const flagVariantValue = this._instance.featureFlags?.getFeatureFlag(flagKey, { send_event: false })
             flagVariantCheck = flagVariantValue === flagVariant || flagVariant === 'any'
         }
         return isFeatureEnabled && flagVariantCheck

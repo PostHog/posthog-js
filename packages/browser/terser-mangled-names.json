@@ -133,7 +133,6 @@
         "_exportTimeoutMillis",
         "_exporter",
         "_extensions",
-        "_featureFlags",
         "_finishedLogRecords",
         "_fireFeatureFlagsCallbacks",
         "_flagListenerCleanup",
