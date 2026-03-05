@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.27.1
+
+### Patch Changes
+
+- [#3186](https://github.com/PostHog/posthog-js/pull/3186) [`4601bbc`](https://github.com/PostHog/posthog-js/commit/4601bbc3d8456ce36ea1065a44101415501d4729) Thanks [@dmarticus](https://github.com/dmarticus)! - Add semver comparison operators to local feature flag evaluation: semver_eq, semver_neq, semver_gt, semver_gte, semver_lt, semver_lte, semver_tilde, semver_caret, and semver_wildcard
+  (2026-03-05)
+
 ## 5.27.0
 
 ### Minor Changes
