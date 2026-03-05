@@ -23,6 +23,9 @@
             "inputs": ["dist/**", "package.json"],
             "env": ["PACKAGE_DEST"]
         },
+        "@posthog/next#build": {
+            "dependsOn": ["^build", "@posthog/react#build"]
+        },
         "posthog-js#package": {
             "dependsOn": ["@posthog/react#build"],
             "inputs": ["dist/**", "lib/**", "react/**"],
