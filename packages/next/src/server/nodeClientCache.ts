@@ -14,6 +14,10 @@ const autoDetectedWaitUntil: Promise<((p: Promise<unknown>) => void) | undefined
 /**
  * Returns a cached PostHog node client, creating one if needed.
  *
+ * Clients are cached by project key + host. Only the options from the first
+ * call for a given key+host pair take effect; subsequent calls with different
+ * options (e.g. flushAt, flushInterval) will return the existing client.
+ *
  * On first call, awaits auto-detection of @vercel/functions waitUntil
  * and merges it into options. Explicit options.waitUntil takes priority.
  */

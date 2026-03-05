@@ -10,6 +10,7 @@ const mockGetAllFlags = jest.fn()
 const mockGetAllFlagsAndPayloads = jest.fn()
 const mockShutdown = jest.fn()
 const mockEnterContext = jest.fn()
+const mockWithContext = jest.fn((_, fn) => fn())
 
 jest.mock('posthog-node', () => ({
     PostHog: jest.fn().mockImplementation(() => ({
@@ -22,6 +23,7 @@ jest.mock('posthog-node', () => ({
         getAllFlagsAndPayloads: mockGetAllFlagsAndPayloads,
         shutdown: mockShutdown,
         enterContext: mockEnterContext,
+        withContext: mockWithContext,
     })),
 }))
 
@@ -54,6 +56,7 @@ const mockGetOrCreateNodeClient = jest.fn().mockImplementation(() => ({
     getAllFlagsAndPayloads: mockGetAllFlagsAndPayloads,
     shutdown: mockShutdown,
     enterContext: mockEnterContext,
+    withContext: mockWithContext,
 }))
 
 jest.mock('../src/server/nodeClientCache', () => ({
@@ -86,10 +89,9 @@ describe('getPostHog', () => {
         expect(client).toBeDefined()
         expect(typeof client.capture).toBe('function')
         expect(typeof client.isFeatureEnabled).toBe('function')
-        expect(typeof client.enterContext).toBe('function')
     })
 
-    it('reads distinct_id from the PostHog cookie and calls enterContext with correct properties', async () => {
+    it('wraps method calls with withContext using cookie identity', async () => {
         const cookieStore = createMockCookies({
             ph_phc_test123_posthog: JSON.stringify({
                 distinct_id: 'user_abc',
@@ -99,25 +101,35 @@ describe('getPostHog', () => {
         })
         ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
 
-        await getPostHog('phc_test123')
+        const client = await getPostHog('phc_test123')
+        client.capture({ distinctId: 'user_abc', event: 'test_event' })
 
-        expect(mockEnterContext).toHaveBeenCalledWith({
-            distinctId: 'user_abc',
-            sessionId: 'session-123',
-            properties: { $session_id: 'session-123', $device_id: 'device_xyz' },
-        })
+        expect(mockWithContext).toHaveBeenCalledWith(
+            {
+                distinctId: 'user_abc',
+                sessionId: 'session-123',
+                properties: { $session_id: 'session-123', $device_id: 'device_xyz' },
+            },
+            expect.any(Function)
+        )
+        expect(mockCapture).toHaveBeenCalledWith({ distinctId: 'user_abc', event: 'test_event' })
     })
 
-    it('calls enterContext with undefined identity when no cookie exists', async () => {
+    it('wraps method calls with withContext with undefined identity when no cookie exists', async () => {
         const cookieStore = createMockCookies({})
         ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
 
-        await getPostHog('phc_test123')
+        const client = await getPostHog('phc_test123')
+        client.capture({ distinctId: 'anon', event: 'test_event' })
 
-        expect(mockEnterContext).toHaveBeenCalledWith({
-            distinctId: undefined,
-            properties: undefined,
-        })
+        expect(mockWithContext).toHaveBeenCalledWith(
+            {
+                distinctId: undefined,
+                sessionId: undefined,
+                properties: undefined,
+            },
+            expect.any(Function)
+        )
     })
 
     it('uses explicit apiKey over env var', async () => {
@@ -164,7 +176,7 @@ describe('getPostHog', () => {
         delete process.env.NEXT_PUBLIC_POSTHOG_HOST
     })
 
-    it('calls enterContext with just distinctId when cookie has no session or device', async () => {
+    it('wraps method calls with withContext with just distinctId when cookie has no session or device', async () => {
         const cookieStore = createMockCookies({
             ph_phc_test123_posthog: JSON.stringify({
                 distinct_id: 'user_abc',
@@ -172,15 +184,21 @@ describe('getPostHog', () => {
         })
         ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
 
-        await getPostHog('phc_test123')
+        const client = await getPostHog('phc_test123')
+        client.capture({ distinctId: 'user_abc', event: 'test_event' })
 
-        expect(mockEnterContext).toHaveBeenCalledWith({
-            distinctId: 'user_abc',
-        })
+        expect(mockWithContext).toHaveBeenCalledWith(
+            {
+                distinctId: 'user_abc',
+                sessionId: undefined,
+                properties: undefined,
+            },
+            expect.any(Function)
+        )
     })
 
     describe('consent awareness', () => {
-        it('does not call enterContext when consent cookie is 0', async () => {
+        it('returns the client directly without proxy when consent cookie is 0', async () => {
             const cookieStore = createMockCookies({
                 ph_phc_test123_posthog: JSON.stringify({
                     distinct_id: 'user_abc',
@@ -192,10 +210,12 @@ describe('getPostHog', () => {
 
             const client = await getPostHog('phc_test123')
             expect(client).toBeDefined()
-            expect(mockEnterContext).not.toHaveBeenCalled()
+            // When opted out, methods should not go through withContext
+            client.capture({ distinctId: 'user_abc', event: 'test_event' })
+            expect(mockWithContext).not.toHaveBeenCalled()
         })
 
-        it('calls enterContext normally when consent cookie is 1', async () => {
+        it('wraps method calls with withContext when consent cookie is 1', async () => {
             const cookieStore = createMockCookies({
                 ph_phc_test123_posthog: JSON.stringify({
                     distinct_id: 'user_abc',
@@ -205,9 +225,12 @@ describe('getPostHog', () => {
             })
             ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
 
-            await getPostHog('phc_test123')
-            expect(mockEnterContext).toHaveBeenCalledWith(
-                expect.objectContaining({ distinctId: 'user_abc' })
+            const client = await getPostHog('phc_test123')
+            client.capture({ distinctId: 'user_abc', event: 'test_event' })
+
+            expect(mockWithContext).toHaveBeenCalledWith(
+                expect.objectContaining({ distinctId: 'user_abc' }),
+                expect.any(Function)
             )
         })
     })

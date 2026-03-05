@@ -52,6 +52,9 @@ export async function getPostHog(apiKey?: string, options?: Partial<PostHogOptio
     // across the await boundary of this async function.
     return new Proxy(client, {
         get(target, prop, receiver) {
+            if (prop === 'withContext') {
+                return Reflect.get(target, prop, receiver)
+            }
             const value = Reflect.get(target, prop, receiver)
             if (typeof value === 'function') {
                 return (...args: unknown[]) => target.withContext(contextData, () => value.apply(target, args))
