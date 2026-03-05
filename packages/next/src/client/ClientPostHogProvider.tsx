@@ -33,12 +33,11 @@ export interface ClientPostHogProviderProps {
  */
 export function ClientPostHogProvider({ apiKey, options, bootstrap, children }: ClientPostHogProviderProps) {
     if (!apiKey) {
-        throw new Error('[PostHog Next.js] apiKey is required')
+        console.warn('[PostHog Next.js] apiKey is required — PostHog will not be initialized')
+        return <>{children}</>
     }
 
-    const mergedOptions = bootstrap
-        ? { ...options, bootstrap: { ...options?.bootstrap, ...bootstrap } }
-        : options
+    const mergedOptions = bootstrap ? { ...options, bootstrap: { ...options?.bootstrap, ...bootstrap } } : options
 
     // Initialize eagerly during render on the client so that child effects
     // see a fully configured posthog instance. The `__loaded` guard prevents
@@ -47,9 +46,5 @@ export function ClientPostHogProvider({ apiKey, options, bootstrap, children }: 
         posthogJs.init(apiKey, mergedOptions)
     }
 
-    return (
-        <ReactPostHogProvider client={posthogJs}>
-            {children}
-        </ReactPostHogProvider>
-    )
+    return <ReactPostHogProvider client={posthogJs}>{children}</ReactPostHogProvider>
 }
