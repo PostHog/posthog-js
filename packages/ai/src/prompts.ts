@@ -46,6 +46,11 @@ function isPromptsWithPostHog(options: PromptsOptions): options is PromptsWithPo
  *   fallback: 'You are a helpful assistant.',
  * })
  *
+ * // Or fetch an exact published version
+ * const v3Template = await prompts.get('support-system-prompt', {
+ *   version: 3,
+ * })
+ *
  * // Compile with variables
  * const systemPrompt = prompts.compile(template, {
  *   company: 'Acme Corp',
@@ -75,20 +80,31 @@ export class Prompts {
     }
   }
 
+  private getCacheKey(name: string, version?: number): string {
+    return version === undefined ? `${name}::latest` : `${name}::version:${version}`
+  }
+
+  private getPromptLabel(name: string, version?: number): string {
+    return version === undefined ? `"${name}"` : `"${name}" version ${version}`
+  }
+
   /**
    * Fetch a prompt by name from the PostHog API
    *
    * @param name - The name of the prompt to fetch
-   * @param options - Optional settings for caching and fallback
+   * @param options - Optional settings for caching, fallback, and exact version selection
    * @returns The prompt string
    * @throws Error if the prompt cannot be fetched and no fallback is provided
    */
   async get(name: string, options?: GetPromptOptions): Promise<string> {
     const cacheTtlSeconds = options?.cacheTtlSeconds ?? this.defaultCacheTtlSeconds
     const fallback = options?.fallback
+    const version = options?.version
+    const cacheKey = this.getCacheKey(name, version)
+    const promptLabel = this.getPromptLabel(name, version)
 
     // Check cache first
-    const cached = this.cache.get(name)
+    const cached = this.cache.get(cacheKey)
     const now = Date.now()
 
     if (cached) {
@@ -101,11 +117,11 @@ export class Prompts {
 
     // Try to fetch from API
     try {
-      const prompt = await this.fetchPromptFromApi(name)
+      const prompt = await this.fetchPromptFromApi(name, version)
       const fetchedAt = Date.now()
 
       // Update cache
-      this.cache.set(name, {
+      this.cache.set(cacheKey, {
         prompt,
         fetchedAt,
       })
@@ -115,13 +131,13 @@ export class Prompts {
       // Fallback order:
       // 1. Return stale cache (with warning)
       if (cached) {
-        console.warn(`[PostHog Prompts] Failed to fetch prompt "${name}", using stale cache:`, error)
+        console.warn(`[PostHog Prompts] Failed to fetch prompt ${promptLabel}, using stale cache:`, error)
         return cached.prompt
       }
 
       // 2. Return fallback (with warning)
       if (fallback !== undefined) {
-        console.warn(`[PostHog Prompts] Failed to fetch prompt "${name}", using fallback:`, error)
+        console.warn(`[PostHog Prompts] Failed to fetch prompt ${promptLabel}, using fallback:`, error)
         return fallback
       }
 
@@ -153,17 +169,22 @@ export class Prompts {
   /**
    * Clear the cache for a specific prompt or all prompts
    *
-   * @param name - Optional prompt name to clear. If not provided, clears all cached prompts.
+   * @param name - Optional prompt name to clear. If provided, clears all cached versions for that prompt.
    */
   clearCache(name?: string): void {
     if (name !== undefined) {
-      this.cache.delete(name)
+      const prefix = `${name}::`
+      for (const key of this.cache.keys()) {
+        if (key.startsWith(prefix)) {
+          this.cache.delete(key)
+        }
+      }
     } else {
       this.cache.clear()
     }
   }
 
-  private async fetchPromptFromApi(name: string): Promise<string> {
+  private async fetchPromptFromApi(name: string, version?: number): Promise<string> {
     if (!this.personalApiKey) {
       throw new Error(
         '[PostHog Prompts] personalApiKey is required to fetch prompts. ' +
@@ -179,7 +200,9 @@ export class Prompts {
 
     const encodedPromptName = encodeURIComponent(name)
     const encodedProjectApiKey = encodeURIComponent(this.projectApiKey)
-    const url = `${this.host}/api/environments/@current/llm_prompts/name/${encodedPromptName}/?token=${encodedProjectApiKey}`
+    const versionQuery = version === undefined ? '' : `&version=${encodeURIComponent(String(version))}`
+    const promptLabel = this.getPromptLabel(name, version)
+    const url = `${this.host}/api/environments/@current/llm_prompts/name/${encodedPromptName}/?token=${encodedProjectApiKey}${versionQuery}`
 
     const response = await fetch(url, {
       method: 'GET',
@@ -190,23 +213,23 @@ export class Prompts {
 
     if (!response.ok) {
       if (response.status === 404) {
-        throw new Error(`[PostHog Prompts] Prompt "${name}" not found`)
+        throw new Error(`[PostHog Prompts] Prompt ${promptLabel} not found`)
       }
 
       if (response.status === 403) {
         throw new Error(
-          `[PostHog Prompts] Access denied for prompt "${name}". ` +
+          `[PostHog Prompts] Access denied for prompt ${promptLabel}. ` +
             'Check that your personalApiKey has the correct permissions and the LLM prompts feature is enabled.'
         )
       }
 
-      throw new Error(`[PostHog Prompts] Failed to fetch prompt "${name}": HTTP ${response.status}`)
+      throw new Error(`[PostHog Prompts] Failed to fetch prompt ${promptLabel}: HTTP ${response.status}`)
     }
 
     const data: unknown = await response.json()
 
     if (!isPromptApiResponse(data)) {
-      throw new Error(`[PostHog Prompts] Invalid response format for prompt "${name}"`)
+      throw new Error(`[PostHog Prompts] Invalid response format for prompt ${promptLabel}`)
     }
 
     return data.prompt
