@@ -69,6 +69,7 @@ export class PostHogInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const httpHost = context.switchToHttp()
     const request = httpHost.getRequest()
+    const response = httpHost.getResponse()
 
     const headers = request?.headers ?? {}
     const sessionId: string | undefined = headers['x-posthog-session-id']
@@ -88,25 +89,30 @@ export class PostHogInterceptor implements NestInterceptor {
       },
     }
 
-    return this.posthog.withContext(contextData, () => {
-      let source = next.handle()
+    // Use enterContext so the context propagates through RxJS Observable
+    // subscription and catchError handlers, not just the synchronous callback.
+    this.posthog.enterContext(contextData)
 
-      if (this.captureExceptions) {
-        source = source.pipe(
-          catchError((exception: unknown) => {
-            if (ErrorTracking.isPreviouslyCapturedError(exception)) {
-              return throwError(() => exception)
-            }
-            const status = getExceptionStatus(exception)
-            if (status !== undefined && status < this.minStatusToCapture) {
-              return throwError(() => exception)
-            }
-            this.posthog.captureException(exception, distinctId)
+    let source = next.handle()
+
+    if (this.captureExceptions) {
+      source = source.pipe(
+        catchError((exception: unknown) => {
+          if (ErrorTracking.isPreviouslyCapturedError(exception)) {
             return throwError(() => exception)
-          })
-        )
-      }
-      return source
-    })
+          }
+          const status = getExceptionStatus(exception)
+          if (status !== undefined && status < this.minStatusToCapture) {
+            return throwError(() => exception)
+          }
+          const responseStatus = status ?? response?.statusCode
+          const additionalProperties: Record<string, any> | undefined =
+            responseStatus !== undefined ? { $response_status_code: responseStatus } : undefined
+          this.posthog.captureException(exception, distinctId, additionalProperties)
+          return throwError(() => exception)
+        })
+      )
+    }
+    return source
   }
 }
