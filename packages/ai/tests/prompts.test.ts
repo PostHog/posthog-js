@@ -742,6 +742,31 @@ describe('Prompts', () => {
       expect(mockFetch).toHaveBeenCalledTimes(3)
     })
 
+    it('should remove the outer cache entry when the last version is cleared', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, version: 1, prompt: 'Version 1 prompt' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, version: 1, prompt: 'Version 1 prompt refreshed' }),
+        })
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      await prompts.get('test-prompt', { version: 1 })
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+
+      prompts.clearCache('test-prompt', 1)
+
+      await expect(prompts.get('test-prompt', { version: 1 })).resolves.toBe('Version 1 prompt refreshed')
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+    })
+
     it('should not clear cache entries for other prompt names that share the same prefix', async () => {
       mockFetch
         .mockResolvedValueOnce({
