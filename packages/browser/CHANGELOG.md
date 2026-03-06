@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.359.1
+
+### Patch Changes
+
+- [#3204](https://github.com/PostHog/posthog-js/pull/3204) [`2b0cd52`](https://github.com/PostHog/posthog-js/commit/2b0cd52bac03b50322c497eb1f2fd070e54c83b4) Thanks [@marandaneto](https://github.com/marandaneto)! - chore: upgrade dompurify to 3.3.2
+  (2026-03-06)
+- Updated dependencies []:
+    - @posthog/types@1.359.1
+
 ## 1.359.0
 
 ### Minor Changes
