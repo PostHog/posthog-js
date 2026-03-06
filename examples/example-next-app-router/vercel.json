@@ -1,0 +1,4 @@
+{
+    "installCommand": "cd ../.. && pnpm install && pnpm package && cd examples/example-next-app-router && pnpm install",
+    "framework": "nextjs"
+}
