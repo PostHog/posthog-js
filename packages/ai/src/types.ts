@@ -101,6 +101,7 @@ export interface TokenUsage {
 export interface GetPromptOptions {
   cacheTtlSeconds?: number
   fallback?: string
+  version?: number
 }
 
 /**

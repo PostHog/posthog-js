@@ -68,6 +68,30 @@ describe('Prompts', () => {
       )
     })
 
+    it('should fetch a specific prompt version when requested', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ ...mockPromptResponse, version: 2, prompt: 'Version 2 prompt' }),
+      })
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      const result = await prompts.get('test-prompt', { version: 2 })
+
+      expect(result).toBe('Version 2 prompt')
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://us.posthog.com/api/environments/@current/llm_prompts/name/test-prompt/?token=phc_test_key&version=2',
+        {
+          method: 'GET',
+          headers: {
+            Authorization: 'Bearer phx_test_key',
+          },
+        }
+      )
+    })
+
     it('should return cached prompt when fresh', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -90,6 +114,34 @@ describe('Prompts', () => {
       const result2 = await prompts.get('test-prompt', { cacheTtlSeconds: 300 })
       expect(result2).toBe(mockPromptResponse.prompt)
       expect(mockFetch).toHaveBeenCalledTimes(1) // No additional fetch
+    })
+
+    it('should keep latest and versioned prompt caches separate', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, version: 2, prompt: 'Latest prompt' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, version: 1, prompt: 'Version 1 prompt' }),
+        })
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      const latestResult = await prompts.get('test-prompt', { cacheTtlSeconds: 300 })
+      const versionedResult = await prompts.get('test-prompt', { cacheTtlSeconds: 300, version: 1 })
+
+      expect(latestResult).toBe('Latest prompt')
+      expect(versionedResult).toBe('Version 1 prompt')
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+
+      await expect(prompts.get('test-prompt', { cacheTtlSeconds: 300 })).resolves.toBe('Latest prompt')
+      await expect(prompts.get('test-prompt', { cacheTtlSeconds: 300, version: 1 })).resolves.toBe('Version 1 prompt')
+      expect(mockFetch).toHaveBeenCalledTimes(2)
     })
 
     it('should refetch when cache is stale', async () => {
@@ -178,6 +230,20 @@ describe('Prompts', () => {
       const prompts = new Prompts({ posthog })
 
       await expect(prompts.get('test-prompt')).rejects.toThrow('Network error')
+    })
+
+    it('should include the requested version in versioned fetch errors', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+      })
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      await expect(prompts.get('nonexistent-prompt', { version: 7 })).rejects.toThrow(
+        '[PostHog Prompts] Prompt "nonexistent-prompt" version 7 not found'
+      )
     })
 
     it('should handle 404 response', async () => {
@@ -598,6 +664,75 @@ describe('Prompts', () => {
       await prompts.get('test-prompt')
       await prompts.get('other-prompt')
       expect(mockFetch).toHaveBeenCalledTimes(4)
+    })
+
+    it('should clear all cached versions for a prompt when a name is provided', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, version: 2, prompt: 'Latest prompt' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, version: 1, prompt: 'Version 1 prompt' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, version: 2, prompt: 'Latest prompt refreshed' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, version: 1, prompt: 'Version 1 prompt refreshed' }),
+        })
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      await prompts.get('test-prompt')
+      await prompts.get('test-prompt', { version: 1 })
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+
+      prompts.clearCache('test-prompt')
+
+      await expect(prompts.get('test-prompt')).resolves.toBe('Latest prompt refreshed')
+      await expect(prompts.get('test-prompt', { version: 1 })).resolves.toBe('Version 1 prompt refreshed')
+      expect(mockFetch).toHaveBeenCalledTimes(4)
+    })
+
+    it('should not clear cache entries for other prompt names that share the same prefix', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, name: 'foo', prompt: 'Foo latest' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, name: 'foo::bar', prompt: 'Foo bar latest' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, name: 'foo', prompt: 'Foo latest refreshed' }),
+        })
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      await prompts.get('foo')
+      await prompts.get('foo::bar')
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+
+      prompts.clearCache('foo')
+
+      await expect(prompts.get('foo')).resolves.toBe('Foo latest refreshed')
+      await expect(prompts.get('foo::bar')).resolves.toBe('Foo bar latest')
+      expect(mockFetch).toHaveBeenCalledTimes(3)
     })
   })
 })
