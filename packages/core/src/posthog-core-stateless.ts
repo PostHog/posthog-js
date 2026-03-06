@@ -964,8 +964,16 @@ export abstract class PostHogCoreStateless {
     }
 
     try {
-      await this.fetchWithRetry(url, fetchOptions)
+      const res = await this.fetchWithRetry(url, fetchOptions)
+      // Consume the response body to prevent resource leaks in runtimes like
+      // Cloudflare Workers that require the body to be read before the handler completes.
+      // See: https://github.com/PostHog/posthog-js/issues/3173
+      await res.text().catch(() => {})
     } catch (err) {
+      // Consume the error response body to prevent resource leaks (see #3173)
+      if (err instanceof PostHogFetchHttpError) {
+        await err.response.text().catch(() => {})
+      }
       this._events.emit('error', err)
     }
   }
@@ -1139,8 +1147,17 @@ export abstract class PostHogCoreStateless {
       }
 
       try {
-        await this.fetchWithRetry(url, fetchOptions, retryOptions)
+        const res = await this.fetchWithRetry(url, fetchOptions, retryOptions)
+        // Consume the response body to prevent resource leaks in runtimes like
+        // Cloudflare Workers that require the body to be read before the handler completes.
+        // See: https://github.com/PostHog/posthog-js/issues/3173
+        await res.text().catch(() => {})
       } catch (err) {
+        // Consume the error response body to prevent resource leaks (see #3173)
+        if (err instanceof PostHogFetchHttpError) {
+          await err.response.text().catch(() => {})
+        }
+
         if (isPostHogFetchContentTooLargeError(err) && batchMessages.length > 1) {
           // if we get a 413 error, we want to reduce the batch size and try again
           this.maxBatchSize = Math.max(1, Math.floor(batchMessages.length / 2))
