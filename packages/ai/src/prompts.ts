@@ -4,6 +4,7 @@ import type { PostHog } from 'posthog-node'
 import type { CachedPrompt, GetPromptOptions, PromptApiResponse, PromptVariables, PromptsDirectOptions } from './types'
 
 const DEFAULT_CACHE_TTL_SECONDS = 300 // 5 minutes
+type PromptVersionCache = Map<number | undefined, CachedPrompt>
 
 function isPromptApiResponse(data: unknown): data is PromptApiResponse {
   return (
@@ -63,7 +64,7 @@ export class Prompts {
   private projectApiKey: string
   private host: string
   private defaultCacheTtlSeconds: number
-  private cache: Map<string, CachedPrompt> = new Map()
+  private cache: Map<string, PromptVersionCache> = new Map()
 
   constructor(options: PromptsOptions) {
     this.defaultCacheTtlSeconds = options.defaultCacheTtlSeconds ?? DEFAULT_CACHE_TTL_SECONDS
@@ -80,8 +81,19 @@ export class Prompts {
     }
   }
 
-  private getCacheKey(name: string, version?: number): string {
-    return version === undefined ? `${name}::latest` : `${name}::version:${version}`
+  private getPromptCache(name: string): PromptVersionCache | undefined {
+    return this.cache.get(name)
+  }
+
+  private getOrCreatePromptCache(name: string): PromptVersionCache {
+    const cachedPromptVersions = this.cache.get(name)
+    if (cachedPromptVersions) {
+      return cachedPromptVersions
+    }
+
+    const promptVersions: PromptVersionCache = new Map()
+    this.cache.set(name, promptVersions)
+    return promptVersions
   }
 
   private getPromptLabel(name: string, version?: number): string {
@@ -100,11 +112,10 @@ export class Prompts {
     const cacheTtlSeconds = options?.cacheTtlSeconds ?? this.defaultCacheTtlSeconds
     const fallback = options?.fallback
     const version = options?.version
-    const cacheKey = this.getCacheKey(name, version)
     const promptLabel = this.getPromptLabel(name, version)
 
     // Check cache first
-    const cached = this.cache.get(cacheKey)
+    const cached = this.getPromptCache(name)?.get(version)
     const now = Date.now()
 
     if (cached) {
@@ -121,7 +132,7 @@ export class Prompts {
       const fetchedAt = Date.now()
 
       // Update cache
-      this.cache.set(cacheKey, {
+      this.getOrCreatePromptCache(name).set(version, {
         prompt,
         fetchedAt,
       })
@@ -169,24 +180,29 @@ export class Prompts {
   /**
    * Clear the cache for a specific prompt or all prompts
    *
-   * @param name - Optional prompt name to clear. If provided, clears all cached versions for that prompt.
+   * @param name - Optional prompt name to clear. If provided, clears all cached versions for that prompt unless a version is also provided.
+   * @param version - Optional prompt version to clear. Requires a prompt name.
    */
-  clearCache(name?: string): void {
-    if (name !== undefined) {
-      const latestKey = this.getCacheKey(name)
-      const versionPrefix = `${name}::version:`
-      for (const key of this.cache.keys()) {
-        if (key === latestKey) {
-          this.cache.delete(key)
-          continue
-        }
+  clearCache(name?: string, version?: number): void {
+    if (version !== undefined && name === undefined) {
+      throw new Error("'version' requires 'name' to be provided")
+    }
 
-        if (key.startsWith(versionPrefix) && /^\d+$/.test(key.slice(versionPrefix.length))) {
-          this.cache.delete(key)
-        }
-      }
-    } else {
+    if (name === undefined) {
       this.cache.clear()
+      return
+    }
+
+    if (version === undefined) {
+      this.cache.delete(name)
+      return
+    }
+
+    const promptVersions = this.getPromptCache(name)
+    promptVersions?.delete(version)
+
+    if (promptVersions?.size === 0) {
+      this.cache.delete(name)
     }
   }
 

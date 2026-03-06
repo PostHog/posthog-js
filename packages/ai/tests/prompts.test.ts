@@ -588,6 +588,13 @@ describe('Prompts', () => {
   })
 
   describe('clearCache()', () => {
+    it('should throw when clearing a specific version without a prompt name', () => {
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      expect(() => prompts.clearCache(undefined, 1)).toThrow("'version' requires 'name' to be provided")
+    })
+
     it('should clear a specific prompt from cache', async () => {
       mockFetch
         .mockResolvedValueOnce({
@@ -701,6 +708,38 @@ describe('Prompts', () => {
       await expect(prompts.get('test-prompt')).resolves.toBe('Latest prompt refreshed')
       await expect(prompts.get('test-prompt', { version: 1 })).resolves.toBe('Version 1 prompt refreshed')
       expect(mockFetch).toHaveBeenCalledTimes(4)
+    })
+
+    it('should clear only the requested cached version when name and version are provided', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, version: 2, prompt: 'Latest prompt' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, version: 1, prompt: 'Version 1 prompt' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, version: 1, prompt: 'Version 1 prompt refreshed' }),
+        })
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      await prompts.get('test-prompt')
+      await prompts.get('test-prompt', { version: 1 })
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+
+      prompts.clearCache('test-prompt', 1)
+
+      await expect(prompts.get('test-prompt')).resolves.toBe('Latest prompt')
+      await expect(prompts.get('test-prompt', { version: 1 })).resolves.toBe('Version 1 prompt refreshed')
+      expect(mockFetch).toHaveBeenCalledTimes(3)
     })
 
     it('should not clear cache entries for other prompt names that share the same prefix', async () => {
