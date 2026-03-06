@@ -1,4 +1,4 @@
 {
-    "installCommand": "cd ../.. && pnpm install && pnpm package && cd examples/example-next-app-router && pnpm install",
+    "installCommand": "cd ../.. && pnpm install && pnpm package && cd examples/example-next-app-router && pnpm install --frozen-lockfile=false",
     "framework": "nextjs"
 }
