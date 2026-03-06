@@ -1,4 +1,5 @@
 {
     "installCommand": "pnpm --dir=../.. install && pnpm --dir=../.. package --force && pnpm install",
+    "buildCommand": "pnpm build",
     "framework": "nextjs"
 }
