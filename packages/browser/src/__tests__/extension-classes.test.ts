@@ -2,6 +2,7 @@ import { PostHog } from '../posthog-core'
 import { PostHogConfig, RemoteConfig } from '../types'
 import { AllExtensions } from '../extensions/extension-bundles'
 import { Autocapture } from '../autocapture'
+import { PostHogFeatureFlags } from '../posthog-featureflags'
 import { SessionRecording } from '../extensions/replay/session-recording'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
@@ -88,7 +89,7 @@ describe('__extensionClasses enrollment', () => {
 
         const posthog = new PostHog()
 
-        expect(posthog._featureFlags).toBeDefined()
+        expect(posthog.featureFlags).toBeDefined()
         expect(posthog.toolbar).toBeDefined()
         expect(posthog.surveys).toBeDefined()
         expect(posthog.conversations).toBeDefined()
@@ -102,7 +103,7 @@ describe('__extensionClasses enrollment', () => {
 
         const posthog = new PostHog()
 
-        expect(posthog._featureFlags).toBeUndefined()
+        expect(posthog.featureFlags).toBeUndefined()
         expect(posthog.toolbar).toBeUndefined()
         expect(posthog.surveys).toBeUndefined()
         expect(posthog.conversations).toBeUndefined()
@@ -292,7 +293,7 @@ describe('extension lifecycle', () => {
             expect(callback).toHaveBeenCalledWith([], { isLoaded: false, error: 'Surveys module not available' })
         })
 
-        it('featureFlags getter returns a stub when extension is not loaded', async () => {
+        it('featureFlags is undefined when extension is not loaded', async () => {
             PostHog.__defaultExtensionClasses = {}
 
             const posthog = await createPosthogInstance(undefined, {
@@ -300,13 +301,7 @@ describe('extension lifecycle', () => {
                 capture_pageview: false,
             })
 
-            expect((posthog as any)._featureFlags).toBeUndefined()
-
-            // The getter should return a stub, not throw
-            const flags = posthog.featureFlags
-            expect(flags).toBeDefined()
-            expect(flags.getFeatureFlag('test')).toBeUndefined()
-            expect(flags.isFeatureEnabled('test')).toBeUndefined()
+            expect(posthog.featureFlags).toBeUndefined()
         })
 
         it('onFeatureFlags calls back with error when extension is not loaded', async () => {
@@ -356,8 +351,8 @@ describe('extension lifecycle', () => {
                 capture_pageview: false,
             })
 
-            expect((posthog as any)._featureFlags).toBeDefined()
-            expect(posthog.featureFlags).toBe((posthog as any)._featureFlags)
+            expect(posthog.featureFlags).toBeDefined()
+            expect(posthog.featureFlags).toBeInstanceOf(PostHogFeatureFlags)
         })
 
         it('bootstrap feature flags work through extension initialize()', async () => {

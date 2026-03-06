@@ -1,6 +1,6 @@
 import { init_as_module } from '../posthog-core'
 
-declare module '../types' {
+declare module '@posthog/types' {
     interface TreeShakeableConfig {
         optional: true
     }

@@ -21,6 +21,7 @@ import type { RequestCallback } from './request'
 import type { SurveyRenderReason } from './survey'
 import type { ToolbarParams } from './toolbar'
 import type { ExceptionAutoCaptureConfig } from './posthog-config'
+import type { TreeShakeable } from './tree-shakeable'
 
 /**
  * The PostHog instance interface.
@@ -202,7 +203,7 @@ export interface PostHog {
     /**
      * The feature flags instance. Provides access to feature flag override methods.
      */
-    featureFlags: {
+    featureFlags: TreeShakeable<{
         /**
          * Override feature flags on the client-side. Useful for testing/debugging.
          *
@@ -225,7 +226,7 @@ export interface PostHog {
          * @deprecated Use `overrideFeatureFlags` instead. This will be removed in a future version.
          */
         override(flags: boolean | string[] | Record<string, string | boolean>, suppressWarning?: boolean): void
-    }
+    }>
 
     /**
      * Get the value of a feature flag.
