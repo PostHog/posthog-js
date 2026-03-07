@@ -433,6 +433,45 @@ describe('Vercel AI SDK - Dual Version Support', () => {
     })
   })
 
+  describe('generateObject (undefined content)', () => {
+    it.each([
+      ['v2', createMockV2Model],
+      ['v3', createMockV3Model],
+    ])(
+      'should handle doGenerate returning undefined content in %s models',
+      async (_version, createModel) => {
+        const baseModel = createModel('gpt-4')
+        // Simulate what happens with generateObject: doGenerate returns no content field
+        baseModel.doGenerate = jest.fn().mockImplementation(async () => ({
+          text: undefined,
+          usage: _version === 'v3' ? v3TokenUsage(10, 5) : { inputTokens: 10, outputTokens: 5 },
+          // content is intentionally omitted - this is what causes the crash
+          response: { modelId: 'gpt-4' },
+          providerMetadata: {},
+          finishReason: _version === 'v3' ? { unified: 'stop' as const, raw: undefined } : ('stop' as const),
+          warnings: [],
+        }))
+
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: 'test-generate-object',
+        })
+
+        // This should not throw
+        const result = await model.doGenerate({
+          prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Return JSON' }] }],
+        } as any)
+
+        expect(result).toBeDefined()
+        expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+
+        const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+        expect(captureCall[0].properties['$ai_is_error']).toBeUndefined()
+        expect(captureCall[0].properties['$ai_output_choices']).toEqual([])
+      }
+    )
+  })
+
   describe('Shared behavior (both versions)', () => {
     it.each([
       ['v2', createMockV2Model],
