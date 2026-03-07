@@ -49,6 +49,20 @@ describe('PostHog Core', () => {
       ])
     })
 
+    it('consumes successful flush response bodies', async () => {
+      const textSpy = jest.fn(async () => 'ok')
+
+      mocks.fetch.mockResolvedValue({
+        status: 200,
+        text: textSpy,
+        json: async () => ({ status: 'ok' }),
+      })
+
+      posthog.capture('test-event-1')
+      await expect(posthog.flush()).resolves.not.toThrow()
+      expect(textSpy).toHaveBeenCalledTimes(1)
+    })
+
     it.each([400, 500])('responds with an error after retries with %s error', async (status) => {
       mocks.fetch.mockImplementation(() => {
         return Promise.resolve({
