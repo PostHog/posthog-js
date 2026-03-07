@@ -19,6 +19,7 @@ import {
   FeatureFlagErrorType,
   FeatureFlagOverrideOptions,
   FeatureFlagResult,
+  BaseFlagEvaluationOptions,
   GroupIdentifyMessage,
   IdentifyMessage,
   IPostHog,
@@ -30,6 +31,7 @@ import {
 } from './types'
 import {
   FeatureFlagsPoller,
+  createFeatureFlagEvaluationContext,
   type FeatureFlagEvaluationContext,
   RequiresServerEvaluation,
   InconclusiveMatchError,
@@ -740,14 +742,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private async _getFeatureFlagResult(
     key: string,
     distinctId: string,
-    options: {
-      groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
-      onlyEvaluateLocally?: boolean
-      sendFeatureFlagEvents?: boolean
-      disableGeoip?: boolean
-    } = {},
+    options: FlagEvaluationOptions = {},
     matchValue?: FeatureFlagValue
   ): Promise<FeatureFlagResult | undefined> {
     const sendFeatureFlagEvents = options.sendFeatureFlagEvents ?? true
@@ -767,29 +762,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       }
     }
 
-    const { groups, disableGeoip } = options
-    let { onlyEvaluateLocally, personProperties, groupProperties } = options
-
-    const adjustedProperties = this.addLocalPersonAndGroupProperties(
+    const { evaluationContext, groups, disableGeoip, onlyEvaluateLocally } = this.prepareFeatureFlagEvaluationContext(
       distinctId,
-      groups,
-      personProperties,
-      groupProperties
+      options
     )
-
-    personProperties = adjustedProperties.allPersonProperties
-    groupProperties = adjustedProperties.allGroupProperties
-    const evaluationContext = this.createFeatureFlagEvaluationContext(
-      distinctId,
-      groups,
-      personProperties,
-      groupProperties
-    )
-
-    // set defaults
-    if (onlyEvaluateLocally == undefined) {
-      onlyEvaluateLocally = this.options.strictLocalEvaluation ?? false
-    }
 
     let result: FeatureFlagResult | undefined = undefined
     let flagWasLocallyEvaluated = false
@@ -804,47 +780,33 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // Try local evaluation first
     const localEvaluationEnabled = this.featureFlagsPoller !== undefined
     if (localEvaluationEnabled) {
-      await this.featureFlagsPoller?.loadFeatureFlags()
-
-      const flag = this.featureFlagsPoller?.featureFlagsByKey[key]
-      if (flag) {
-        try {
-          const localResult = await this.featureFlagsPoller?.computeFlagAndPayloadLocally(flag, evaluationContext, {
-            matchValue,
-          })
-          if (localResult) {
-            flagWasLocallyEvaluated = true
-            const value = localResult.value
-            flagId = flag.id
-            flagReason = 'Evaluated locally'
-            result = {
-              key,
-              enabled: value !== false,
-              variant: typeof value === 'string' ? value : undefined,
-              payload: localResult.payload ?? undefined,
-            }
+      try {
+        const localResult = await this.featureFlagsPoller?.getFeatureFlagResult(key, evaluationContext, { matchValue })
+        if (localResult) {
+          flagWasLocallyEvaluated = true
+          const value = localResult.value
+          flagId = localResult.flag.id
+          flagReason = 'Evaluated locally'
+          result = {
+            key,
+            enabled: value !== false,
+            variant: typeof value === 'string' ? value : undefined,
+            payload: localResult.payload ?? undefined,
           }
-        } catch (e) {
-          if (e instanceof RequiresServerEvaluation || e instanceof InconclusiveMatchError) {
-            // Fall through to server evaluation
-            this._logger?.info(`${e.name} when computing flag locally: ${key}: ${e.message}`)
-          } else {
-            throw e
-          }
+        }
+      } catch (e) {
+        if (e instanceof RequiresServerEvaluation || e instanceof InconclusiveMatchError) {
+          // Fall through to server evaluation
+          this._logger?.info(`${e.name} when computing flag locally: ${key}: ${e.message}`)
+        } else {
+          throw e
         }
       }
     }
 
     // Fall back to remote evaluation if needed
     if (!flagWasLocallyEvaluated && !onlyEvaluateLocally) {
-      const flagsResponse = await super.getFeatureFlagDetailsStateless(
-        evaluationContext.distinctId,
-        evaluationContext.groups,
-        evaluationContext.personProperties,
-        evaluationContext.groupProperties,
-        disableGeoip,
-        [key]
-      )
+      const flagsResponse = await this.getFeatureFlagDetailsForEvaluationContext(evaluationContext, disableGeoip, [key])
 
       if (flagsResponse === undefined) {
         featureFlagError = FeatureFlagError.UNKNOWN_ERROR
@@ -1007,14 +969,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   async getFeatureFlag(
     key: string,
     distinctId: string,
-    options?: {
-      groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
-      onlyEvaluateLocally?: boolean
-      sendFeatureFlagEvents?: boolean
-      disableGeoip?: boolean
-    }
+    options?: FlagEvaluationOptions
   ): Promise<FeatureFlagValue | undefined> {
     const result = await this._getFeatureFlagResult(key, distinctId, {
       ...options,
@@ -1240,14 +1195,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   async isFeatureEnabled(
     key: string,
     distinctId: string,
-    options?: {
-      groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
-      onlyEvaluateLocally?: boolean
-      sendFeatureFlagEvents?: boolean
-      disableGeoip?: boolean
-    }
+    options?: FlagEvaluationOptions
   ): Promise<boolean | undefined> {
     const feat = await this.getFeatureFlag(key, distinctId, options)
     if (feat === undefined) {
@@ -1361,29 +1309,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return { featureFlags: {}, featureFlagPayloads: {} }
     }
 
-    const { groups, disableGeoip, flagKeys } = resolvedOptions || {}
-    let { onlyEvaluateLocally, personProperties, groupProperties } = resolvedOptions || {}
-
-    const adjustedProperties = this.addLocalPersonAndGroupProperties(
+    const flagKeys = resolvedOptions?.flagKeys
+    const { evaluationContext, disableGeoip, onlyEvaluateLocally } = this.prepareFeatureFlagEvaluationContext(
       resolvedDistinctId,
-      groups,
-      personProperties,
-      groupProperties
+      resolvedOptions
     )
-
-    personProperties = adjustedProperties.allPersonProperties
-    groupProperties = adjustedProperties.allGroupProperties
-    const evaluationContext = this.createFeatureFlagEvaluationContext(
-      resolvedDistinctId,
-      groups,
-      personProperties,
-      groupProperties
-    )
-
-    // set defaults
-    if (onlyEvaluateLocally == undefined) {
-      onlyEvaluateLocally = this.options.strictLocalEvaluation ?? false
-    }
 
     const localEvaluationResult = await this.featureFlagsPoller?.getAllFlagsAndPayloads(evaluationContext, flagKeys)
 
@@ -1397,11 +1327,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     if (fallbackToFlags && !onlyEvaluateLocally) {
-      const remoteEvaluationResult = await super.getFeatureFlagsAndPayloadsStateless(
-        evaluationContext.distinctId,
-        evaluationContext.groups,
-        evaluationContext.personProperties,
-        evaluationContext.groupProperties,
+      const remoteEvaluationResult = await this.getFeatureFlagsAndPayloadsForEvaluationContext(
+        evaluationContext,
         disableGeoip,
         flagKeys
       )
@@ -1791,34 +1718,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const onlyEvaluateLocally =
       sendFeatureFlagsOptions?.onlyEvaluateLocally ?? this.options.strictLocalEvaluation ?? false
 
-    // If onlyEvaluateLocally is true, only use local evaluation
-    if (onlyEvaluateLocally) {
-      if ((this.featureFlagsPoller?.featureFlags?.length || 0) > 0) {
-        const groupsWithStringValues: Record<string, string> = {}
-        for (const [key, value] of Object.entries(groups || {})) {
-          groupsWithStringValues[key] = String(value)
-        }
-
-        return await this.getAllFlags(distinctId, {
-          groups: groupsWithStringValues,
-          personProperties: finalPersonProperties,
-          groupProperties: finalGroupProperties,
-          disableGeoip,
-          onlyEvaluateLocally: true,
-          flagKeys,
-        })
-      } else {
-        // If onlyEvaluateLocally is true but we don't have local flags, return empty
-        return {}
-      }
-    }
-
-    // Prefer local evaluation if available (default behavior; I'd rather not penalize users who haven't updated to the new API but still want to use local evaluation)
-    if ((this.featureFlagsPoller?.featureFlags?.length || 0) > 0) {
-      const groupsWithStringValues: Record<string, string> = {}
-      for (const [key, value] of Object.entries(groups || {})) {
-        groupsWithStringValues[key] = String(value)
-      }
+    const localFlagsAvailable = (this.featureFlagsPoller?.featureFlags?.length || 0) > 0
+    if (localFlagsAvailable) {
+      const groupsWithStringValues = this.stringifyGroupValues(groups)
 
       return await this.getAllFlags(distinctId, {
         groups: groupsWithStringValues,
@@ -1828,6 +1730,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         onlyEvaluateLocally: true,
         flagKeys,
       })
+    }
+
+    // If local-only evaluation is requested but local definitions are unavailable, return empty.
+    if (onlyEvaluateLocally) {
+      return {}
     }
 
     // Fall back to remote evaluation if local evaluation is not available
@@ -1840,6 +1747,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         disableGeoip
       )
     ).flags
+  }
+
+  private stringifyGroupValues(groups?: Record<string, string | number>): Record<string, string> {
+    const stringifiedGroups: Record<string, string> = {}
+
+    for (const [key, value] of Object.entries(groups || {})) {
+      stringifiedGroups[key] = String(value)
+    }
+
+    return stringifiedGroups
   }
 
   private addLocalPersonAndGroupProperties(
@@ -1863,19 +1780,66 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return { allPersonProperties, allGroupProperties }
   }
 
-  private createFeatureFlagEvaluationContext(
+  private prepareFeatureFlagEvaluationContext(
     distinctId: string,
-    groups?: Record<string, string>,
-    personProperties?: Record<string, any>,
-    groupProperties?: Record<string, Record<string, any>>
-  ): FeatureFlagEvaluationContext {
-    return {
+    options: BaseFlagEvaluationOptions = {}
+  ): {
+    evaluationContext: FeatureFlagEvaluationContext
+    groups?: Record<string, string>
+    disableGeoip?: boolean
+    onlyEvaluateLocally: boolean
+  } {
+    const { groups, disableGeoip, onlyEvaluateLocally, personProperties, groupProperties } = options
+    const adjustedProperties = this.addLocalPersonAndGroupProperties(
       distinctId,
-      groups: groups || {},
-      personProperties: personProperties || {},
-      groupProperties: groupProperties || {},
-      evaluationCache: {},
+      groups,
+      personProperties,
+      groupProperties
+    )
+
+    const evaluationContext = createFeatureFlagEvaluationContext(
+      distinctId,
+      groups,
+      adjustedProperties.allPersonProperties,
+      adjustedProperties.allGroupProperties
+    )
+
+    return {
+      evaluationContext,
+      groups,
+      disableGeoip,
+      onlyEvaluateLocally: onlyEvaluateLocally ?? this.options.strictLocalEvaluation ?? false,
     }
+  }
+
+  private getFeatureFlagDetailsForEvaluationContext(
+    evaluationContext: FeatureFlagEvaluationContext,
+    disableGeoip?: boolean,
+    flagKeys?: string[]
+  ) {
+    return super.getFeatureFlagDetailsStateless(
+      evaluationContext.distinctId,
+      evaluationContext.groups,
+      evaluationContext.personProperties,
+      evaluationContext.groupProperties,
+      disableGeoip,
+      flagKeys
+    )
+  }
+
+  private getFeatureFlagsAndPayloadsForEvaluationContext(
+    evaluationContext: FeatureFlagEvaluationContext,
+    disableGeoip?: boolean,
+    flagKeys?: string[]
+  ) {
+    return super.getFeatureFlagsAndPayloadsStateless(
+      evaluationContext.distinctId,
+      evaluationContext.groups,
+      evaluationContext.personProperties,
+      evaluationContext.groupProperties,
+      disableGeoip,
+      flagKeys
+    )
   }
 
   /**

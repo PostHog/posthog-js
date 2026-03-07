@@ -66,6 +66,22 @@ export type FeatureFlagEvaluationContext = {
   evaluationCache: Record<string, FeatureFlagValue>
 }
 
+export function createFeatureFlagEvaluationContext(
+  distinctId: string,
+  groups: Record<string, string> = {},
+  personProperties: Record<string, any> = {},
+  groupProperties: Record<string, Record<string, any>> = {},
+  evaluationCache: Record<string, FeatureFlagValue> = {}
+): FeatureFlagEvaluationContext {
+  return {
+    distinctId,
+    groups,
+    personProperties,
+    groupProperties,
+    evaluationCache,
+  }
+}
+
 type ComputeFlagAndPayloadOptions = {
   matchValue?: FeatureFlagValue
   skipLoadCheck?: boolean
@@ -136,22 +152,6 @@ class FeatureFlagsPoller {
     }
   }
 
-  private createEvaluationContext(
-    distinctId: string,
-    groups: Record<string, string> = {},
-    personProperties: Record<string, any> = {},
-    groupProperties: Record<string, Record<string, any>> = {},
-    evaluationCache: Record<string, FeatureFlagValue> = {}
-  ): FeatureFlagEvaluationContext {
-    return {
-      distinctId,
-      groups,
-      personProperties,
-      groupProperties,
-      evaluationCache,
-    }
-  }
-
   async getFeatureFlag(
     key: string,
     distinctId: string,
@@ -162,30 +162,62 @@ class FeatureFlagsPoller {
     await this.loadFeatureFlags()
 
     let response: FeatureFlagValue | undefined = undefined
-    let featureFlag = undefined
 
     if (!this.loadedSuccessfullyOnce) {
       return response
     }
 
-    featureFlag = this.featureFlagsByKey[key]
-
-    if (featureFlag !== undefined) {
-      const evaluationContext = this.createEvaluationContext(distinctId, groups, personProperties, groupProperties)
-      try {
-        const result = await this.computeFlagAndPayloadLocally(featureFlag, evaluationContext)
-        response = result.value
+    const evaluationContext = createFeatureFlagEvaluationContext(distinctId, groups, personProperties, groupProperties)
+    try {
+      const result = await this.getFeatureFlagResult(key, evaluationContext, { skipLoadCheck: true })
+      response = result?.value
+      if (result !== undefined) {
         this.logMsgIfDebug(() => console.debug(`Successfully computed flag locally: ${key} -> ${response}`))
-      } catch (e) {
-        if (e instanceof RequiresServerEvaluation || e instanceof InconclusiveMatchError) {
-          this.logMsgIfDebug(() => console.debug(`${e.name} when computing flag locally: ${key}: ${e.message}`))
-        } else if (e instanceof Error) {
-          this.onError?.(new Error(`Error computing flag locally: ${key}: ${e}`))
-        }
+      }
+    } catch (e) {
+      if (e instanceof RequiresServerEvaluation || e instanceof InconclusiveMatchError) {
+        this.logMsgIfDebug(() => console.debug(`${e.name} when computing flag locally: ${key}: ${e.message}`))
+      } else if (e instanceof Error) {
+        this.onError?.(new Error(`Error computing flag locally: ${key}: ${e}`))
       }
     }
 
     return response
+  }
+
+  async getFeatureFlagResult(
+    key: string,
+    evaluationContext: FeatureFlagEvaluationContext,
+    options: ComputeFlagAndPayloadOptions = {}
+  ): Promise<
+    | {
+        flag: PostHogFeatureFlag
+        value: FeatureFlagValue
+        payload: JsonType | null
+      }
+    | undefined
+  > {
+    const { skipLoadCheck = false } = options
+
+    if (!skipLoadCheck) {
+      await this.loadFeatureFlags()
+    }
+
+    if (!this.loadedSuccessfullyOnce) {
+      return undefined
+    }
+
+    const flag = this.featureFlagsByKey[key]
+    if (!flag) {
+      return undefined
+    }
+
+    const result = await this.computeFlagAndPayloadLocally(flag, evaluationContext, {
+      ...options,
+      skipLoadCheck: true,
+    })
+
+    return { flag, ...result }
   }
 
   async getAllFlagsAndPayloads(
