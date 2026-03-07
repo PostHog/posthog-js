@@ -2678,6 +2678,10 @@ export class PostHog implements PostHogInterface {
             },
             1
         )
+
+        // Reload feature flags for the new anonymous user, just like identify()
+        // does when the distinct_id changes.
+        this.reloadFeatureFlags()
     }
 
     /**
