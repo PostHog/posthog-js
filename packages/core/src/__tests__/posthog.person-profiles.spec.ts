@@ -82,7 +82,7 @@ describe('PostHog Core - Person Profiles', () => {
       expect(body.batch[0].event).toBe('$create_alias')
     })
 
-    it('should set $process_person_profile to true after group()', async () => {
+    it('should NOT set $process_person_profile to true after group()', async () => {
       posthog.group('company', 'company-123')
       await waitForPromises()
 
@@ -91,10 +91,10 @@ describe('PostHog Core - Person Profiles', () => {
       await waitForPromises()
 
       const body = parseBody(mocks.fetch.mock.calls[0])
-      expect(body.batch[0].properties.$process_person_profile).toBe(true)
+      expect(body.batch[0].properties.$process_person_profile).toBe(false)
     })
 
-    it('should set $process_person_profile to true after groups()', async () => {
+    it('should NOT set $process_person_profile to true after groups()', async () => {
       posthog.groups({ company: 'company-123' })
       await waitForPromises()
 
@@ -103,7 +103,7 @@ describe('PostHog Core - Person Profiles', () => {
       await waitForPromises()
 
       const body = parseBody(mocks.fetch.mock.calls[0])
-      expect(body.batch[0].properties.$process_person_profile).toBe(true)
+      expect(body.batch[0].properties.$process_person_profile).toBe(false)
     })
 
     it('should allow groupIdentify() to work', async () => {
