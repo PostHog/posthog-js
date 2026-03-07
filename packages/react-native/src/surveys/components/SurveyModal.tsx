@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native'
 
 import { Cancel } from './Cancel'
 import { ConfirmationMessage } from './ConfirmationMessage'
-import { Questions } from './Surveys'
+import { Questions, SurveyResponses } from './Surveys'
 
 import { SurveyAppearanceTheme } from '../surveys-utils'
 import { Survey, SurveyQuestionDescriptionContentType } from '@posthog/core'
@@ -13,14 +13,26 @@ export type SurveyModalProps = {
   survey: Survey
   appearance: SurveyAppearanceTheme
   onShow: () => void
-  onClose: (submitted: boolean) => void
+  onClose: (submitted: boolean, responses?: SurveyResponses, surveySubmissionId?: string) => void
   androidKeyboardBehavior?: 'padding' | 'height'
 }
 
 export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
   const { survey, appearance, onShow, androidKeyboardBehavior = 'height' } = props
   const [isSurveySent, setIsSurveySent] = useState(false)
-  const onClose = useCallback(() => props.onClose(isSurveySent), [isSurveySent, props])
+  const responsesRef = useRef<SurveyResponses>({})
+  const submissionIdRef = useRef<string | undefined>(undefined)
+
+  const onClose = useCallback(
+    () => props.onClose(isSurveySent, responsesRef.current, submissionIdRef.current),
+    [isSurveySent, props]
+  )
+
+  const handleResponsesChange = useCallback((responses: SurveyResponses, surveySubmissionId: string) => {
+    responsesRef.current = responses
+    submissionIdRef.current = surveySubmissionId
+  }, [])
+
   const insets = useOptionalSafeAreaInsets()
 
   const [isVisible] = useState(true)
@@ -59,7 +71,12 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
                 ]}
               >
                 {!shouldShowConfirmation ? (
-                  <Questions survey={survey} appearance={appearance} onSubmit={() => setIsSurveySent(true)} />
+                  <Questions
+                    survey={survey}
+                    appearance={appearance}
+                    onSubmit={() => setIsSurveySent(true)}
+                    onResponsesChange={handleResponsesChange}
+                  />
                 ) : (
                   <ConfirmationMessage
                     appearance={appearance}

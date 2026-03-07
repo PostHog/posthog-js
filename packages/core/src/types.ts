@@ -669,6 +669,7 @@ export type Survey = {
   current_iteration?: number
   current_iteration_start_date?: string
   schedule?: SurveySchedule
+  enable_partial_responses?: boolean | null
 }
 
 export type SurveyActionType = {
