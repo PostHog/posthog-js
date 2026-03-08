@@ -125,6 +125,25 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
               file: fileData,
               mediaType: c.mediaType,
             }
+          } else if (c.type === 'image') {
+            // For image type, check if it's a data URL and redact if needed
+            let imageData: string
+
+            const contentData: unknown = c.data
+
+            if (contentData instanceof URL) {
+              imageData = contentData.toString()
+            } else if (isString(contentData)) {
+              // Redact base64 data URLs and raw base64 to prevent oversized events
+              imageData = redactBase64DataUrl(contentData)
+            } else {
+              imageData = 'raw images not supported'
+            }
+
+            return {
+              type: 'image',
+              image: imageData,
+            }
           } else if (c.type === 'reasoning') {
             return {
               type: 'reasoning',
