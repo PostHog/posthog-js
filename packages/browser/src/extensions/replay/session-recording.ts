@@ -261,7 +261,9 @@ export class SessionRecording implements Extension {
             return false
         }
         const config = typeof persistedConfig === 'object' ? persistedConfig : JSON.parse(persistedConfig)
-        const cacheTimestamp = config.cache_timestamp ?? 0
+        // default to now so that configs persisted by older SDK versions
+        // (which never set cache_timestamp) are treated as fresh
+        const cacheTimestamp = config.cache_timestamp ?? Date.now()
         return Date.now() - cacheTimestamp <= RECORDING_REMOTE_CONFIG_TTL_MS
     }
 
