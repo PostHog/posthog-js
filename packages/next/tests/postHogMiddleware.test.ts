@@ -385,10 +385,10 @@ describe('postHogMiddleware', () => {
             expect(mockCookiesSet).toHaveBeenCalledWith(COOKIE_NAME, expect.any(String), expect.any(Object))
         })
 
-        it('does not seed when no consent cookie and optOutByDefault is true', async () => {
+        it('does not seed when no consent cookie and seedAnonymousCookie is false', async () => {
             const middleware = postHogMiddleware({
                 apiKey: 'phc_test123',
-                optOutByDefault: true,
+                seedAnonymousCookie: false,
             })
             const req = new MockNextRequest('https://example.com/')
 
@@ -396,7 +396,7 @@ describe('postHogMiddleware', () => {
             expect(mockCookiesSet).not.toHaveBeenCalled()
         })
 
-        it('seeds when no consent cookie and optOutByDefault is false (default)', async () => {
+        it('seeds when no consent cookie and seedAnonymousCookie is true (default)', async () => {
             const middleware = postHogMiddleware({ apiKey: 'phc_test123' })
             const req = new MockNextRequest('https://example.com/')
 
