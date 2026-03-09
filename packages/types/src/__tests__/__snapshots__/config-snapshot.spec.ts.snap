@@ -193,6 +193,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
         "undefined",
         "false",
         "true"
+      ],
+      "serviceName": [
+        "undefined",
+        "string"
       ]
     }
   ],
