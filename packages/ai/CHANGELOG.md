@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 7.11.0
+
+### Minor Changes
+
+- [#3210](https://github.com/PostHog/posthog-js/pull/3210) [`2d9eb60`](https://github.com/PostHog/posthog-js/commit/2d9eb60f6e85aba5abb08d86fc74531b85fefe70) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Add version-specific `Prompts.clearCache(name, version)` support and switch prompt caching to structured name/version entries instead of string-encoded cache keys.
+  (2026-03-09)
+
 ## 7.10.0
 
 ### Minor Changes
