@@ -399,7 +399,7 @@ describe('Lazy SessionRecording', () => {
                 }
             })
 
-            it('treats legacy config without cache_timestamp as stale', () => {
+            it('treats legacy config without cache_timestamp as fresh', () => {
                 sessionRecording.stopRecording()
 
                 posthog.persistence?.register({
@@ -407,7 +407,7 @@ describe('Lazy SessionRecording', () => {
                 })
 
                 const result = sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']
-                expect(result).toBeUndefined()
+                expect(result?.enabled).toBe(true)
             })
 
             it('trusts stale config once recording has started (long-lived SPA)', () => {

@@ -730,7 +730,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Only check TTL if recording hasn't started yet
         // Once started, trust the config until a hard page load
         if (!this.isStarted) {
-            const cacheTimestamp = parsedConfig.cache_timestamp ?? 0
+            // default to now so that configs persisted by older SDK versions
+            // (which never set cache_timestamp) are treated as fresh
+            const cacheTimestamp = parsedConfig.cache_timestamp ?? Date.now()
             if (Date.now() - cacheTimestamp > RECORDING_REMOTE_CONFIG_TTL_MS) {
                 logger.info('persisted remote config for session recording is stale and will be ignored', {
                     cacheTimestamp,
