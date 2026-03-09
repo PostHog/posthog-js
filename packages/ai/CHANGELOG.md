@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 7.10.0
+
+### Minor Changes
+
+- [#3206](https://github.com/PostHog/posthog-js/pull/3206) [`43a81c5`](https://github.com/PostHog/posthog-js/commit/43a81c52e50230c63e69070fd370bf52c0d32457) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Add version-aware prompt fetching to the Prompts SDK so callers can request a specific published prompt version without colliding with the latest prompt cache entry.
+  (2026-03-09)
+
 ## 7.9.5
 
 ### Patch Changes

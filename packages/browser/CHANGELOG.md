@@ -1,5 +1,21 @@
 # posthog-js
 
+## 1.360.0
+
+### Patch Changes
+
+- [#3213](https://github.com/PostHog/posthog-js/pull/3213) [`db089fd`](https://github.com/PostHog/posthog-js/commit/db089fd81f35a9c5e825c43853a870a17c916ce0) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix(replay): treat legacy configs without cache_timestamp as fresh
+
+    Configs persisted by older SDK versions never include a cache_timestamp.
+    Defaulting to 0 treats them as always stale, causing the persisted config
+    to be cleared before start() runs — so recording never starts for
+    customers on older core SDK versions paired with the latest CDN recorder. (2026-03-09)
+
+- [#3207](https://github.com/PostHog/posthog-js/pull/3207) [`c5a37cb`](https://github.com/PostHog/posthog-js/commit/c5a37cbc248515ff5333f425ffa270136169d47f) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: PostHogFeatureFlags uses a TreeShakeable<T> type
+  (2026-03-09)
+- Updated dependencies [[`c5a37cb`](https://github.com/PostHog/posthog-js/commit/c5a37cbc248515ff5333f425ffa270136169d47f)]:
+    - @posthog/types@1.360.0
+
 ## 1.359.1
 
 ### Patch Changes

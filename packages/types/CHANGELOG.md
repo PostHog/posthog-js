@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.360.0
+
+### Minor Changes
+
+- [#3207](https://github.com/PostHog/posthog-js/pull/3207) [`c5a37cb`](https://github.com/PostHog/posthog-js/commit/c5a37cbc248515ff5333f425ffa270136169d47f) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Add TreeShakeable<T>
+  (2026-03-09)
+
 ## 1.359.1
 
 ## 1.359.0
