@@ -47,6 +47,7 @@ describe('PostHog Core', () => {
 
       mocks.fetch.mockImplementation((url) => {
         if (url.includes('/flags/?v=2')) {
+          expect(url).not.toContain('config=true')
           return Promise.resolve({
             status: 200,
             text: () => Promise.resolve('ok'),

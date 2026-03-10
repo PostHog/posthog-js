@@ -1,5 +1,6 @@
 ---
 'posthog-node': patch
+'@posthog/core': patch
 ---
 
-Set config=false to request only the necessary data
+Omit the config query parameter by default to request only the necessary data
