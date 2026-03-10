@@ -1,5 +1,15 @@
 # @posthog/next
 
+## 0.2.0
+
+### Minor Changes
+
+- [#3215](https://github.com/PostHog/posthog-js/pull/3215) [`429b389`](https://github.com/PostHog/posthog-js/commit/429b389a1f9d7d094ed682db29ad0d20e2889764) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: rename `optOutByDefault` to `seedAnonymousCookie`
+
+    Renamed to better express what the option does: to control whether the middleware seeds a cookie containing an anonymous identifier on first page load.
+
+    Migration: replace `optOutByDefault: true` with `seedAnonymousCookie: false`. (2026-03-10)
+
 ## 0.1.1
 
 ### Patch Changes
