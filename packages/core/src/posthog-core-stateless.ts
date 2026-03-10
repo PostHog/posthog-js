@@ -1174,12 +1174,6 @@ export abstract class PostHogCoreStateless {
     retryOptions?: Partial<RetriableOptions>,
     requestTimeout?: number
   ): Promise<PostHogFetchResponse> {
-    ;(AbortSignal as any).timeout ??= function timeout(ms: number) {
-      const ctrl = new AbortController()
-      setTimeout(() => ctrl.abort(), ms)
-      return ctrl.signal
-    }
-
     const body = options.body ? options.body : ''
     let reqByteLength = -1
     try {
@@ -1199,15 +1193,21 @@ export abstract class PostHogCoreStateless {
 
     return await retriable(
       async () => {
+        const ctrl = new AbortController()
+        const timeoutMs = requestTimeout ?? this.requestTimeout
+        const timer = safeSetTimeout(() => ctrl.abort(), timeoutMs)
+
         let res: PostHogFetchResponse | null = null
         try {
           res = await this.fetch(url, {
-            signal: (AbortSignal as any).timeout(requestTimeout ?? this.requestTimeout),
+            signal: ctrl.signal,
             ...options,
           })
         } catch (e) {
           // fetch will only throw on network errors or on timeouts
           throw new PostHogFetchNetworkError(e)
+        } finally {
+          clearTimeout(timer)
         }
         // If we're in no-cors mode, we can't access the response status
         // We only throw on HTTP errors if we're not in no-cors mode
@@ -1259,16 +1259,21 @@ export abstract class PostHogCoreStateless {
       }
     }
 
-    return Promise.race([
-      new Promise<void>((_, reject) => {
-        safeSetTimeout(() => {
-          this._logger.error('Timed out while shutting down PostHog')
-          hasTimedOut = true
-          reject('Timeout while shutting down PostHog. Some events may not have been sent.')
-        }, shutdownTimeoutMs)
-      }),
-      doShutdown(),
-    ])
+    let timeoutHandle: ReturnType<typeof safeSetTimeout> | undefined
+    try {
+      return await Promise.race([
+        new Promise<void>((_, reject) => {
+          timeoutHandle = safeSetTimeout(() => {
+            this._logger.error('Timed out while shutting down PostHog')
+            hasTimedOut = true
+            reject('Timeout while shutting down PostHog. Some events may not have been sent.')
+          }, shutdownTimeoutMs)
+        }),
+        doShutdown(),
+      ])
+    } finally {
+      clearTimeout(timeoutHandle)
+    }
   }
 
   /**
