@@ -3,6 +3,10 @@ name: ES5 support check
 on:
   - pull_request
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ssr:
     name: Build and check ES5/ES6 support
