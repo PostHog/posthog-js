@@ -462,7 +462,7 @@ export abstract class PostHogCoreStateless {
     personProperties: Record<string, string> = {},
     groupProperties: Record<string, Record<string, string>> = {},
     extraPayload: Record<string, any> = {},
-    fetchConfig: boolean = true
+    fetchConfig: boolean = false
   ): Promise<GetFlagsResult> {
     await this._initPromise
 

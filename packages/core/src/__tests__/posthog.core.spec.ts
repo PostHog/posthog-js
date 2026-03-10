@@ -46,7 +46,7 @@ describe('PostHog Core', () => {
       }
 
       mocks.fetch.mockImplementation((url) => {
-        if (url.includes('/flags/?v=2&config=true')) {
+        if (url.includes('/flags/?v=2')) {
           return Promise.resolve({
             status: 200,
             text: () => Promise.resolve('ok'),
@@ -91,7 +91,7 @@ describe('PostHog Core', () => {
         featureFlagPayloads: { 'test-flag': { a: 'payload' } },
       }
       mocks.fetch.mockImplementation((url) => {
-        if (url.includes('/flags/?v=2&config=true')) {
+        if (url.includes('/flags/?v=2')) {
           return Promise.resolve({
             status: 200,
             text: () => Promise.resolve('ok'),
@@ -110,7 +110,7 @@ describe('PostHog Core', () => {
 
     it('should handle error response', async () => {
       mocks.fetch.mockImplementation((url) => {
-        if (url.includes('/flags/?v=2&config=true')) {
+        if (url.includes('/flags/?v=2')) {
           return Promise.resolve({
             status: 400,
             text: () => Promise.resolve('error'),
@@ -131,7 +131,7 @@ describe('PostHog Core', () => {
     it('should handle network errors', async () => {
       const emitSpy = jest.spyOn(posthog['_events'], 'emit')
       mocks.fetch.mockImplementation((url) => {
-        if (url.includes('/flags/?v=2&config=true')) {
+        if (url.includes('/flags/?v=2')) {
           return Promise.reject(new Error('Network error'))
         }
         return errorAPIResponse
