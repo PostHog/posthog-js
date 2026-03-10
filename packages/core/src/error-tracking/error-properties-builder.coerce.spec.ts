@@ -173,7 +173,7 @@ describe('ErrorPropertiesBuilder', () => {
       const exception = coerceInput(event, syntheticError)
       expect(exception).toMatchObject({
         type: 'MouseEvent',
-        value: 'MouseEvent captured as exception with keys: [object has no keys]',
+        value: "'MouseEvent' captured as exception with keys: [object has no keys]",
         stack: syntheticError.stack,
         synthetic: true,
       })
