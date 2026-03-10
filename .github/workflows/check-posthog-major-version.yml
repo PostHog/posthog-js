@@ -72,6 +72,9 @@ jobs:
       - name: Remove outdated comments
         if: always()
         uses: actions/github-script@v7
+        env:
+          NO_CHANGESETS: ${{ steps.check-major.outputs.no_changesets }}
+          MAJOR_BUMP_FOUND: ${{ steps.check-major.outputs.major_bump_found }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -81,8 +84,8 @@ jobs:
               issue_number: context.issue.number,
             });
             
-            const noChangesetFound = '${{ steps.check-major.outputs.no_changesets }}' === 'true';
-            const majorBumpFound = '${{ steps.check-major.outputs.major_bump_found }}' === 'true';
+            const noChangesetFound = process.env.NO_CHANGESETS === 'true';
+            const majorBumpFound = process.env.MAJOR_BUMP_FOUND === 'true';
             
             // If there ARE changesets now, remove the "no changeset" comment
             if (!noChangesetFound) {
@@ -121,12 +124,14 @@ jobs:
       - name: Comment on PR
         if: failure() && steps.check-major.outputs.major_bump_found == 'true'
         uses: actions/github-script@v7
+        env:
+          CHANGESET_FILE: ${{ steps.check-major.outputs.changeset_file }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const comment = `## ⚠️ Major Version Bump Detected for posthog-js
             
-            This PR contains a changeset with a **major version bump** for \`posthog-js\` in file: \`${{ steps.check-major.outputs.changeset_file }}\`
+            This PR contains a changeset with a **major version bump** for \`posthog-js\` in file: \`${process.env.CHANGESET_FILE}\`
             
             ### Why is this blocked?
             The \`posthog-js\` package is autoloaded by clients and **must not have breaking changes**. Major version bumps would break existing client integrations.
