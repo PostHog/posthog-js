@@ -48,6 +48,16 @@ jobs:
         with:
           package-name: posthog-js
 
+      - name: Restore Turbo cache
+        if: ${{ steps.is-affected.outputs.is-affected == 'true' }}
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-integration-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-integration-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-integration-
+
       - name: Build packages
         if: ${{ steps.is-affected.outputs.is-affected == 'true' }}
         run: pnpm build
