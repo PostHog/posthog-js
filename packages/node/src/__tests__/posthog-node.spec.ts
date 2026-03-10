@@ -645,6 +645,59 @@ describe('PostHog Node.js', () => {
     })
   })
 
+  describe('request timeout', () => {
+    beforeEach(() => {
+      jest.useRealTimers()
+    })
+
+    afterEach(() => {
+      jest.useFakeTimers()
+    })
+
+    it('should abort a slow fetch after requestTimeout', async () => {
+      // A fetch that hangs forever but respects the AbortSignal — just like a real
+      // server that never responds. When our AbortController fires, the signal's
+      // abort event rejects the promise, mimicking real fetch abort behavior.
+      const hangingFetch = jest.fn((_url: string, init?: { signal?: AbortSignal }) => {
+        return new Promise<Response>((_resolve, reject) => {
+          if (init?.signal?.aborted) {
+            reject(new DOMException('The operation was aborted', 'AbortError'))
+            return
+          }
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('The operation was aborted', 'AbortError'))
+          })
+        })
+      })
+
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetch: hangingFetch as any,
+        fetchRetryCount: 0,
+        flushAt: 100, // high value so capture() doesn't auto-flush
+        flushInterval: 0,
+        requestTimeout: 10,
+        disableCompression: true,
+      })
+
+      const errors: any[] = []
+      ph.on('error', (err: any) => errors.push(err))
+
+      ph.capture({ event: 'test-event', distinctId: '123' })
+
+      // shutdown() joins the promise queue (waits for capture's async prepareEventMessage),
+      // then flushes. The flush calls fetchWithRetry → hangingFetch → abort fires after 10ms.
+      // _flush() catch emits 'error' (posthog-core-stateless.ts:1159) and re-throws.
+      // doShutdown() catches the PostHogFetchError and returns cleanly.
+      await ph.shutdown()
+
+      expect(hangingFetch).toHaveBeenCalled()
+      expect(errors).toHaveLength(1)
+      expect(errors[0].name).toBe('PostHogFetchNetworkError')
+      expect(errors[0].error.name).toBe('AbortError')
+    }, 10000)
+  })
+
   describe('groupIdentify', () => {
     it('should identify group with unique id', async () => {
       posthog.groupIdentify({ groupType: 'posthog', groupKey: 'team-1', properties: { analytics: true } })
