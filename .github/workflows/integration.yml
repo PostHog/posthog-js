@@ -1,5 +1,9 @@
 name: Playwright Integration Tests
 on: [pull_request]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 env:
   POSTHOG_PROJECT_API_KEY: "${{ secrets.POSTHOG_PROJECT_API_KEY }}"
   POSTHOG_PERSONAL_API_KEY: "${{ secrets.POSTHOG_PERSONAL_API_KEY }}"
@@ -35,10 +39,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .turbo/cache
-          key: turbo-integration-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
-          restore-keys: |
-            turbo-integration-${{ hashFiles('pnpm-lock.yaml') }}-
-            turbo-integration-
+          key: turbo-integration-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: turbo-integration-
 
       - name: Build packages
         if: steps.is-affected.outputs.is-affected == 'true'
@@ -102,10 +104,8 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .turbo/cache
-          key: turbo-integration-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
-          restore-keys: |
-            turbo-integration-${{ hashFiles('pnpm-lock.yaml') }}-
-            turbo-integration-
+          key: turbo-integration-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: turbo-integration-
 
       - name: Build packages
         if: needs.setup.outputs.is-affected == 'true'
