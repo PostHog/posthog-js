@@ -12,6 +12,7 @@
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "test:unit": "jest",
+    "test:edge-compat": "jest --env @edge-runtime/jest-environment --no-coverage",
     "prebuild": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/version.ts",
     "build": "rslib build",
     "dev": "rslib build -w",
@@ -40,6 +41,7 @@
     "@posthog/core": "workspace:*"
   },
   "devDependencies": {
+    "@edge-runtime/jest-environment": "^4.0.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
     "@types/express": "^5.0.5",
