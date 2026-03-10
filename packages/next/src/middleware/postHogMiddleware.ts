@@ -43,10 +43,17 @@ export interface PostHogMiddlewareOptions {
      */
     response?: NextResponse
     /**
-     * When true, skips cookie seeding when no consent cookie is present.
-     * Mirrors the client-side `opt_out_capturing_by_default` option.
+     * Whether the middleware seeds the anonymous identity cookie on first visit.
+     *
+     * When `true` (the default), the middleware generates a UUIDv7 anonymous ID
+     * and sets the `ph_<key>_posthog` cookie on the first request so that server
+     * and client share the same identity from the first render.
+     *
+     * Set to `false` if you need user consent before setting any cookies. The
+     * middleware will not set the cookie and it will only be created by the
+     * client SDK.
      */
-    optOutByDefault?: boolean
+    seedAnonymousCookie?: boolean
     /**
      * Custom name for the consent cookie.
      * Mirrors the client-side `consent_persistence_name` option.
@@ -139,8 +146,9 @@ export function postHogMiddleware(config: PostHogMiddlewareOptions = {}) {
         const state = readPostHogCookie(request.cookies, apiKey)
         const response = config.response ?? NextResponse.next()
 
+        const shouldSeed = config.seedAnonymousCookie ?? true
         const optedOut = isOptedOut(request.cookies, apiKey, {
-            opt_out_capturing_by_default: config.optOutByDefault,
+            opt_out_capturing_by_default: !shouldSeed,
             consent_persistence_name: config.consentCookieName,
             opt_out_capturing_cookie_prefix: config.consentCookiePrefix,
         })

@@ -404,14 +404,14 @@ The package applies these defaults to ensure the server can read consent:
 }
 ```
 
-### Opt-out by default
+### Requiring consent before cookies
 
-If your app requires consent before any tracking (common in GDPR regions), configure the middleware:
+If your app requires user consent before setting any cookies, disable anonymous cookie seeding in the middleware:
 
 ```ts
 export default postHogMiddleware({
     proxy: true,
-    optOutByDefault: true,
+    seedAnonymousCookie: false,
 })
 ```
 
@@ -421,7 +421,7 @@ And on the client:
 <PostHogProvider clientOptions={{ opt_out_capturing_by_default: true }}>
 ```
 
-When opt-out is the default, no identity cookie is seeded and no flags are evaluated until the user explicitly opts in.
+With this configuration, no identity cookie is seeded and no flags are evaluated until the user explicitly opts in.
 
 ---
 
@@ -480,11 +480,11 @@ export const config = {
 
 ### Middleware Consent Options
 
-| Option                | Type      | Default                    | Description                                                              |
-| --------------------- | --------- | -------------------------- | ------------------------------------------------------------------------ |
-| `optOutByDefault`     | `boolean` | `false`                    | Skip cookie seeding when no consent cookie exists.                       |
-| `consentCookieName`   | `string`  | `__ph_opt_in_out_<apiKey>` | Custom consent cookie name. Mirrors `consent_persistence_name`.          |
-| `consentCookiePrefix` | `string`  | `__ph_opt_in_out_`         | Custom consent cookie prefix. Mirrors `opt_out_capturing_cookie_prefix`. |
+| Option                | Type      | Default                    | Description                                                                                                  |
+| --------------------- | --------- | -------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `seedAnonymousCookie` | `boolean` | `true`                     | Seed the anonymous identity cookie on first visit. Set to `false` to require consent before setting cookies. |
+| `consentCookieName`   | `string`  | `__ph_opt_in_out_<apiKey>` | Custom consent cookie name. Mirrors `consent_persistence_name`.                                              |
+| `consentCookiePrefix` | `string`  | `__ph_opt_in_out_`         | Custom consent cookie prefix. Mirrors `opt_out_capturing_cookie_prefix`.                                     |
 
 ### Full Middleware Options
 
@@ -493,7 +493,7 @@ interface PostHogMiddlewareOptions {
     apiKey?: string // defaults to NEXT_PUBLIC_POSTHOG_KEY
     cookieMaxAgeSeconds?: number // default: 365 days (31,536,000 seconds)
     response?: NextResponse // compose with existing middleware
-    optOutByDefault?: boolean // default: false
+    seedAnonymousCookie?: boolean // default: true
     consentCookieName?: string // custom consent cookie name
     consentCookiePrefix?: string // custom consent cookie prefix
     proxy?: boolean | PostHogProxyOptions // enable API proxying
