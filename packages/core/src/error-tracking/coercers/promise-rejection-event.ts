@@ -4,8 +4,9 @@ import { CoercingContext, ErrorTrackingCoercer, ExceptionLike } from '../types'
 type EventWithDetailReason = Event & { detail: { reason: unknown } }
 
 // Web only
-export class PromiseRejectionEventCoercer
-  implements ErrorTrackingCoercer<PromiseRejectionEvent | EventWithDetailReason> {
+export class PromiseRejectionEventCoercer implements ErrorTrackingCoercer<
+  PromiseRejectionEvent | EventWithDetailReason
+> {
   match(err: unknown): err is PromiseRejectionEvent | EventWithDetailReason {
     return isBuiltin(err, 'PromiseRejectionEvent') || this.isCustomEventWrappingRejection(err)
   }
@@ -49,12 +50,7 @@ export class PromiseRejectionEventCoercer
       // the CustomEvent's `detail` attribute, since they're not part of CustomEvent's spec
       // see https://developer.mozilla.org/en-US/docs/Web/API/CustomEvent and
       // https://github.com/getsentry/sentry-javascript/issues/2380
-      if (
-        'detail' in error &&
-        error.detail != null &&
-        typeof error.detail === 'object' &&
-        'reason' in error.detail
-      ) {
+      if ('detail' in error && error.detail != null && typeof error.detail === 'object' && 'reason' in error.detail) {
         return error.detail.reason
       }
     } catch {
