@@ -45,9 +45,9 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           disableGeoip?: boolean;
           distinctId: string;
           event: string;
-          groups?: any;
+          groups?: string;
           host: string;
-          properties?: any;
+          properties?: string;
           sendFeatureFlags?: boolean;
           timestamp?: number;
           uuid?: string;
@@ -59,7 +59,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "action",
         "internal",
         {
-          additionalProperties?: any;
+          additionalProperties?: string;
           apiKey: string;
           distinctId?: string;
           errorMessage: string;
@@ -164,7 +164,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           groupKey: string;
           groupType: string;
           host: string;
-          properties?: any;
+          properties?: string;
         },
         any,
         Name
@@ -177,7 +177,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           disableGeoip?: boolean;
           distinctId: string;
           host: string;
-          properties?: any;
+          properties?: string;
         },
         any,
         Name

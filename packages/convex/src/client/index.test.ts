@@ -124,7 +124,7 @@ describe('captureException', () => {
     expect(args.errorName).toBe('TypeError')
     expect(args.errorStack).toBeDefined()
     expect(args.distinctId).toBe('user-1')
-    expect(args.additionalProperties).toEqual({ context: 'signup' })
+    expect(args.additionalProperties).toBe(JSON.stringify({ context: 'signup' }))
   })
 
   test('handles string errors', async () => {
@@ -142,6 +142,145 @@ describe('captureException', () => {
     expect(args.errorMessage).toBe('string error')
     expect(args.errorStack).toBeUndefined()
     expect(args.errorName).toBeUndefined()
+  })
+})
+
+describe('$-prefixed property serialization', () => {
+  test('serializes properties with $-prefixed keys as JSON strings', async () => {
+    const component = { lib: { capture: 'capture_ref' } }
+    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const ctx = mockSchedulerCtx()
+
+    await posthog.capture(ctx as never, {
+      distinctId: 'user-1',
+      event: '$ai_generation',
+      properties: {
+        $ai_model: 'gpt-4o-mini',
+        $ai_provider: 'openai',
+        $ai_input_tokens: 10,
+        $ai_output_tokens: 20,
+      },
+    })
+
+    const [, , args] = ctx.scheduler.runAfter.mock.calls[0]
+    expect(typeof args.properties).toBe('string')
+    expect(JSON.parse(args.properties)).toEqual({
+      $ai_model: 'gpt-4o-mini',
+      $ai_provider: 'openai',
+      $ai_input_tokens: 10,
+      $ai_output_tokens: 20,
+    })
+  })
+
+  test('serializes identify properties with $set and $set_once', async () => {
+    const component = { lib: { identify: 'identify_ref' } }
+    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const ctx = mockSchedulerCtx()
+
+    await posthog.identify(ctx as never, {
+      distinctId: 'user-1',
+      properties: {
+        $set: { name: 'Alice' },
+        $set_once: { created_at: '2026-01-01' },
+      },
+    })
+
+    const [, , args] = ctx.scheduler.runAfter.mock.calls[0]
+    expect(typeof args.properties).toBe('string')
+    expect(JSON.parse(args.properties)).toEqual({
+      $set: { name: 'Alice' },
+      $set_once: { created_at: '2026-01-01' },
+    })
+  })
+
+  test('passes undefined when properties are not provided', async () => {
+    const component = { lib: { capture: 'capture_ref' } }
+    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const ctx = mockSchedulerCtx()
+
+    await posthog.capture(ctx as never, {
+      distinctId: 'user-1',
+      event: 'simple_event',
+    })
+
+    const [, , args] = ctx.scheduler.runAfter.mock.calls[0]
+    expect(args.properties).toBeUndefined()
+  })
+
+  test('preserves nested objects and arrays through serialization', async () => {
+    const component = { lib: { capture: 'capture_ref' } }
+    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const ctx = mockSchedulerCtx()
+
+    const properties = {
+      $ai_input: [{ role: 'user', content: 'Hello' }],
+      $ai_output_choices: [{ role: 'assistant', content: 'Hi!' }],
+      nested: { deep: { value: true } },
+      numbers: [1, 2.5, -3],
+      nullValue: null,
+      boolValue: false,
+    }
+
+    await posthog.capture(ctx as never, {
+      distinctId: 'user-1',
+      event: '$ai_generation',
+      properties,
+    })
+
+    const [, , args] = ctx.scheduler.runAfter.mock.calls[0]
+    expect(JSON.parse(args.properties)).toEqual(properties)
+  })
+
+  test('serializes groups with string and number values', async () => {
+    const component = { lib: { capture: 'capture_ref' } }
+    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const ctx = mockSchedulerCtx()
+
+    await posthog.capture(ctx as never, {
+      distinctId: 'user-1',
+      event: 'test',
+      groups: { company: 'acme', project_id: 42 },
+    })
+
+    const [, , args] = ctx.scheduler.runAfter.mock.calls[0]
+    expect(typeof args.groups).toBe('string')
+    expect(JSON.parse(args.groups)).toEqual({ company: 'acme', project_id: 42 })
+  })
+
+  test('serializes captureException additionalProperties', async () => {
+    const component = { lib: { captureException: 'captureException_ref' } }
+    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const ctx = mockSchedulerCtx()
+
+    await posthog.captureException(ctx as never, {
+      error: new Error('test'),
+      distinctId: 'user-1',
+      additionalProperties: { $ai_trace_id: 'trace-123', page: '/checkout' },
+    })
+
+    const [, , args] = ctx.scheduler.runAfter.mock.calls[0]
+    expect(typeof args.additionalProperties).toBe('string')
+    expect(JSON.parse(args.additionalProperties)).toEqual({
+      $ai_trace_id: 'trace-123',
+      page: '/checkout',
+    })
+  })
+
+  test('handles empty objects', async () => {
+    const component = { lib: { capture: 'capture_ref' } }
+    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const ctx = mockSchedulerCtx()
+
+    await posthog.capture(ctx as never, {
+      distinctId: 'user-1',
+      event: 'test',
+      properties: {},
+      groups: {},
+    })
+
+    const [, , args] = ctx.scheduler.runAfter.mock.calls[0]
+    expect(JSON.parse(args.properties)).toEqual({})
+    expect(JSON.parse(args.groups)).toEqual({})
   })
 })
 
@@ -195,7 +334,7 @@ describe('beforeSend', () => {
     })
 
     const [, , args] = ctx.scheduler.runAfter.mock.calls[0]
-    expect(args.properties).toEqual({ page: '/home', injected: true })
+    expect(args.properties).toBe(JSON.stringify({ page: '/home', injected: true }))
   })
 
   test('chains multiple beforeSend functions', async () => {
@@ -220,7 +359,7 @@ describe('beforeSend', () => {
     })
 
     const [, , args] = ctx.scheduler.runAfter.mock.calls[0]
-    expect(args.properties).toEqual({ first: true, second: true })
+    expect(args.properties).toBe(JSON.stringify({ first: true, second: true }))
   })
 
   test('short-circuits chain when a function returns null', async () => {
