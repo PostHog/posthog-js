@@ -12,7 +12,8 @@ function parseProperties(json: string | undefined): Record<string, unknown> | un
   if (!json) return undefined
   try {
     return JSON.parse(json)
-  } catch {
+  } catch (e) {
+    console.warn('[PostHog] Failed to parse serialized properties, dropping them.', e)
     return undefined
   }
 }
