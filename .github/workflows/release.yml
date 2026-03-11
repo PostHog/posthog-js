@@ -231,6 +231,13 @@ jobs:
               if: steps.check-package-version.outputs.is-new-version == 'true'
               run: pnpm install --frozen-lockfile && pnpm build
 
+            - name: Publish ${{ matrix.package.name }} to NPM
+              if: steps.check-package-version.outputs.is-new-version == 'true'
+              run: |
+                  pnpm publish --filter=${{ matrix.package.name }} --access public
+              env:
+                  NPM_CONFIG_PROVENANCE: true
+
             - name: Tag repository with package_name and package_version
               if: steps.check-package-version.outputs.is-new-version == 'true'
               env:
@@ -241,13 +248,6 @@ jobs:
                   gh api "repos/${{ github.repository }}/git/refs" \
                     -f "ref=refs/tags/$PACKAGE_NAME@$COMMITTED_VERSION" \
                     -f "sha=$(git rev-parse HEAD)"
-
-            - name: Publish ${{ matrix.package.name }} to NPM
-              if: steps.check-package-version.outputs.is-new-version == 'true'
-              run: |
-                  pnpm publish --filter=${{ matrix.package.name }} --access public
-              env:
-                  NPM_CONFIG_PROVENANCE: true
 
             - name: Create GitHub release
               if: steps.check-package-version.outputs.is-new-version == 'true'
