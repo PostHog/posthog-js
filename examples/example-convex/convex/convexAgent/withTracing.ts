@@ -24,7 +24,6 @@ const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
 export const generate = action({
   args: {
     prompt: v.string(),
-    threadId: v.optional(v.string()),
     distinctId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -40,9 +39,7 @@ export const generate = action({
       instructions: 'You are a helpful support agent. Answer questions concisely.',
     })
 
-    const { thread } = args.threadId
-      ? await supportAgent.continueThread(ctx, { threadId: args.threadId })
-      : await supportAgent.createThread(ctx, {})
+    const { thread } = await supportAgent.createThread(ctx, {})
 
     const result = await thread.generateText({ prompt: args.prompt })
 
@@ -50,7 +47,6 @@ export const generate = action({
 
     return {
       text: result.text,
-      threadId: thread.threadId,
       usage: result.totalUsage,
     }
   },

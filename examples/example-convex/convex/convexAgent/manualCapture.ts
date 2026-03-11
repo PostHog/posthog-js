@@ -14,13 +14,10 @@ const supportAgent = new Agent(components.agent, {
 export const generate = action({
   args: {
     prompt: v.string(),
-    threadId: v.optional(v.string()),
     distinctId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { thread } = args.threadId
-      ? await supportAgent.continueThread(ctx, { threadId: args.threadId })
-      : await supportAgent.createThread(ctx, {})
+    const { thread } = await supportAgent.createThread(ctx, {})
 
     const startTime = Date.now()
 
@@ -52,7 +49,6 @@ export const generate = action({
         // Core identification
         $ai_provider: usageData.provider,
         $ai_model: usageData.model,
-        $ai_trace_id: thread.threadId,
         $ai_span_name: usageData.agentName,
 
         // Token usage (from totalUsage to account for multi-step tool calls)
@@ -77,7 +73,6 @@ export const generate = action({
 
     return {
       text: result.text,
-      threadId: thread.threadId,
       usage: result.totalUsage,
     }
   },
