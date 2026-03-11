@@ -4,7 +4,7 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-pnpmfileChecksum: sha256-N3riA/tbAnNXqNYCauSgZTrb8uBs1MMWnJDTJCSRm8c=
+pnpmfileChecksum: sha256-yVJZ6vhbVglHX96LCyXF5k3CRZo/MEv/K0owx+7kTTo=
 
 importers:
 
@@ -456,8 +456,8 @@ packages:
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
   '@posthog/convex@file:../../target/posthog-convex.tgz':
-    resolution: {integrity: sha512-rpAo/UpmdmS2U8lrYHLJ/94niBUc7ZPHNJPZxX3MjiREeX6Lsi4X9QImWMWNnRAOMpVYumV5mgm3azY/i9uWBg==, tarball: file:../../target/posthog-convex.tgz}
-    version: 0.0.0
+    resolution: {integrity: sha512-eCRbDZv7N+V1xAzUqHZykiV8MZdO4ymT9NrPbURSXvaDmxI46O3ttbtxlJRu7iKWbJdciUliatZ+BU3BjAjCgA==, tarball: file:../../target/posthog-convex.tgz}
+    version: 0.1.8
     peerDependencies:
       convex: ^1.31.7
 
