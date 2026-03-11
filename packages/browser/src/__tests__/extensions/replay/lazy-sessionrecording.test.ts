@@ -1228,7 +1228,7 @@ describe('Lazy SessionRecording', () => {
                 // which rotates the session in the session manager and then fires the
                 // _onSessionIdCallback synchronously.
                 jest.useFakeTimers().setSystemTime(new Date(rotationTimestamp))
-                const { sessionId: newSessionId, windowId: newWindowId } =
+                const { sessionId: newSessionId } =
                     sessionManager.checkAndGetSessionAndWindowId(false, rotationTimestamp)
                 expect(newSessionId).toEqual(rotatedSessionId)
                 expect(newSessionId).not.toEqual(firstSessionId)
