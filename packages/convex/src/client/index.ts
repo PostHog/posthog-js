@@ -135,8 +135,8 @@ export class PostHog {
       host: this.host,
       distinctId: result.distinctId,
       event: result.event,
-      properties: result.properties,
-      groups: args.groups,
+      properties: result.properties ? JSON.stringify(result.properties) : undefined,
+      groups: args.groups ? JSON.stringify(args.groups) : undefined,
       sendFeatureFlags: args.sendFeatureFlags,
       timestamp: args.timestamp?.getTime(),
       uuid: args.uuid,
@@ -168,7 +168,7 @@ export class PostHog {
       apiKey: this.apiKey,
       host: this.host,
       distinctId: result.distinctId,
-      properties: result.properties,
+      properties: result.properties ? JSON.stringify(result.properties) : undefined,
       disableGeoip: args.disableGeoip,
     })
   }
@@ -195,7 +195,7 @@ export class PostHog {
       host: this.host,
       groupType: args.groupType,
       groupKey: args.groupKey,
-      properties: result.properties,
+      properties: result.properties ? JSON.stringify(result.properties) : undefined,
       distinctId: args.distinctId,
       disableGeoip: args.disableGeoip,
     })
@@ -256,7 +256,7 @@ export class PostHog {
       errorMessage: message,
       errorStack: stack,
       errorName: name,
-      additionalProperties: result.properties,
+      additionalProperties: result.properties ? JSON.stringify(result.properties) : undefined,
     })
   }
 
