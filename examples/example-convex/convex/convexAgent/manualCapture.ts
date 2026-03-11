@@ -1,9 +1,9 @@
 import { Agent } from '@convex-dev/agent'
 import { openai } from '@ai-sdk/openai'
-import { components } from './_generated/api'
-import { action } from './_generated/server'
+import { components } from '../_generated/api'
+import { action } from '../_generated/server'
 import { v } from 'convex/values'
-import { posthog } from './posthog.js'
+import { posthog } from '../posthog.js'
 
 const supportAgent = new Agent(components.agent, {
   name: 'support-agent',
@@ -11,7 +11,7 @@ const supportAgent = new Agent(components.agent, {
   instructions: 'You are a helpful support agent. Answer questions concisely.',
 })
 
-export const chat = action({
+export const generate = action({
   args: {
     prompt: v.string(),
     threadId: v.optional(v.string()),

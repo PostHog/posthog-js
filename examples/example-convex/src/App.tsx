@@ -88,9 +88,9 @@ function App() {
   const [exceptionProps, setExceptionProps] = useState('{"page":"/checkout"}')
   const [exceptionDistinctId, setExceptionDistinctId] = useState('')
 
-  // 7. AI Agent
-  const [agentPrompt, setAgentPrompt] = useState('What is PostHog?')
-  const [agentThreadId, setAgentThreadId] = useState('')
+  // 7. AI Generation
+  const [aiApproach, setAiApproach] = useState<'agent' | 'ai-sdk' | 'agent-traced' | 'ai-sdk-traced'>('agent')
+  const [aiPrompt, setAiPrompt] = useState('What is PostHog?')
 
   // 6. Feature Flags
   const [flagKey, setFlagKey] = useState('test-flag')
@@ -122,7 +122,10 @@ function App() {
   const aliasM = useMutation(api.example.testAlias)
   const captureExceptionM = useMutation(api.example.testCaptureException)
 
-  const chatA = useAction(api.agent.chat)
+  const agentManualA = useAction(api.convexAgent.manualCapture.generate)
+  const agentTracedA = useAction(api.convexAgent.withTracing.generate)
+  const aiSdkManualA = useAction(api.aiSdk.manualCapture.generate)
+  const aiSdkTracedA = useAction(api.aiSdk.withTracing.generate)
 
   const getFeatureFlagA = useAction(api.example.testGetFeatureFlag)
   const isFeatureEnabledA = useAction(api.example.testIsFeatureEnabled)
@@ -509,41 +512,39 @@ function App() {
           </div>
         </Section>
 
-        {/* 7. AI Agent */}
-        <Section num={7} title="AI Agent Chat" accent="#e879f9">
+        {/* 7. AI Generation */}
+        <Section num={7} title="AI Generation" accent="#e879f9">
           <div className="field-grid">
-            <Field label="Prompt" wide>
-              <textarea value={agentPrompt} onChange={(e) => setAgentPrompt(e.target.value)} rows={2} />
+            <Field label="Approach">
+              <select value={aiApproach} onChange={(e) => setAiApproach(e.target.value as typeof aiApproach)}>
+                <option value="agent">@convex-dev/agent (manual capture)</option>
+                <option value="agent-traced">@convex-dev/agent + @posthog/ai</option>
+                <option value="ai-sdk">AI SDK (manual capture)</option>
+                <option value="ai-sdk-traced">AI SDK + @posthog/ai</option>
+              </select>
             </Field>
-            <Field label="Thread ID" hint="leave empty to start new thread">
-              <input
-                value={agentThreadId}
-                onChange={(e) => setAgentThreadId(e.target.value)}
-                placeholder="auto-created"
-              />
+            <Field label="Prompt" wide>
+              <textarea value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} rows={2} />
             </Field>
           </div>
           <div className="actions">
             <button
-              {...btnProps('chat')}
-              onClick={() =>
-                run('chat', async () => {
-                  const result = await chatA({
-                    prompt: agentPrompt,
-                    distinctId,
-                    threadId: agentThreadId || undefined,
-                  })
-                  if (result.threadId) setAgentThreadId(result.threadId)
-                  return result
-                })
-              }
+              {...btnProps('ai-generate')}
+              onClick={() => {
+                const args = { prompt: aiPrompt, distinctId }
+                const fn =
+                  aiApproach === 'agent' ? () => agentManualA(args)
+                  : aiApproach === 'agent-traced' ? () => agentTracedA(args)
+                  : aiApproach === 'ai-sdk-traced' ? () => aiSdkTracedA(args)
+                  : () => aiSdkManualA(args)
+                run('ai-generate', fn)
+              }}
             >
-              Send
+              Generate
             </button>
           </div>
           <p className="section-note">
-            Uses <code>@convex-dev/agent</code> with a <code>usageHandler</code> that captures{' '}
-            <code>$ai_generation</code> events to PostHog.
+            Captures <code>$ai_generation</code> events to PostHog using the selected approach.
           </p>
         </Section>
       </div>

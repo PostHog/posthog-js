@@ -8,7 +8,10 @@
  * @module
  */
 
-import type * as agent from "../agent.js";
+import type * as aiSdk_manualCapture from "../aiSdk/manualCapture.js";
+import type * as aiSdk_withTracing from "../aiSdk/withTracing.js";
+import type * as convexAgent_manualCapture from "../convexAgent/manualCapture.js";
+import type * as convexAgent_withTracing from "../convexAgent/withTracing.js";
 import type * as example from "../example.js";
 import type * as posthog from "../posthog.js";
 
@@ -19,7 +22,10 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  agent: typeof agent;
+  "aiSdk/manualCapture": typeof aiSdk_manualCapture;
+  "aiSdk/withTracing": typeof aiSdk_withTracing;
+  "convexAgent/manualCapture": typeof convexAgent_manualCapture;
+  "convexAgent/withTracing": typeof convexAgent_withTracing;
   example: typeof example;
   posthog: typeof posthog;
 }>;
