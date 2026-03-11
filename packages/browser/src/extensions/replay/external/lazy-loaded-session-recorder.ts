@@ -920,10 +920,20 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._clearConditionalRecordingPersistence()
 
-        // Note: We don't call stop()/start() here because _updateWindowAndSessionIds
-        // already handles the restart. This callback fires synchronously during
-        // checkAndGetSessionAndWindowId(), so _updateWindowAndSessionIds will detect
-        // the session change and handle the restart after this callback returns.
+        if (this._isIdle === true) {
+            // When idle, _updateWindowAndSessionIds returns early at the _isIdle guard
+            // and will never detect the session change or call stop()/start().
+            // This happens when analytics events (e.g. $pageleave, $exception) trigger
+            // session rotation via checkAndGetSessionAndWindowId in posthog-core,
+            // bypassing the recorder's rrweb event path entirely.
+            this._isIdle = 'unknown'
+            this.stop()
+            this.start('session_id_changed')
+            return
+        }
+
+        // When not idle, _updateWindowAndSessionIds handles the restart — it will
+        // detect the session change and call stop()/start() after this callback returns.
 
         if (shouldLinkSessions) {
             this._tryAddCustomEvent('$session_starting', {
