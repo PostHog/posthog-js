@@ -9,8 +9,10 @@
  */
 
 import type * as aiSdk_manualCapture from "../aiSdk/manualCapture.js";
+import type * as aiSdk_openTelemetry from "../aiSdk/openTelemetry.js";
 import type * as aiSdk_withTracing from "../aiSdk/withTracing.js";
 import type * as convexAgent_manualCapture from "../convexAgent/manualCapture.js";
+import type * as convexAgent_openTelemetry from "../convexAgent/openTelemetry.js";
 import type * as convexAgent_withTracing from "../convexAgent/withTracing.js";
 import type * as example from "../example.js";
 import type * as posthog from "../posthog.js";
@@ -23,8 +25,10 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "aiSdk/manualCapture": typeof aiSdk_manualCapture;
+  "aiSdk/openTelemetry": typeof aiSdk_openTelemetry;
   "aiSdk/withTracing": typeof aiSdk_withTracing;
   "convexAgent/manualCapture": typeof convexAgent_manualCapture;
+  "convexAgent/openTelemetry": typeof convexAgent_openTelemetry;
   "convexAgent/withTracing": typeof convexAgent_withTracing;
   example: typeof example;
   posthog: typeof posthog;

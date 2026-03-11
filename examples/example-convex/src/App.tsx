@@ -89,7 +89,8 @@ function App() {
   const [exceptionDistinctId, setExceptionDistinctId] = useState('')
 
   // 7. AI Generation
-  const [aiApproach, setAiApproach] = useState<'agent' | 'ai-sdk' | 'agent-traced' | 'ai-sdk-traced'>('agent')
+  const [aiLibrary, setAiLibrary] = useState<'agent' | 'ai-sdk'>('agent')
+  const [aiCapture, setAiCapture] = useState<'manual' | 'withTracing' | 'otel'>('manual')
   const [aiPrompt, setAiPrompt] = useState('What is PostHog?')
 
   // 6. Feature Flags
@@ -124,8 +125,10 @@ function App() {
 
   const agentManualA = useAction(api.convexAgent.manualCapture.generate)
   const agentTracedA = useAction(api.convexAgent.withTracing.generate)
+  const agentOtelA = useAction(api.convexAgent.openTelemetry.generate)
   const aiSdkManualA = useAction(api.aiSdk.manualCapture.generate)
   const aiSdkTracedA = useAction(api.aiSdk.withTracing.generate)
+  const aiSdkOtelA = useAction(api.aiSdk.openTelemetry.generate)
 
   const getFeatureFlagA = useAction(api.example.testGetFeatureFlag)
   const isFeatureEnabledA = useAction(api.example.testIsFeatureEnabled)
@@ -515,12 +518,17 @@ function App() {
         {/* 7. AI Generation */}
         <Section num={7} title="AI Generation" accent="#e879f9">
           <div className="field-grid">
-            <Field label="Approach">
-              <select value={aiApproach} onChange={(e) => setAiApproach(e.target.value as typeof aiApproach)}>
-                <option value="agent">@convex-dev/agent (manual capture)</option>
-                <option value="agent-traced">@convex-dev/agent + @posthog/ai</option>
-                <option value="ai-sdk">AI SDK (manual capture)</option>
-                <option value="ai-sdk-traced">AI SDK + @posthog/ai</option>
+            <Field label="Library">
+              <select value={aiLibrary} onChange={(e) => setAiLibrary(e.target.value as typeof aiLibrary)}>
+                <option value="agent">@convex-dev/agent</option>
+                <option value="ai-sdk">AI SDK</option>
+              </select>
+            </Field>
+            <Field label="Capture method">
+              <select value={aiCapture} onChange={(e) => setAiCapture(e.target.value as typeof aiCapture)}>
+                <option value="manual">Manual capture</option>
+                <option value="withTracing">@posthog/ai withTracing</option>
+                <option value="otel">OpenTelemetry</option>
               </select>
             </Field>
             <Field label="Prompt" wide>
@@ -532,12 +540,16 @@ function App() {
               {...btnProps('ai-generate')}
               onClick={() => {
                 const args = { prompt: aiPrompt, distinctId }
-                const fn =
-                  aiApproach === 'agent' ? () => agentManualA(args)
-                  : aiApproach === 'agent-traced' ? () => agentTracedA(args)
-                  : aiApproach === 'ai-sdk-traced' ? () => aiSdkTracedA(args)
-                  : () => aiSdkManualA(args)
-                run('ai-generate', fn)
+                const actions = {
+                  'agent-manual': agentManualA,
+                  'agent-withTracing': agentTracedA,
+                  'agent-otel': agentOtelA,
+                  'ai-sdk-manual': aiSdkManualA,
+                  'ai-sdk-withTracing': aiSdkTracedA,
+                  'ai-sdk-otel': aiSdkOtelA,
+                }
+                const action = actions[`${aiLibrary}-${aiCapture}`]
+                run('ai-generate', () => action(args))
               }}
             >
               Generate
