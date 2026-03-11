@@ -46,7 +46,7 @@ export const generate = action({
     const latency = (Date.now() - startTime) / 1000
 
     await posthog.capture(ctx, {
-      distinctId: args.distinctId,
+      distinctId: args.distinctId ?? 'anonymous',
       event: '$ai_generation',
       properties: {
         // Core identification
@@ -69,8 +69,8 @@ export const generate = action({
         $ai_input: [{ role: 'user', content: args.prompt }],
         $ai_output_choices: [{ role: 'assistant', content: result.text }],
 
-        // Generation metadata
-        $ai_http_status: result.response.headers?.['status'] ? Number(result.response.headers['status']) : 200,
+        // Generation metadata — the AI SDK doesn't expose HTTP status directly,
+        // so we infer success/failure from the finish reason.
         $ai_is_error: result.finishReason === 'error',
       },
     })
