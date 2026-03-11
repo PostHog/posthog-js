@@ -10,8 +10,13 @@
         "typecheck": "tsc --noEmit && tsc -p convex"
     },
     "dependencies": {
-        "@posthog/convex": "*",
+        "@ai-sdk/openai": "^2.0.98",
+        "@ai-sdk/provider-utils": "^3.0.22",
+        "@convex-dev/agent": "^0.3.2",
+        "@posthog/convex": "file:../../target/posthog-convex.tgz",
+        "ai": "^5.0.150",
         "convex": "^1.31.7",
+        "convex-helpers": "^0.1.103",
         "react": "^19.2.1",
         "react-dom": "^19.2.1"
     },

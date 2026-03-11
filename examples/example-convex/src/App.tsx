@@ -88,6 +88,10 @@ function App() {
   const [exceptionProps, setExceptionProps] = useState('{"page":"/checkout"}')
   const [exceptionDistinctId, setExceptionDistinctId] = useState('')
 
+  // 7. AI Agent
+  const [agentPrompt, setAgentPrompt] = useState('What is PostHog?')
+  const [agentThreadId, setAgentThreadId] = useState('')
+
   // 6. Feature Flags
   const [flagKey, setFlagKey] = useState('test-flag')
   const [ffGroups, setFfGroups] = useState('{"company":"acme"}')
@@ -117,6 +121,8 @@ function App() {
   const groupIdentifyM = useMutation(api.example.testGroupIdentify)
   const aliasM = useMutation(api.example.testAlias)
   const captureExceptionM = useMutation(api.example.testCaptureException)
+
+  const chatA = useAction(api.agent.chat)
 
   const getFeatureFlagA = useAction(api.example.testGetFeatureFlag)
   const isFeatureEnabledA = useAction(api.example.testIsFeatureEnabled)
@@ -501,6 +507,44 @@ function App() {
               getAllFlagsAndPayloads
             </button>
           </div>
+        </Section>
+
+        {/* 7. AI Agent */}
+        <Section num={7} title="AI Agent Chat" accent="#e879f9">
+          <div className="field-grid">
+            <Field label="Prompt" wide>
+              <textarea value={agentPrompt} onChange={(e) => setAgentPrompt(e.target.value)} rows={2} />
+            </Field>
+            <Field label="Thread ID" hint="leave empty to start new thread">
+              <input
+                value={agentThreadId}
+                onChange={(e) => setAgentThreadId(e.target.value)}
+                placeholder="auto-created"
+              />
+            </Field>
+          </div>
+          <div className="actions">
+            <button
+              {...btnProps('chat')}
+              onClick={() =>
+                run('chat', async () => {
+                  const result = await chatA({
+                    prompt: agentPrompt,
+                    distinctId,
+                    threadId: agentThreadId || undefined,
+                  })
+                  if (result.threadId) setAgentThreadId(result.threadId)
+                  return result
+                })
+              }
+            >
+              Send
+            </button>
+          </div>
+          <p className="section-note">
+            Uses <code>@convex-dev/agent</code> with a <code>usageHandler</code> that captures{' '}
+            <code>$ai_generation</code> events to PostHog.
+          </p>
         </Section>
       </div>
 

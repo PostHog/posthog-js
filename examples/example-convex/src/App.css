@@ -214,8 +214,7 @@ input:focus,
 textarea:focus,
 select:focus {
   border-color: var(--accent, var(--border-focus));
-  box-shadow: 0 0 0 2px
-    color-mix(in srgb, var(--accent, var(--border-focus)) 15%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, var(--border-focus)) 15%, transparent);
 }
 
 textarea {
@@ -276,8 +275,7 @@ select {
 
 .btn {
   background: color-mix(in srgb, var(--accent, #60a5fa) 15%, var(--bg-2));
-  border: 1px solid
-    color-mix(in srgb, var(--accent, #60a5fa) 30%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--accent, #60a5fa) 30%, var(--border));
   border-radius: var(--radius);
   color: var(--accent, #60a5fa);
   font-family: var(--font-mono);
@@ -321,10 +319,12 @@ select {
 }
 
 @keyframes btn-pulse {
+
   0%,
   100% {
     opacity: 0.7;
   }
+
   50% {
     opacity: 0.4;
   }
@@ -334,6 +334,7 @@ select {
   0% {
     filter: brightness(1.5);
   }
+
   100% {
     filter: brightness(1);
   }
@@ -416,4 +417,19 @@ select {
   .actions {
     flex-wrap: wrap;
   }
+}
+
+.section-note {
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+.section-note code {
+  background: var(--bg-2);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
 }
