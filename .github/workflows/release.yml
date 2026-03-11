@@ -206,7 +206,7 @@ jobs:
             - name: Checkout repository
               uses: actions/checkout@v4
               with:
-                  ref: main
+                  ref: ${{ needs.version-bump.outputs.commit-hash }}
                   fetch-depth: 0
 
             - name: Setup environment
