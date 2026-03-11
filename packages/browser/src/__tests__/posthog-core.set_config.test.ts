@@ -77,6 +77,17 @@ describe('posthog.set_config', () => {
             expect(Config.DEBUG).toBe(true)
         })
 
+        it('should read JSON-encoded ph_debug (set by posthog.debug()) across page navigations', () => {
+            // posthog.debug() → set_config({ debug: true }) → localStore._set stores JSON-encoded '"true"'
+            localStorage.setItem('ph_debug', '"true"')
+            const token = uuidv7()
+
+            const posthog = defaultPostHog().init(token, {}, token)!
+
+            expect(posthog.config.debug).toBe(true)
+            expect(Config.DEBUG).toBe(true)
+        })
+
         it('should persist debug=true to localStorage when set', () => {
             const token = uuidv7()
             const posthog = defaultPostHog().init(token, {}, token)!

@@ -3741,7 +3741,8 @@ export class PostHog implements PostHogInterface {
 
     private _checkLocalStorageForDebug(debugConfig: boolean | undefined) {
         const explicitlyFalse = isBoolean(debugConfig) && !debugConfig
-        const isTrueInLocalStorage = localStore._is_supported() && localStore._get('ph_debug') === 'true'
+        const rawValue = localStore._is_supported() ? localStore._get('ph_debug') : null
+        const isTrueInLocalStorage = rawValue === 'true' || rawValue === '"true"'
         return explicitlyFalse ? false : isTrueInLocalStorage ? true : debugConfig
     }
 }
