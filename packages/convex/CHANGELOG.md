@@ -1,5 +1,15 @@
 # @posthog/convex
 
+## 0.1.9
+
+### Patch Changes
+
+- [#3226](https://github.com/PostHog/posthog-js/pull/3226) [`a8ca323`](https://github.com/PostHog/posthog-js/commit/a8ca32334ce51fd3162609439a290b6458929b42) Thanks [@richardsolomou](https://github.com/richardsolomou)! - fix: support $-prefixed property keys (e.g. $ai_model, $set) by JSON-serializing properties before passing through Convex's value system
+  (2026-03-11)
+- Updated dependencies [[`4009c15`](https://github.com/PostHog/posthog-js/commit/4009c15c85c96b5cf99fdbcda448b9893c95541e)]:
+  - @posthog/core@1.23.3
+  - posthog-node@5.28.1
+
 ## 0.1.8
 
 ### Patch Changes

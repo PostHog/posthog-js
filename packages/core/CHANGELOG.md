@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.23.3
+
+### Patch Changes
+
+- [#3220](https://github.com/PostHog/posthog-js/pull/3220) [`4009c15`](https://github.com/PostHog/posthog-js/commit/4009c15c85c96b5cf99fdbcda448b9893c95541e) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - add better handling for CustomEvent inside unhandled rejections
+  (2026-03-11)
+
 ## 1.23.2
 
 ### Patch Changes
