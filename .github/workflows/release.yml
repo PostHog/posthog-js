@@ -67,9 +67,9 @@ jobs:
         if: always() && needs.check-changesets.outputs.has-changesets == 'true'
         environment: 'NPM Release' # This will require an approval from a maintainer, they are notified in Slack above
         permissions:
-            contents: write
+            contents: read
         outputs:
-            committed: ${{ steps.commit-version-bump.outputs.committed }}
+            commit-hash: ${{ steps.commit-version-bump.outputs.commit-hash }}
         steps:
             - name: Notify Slack - Approved
               continue-on-error: true # Don't block release if Slack notification fails
@@ -95,11 +95,6 @@ jobs:
                   fetch-depth: 0
                   token: ${{ steps.releaser.outputs.token }}
 
-            - name: Configure Git
-              run: |
-                  git config user.name "github-actions[bot]"
-                  git config user.email "github-actions[bot]@users.noreply.github.com"
-
             - name: Setup environment
               uses: ./.github/actions/setup
               with:
@@ -119,17 +114,11 @@ jobs:
 
             - name: Commit version bump and lockfile
               id: commit-version-bump
-              run: |
-                  git add -A
-                  if git diff --staged --quiet; then
-                    echo "No changes to commit"
-                    echo "committed=false" >> "$GITHUB_OUTPUT"
-                  else
-                    # Use [version bump] tag to identify this as our version bump commit
-                    git commit -m "chore: update versions and lockfile [version bump]"
-                    git push origin main
-                    echo "committed=true" >> "$GITHUB_OUTPUT"
-                  fi
+              uses: planetscale/ghcommit-action@25309d8005ac7c3bcd61d3fe19b69e0fe47dbdde # v0.2.20
+              with:
+                  commit_message: 'chore: update versions and lockfile [version bump]'
+                  repo: ${{ github.repository }}
+                  branch: main
               env:
                   GITHUB_TOKEN: ${{ steps.releaser.outputs.token }}
 
@@ -190,7 +179,7 @@ jobs:
         runs-on: ubuntu-latest
         # Use `always()` to ensure the job runs even if the check-release-label job fails
         # but still depend on it to be able to use `needs.notify-approval-needed.outputs.slack_ts`
-        if: always() && needs.version-bump.outputs.committed == 'true'
+        if: always() && needs.version-bump.outputs.commit-hash != ''
         permissions:
             contents: write
             actions: write
@@ -217,13 +206,8 @@ jobs:
             - name: Checkout repository
               uses: actions/checkout@v4
               with:
-                  ref: main
+                  ref: ${{ needs.version-bump.outputs.commit-hash }}
                   fetch-depth: 0
-
-            - name: Configure Git
-              run: |
-                  git config user.name "github-actions[bot]"
-                  git config user.email "github-actions[bot]@users.noreply.github.com"
 
             - name: Setup environment
               uses: ./.github/actions/setup
@@ -247,14 +231,6 @@ jobs:
               if: steps.check-package-version.outputs.is-new-version == 'true'
               run: pnpm install --frozen-lockfile && pnpm build
 
-            - name: Tag repository with package_name and package_version
-              if: steps.check-package-version.outputs.is-new-version == 'true'
-              env:
-                  PACKAGE_NAME: ${{ matrix.package.name }}
-                  COMMITTED_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
-              run: |
-                  git tag -a "$PACKAGE_NAME@$COMMITTED_VERSION" -m "$PACKAGE_NAME@$COMMITTED_VERSION"
-
             - name: Publish ${{ matrix.package.name }} to NPM
               if: steps.check-package-version.outputs.is-new-version == 'true'
               run: |
@@ -262,14 +238,16 @@ jobs:
               env:
                   NPM_CONFIG_PROVENANCE: true
 
-            - name: Push tag to GitHub
+            - name: Tag repository with package_name and package_version
               if: steps.check-package-version.outputs.is-new-version == 'true'
-              shell: bash
               env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   PACKAGE_NAME: ${{ matrix.package.name }}
                   COMMITTED_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
               run: |
-                  git push origin "$PACKAGE_NAME@$COMMITTED_VERSION"
+                  gh api "repos/${{ github.repository }}/git/refs" \
+                    -f "ref=refs/tags/$PACKAGE_NAME@$COMMITTED_VERSION" \
+                    -f "sha=$(git rev-parse HEAD)"
 
             - name: Create GitHub release
               if: steps.check-package-version.outputs.is-new-version == 'true'
@@ -283,18 +261,10 @@ jobs:
                   # this assumes the formatting of the file
                   # and that this workflow is always running for the most recent entry in the file
                   LAST_CHANGELOG_ENTRY=$(awk -v defText="see CHANGELOG.md" '/^## /{if (flag) exit; flag=1} flag && /^##$/{exit} flag; END{if (!flag) print defText}' CHANGELOG.md)
-                  gh api \
-                    --method POST \
-                    -H "Accept: application/vnd.github+json" \
-                    -H "X-GitHub-Api-Version: 2022-11-28" \
-                    /repos/posthog/posthog-js/releases \
-                    -f tag_name="$PACKAGE_NAME@$COMMITTED_VERSION" \
-                    -f target_commitish='main' \
-                    -f name="$PACKAGE_NAME@$COMMITTED_VERSION" \
-                    -f body="$LAST_CHANGELOG_ENTRY" \
-                    -F draft=false \
-                    -F prerelease=false \
-                    -F generate_release_notes=false
+                  gh release create "$PACKAGE_NAME@$COMMITTED_VERSION" \
+                    --target main \
+                    --title "$PACKAGE_NAME@$COMMITTED_VERSION" \
+                    --notes "$LAST_CHANGELOG_ENTRY"
 
             ########################################################
             ############## posthog-js auto-update ##################
