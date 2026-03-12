@@ -22,6 +22,9 @@ jobs:
 
       - run: pnpm test:unit
 
+      - name: Node edge runtime tests
+        run: pnpm --filter=posthog-node test:edge-compat
+
   integration:
     name: Playwright E2E tests
     runs-on: depot-ubuntu-latest-8
