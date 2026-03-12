@@ -3856,3 +3856,4 @@ export function init_as_module(): PostHog {
 
     return posthogMain
 }
+// temporary: trigger is-affected for CI testing
