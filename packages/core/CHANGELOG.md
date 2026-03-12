@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.23.4
+
+### Patch Changes
+
+- [#3229](https://github.com/PostHog/posthog-js/pull/3229) [`fa63093`](https://github.com/PostHog/posthog-js/commit/fa630938e501f04125f937cb973c24b8383baf01) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: Clean up leaked timers in edge runtimes
+  (2026-03-12)
+
 ## 1.23.3
 
 ### Patch Changes
