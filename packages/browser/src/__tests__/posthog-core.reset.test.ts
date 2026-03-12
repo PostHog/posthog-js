@@ -97,6 +97,25 @@ describe('reset()', () => {
         expect(mockCallback).not.toHaveBeenCalled()
     })
 
+    it('reloads feature flags for the new anonymous user', async () => {
+        const callFlags = jest.spyOn(instance.featureFlags, '_callFlagsEndpoint')
+
+        instance.reset()
+        await new Promise((resolve) => setTimeout(resolve, 10))
+
+        expect(callFlags).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not reload twice in existing call sites which manually invoke reloadFeatureFlags', async () => {
+        const callFlags = jest.spyOn(instance.featureFlags, '_callFlagsEndpoint')
+
+        instance.reset()
+        instance.reloadFeatureFlags()
+        await new Promise((resolve) => setTimeout(resolve, 10))
+
+        expect(callFlags).toHaveBeenCalledTimes(1)
+    })
+
     describe('when calling reset(true)', () => {
         it('does reset the device id', () => {
             const initialDeviceId = instance.get_property('$device_id')

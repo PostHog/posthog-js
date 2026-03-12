@@ -289,6 +289,7 @@ test.describe('Session recording - array.js', () => {
         // After reset we get:
         // 1. Old session buffer flush (network event with old session)
         // 2. New session snapshot with $session_id_change
+        // 3. Additional snapshot from feature flags reload network activity after reset
         // Note: no $session_ending/$session_starting since reset is not a rotation (shouldLinkSessions=false)
         expect(eventSummaries).toMatchObject([
             { sessionId: 'starting', tags: [] },
@@ -296,6 +297,7 @@ test.describe('Session recording - array.js', () => {
                 sessionId: 'new',
                 tags: ['$remote_config_received', '$session_options', '$posthog_config', '$session_id_change'],
             },
+            { sessionId: 'new', tags: [] },
         ])
     })
 
