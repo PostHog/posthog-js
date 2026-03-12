@@ -864,7 +864,7 @@ describe('PostHog Node.js', () => {
       )
       expect(mockedFetch).toHaveBeenCalledTimes(1)
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({ method: 'POST', body: expect.stringContaining('"geoip_disable":true') })
       )
     })
@@ -898,7 +898,7 @@ describe('PostHog Node.js', () => {
       await waitForPromises()
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({ method: 'POST' })
       )
 
@@ -923,7 +923,7 @@ describe('PostHog Node.js', () => {
 
       expect(mockedFetch).not.toHaveBeenCalledWith(...anyLocalEvalCall)
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({ method: 'POST', body: expect.stringContaining('"geoip_disable":true') })
       )
     })
@@ -986,7 +986,7 @@ describe('PostHog Node.js', () => {
       expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
       // no flags call
       expect(mockedFetch).not.toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({ method: 'POST' })
       )
 
@@ -1045,7 +1045,7 @@ describe('PostHog Node.js', () => {
       expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
       // no flags call
       expect(mockedFetch).not.toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({ method: 'POST' })
       )
 
@@ -1094,7 +1094,7 @@ describe('PostHog Node.js', () => {
       await waitForFlushTimer()
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({ method: 'POST', body: expect.not.stringContaining('geoip_disable') })
       )
 
@@ -1243,7 +1243,7 @@ describe('PostHog Node.js', () => {
 
         // Should make remote flags call
         expect(mockedFetch).toHaveBeenCalledWith(
-          'http://example.com/flags/?v=2&config=true',
+          'http://example.com/flags/?v=2',
           expect.objectContaining({
             method: 'POST',
             body: expect.stringContaining('"plan":"premium"'),
@@ -1303,7 +1303,7 @@ describe('PostHog Node.js', () => {
 
         // Should not make remote flags call
         expect(mockedFetch).not.toHaveBeenCalledWith(
-          'http://example.com/flags/?v=2&config=true',
+          'http://example.com/flags/?v=2',
           expect.objectContaining({ method: 'POST' })
         )
 
@@ -1489,7 +1489,7 @@ describe('PostHog Node.js', () => {
 
         // Should not make remote flags call
         expect(mockedFetch).not.toHaveBeenCalledWith(
-          'http://example.com/flags/?v=2&config=true',
+          'http://example.com/flags/?v=2',
           expect.objectContaining({ method: 'POST' })
         )
 
@@ -1598,7 +1598,7 @@ describe('PostHog Node.js', () => {
 
         // Should make remote flags call since local evaluation has no flags
         expect(mockedFetch).toHaveBeenCalledWith(
-          'http://example.com/flags/?v=2&config=true',
+          'http://example.com/flags/?v=2',
           expect.objectContaining({
             method: 'POST',
             body: expect.stringContaining('"plan":"premium"'),
@@ -1821,7 +1821,7 @@ describe('PostHog Node.js', () => {
 
         // Should not make any remote calls for flags
         expect(mockedFetch).not.toHaveBeenCalledWith(
-          'http://example.com/flags/?v=2&config=true',
+          'http://example.com/flags/?v=2',
           expect.objectContaining({ method: 'POST' })
         )
 
@@ -1875,7 +1875,7 @@ describe('PostHog Node.js', () => {
 
         // Should make remote calls for flags
         expect(mockedFetch).toHaveBeenCalledWith(
-          'http://example.com/flags/?v=2&config=true',
+          'http://example.com/flags/?v=2',
           expect.objectContaining({ method: 'POST' })
         )
 
@@ -2330,7 +2330,7 @@ describe('PostHog Node.js', () => {
       ).resolves.toEqual(2)
       expect(mockedFetch).toHaveBeenCalledTimes(1)
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({ method: 'POST', body: expect.stringContaining('"geoip_disable":true') })
       )
     })
@@ -2371,7 +2371,7 @@ describe('PostHog Node.js', () => {
       ).resolves.toEqual([1])
       expect(mockedFetch).toHaveBeenCalledTimes(1)
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({ method: 'POST', body: expect.stringContaining('"geoip_disable":true') })
       )
     })
@@ -2391,7 +2391,7 @@ describe('PostHog Node.js', () => {
       ).resolves.toEqual(2)
       expect(mockedFetch).toHaveBeenCalledTimes(1)
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({ method: 'POST', body: expect.stringContaining('"geoip_disable":true') })
       )
 
@@ -2400,7 +2400,7 @@ describe('PostHog Node.js', () => {
       await expect(posthog.isFeatureEnabled('feature-variant', '123', { disableGeoip: false })).resolves.toEqual(true)
       expect(mockedFetch).toHaveBeenCalledTimes(1)
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({ method: 'POST', body: expect.not.stringContaining('geoip_disable') })
       )
     })
@@ -2414,7 +2414,7 @@ describe('PostHog Node.js', () => {
       jest.runOnlyPendingTimers()
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({
           body: JSON.stringify({
             token: 'TEST_API_KEY',
@@ -2444,7 +2444,7 @@ describe('PostHog Node.js', () => {
       jest.runOnlyPendingTimers()
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({
           body: JSON.stringify({
             token: 'TEST_API_KEY',
@@ -2475,7 +2475,7 @@ describe('PostHog Node.js', () => {
       jest.runOnlyPendingTimers()
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({
           body: JSON.stringify({
             token: 'TEST_API_KEY',
@@ -2499,7 +2499,7 @@ describe('PostHog Node.js', () => {
       jest.runOnlyPendingTimers()
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({
           body: JSON.stringify({
             token: 'TEST_API_KEY',
@@ -2519,7 +2519,7 @@ describe('PostHog Node.js', () => {
       jest.runOnlyPendingTimers()
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({
           body: JSON.stringify({
             token: 'TEST_API_KEY',
@@ -2541,7 +2541,7 @@ describe('PostHog Node.js', () => {
       jest.runOnlyPendingTimers()
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({
           body: JSON.stringify({
             token: 'TEST_API_KEY',
@@ -2601,7 +2601,7 @@ describe('PostHog Node.js', () => {
       await posthogWithEnvs.getAllFlags('some-distinct-id')
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('"evaluation_contexts":["production","backend"]'),
@@ -2627,7 +2627,7 @@ describe('PostHog Node.js', () => {
       await posthogWithoutEnvs.getAllFlags('some-distinct-id')
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({
           method: 'POST',
           body: expect.not.stringContaining('evaluation_contexts'),
@@ -2654,7 +2654,7 @@ describe('PostHog Node.js', () => {
       await posthogWithEmptyEnvs.getAllFlags('some-distinct-id')
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({
           method: 'POST',
           body: expect.not.stringContaining('evaluation_contexts'),
@@ -2681,7 +2681,7 @@ describe('PostHog Node.js', () => {
       await posthogWithDeprecated.getAllFlags('some-distinct-id')
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2&config=true',
+        'http://example.com/flags/?v=2',
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('"evaluation_contexts":["production","backend"]'),

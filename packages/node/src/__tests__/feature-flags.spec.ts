@@ -649,7 +649,7 @@ describe('local evaluation', () => {
       })
     ).toEqual('flags-fallback-value')
     expect(mockedFetch).toHaveBeenCalledWith(
-      'http://example.com/flags/?v=2&config=true',
+      'http://example.com/flags/?v=2',
       expect.objectContaining({
         body: JSON.stringify({
           token: 'TEST_API_KEY',
@@ -673,7 +673,7 @@ describe('local evaluation', () => {
       await posthog.getFeatureFlag('complex-flag', 'some-distinct-id', { personProperties: { doesnt_matter: '1' } })
     ).toEqual('flags-fallback-value')
     expect(mockedFetch).toHaveBeenCalledWith(
-      'http://example.com/flags/?v=2&config=true',
+      'http://example.com/flags/?v=2',
       expect.objectContaining({
         body: JSON.stringify({
           token: 'TEST_API_KEY',

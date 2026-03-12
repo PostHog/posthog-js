@@ -34,7 +34,7 @@ describe('flags v2', () => {
       const result = await posthog.getFeatureFlag('non-existent-flag', 'some-distinct-id')
 
       expect(result).toBe(undefined)
-      expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2&config=true', expect.any(Object))
+      expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2', expect.any(Object))
 
       await waitForPromises()
       expect(capturedMessage).toMatchObject({
@@ -150,7 +150,7 @@ describe('flags v2', () => {
         const result = await posthog.getFeatureFlag(key, 'some-distinct-id')
 
         expect(result).toBe(expectedResponse)
-        expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2&config=true', expect.any(Object))
+        expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2', expect.any(Object))
 
         await waitForPromises()
         expect(capturedMessage).toMatchObject({
@@ -214,7 +214,7 @@ describe('flags v2', () => {
         const result = await posthog.getFeatureFlagPayload('flag-with-payload', 'some-distinct-id')
 
         expect(result).toEqual([0, 1, 2])
-        expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2&config=true', expect.any(Object))
+        expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2', expect.any(Object))
 
         await waitForPromises()
         expect(capturedMessage).toBeUndefined()
@@ -329,7 +329,7 @@ describe('flags v1', () => {
       const result = await posthog.getFeatureFlag('non-existent-flag', 'some-distinct-id')
 
       expect(result).toBe(undefined)
-      expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2&config=true', expect.any(Object))
+      expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2', expect.any(Object))
 
       await waitForPromises()
       expect(capturedMessage).toMatchObject({
@@ -375,7 +375,7 @@ describe('flags v1', () => {
       const result = await posthog.getFeatureFlagPayload('flag-with-payload', 'some-distinct-id')
 
       expect(result).toEqual([0, 1, 2])
-      expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2&config=true', expect.any(Object))
+      expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2', expect.any(Object))
 
       await waitForPromises()
       expect(capturedMessage).toBeUndefined()
