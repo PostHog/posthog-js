@@ -23,7 +23,7 @@
         "test:unit": "vitest run src",
         "test:unit:surveys": "vitest run '.*survey.*.test.'",
         "test:unit:tours": "vitest run '.*tours.*.test.'",
-        "test:functional": "vitest run functional_tests",
+        "test:functional": "vitest run --config vitest.functional.config.mts",
         "test-watch": "vitest run --watch src",
         "test:typecheck": "cd src/__tests__ && tsc --noEmit --project tsconfig.json",
         "typecheck": "tsc --noEmit --project tsconfig.json",

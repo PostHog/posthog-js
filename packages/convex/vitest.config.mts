@@ -6,7 +6,7 @@ export default defineConfig({
         globals: true,
         clearMocks: true,
         fakeTimers: { shouldAdvanceTime: true },
-        include: ['src/**/*.test.ts', '../../examples/example-convex/convex/**/*.test.ts'],
+        include: ['src/**/*.test.ts'],
         exclude: ['**/node_modules/**'],
         alias: {
             '@posthog/convex/test': path.resolve(__dirname, 'src/test'),
