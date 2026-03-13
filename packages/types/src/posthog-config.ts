@@ -567,6 +567,12 @@ export interface SurveyConfig {
  */
 export interface LogsConfig {
     captureConsoleLogs?: boolean
+    /**
+     * The service name to use in OpenTelemetry resource attributes for logs.
+     *
+     * @default 'posthog-browser-logs'
+     */
+    serviceName?: string
 }
 
 // See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
