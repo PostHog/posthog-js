@@ -1,15 +1,5 @@
 # posthog-js
 
-## 1.360.2
-
-### Patch Changes
-
-- [#3200](https://github.com/PostHog/posthog-js/pull/3200) [`1f99bc4`](https://github.com/PostHog/posthog-js/commit/1f99bc474e3bdf4348fc9b1a6eb19175ee1a4f72) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: Calling reset() now automatically reloads feature flags
-  (2026-03-12)
-- Updated dependencies [[`fa63093`](https://github.com/PostHog/posthog-js/commit/fa630938e501f04125f937cb973c24b8383baf01)]:
-    - @posthog/core@1.23.4
-    - @posthog/types@1.360.2
-
 ## 1.360.1
 
 ### Patch Changes
