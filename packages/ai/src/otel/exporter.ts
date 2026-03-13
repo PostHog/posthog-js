@@ -30,10 +30,11 @@ export interface PostHogTraceExporterOptions {
  */
 export class PostHogTraceExporter extends OTLPTraceExporter {
   constructor(options: PostHogTraceExporterOptions) {
-    const host = options.host?.replace(/\/+$/, '') || 'https://us.i.posthog.com'
+    const host = new URL(options.host || 'https://us.i.posthog.com').origin
     super({
       url: `${host}/i/v0/ai/otel`,
       headers: {
+        // The OTLP ingestion endpoint authenticates using the project API key as a Bearer token
         Authorization: `Bearer ${options.apiKey}`,
       },
     })

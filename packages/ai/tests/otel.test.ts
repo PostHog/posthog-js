@@ -13,55 +13,38 @@ describe('PostHogTraceExporter', () => {
     jest.clearAllMocks()
   })
 
-  it('configures the OTLP exporter with the PostHog endpoint and auth header', () => {
-    const exporter = new PostHogTraceExporter({ apiKey: 'phc_test123' })
-
-    expect((exporter as any)._config).toEqual({
-      url: 'https://us.i.posthog.com/i/v0/ai/otel',
-      headers: {
-        Authorization: 'Bearer phc_test123',
-      },
-    })
-  })
-
-  it('uses a custom host when provided', () => {
-    const exporter = new PostHogTraceExporter({
+  it.each([
+    {
+      name: 'default host',
+      apiKey: 'phc_test123',
+      host: undefined,
+      expectedUrl: 'https://us.i.posthog.com/i/v0/ai/otel',
+    },
+    {
+      name: 'custom host',
       apiKey: 'phc_test456',
       host: 'https://eu.i.posthog.com',
-    })
-
-    expect((exporter as any)._config).toEqual({
-      url: 'https://eu.i.posthog.com/i/v0/ai/otel',
-      headers: {
-        Authorization: 'Bearer phc_test456',
-      },
-    })
-  })
-
-  it('strips trailing slashes from the host', () => {
-    const exporter = new PostHogTraceExporter({
+      expectedUrl: 'https://eu.i.posthog.com/i/v0/ai/otel',
+    },
+    {
+      name: 'trailing slash',
       apiKey: 'phc_test789',
       host: 'https://custom.posthog.com/',
-    })
-
-    expect((exporter as any)._config).toEqual({
-      url: 'https://custom.posthog.com/i/v0/ai/otel',
-      headers: {
-        Authorization: 'Bearer phc_test789',
-      },
-    })
-  })
-
-  it('strips multiple trailing slashes from the host', () => {
-    const exporter = new PostHogTraceExporter({
+      expectedUrl: 'https://custom.posthog.com/i/v0/ai/otel',
+    },
+    {
+      name: 'multiple trailing slashes',
       apiKey: 'phc_test000',
       host: 'https://custom.posthog.com///',
-    })
+      expectedUrl: 'https://custom.posthog.com/i/v0/ai/otel',
+    },
+  ])('configures the OTLP exporter correctly with $name', ({ apiKey, host, expectedUrl }) => {
+    const exporter = new PostHogTraceExporter({ apiKey, host })
 
     expect((exporter as any)._config).toEqual({
-      url: 'https://custom.posthog.com/i/v0/ai/otel',
+      url: expectedUrl,
       headers: {
-        Authorization: 'Bearer phc_test000',
+        Authorization: `Bearer ${apiKey}`,
       },
     })
   })
