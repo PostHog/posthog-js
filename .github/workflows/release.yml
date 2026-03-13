@@ -234,7 +234,7 @@ jobs:
             - name: Publish ${{ matrix.package.name }} to NPM
               if: steps.check-package-version.outputs.is-new-version == 'true'
               run: |
-                  pnpm publish --filter=${{ matrix.package.name }} --access public
+                  pnpm publish --filter=${{ matrix.package.name }} --access public --no-git-checks
               env:
                   NPM_CONFIG_PROVENANCE: true
 
