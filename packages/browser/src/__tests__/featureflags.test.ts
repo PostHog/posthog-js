@@ -136,7 +136,7 @@ describe('featureflags', () => {
     })
 
     it('should warn if /flags endpoint was not hit and no flags exist', () => {
-        ;(window as any).POSTHOG_DEBUG = true
+        (window as any).POSTHOG_DEBUG = true
         featureFlags._hasLoadedFlags = false
         instance.persistence.unregister('$enabled_feature_flags')
         instance.persistence.unregister('$active_feature_flags')

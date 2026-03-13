@@ -9,7 +9,7 @@ describe('PostHog Core', () => {
   vi.setSystemTime(new Date('2022-01-01'))
 
   beforeEach(() => {
-    ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
+    [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
   })
 
   describe('on', () => {

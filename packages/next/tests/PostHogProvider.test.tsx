@@ -4,11 +4,10 @@ import { PostHogProvider } from '../src/app/PostHogProvider'
 
 // Mock ClientPostHogProvider
 const { mockClientProvider } = vi.hoisted(() => ({
-    mockClientProvider: vi.fn(({ children }: { children: React.ReactNode }),
-}))
-
+    mockClientProvider: vi.fn(({ children }: { children: React.ReactNode }) => (
     <div data-testid="client-provider">{children}</div>
-))
+)),
+}))
 vi.mock('../src/client/ClientPostHogProvider', () => ({
     ClientPostHogProvider: (props: any) => mockClientProvider(props),
 }))

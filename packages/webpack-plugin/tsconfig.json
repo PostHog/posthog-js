@@ -9,5 +9,10 @@
         "declarationMap": true,
         "moduleResolution": "bundler",
         "module": "ES6"
-    }
+    },
+    "exclude": [
+        "node_modules",
+        "dist",
+        "vitest.config.mts"
+    ]
 }

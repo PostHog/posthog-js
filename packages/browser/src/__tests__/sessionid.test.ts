@@ -113,7 +113,7 @@ describe('Session ID manager', () => {
 
     describe('stored session data', () => {
         beforeEach(() => {
-            ;(sessionStore._parse as vi.Mock).mockReturnValue('oldWindowID')
+            (sessionStore._parse as vi.Mock).mockReturnValue('oldWindowID')
             timestampOfSessionStart = now - 3600
             persistence.props[SESSION_ID] = [now, 'oldSessionID', timestampOfSessionStart]
         })
@@ -150,7 +150,7 @@ describe('Session ID manager', () => {
         })
 
         it('generates only a new window id, and saves it when there is no previous window id set', () => {
-            ;(sessionStore._parse as vi.Mock).mockReturnValue(null)
+            (sessionStore._parse as vi.Mock).mockReturnValue(null)
             expect(sessionIdMgr(persistence).checkAndGetSessionAndWindowId(undefined, timestamp)).toEqual({
                 windowId: 'newUUID',
                 sessionId: 'oldSessionID',
@@ -288,7 +288,7 @@ describe('Session ID manager', () => {
             expect(sessionStore._set).not.toHaveBeenCalled()
         })
         it('stores and retrieves a window_id if sessionStorage is not supported', () => {
-            ;(sessionStore._is_supported as vi.Mock).mockReturnValue(false)
+            (sessionStore._is_supported as vi.Mock).mockReturnValue(false)
             const sessionIdManager = sessionIdMgr(persistence)
             sessionIdManager['_setWindowId']('newWindowId')
             expect(sessionIdManager['_getWindowId']()).toEqual('newWindowId')
@@ -350,7 +350,7 @@ describe('Session ID manager', () => {
     describe('primary_window_exists_storage_key', () => {
         it('if primary_window_exists key does not exist, do not cycle window id', () => {
             // setup
-            ;(sessionStore._parse as vi.Mock).mockImplementation((storeKey: string) =>
+            (sessionStore._parse as vi.Mock).mockImplementation((storeKey: string) =>
                 storeKey === 'ph_persistance-name_primary_window_exists' ? undefined : 'oldWindowId'
             )
             // expect
@@ -360,7 +360,7 @@ describe('Session ID manager', () => {
         })
         it('if primary_window_exists key exists, cycle window id', () => {
             // setup
-            ;(sessionStore._parse as vi.Mock).mockImplementation((storeKey: string) =>
+            (sessionStore._parse as vi.Mock).mockImplementation((storeKey: string) =>
                 storeKey === 'ph_persistance-name_primary_window_exists' ? true : 'oldWindowId'
             )
             // expect

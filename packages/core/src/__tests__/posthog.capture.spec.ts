@@ -15,7 +15,7 @@ describe('PostHog Core', () => {
   vi.useFakeTimers()
 
   beforeEach(() => {
-    ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 })
+    [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 })
   })
 
   describe('capture', () => {

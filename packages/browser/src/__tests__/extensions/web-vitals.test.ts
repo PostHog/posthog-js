@@ -201,7 +201,7 @@ describe('web vitals', () => {
             })
 
             it('should emit after configured timeout even when only 1 to 3 metrics captured', async () => {
-                ;(posthog.config.capture_performance as PerformanceCaptureConfig).web_vitals_delayed_flush_ms = 1000
+                (posthog.config.capture_performance as PerformanceCaptureConfig).web_vitals_delayed_flush_ms = 1000
                 onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
 
                 expect(beforeSendMock).toBeCalledTimes(0)

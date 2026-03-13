@@ -82,7 +82,7 @@ describe('PostHog Core', () => {
     })
 
     it('skips when client is disabled', async () => {
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 2 })
+      [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 2 })
 
       posthog.capture('test-event-1')
       await waitForPromises()
@@ -115,7 +115,7 @@ describe('PostHog Core', () => {
     })
 
     it('should flush all events even if larger than batch size', async () => {
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
+      [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
 
       const successfulMessages: any[] = []
 
@@ -146,7 +146,7 @@ describe('PostHog Core', () => {
     })
 
     it('should reduce the batch size without dropping events if received 413', async () => {
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
+      [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
       const successfulMessages: any[] = []
 
       mocks.fetch.mockImplementation(async (_, options) => {
@@ -183,7 +183,7 @@ describe('PostHog Core', () => {
     })
 
     it('should treat a 413 at batchSize 1 as a regular error', async () => {
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
+      [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
 
       mocks.fetch.mockImplementation(async () => {
         return Promise.resolve({

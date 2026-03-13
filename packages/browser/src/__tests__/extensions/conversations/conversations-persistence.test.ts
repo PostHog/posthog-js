@@ -127,7 +127,7 @@ describe('ConversationsPersistence', () => {
         })
 
         it('should handle localStorage errors gracefully', () => {
-            ;(window.localStorage.getItem as vi.Mock).mockImplementation(() => {
+            (window.localStorage.getItem as vi.Mock).mockImplementation(() => {
                 throw new Error('Storage error')
             })
 
@@ -137,7 +137,7 @@ describe('ConversationsPersistence', () => {
         })
 
         it('should return the same fallback UUID on repeated calls when localStorage is broken', () => {
-            ;(window.localStorage.getItem as vi.Mock).mockImplementation(() => {
+            (window.localStorage.getItem as vi.Mock).mockImplementation(() => {
                 throw new Error('Storage error')
             })
 
@@ -149,7 +149,7 @@ describe('ConversationsPersistence', () => {
         })
 
         it('should handle missing token gracefully', () => {
-            ;(mockPosthog as any).config = { token: undefined }
+            (mockPosthog as any).config = { token: undefined }
 
             persistence = new ConversationsPersistence(mockPosthog)
             const sessionId = persistence.getOrCreateWidgetSessionId()
@@ -185,7 +185,7 @@ describe('ConversationsPersistence', () => {
         })
 
         it('should handle localStorage write errors gracefully', () => {
-            ;(window.localStorage.setItem as vi.Mock).mockImplementation(() => {
+            (window.localStorage.setItem as vi.Mock).mockImplementation(() => {
                 throw new Error('Storage full')
             })
 
@@ -193,7 +193,7 @@ describe('ConversationsPersistence', () => {
         })
 
         it('should handle localStorage read errors gracefully', () => {
-            ;(window.localStorage.getItem as vi.Mock).mockImplementation(() => {
+            (window.localStorage.getItem as vi.Mock).mockImplementation(() => {
                 throw new Error('Storage error')
             })
 
@@ -225,7 +225,7 @@ describe('ConversationsPersistence', () => {
         })
 
         it('should handle localStorage errors gracefully', () => {
-            ;(window.localStorage.setItem as vi.Mock).mockImplementation(() => {
+            (window.localStorage.setItem as vi.Mock).mockImplementation(() => {
                 throw new Error('Storage full')
             })
 
@@ -274,7 +274,7 @@ describe('ConversationsPersistence', () => {
         })
 
         it('should handle localStorage errors gracefully', () => {
-            ;(window.localStorage.setItem as vi.Mock).mockImplementation(() => {
+            (window.localStorage.setItem as vi.Mock).mockImplementation(() => {
                 throw new Error('Storage full')
             })
 
@@ -313,7 +313,7 @@ describe('ConversationsPersistence', () => {
         })
 
         it('should handle localStorage errors gracefully', () => {
-            ;(window.localStorage.removeItem as vi.Mock).mockImplementation(() => {
+            (window.localStorage.removeItem as vi.Mock).mockImplementation(() => {
                 throw new Error('Storage error')
             })
 
@@ -364,7 +364,7 @@ describe('ConversationsPersistence', () => {
         })
 
         it('should clean up old keys from PostHog persistence after migration', () => {
-            ;(mockPosthog.persistence!.get_property as vi.Mock).mockImplementation((key: string) => {
+            (mockPosthog.persistence!.get_property as vi.Mock).mockImplementation((key: string) => {
                 if (key === LEGACY_WIDGET_SESSION_ID) {
                     return 'legacy-session-id'
                 }
@@ -391,7 +391,7 @@ describe('ConversationsPersistence', () => {
 
         it('should fall back to raw localStorage when persistence.props lost the key', () => {
             // PostHog persistence.props doesn't have the key (the bug scenario)
-            ;(mockPosthog.persistence!.get_property as vi.Mock).mockReturnValue(undefined)
+            (mockPosthog.persistence!.get_property as vi.Mock).mockReturnValue(undefined)
 
             // But raw localStorage still has it
             localStorageData[LEGACY_PH_KEY] = JSON.stringify({
@@ -408,7 +408,7 @@ describe('ConversationsPersistence', () => {
         })
 
         it('should not migrate if persistence is disabled', () => {
-            ;(mockPosthog.persistence!.isDisabled as vi.Mock).mockReturnValue(true)
+            (mockPosthog.persistence!.isDisabled as vi.Mock).mockReturnValue(true)
             ;(mockPosthog.persistence!.get_property as vi.Mock).mockReturnValue('should-not-be-used')
 
             persistence = new ConversationsPersistence(mockPosthog)

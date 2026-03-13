@@ -1,11 +1,18 @@
 {
-  "extends": "@posthog-tooling/tsconfig-base",
-  "compilerOptions": {
-    "incremental": false,
-    "rootDir": "./src",
-    "baseUrl": "./src",
-    "target": "ES6",
-    "skipLibCheck": true,
-    "lib": ["DOM"]
-  }
+    "extends": "@posthog-tooling/tsconfig-base",
+    "compilerOptions": {
+        "incremental": false,
+        "rootDir": "./src",
+        "baseUrl": "./src",
+        "target": "ES6",
+        "skipLibCheck": true,
+        "lib": [
+            "DOM"
+        ]
+    },
+    "exclude": [
+        "node_modules",
+        "dist",
+        "vitest.config.mts"
+    ]
 }

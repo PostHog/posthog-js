@@ -9,27 +9,24 @@ const mockLogs = {
     })),
 }
 
-const { mockOTLPLogExporter, mockLoggerProvider, mockBatchLogRecordProcessor, mockResourceFromAttributes } = vi.hoisted(() => ({
-    mockOTLPLogExporter: vi.fn().mockImplementation((),
-    mockLoggerProvider: vi.fn().mockImplementation((),
-    mockBatchLogRecordProcessor: vi.fn().mockImplementation((),
-    mockResourceFromAttributes: vi.fn((attrs),
-}))
-
+const mockOTLPLogExporter = vi.fn().mockImplementation(() => ({
     export: vi.fn(),
     shutdown: vi.fn(),
 }))
 
+const mockLoggerProvider = vi.fn().mockImplementation(() => ({
     getLogger: vi.fn(() => ({
         emit: vi.fn(),
     })),
     shutdown: vi.fn(),
 }))
 
+const mockBatchLogRecordProcessor = vi.fn().mockImplementation(() => ({
     onEmit: vi.fn(),
     shutdown: vi.fn(),
 }))
 
+const mockResourceFromAttributes = vi.fn((attrs) => ({
     attributes: attrs,
 }))
 
@@ -57,7 +54,7 @@ describe('logs entrypoint', () => {
     let mockEmit: vi.Mock
 
     beforeEach(() => {
-        vi.resetModules()
+        jest.resetModules()
         vi.clearAllMocks()
 
         // Store original console
@@ -601,7 +598,7 @@ describe('logs entrypoint', () => {
         })
 
         it('should use PostHog distinct_id in log attributes', () => {
-            ;(mockPostHog.get_distinct_id as vi.Mock).mockReturnValue('custom-distinct-id')
+            (mockPostHog.get_distinct_id as vi.Mock).mockReturnValue('custom-distinct-id')
 
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)

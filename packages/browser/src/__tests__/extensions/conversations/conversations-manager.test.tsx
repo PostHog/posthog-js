@@ -612,7 +612,7 @@ describe('ConversationsManager', () => {
 
         it('should handle missing session ID gracefully', async () => {
             // Mock get_session_id to return empty string
-            ;(mockPosthog.get_session_id as vi.Mock).mockReturnValue('')
+            (mockPosthog.get_session_id as vi.Mock).mockReturnValue('')
 
             await act(async () => {
                 await manager.sendMessage('First message')
@@ -626,7 +626,7 @@ describe('ConversationsManager', () => {
 
         it('should handle missing session replay URL gracefully', async () => {
             // Mock get_session_replay_url to return empty string
-            ;(mockPosthog.get_session_replay_url as vi.Mock).mockReturnValue('')
+            (mockPosthog.get_session_replay_url as vi.Mock).mockReturnValue('')
 
             await act(async () => {
                 await manager.sendMessage('First message')
@@ -655,7 +655,7 @@ describe('ConversationsManager', () => {
 
         it('should handle error during session context capture without failing message send', async () => {
             // Mock get_session_id to throw an error
-            ;(mockPosthog.get_session_id as vi.Mock).mockImplementation(() => {
+            (mockPosthog.get_session_id as vi.Mock).mockImplementation(() => {
                 throw new Error('Session ID error')
             })
 

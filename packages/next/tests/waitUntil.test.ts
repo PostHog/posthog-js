@@ -15,7 +15,7 @@ vi.mock('posthog-node', () => ({
 describe('nodeClientCache waitUntil auto-detection', () => {
     beforeEach(() => {
         vi.clearAllMocks()
-        vi.resetModules()
+        jest.resetModules()
     })
 
     it('auto-detects @vercel/functions waitUntil and applies to new clients', async () => {

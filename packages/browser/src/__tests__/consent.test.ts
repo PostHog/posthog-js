@@ -200,7 +200,7 @@ describe('consentManager', () => {
 
     describe('with do not track setting', () => {
         beforeEach(() => {
-            ;(navigator as any).doNotTrack = '1'
+            (navigator as any).doNotTrack = '1'
         })
 
         it('should respect it if explicitly set', async () => {

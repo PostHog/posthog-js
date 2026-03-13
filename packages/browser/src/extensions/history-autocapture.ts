@@ -62,7 +62,7 @@ export class HistoryAutocapture implements Extension {
                     title: string,
                     url?: string | URL | null
                 ): void {
-                    ;(originalPushState as History['pushState']).call(this, state, title, url)
+                    (originalPushState as History['pushState']).call(this, state, title, url)
                     self._capturePageview('pushState')
                 }
             })
@@ -76,7 +76,7 @@ export class HistoryAutocapture implements Extension {
                     title: string,
                     url?: string | URL | null
                 ): void {
-                    ;(originalReplaceState as History['replaceState']).call(this, state, title, url)
+                    (originalReplaceState as History['replaceState']).call(this, state, title, url)
                     self._capturePageview('replaceState')
                 }
             })

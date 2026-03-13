@@ -432,7 +432,7 @@ describe(`Autocapture utility functions`, () => {
         // instead of a string, removing the element from the page. Ensure this issue is mitigated.
         it(`shouldn't inadvertently replace DOM nodes`, () => {
             // setup
-            ;(el as any).replace = sinon.spy()
+            (el as any).replace = sinon.spy()
 
             // test
             input.name = el as any

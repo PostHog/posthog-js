@@ -7,7 +7,7 @@ describe('PostHog Core', () => {
   let mocks: PostHogCoreTestClientMocks
 
   beforeEach(() => {
-    ;[posthog, mocks] = createTestClient('TEST_API_KEY', {})
+    [posthog, mocks] = createTestClient('TEST_API_KEY', {})
   })
 
   describe('init', () => {
@@ -39,7 +39,7 @@ describe('PostHog Core', () => {
     })
 
     it('overwrites defaults with options', () => {
-      ;[posthog, mocks] = createTestClient('key', {
+      [posthog, mocks] = createTestClient('key', {
         host: 'https://a.com',
         flushAt: 1,
         flushInterval: 2,
@@ -54,18 +54,18 @@ describe('PostHog Core', () => {
     })
 
     it('should keep the flushAt option above zero', () => {
-      ;[posthog, mocks] = createTestClient('key', { flushAt: -2 }) as any
+      [posthog, mocks] = createTestClient('key', { flushAt: -2 }) as any
       expect((posthog as any).flushAt).toEqual(1)
     })
 
     it('should remove trailing slashes from `host`', () => {
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { host: 'http://my-posthog.com///' })
+      [posthog, mocks] = createTestClient('TEST_API_KEY', { host: 'http://my-posthog.com///' })
 
       expect((posthog as any).host).toEqual('http://my-posthog.com')
     })
 
     it('should use bootstrapped distinct ID when present', async () => {
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { bootstrap: { distinctId: 'new_anon_id' } })
+      [posthog, mocks] = createTestClient('TEST_API_KEY', { bootstrap: { distinctId: 'new_anon_id' } })
 
       expect((posthog as any).getDistinctId()).toEqual('new_anon_id')
       expect((posthog as any).getAnonymousId()).toEqual('new_anon_id')
@@ -77,7 +77,7 @@ describe('PostHog Core', () => {
     })
 
     it('should use bootstrapped distinct ID as identified ID when present', async () => {
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+      [posthog, mocks] = createTestClient('TEST_API_KEY', {
         bootstrap: { distinctId: 'new_id', isIdentifiedId: true },
       })
       vi.runOnlyPendingTimers()
@@ -94,7 +94,7 @@ describe('PostHog Core', () => {
 
   describe('disabled', () => {
     it('should not send events when disabled', async () => {
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+      [posthog, mocks] = createTestClient('TEST_API_KEY', {
         disabled: true,
         flushAt: 1,
       })

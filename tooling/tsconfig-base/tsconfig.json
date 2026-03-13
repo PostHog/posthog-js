@@ -17,6 +17,6 @@
         "strict": true,
         "rootDir": ".",
         "lib": ["es2022"],
-        "types": ["node", "jest"]
+        "types": ["node"]
     }
 }

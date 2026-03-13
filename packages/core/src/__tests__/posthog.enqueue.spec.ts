@@ -11,7 +11,7 @@ describe('PostHog Core', () => {
   })
 
   function createSut(maxQueueSize: number = 1000, flushAt: number = 20): void {
-    ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+    [posthog, mocks] = createTestClient('TEST_API_KEY', {
       maxQueueSize: maxQueueSize,
       flushAt: flushAt,
     })

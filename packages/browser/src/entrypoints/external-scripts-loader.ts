@@ -29,7 +29,7 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
                     // it hasn't already loaded
                     // we probably called loadScript twice in quick succession,
                     // so we attach a callback to the onload event
-                    ;(alreadyExistingScriptTag as any).__posthog_loading_callback_fired = true
+                    (alreadyExistingScriptTag as any).__posthog_loading_callback_fired = true
                     callback(undefined, event)
                 })
                 alreadyExistingScriptTag.onerror = (error) => callback(error)
@@ -49,7 +49,7 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
         scriptTag.src = url
         scriptTag.onload = (event) => {
             // mark the script as having had its callback fired, so we can avoid double-calling it
-            ;(scriptTag as any).__posthog_loading_callback_fired = true
+            (scriptTag as any).__posthog_loading_callback_fired = true
             callback(undefined, event)
         }
         scriptTag.onerror = (error) => callback(error)

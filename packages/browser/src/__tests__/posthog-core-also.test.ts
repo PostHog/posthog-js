@@ -1144,7 +1144,7 @@ describe('posthog core', () => {
 
         describe('error handling', () => {
             it('handles blank keys being passed', () => {
-                ;(window as any).console.error = vi.fn()
+                (window as any).console.error = vi.fn()
                 ;(window as any).console.warn = vi.fn()
 
                 posthog.register = vi.fn()

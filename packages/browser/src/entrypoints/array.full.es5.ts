@@ -13,7 +13,7 @@ if (typeof performance === 'undefined' || typeof performance.now !== 'function')
     perf.now = perf.now || (() => Date.now())
     if (typeof performance === 'undefined') {
         // eslint-disable-next-line no-restricted-globals
-        ;(window as any).performance = perf
+        (window as any).performance = perf
     }
 }
 

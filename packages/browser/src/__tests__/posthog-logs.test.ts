@@ -191,7 +191,7 @@ describe('posthog-logs', () => {
             })
 
             it('should not initialize if PostHog Extensions are not found', () => {
-                ;(logs as any)._isLogsEnabled = true
+                (logs as any)._isLogsEnabled = true
                 Object.defineProperty(assignableWindow, '__PosthogExtensions__', {
                     value: null,
                     writable: true,
@@ -205,7 +205,7 @@ describe('posthog-logs', () => {
             })
 
             it('should not initialize if loadExternalDependency is not found', () => {
-                ;(logs as any)._isLogsEnabled = true
+                (logs as any)._isLogsEnabled = true
                 Object.defineProperty(assignableWindow, '__PosthogExtensions__', {
                     value: {},
                     writable: true,
@@ -218,7 +218,7 @@ describe('posthog-logs', () => {
             })
 
             it('should initialize logs when all conditions are met', () => {
-                ;(logs as any)._isLogsEnabled = true
+                (logs as any)._isLogsEnabled = true
 
                 logs.loadIfEnabled()
 
@@ -227,7 +227,7 @@ describe('posthog-logs', () => {
             })
 
             it('should handle loadExternalDependency errors', () => {
-                ;(logs as any)._isLogsEnabled = true
+                (logs as any)._isLogsEnabled = true
                 mockLoadExternalDependency.mockImplementation((_instance, _name, callback) => {
                     callback(new Error('Loading failed'))
                 })
@@ -239,7 +239,7 @@ describe('posthog-logs', () => {
             })
 
             it('should handle missing initializeLogs function', () => {
-                ;(logs as any)._isLogsEnabled = true
+                (logs as any)._isLogsEnabled = true
                 Object.defineProperty(assignableWindow, '__PosthogExtensions__', {
                     value: {
                         loadExternalDependency: mockLoadExternalDependency,
@@ -255,7 +255,7 @@ describe('posthog-logs', () => {
             })
 
             it('should not reinitialize logs if called multiple times', () => {
-                ;(logs as any)._isLogsEnabled = true
+                (logs as any)._isLogsEnabled = true
 
                 logs.loadIfEnabled()
                 logs.loadIfEnabled()
@@ -371,7 +371,7 @@ describe('posthog-logs', () => {
             })
 
             it('should handle window object not being available', () => {
-                ;(logs as any)._isLogsEnabled = true
+                (logs as any)._isLogsEnabled = true
                 const originalExtensions = assignableWindow.__PosthogExtensions__
                 Object.defineProperty(assignableWindow, '__PosthogExtensions__', {
                     value: undefined,
@@ -424,7 +424,7 @@ describe('posthog-logs', () => {
             })
 
             it('should handle async loading errors gracefully', () => {
-                ;(logs as any)._isLogsEnabled = true
+                (logs as any)._isLogsEnabled = true
                 mockLoadExternalDependency.mockImplementation((_instance, _name, callback) => {
                     // Simulate async error
                     setTimeout(() => callback(new Error('Network error')), 0)

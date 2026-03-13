@@ -16,7 +16,7 @@ describe('PostHog Core - Person Profiles', () => {
     let mocks: PostHogCoreTestClientMocks
 
     beforeEach(() => {
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+      [posthog, mocks] = createTestClient('TEST_API_KEY', {
         flushAt: 1,
         personProfiles: 'identified_only',
       })
@@ -144,7 +144,7 @@ describe('PostHog Core - Person Profiles', () => {
     let mocks: PostHogCoreTestClientMocks
 
     beforeEach(() => {
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+      [posthog, mocks] = createTestClient('TEST_API_KEY', {
         flushAt: 1,
         personProfiles: 'always',
       })
@@ -174,7 +174,7 @@ describe('PostHog Core - Person Profiles', () => {
     let mocks: PostHogCoreTestClientMocks
 
     beforeEach(() => {
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+      [posthog, mocks] = createTestClient('TEST_API_KEY', {
         flushAt: 1,
         personProfiles: 'never',
       })
@@ -363,7 +363,7 @@ describe('PostHog Core - Person Profiles', () => {
       let mocks: PostHogCoreTestClientMocks
 
       beforeEach(() => {
-        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        [posthog, mocks] = createTestClient('TEST_API_KEY', {
           flushAt: 1,
           personProfiles: 'identified_only',
         })
@@ -476,7 +476,7 @@ describe('PostHog Core - Person Profiles', () => {
       let mocks: PostHogCoreTestClientMocks
 
       beforeEach(() => {
-        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        [posthog, mocks] = createTestClient('TEST_API_KEY', {
           flushAt: 1,
           personProfiles: 'always',
         })
@@ -499,7 +499,7 @@ describe('PostHog Core - Person Profiles', () => {
       let mocks: PostHogCoreTestClientMocks
 
       beforeEach(() => {
-        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        [posthog, mocks] = createTestClient('TEST_API_KEY', {
           flushAt: 1,
           personProfiles: 'never',
         })

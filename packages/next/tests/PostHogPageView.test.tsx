@@ -6,7 +6,6 @@ const { mockCapture, mockUsePostHog } = vi.hoisted(() => ({
     mockCapture: vi.fn(),
     mockUsePostHog: vi.fn(() => ({ capture: mockCapture })),
 }))
-
 vi.mock('posthog-js/react', () => ({
     usePostHog: () => mockUsePostHog(),
 }))

@@ -77,7 +77,7 @@ describe('PostHog onRemoteConfig', () => {
     })
 
     it('does not fire onRemoteConfig when flags request fails', async () => {
-      ;[posthog, mocks] = createTestClientWithRemoteConfig(
+      [posthog, mocks] = createTestClientWithRemoteConfig(
         'TEST_API_KEY',
         {
           flushAt: 1,

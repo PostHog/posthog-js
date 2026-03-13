@@ -18,7 +18,7 @@ function setupWrappedFetch(downstreamFetch: typeof fetch): { wrappedFetch: typeo
         observe() {}
         disconnect() {}
     }
-    ;(global as any).PerformanceObserver = MockPerformanceObserver
+    (global as any).PerformanceObserver = MockPerformanceObserver
 
     const mockWindow = {
         fetch: downstreamFetch,

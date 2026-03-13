@@ -40,7 +40,7 @@ describe('PostHog Feature Flags v1', () => {
   })
 
   beforeEach(() => {
-    ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+    [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
       _mocks.fetch.mockImplementation((url) => {
         if (url.includes('/flags/?v=2')) {
           return Promise.resolve({
@@ -143,7 +143,7 @@ describe('PostHog Feature Flags v1', () => {
 
       describe('when errored out', () => {
         beforeEach(async () => {
-          ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+          [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
             _mocks.fetch.mockImplementation((url) => {
               if (url.includes('/flags/')) {
                 return Promise.resolve({
@@ -197,7 +197,7 @@ describe('PostHog Feature Flags v1', () => {
 
       describe('when subsequent flags calls return partial results', () => {
         beforeEach(async () => {
-          ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+          [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
             _mocks.fetch
               .mockImplementationOnce((url) => {
                 if (url.includes('/flags/?v=2')) {
@@ -302,7 +302,7 @@ describe('PostHog Feature Flags v1', () => {
 
       describe('when subsequent flags calls return results without errors', () => {
         beforeEach(async () => {
-          ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+          [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
             _mocks.fetch
               .mockImplementationOnce((url) => {
                 if (url.includes('/flags/?v=2')) {
@@ -567,7 +567,7 @@ describe('PostHog Feature Flags v1', () => {
 
     describe('when quota limited', () => {
       beforeEach(async () => {
-        ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+        [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
           _mocks.fetch.mockImplementation((url) => {
             if (url.includes('/flags/')) {
               return Promise.resolve({
@@ -630,7 +630,7 @@ describe('PostHog Feature Flags v1', () => {
 
   describe('bootstrapped feature flags', () => {
     beforeEach(() => {
-      ;[posthog, mocks] = createTestClient(
+      [posthog, mocks] = createTestClient(
         'TEST_API_KEY',
         {
           flushAt: 1,
@@ -741,7 +741,7 @@ describe('PostHog Feature Flags v1', () => {
 
     describe('when loaded', () => {
       beforeEach(async () => {
-        ;[posthog, mocks] = createTestClient(
+        [posthog, mocks] = createTestClient(
           'TEST_API_KEY',
           {
             flushAt: 1,
@@ -871,7 +871,7 @@ describe('PostHog Feature Flags v1', () => {
 
   describe('bootstapped do not overwrite values', () => {
     beforeEach(() => {
-      ;[posthog, mocks] = createTestClient(
+      [posthog, mocks] = createTestClient(
         'TEST_API_KEY',
         {
           flushAt: 1,

@@ -860,7 +860,7 @@ describe('surveys', () => {
         })
 
         it('should warn when survey manager is not initialized', () => {
-            ;(surveys as any)._surveyManager = null
+            (surveys as any)._surveyManager = null
             const loggerWarnSpy = vi.spyOn(logger, 'warn')
 
             surveys.renderSurvey('test-survey', '#test-survey-container')

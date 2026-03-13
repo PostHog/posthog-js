@@ -243,7 +243,7 @@ function renderNode(
                     alt={typeof alt === 'string' ? alt : ''}
                     style={styles.image}
                     onError={(e) => {
-                        ;(e.target as HTMLImageElement).style.display = 'none'
+                        (e.target as HTMLImageElement).style.display = 'none'
                     }}
                 />
             )

@@ -527,7 +527,7 @@ describe('Conversations API Methods', () => {
 
         describe('getCurrentTicketId', () => {
             it('should return current ticket ID when available', () => {
-                ;(mockManager.getCurrentTicketId as vi.Mock).mockReturnValue('ticket-abc')
+                (mockManager.getCurrentTicketId as vi.Mock).mockReturnValue('ticket-abc')
 
                 const result = conversations.getCurrentTicketId()
 
@@ -536,7 +536,7 @@ describe('Conversations API Methods', () => {
             })
 
             it('should return null when no active ticket', () => {
-                ;(mockManager.getCurrentTicketId as vi.Mock).mockReturnValue(null)
+                (mockManager.getCurrentTicketId as vi.Mock).mockReturnValue(null)
 
                 const result = conversations.getCurrentTicketId()
 
@@ -547,7 +547,7 @@ describe('Conversations API Methods', () => {
 
         describe('getWidgetSessionId', () => {
             it('should return widget session ID', () => {
-                ;(mockManager.getWidgetSessionId as vi.Mock).mockReturnValue('session-xyz')
+                (mockManager.getWidgetSessionId as vi.Mock).mockReturnValue('session-xyz')
 
                 const result = conversations.getWidgetSessionId()
 

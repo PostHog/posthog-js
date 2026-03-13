@@ -7,7 +7,7 @@ describe('PostHog Core', () => {
   let mocks: PostHogCoreTestClientMocks
 
   beforeEach(() => {
-    ;[posthog, mocks] = createTestClient('TEST_API_KEY', {})
+    [posthog, mocks] = createTestClient('TEST_API_KEY', {})
   })
 
   describe('reset', () => {

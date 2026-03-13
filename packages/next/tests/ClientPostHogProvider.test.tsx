@@ -3,11 +3,10 @@ import { render, screen } from '@testing-library/react'
 import { ClientPostHogProvider } from '../src/client/ClientPostHogProvider'
 
 const { mockPostHogProvider } = vi.hoisted(() => ({
-    mockPostHogProvider: vi.fn(({ children }: { children: React.ReactNode }),
+    mockPostHogProvider: vi.fn(({ children }: { children: React.ReactNode }) => (
+        <div data-testid="posthog-provider">{children}</div>
+    )),
 }))
-
-    <div data-testid="posthog-provider">{children}</div>
-))
 vi.mock('posthog-js/react', () => ({
     PostHogProvider: (props: any) => mockPostHogProvider(props),
 }))

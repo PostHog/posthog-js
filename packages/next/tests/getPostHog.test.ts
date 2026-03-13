@@ -13,7 +13,7 @@ const mockEnterContext = vi.fn()
 const mockWithContext = vi.fn((_, fn) => fn())
 
 vi.mock('posthog-node', () => ({
-    PostHog: vi.fn().mockImplementation(function() { return ({
+    PostHog: vi.fn().mockImplementation(function() { return {
         capture: mockCapture,
         identify: mockIdentify,
         isFeatureEnabled: mockIsFeatureEnabled,
@@ -24,7 +24,7 @@ vi.mock('posthog-node', () => ({
         shutdown: mockShutdown,
         enterContext: mockEnterContext,
         withContext: mockWithContext,
-    })),
+    }; }),
 }))
 
 // Mock next/headers cookies()
@@ -46,7 +46,7 @@ vi.mock('next/headers', () => ({
 }))
 
 // Mock nodeClientCache to avoid cross-test cache pollution
-const mockGetOrCreateNodeClient = vi.fn().mockImplementation(function() { return ({
+const mockGetOrCreateNodeClient = vi.fn().mockImplementation(() => ({
     capture: mockCapture,
     identify: mockIdentify,
     isFeatureEnabled: mockIsFeatureEnabled,

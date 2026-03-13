@@ -178,7 +178,7 @@ function deepCircularCopy<T extends Record<string, any> = Record<string, any>>(
             result = {} as T
             each(value, (val, key) => {
                 if (!COPY_IN_PROGRESS_SET.has(val)) {
-                    ;(result as any)[key] = internalDeepCircularCopy(val, key)
+                    (result as any)[key] = internalDeepCircularCopy(val, key)
                 }
             })
         }

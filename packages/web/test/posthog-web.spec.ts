@@ -10,7 +10,7 @@ describe('PostHogWeb', () => {
   vi.useRealTimers()
 
   beforeEach(() => {
-    ;(global as any).window.fetch = fetch = vi.fn(async (url) => {
+    (global as any).window.fetch = fetch = vi.fn(async (url) => {
       let res: any = { status: 'ok' }
       if (url.includes('flags')) {
         res = {

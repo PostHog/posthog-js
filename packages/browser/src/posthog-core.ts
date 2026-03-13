@@ -1011,7 +1011,7 @@ export class PostHog implements PostHogInterface {
                     if (isArray(fn_name)) {
                         capturing_calls.push(item) // chained call e.g. posthog.get_group().set()
                     } else if (isFunction(item)) {
-                        ;(item as any).call(this)
+                        (item as any).call(this)
                     } else if (isArray(item) && fn_name === 'alias') {
                         alias_calls.push(item)
                     } else if (
@@ -3759,7 +3759,7 @@ const add_dom_loaded_handler = function () {
         if ((dom_loaded_handler as any).done) {
             return
         }
-        ;(dom_loaded_handler as any).done = true
+        (dom_loaded_handler as any).done = true
 
         ENQUEUE_REQUESTS = false
 

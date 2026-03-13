@@ -111,7 +111,7 @@ describe('PostHogProvider component', () => {
         })
 
         it('warns if posthogJs has been loaded elsewhere', () => {
-            ;(posthogJs as any).__loaded = true
+            (posthogJs as any).__loaded = true
 
             const consoleSpy = vi.spyOn(console, 'warn').mockImplementation()
             render(

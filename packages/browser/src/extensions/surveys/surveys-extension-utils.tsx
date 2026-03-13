@@ -393,7 +393,7 @@ export const retrieveSurveyShadow = (
         }
         shadow.appendChild(stylesheet)
     }
-    ;(element ? element : document.body).appendChild(div)
+    (element ? element : document.body).appendChild(div)
     return {
         shadow,
         isNewlyCreated: true,

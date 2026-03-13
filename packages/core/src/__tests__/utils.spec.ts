@@ -4,7 +4,7 @@ vi.useFakeTimers()
 describe('utils', () => {
   describe('assert', () => {
     it('should throw on falsey values', () => {
-      ;[false, '', null, undefined, 0, {}, []].forEach((x) => {
+      [false, '', null, undefined, 0, {}, []].forEach((x) => {
         expect(() => assert(x, 'error')).toThrow('error')
       })
     })

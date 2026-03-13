@@ -480,7 +480,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
   conditionalTest('privacy mode global', async () => {
     // override mock to appear globally in privacy mode
-    ;(mockPostHogClient as any).privacy_mode = true
+    (mockPostHogClient as any).privacy_mode = true
 
     await client.chat.completions.create({
       model: 'gpt-4',

@@ -289,7 +289,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
 
   conditionalTest('privacy mode global', async () => {
     // override mock to appear globally in privacy mode
-    ;(mockPostHogClient as any).privacy_mode = true
+    (mockPostHogClient as any).privacy_mode = true
 
     const mockAzureChatResponse = {
       id: 'test-response-id',

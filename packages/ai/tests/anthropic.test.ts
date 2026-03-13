@@ -707,7 +707,7 @@ describe('PostHogAnthropic', () => {
 
     conditionalTest('should respect global privacy mode', async () => {
       // Set global privacy mode
-      ;(mockPostHogClient as any).privacy_mode = true
+      (mockPostHogClient as any).privacy_mode = true
 
       await client.messages.create({
         model: 'claude-3-opus-20240229',
