@@ -1,7 +1,7 @@
 "use node"
 
-import { NodeTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node'
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto'
+import { NodeSDK } from '@opentelemetry/sdk-node'
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 import { Agent } from '@convex-dev/agent'
 import { openai } from '@ai-sdk/openai'
@@ -18,9 +18,11 @@ export const generate = action({
     distinctId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // Set up an OTel trace provider that exports spans directly to PostHog's
+    // Set up an OTel SDK that exports spans directly to PostHog's
     // /i/v0/ai/otel endpoint. PostHog converts gen_ai.* spans into
-    // $ai_generation events server-side.
+    // $ai_generation events server-side. NodeSDK (vs NodeTracerProvider)
+    // handles context propagation via AsyncLocalStorage automatically,
+    // which the AI SDK needs to connect parent and child spans.
     const exporter = new OTLPTraceExporter({
       url: `${process.env.POSTHOG_HOST || 'https://us.i.posthog.com'}/i/v0/ai/otel`,
       headers: {
@@ -28,13 +30,16 @@ export const generate = action({
       },
     })
 
-    const provider = new NodeTracerProvider({
+    const distinctId = args.distinctId ?? 'anonymous'
+
+    const sdk = new NodeSDK({
       resource: resourceFromAttributes({
-        'posthog.distinct_id': args.distinctId ?? 'anonymous',
+        'service.name': 'example-convex',
+        'user.id': distinctId,
       }),
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
+      traceExporter: exporter,
     })
-    provider.register()
+    sdk.start()
 
     const supportAgent = new Agent(components.agent, {
       name: 'support-agent',
@@ -46,11 +51,16 @@ export const generate = action({
 
     const result = await thread.generateText({
       prompt: args.prompt,
-      // experimental_telemetry: { isEnabled: true }
+      experimental_telemetry: {
+        isEnabled: true,
+        functionId: 'convex-agent-otel',
+        metadata: {
+          posthog_distinct_id: distinctId,
+        },
+      },
     })
 
-    await provider.forceFlush()
-    await provider.shutdown()
+    await sdk.shutdown()
 
     return {
       text: result.text,
