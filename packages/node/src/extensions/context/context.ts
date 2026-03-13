@@ -29,6 +29,7 @@ export class PostHogContext implements IPostHogContext {
     return {
       distinctId: context.distinctId ?? current.distinctId,
       sessionId: context.sessionId ?? current.sessionId,
+      groups: context.groups ?? current.groups,
       properties: {
         ...(current.properties || {}),
         ...(context.properties || {}),
