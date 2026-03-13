@@ -1,4 +1,3 @@
-import { expect } from '@jest/globals'
 import { NetworkRecordOptions } from '../../../../types'
 import { isHostOnDenyList } from '../../../../extensions/replay/external/denylist'
 

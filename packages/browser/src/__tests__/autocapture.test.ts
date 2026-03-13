@@ -62,10 +62,10 @@ describe('Autocapture system', () => {
 
     let autocapture: Autocapture
     let posthog: PostHog
-    let beforeSendMock: jest.Mock
+    let beforeSendMock: vi.Mock
 
     beforeEach(async () => {
-        jest.spyOn(window!.console, 'log').mockImplementation()
+        vi.spyOn(window!.console, 'log').mockImplementation()
 
         Object.defineProperty(window, 'location', {
             configurable: true,
@@ -75,7 +75,7 @@ describe('Autocapture system', () => {
             value: new URL('https://example.com'),
         })
 
-        beforeSendMock = jest.fn().mockImplementation((...args) => args)
+        beforeSendMock = vi.fn().mockImplementation((...args) => args)
 
         posthog = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',
@@ -1181,7 +1181,7 @@ describe('Autocapture system', () => {
         beforeEach(() => {
             document.title = 'test page'
 
-            jest.spyOn(autocapture, '_addDomEventHandlers')
+            vi.spyOn(autocapture, '_addDomEventHandlers')
         })
 
         it('should be enabled after init when autocapture is true in config', () => {

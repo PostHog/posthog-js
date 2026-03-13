@@ -17,7 +17,7 @@ describe('survey-event-receiver', () => {
     describe('event based surveys', () => {
         let config: PostHogConfig
         let instance: PostHog
-        let mockAddCaptureHook: jest.Mock
+        let mockAddCaptureHook: vi.Mock
 
         const surveysWithEvents: Survey[] = [
             {
@@ -77,7 +77,7 @@ describe('survey-event-receiver', () => {
         ]
 
         beforeEach(() => {
-            mockAddCaptureHook = jest.fn()
+            mockAddCaptureHook = vi.fn()
             config = createMockConfig({
                 token: 'testtoken',
                 api_host: 'https://app.posthog.com',
@@ -88,7 +88,7 @@ describe('survey-event-receiver', () => {
                 config: config,
                 persistence: new PostHogPersistence(config),
                 _addCaptureHook: mockAddCaptureHook,
-                getSurveys: jest.fn((callback) => callback(surveysWithEvents)),
+                getSurveys: vi.fn((callback) => callback(surveysWithEvents)),
             })
         })
 
@@ -175,7 +175,7 @@ describe('survey-event-receiver', () => {
     describe('property filter based surveys', () => {
         let config: PostHogConfig
         let instance: PostHog
-        let mockAddCaptureHook: jest.Mock
+        let mockAddCaptureHook: vi.Mock
 
         const createEventPayload = (eventName: string, properties: Record<string, any> = {}): CaptureResult => ({
             $set: undefined,
@@ -210,7 +210,7 @@ describe('survey-event-receiver', () => {
             }) as unknown as Survey
 
         beforeEach(() => {
-            mockAddCaptureHook = jest.fn()
+            mockAddCaptureHook = vi.fn()
             config = createMockConfig({
                 token: 'testtoken',
                 api_host: 'https://app.posthog.com',
@@ -221,7 +221,7 @@ describe('survey-event-receiver', () => {
                 config: config,
                 persistence: new PostHogPersistence(config),
                 _addCaptureHook: mockAddCaptureHook,
-                getSurveys: jest.fn((callback) => callback([])),
+                getSurveys: vi.fn((callback) => callback([])),
             })
         })
 
@@ -239,7 +239,7 @@ describe('survey-event-receiver', () => {
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
             // Set up getSurveys mock to return the survey
-            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
 
             // Should match exact value
             registeredHook('purchase', createEventPayload('purchase', { product_type: 'premium' }))
@@ -255,7 +255,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
-            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
 
             // Should not match different value
             registeredHook('purchase', createEventPayload('purchase', { product_type: 'basic' }))
@@ -271,7 +271,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
-            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
 
             // Should match when value is not 'basic'
             registeredHook('purchase', createEventPayload('purchase', { product_type: 'premium' }))
@@ -287,7 +287,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
-            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
 
             // Should match regex pattern
             registeredHook('page_view', createEventPayload('page_view', { url: '/app/dashboard' }))
@@ -303,7 +303,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
-            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
 
             // Should match case-insensitive contains
             registeredHook('search', createEventPayload('search', { query: 'new product features' }))
@@ -320,7 +320,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
-            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
 
             // Should match when both conditions are met
             registeredHook('purchase', createEventPayload('purchase', { product_type: 'premium', amount: '200' }))
@@ -343,7 +343,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
-            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
 
             // Should not match when property is missing
             registeredHook('purchase', createEventPayload('purchase', { other_prop: 'value' }))
@@ -357,7 +357,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
-            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
 
             // Should match based on event name only
             registeredHook('purchase', createEventPayload('purchase', { any_prop: 'any_value' }))
@@ -373,7 +373,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
-            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
 
             registeredHook('purchase', createEventPayload('purchase', { amount: 150 }))
             expect(surveyEventReceiver.getSurveys()).toContain('gt-test')
@@ -388,7 +388,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
-            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) => callback([survey]))
 
             registeredHook('purchase', createEventPayload('purchase', { amount: 50 }))
             expect(surveyEventReceiver.getSurveys()).toContain('lt-test')
@@ -409,8 +409,8 @@ describe('survey-event-receiver', () => {
             instance = createMockPostHog({
                 config: config,
                 persistence: new PostHogPersistence(config),
-                _addCaptureHook: jest.fn(),
-                getSurveys: jest.fn((callback) => callback([])),
+                _addCaptureHook: vi.fn(),
+                getSurveys: vi.fn((callback) => callback([])),
             })
         })
 
@@ -549,8 +549,8 @@ describe('survey-event-receiver', () => {
     describe('cancel events', () => {
         let config: PostHogConfig
         let instance: PostHog
-        let mockAddCaptureHook: jest.Mock
-        let mockCancelPendingSurvey: jest.Mock
+        let mockAddCaptureHook: vi.Mock
+        let mockCancelPendingSurvey: vi.Mock
 
         const surveyWithCancelEvent: Survey = {
             name: 'survey with cancel',
@@ -566,8 +566,8 @@ describe('survey-event-receiver', () => {
         } as unknown as Survey
 
         beforeEach(() => {
-            mockAddCaptureHook = jest.fn()
-            mockCancelPendingSurvey = jest.fn()
+            mockAddCaptureHook = vi.fn()
+            mockCancelPendingSurvey = vi.fn()
             config = createMockConfig({
                 token: 'testtoken',
                 api_host: 'https://app.posthog.com',
@@ -578,7 +578,7 @@ describe('survey-event-receiver', () => {
                 config: config,
                 persistence: new PostHogPersistence(config),
                 _addCaptureHook: mockAddCaptureHook,
-                getSurveys: jest.fn((callback) => callback([surveyWithCancelEvent])),
+                getSurveys: vi.fn((callback) => callback([surveyWithCancelEvent])),
                 cancelPendingSurvey: mockCancelPendingSurvey,
             })
         })
@@ -642,7 +642,7 @@ describe('survey-event-receiver', () => {
                 },
             } as unknown as Survey
 
-            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) =>
+            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) =>
                 callback([surveyWithCancelPropertyFilter])
             )
 
@@ -681,7 +681,7 @@ describe('survey-event-receiver', () => {
                 },
             } as unknown as Survey
 
-            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) =>
+            ;(instance.getSurveys as vi.Mock).mockImplementation((callback) =>
                 callback([surveyWithCancelPropertyFilter])
             )
 

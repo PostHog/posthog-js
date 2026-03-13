@@ -13,7 +13,7 @@ describe('__extensionClasses enrollment', () => {
 
     beforeEach(() => {
         savedDefaults = PostHog.__defaultExtensionClasses
-        console.error = jest.fn()
+        console.error = vi.fn()
     })
 
     afterEach(() => {
@@ -142,7 +142,7 @@ describe('extension lifecycle', () => {
 
     beforeEach(() => {
         savedDefaults = PostHog.__defaultExtensionClasses
-        console.error = jest.fn()
+        console.error = vi.fn()
     })
 
     afterEach(() => {
@@ -180,7 +180,7 @@ describe('extension lifecycle', () => {
         it('calls initialize() on extensions that define it', async () => {
             PostHog.__defaultExtensionClasses = {}
 
-            const initializeSpy = jest.fn()
+            const initializeSpy = vi.fn()
 
             class SpyExtension {
                 constructor() {}
@@ -220,7 +220,7 @@ describe('extension lifecycle', () => {
         it('calls onRemoteConfig on all extensions that define it', async () => {
             PostHog.__defaultExtensionClasses = {}
 
-            const onRemoteConfigSpy = jest.fn()
+            const onRemoteConfigSpy = vi.fn()
 
             class SpyExtension {
                 constructor() {}
@@ -259,7 +259,7 @@ describe('extension lifecycle', () => {
                 capture_pageview: false,
             })
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             posthog.onSurveysLoaded(callback)
 
             expect(callback).toHaveBeenCalledWith([], { isLoaded: false, error: 'Surveys module not available' })
@@ -273,7 +273,7 @@ describe('extension lifecycle', () => {
                 capture_pageview: false,
             })
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             posthog.getSurveys(callback)
 
             expect(callback).toHaveBeenCalledWith([], { isLoaded: false, error: 'Surveys module not available' })
@@ -287,7 +287,7 @@ describe('extension lifecycle', () => {
                 capture_pageview: false,
             })
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             posthog.getActiveMatchingSurveys(callback)
 
             expect(callback).toHaveBeenCalledWith([], { isLoaded: false, error: 'Surveys module not available' })
@@ -312,7 +312,7 @@ describe('extension lifecycle', () => {
                 capture_pageview: false,
             })
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             const unsubscribe = posthog.onFeatureFlags(callback)
 
             expect(callback).toHaveBeenCalledWith([], {}, { errorsLoading: true })

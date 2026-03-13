@@ -2,16 +2,18 @@ import React from 'react'
 import { render, screen } from '@testing-library/react'
 import { PostHogProvider } from '../src/pages/PostHogProvider'
 
-const mockClientPostHogProvider = jest.fn(({ children }: { children: React.ReactNode }) => (
+const { mockClientPostHogProvider } = vi.hoisted(() => ({
+    mockClientPostHogProvider: vi.fn(({ children }: { children: React.ReactNode }) => (
     <div data-testid="client-provider">{children}</div>
-))
-jest.mock('../src/client/ClientPostHogProvider', () => ({
+)),
+}))
+vi.mock('../src/client/ClientPostHogProvider', () => ({
     ClientPostHogProvider: (props: any) => mockClientPostHogProvider(props),
 }))
 
 describe('Pages PostHogProvider', () => {
     beforeEach(() => {
-        jest.clearAllMocks()
+        vi.clearAllMocks()
     })
 
     it('renders children inside ClientPostHogProvider', () => {

@@ -1,4 +1,4 @@
-import '@testing-library/jest-dom'
+import '@testing-library/jest-dom/vitest'
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/preact'
 import {
@@ -26,8 +26,8 @@ describe('MultipleChoiceQuestion', () => {
         forceDisableHtml: false,
         appearance: mockAppearance,
         displayQuestionIndex: 1,
-        onSubmit: jest.fn(),
-        onPreviewSubmit: jest.fn(),
+        onSubmit: vi.fn(),
+        onPreviewSubmit: vi.fn(),
     }
 
     describe('SingleChoice', () => {
@@ -104,7 +104,7 @@ describe('MultipleChoiceQuestion', () => {
         }
 
         it('submits the selected choice immediately and hides button', () => {
-            const onSubmitMock = jest.fn()
+            const onSubmitMock = vi.fn()
             const { getByLabelText, queryByText } = render(
                 <MultipleChoiceQuestion {...baseProps} onSubmit={onSubmitMock} question={singleChoiceSkipQuestion} />
             )
@@ -220,7 +220,7 @@ describe('MultipleChoiceQuestion', () => {
         })
 
         it('does not propagate keydown events from open choice input', () => {
-            const parentKeyDownHandler = jest.fn()
+            const parentKeyDownHandler = vi.fn()
             const { container } = render(
                 <div onKeyDown={parentKeyDownHandler}>
                     <MultipleChoiceQuestion {...baseProps} question={multipleChoiceQuestion} />
@@ -252,8 +252,8 @@ describe('OpenTextQuestion', () => {
     const baseProps = {
         forceDisableHtml: false,
         appearance: mockAppearance,
-        onSubmit: jest.fn(),
-        onPreviewSubmit: jest.fn(),
+        onSubmit: vi.fn(),
+        onPreviewSubmit: vi.fn(),
         displayQuestionIndex: 0,
     }
 
@@ -265,7 +265,7 @@ describe('OpenTextQuestion', () => {
     }
 
     it('does not propagate keydown events', () => {
-        const parentKeyDownHandler = jest.fn()
+        const parentKeyDownHandler = vi.fn()
 
         // Render the component within a div that has a keydown listener
         const { container } = render(
@@ -303,8 +303,8 @@ describe('RatingQuestion', () => {
         forceDisableHtml: false,
         appearance: mockAppearance,
         displayQuestionIndex: 1,
-        onSubmit: jest.fn(),
-        onPreviewSubmit: jest.fn(),
+        onSubmit: vi.fn(),
+        onPreviewSubmit: vi.fn(),
     }
 
     const ratingQuestion: RatingSurveyQuestion = {
@@ -463,7 +463,7 @@ describe('RatingQuestion', () => {
         }
 
         it('submits rating immediately and hides button for number display', async () => {
-            const onSubmitMock = jest.fn()
+            const onSubmitMock = vi.fn()
             render(<RatingQuestion {...baseProps} onSubmit={onSubmitMock} question={ratingSkipQuestion} />)
             const button3 = getRatingButton(3)
 
@@ -476,7 +476,7 @@ describe('RatingQuestion', () => {
         })
 
         it('submits rating immediately and hides button for emoji display', async () => {
-            const onSubmitMock = jest.fn()
+            const onSubmitMock = vi.fn()
             render(<RatingQuestion {...baseProps} onSubmit={onSubmitMock} question={ratingEmojiSkipQuestion} />)
 
             // Click the emoji button that corresponds to rating value 1
@@ -492,7 +492,7 @@ describe('RatingQuestion', () => {
 
         it('shows submit button if skipSubmitButton is false for number display', () => {
             const question = { ...ratingSkipQuestion, skipSubmitButton: false }
-            const onSubmitMock = jest.fn()
+            const onSubmitMock = vi.fn()
             render(<RatingQuestion {...baseProps} onSubmit={onSubmitMock} question={question} />)
             const button3 = getRatingButton(3)
 
@@ -504,7 +504,7 @@ describe('RatingQuestion', () => {
 
         it('shows submit button if skipSubmitButton is false for emoji display', () => {
             const question = { ...ratingEmojiSkipQuestion, skipSubmitButton: false }
-            const onSubmitMock = jest.fn()
+            const onSubmitMock = vi.fn()
             render(<RatingQuestion {...baseProps} onSubmit={onSubmitMock} question={question} />)
 
             // Click the emoji button that corresponds to rating value 1

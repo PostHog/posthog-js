@@ -15,7 +15,7 @@
         "clean": "rimraf dist",
         "lint": "eslint src",
         "lint:fix": "eslint src --fix",
-        "test:unit": "jest --passWithNoTests",
+        "test:unit": "vitest run --passWithNoTests",
         "dev": "rslib build --watch",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },
@@ -33,8 +33,7 @@
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
-        "@types/jest": "catalog:",
-        "jest": "catalog:",
-        "rollup": "~4.53.2"
+        "rollup": "~4.53.2",
+        "vitest": "catalog:"
     }
 }

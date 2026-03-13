@@ -1,3 +1,6 @@
+// vi and expect are available as globals from vitest when running tests
+declare const vi: any
+declare const expect: any
 import { Logger } from '@/types'
 
 export const wait = async (t: number): Promise<void> => {
@@ -5,13 +8,11 @@ export const wait = async (t: number): Promise<void> => {
 }
 
 export const waitForPromises = async (): Promise<void> => {
-  await new Promise((resolve) => {
-    // IMPORTANT: Only enable real timers for this promise - allows us to pass a short amount of ticks
-    // whilst keeping any timers made during other promises as fake timers
-    jest.useRealTimers()
-    setTimeout(resolve, 10)
-    jest.useFakeTimers()
-  })
+  // Flush all pending microtasks and promises
+  // vi.advanceTimersByTimeAsync advances fake timers while also processing microtasks
+  await vi.advanceTimersByTimeAsync(0)
+  // Run an additional microtask tick to ensure all chained promises resolve
+  await new Promise<void>((resolve) => queueMicrotask(resolve))
 }
 
 export const parseBody = (mockCall: any): any => {
@@ -36,10 +37,10 @@ export const delay = (ms: number): Promise<void> => {
 
 export const createMockLogger = (): Logger => {
   return {
-    info: jest.fn((...args) => console.log(...args)),
-    warn: jest.fn((...args) => console.warn(...args)),
-    error: jest.fn((...args) => console.error(...args)),
-    critical: jest.fn((...args) => console.error(...args)),
+    info: vi.fn((...args: any[]) => console.log(...args)),
+    warn: vi.fn((...args: any[]) => console.warn(...args)),
+    error: vi.fn((...args: any[]) => console.error(...args)),
+    critical: vi.fn((...args: any[]) => console.error(...args)),
     createLogger: createMockLogger,
   }
 }

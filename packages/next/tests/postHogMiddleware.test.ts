@@ -1,10 +1,10 @@
-jest.mock('server-only', () => ({}))
+vi.mock('server-only', () => ({}))
 
 import { postHogMiddleware } from '../src/middleware/postHogMiddleware'
 
 // Mock identity module so we can control the generated ID
-const mockGenerateAnonymousId = jest.fn(() => 'mock-anon-id')
-jest.mock('../src/shared/identity', () => ({
+const mockGenerateAnonymousId = vi.fn(() => 'mock-anon-id')
+vi.mock('../src/shared/identity', () => ({
     generateAnonymousId: () => mockGenerateAnonymousId(),
 }))
 
@@ -32,20 +32,20 @@ class MockNextRequest {
     }
 }
 
-const mockCookiesSet = jest.fn()
-const mockCookiesDelete = jest.fn()
-const mockNextResponseNext = jest.fn(() => ({
+const mockCookiesSet = vi.fn()
+const mockCookiesDelete = vi.fn()
+const mockNextResponseNext = vi.fn(() => ({
     headers: new Map(),
     cookies: { set: mockCookiesSet, delete: mockCookiesDelete },
 }))
 
-const mockNextResponseRewrite = jest.fn((url: URL) => ({
+const mockNextResponseRewrite = vi.fn((url: URL) => ({
     headers: new Map(),
-    cookies: { set: jest.fn() },
+    cookies: { set: vi.fn() },
     _rewriteUrl: url,
 }))
 
-jest.mock('next/server', () => ({
+vi.mock('next/server', () => ({
     NextResponse: {
         next: (...args: any[]) => mockNextResponseNext(...args),
         rewrite: (url: URL) => mockNextResponseRewrite(url),
@@ -58,7 +58,7 @@ describe('postHogMiddleware', () => {
     const originalEnv = process.env
 
     beforeEach(() => {
-        jest.clearAllMocks()
+        vi.clearAllMocks()
         mockGenerateAnonymousId.mockReturnValue('mock-anon-id')
         process.env = { ...originalEnv }
     })
@@ -178,7 +178,7 @@ describe('postHogMiddleware', () => {
 
     describe('composable response', () => {
         it('uses the provided response instead of creating one', async () => {
-            const providedCookiesSet = jest.fn()
+            const providedCookiesSet = vi.fn()
             const providedResponse = {
                 headers: new Map(),
                 cookies: { set: providedCookiesSet },
@@ -202,7 +202,7 @@ describe('postHogMiddleware', () => {
         })
 
         it('returns the provided response unmodified when cookie exists', async () => {
-            const providedCookiesSet = jest.fn()
+            const providedCookiesSet = vi.fn()
             const providedResponse = {
                 headers: new Map(),
                 cookies: { set: providedCookiesSet },

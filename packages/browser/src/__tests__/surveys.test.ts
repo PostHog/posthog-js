@@ -1,6 +1,5 @@
 /// <reference lib="dom" />
 
-import { expect, it, describe, beforeEach, afterEach, jest } from '@jest/globals'
 import { SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
 import { generateSurveys, getNextSurveyStep, SurveyManager } from '../extensions/surveys'
 import {
@@ -173,7 +172,7 @@ describe('surveys', () => {
     beforeEach(() => {
         surveysResponse = { surveys: firstSurveys }
 
-        const loadScriptMock = jest.fn()
+        const loadScriptMock = vi.fn()
 
         loadScriptMock.mockImplementation((_ph, _path, callback) => {
             assignableWindow.__PosthogExtensions__ = assignableWindow.__Posthog__ || {}
@@ -194,7 +193,7 @@ describe('surveys', () => {
             config: config,
             persistence: new PostHogPersistence(config),
             requestRouter: new RequestRouter({ config } as any),
-            _addCaptureHook: jest.fn(),
+            _addCaptureHook: vi.fn(),
             register: (props: Properties) => instance.persistence?.register(props),
             unregister: (key: string) => instance.persistence?.unregister(key),
             get_property: (key: string) => instance.persistence?.props[key],
@@ -205,7 +204,7 @@ describe('surveys', () => {
                 _send_request: jest
                     .fn()
                     .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
-                getFeatureFlag: jest.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
+                getFeatureFlag: vi.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
                 isFeatureEnabled: jest
                     .fn()
                     .mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
@@ -224,7 +223,7 @@ describe('surveys', () => {
 
         // mock loadIfEnabled so posthog.surveys.loadIfEnabled() doesn't call _send_request
         // and it instantiates the survey event receiver
-        const loadIfEnabledMock = jest.fn()
+        const loadIfEnabledMock = vi.fn()
         loadIfEnabledMock.mockImplementation(() => {
             surveys._surveyEventReceiver = new SurveyEventReceiver(instance)
         })
@@ -834,9 +833,9 @@ describe('surveys', () => {
 
         it('should render in-app surveys (popover, widget, api)', () => {
             surveysResponse = { surveys: [inAppSurvey] }
-            const mockRenderSurvey = jest.fn()
+            const mockRenderSurvey = vi.fn()
             ;(surveys as any)._surveyManager = { renderSurvey: mockRenderSurvey }
-            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+            const loggerWarnSpy = vi.spyOn(logger, 'warn')
 
             surveys.renderSurvey('in-app-survey', '#test-survey-container')
 
@@ -850,9 +849,9 @@ describe('surveys', () => {
 
         it('should not render external surveys and show warning', () => {
             surveysResponse = { surveys: [externalSurvey] }
-            const mockRenderSurvey = jest.fn()
+            const mockRenderSurvey = vi.fn()
             ;(surveys as any)._surveyManager = { renderSurvey: mockRenderSurvey }
-            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+            const loggerWarnSpy = vi.spyOn(logger, 'warn')
 
             surveys.renderSurvey('external-survey', '#test-survey-container')
 
@@ -861,8 +860,8 @@ describe('surveys', () => {
         })
 
         it('should warn when survey manager is not initialized', () => {
-            ;(surveys as any)._surveyManager = null
-            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+            (surveys as any)._surveyManager = null
+            const loggerWarnSpy = vi.spyOn(logger, 'warn')
 
             surveys.renderSurvey('test-survey', '#test-survey-container')
 
@@ -871,8 +870,8 @@ describe('surveys', () => {
 
         it('should warn when survey is not found', () => {
             surveysResponse = { surveys: [] }
-            ;(surveys as any)._surveyManager = { renderSurvey: jest.fn() }
-            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+            ;(surveys as any)._surveyManager = { renderSurvey: vi.fn() }
+            const loggerWarnSpy = vi.spyOn(logger, 'warn')
 
             surveys.renderSurvey('non-existent-survey', '#test-survey-container')
 
@@ -881,8 +880,8 @@ describe('surveys', () => {
 
         it('should warn when target element is not found', () => {
             surveysResponse = { surveys: [inAppSurvey] }
-            ;(surveys as any)._surveyManager = { renderSurvey: jest.fn() }
-            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+            ;(surveys as any)._surveyManager = { renderSurvey: vi.fn() }
+            const loggerWarnSpy = vi.spyOn(logger, 'warn')
 
             surveys.renderSurvey('in-app-survey', '#non-existent-element')
 
@@ -970,7 +969,7 @@ describe('surveys', () => {
 
         it('correctly converts truthy/falsy flag values to boolean', () => {
             // Mock different return values
-            const mockIsFeatureEnabled = jest.fn()
+            const mockIsFeatureEnabled = vi.fn()
             instance.featureFlags.isFeatureEnabled = mockIsFeatureEnabled
 
             // Test truthy values

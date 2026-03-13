@@ -5,11 +5,11 @@ describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient
   let mocks: PostHogCoreTestClientMocks
 
-  jest.useFakeTimers()
-  jest.setSystemTime(new Date('2022-01-01T12:00:00'))
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2022-01-01T12:00:00'))
 
   beforeEach(() => {
-    ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 })
+    [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 })
   })
 
   describe('sessions', () => {
@@ -31,22 +31,22 @@ describe('PostHog Core', () => {
     })
 
     it('should generate new sessionId if expired', () => {
-      jest.setSystemTime(new Date('2022-01-01T12:00:00'))
+      vi.setSystemTime(new Date('2022-01-01T12:00:00'))
       posthog.capture('test')
       const sessionId = posthog.getPersistedProperty(PostHogPersistedProperty.SessionId)
 
       // Check 29 minutes later
-      jest.setSystemTime(new Date('2022-01-01T12:29:00'))
+      vi.setSystemTime(new Date('2022-01-01T12:29:00'))
       posthog.capture('test')
       expect(posthog.getPersistedProperty(PostHogPersistedProperty.SessionId)).toEqual(sessionId)
 
       // Check another 29 minutes later
-      jest.setSystemTime(new Date('2022-01-01T12:58:00'))
+      vi.setSystemTime(new Date('2022-01-01T12:58:00'))
       posthog.capture('test')
       expect(posthog.getPersistedProperty(PostHogPersistedProperty.SessionId)).toEqual(sessionId)
 
       // Check more than 30 minutes later
-      jest.setSystemTime(new Date('2022-01-01T13:30:00'))
+      vi.setSystemTime(new Date('2022-01-01T13:30:00'))
       posthog.capture('test')
       expect(posthog.getPersistedProperty(PostHogPersistedProperty.SessionId)).not.toEqual(sessionId)
     })

@@ -14,7 +14,7 @@ describe('external-scripts-loader', () => {
         } as PostHog
         mockPostHog.requestRouter = new RequestRouter(mockPostHog)
 
-        const callback = jest.fn()
+        const callback = vi.fn()
         beforeEach(() => {
             callback.mockClear()
             document!.getElementsByTagName('html')![0].innerHTML = ''
@@ -83,8 +83,8 @@ describe('external-scripts-loader', () => {
         })
 
         it('adds timestamp to toolbar loader', () => {
-            jest.useFakeTimers()
-            jest.setSystemTime(1726067100000)
+            vi.useFakeTimers()
+            vi.setSystemTime(1726067100000)
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'toolbar', callback)
             expect(document!.getElementsByTagName('script')[0].src).toBe(
                 'https://us-assets.i.posthog.com/static/toolbar.js?v=1.0.0&t=1726067100000'

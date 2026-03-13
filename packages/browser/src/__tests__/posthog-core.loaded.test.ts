@@ -3,7 +3,7 @@ import { uuidv7 } from '../uuidv7'
 import { PostHog } from '../posthog-core'
 import { PostHogConfig } from '../types'
 
-jest.useFakeTimers()
+vi.useFakeTimers()
 
 describe('loaded() with flags', () => {
     let instance: PostHog
@@ -14,14 +14,14 @@ describe('loaded() with flags', () => {
             disable_compression: true,
             ...config,
             loaded: (ph) => {
-                ph.capture = jest.fn()
-                ph._send_request = jest.fn(({ callback }) => callback?.({ statusCode: 200, json: {} }))
-                ph._start_queue_if_opted_in = jest.fn()
+                ph.capture = vi.fn()
+                ph._send_request = vi.fn(({ callback }) => callback?.({ statusCode: 200, json: {} }))
+                ph._start_queue_if_opted_in = vi.fn()
 
-                jest.spyOn(ph.featureFlags, 'setGroupPropertiesForFlags')
-                jest.spyOn(ph.featureFlags, 'setReloadingPaused')
-                jest.spyOn(ph.featureFlags, 'reloadFeatureFlags')
-                jest.spyOn(ph.featureFlags, '_callFlagsEndpoint')
+                vi.spyOn(ph.featureFlags, 'setGroupPropertiesForFlags')
+                vi.spyOn(ph.featureFlags, 'setReloadingPaused')
+                vi.spyOn(ph.featureFlags, 'reloadFeatureFlags')
+                vi.spyOn(ph.featureFlags, '_callFlagsEndpoint')
 
                 config?.loaded?.(ph)
             },
@@ -57,7 +57,7 @@ describe('loaded() with flags', () => {
             })
 
             // Advance past the 5ms debounce timer from reloadFeatureFlags
-            jest.advanceTimersByTime(10)
+            vi.advanceTimersByTime(10)
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
@@ -67,7 +67,7 @@ describe('loaded() with flags', () => {
                     groups: { org: 'bazinga' },
                 },
             })
-            jest.advanceTimersByTime(10) // Ensure no additional debounce
+            vi.advanceTimersByTime(10) // Ensure no additional debounce
             expect(instance._send_request).toHaveBeenCalledTimes(1)
         })
 
@@ -82,7 +82,7 @@ describe('loaded() with flags', () => {
             })
 
             // Advance past the 5ms debounce timer
-            jest.advanceTimersByTime(10)
+            vi.advanceTimersByTime(10)
 
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(1)
             expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -94,8 +94,8 @@ describe('loaded() with flags', () => {
                 },
             })
 
-            jest.advanceTimersByTime(100) // Fire the setTimeout for group change
-            jest.advanceTimersByTime(10) // Fire the debounce for the second group call
+            vi.advanceTimersByTime(100) // Fire the setTimeout for group change
+            vi.advanceTimersByTime(10) // Fire the debounce for the second group call
 
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(2)
             expect(instance._send_request).toHaveBeenCalledTimes(2)
@@ -117,7 +117,7 @@ describe('loaded() with flags', () => {
             })
 
             // Advance past the 5ms debounce timer
-            jest.advanceTimersByTime(10)
+            vi.advanceTimersByTime(10)
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0]).toMatchObject({
@@ -139,7 +139,7 @@ describe('loaded() with flags', () => {
             expect(instance.config.advanced_disable_feature_flags_on_first_load).toBe(true)
 
             // Advance past the 5ms debounce timer — the group() call still triggers reloadFeatureFlags
-            jest.advanceTimersByTime(10)
+            vi.advanceTimersByTime(10)
 
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(1)
             expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -147,7 +147,7 @@ describe('loaded() with flags', () => {
             // The group() triggered reload doesn't set disable_flags
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toEqual(undefined)
 
-            jest.advanceTimersByTime(10) // Ensure no additional calls
+            vi.advanceTimersByTime(10) // Ensure no additional calls
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(1)
             expect(instance._send_request).toHaveBeenCalledTimes(1)
         })
@@ -186,17 +186,17 @@ describe('loaded() with flags', () => {
                 expectedArgs: { quotaLimited: ['recordings'], featureFlags: { 'test-flag': true } },
             },
         ])('$name', async ({ response, expectedCall, expectedArgs }) => {
-            instance._send_request = jest.fn(({ callback }) =>
+            instance._send_request = vi.fn(({ callback }) =>
                 callback?.({
                     statusCode: 200,
                     json: response,
                 })
             )
 
-            const receivedFeatureFlagsSpy = jest.spyOn(instance.featureFlags, 'receivedFeatureFlags')
+            const receivedFeatureFlagsSpy = vi.spyOn(instance.featureFlags, 'receivedFeatureFlags')
 
             instance.featureFlags._callFlagsEndpoint()
-            jest.advanceTimersByTime(10)
+            vi.advanceTimersByTime(10)
 
             if (expectedCall) {
                 expect(receivedFeatureFlagsSpy).toHaveBeenCalledWith(expectedArgs, false)

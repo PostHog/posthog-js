@@ -4,8 +4,8 @@ describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient
   let mocks: PostHogCoreTestClientMocks
 
-  jest.useFakeTimers()
-  jest.setSystemTime(new Date('2022-01-01'))
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2022-01-01'))
 
   const errorAPIResponse = Promise.resolve({
     status: 400,
@@ -18,7 +18,7 @@ describe('PostHog Core', () => {
 
   describe('getFlags', () => {
     beforeEach(() => {
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 })
+      [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 })
     })
 
     it('should handle successful v1 response and return normalized response', async () => {
@@ -130,7 +130,7 @@ describe('PostHog Core', () => {
     })
 
     it('should handle network errors', async () => {
-      const emitSpy = jest.spyOn(posthog['_events'], 'emit')
+      const emitSpy = vi.spyOn(posthog['_events'], 'emit')
       mocks.fetch.mockImplementation((url) => {
         if (url.includes('/flags/?v=2')) {
           return Promise.reject(new Error('Network error'))

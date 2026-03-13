@@ -7,8 +7,8 @@
         "clean:dep": "rm -rf node_modules && pnpm -r exec rm -rf node_modules",
         "lint": "turbo lint",
         "lint:fix": "turbo lint:fix",
-        "lint:playground": "prettier --check 'playground/**/*.{ts,tsx,js,jsx,mjs,json,md}' && eslint 'playground/**/*.{ts,tsx,js,jsx,mjs}'",
-        "lint:playground:fix": "prettier --write 'playground/**/*.{ts,tsx,js,jsx,mjs,json,md}' && eslint --fix 'playground/**/*.{ts,tsx,js,jsx,mjs}'",
+        "lint:playground": "oxfmt --check 'playground/**/*.{ts,tsx,js,jsx,mjs,json,md}' && eslint 'playground/**/*.{ts,tsx,js,jsx,mjs}'",
+        "lint:playground:fix": "oxfmt --write 'playground/**/*.{ts,tsx,js,jsx,mjs,json,md}' && eslint --fix 'playground/**/*.{ts,tsx,js,jsx,mjs}'",
         "test": "turbo test",
         "test:unit": "turbo test:unit",
         "test:functional": "turbo test:functional",
@@ -38,22 +38,21 @@
         "@microsoft/api-extractor": "^7.55.1",
         "@microsoft/api-extractor-model": "^7.32.1",
         "@microsoft/tsdoc": "^0.15.1",
+        "@oxfmt/binding-darwin-arm64": "0.40.0",
         "@types/eslint": "^8.56.12",
         "@types/node": "^22.19.1",
         "@typescript-eslint/eslint-plugin": "^8.48.1",
         "@typescript-eslint/parser": "^8.48.1",
+        "@vitest/eslint-plugin": "^1.2.1",
         "eslint": "8.57.0",
         "eslint-config-posthog-js": "link:tooling/eslint-plugin-posthog-js",
-        "eslint-config-prettier": "^8.10.2",
         "eslint-plugin-compat": "^6.0.2",
-        "eslint-plugin-jest": "^28.14.0",
         "eslint-plugin-no-only-tests": "^3.3.0",
         "eslint-plugin-posthog-js": "link:tooling/eslint-plugin-posthog-js",
-        "eslint-plugin-prettier": "^5.5.4",
         "eslint-plugin-react": "^7.37.5",
         "eslint-plugin-react-hooks": "^4.6.2",
         "lint-staged": "^10.5.4",
-        "prettier": "^3.7.4",
+        "oxfmt": "^0.40.0",
         "rimraf": "^6.1.2",
         "rollup": "catalog:",
         "ts-node": "^10.9.2",
@@ -63,8 +62,8 @@
     "lint-staged": {
         "*.{ts,tsx,js,jsx,mjs,cjs}": [
             "eslint --cache --fix",
-            "prettier --write"
+            "oxfmt --write"
         ],
-        "*.{json,md}": "prettier --write"
+        "*.{json,md}": "oxfmt --write"
     }
 }

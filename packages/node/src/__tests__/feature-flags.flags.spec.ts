@@ -3,9 +3,11 @@ import { PostHogOptions } from '@/types'
 import { apiImplementation, apiImplementationV4, waitForPromises } from './utils'
 import { PostHogV2FlagsResponse, FeatureFlagError } from '@posthog/core'
 
-jest.spyOn(console, 'debug').mockImplementation()
+vi.useFakeTimers()
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+vi.spyOn(console, 'debug').mockImplementation()
+
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
 const posthogImmediateResolveOptions: PostHogOptions = {
   fetchRetryCount: 0,

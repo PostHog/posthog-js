@@ -7,7 +7,6 @@ import { createPosthogInstance } from '../../helpers/posthog-instance'
 import { uuidv7 } from '../../../uuidv7'
 
 import posthogErrorWrappingFunctions from '../../../entrypoints/exception-autocapture'
-import { afterEach } from '@jest/globals'
 
 /** help out jsdom */
 export type PromiseRejectionEventTypes = 'rejectionhandled' | 'unhandledrejection'
@@ -34,12 +33,12 @@ export class PromiseRejectionEvent extends Event {
 describe('Exception Observer', () => {
     let exceptionObserver: ExceptionObserver
     let posthog: PostHog
-    let sendRequestSpy: jest.SpyInstance
-    const beforeSendMock = jest.fn().mockImplementation((e) => e)
-    const loadScriptMock = jest.fn()
+    let sendRequestSpy: vi.SpyInstance
+    const beforeSendMock = vi.fn().mockImplementation((e) => e)
+    const loadScriptMock = vi.fn()
 
     const addErrorWrappingFlagToWindow = () => {
-        // assignableWindow.onerror = jest.fn()
+        // assignableWindow.onerror = vi.fn()
         // assignableWindow.onerror__POSTHOG_INSTRUMENTED__ = true
 
         assignableWindow.__PosthogExtensions__.errorWrappingFunctions = posthogErrorWrappingFunctions
@@ -62,7 +61,7 @@ describe('Exception Observer', () => {
             loadExternalDependency: loadScriptMock,
         }
 
-        sendRequestSpy = jest.spyOn(posthog, '_send_request')
+        sendRequestSpy = vi.spyOn(posthog, '_send_request')
 
         exceptionObserver = new ExceptionObserver(posthog)
     })
@@ -174,7 +173,7 @@ describe('Exception Observer', () => {
         it('captures an event when console.error is called', () => {
             // setup.js makes console.error throw, so we need to replace it
             const originalConsoleError = window!.console.error
-            window!.console.error = jest.fn()
+            window!.console.error = vi.fn()
 
             posthog.config.capture_exceptions = {
                 capture_console_errors: true,
@@ -204,11 +203,11 @@ describe('Exception Observer', () => {
     })
 
     describe('when there are handlers already present', () => {
-        const originalOnError = jest.fn()
-        const originalOnUnhandledRejection = jest.fn()
+        const originalOnError = vi.fn()
+        const originalOnUnhandledRejection = vi.fn()
 
         beforeEach(() => {
-            jest.clearAllMocks()
+            vi.clearAllMocks()
             window!.onerror = originalOnError
             window!.onunhandledrejection = originalOnUnhandledRejection
 

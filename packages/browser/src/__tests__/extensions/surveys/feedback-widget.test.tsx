@@ -1,5 +1,5 @@
 /* eslint-disable compat/compat */
-import '@testing-library/jest-dom'
+import '@testing-library/jest-dom/vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact'
 import { FeedbackWidget } from '../../../extensions/surveys'
 import { Survey, SurveyQuestionType, SurveyType, SurveyWidgetType } from '../../../posthog-surveys-types'
@@ -8,12 +8,12 @@ import { PostHogFeatureFlags } from '../../../posthog-featureflags'
 
 // Mock PostHog instance
 const mockPosthog = createMockPostHog({
-    capture: jest.fn(),
-    getActiveMatchingSurveys: jest.fn(),
+    capture: vi.fn(),
+    getActiveMatchingSurveys: vi.fn(),
     featureFlags: {
-        isFeatureEnabled: jest.fn().mockReturnValue(true),
+        isFeatureEnabled: vi.fn().mockReturnValue(true),
     } as Partial<PostHogFeatureFlags> as unknown as PostHogFeatureFlags,
-    get_session_replay_url: jest.fn().mockReturnValue('http://example.com/replay'),
+    get_session_replay_url: vi.fn().mockReturnValue('http://example.com/replay'),
 })
 
 // Base mock survey for widget type
@@ -83,8 +83,8 @@ describe('FeedbackWidget', () => {
         // Mock history API for URL change hook
         Object.defineProperty(window, 'history', {
             value: {
-                pushState: jest.fn(),
-                replaceState: jest.fn(),
+                pushState: vi.fn(),
+                replaceState: vi.fn(),
                 // Add scrollRestoration if needed by your code, JSDOM defaults to 'auto'
                 scrollRestoration: 'manual',
             },
@@ -92,9 +92,9 @@ describe('FeedbackWidget', () => {
         })
 
         // Mock form.submit to prevent JSDOM error
-        HTMLFormElement.prototype.submit = jest.fn()
+        HTMLFormElement.prototype.submit = vi.fn()
 
-        jest.clearAllMocks()
+        vi.clearAllMocks()
     })
 
     afterEach(() => {

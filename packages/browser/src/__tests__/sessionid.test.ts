@@ -7,14 +7,14 @@ import { PostHogPersistence } from '../posthog-persistence'
 import { assignableWindow } from '../utils/globals'
 import { createMockPostHog } from './helpers/posthog-instance'
 
-jest.mock('../uuidv7')
-jest.mock('../storage')
+vi.mock('../uuidv7')
+vi.mock('../storage')
 
 describe('Session ID manager', () => {
     let timestamp: number | undefined
     let now: number
     let timestampOfSessionStart: number
-    let registerMock: jest.Mock
+    let registerMock: vi.Mock
 
     const config: Partial<PostHogConfig> = {
         persistence_name: 'persistance-name',
@@ -23,7 +23,7 @@ describe('Session ID manager', () => {
     let persistence: { props: Properties } & Partial<PostHogPersistence>
 
     const sessionIdMgr = (phPersistence: Partial<PostHogPersistence>) => {
-        registerMock = jest.fn()
+        registerMock = vi.fn()
         return new SessionIdManager(
             createMockPostHog({
                 config,
@@ -41,17 +41,17 @@ describe('Session ID manager', () => {
 
         persistence = {
             props: { [SESSION_ID]: undefined },
-            register: jest.fn().mockImplementation((props) => {
+            register: vi.fn().mockImplementation((props) => {
                 // Mock the behavior of register - it should update the props
                 Object.assign(persistence.props, props)
             }),
             _disabled: false,
         }
-        ;(sessionStore._is_supported as jest.Mock).mockReturnValue(true)
+        ;(sessionStore._is_supported as vi.Mock).mockReturnValue(true)
         // @ts-expect-error - TS gets confused about the types here
-        jest.spyOn(global, 'Date').mockImplementation(() => new originalDate(now))
-        ;(uuidv7 as jest.Mock).mockReturnValue('newUUID')
-        ;(uuid7ToTimestampMs as jest.Mock).mockReturnValue(timestamp)
+        vi.spyOn(global, 'Date').mockImplementation(() => new originalDate(now))
+        ;(uuidv7 as vi.Mock).mockReturnValue('newUUID')
+        ;(uuid7ToTimestampMs as vi.Mock).mockReturnValue(timestamp)
     })
 
     describe('new session id manager', () => {
@@ -89,7 +89,7 @@ describe('Session ID manager', () => {
                 createMockPostHog({
                     config: { ...config, bootstrap },
                     persistence: persistence as PostHogPersistence,
-                    register: jest.fn(),
+                    register: vi.fn(),
                 })
             )
 
@@ -113,7 +113,7 @@ describe('Session ID manager', () => {
 
     describe('stored session data', () => {
         beforeEach(() => {
-            ;(sessionStore._parse as jest.Mock).mockReturnValue('oldWindowID')
+            (sessionStore._parse as vi.Mock).mockReturnValue('oldWindowID')
             timestampOfSessionStart = now - 3600
             persistence.props[SESSION_ID] = [now, 'oldSessionID', timestampOfSessionStart]
         })
@@ -150,7 +150,7 @@ describe('Session ID manager', () => {
         })
 
         it('generates only a new window id, and saves it when there is no previous window id set', () => {
-            ;(sessionStore._parse as jest.Mock).mockReturnValue(null)
+            (sessionStore._parse as vi.Mock).mockReturnValue(null)
             expect(sessionIdMgr(persistence).checkAndGetSessionAndWindowId(undefined, timestamp)).toEqual({
                 windowId: 'newUUID',
                 sessionId: 'oldSessionID',
@@ -288,7 +288,7 @@ describe('Session ID manager', () => {
             expect(sessionStore._set).not.toHaveBeenCalled()
         })
         it('stores and retrieves a window_id if sessionStorage is not supported', () => {
-            ;(sessionStore._is_supported as jest.Mock).mockReturnValue(false)
+            (sessionStore._is_supported as vi.Mock).mockReturnValue(false)
             const sessionIdManager = sessionIdMgr(persistence)
             sessionIdManager['_setWindowId']('newWindowId')
             expect(sessionIdManager['_getWindowId']()).toEqual('newWindowId')
@@ -350,7 +350,7 @@ describe('Session ID manager', () => {
     describe('primary_window_exists_storage_key', () => {
         it('if primary_window_exists key does not exist, do not cycle window id', () => {
             // setup
-            ;(sessionStore._parse as jest.Mock).mockImplementation((storeKey: string) =>
+            (sessionStore._parse as vi.Mock).mockImplementation((storeKey: string) =>
                 storeKey === 'ph_persistance-name_primary_window_exists' ? undefined : 'oldWindowId'
             )
             // expect
@@ -360,7 +360,7 @@ describe('Session ID manager', () => {
         })
         it('if primary_window_exists key exists, cycle window id', () => {
             // setup
-            ;(sessionStore._parse as jest.Mock).mockImplementation((storeKey: string) =>
+            (sessionStore._parse as vi.Mock).mockImplementation((storeKey: string) =>
                 storeKey === 'ph_persistance-name_primary_window_exists' ? true : 'oldWindowId'
             )
             // expect
@@ -378,12 +378,12 @@ describe('Session ID manager', () => {
                         session_idle_timeout_seconds: timeout,
                     },
                     persistence: persistence as PostHogPersistence,
-                    register: jest.fn(),
+                    register: vi.fn(),
                 })
             )
 
         beforeEach(() => {
-            console.warn = jest.fn()
+            console.warn = vi.fn()
         })
 
         it('uses the custom session_idle_timeout_seconds if within bounds', () => {
@@ -428,10 +428,10 @@ describe('Session ID manager', () => {
         })
 
         it('resets session when idle timeout is exceeded', async () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
 
             const sessionIdManager = sessionIdMgr(persistence)
-            const resetSpy = jest.spyOn(sessionIdManager, 'resetSessionId')
+            const resetSpy = vi.spyOn(sessionIdManager, 'resetSessionId')
 
             // Start with a fresh session
             sessionIdManager.checkAndGetSessionAndWindowId(false, timestamp)
@@ -442,7 +442,7 @@ describe('Session ID manager', () => {
 
             // Fast-forward time to trigger the idle timeout timer
             const idleTimeoutMs = sessionIdManager.sessionTimeoutMs * 1.1
-            jest.advanceTimersByTime(idleTimeoutMs + 1000)
+            vi.advanceTimersByTime(idleTimeoutMs + 1000)
 
             // Timer should have fired and called resetSessionId
             expect(resetSpy).toHaveBeenCalled()
@@ -456,17 +456,17 @@ describe('Session ID manager', () => {
             expect(newSessionData.sessionId).not.toEqual('oldSessionID')
             expect(newSessionData.changeReason?.noSessionId).toBe(true)
 
-            jest.useRealTimers()
+            vi.useRealTimers()
         })
 
         it('timer checks current session activity before resetting', async () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
 
             const sessionIdManager = sessionIdMgr(persistence)
-            const resetSpy = jest.spyOn(sessionIdManager, 'resetSessionId')
+            const resetSpy = vi.spyOn(sessionIdManager, 'resetSessionId')
 
             // Mock _getSessionId to control what the timer sees
-            const getSessionIdSpy = jest.spyOn(sessionIdManager as any, '_getSessionId')
+            const getSessionIdSpy = vi.spyOn(sessionIdManager as any, '_getSessionId')
 
             // Start with a fresh session
             sessionIdManager.checkAndGetSessionAndWindowId(false, timestamp)
@@ -477,25 +477,25 @@ describe('Session ID manager', () => {
 
             // Fast-forward time almost to when timer fires
             const idleTimeoutMs = sessionIdManager.sessionTimeoutMs * 1.1
-            jest.advanceTimersByTime(idleTimeoutMs - 100)
+            vi.advanceTimersByTime(idleTimeoutMs - 100)
 
             // Before timer fires, change mock to return recent activity (simulating another window updating)
             const recentTimestamp = new Date().getTime() - 1000 // 1 second ago
             getSessionIdSpy.mockReturnValue([recentTimestamp, 'sharedSessionID', timestamp])
 
             // Let the timer fire
-            jest.advanceTimersByTime(200)
+            vi.advanceTimersByTime(200)
 
             // The timer should NOT have reset the session because it found recent activity
             expect(resetSpy).not.toHaveBeenCalled()
 
-            jest.useRealTimers()
+            vi.useRealTimers()
         })
     })
 
     describe('forcedIdleReset event emitter', () => {
         it('is safe when there are no handlers registered', async () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
 
             const sessionIdManager = sessionIdMgr(persistence)
 
@@ -510,19 +510,19 @@ describe('Session ID manager', () => {
             // This should not throw even with no handlers registered
             expect(() => {
                 const idleTimeoutMs = sessionIdManager.sessionTimeoutMs * 1.1
-                jest.advanceTimersByTime(idleTimeoutMs + 1000)
+                vi.advanceTimersByTime(idleTimeoutMs + 1000)
             }).not.toThrow()
 
-            jest.useRealTimers()
+            vi.useRealTimers()
         })
 
         it('calls multiple handlers when forcedIdleReset occurs', async () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
 
             const sessionIdManager = sessionIdMgr(persistence)
-            const mockHandler1 = jest.fn()
-            const mockHandler2 = jest.fn()
-            const mockHandler3 = jest.fn()
+            const mockHandler1 = vi.fn()
+            const mockHandler2 = vi.fn()
+            const mockHandler3 = vi.fn()
 
             // Register multiple handlers
             sessionIdManager.on('forcedIdleReset', mockHandler1)
@@ -538,14 +538,14 @@ describe('Session ID manager', () => {
 
             // Fast-forward time to trigger the idle timeout timer
             const idleTimeoutMs = sessionIdManager.sessionTimeoutMs * 1.1
-            jest.advanceTimersByTime(idleTimeoutMs + 1000)
+            vi.advanceTimersByTime(idleTimeoutMs + 1000)
 
             // All handlers should have been called exactly once
             expect(mockHandler1).toHaveBeenCalledTimes(1)
             expect(mockHandler2).toHaveBeenCalledTimes(1)
             expect(mockHandler3).toHaveBeenCalledTimes(1)
 
-            jest.useRealTimers()
+            vi.useRealTimers()
         })
     })
 
@@ -570,7 +570,7 @@ describe('Session ID manager', () => {
                 createMockPostHog({
                     config: memoryConfig,
                     persistence: realPersistence,
-                    register: jest.fn(),
+                    register: vi.fn(),
                 }),
                 () => 'newUUID',
                 () => 'newUUID'
@@ -597,7 +597,7 @@ describe('Session ID manager', () => {
 
     describe('destroy()', () => {
         it('clears the idle timeout timer', () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const sessionIdManager = sessionIdMgr(persistence)
 
             // The timer is created in the constructor
@@ -606,11 +606,11 @@ describe('Session ID manager', () => {
             sessionIdManager.destroy()
 
             expect(sessionIdManager['_enforceIdleTimeout']).toBeUndefined()
-            jest.useRealTimers()
+            vi.useRealTimers()
         })
 
         it('removes the beforeunload event listener', () => {
-            const removeEventListenerSpy = jest.spyOn(window, 'removeEventListener')
+            const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener')
             const sessionIdManager = sessionIdMgr(persistence)
 
             expect(sessionIdManager['_beforeUnloadListener']).toBeDefined()
@@ -629,7 +629,7 @@ describe('Session ID manager', () => {
 
         it('clears session id changed handlers', () => {
             const sessionIdManager = sessionIdMgr(persistence)
-            const mockHandler = jest.fn()
+            const mockHandler = vi.fn()
 
             sessionIdManager.onSessionId(mockHandler)
             expect(sessionIdManager['_sessionIdChangedHandlers']).toHaveLength(1)
@@ -640,9 +640,9 @@ describe('Session ID manager', () => {
         })
 
         it('prevents timer from firing after destroy', async () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const sessionIdManager = sessionIdMgr(persistence)
-            const mockHandler = jest.fn()
+            const mockHandler = vi.fn()
 
             sessionIdManager.on('forcedIdleReset', mockHandler)
 
@@ -655,12 +655,12 @@ describe('Session ID manager', () => {
 
             // Advance time past when the timer would have fired
             const idleTimeoutMs = sessionIdManager.sessionTimeoutMs * 1.1
-            jest.advanceTimersByTime(idleTimeoutMs + 1000)
+            vi.advanceTimersByTime(idleTimeoutMs + 1000)
 
             // Handler should NOT have been called since we destroyed the manager
             expect(mockHandler).not.toHaveBeenCalled()
 
-            jest.useRealTimers()
+            vi.useRealTimers()
         })
     })
 })

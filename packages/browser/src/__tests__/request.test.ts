@@ -5,24 +5,24 @@ import { TextDecoder } from 'util'
 import { extendURLParams, request } from '../request'
 import { Compression, RequestWithOptions } from '../types'
 
-jest.mock('../utils/globals', () => ({
-    ...jest.requireActual('../utils/globals'),
-    fetch: jest.fn(),
-    XMLHttpRequest: jest.fn(),
+vi.mock('../utils/globals', async () => ({
+    ...await vi.importActual('../utils/globals'),
+    fetch: vi.fn(),
+    XMLHttpRequest: vi.fn(),
     navigator: {
-        sendBeacon: jest.fn(),
+        sendBeacon: vi.fn(),
     },
 }))
 
 import { fetch, XMLHttpRequest, navigator } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
 
-jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45' }))
+vi.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45' }))
 
 const flushPromises = async () => {
-    jest.useRealTimers()
+    vi.useRealTimers()
     await new Promise((res) => setTimeout(res, 0))
-    jest.useRealTimers()
+    vi.useRealTimers()
 }
 
 const bodyData = () => ({ key: uuidv7() })
@@ -36,14 +36,14 @@ const arrayOfBodyData = (n: number) => {
 const veryLargeBodyData = arrayOfBodyData(8024)
 
 describe('request', () => {
-    const mockedFetch: jest.MockedFunction<any> = fetch as jest.MockedFunction<any>
-    const mockedXMLHttpRequest: jest.MockedFunction<any> = XMLHttpRequest as jest.MockedFunction<any>
-    const mockedNavigator: jest.Mocked<typeof navigator> = navigator as jest.Mocked<typeof navigator>
+    const mockedFetch: vi.MockedFunction<any> = fetch as vi.MockedFunction<any>
+    const mockedXMLHttpRequest: vi.MockedFunction<any> = XMLHttpRequest as vi.MockedFunction<any>
+    const mockedNavigator: vi.Mocked<typeof navigator> = navigator as vi.Mocked<typeof navigator>
     let mockedXHR = {
-        open: jest.fn(),
-        setRequestHeader: jest.fn(),
-        onreadystatechange: jest.fn(),
-        send: jest.fn(),
+        open: vi.fn(),
+        setRequestHeader: vi.fn(),
+        onreadystatechange: vi.fn(),
+        send: vi.fn(),
         readyState: 4,
         responseText: JSON.stringify('something here'),
         status: 200,
@@ -52,16 +52,16 @@ describe('request', () => {
 
     const now = 1700000000000
 
-    const mockCallback = jest.fn()
+    const mockCallback = vi.fn()
     let createRequest: (overrides?: Partial<RequestWithOptions>) => RequestWithOptions
     let transport: RequestWithOptions['transport']
 
     beforeEach(() => {
         mockedXHR = {
-            open: jest.fn(),
-            setRequestHeader: jest.fn(),
-            onreadystatechange: jest.fn(),
-            send: jest.fn(),
+            open: vi.fn(),
+            setRequestHeader: vi.fn(),
+            onreadystatechange: vi.fn(),
+            send: vi.fn(),
             readyState: 4,
             responseText: JSON.stringify('something here'),
             status: 200,
@@ -69,8 +69,8 @@ describe('request', () => {
         }
         mockedXMLHttpRequest.mockImplementation(() => mockedXHR)
 
-        jest.useFakeTimers()
-        jest.setSystemTime(now)
+        vi.useFakeTimers()
+        vi.setSystemTime(now)
 
         createRequest = (overrides) => ({
             url: 'https://any.posthog-instance.com?ver=1.23.45',

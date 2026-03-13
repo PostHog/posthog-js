@@ -6,27 +6,27 @@ import { assignableWindow } from '../utils/globals'
 describe('Evaluation Tags/Contexts', () => {
     let posthog: PostHog
     let featureFlags: PostHogFeatureFlags
-    let mockSendRequest: jest.Mock
+    let mockSendRequest: vi.Mock
 
     beforeEach(() => {
         // Create a mock PostHog instance
         posthog = {
             config: {} as PostHogConfig,
             persistence: {
-                get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
-                get_initial_props: jest.fn().mockReturnValue({}),
+                get_distinct_id: vi.fn().mockReturnValue('test-distinct-id'),
+                get_initial_props: vi.fn().mockReturnValue({}),
             },
-            get_property: jest.fn().mockReturnValue({}),
-            get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
-            getGroups: jest.fn().mockReturnValue({}),
+            get_property: vi.fn().mockReturnValue({}),
+            get_distinct_id: vi.fn().mockReturnValue('test-distinct-id'),
+            getGroups: vi.fn().mockReturnValue({}),
             requestRouter: {
-                endpointFor: jest.fn().mockReturnValue('/flags/?v=2'),
+                endpointFor: vi.fn().mockReturnValue('/flags/?v=2'),
             },
-            _send_request: jest.fn(),
-            _shouldDisableFlags: jest.fn().mockReturnValue(false),
+            _send_request: vi.fn(),
+            _shouldDisableFlags: vi.fn().mockReturnValue(false),
         } as any
 
-        mockSendRequest = posthog._send_request as jest.Mock
+        mockSendRequest = posthog._send_request as vi.Mock
 
         featureFlags = new PostHogFeatureFlags(posthog)
     })
@@ -69,7 +69,7 @@ describe('Evaluation Tags/Contexts', () => {
 
         it('should support deprecated evaluation_environments field', () => {
             assignableWindow.POSTHOG_DEBUG = true
-            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
             posthog.config.evaluation_environments = ['production', 'staging']
 
             // Call multiple times

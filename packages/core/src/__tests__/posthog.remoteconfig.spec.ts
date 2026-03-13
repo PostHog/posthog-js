@@ -25,8 +25,8 @@ describe('PostHog onRemoteConfig', () => {
   let posthog: TestClientWithRemoteConfig
   let mocks: PostHogCoreTestClientMocks
 
-  jest.useFakeTimers()
-  jest.setSystemTime(new Date('2022-01-01'))
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2022-01-01'))
 
   afterEach(async () => {
     await posthog.shutdown()
@@ -77,7 +77,7 @@ describe('PostHog onRemoteConfig', () => {
     })
 
     it('does not fire onRemoteConfig when flags request fails', async () => {
-      ;[posthog, mocks] = createTestClientWithRemoteConfig(
+      [posthog, mocks] = createTestClientWithRemoteConfig(
         'TEST_API_KEY',
         {
           flushAt: 1,

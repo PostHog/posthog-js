@@ -5,17 +5,17 @@ describe('PostHog Core', () => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let mocks: PostHogCoreTestClientMocks
 
-  jest.useFakeTimers()
-  jest.setSystemTime(new Date('2022-01-01'))
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2022-01-01'))
 
   beforeEach(() => {
-    ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
+    [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
   })
 
   describe('on', () => {
     it('should listen to various events', () => {
-      const mock = jest.fn()
-      const mockOther = jest.fn()
+      const mock = vi.fn()
+      const mockOther = vi.fn()
       posthog.on('identify', mock)
       posthog.on('identify', mockOther)
 
@@ -26,7 +26,7 @@ describe('PostHog Core', () => {
     })
 
     it('should unsubscribe when called', () => {
-      const mock = jest.fn()
+      const mock = vi.fn()
       const unsubscribe = posthog.on('identify', mock)
 
       posthog.identify('user-1')
@@ -41,11 +41,11 @@ describe('PostHog Core', () => {
     })
 
     it('should subscribe to flush events', async () => {
-      const mock = jest.fn()
+      const mock = vi.fn()
       posthog.on('flush', mock)
       posthog.capture('event')
       expect(mock).toHaveBeenCalledTimes(0)
-      jest.runOnlyPendingTimers()
+      vi.runOnlyPendingTimers()
       await waitForPromises()
       expect(mock).toHaveBeenCalledTimes(1)
     })

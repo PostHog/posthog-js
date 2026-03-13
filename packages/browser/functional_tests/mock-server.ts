@@ -36,10 +36,23 @@ const handleRequest = (group: string) => (req: RestRequest, res: ResponseComposi
 
     capturedRequests[group] = [...(capturedRequests[group] || []), body]
 
-    return res(ctx.json({}))
+    return res(
+        ctx.set('Access-Control-Allow-Origin', '*'),
+        ctx.set('Access-Control-Allow-Headers', '*'),
+        ctx.json({})
+    )
 }
 
+const corsHeaders = (ctx: RestContext) => [
+    ctx.set('Access-Control-Allow-Origin', '*'),
+    ctx.set('Access-Control-Allow-Headers', '*'),
+    ctx.set('Access-Control-Allow-Methods', 'POST, OPTIONS'),
+]
+
 const server = setupServer(
+    rest.options('http://localhost/*', (_req, res, ctx) => {
+        return res(...corsHeaders(ctx), ctx.status(200))
+    }),
     rest.post('http://localhost/e/', (req, res, ctx) => {
         return handleRequest('/e/')(req, res, ctx)
     }),

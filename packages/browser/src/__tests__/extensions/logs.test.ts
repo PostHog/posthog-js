@@ -3,47 +3,47 @@ import { PostHog } from '../../posthog-core'
 
 // Mock external OpenTelemetry dependencies
 const mockLogs = {
-    setGlobalLoggerProvider: jest.fn(),
-    getLogger: jest.fn(() => ({
-        emit: jest.fn(),
+    setGlobalLoggerProvider: vi.fn(),
+    getLogger: vi.fn(() => ({
+        emit: vi.fn(),
     })),
 }
 
-const mockOTLPLogExporter = jest.fn().mockImplementation(() => ({
-    export: jest.fn(),
-    shutdown: jest.fn(),
+const mockOTLPLogExporter = vi.fn().mockImplementation(() => ({
+    export: vi.fn(),
+    shutdown: vi.fn(),
 }))
 
-const mockLoggerProvider = jest.fn().mockImplementation(() => ({
-    getLogger: jest.fn(() => ({
-        emit: jest.fn(),
+const mockLoggerProvider = vi.fn().mockImplementation(() => ({
+    getLogger: vi.fn(() => ({
+        emit: vi.fn(),
     })),
-    shutdown: jest.fn(),
+    shutdown: vi.fn(),
 }))
 
-const mockBatchLogRecordProcessor = jest.fn().mockImplementation(() => ({
-    onEmit: jest.fn(),
-    shutdown: jest.fn(),
+const mockBatchLogRecordProcessor = vi.fn().mockImplementation(() => ({
+    onEmit: vi.fn(),
+    shutdown: vi.fn(),
 }))
 
-const mockResourceFromAttributes = jest.fn((attrs) => ({
+const mockResourceFromAttributes = vi.fn((attrs) => ({
     attributes: attrs,
 }))
 
-jest.mock('@opentelemetry/api-logs', () => ({
+vi.mock('@opentelemetry/api-logs', () => ({
     logs: mockLogs,
 }))
 
-jest.mock('@opentelemetry/exporter-logs-otlp-http', () => ({
+vi.mock('@opentelemetry/exporter-logs-otlp-http', () => ({
     OTLPLogExporter: mockOTLPLogExporter,
 }))
 
-jest.mock('@opentelemetry/sdk-logs', () => ({
+vi.mock('@opentelemetry/sdk-logs', () => ({
     LoggerProvider: mockLoggerProvider,
     BatchLogRecordProcessor: mockBatchLogRecordProcessor,
 }))
 
-jest.mock('@opentelemetry/resources', () => ({
+vi.mock('@opentelemetry/resources', () => ({
     resourceFromAttributes: mockResourceFromAttributes,
 }))
 
@@ -51,17 +51,17 @@ describe('logs entrypoint', () => {
     let mockPostHog: PostHog
     let originalConsole: Console
     let mockLogger: any
-    let mockEmit: jest.Mock
+    let mockEmit: vi.Mock
 
     beforeEach(() => {
         jest.resetModules()
-        jest.clearAllMocks()
+        vi.clearAllMocks()
 
         // Store original console
         originalConsole = { ...console }
 
         // Set up mock logger
-        mockEmit = jest.fn()
+        mockEmit = vi.fn()
         mockLogger = { emit: mockEmit }
 
         mockLogs.getLogger.mockReturnValue(mockLogger)
@@ -73,14 +73,14 @@ describe('logs entrypoint', () => {
                 token: 'test-token',
             },
             sessionManager: {
-                checkAndGetSessionAndWindowId: jest.fn(() => ({
+                checkAndGetSessionAndWindowId: vi.fn(() => ({
                     sessionId: 'session-123',
                     windowId: 'window-456',
                     sessionStartTimestamp: new Date('2023-01-01T10:00:00Z').getTime(),
                     lastActivityTimestamp: new Date('2023-01-01T10:30:00Z').getTime(),
                 })),
             },
-            get_distinct_id: jest.fn(() => 'user-123'),
+            get_distinct_id: vi.fn(() => 'user-123'),
         } as unknown as PostHog
 
         // Mock assignableWindow
@@ -94,11 +94,11 @@ describe('logs entrypoint', () => {
 
         Object.defineProperty(assignableWindow, 'console', {
             value: {
-                log: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn(),
-                debug: jest.fn(),
+                log: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn(),
+                debug: vi.fn(),
             },
             writable: true,
         })
@@ -122,7 +122,7 @@ describe('logs entrypoint', () => {
         })
 
         it('should preserve existing PostHog extensions', async () => {
-            const existingExtension = jest.fn()
+            const existingExtension = vi.fn()
             assignableWindow.__PosthogExtensions__ = { logs: { initializeLogs: undefined } } as any
             ;(assignableWindow.__PosthogExtensions__ as any).existingExtension = existingExtension
 
@@ -598,7 +598,7 @@ describe('logs entrypoint', () => {
         })
 
         it('should use PostHog distinct_id in log attributes', () => {
-            ;(mockPostHog.get_distinct_id as jest.Mock).mockReturnValue('custom-distinct-id')
+            (mockPostHog.get_distinct_id as vi.Mock).mockReturnValue('custom-distinct-id')
 
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)

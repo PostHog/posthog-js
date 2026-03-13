@@ -2,9 +2,9 @@ import { PostHogOptions } from '@/types'
 import { PostHog } from '@/entrypoints/index.node'
 import { apiImplementation, waitForPromises } from './utils'
 
-jest.spyOn(console, 'debug').mockImplementation()
+vi.spyOn(console, 'debug').mockImplementation()
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
 const posthogImmediateResolveOptions: PostHogOptions = {
   fetchRetryCount: 0,
@@ -13,7 +13,7 @@ const posthogImmediateResolveOptions: PostHogOptions = {
 describe('overrideFeatureFlags', () => {
   let posthog: PostHog
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   beforeEach(() => {
     mockedFetch.mockClear()

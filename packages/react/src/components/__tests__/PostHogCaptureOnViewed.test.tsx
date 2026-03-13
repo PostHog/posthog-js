@@ -2,7 +2,7 @@ import * as React from 'react'
 import { render, screen } from '@testing-library/react'
 import { PostHog, PostHogProvider } from '../../context'
 import { PostHogCaptureOnViewed } from '../'
-import '@testing-library/jest-dom'
+import '@testing-library/jest-dom/vitest'
 
 describe('PostHogCaptureOnViewed component', () => {
     let mockObserverCallback: any = null
@@ -11,15 +11,15 @@ describe('PostHogCaptureOnViewed component', () => {
 
     beforeEach(() => {
         fakePosthog = {
-            capture: jest.fn(),
+            capture: vi.fn(),
         } as unknown as PostHog
 
-        const mockIntersectionObserver = jest.fn((callback) => {
+        const mockIntersectionObserver = vi.fn((callback) => {
             mockObserverCallback = callback
             return {
-                observe: jest.fn(),
-                unobserve: jest.fn(),
-                disconnect: jest.fn(),
+                observe: vi.fn(),
+                unobserve: vi.fn(),
+                disconnect: vi.fn(),
             }
         })
 

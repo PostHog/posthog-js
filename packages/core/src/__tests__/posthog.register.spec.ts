@@ -12,7 +12,7 @@ describe('PostHog Core', () => {
   }
 
   beforeEach(() => {
-    ;[posthog, mocks] = createTestClient('TEST_API_KEY', {})
+    [posthog, mocks] = createTestClient('TEST_API_KEY', {})
   })
 
   describe('register', () => {

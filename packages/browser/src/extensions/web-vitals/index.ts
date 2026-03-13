@@ -259,7 +259,7 @@ export class WebVitalsAutocapture {
 
         const posthogExtensions = assignableWindow.__PosthogExtensions__
         if (!isUndefined(posthogExtensions) && !isUndefined(posthogExtensions.postHogWebVitalsCallbacks)) {
-            ;({ onLCP, onCLS, onFCP, onINP } = posthogExtensions.postHogWebVitalsCallbacks)
+            ({ onLCP, onCLS, onFCP, onINP } = posthogExtensions.postHogWebVitalsCallbacks)
         }
 
         if (!onLCP || !onCLS || !onFCP || !onINP) {

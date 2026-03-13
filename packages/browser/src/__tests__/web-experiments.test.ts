@@ -105,11 +105,11 @@ describe('Web Experimentation', () => {
         },
     } as unknown as WebExperiment
 
-    const simulateFeatureFlags: jest.Mock = jest.fn()
+    const simulateFeatureFlags: vi.Mock = vi.fn()
 
     beforeEach(() => {
         let cachedFlags = {}
-        persistence = createMockPersistence({ props: {}, register: jest.fn() })
+        persistence = createMockPersistence({ props: {}, register: vi.fn() })
         posthog = makePostHog({
             config: createMockConfig({
                 disable_web_experiments: false,
@@ -119,13 +119,13 @@ describe('Web Experimentation', () => {
                 region: 'us-east-1',
             }),
             persistence: persistence,
-            get_property: jest.fn(),
-            capture: jest.fn(),
+            get_property: vi.fn(),
+            capture: vi.fn(),
             _send_request: jest
                 .fn()
                 .mockImplementation(({ callback }) => callback({ statusCode: 200, json: experimentsResponse })),
             consent: { isOptedOut: () => true } as unknown as ConsentManager,
-            onFeatureFlags: jest.fn(),
+            onFeatureFlags: vi.fn(),
             getFeatureFlag: (key: string) => {
                 return cachedFlags[key]
             },
@@ -255,12 +255,12 @@ describe('Web Experimentation', () => {
                     // no disable_web_experiments set to false here, so it's implicitly enabled
                 }),
                 persistence: persistence,
-                get_property: jest.fn(),
+                get_property: vi.fn(),
                 _send_request: jest
                     .fn()
                     .mockImplementation(({ callback }) => callback({ statusCode: 200, json: expResponse })),
                 consent: { isOptedOut: () => true } as unknown as ConsentManager,
-                onFeatureFlags: jest.fn(),
+                onFeatureFlags: vi.fn(),
             })
 
             posthog.requestRouter = new RequestRouter(disabledPostHog)

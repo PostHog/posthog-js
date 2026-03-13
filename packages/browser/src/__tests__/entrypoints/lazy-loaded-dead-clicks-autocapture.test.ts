@@ -4,8 +4,8 @@ import { assignableWindow, document } from '../../utils/globals'
 import { autocaptureCompatibleElements } from '../../autocapture-utils'
 
 // need to fake the timer before jsdom inits
-jest.useFakeTimers()
-jest.setSystemTime(1000)
+vi.useFakeTimers()
+vi.setSystemTime(1000)
 
 const triggerMouseEvent = function (
     node: Node,
@@ -29,7 +29,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
     let lazyLoadedDeadClicksAutocapture: LazyLoadedDeadClicksAutocapture
 
     beforeEach(async () => {
-        jest.setSystemTime(1000)
+        vi.setSystemTime(1000)
 
         assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
         assignableWindow.__PosthogExtensions__.loadExternalDependency = jest
@@ -45,7 +45,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             persistence: {
                 props: {},
             },
-            capture: jest.fn(),
+            capture: vi.fn(),
         } as unknown as Partial<PostHog> as PostHog
 
         lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance)
@@ -92,12 +92,12 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
     })
 
     it('tracks last scroll', () => {
-        jest.setSystemTime(1000)
+        vi.setSystemTime(1000)
         triggerMouseEvent(document.body, 'click')
 
         expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].scrollDelayMs).not.toBeDefined()
 
-        jest.setSystemTime(1050)
+        vi.setSystemTime(1050)
         triggerMouseEvent(document.body, 'scroll')
 
         expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].scrollDelayMs).toBe(50)
@@ -116,13 +116,13 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
     describe('click ignore', () => {
         it('ignores clicks on same node within one second', () => {
-            jest.setSystemTime(1000)
+            vi.setSystemTime(1000)
             triggerMouseEvent(document.body, 'click')
 
-            jest.setSystemTime(1999)
+            vi.setSystemTime(1999)
             triggerMouseEvent(document.body, 'click')
 
-            jest.setSystemTime(2000)
+            vi.setSystemTime(2000)
             triggerMouseEvent(document.body, 'click')
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(2)
@@ -151,7 +151,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             const el = document.createElement(element)
             document.body.append(el)
             triggerMouseEvent(el, 'click')
-            jest.setSystemTime(4000)
+            vi.setSystemTime(4000)
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
@@ -162,7 +162,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
     describe('dead click detection', () => {
         beforeEach(() => {
-            jest.setSystemTime(0)
+            vi.setSystemTime(0)
         })
 
         it('click followed by scroll, not a dead click', () => {
@@ -341,7 +341,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             })
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
 
-            jest.setSystemTime(3001 + 900)
+            vi.setSystemTime(3001 + 900)
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
@@ -383,7 +383,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             })
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
 
-            jest.setSystemTime(25 + 900)
+            vi.setSystemTime(25 + 900)
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
@@ -392,8 +392,8 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
     })
 
     it('can have alternative behaviour for onCapture', () => {
-        jest.setSystemTime(0)
-        const replacementCapture = jest.fn()
+        vi.setSystemTime(0)
+        const replacementCapture = vi.fn()
 
         lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance, {
             __onCapture: replacementCapture,
@@ -407,7 +407,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         })
         lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
 
-        jest.setSystemTime(3001 + 900)
+        vi.setSystemTime(3001 + 900)
         lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
         expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)

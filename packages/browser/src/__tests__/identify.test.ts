@@ -44,7 +44,7 @@ describe('identify', () => {
     it('should send $is_identified = true with the identify event and following events', async () => {
         // arrange
         const token = uuidv7()
-        const beforeSendMock = jest.fn().mockImplementation((e) => e)
+        const beforeSendMock = vi.fn().mockImplementation((e) => e)
         const posthog = await createPosthogInstance(token, { before_send: beforeSendMock })
         const distinctId = '123'
 

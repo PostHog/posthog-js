@@ -1,7 +1,7 @@
 import '../src/__tests__/helpers/mock-logger'
 
 import { waitFor } from '@testing-library/dom'
-import 'regenerator-runtime/runtime'
+
 import { createPosthogInstance } from '../src/__tests__/helpers/posthog-instance'
 import { PostHog } from '../src/posthog-core'
 import { logger } from '../src/utils/logger'
@@ -35,7 +35,7 @@ describe('FunctionalTests / Identify', () => {
             )
         )
 
-        expect(jest.mocked(logger).error).toBeCalledTimes(0)
+        expect(vi.mocked(logger).error).toBeCalledTimes(0)
     })
 
     test('identify sends an engage request if identify called twice with the same distinct id and with $set/$set_once', async () => {

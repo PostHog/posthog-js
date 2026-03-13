@@ -5,21 +5,21 @@ import { assignableWindow } from '../utils/globals'
 
 // Mock the logger to avoid console output during tests
 const mockLogger = {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
 }
 
-jest.mock('../utils/logger', () => ({
-    createLogger: jest.fn(() => mockLogger),
+vi.mock('../utils/logger', () => ({
+    createLogger: vi.fn(() => mockLogger),
 }))
 
 describe('posthog-logs', () => {
     describe('PostHogLogs Class', () => {
         let mockPostHog: PostHog
         let logs: PostHogLogs
-        let mockInitializeLogs: jest.Mock
-        let mockLoadExternalDependency: jest.Mock
+        let mockInitializeLogs: vi.Mock
+        let mockLoadExternalDependency: vi.Mock
 
         const flagsResponse = {
             featureFlags: {
@@ -36,11 +36,11 @@ describe('posthog-logs', () => {
 
         beforeEach(() => {
             // Clear all mocks
-            jest.clearAllMocks()
+            vi.clearAllMocks()
 
             // Mock window and PostHog extensions
-            mockInitializeLogs = jest.fn()
-            mockLoadExternalDependency = jest.fn((_instance, _name, callback) => {
+            mockInitializeLogs = vi.fn()
+            mockLoadExternalDependency = vi.fn((_instance, _name, callback) => {
                 callback(null) // Simulate successful loading
             })
 
@@ -62,35 +62,35 @@ describe('posthog-logs', () => {
                     logs_request_timeout_ms: 3000,
                 },
                 persistence: {
-                    register: jest.fn(),
+                    register: vi.fn(),
                     props: {},
                 },
                 requestRouter: {
-                    endpointFor: jest.fn(() => 'https://app.posthog.com'),
+                    endpointFor: vi.fn(() => 'https://app.posthog.com'),
                 },
-                _send_request: jest.fn(),
-                get_property: jest.fn(),
+                _send_request: vi.fn(),
+                get_property: vi.fn(),
                 consent: {
                     _instance: mockPostHog,
                     _config: {},
-                    consent: jest.fn(),
-                    isOptedIn: jest.fn(() => true),
-                    isOptedOut: jest.fn(() => false),
-                    hasOptedInBefore: jest.fn(() => true),
-                    hasOptedOutBefore: jest.fn(() => false),
-                    optInCapturing: jest.fn(),
-                    optOutCapturing: jest.fn(),
-                    reset: jest.fn(),
-                    onConsentChange: jest.fn(),
+                    consent: vi.fn(),
+                    isOptedIn: vi.fn(() => true),
+                    isOptedOut: vi.fn(() => false),
+                    hasOptedInBefore: vi.fn(() => true),
+                    hasOptedOutBefore: vi.fn(() => false),
+                    optInCapturing: vi.fn(),
+                    optOutCapturing: vi.fn(),
+                    reset: vi.fn(),
+                    onConsentChange: vi.fn(),
                 },
                 featureFlags: {
-                    _send_request: jest.fn((_url, _params, callback) => {
+                    _send_request: vi.fn((_url, _params, callback) => {
                         callback({ statusCode: 200, json: flagsResponse })
                     }),
-                    getFeatureFlag: jest.fn((flag) => {
+                    getFeatureFlag: vi.fn((flag) => {
                         return flagsResponse.featureFlags[flag as keyof typeof flagsResponse.featureFlags]
                     }),
-                    isFeatureEnabled: jest.fn((flag) => {
+                    isFeatureEnabled: vi.fn((flag) => {
                         return !!flagsResponse.featureFlags[flag as keyof typeof flagsResponse.featureFlags]
                     }),
                 },
@@ -160,7 +160,7 @@ describe('posthog-logs', () => {
             })
 
             it('should call loadIfEnabled when logs are enabled', () => {
-                const loadIfEnabledSpy = jest.spyOn(logs, 'loadIfEnabled')
+                const loadIfEnabledSpy = vi.spyOn(logs, 'loadIfEnabled')
                 const response = {
                     supportedCompression: [],
                     toolbarParams: {},
@@ -191,7 +191,7 @@ describe('posthog-logs', () => {
             })
 
             it('should not initialize if PostHog Extensions are not found', () => {
-                ;(logs as any)._isLogsEnabled = true
+                (logs as any)._isLogsEnabled = true
                 Object.defineProperty(assignableWindow, '__PosthogExtensions__', {
                     value: null,
                     writable: true,
@@ -205,7 +205,7 @@ describe('posthog-logs', () => {
             })
 
             it('should not initialize if loadExternalDependency is not found', () => {
-                ;(logs as any)._isLogsEnabled = true
+                (logs as any)._isLogsEnabled = true
                 Object.defineProperty(assignableWindow, '__PosthogExtensions__', {
                     value: {},
                     writable: true,
@@ -218,7 +218,7 @@ describe('posthog-logs', () => {
             })
 
             it('should initialize logs when all conditions are met', () => {
-                ;(logs as any)._isLogsEnabled = true
+                (logs as any)._isLogsEnabled = true
 
                 logs.loadIfEnabled()
 
@@ -227,7 +227,7 @@ describe('posthog-logs', () => {
             })
 
             it('should handle loadExternalDependency errors', () => {
-                ;(logs as any)._isLogsEnabled = true
+                (logs as any)._isLogsEnabled = true
                 mockLoadExternalDependency.mockImplementation((_instance, _name, callback) => {
                     callback(new Error('Loading failed'))
                 })
@@ -239,7 +239,7 @@ describe('posthog-logs', () => {
             })
 
             it('should handle missing initializeLogs function', () => {
-                ;(logs as any)._isLogsEnabled = true
+                (logs as any)._isLogsEnabled = true
                 Object.defineProperty(assignableWindow, '__PosthogExtensions__', {
                     value: {
                         loadExternalDependency: mockLoadExternalDependency,
@@ -255,7 +255,7 @@ describe('posthog-logs', () => {
             })
 
             it('should not reinitialize logs if called multiple times', () => {
-                ;(logs as any)._isLogsEnabled = true
+                (logs as any)._isLogsEnabled = true
 
                 logs.loadIfEnabled()
                 logs.loadIfEnabled()
@@ -371,7 +371,7 @@ describe('posthog-logs', () => {
             })
 
             it('should handle window object not being available', () => {
-                ;(logs as any)._isLogsEnabled = true
+                (logs as any)._isLogsEnabled = true
                 const originalExtensions = assignableWindow.__PosthogExtensions__
                 Object.defineProperty(assignableWindow, '__PosthogExtensions__', {
                     value: undefined,
@@ -424,7 +424,7 @@ describe('posthog-logs', () => {
             })
 
             it('should handle async loading errors gracefully', () => {
-                ;(logs as any)._isLogsEnabled = true
+                (logs as any)._isLogsEnabled = true
                 mockLoadExternalDependency.mockImplementation((_instance, _name, callback) => {
                     // Simulate async error
                     setTimeout(() => callback(new Error('Network error')), 0)

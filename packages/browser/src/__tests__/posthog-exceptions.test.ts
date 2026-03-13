@@ -31,7 +31,7 @@ function createSuppressionRule(
 }
 
 describe('PostHogExceptions', () => {
-    const captureMock = jest.fn()
+    const captureMock = vi.fn()
     let posthog: PostHog
     let exceptions: PostHogExceptions
     let config: PostHogConfig

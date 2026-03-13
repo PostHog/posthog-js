@@ -4,19 +4,19 @@ import openaiModule from 'openai'
 
 let mockAzureEmbeddingResponse: any = {}
 
-jest.mock('posthog-node', () => {
+vi.mock('posthog-node', () => {
   return {
-    PostHog: jest.fn().mockImplementation(() => {
+    PostHog: vi.fn().mockImplementation(function() {
       return {
-        capture: jest.fn(),
-        captureImmediate: jest.fn(),
+        capture: vi.fn(),
+        captureImmediate: vi.fn(),
         privacy_mode: false,
       }
     }),
   }
 })
 
-jest.mock('openai', () => {
+vi.mock('openai', () => {
   // Mock Completions class – `create` is declared on the prototype so that
   // subclasses can safely `super.create(...)` without it being shadowed by an
   // instance field (which would overwrite the subclass implementation).
@@ -63,14 +63,14 @@ jest.mock('openai', () => {
     constructor() {
       this.chat = {
         completions: {
-          create: jest.fn(),
+          create: vi.fn(),
         },
       }
       this.embeddings = {
-        create: jest.fn(),
+        create: vi.fn(),
       }
       this.responses = {
-        create: jest.fn(),
+        create: vi.fn(),
       }
     }
 
@@ -105,7 +105,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       return
     }
 
-    jest.clearAllMocks()
+    vi.clearAllMocks()
 
     // Reset the default mocks
     mockPostHogClient = new (PostHog as any)()
@@ -133,7 +133,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
 
     // Mock the Embeddings class
     const EmbeddingsMock: any = openaiModule.Embeddings || class MockEmbeddings {}
-    EmbeddingsMock.prototype.create = jest.fn().mockResolvedValue(mockAzureEmbeddingResponse)
+    EmbeddingsMock.prototype.create = vi.fn().mockResolvedValue(mockAzureEmbeddingResponse)
   })
 
   // Conditionally run tests based on API key availability
@@ -166,7 +166,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     }
 
     const ChatMock: any = openaiModule.Chat
-    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(mockAzureChatResponse)
+    ;(ChatMock.Completions as any).prototype.create = vi.fn().mockResolvedValue(mockAzureChatResponse)
 
     const response = await client.chat.completions.create({
       model: 'gpt-4',
@@ -178,7 +178,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     expect(response).toEqual(mockAzureChatResponse)
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
 
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { distinctId, event, properties } = captureArgs[0]
 
     expect(distinctId).toBe('test-id')
@@ -230,7 +230,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     }
 
     const ChatMock: any = openaiModule.Chat
-    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(mockAzureChatResponse)
+    ;(ChatMock.Completions as any).prototype.create = vi.fn().mockResolvedValue(mockAzureChatResponse)
 
     await client.chat.completions.create({
       model: 'gpt-4',
@@ -240,7 +240,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { groups } = captureArgs[0]
     expect(groups).toEqual({ company: 'test_company' })
   })
@@ -271,7 +271,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     }
 
     const ChatMock: any = openaiModule.Chat
-    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(mockAzureChatResponse)
+    ;(ChatMock.Completions as any).prototype.create = vi.fn().mockResolvedValue(mockAzureChatResponse)
 
     await client.chat.completions.create({
       model: 'gpt-4',
@@ -281,7 +281,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { properties } = captureArgs[0]
     expect(properties['$ai_input']).toBeNull()
     expect(properties['$ai_output_choices']).toBeNull()
@@ -289,7 +289,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
 
   conditionalTest('privacy mode global', async () => {
     // override mock to appear globally in privacy mode
-    ;(mockPostHogClient as any).privacy_mode = true
+    (mockPostHogClient as any).privacy_mode = true
 
     const mockAzureChatResponse = {
       id: 'test-response-id',
@@ -316,7 +316,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     }
 
     const ChatMock: any = openaiModule.Chat
-    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(mockAzureChatResponse)
+    ;(ChatMock.Completions as any).prototype.create = vi.fn().mockResolvedValue(mockAzureChatResponse)
 
     await client.chat.completions.create({
       model: 'gpt-4',
@@ -327,7 +327,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { properties } = captureArgs[0]
     expect(properties['$ai_input']).toBeNull()
     expect(properties['$ai_output_choices']).toBeNull()
@@ -359,7 +359,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     }
 
     const ChatMock: any = openaiModule.Chat
-    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(mockAzureChatResponse)
+    ;(ChatMock.Completions as any).prototype.create = vi.fn().mockResolvedValue(mockAzureChatResponse)
 
     await client.chat.completions.create({
       model: 'gpt-4',
@@ -399,7 +399,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     }
 
     const ChatMock: any = openaiModule.Chat
-    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(mockAzureChatResponse)
+    ;(ChatMock.Completions as any).prototype.create = vi.fn().mockResolvedValue(mockAzureChatResponse)
 
     await client.chat.completions.create({
       model: 'gpt-4',
@@ -408,7 +408,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { distinctId, properties } = captureArgs[0]
 
     expect(distinctId).toBe('trace-123')
@@ -441,7 +441,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     }
 
     const ChatMock: any = openaiModule.Chat
-    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(mockAzureChatResponse)
+    ;(ChatMock.Completions as any).prototype.create = vi.fn().mockResolvedValue(mockAzureChatResponse)
 
     await client.chat.completions.create({
       model: 'gpt-4',
@@ -451,7 +451,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { distinctId, properties } = captureArgs[0]
 
     expect(distinctId).toBe('user-456')
@@ -484,7 +484,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     }
 
     const ChatMock: any = openaiModule.Chat
-    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(mockAzureChatResponse)
+    ;(ChatMock.Completions as any).prototype.create = vi.fn().mockResolvedValue(mockAzureChatResponse)
 
     await client.chat.completions.create({
       model: 'gpt-4',
@@ -496,7 +496,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { distinctId, properties } = captureArgs[0]
 
     expect(distinctId).toBe('test-system-prompt')
@@ -520,7 +520,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       expect(response).toEqual(mockAzureEmbeddingResponse)
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { distinctId, event, properties } = captureArgs[0]
 
       expect(distinctId).toBe('test-id')
@@ -565,7 +565,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       }
 
       const EmbeddingsMock: any = openaiModule.Embeddings || class MockEmbeddings {}
-      EmbeddingsMock.prototype.create = jest.fn().mockResolvedValue(mockAzureEmbeddingResponse)
+      EmbeddingsMock.prototype.create = vi.fn().mockResolvedValue(mockAzureEmbeddingResponse)
 
       const response = await client.embeddings.create({
         model: 'text-embedding-3-small',
@@ -576,7 +576,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       expect(response).toEqual(mockAzureEmbeddingResponse)
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_input']).toEqual(arrayInput)
@@ -594,7 +594,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_input']).toBeNull()
@@ -605,7 +605,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       const EmbeddingsMock: any = openaiModule.Embeddings || class MockEmbeddings {}
       const testError = new Error('API Error') as Error & { status: number }
       testError.status = 400
-      EmbeddingsMock.prototype.create = jest.fn().mockRejectedValue(testError)
+      EmbeddingsMock.prototype.create = vi.fn().mockRejectedValue(testError)
 
       await expect(
         client.embeddings.create({
@@ -617,7 +617,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
 
       // Verify error was captured
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_http_status']).toBe(400)
@@ -646,7 +646,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       // Should have a generated trace ID
@@ -665,7 +665,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_trace_id']).toBe(customTraceId)
@@ -682,7 +682,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { groups } = captureArgs[0]
 
       expect(groups).toEqual(testGroups)
@@ -691,7 +691,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
 
   conditionalTest('posthogProperties are not sent to Azure OpenAI', async () => {
     const ChatMock: any = openaiModule.Chat
-    const mockCreate = jest.fn().mockResolvedValue({})
+    const mockCreate = vi.fn().mockResolvedValue({})
     const originalCreate = (ChatMock.Completions as any).prototype.create
     ;(ChatMock.Completions as any).prototype.create = mockCreate
 

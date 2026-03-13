@@ -5,10 +5,10 @@ import { USER_STATE } from '../constants'
 
 describe('reset()', () => {
     let instance: PostHog
-    let beforeSendMock: jest.Mock
+    let beforeSendMock: vi.Mock
 
     beforeEach(async () => {
-        beforeSendMock = jest.fn().mockImplementation((e) => e)
+        beforeSendMock = vi.fn().mockImplementation((e) => e)
 
         instance = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',
@@ -91,14 +91,14 @@ describe('reset()', () => {
         expect(instance.featureFlags.hasLoadedFlags).toBe(false)
         expect(instance.featureFlags.getFlags()).toEqual([])
 
-        const mockCallback = jest.fn()
+        const mockCallback = vi.fn()
         instance.featureFlags.onFeatureFlags(mockCallback)
 
         expect(mockCallback).not.toHaveBeenCalled()
     })
 
     it('reloads feature flags for the new anonymous user', async () => {
-        const callFlags = jest.spyOn(instance.featureFlags, '_callFlagsEndpoint')
+        const callFlags = vi.spyOn(instance.featureFlags, '_callFlagsEndpoint')
 
         instance.reset()
         await new Promise((resolve) => setTimeout(resolve, 10))
@@ -107,7 +107,7 @@ describe('reset()', () => {
     })
 
     it('does not reload twice in existing call sites which manually invoke reloadFeatureFlags', async () => {
-        const callFlags = jest.spyOn(instance.featureFlags, '_callFlagsEndpoint')
+        const callFlags = vi.spyOn(instance.featureFlags, '_callFlagsEndpoint')
 
         instance.reset()
         instance.reloadFeatureFlags()

@@ -20,34 +20,34 @@ describe('Conversations API Methods', () => {
     let conversations: PostHogConversations
     let mockPostHog: PostHog
     let mockManager: ConversationsManager
-    let consoleWarnSpy: jest.SpyInstance
+    let consoleWarnSpy: vi.SpyInstance
 
     beforeEach(() => {
         // Clear localStorage
         localStorage.clear()
-        jest.clearAllMocks()
+        vi.clearAllMocks()
 
         // Enable debug mode so logger actually logs
         Config.DEBUG = true
 
         // Spy on console.warn
-        consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation()
+        consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
         // Setup mock manager with API methods
         mockManager = {
-            show: jest.fn(),
-            hide: jest.fn(),
-            reset: jest.fn(),
-            isVisible: jest.fn().mockReturnValue(true),
-            sendMessage: jest.fn(),
-            getMessages: jest.fn(),
-            markAsRead: jest.fn(),
-            getTickets: jest.fn(),
-            requestRestoreLink: jest.fn(),
-            restoreFromToken: jest.fn(),
-            restoreFromUrlToken: jest.fn(),
-            getCurrentTicketId: jest.fn(),
-            getWidgetSessionId: jest.fn(),
+            show: vi.fn(),
+            hide: vi.fn(),
+            reset: vi.fn(),
+            isVisible: vi.fn().mockReturnValue(true),
+            sendMessage: vi.fn(),
+            getMessages: vi.fn(),
+            markAsRead: vi.fn(),
+            getTickets: vi.fn(),
+            requestRestoreLink: vi.fn(),
+            restoreFromToken: vi.fn(),
+            restoreFromUrlToken: vi.fn(),
+            getCurrentTicketId: vi.fn(),
+            getWidgetSessionId: vi.fn(),
         } as unknown as ConversationsManager
 
         // Setup mock PostHog instance
@@ -64,20 +64,20 @@ describe('Conversations API Methods', () => {
                 },
             }),
             requestRouter: {
-                endpointFor: jest.fn().mockReturnValue('https://test.posthog.com/api/test'),
+                endpointFor: vi.fn().mockReturnValue('https://test.posthog.com/api/test'),
             } as any,
             consent: {
-                isOptedOut: jest.fn().mockReturnValue(false),
+                isOptedOut: vi.fn().mockReturnValue(false),
             } as any,
-            get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
-            on: jest.fn().mockReturnValue(jest.fn()),
+            get_distinct_id: vi.fn().mockReturnValue('test-distinct-id'),
+            on: vi.fn().mockReturnValue(vi.fn()),
         })
 
         // Setup PostHog extensions
         assignableWindow.__PosthogExtensions__ = {
             initConversations: undefined,
-            loadExternalDependency: jest.fn((_instance, _path, callback) => {
-                assignableWindow.__PosthogExtensions__!.initConversations = jest.fn().mockReturnValue(mockManager)
+            loadExternalDependency: vi.fn((_instance, _path, callback) => {
+                assignableWindow.__PosthogExtensions__!.initConversations = vi.fn().mockReturnValue(mockManager)
                 callback(null)
             }),
         }
@@ -201,7 +201,7 @@ describe('Conversations API Methods', () => {
                     unread_count: 0,
                 }
 
-                ;(mockManager.sendMessage as jest.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.sendMessage as vi.Mock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.sendMessage('Hello!')
 
@@ -223,7 +223,7 @@ describe('Conversations API Methods', () => {
                     email: 'john@example.com',
                 }
 
-                ;(mockManager.sendMessage as jest.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.sendMessage as vi.Mock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.sendMessage('Hello!', userTraits)
 
@@ -240,7 +240,7 @@ describe('Conversations API Methods', () => {
                     unread_count: 0,
                 }
 
-                ;(mockManager.sendMessage as jest.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.sendMessage as vi.Mock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.sendMessage('Start new conversation', undefined, true)
 
@@ -262,7 +262,7 @@ describe('Conversations API Methods', () => {
                     email: 'jane@example.com',
                 }
 
-                ;(mockManager.sendMessage as jest.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.sendMessage as vi.Mock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.sendMessage('New ticket please', userTraits, true)
 
@@ -289,7 +289,7 @@ describe('Conversations API Methods', () => {
                     unread_count: 0,
                 }
 
-                ;(mockManager.getMessages as jest.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.getMessages as vi.Mock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.getMessages()
 
@@ -306,7 +306,7 @@ describe('Conversations API Methods', () => {
                     unread_count: 0,
                 }
 
-                ;(mockManager.getMessages as jest.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.getMessages as vi.Mock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.getMessages('ticket-456')
 
@@ -325,7 +325,7 @@ describe('Conversations API Methods', () => {
 
                 const afterTimestamp = '2024-01-01T12:00:00Z'
 
-                ;(mockManager.getMessages as jest.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.getMessages as vi.Mock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.getMessages(undefined, afterTimestamp)
 
@@ -370,7 +370,7 @@ describe('Conversations API Methods', () => {
                     unread_count: 0,
                 }
 
-                ;(mockManager.getMessages as jest.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.getMessages as vi.Mock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.getMessages()
 
@@ -387,7 +387,7 @@ describe('Conversations API Methods', () => {
                     unread_count: 0,
                 }
 
-                ;(mockManager.markAsRead as jest.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.markAsRead as vi.Mock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.markAsRead()
 
@@ -401,7 +401,7 @@ describe('Conversations API Methods', () => {
                     unread_count: 0,
                 }
 
-                ;(mockManager.markAsRead as jest.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.markAsRead as vi.Mock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.markAsRead('ticket-789')
 
@@ -436,7 +436,7 @@ describe('Conversations API Methods', () => {
                     ],
                 }
 
-                ;(mockManager.getTickets as jest.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.getTickets as vi.Mock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.getTickets()
 
@@ -450,7 +450,7 @@ describe('Conversations API Methods', () => {
                     results: [],
                 }
 
-                ;(mockManager.getTickets as jest.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.getTickets as vi.Mock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.getTickets({
                     limit: 10,
@@ -470,7 +470,7 @@ describe('Conversations API Methods', () => {
                     results: [],
                 }
 
-                ;(mockManager.getTickets as jest.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.getTickets as vi.Mock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.getTickets({
                     status: 'open',
@@ -490,7 +490,7 @@ describe('Conversations API Methods', () => {
         describe('requestRestoreLink', () => {
             it('should request a restore link through the manager', async () => {
                 const mockResponse: RequestRestoreLinkResponse = { ok: true }
-                ;(mockManager.requestRestoreLink as jest.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.requestRestoreLink as vi.Mock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.requestRestoreLink('user@example.com')
 
@@ -506,7 +506,7 @@ describe('Conversations API Methods', () => {
                     widget_session_id: 'restored-session-id',
                     migrated_ticket_ids: ['ticket-1'],
                 }
-                ;(mockManager.restoreFromToken as jest.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.restoreFromToken as vi.Mock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.restoreFromToken('restore-token')
 
@@ -516,7 +516,7 @@ describe('Conversations API Methods', () => {
 
             it('should redeem restore token from URL through the manager', async () => {
                 const mockResponse: RestoreFromTokenResponse = { status: 'invalid', code: 'token_invalid' }
-                ;(mockManager.restoreFromUrlToken as jest.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.restoreFromUrlToken as vi.Mock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.restoreFromUrlToken()
 
@@ -527,7 +527,7 @@ describe('Conversations API Methods', () => {
 
         describe('getCurrentTicketId', () => {
             it('should return current ticket ID when available', () => {
-                ;(mockManager.getCurrentTicketId as jest.Mock).mockReturnValue('ticket-abc')
+                (mockManager.getCurrentTicketId as vi.Mock).mockReturnValue('ticket-abc')
 
                 const result = conversations.getCurrentTicketId()
 
@@ -536,7 +536,7 @@ describe('Conversations API Methods', () => {
             })
 
             it('should return null when no active ticket', () => {
-                ;(mockManager.getCurrentTicketId as jest.Mock).mockReturnValue(null)
+                (mockManager.getCurrentTicketId as vi.Mock).mockReturnValue(null)
 
                 const result = conversations.getCurrentTicketId()
 
@@ -547,7 +547,7 @@ describe('Conversations API Methods', () => {
 
         describe('getWidgetSessionId', () => {
             it('should return widget session ID', () => {
-                ;(mockManager.getWidgetSessionId as jest.Mock).mockReturnValue('session-xyz')
+                (mockManager.getWidgetSessionId as vi.Mock).mockReturnValue('session-xyz')
 
                 const result = conversations.getWidgetSessionId()
 
@@ -574,28 +574,28 @@ describe('Conversations API Methods', () => {
 
         it('should handle sendMessage errors', async () => {
             const error = new Error('Network error')
-            ;(mockManager.sendMessage as jest.Mock).mockRejectedValue(error)
+            ;(mockManager.sendMessage as vi.Mock).mockRejectedValue(error)
 
             await expect(conversations.sendMessage('Hello')).rejects.toThrow('Network error')
         })
 
         it('should handle getMessages errors', async () => {
             const error = new Error('Ticket not found')
-            ;(mockManager.getMessages as jest.Mock).mockRejectedValue(error)
+            ;(mockManager.getMessages as vi.Mock).mockRejectedValue(error)
 
             await expect(conversations.getMessages('invalid-ticket')).rejects.toThrow('Ticket not found')
         })
 
         it('should handle markAsRead errors', async () => {
             const error = new Error('Failed to mark as read')
-            ;(mockManager.markAsRead as jest.Mock).mockRejectedValue(error)
+            ;(mockManager.markAsRead as vi.Mock).mockRejectedValue(error)
 
             await expect(conversations.markAsRead('ticket-123')).rejects.toThrow('Failed to mark as read')
         })
 
         it('should handle getTickets errors', async () => {
             const error = new Error('Failed to fetch tickets')
-            ;(mockManager.getTickets as jest.Mock).mockRejectedValue(error)
+            ;(mockManager.getTickets as vi.Mock).mockRejectedValue(error)
 
             await expect(conversations.getTickets()).rejects.toThrow('Failed to fetch tickets')
         })
@@ -635,7 +635,7 @@ describe('Conversations API Methods', () => {
                 unread_count: 0,
             }
 
-            ;(mockManager.sendMessage as jest.Mock).mockResolvedValue(mockResponse)
+            ;(mockManager.sendMessage as vi.Mock).mockResolvedValue(mockResponse)
 
             const result = await conversations.sendMessage('Test')
             expect(result).toEqual(mockResponse)

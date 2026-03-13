@@ -1,7 +1,7 @@
 import { Logger } from '@/types'
 import { BucketedRateLimiter } from './bucketed-rate-limiter'
 
-jest.useFakeTimers()
+vi.useFakeTimers()
 
 describe('BucketedRateLimiter', () => {
   let rateLimiter: BucketedRateLimiter<string>
@@ -16,7 +16,7 @@ describe('BucketedRateLimiter', () => {
   })
 
   afterEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   describe('basic consumption', () => {
@@ -65,7 +65,7 @@ describe('BucketedRateLimiter', () => {
 
       expect(rateLimiter.consumeRateLimit(key)).toBe(true)
 
-      jest.advanceTimersByTime(2000)
+      vi.advanceTimersByTime(2000)
 
       const result = rateLimiter.consumeRateLimit(key)
       expect(result).toBe(false)
@@ -78,7 +78,7 @@ describe('BucketedRateLimiter', () => {
       const key = 'ResizeObserver'
       rateLimiter.consumeRateLimit(key)
 
-      jest.advanceTimersByTime(20000)
+      vi.advanceTimersByTime(20000)
 
       rateLimiter.consumeRateLimit(key)
 
@@ -93,7 +93,7 @@ describe('BucketedRateLimiter', () => {
         rateLimiter.consumeRateLimit(key)
       }
 
-      jest.advanceTimersByTime(999)
+      vi.advanceTimersByTime(999)
 
       rateLimiter.consumeRateLimit(key)
       expect(rateLimiter['_buckets'][key].tokens).toBe(0)
@@ -120,7 +120,7 @@ describe('BucketedRateLimiter', () => {
           limiter.consumeRateLimit('test')
         }
 
-        jest.advanceTimersByTime(intervals * 1000)
+        vi.advanceTimersByTime(intervals * 1000)
 
         limiter.consumeRateLimit('test')
         expect(limiter['_buckets']['test'].tokens).toBe(expected)
@@ -164,7 +164,7 @@ describe('BucketedRateLimiter', () => {
 
   describe('callback behavior', () => {
     test('invokes callback when bucket reaches zero', () => {
-      const callback = jest.fn()
+      const callback = vi.fn()
       const limiter = new BucketedRateLimiter({
         bucketSize: 3,
         refillRate: 1,
@@ -183,7 +183,7 @@ describe('BucketedRateLimiter', () => {
     })
 
     test('does not invoke callback for subsequent calls when already at zero', () => {
-      const callback = jest.fn()
+      const callback = vi.fn()
       const limiter = new BucketedRateLimiter({
         bucketSize: 2,
         refillRate: 1,
@@ -202,7 +202,7 @@ describe('BucketedRateLimiter', () => {
     })
 
     test('invokes callback again after refill and re-exhaustion', () => {
-      const callback = jest.fn()
+      const callback = vi.fn()
       const limiter = new BucketedRateLimiter({
         bucketSize: 2,
         refillRate: 1,
@@ -215,7 +215,7 @@ describe('BucketedRateLimiter', () => {
       limiter.consumeRateLimit('test')
       expect(callback).toHaveBeenCalledTimes(1)
 
-      jest.advanceTimersByTime(2000)
+      vi.advanceTimersByTime(2000)
 
       limiter.consumeRateLimit('test')
       limiter.consumeRateLimit('test')
@@ -256,13 +256,13 @@ describe('BucketedRateLimiter', () => {
       expect(rateLimiter['_buckets'][key].lastAccess).toBe(startTime)
       expect(rateLimiter['_buckets'][key].tokens).toBe(9)
 
-      jest.advanceTimersByTime(500)
+      vi.advanceTimersByTime(500)
 
       rateLimiter.consumeRateLimit(key)
       expect(rateLimiter['_buckets'][key].lastAccess).toBe(startTime)
       expect(rateLimiter['_buckets'][key].tokens).toBe(8)
 
-      jest.advanceTimersByTime(600)
+      vi.advanceTimersByTime(600)
 
       rateLimiter.consumeRateLimit(key)
       expect(rateLimiter['_buckets'][key].lastAccess).toBe(startTime + 1000)
@@ -279,7 +279,7 @@ describe('BucketedRateLimiter', () => {
 
       expect(rateLimiter['_buckets'][key].lastAccess).toBe(startTime)
 
-      jest.advanceTimersByTime(2500)
+      vi.advanceTimersByTime(2500)
 
       rateLimiter.consumeRateLimit(key)
 

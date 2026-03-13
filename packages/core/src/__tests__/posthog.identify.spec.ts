@@ -11,11 +11,11 @@ describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient
   let mocks: PostHogCoreTestClientMocks
 
-  jest.useFakeTimers()
-  jest.setSystemTime(new Date('2022-01-01'))
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2022-01-01'))
 
   beforeEach(() => {
-    ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 })
+    [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 })
   })
 
   describe('identify', () => {

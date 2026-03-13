@@ -13,11 +13,11 @@ import { RequestQueue } from '../request-queue'
 import { SessionRecording } from '../extensions/replay/session-recording'
 import { SessionPropsManager } from '../session-props'
 
-let mockGetProperties: jest.Mock
+let mockGetProperties: vi.Mock
 
-jest.mock('../utils/event-utils', () => {
-    const originalEventUtils = jest.requireActual('../utils/event-utils')
-    mockGetProperties = jest.fn().mockImplementation((...args) => originalEventUtils.getEventProperties(...args))
+vi.mock('../utils/event-utils', async () => {
+    const originalEventUtils = await vi.importActual('../utils/event-utils')
+    mockGetProperties = vi.fn().mockImplementation((...args) => originalEventUtils.getEventProperties(...args))
     return {
         ...originalEventUtils,
         getEventProperties: mockGetProperties,
@@ -31,7 +31,7 @@ describe('posthog core', () => {
     const defaultConfig = {}
 
     const defaultOverrides = {
-        _send_request: jest.fn(),
+        _send_request: vi.fn(),
     }
 
     const posthogWith = (config: Partial<PostHogConfig>, overrides?: Partial<PostHog>): PostHog => {
@@ -48,11 +48,11 @@ describe('posthog core', () => {
     }
 
     beforeEach(() => {
-        jest.useFakeTimers().setSystemTime(baseUTCDateTime)
+        vi.useFakeTimers().setSystemTime(baseUTCDateTime)
     })
 
     afterEach(() => {
-        jest.useRealTimers()
+        vi.useRealTimers()
     })
 
     describe('capture()', () => {
@@ -93,7 +93,7 @@ describe('posthog core', () => {
         })
 
         it('calls callbacks added via _addCaptureHook', () => {
-            const hook = jest.fn()
+            const hook = vi.fn()
             const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
 
@@ -117,11 +117,11 @@ describe('posthog core', () => {
                 {
                     ...defaultOverrides,
                     sessionPersistence: {
-                        update_search_keyword: jest.fn(),
-                        update_campaign_params: jest.fn(),
-                        update_referrer_info: jest.fn(),
-                        update_config: jest.fn(),
-                        properties: jest.fn(),
+                        update_search_keyword: vi.fn(),
+                        update_campaign_params: vi.fn(),
+                        update_referrer_info: vi.fn(),
+                        update_config: vi.fn(),
+                        properties: vi.fn(),
                         get_property: () => 'anonymous',
                     } as unknown as PostHogPersistence,
                 }
@@ -134,7 +134,7 @@ describe('posthog core', () => {
         })
 
         it('errors with undefined event name', () => {
-            const hook = jest.fn()
+            const hook = vi.fn()
 
             const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
@@ -145,7 +145,7 @@ describe('posthog core', () => {
         })
 
         it('errors with object event name', () => {
-            const hook = jest.fn()
+            const hook = vi.fn()
 
             const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
@@ -163,7 +163,7 @@ describe('posthog core', () => {
                 userAgent:
                     'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36',
             }
-            const hook = jest.fn()
+            const hook = vi.fn()
             const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
 
@@ -180,7 +180,7 @@ describe('posthog core', () => {
                     'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36',
             }
 
-            const hook = jest.fn().mockImplementation((event) => event)
+            const hook = vi.fn().mockImplementation((event) => event)
             const posthog = posthogWith(
                 {
                     opt_out_useragent_filter: true,
@@ -418,23 +418,23 @@ describe('posthog core', () => {
         const overrides: Partial<PostHog> = {
             persistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop', $is_identified: false }),
-                remove_event_timer: jest.fn(),
+                remove_event_timer: vi.fn(),
                 get_property: () => 'anonymous',
                 props: {},
-                register: jest.fn(),
+                register: vi.fn(),
             } as unknown as PostHogPersistence,
             sessionPersistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
                 get_property: () => 'anonymous',
             } as unknown as PostHogPersistence,
             sessionManager: {
-                checkAndGetSessionAndWindowId: jest.fn().mockReturnValue({
+                checkAndGetSessionAndWindowId: vi.fn().mockReturnValue({
                     windowId: 'windowId',
                     sessionId: 'sessionId',
                 }),
             } as unknown as SessionIdManager,
             sessionPropsManager: {
-                getSessionProps: jest.fn().mockReturnValue({
+                getSessionProps: vi.fn().mockReturnValue({
                     $session_entry_referring_domain: 'https://referrer.example.com',
                 }),
             } as unknown as SessionPropsManager,
@@ -625,7 +625,7 @@ describe('posthog core', () => {
                     capture_pageleave: 'if_capture_pageview',
                     request_batching: true,
                 },
-                { capture: jest.fn() }
+                { capture: vi.fn() }
             )
 
             posthog._handle_unload()
@@ -640,7 +640,7 @@ describe('posthog core', () => {
                     capture_pageleave: 'if_capture_pageview',
                     request_batching: true,
                 },
-                { capture: jest.fn() }
+                { capture: vi.fn() }
             )
 
             posthog._handle_unload()
@@ -655,7 +655,7 @@ describe('posthog core', () => {
                     capture_pageleave: 'if_capture_pageview',
                     request_batching: true,
                 },
-                { capture: jest.fn() }
+                { capture: vi.fn() }
             )
 
             posthog._handle_unload()
@@ -670,7 +670,7 @@ describe('posthog core', () => {
                     capture_pageleave: true,
                     request_batching: true,
                 },
-                { capture: jest.fn() }
+                { capture: vi.fn() }
             )
 
             posthog._handle_unload()
@@ -685,7 +685,7 @@ describe('posthog core', () => {
                     capture_pageleave: 'if_capture_pageview',
                     request_batching: true,
                 },
-                { _requestQueue: { enqueue: jest.fn(), unload: jest.fn() } as unknown as RequestQueue }
+                { _requestQueue: { enqueue: vi.fn(), unload: vi.fn() } as unknown as RequestQueue }
             )
 
             posthog._handle_unload()
@@ -701,7 +701,7 @@ describe('posthog core', () => {
                         capture_pageleave: 'if_capture_pageview',
                         request_batching: false,
                     },
-                    { capture: jest.fn() }
+                    { capture: vi.fn() }
                 )
                 posthog._handle_unload()
 
@@ -715,7 +715,7 @@ describe('posthog core', () => {
                         capture_pageleave: 'if_capture_pageview',
                         request_batching: false,
                     },
-                    { capture: jest.fn() }
+                    { capture: vi.fn() }
                 )
                 posthog._handle_unload()
 
@@ -729,7 +729,7 @@ describe('posthog core', () => {
                         capture_pageleave: 'if_capture_pageview',
                         request_batching: false,
                     },
-                    { capture: jest.fn() }
+                    { capture: vi.fn() }
                 )
                 posthog._handle_unload()
 
@@ -746,7 +746,7 @@ describe('posthog core', () => {
                         distinctID: 'abcd',
                     },
                 },
-                { capture: jest.fn() }
+                { capture: vi.fn() }
             )
 
             expect(posthog.get_distinct_id()).toBe('abcd')
@@ -774,7 +774,7 @@ describe('posthog core', () => {
                     },
                     get_device_id: () => 'og-device-id',
                 },
-                { capture: jest.fn() }
+                { capture: vi.fn() }
             )
 
             expect(posthog.get_distinct_id()).toBe('abcd')
@@ -893,15 +893,15 @@ describe('posthog core', () => {
     })
 
     describe('init()', () => {
-        jest.spyOn(window, 'window', 'get')
+        vi.spyOn(window, 'window', 'get')
 
         beforeEach(() => {
-            jest.spyOn(window.console, 'warn').mockImplementation()
-            jest.spyOn(window.console, 'error').mockImplementation()
+            vi.spyOn(window.console, 'warn').mockImplementation()
+            vi.spyOn(window.console, 'error').mockImplementation()
         })
 
         it('can set an xhr error handler', () => {
-            const fakeOnXHRError = jest.fn()
+            const fakeOnXHRError = vi.fn()
             const posthog = posthogWith({
                 on_xhr_error: fakeOnXHRError,
             })
@@ -924,12 +924,12 @@ describe('posthog core', () => {
             const posthog = defaultPostHog().init('testtoken', defaultConfig, uuidv7())!
 
             posthog.sessionRecording = {
-                afterFlagsResponse: jest.fn(),
-                startIfEnabledOrStop: jest.fn(),
+                afterFlagsResponse: vi.fn(),
+                startIfEnabledOrStop: vi.fn(),
             } as unknown as SessionRecording
             posthog.persistence = {
-                register: jest.fn(),
-                update_config: jest.fn(),
+                register: vi.fn(),
+                update_config: vi.fn(),
             } as unknown as PostHogPersistence
 
             // Feature flags
@@ -1018,8 +1018,8 @@ describe('posthog core', () => {
                 uuidv7()
             )!
             posthog.persistence!.clear()
-            posthog.reloadFeatureFlags = jest.fn()
-            posthog.capture = jest.fn()
+            posthog.reloadFeatureFlags = vi.fn()
+            posthog.capture = vi.fn()
         })
 
         it('records info on groups', () => {
@@ -1116,7 +1116,7 @@ describe('posthog core', () => {
                 posthog.persistence!.clear()
                 // mock this internal queue - not capture
                 posthog._requestQueue = {
-                    enqueue: jest.fn(),
+                    enqueue: vi.fn(),
                 } as unknown as RequestQueue
             })
 
@@ -1128,7 +1128,7 @@ describe('posthog core', () => {
 
                 expect(posthog._requestQueue!.enqueue).toHaveBeenCalledTimes(1)
 
-                const eventPayload = jest.mocked(posthog._requestQueue!.enqueue).mock.calls[0][0]
+                const eventPayload = vi.mocked(posthog._requestQueue!.enqueue).mock.calls[0][0]
                 // need to help TS know event payload data is not an array
                 // eslint-disable-next-line posthog-js/no-direct-array-check
                 if (Array.isArray(eventPayload.data!)) {
@@ -1144,10 +1144,10 @@ describe('posthog core', () => {
 
         describe('error handling', () => {
             it('handles blank keys being passed', () => {
-                ;(window as any).console.error = jest.fn()
-                ;(window as any).console.warn = jest.fn()
+                (window as any).console.error = vi.fn()
+                ;(window as any).console.warn = vi.fn()
 
-                posthog.register = jest.fn()
+                posthog.register = vi.fn()
 
                 posthog.group(null as unknown as string, 'foo')
                 posthog.group('organization', null as unknown as string)
@@ -1194,7 +1194,7 @@ describe('posthog core', () => {
         })
 
         it('falls back to advanced_disable_decide with deprecation warning', () => {
-            const warnSpy = jest.spyOn(mockLogger, 'warn')
+            const warnSpy = vi.spyOn(mockLogger, 'warn')
             const posthog = posthogWith({ advanced_disable_decide: true })
             expect(posthog._shouldDisableFlags()).toBe(true)
             expect(warnSpy).toHaveBeenCalledWith(
@@ -1203,7 +1203,7 @@ describe('posthog core', () => {
         })
 
         it('prioritizes advanced_disable_flags over advanced_disable_decide', () => {
-            const warnSpy = jest.spyOn(mockLogger, 'warn')
+            const warnSpy = vi.spyOn(mockLogger, 'warn')
             const posthog = posthogWith({
                 advanced_disable_flags: false,
                 advanced_disable_decide: true,
@@ -1222,7 +1222,7 @@ describe('posthog core', () => {
 
     describe('_loaded()', () => {
         it('calls loaded config option', () => {
-            const posthog = posthogWith({ loaded: jest.fn() })
+            const posthog = posthogWith({ loaded: vi.fn() })
 
             posthog._loaded()
 
@@ -1243,15 +1243,15 @@ describe('posthog core', () => {
 
         describe('/flags', () => {
             beforeEach(() => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
             })
 
             afterEach(() => {
-                jest.useRealTimers()
+                vi.useRealTimers()
             })
 
             it('is called by default', async () => {
-                const sendRequestMock = jest.fn()
+                const sendRequestMock = vi.fn()
                 await createPosthogInstance(uuidv7(), {
                     loaded: (ph) => {
                         ph._send_request = sendRequestMock
@@ -1259,7 +1259,7 @@ describe('posthog core', () => {
                 })
 
                 // Advance past the 5ms debounce timer from reloadFeatureFlags
-                jest.advanceTimersByTime(10)
+                vi.advanceTimersByTime(10)
 
                 expect(sendRequestMock.mock.calls[0][0]).toMatchObject({
                     url: 'http://localhost/flags/?v=2',
@@ -1267,7 +1267,7 @@ describe('posthog core', () => {
             })
 
             it('does not call flags if disabled', async () => {
-                const sendRequestMock = jest.fn()
+                const sendRequestMock = vi.fn()
                 await createPosthogInstance(uuidv7(), {
                     advanced_disable_flags: true,
                     loaded: (ph) => {
@@ -1275,7 +1275,7 @@ describe('posthog core', () => {
                     },
                 })
 
-                jest.advanceTimersByTime(10)
+                vi.advanceTimersByTime(10)
                 expect(sendRequestMock).not.toHaveBeenCalled()
             })
         })
@@ -1283,18 +1283,18 @@ describe('posthog core', () => {
 
     describe('capturing pageviews', () => {
         it('captures not capture pageview if disabled', async () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
 
             const instance = await createPosthogInstance(uuidv7(), {
                 capture_pageview: false,
             })
-            instance.capture = jest.fn()
+            instance.capture = vi.fn()
 
             // TODO you shouldn't need to emit an event to get the pending timer to emit the pageview
             // but you do :shrug:
             instance.capture('not a pageview', {})
 
-            jest.runOnlyPendingTimers()
+            vi.runOnlyPendingTimers()
 
             expect(instance.capture).not.toHaveBeenLastCalledWith(
                 '$pageview',
@@ -1304,18 +1304,18 @@ describe('posthog core', () => {
         })
 
         it('captures pageview if enabled', async () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
 
             const instance = await createPosthogInstance(uuidv7(), {
                 capture_pageview: true,
             })
-            instance.capture = jest.fn()
+            instance.capture = vi.fn()
 
             // TODO you shouldn't need to emit an event to get the pending timer to emit the pageview
             // but you do :shrug:
             instance.capture('not a pageview', {})
 
-            jest.runOnlyPendingTimers()
+            vi.runOnlyPendingTimers()
 
             expect(instance.capture).toHaveBeenLastCalledWith('$pageview', { title: 'test' }, { send_instantly: true })
         })
@@ -1330,7 +1330,7 @@ describe('posthog core', () => {
             instance = await createPosthogInstance(token, {
                 api_host: 'https://us.posthog.com',
             })
-            instance.sessionManager!.checkAndGetSessionAndWindowId = jest.fn().mockReturnValue({
+            instance.sessionManager!.checkAndGetSessionAndWindowId = vi.fn().mockReturnValue({
                 windowId: 'windowId',
                 sessionId: 'sessionId',
                 sessionStartTimestamp: new Date().getTime() - 30000,

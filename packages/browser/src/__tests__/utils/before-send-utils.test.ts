@@ -36,7 +36,7 @@ describe('before send utils', () => {
         const distinct_id_one = 'user-1'
         const distinct_id_two = 'user-that-hashes-to-no-events'
         Array.from({ length: 100 }).forEach(() => {
-            ;[distinct_id_one, distinct_id_two].forEach((distinct_id) => {
+            [distinct_id_one, distinct_id_two].forEach((distinct_id) => {
                 const captureResult = { properties: { distinct_id } } as unknown as CaptureResult
                 results.push(sampleFn(captureResult))
             })
@@ -59,7 +59,7 @@ describe('before send utils', () => {
         const session_id_one = 'a-session-id'
         const session_id_two = 'id-that-hashes-to-not-sending-events'
         Array.from({ length: 100 }).forEach(() => {
-            ;[session_id_one, session_id_two].forEach((session_id) => {
+            [session_id_one, session_id_two].forEach((session_id) => {
                 const captureResult = { properties: { $session_id: session_id } } as unknown as CaptureResult
                 results.push(sampleFn(captureResult))
             })
@@ -84,7 +84,7 @@ describe('before send utils', () => {
         const session_id_one = 'a-session-id'
         const session_id_two = 'id-that-hashes-to-not-sending-events'
         Array.from({ length: 100 }).forEach(() => {
-            ;[session_id_one, session_id_two].forEach((session_id) => {
+            [session_id_one, session_id_two].forEach((session_id) => {
                 const captureResult = {
                     event: '$autocapture',
                     properties: { $session_id: session_id },

@@ -106,14 +106,14 @@ export class PostHog extends PostHogCore {
 
     patch(window.history, 'pushState', (originalPushState) => {
       return function patchedPushState(this: History, state: any, title: string, url?: string | URL | null): void {
-        ;(originalPushState as History['pushState']).call(this, state, title, url)
+        (originalPushState as History['pushState']).call(this, state, title, url)
         self.captureNavigationEvent('pushState')
       }
     })
 
     patch(window.history, 'replaceState', (originalReplaceState) => {
       return function patchedReplaceState(this: History, state: any, title: string, url?: string | URL | null): void {
-        ;(originalReplaceState as History['replaceState']).call(this, state, title, url)
+        (originalReplaceState as History['replaceState']).call(this, state, title, url)
         self.captureNavigationEvent('replaceState')
       }
     })

@@ -23,7 +23,7 @@ function deleteAllCookies() {
 }
 
 // periodically flakes because of unexpected console logging
-jest.retryTimes(3)
+// vitest: use { retry: N } in describe/it options instead
 
 describe('consentManager', () => {
     const createPostHog = async (config: Partial<PostHogConfig> = {}) => {
@@ -42,8 +42,8 @@ describe('consentManager', () => {
         posthog.reset()
 
         // we don't want unexpected console errors/warnings to fail these tests
-        console.error = jest.fn()
-        console.warn = jest.fn()
+        console.error = vi.fn()
+        console.warn = vi.fn()
     })
 
     afterEach(() => {
@@ -99,9 +99,9 @@ describe('consentManager', () => {
     })
 
     describe('opt out event', () => {
-        let beforeSendMock = jest.fn().mockImplementation((...args) => args)
+        let beforeSendMock = vi.fn().mockImplementation((...args) => args)
         beforeEach(async () => {
-            beforeSendMock = jest.fn().mockImplementation((e) => e)
+            beforeSendMock = vi.fn().mockImplementation((e) => e)
             posthog = await createPostHog({ opt_out_capturing_by_default: true, before_send: beforeSendMock })
         })
 
@@ -167,7 +167,7 @@ describe('consentManager', () => {
 
         it('should send $pageview on opt in if is has not been captured', async () => {
             // Some other tests might call setTimeout after they've passed, so creating a new instance here.
-            const beforeSendMock = jest.fn().mockImplementation((e) => e)
+            const beforeSendMock = vi.fn().mockImplementation((e) => e)
             const posthog = await createPostHog({ before_send: beforeSendMock })
 
             posthog.opt_in_capturing()
@@ -182,7 +182,7 @@ describe('consentManager', () => {
 
         it('should not send $pageview on subsequent opt in', async () => {
             // Some other tests might call setTimeout after they've passed, so creating a new instance here.
-            const beforeSendMock = jest.fn().mockImplementation((e) => e)
+            const beforeSendMock = vi.fn().mockImplementation((e) => e)
             const posthog = await createPostHog({ before_send: beforeSendMock })
 
             posthog.opt_in_capturing()
@@ -200,7 +200,7 @@ describe('consentManager', () => {
 
     describe('with do not track setting', () => {
         beforeEach(() => {
-            ;(navigator as any).doNotTrack = '1'
+            (navigator as any).doNotTrack = '1'
         })
 
         it('should respect it if explicitly set', async () => {
@@ -256,7 +256,7 @@ describe('consentManager', () => {
                 })
 
                 it(`should capture an event recording the opt-in action`, () => {
-                    const beforeSendMock = jest.fn()
+                    const beforeSendMock = vi.fn()
                     posthog.on('eventCaptured', beforeSendMock)
 
                     posthog.opt_in_capturing()

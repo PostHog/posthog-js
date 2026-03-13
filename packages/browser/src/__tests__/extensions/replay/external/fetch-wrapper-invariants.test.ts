@@ -1,5 +1,5 @@
 /**
- * @jest-environment node
+ * @vitest-environment node
  */
 
 import { getRecordNetworkPlugin } from '../../../../extensions/replay/external/network-plugin'
@@ -18,7 +18,7 @@ function setupWrappedFetch(downstreamFetch: typeof fetch): { wrappedFetch: typeo
         observe() {}
         disconnect() {}
     }
-    ;(global as any).PerformanceObserver = MockPerformanceObserver
+    (global as any).PerformanceObserver = MockPerformanceObserver
 
     const mockWindow = {
         fetch: downstreamFetch,
@@ -42,8 +42,8 @@ function setupWrappedFetch(downstreamFetch: typeof fetch): { wrappedFetch: typeo
 describe('fetch wrapper', () => {
     // Use fake timers to prevent getRequestPerformanceEntry retry timeouts
     // from keeping the Jest worker alive after tests complete.
-    beforeEach(() => jest.useFakeTimers())
-    afterEach(() => jest.useRealTimers())
+    beforeEach(() => vi.useFakeTimers())
+    afterEach(() => vi.useRealTimers())
 
     describe('does not throw for valid inputs', () => {
         let wrappedFetch: typeof fetch

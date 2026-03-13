@@ -65,10 +65,10 @@ const CAMPAIGN_PARAMS_NULL = {
     wbraid: null,
 }
 
-jest.mock('../utils/globals', () => {
-    const orig = jest.requireActual('../utils/globals')
-    const mockURLGetter = jest.fn()
-    const mockReferrerGetter = jest.fn()
+vi.mock('../utils/globals', async () => {
+    const orig = await vi.importActual('../utils/globals')
+    const mockURLGetter = vi.fn()
+    const mockReferrerGetter = vi.fn()
     let mockedCookieVal = ''
     return {
         ...orig,
@@ -110,7 +110,7 @@ const { mockURLGetter, mockReferrerGetter, document } = require('../utils/global
 describe('person processing', () => {
     const distinctId = '123'
     beforeEach(() => {
-        console.error = jest.fn()
+        console.error = vi.fn()
         mockReferrerGetter.mockReturnValue('https://referrer.com')
         mockURLGetter.mockReturnValue('https://example.com?utm_source=foo')
         document.cookie = ''
@@ -122,7 +122,7 @@ describe('person processing', () => {
         persistence_name?: string
     ) => {
         token = token || uuidv7()
-        const beforeSendMock = jest.fn().mockImplementation((e) => e)
+        const beforeSendMock = vi.fn().mockImplementation((e) => e)
         const posthog = await createPosthogInstance(token, {
             before_send: beforeSendMock,
             person_profiles,
@@ -877,7 +877,7 @@ describe('person processing', () => {
 
         it('should log a message when deduping properties', async () => {
             const { posthog } = await setup('always')
-            mockLogger.info = jest.fn()
+            mockLogger.info = vi.fn()
 
             posthog.setPersonProperties({ email: 'john@example.com' })
             posthog.setPersonProperties({ email: 'john@example.com' })

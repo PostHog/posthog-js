@@ -14,7 +14,7 @@ describe('SiteApps', () => {
     let posthog: PostHog
     let siteAppsInstance: SiteApps
     let emitCaptureEvent: ((eventName: string, eventPayload: CaptureResult) => void) | undefined
-    let removeCaptureHook = jest.fn()
+    let removeCaptureHook = vi.fn()
 
     const token = 'testtoken'
 
@@ -31,7 +31,7 @@ describe('SiteApps', () => {
 
         // Reset assignableWindow properties
         assignableWindow.__PosthogExtensions__ = {
-            loadSiteApp: jest.fn().mockImplementation((_instance, _url, callback) => {
+            loadSiteApp: vi.fn().mockImplementation((_instance, _url, callback) => {
                 // Simulate async loading
                 setTimeout(() => {
                     const id = _url.split('/').pop()
@@ -46,7 +46,7 @@ describe('SiteApps', () => {
         delete assignableWindow._POSTHOG_REMOTE_CONFIG
         delete assignableWindow.POSTHOG_DEBUG
 
-        removeCaptureHook = jest.fn()
+        removeCaptureHook = vi.fn()
 
         posthog = createMockPostHog({
             config: { ...defaultConfig, opt_in_site_apps: true },
@@ -54,30 +54,30 @@ describe('SiteApps', () => {
             register: (props: Properties) => posthog.persistence!.register(props),
             unregister: (key: string) => posthog.persistence!.unregister(key),
             get_property: (key: string) => posthog.persistence!.props[key],
-            capture: jest.fn(),
-            _addCaptureHook: jest.fn((cb) => {
+            capture: vi.fn(),
+            _addCaptureHook: vi.fn((cb) => {
                 emitCaptureEvent = cb
                 return removeCaptureHook
             }),
-            _afterFlagsResponse: jest.fn(),
-            get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
-            _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
+            _afterFlagsResponse: vi.fn(),
+            get_distinct_id: vi.fn().mockImplementation(() => 'distinctid'),
+            _send_request: vi.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
             featureFlags: {
-                receivedFeatureFlags: jest.fn(),
-                setReloadingPaused: jest.fn(),
-                _startReloadTimer: jest.fn(),
+                receivedFeatureFlags: vi.fn(),
+                setReloadingPaused: vi.fn(),
+                _startReloadTimer: vi.fn(),
             },
             requestRouter: new RequestRouter(createMockPostHog({ config: defaultConfig })),
-            _hasBootstrappedFeatureFlags: jest.fn(),
+            _hasBootstrappedFeatureFlags: vi.fn(),
             getGroups: () => ({ organization: '5' }),
-            on: jest.fn(),
+            on: vi.fn(),
         })
 
         siteAppsInstance = new SiteApps(posthog)
     })
 
     afterEach(() => {
-        jest.clearAllMocks()
+        vi.clearAllMocks()
     })
 
     describe('constructor', () => {
@@ -170,7 +170,7 @@ describe('SiteApps', () => {
         })
 
         it('constructs globals object correctly', () => {
-            jest.spyOn(posthog, 'get_property').mockImplementation((key) => {
+            vi.spyOn(posthog, 'get_property').mockImplementation((key) => {
                 if (key === '$groups') {
                     return { groupType: 'groupId' }
                 } else if (key === '$stored_group_properties') {
@@ -258,9 +258,9 @@ describe('SiteApps', () => {
                     siteApps: [
                         {
                             id: '1',
-                            init: jest.fn(() => {
+                            init: vi.fn(() => {
                                 return {
-                                    processEvent: jest.fn(),
+                                    processEvent: vi.fn(),
                                 }
                             }),
                         },
@@ -303,7 +303,7 @@ describe('SiteApps', () => {
             posthog: PostHog
             callback: (success: boolean) => void
         }
-        let appConfigs: (AppConfig & { processEvent: jest.Mock })[] = []
+        let appConfigs: (AppConfig & { processEvent: vi.Mock })[] = []
         const init = (onInit?: (appConfig: AppConfig) => void) => {
             assignableWindow._POSTHOG_REMOTE_CONFIG = {
                 [token]: {
@@ -311,8 +311,8 @@ describe('SiteApps', () => {
                     siteApps: [
                         {
                             id: '1',
-                            init: jest.fn((config: AppConfig) => {
-                                const processEvent = jest.fn()
+                            init: vi.fn((config: AppConfig) => {
+                                const processEvent = vi.fn()
                                 appConfigs.push({ ...config, processEvent })
                                 onInit?.(config)
                                 return {
@@ -322,8 +322,8 @@ describe('SiteApps', () => {
                         },
                         {
                             id: '2',
-                            init: jest.fn((config: AppConfig) => {
-                                const processEvent = jest.fn()
+                            init: vi.fn((config: AppConfig) => {
+                                const processEvent = vi.fn()
                                 appConfigs.push({ ...config, processEvent })
                                 onInit?.(config)
                                 return {

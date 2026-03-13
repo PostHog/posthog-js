@@ -7,7 +7,6 @@
  *   - Enrich Segment events with PostHog event properties.
  */
 
-import { beforeEach, describe, expect, it, jest } from '@jest/globals'
 
 import { USER_STATE } from '../constants'
 import { SegmentContext, SegmentPlugin } from '../extensions/segment-integration'
@@ -40,14 +39,14 @@ const initPostHogInAPromise = (
 }
 
 // sometimes flakes because of unexpected console.logs
-jest.retryTimes(6)
+// vitest: use { retry: N } in describe/it options instead
 
 describe(`Segment integration`, () => {
     let segment: any
     let segmentIntegration: SegmentPlugin
     let posthogName: string
 
-    jest.setTimeout(500)
+    // Note: test timeout is configured in vitest.config.mts or per-test with { timeout: 500 }
 
     beforeEach(() => {
         // Clear localStorage to avoid state leakage between tests
@@ -87,7 +86,7 @@ describe(`Segment integration`, () => {
         }
 
         // logging of network requests during init causes this to flake
-        console.error = jest.fn()
+        console.error = vi.fn()
     })
 
     it('should call loaded after the segment integration has been set up', async () => {

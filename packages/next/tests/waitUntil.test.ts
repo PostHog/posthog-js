@@ -1,20 +1,20 @@
-jest.mock('server-only', () => ({}))
+vi.mock('server-only', () => ({}))
 
-const mockVercelWaitUntil = jest.fn()
+const mockVercelWaitUntil = vi.fn()
 
-jest.mock('@vercel/functions', () => ({
+vi.mock('@vercel/functions', () => ({
     waitUntil: mockVercelWaitUntil,
 }))
 
-const mockPostHogConstructor = jest.fn()
+const mockPostHogConstructor = vi.fn()
 
-jest.mock('posthog-node', () => ({
+vi.mock('posthog-node', () => ({
     PostHog: mockPostHogConstructor,
 }))
 
 describe('nodeClientCache waitUntil auto-detection', () => {
     beforeEach(() => {
-        jest.clearAllMocks()
+        vi.clearAllMocks()
         jest.resetModules()
     })
 
@@ -32,7 +32,7 @@ describe('nodeClientCache waitUntil auto-detection', () => {
     it('explicit options.waitUntil takes priority over auto-detected', async () => {
         const { getOrCreateNodeClient } = require('../src/server/nodeClientCache')
 
-        const explicitWaitUntil = jest.fn()
+        const explicitWaitUntil = vi.fn()
         await getOrCreateNodeClient('phc_test3', { host: 'https://test3.com', waitUntil: explicitWaitUntil })
 
         expect(mockPostHogConstructor).toHaveBeenCalledWith(

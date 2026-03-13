@@ -12,8 +12,8 @@ describe('PostHog Feature Flags v4', () => {
   let posthog: PostHogCoreTestClient
   let mocks: PostHogCoreTestClientMocks
 
-  jest.useFakeTimers()
-  jest.setSystemTime(new Date('2022-01-01'))
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2022-01-01'))
 
   const createMockFeatureFlags = (): Partial<PostHogV2FlagsResponse['flags']> => ({
     'feature-1': {
@@ -99,7 +99,7 @@ describe('PostHog Feature Flags v4', () => {
   })
 
   beforeEach(() => {
-    ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+    [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
       _mocks.fetch.mockImplementation((url) => {
         if (url.includes('/flags/?v=2')) {
           return Promise.resolve({
@@ -269,9 +269,9 @@ describe('PostHog Feature Flags v4', () => {
     })
 
     describe('when loaded', () => {
-      beforeEach(() => {
+      beforeEach(async () => {
         // The core doesn't reload flags by default (this is handled differently by web and RN)
-        posthog.reloadFeatureFlags()
+        await posthog.reloadFeatureFlagsAsync()
       })
 
       it('should return the value of a flag', async () => {
@@ -289,8 +289,8 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       describe('when errored out', () => {
-        beforeEach(() => {
-          ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+        beforeEach(async () => {
+          [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
             _mocks.fetch.mockImplementation((url) => {
               if (url.includes('/flags/')) {
                 return Promise.resolve({
@@ -307,7 +307,7 @@ describe('PostHog Feature Flags v4', () => {
             })
           })
 
-          posthog.reloadFeatureFlags()
+          await posthog.reloadFeatureFlagsAsync()
         })
 
         it('should return undefined', async () => {
@@ -343,8 +343,8 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       describe('when subsequent flags calls return partial results', () => {
-        beforeEach(() => {
-          ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+        beforeEach(async () => {
+          [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
             _mocks.fetch
               .mockImplementationOnce((url) => {
                 if (url.includes('/flags/?v=2')) {
@@ -412,7 +412,7 @@ describe('PostHog Feature Flags v4', () => {
               })
           })
 
-          posthog.reloadFeatureFlags()
+          await posthog.reloadFeatureFlagsAsync()
         })
 
         it('should return combined results', async () => {
@@ -481,8 +481,8 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       describe('when subsequent flags calls return failed flags with errorsWhileComputingFlags', () => {
-        beforeEach(() => {
-          ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+        beforeEach(async () => {
+          [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
             _mocks.fetch
               .mockImplementationOnce((url) => {
                 if (url.includes('/flags/?v=2')) {
@@ -552,7 +552,7 @@ describe('PostHog Feature Flags v4', () => {
               })
           })
 
-          posthog.reloadFeatureFlags()
+          await posthog.reloadFeatureFlagsAsync()
         })
 
         it('should filter out failed flags and preserve their cached values', async () => {
@@ -583,8 +583,8 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       describe('when subsequent flags calls return results without errors', () => {
-        beforeEach(() => {
-          ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+        beforeEach(async () => {
+          [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
             _mocks.fetch
               .mockImplementationOnce((url) => {
                 if (url.includes('/flags/?v=2')) {
@@ -654,7 +654,7 @@ describe('PostHog Feature Flags v4', () => {
               })
           })
 
-          posthog.reloadFeatureFlags()
+          await posthog.reloadFeatureFlagsAsync()
         })
 
         it('should return only latest results', async () => {
@@ -1074,8 +1074,8 @@ describe('PostHog Feature Flags v4', () => {
     })
 
     describe('when quota limited', () => {
-      beforeEach(() => {
-        ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+      beforeEach(async () => {
+        [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
           _mocks.fetch.mockImplementation((url) => {
             if (url.includes('/flags/')) {
               return Promise.resolve({
@@ -1092,7 +1092,7 @@ describe('PostHog Feature Flags v4', () => {
           })
         })
 
-        posthog.reloadFeatureFlags()
+        await posthog.reloadFeatureFlagsAsync()
       })
 
       it('should unset all flags when feature_flags is quota limited', async () => {
@@ -1122,7 +1122,7 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       it('should emit featureflags event with quotaLimited when quota limited', async () => {
-        const featureFlagsHandler = jest.fn()
+        const featureFlagsHandler = vi.fn()
         posthog.on('featureflags', featureFlagsHandler)
 
         await posthog.reloadFeatureFlagsAsync()
@@ -1163,7 +1163,7 @@ describe('PostHog Feature Flags v4', () => {
 
     describe('getFeatureFlagResult error scenarios', () => {
       it('should include ERRORS_WHILE_COMPUTING error', async () => {
-        ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+        [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
           _mocks.fetch.mockImplementation((url) => {
             if (url.includes('/flags/')) {
               return Promise.resolve({
@@ -1184,7 +1184,7 @@ describe('PostHog Feature Flags v4', () => {
             })
           })
         })
-        posthog.reloadFeatureFlags()
+        await posthog.reloadFeatureFlagsAsync()
         await waitForPromises()
 
         posthog.getFeatureFlagResult('feature-1')
@@ -1205,7 +1205,7 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       it('should include TIMEOUT error when request timed out', async () => {
-        ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+        [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
           _mocks.fetch.mockImplementation((url) => {
             if (url.includes('/flags/')) {
               const abortError = new Error('The operation was aborted')
@@ -1219,7 +1219,7 @@ describe('PostHog Feature Flags v4', () => {
             })
           })
         })
-        posthog.reloadFeatureFlags()
+        await posthog.reloadFeatureFlagsAsync()
         await waitForPromises()
 
         posthog.getFeatureFlagResult('feature-1')
@@ -1239,7 +1239,7 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       it('should include api_error with status code', async () => {
-        ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+        [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
           _mocks.fetch.mockImplementation((url) => {
             if (url.includes('/flags/')) {
               return Promise.resolve({
@@ -1255,7 +1255,7 @@ describe('PostHog Feature Flags v4', () => {
             })
           })
         })
-        posthog.reloadFeatureFlags()
+        await posthog.reloadFeatureFlagsAsync()
         await waitForPromises()
 
         posthog.getFeatureFlagResult('feature-1')
@@ -1275,7 +1275,7 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       it('should include CONNECTION_ERROR for network failures', async () => {
-        ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+        [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
           _mocks.fetch.mockImplementation((url) => {
             if (url.includes('/flags/')) {
               return Promise.reject(new TypeError('Failed to fetch'))
@@ -1287,7 +1287,7 @@ describe('PostHog Feature Flags v4', () => {
             })
           })
         })
-        posthog.reloadFeatureFlags()
+        await posthog.reloadFeatureFlagsAsync()
         await waitForPromises()
 
         posthog.getFeatureFlagResult('feature-1')
@@ -1310,7 +1310,7 @@ describe('PostHog Feature Flags v4', () => {
 
   describe('bootstrapped feature flags', () => {
     beforeEach(() => {
-      ;[posthog, mocks] = createTestClient(
+      [posthog, mocks] = createTestClient(
         'TEST_API_KEY',
         {
           flushAt: 1,
@@ -1419,8 +1419,8 @@ describe('PostHog Feature Flags v4', () => {
     })
 
     describe('when loaded', () => {
-      beforeEach(() => {
-        ;[posthog, mocks] = createTestClient(
+      beforeEach(async () => {
+        [posthog, mocks] = createTestClient(
           'TEST_API_KEY',
           {
             flushAt: 1,
@@ -1468,7 +1468,7 @@ describe('PostHog Feature Flags v4', () => {
           }
         )
 
-        posthog.reloadFeatureFlags()
+        await posthog.reloadFeatureFlagsAsync()
       })
 
       it('should load new feature flags', async () => {
@@ -1549,7 +1549,7 @@ describe('PostHog Feature Flags v4', () => {
 
   describe('bootstapped do not overwrite values', () => {
     beforeEach(() => {
-      ;[posthog, mocks] = createTestClient(
+      [posthog, mocks] = createTestClient(
         'TEST_API_KEY',
         {
           flushAt: 1,

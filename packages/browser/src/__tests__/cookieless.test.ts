@@ -3,12 +3,12 @@ import { uuidv7 } from '../uuidv7'
 import { createPosthogInstance } from './helpers/posthog-instance'
 const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-jest.mock('../utils/globals', () => {
-    const orig = jest.requireActual('../utils/globals')
-    const mockURLGetter = jest.fn()
-    const mockReferrerGetter = jest.fn()
+vi.mock('../utils/globals', async () => {
+    const orig = await vi.importActual('../utils/globals')
+    const mockURLGetter = vi.fn()
+    const mockReferrerGetter = vi.fn()
     const mockedCookieBox = { cookie: '' }
-    const mockedFetch = jest.fn()
+    const mockedFetch = vi.fn()
     return {
         ...orig,
         mockURLGetter,
@@ -47,9 +47,9 @@ jest.mock('../utils/globals', () => {
             }
         },
         XMLHttpRequest: () => ({
-            open: jest.fn(),
-            send: jest.fn(),
-            setRequestHeader: jest.fn(),
+            open: vi.fn(),
+            send: vi.fn(),
+            setRequestHeader: vi.fn(),
         }),
         fetch: mockedFetch,
     }
@@ -66,7 +66,7 @@ describe('cookieless', () => {
         event: 'prop',
     }
     const setup = async (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
-        const beforeSendMock = jest.fn().mockImplementation((e) => e)
+        const beforeSendMock = vi.fn().mockImplementation((e) => e)
         const posthog = await createPosthogInstance(token, {
             ...config,
             before_send: beforeSendMock,
@@ -143,7 +143,7 @@ describe('cookieless', () => {
             expect(posthog.has_opted_out_capturing()).toEqual(true)
 
             // Mock surveys to verify they get loaded
-            const mockSurveysLoadIfEnabled = jest.spyOn(posthog.surveys, 'loadIfEnabled')
+            const mockSurveysLoadIfEnabled = vi.spyOn(posthog.surveys, 'loadIfEnabled')
 
             // opt in
             posthog.opt_in_capturing()
@@ -317,14 +317,14 @@ describe('cookieless', () => {
 
         it('should restart the request queue when opting in', async () => {
             // we're testing the interaction with the request queue, so we need to mock fetch rather than relying on before_send
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const { posthog } = await setup({
                 cookieless_mode: 'on_reject',
                 request_batching: true,
             })
             // Flags are loaded via RemoteConfig -> ensureFlagsLoaded -> reloadFeatureFlags,
             // which debounces for 5ms before calling the flags endpoint
-            jest.advanceTimersByTime(10)
+            vi.advanceTimersByTime(10)
             expect(mockedFetch).toBeCalledTimes(1) // flags
             expect(mockedFetch.mock.calls[0][0]).toContain('/flags/')
 
@@ -334,7 +334,7 @@ describe('cookieless', () => {
             expect(JSON.parse(mockedFetch.mock.calls[2][1].body).event).toEqual('$pageview')
 
             posthog.capture('custom event')
-            jest.advanceTimersByTime(5000) // flush the batch queue (3s interval) without triggering 5-min remote config refresh
+            vi.advanceTimersByTime(5000) // flush the batch queue (3s interval) without triggering 5-min remote config refresh
             expect(mockedFetch).toBeCalledTimes(4) // flags + opt in + pageview + custom event
             expect(JSON.parse(mockedFetch.mock.calls[3][1].body)[0].event).toEqual('custom event')
         })

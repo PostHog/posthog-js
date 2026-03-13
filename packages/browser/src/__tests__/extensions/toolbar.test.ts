@@ -23,12 +23,12 @@ describe('Toolbar', () => {
                 api_host: 'http://api.example.com',
                 token: 'test_token',
             }),
-            set_config: jest.fn(),
+            set_config: vi.fn(),
         })
         instance.requestRouter = new RequestRouter(instance)
 
         assignableWindow.__PosthogExtensions__ = {
-            loadExternalDependency: jest.fn((_ph, _path: any, callback: any) => callback()),
+            loadExternalDependency: vi.fn((_ph, _path: any, callback: any) => callback()),
         }
 
         toolbar = new Toolbar(instance)
@@ -38,7 +38,7 @@ describe('Toolbar', () => {
         if (document.getElementById(TOOLBAR_ID)) {
             document.body.removeChild(document.getElementById(TOOLBAR_ID)!)
         }
-        assignableWindow.ph_load_toolbar = jest.fn(() => {
+        assignableWindow.ph_load_toolbar = vi.fn(() => {
             const mockToolbarElement = document.createElement('div')
             mockToolbarElement.setAttribute('id', TOOLBAR_ID)
             document.body.appendChild(mockToolbarElement)
@@ -47,11 +47,11 @@ describe('Toolbar', () => {
 
     describe('maybeLoadToolbar', () => {
         const localStorage = {
-            getItem: jest.fn(),
-            setItem: jest.fn(),
+            getItem: vi.fn(),
+            setItem: vi.fn(),
         }
         const storage = localStorage as unknown as Storage
-        const history = { replaceState: jest.fn() } as unknown as History
+        const history = { replaceState: vi.fn() } as unknown as History
 
         const defaultHashState = {
             action: 'ph_authorize',
@@ -97,7 +97,7 @@ describe('Toolbar', () => {
         beforeEach(() => {
             localStorage.getItem.mockImplementation(() => {})
 
-            jest.spyOn(toolbar, 'loadToolbar')
+            vi.spyOn(toolbar, 'loadToolbar')
         })
 
         it('should initialize the toolbar when the hash state contains action "ph_authorize"', () => {

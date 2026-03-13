@@ -1,11 +1,10 @@
-import { describe, expect, test, jest } from '@jest/globals'
 import { PostHog, normalizeError } from './index.js'
 import type { BeforeSendFn, IdentifyFn } from './index.js'
 
 function mockSchedulerCtx() {
   return {
     scheduler: {
-      runAfter: jest.fn(),
+      runAfter: vi.fn(),
     },
   }
 }
@@ -365,7 +364,7 @@ describe('beforeSend', () => {
   test('short-circuits chain when a function returns null', async () => {
     const component = { lib: { capture: 'capture_ref' } }
     const fn1: BeforeSendFn = () => null
-    const fn2: BeforeSendFn = jest.fn((event) => event)
+    const fn2: BeforeSendFn = vi.fn((event) => event)
     const posthog = new PostHog(component as never, {
       apiKey: 'key',
       beforeSend: [fn1, fn2],
@@ -538,7 +537,7 @@ describe('identify callback', () => {
 
   test('passes ctx to identify callback', async () => {
     const component = { lib: { capture: 'capture_ref' } }
-    const identify = jest.fn(async () => ({ distinctId: 'resolved' }))
+    const identify = vi.fn(async () => ({ distinctId: 'resolved' }))
     const posthog = new PostHog(component as never, {
       apiKey: 'key',
       identify,
@@ -619,7 +618,7 @@ describe('identify callback', () => {
       identify: identifyReturning('auth-user'),
     })
     const ctx = {
-      runAction: jest.fn(async (_ref: unknown, _args: Record<string, unknown>) => true),
+      runAction: vi.fn(async (_ref: unknown, _args: Record<string, unknown>) => true),
     }
 
     await posthog.getFeatureFlag(ctx as never, { key: 'my-flag' })

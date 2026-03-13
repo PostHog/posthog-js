@@ -10,7 +10,7 @@ describe('RemoteConfigLoader', () => {
     let posthog: PostHog
 
     beforeEach(() => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
 
         const defaultConfig: Partial<PostHogConfig> = {
             token: 'testtoken',
@@ -20,24 +20,24 @@ describe('RemoteConfigLoader', () => {
 
         document.body.innerHTML = ''
         document.head.innerHTML = ''
-        jest.spyOn(window.console, 'error').mockImplementation()
+        vi.spyOn(window.console, 'error').mockImplementation()
 
         posthog = createMockPostHog({
             config: { ...defaultConfig },
-            _onRemoteConfig: jest.fn(),
-            _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
+            _onRemoteConfig: vi.fn(),
+            _send_request: vi.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
             _shouldDisableFlags: () =>
                 posthog.config.advanced_disable_flags || posthog.config.advanced_disable_decide || false,
             featureFlags: {
-                ensureFlagsLoaded: jest.fn(),
+                ensureFlagsLoaded: vi.fn(),
             },
-            reloadFeatureFlags: jest.fn(),
+            reloadFeatureFlags: vi.fn(),
             requestRouter: new RequestRouter(createMockPostHog({ config: defaultConfig })),
         })
     })
 
     afterEach(() => {
-        jest.useRealTimers()
+        vi.useRealTimers()
     })
 
     describe('remote config', () => {
@@ -47,7 +47,7 @@ describe('RemoteConfigLoader', () => {
             assignableWindow._POSTHOG_REMOTE_CONFIG = undefined
             assignableWindow.POSTHOG_DEBUG = true
 
-            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = vi.fn(
                 (_ph: PostHog, _name: string, cb: (err?: any) => void) => {
                     assignableWindow._POSTHOG_REMOTE_CONFIG = {}
                     assignableWindow._POSTHOG_REMOTE_CONFIG[_ph.config.token] = {
@@ -58,7 +58,7 @@ describe('RemoteConfigLoader', () => {
                 }
             )
 
-            posthog._send_request = jest.fn().mockImplementation(({ callback }) => callback?.({ json: config }))
+            posthog._send_request = vi.fn().mockImplementation(({ callback }) => callback?.({ json: config }))
         })
 
         it('properly pulls from the window and uses it if set', () => {
@@ -89,7 +89,7 @@ describe('RemoteConfigLoader', () => {
         })
 
         it('loads the json if window config not set and js failed', () => {
-            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = vi.fn(
                 (_ph: PostHog, _name: string, cb: (err?: any) => void) => {
                     cb()
                 }
@@ -128,12 +128,12 @@ describe('RemoteConfigLoader', () => {
         })
 
         it('still initializes extensions and loads flags when config fetch fails', () => {
-            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = vi.fn(
                 (_ph: PostHog, _name: string, cb: (err?: any) => void) => {
                     cb()
                 }
             )
-            posthog._send_request = jest.fn().mockImplementation(({ callback }) => callback?.({ json: undefined }))
+            posthog._send_request = vi.fn().mockImplementation(({ callback }) => callback?.({ json: undefined }))
 
             new RemoteConfigLoader(posthog).load()
 
@@ -192,12 +192,12 @@ describe('RemoteConfigLoader', () => {
             const loader = new RemoteConfigLoader(posthog)
             loader.load()
 
-            jest.advanceTimersByTime(5 * 60 * 1000)
+            vi.advanceTimersByTime(5 * 60 * 1000)
             expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
 
             loader.stop()
 
-            jest.advanceTimersByTime(5 * 60 * 1000)
+            vi.advanceTimersByTime(5 * 60 * 1000)
             // Should not be called again after stop
             expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
         })
@@ -220,7 +220,7 @@ describe('RemoteConfigLoader', () => {
             Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
 
             // Interval fires while hidden — should be a no-op
-            jest.advanceTimersByTime(5 * 60 * 1000)
+            vi.advanceTimersByTime(5 * 60 * 1000)
             expect(posthog.reloadFeatureFlags).not.toHaveBeenCalled()
 
             loader.stop()
@@ -235,14 +235,14 @@ describe('RemoteConfigLoader', () => {
             Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
 
             // Interval fires while hidden — no refresh
-            jest.advanceTimersByTime(5 * 60 * 1000)
+            vi.advanceTimersByTime(5 * 60 * 1000)
             expect(posthog.reloadFeatureFlags).not.toHaveBeenCalled()
 
             // Tab becomes visible
             Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
 
             // Next interval fires while visible — should refresh
-            jest.advanceTimersByTime(5 * 60 * 1000)
+            vi.advanceTimersByTime(5 * 60 * 1000)
             expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
 
             loader.stop()
@@ -266,11 +266,11 @@ describe('RemoteConfigLoader', () => {
             loader.load()
 
             // Default interval (5 min) should not trigger refresh
-            jest.advanceTimersByTime(5 * 60 * 1000)
+            vi.advanceTimersByTime(5 * 60 * 1000)
             expect(posthog.reloadFeatureFlags).not.toHaveBeenCalled()
 
             // Custom interval (10 min) should trigger refresh
-            jest.advanceTimersByTime(5 * 60 * 1000) // total: 10 minutes
+            vi.advanceTimersByTime(5 * 60 * 1000) // total: 10 minutes
             expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
 
             loader.stop()
@@ -283,7 +283,7 @@ describe('RemoteConfigLoader', () => {
             loader.load()
 
             // Even after a long time, no refresh should occur
-            jest.advanceTimersByTime(30 * 60 * 1000) // 30 minutes
+            vi.advanceTimersByTime(30 * 60 * 1000) // 30 minutes
             expect(posthog.reloadFeatureFlags).not.toHaveBeenCalled()
 
             loader.stop()
@@ -296,7 +296,7 @@ describe('RemoteConfigLoader', () => {
             loader.load()
 
             // Should use default 5 minute interval
-            jest.advanceTimersByTime(5 * 60 * 1000)
+            vi.advanceTimersByTime(5 * 60 * 1000)
             expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
 
             loader.stop()

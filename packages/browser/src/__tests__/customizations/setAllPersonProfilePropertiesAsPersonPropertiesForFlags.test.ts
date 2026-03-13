@@ -3,10 +3,10 @@ import { createPosthogInstance } from '../helpers/posthog-instance'
 import { setAllPersonProfilePropertiesAsPersonPropertiesForFlags } from '../../customizations/setAllPersonProfilePropertiesAsPersonPropertiesForFlags'
 import { STORED_PERSON_PROPERTIES_KEY } from '../../constants'
 
-jest.mock('../../utils/globals', () => {
-    const orig = jest.requireActual('../../utils/globals')
-    const mockURLGetter = jest.fn()
-    const mockReferrerGetter = jest.fn()
+vi.mock('../../utils/globals', async () => {
+    const orig = await vi.importActual('../../utils/globals')
+    const mockURLGetter = vi.fn()
+    const mockReferrerGetter = vi.fn()
     return {
         ...orig,
         mockURLGetter,

@@ -3,15 +3,15 @@ import { uuidv7 } from '../uuidv7'
 import Config from '../config'
 
 describe('posthog.set_config', () => {
-    const mockURL = jest.fn()
-    const mockReferrer = jest.fn()
+    const mockURL = vi.fn()
+    const mockReferrer = vi.fn()
     const originalWindowLocation = window.location
 
     beforeEach(() => {
         mockReferrer.mockReturnValue('https://referrer.com')
         mockURL.mockReturnValue('https://example.com')
-        console.error = jest.fn()
-        console.log = jest.fn()
+        console.error = vi.fn()
+        console.log = vi.fn()
 
         // Mock getters using Object.defineProperty
         Object.defineProperty(document, 'URL', {

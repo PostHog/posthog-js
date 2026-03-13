@@ -9,12 +9,12 @@ const mockSpanContext = (traceId: string) => ({
   traceFlags: 1,
 })
 
-jest.mock('posthog-node', () => {
+vi.mock('posthog-node', () => {
   return {
-    PostHog: jest.fn().mockImplementation(() => {
+    PostHog: vi.fn().mockImplementation(function() {
       return {
-        capture: jest.fn(),
-        captureImmediate: jest.fn(),
+        capture: vi.fn(),
+        captureImmediate: vi.fn(),
         privacy_mode: false,
       }
     }),
@@ -25,7 +25,7 @@ describe('OTEL span mapping', () => {
   let mockPostHogClient: PostHog
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     mockPostHogClient = new (PostHog as any)()
   })
 
@@ -57,7 +57,7 @@ describe('OTEL span mapping', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const properties = captureCall[0].properties
 
     expect(properties.$ai_framework).toBe('vercel')
@@ -98,7 +98,7 @@ describe('OTEL span mapping', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties.$ai_framework_version).toBeUndefined()
   })
 
@@ -126,7 +126,7 @@ describe('OTEL span mapping', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties.$ai_framework_version).toBe('6')
   })
 
@@ -154,7 +154,7 @@ describe('OTEL span mapping', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties.$ai_time_to_first_token).toBe(0.25)
   })
 
@@ -182,7 +182,7 @@ describe('OTEL span mapping', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties.$ai_input).toBeNull()
     expect(captureCall[0].properties.$ai_output_choices).toBeNull()
   })
@@ -219,13 +219,13 @@ describe('OTEL span mapping', () => {
     await flushPromises()
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties.$ai_trace_id).toBe('accepted-trace')
   })
 
   it('span processor forceFlush waits for in-flight captures to settle', async () => {
     let resolveCapture: (() => void) | undefined
-    const captureSpy = jest.spyOn(captureModule, 'captureSpan').mockImplementation(() => {
+    const captureSpy = vi.spyOn(captureModule, 'captureSpan').mockImplementation(function() {
       return new Promise<void>((resolve) => {
         resolveCapture = resolve
       })
@@ -261,7 +261,7 @@ describe('OTEL span mapping', () => {
 
   it('span processor shutdown waits for in-flight captures to settle', async () => {
     let resolveCapture: (() => void) | undefined
-    const captureSpy = jest.spyOn(captureModule, 'captureSpan').mockImplementation(() => {
+    const captureSpy = vi.spyOn(captureModule, 'captureSpan').mockImplementation(function() {
       return new Promise<void>((resolve) => {
         resolveCapture = resolve
       })
@@ -355,7 +355,7 @@ describe('OTEL span mapping', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties.$ai_model).toBe('gpt-4.1')
     expect(captureCall[0].properties.source).toBe('custom-mapper')
   })
@@ -409,7 +409,7 @@ describe('OTEL span mapping', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties.$ai_model).toBe('gpt-4.1')
     expect(captureCall[0].properties.ai_finish_reason).toBe('stop')
     expect(captureCall[0].properties.ai_schema_name).toBe('UserProfile')
@@ -436,7 +436,7 @@ describe('OTEL span mapping', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].event).toBe('$ai_embedding')
     expect(captureCall[0].properties.$ai_input_tokens).toBe(6)
     expect(captureCall[0].properties.$ai_output_choices).toBeNull()
@@ -470,7 +470,7 @@ describe('OTEL span mapping', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties.$ai_tools).toEqual([
       {
         type: 'function',
@@ -506,7 +506,7 @@ describe('OTEL span mapping', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties.$ai_output_choices[0].content).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -556,7 +556,7 @@ describe('OTEL span mapping', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const content = captureCall[0].properties.$ai_output_choices[0].content
     expect(content).toEqual(
       expect.arrayContaining([
@@ -595,7 +595,7 @@ describe('OTEL span mapping', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const content = captureCall[0].properties.$ai_output_choices[0].content
     expect(content).toEqual(
       expect.arrayContaining([
@@ -639,7 +639,7 @@ describe('OTEL span mapping', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const content = captureCall[0].properties.$ai_output_choices[0].content
     expect(content).toEqual(
       expect.arrayContaining([
@@ -683,7 +683,7 @@ describe('OTEL span mapping', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties.$ai_output_choices[0].content).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -719,7 +719,7 @@ describe('OTEL span mapping', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties.$ai_output_choices).toEqual([
       {
         role: 'assistant',
@@ -771,7 +771,7 @@ describe('OTEL span mapping', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties.$ai_output_choices).toEqual([
       {
         role: 'assistant',
@@ -817,7 +817,7 @@ describe('OTEL span mapping', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties.$ai_output_choices).toEqual([
       {
         role: 'assistant',
@@ -870,7 +870,7 @@ describe('OTEL span mapping', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties.$ai_output_choices[0].content).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -906,7 +906,7 @@ describe('OTEL span mapping', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties.$ai_output_choices).toEqual([
       { role: 'assistant', content: [{ type: 'text', text: 'Line one' }] },
       { role: 'assistant', content: [{ type: 'text', text: 'Line two' }] },

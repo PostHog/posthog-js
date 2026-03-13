@@ -15,7 +15,7 @@ describe('PostHogContext component', () => {
 
     it("should not throw error if a client instance can't be found in the context", () => {
         // eslint-disable-next-line no-console
-        console.warn = jest.fn()
+        console.warn = vi.fn()
 
         expect(() => {
             render(

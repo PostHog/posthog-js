@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { PostHogProvider, PostHog } from '../../context'
 import { PostHogFeature } from '../'
-import '@testing-library/jest-dom'
+import '@testing-library/jest-dom/vitest'
 
 const FEATURE_FLAG_STATUS: Record<string, string | boolean> = {
     multivariate_feature: 'string-value',
@@ -34,7 +34,7 @@ describe('PostHogFeature component', () => {
 
     beforeEach(() => {
         // IntersectionObserver isn't available in test environment
-        const mockIntersectionObserver = jest.fn()
+        const mockIntersectionObserver = vi.fn()
         mockIntersectionObserver.mockReturnValue({
             observe: () => null,
             unobserve: () => null,
@@ -65,7 +65,7 @@ describe('PostHogFeature component', () => {
                 callback(activeFlags)
                 return () => {}
             },
-            capture: jest.fn(),
+            capture: vi.fn(),
             featureFlags: {
                 hasLoadedFlags: true,
             },

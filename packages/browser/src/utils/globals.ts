@@ -272,10 +272,10 @@ const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' 
 
 // React Native polyfills for posthog-js compatibility
 if (typeof self === 'undefined') {
-    ;(global as any).self = global
+    (global as any).self = global
 }
 if (typeof File === 'undefined') {
-    ;(global as any).File = function () {}
+    (global as any).File = function () {}
 }
 
 export const ArrayProto = Array.prototype

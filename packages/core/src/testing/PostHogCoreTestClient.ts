@@ -1,13 +1,27 @@
+// vi is available as a global from vitest when running tests
+declare const vi: any
+
 import { PostHogCore } from '@/posthog-core'
 import type { GetFlagsResult, JsonType, PostHogCoreOptions, PostHogFetchOptions, PostHogFetchResponse } from '@/types'
 
 const version = '2.0.0-alpha'
 
+// Use generic mock type that works both with Jest and Vitest
+type MockFn<TReturn = any, TArgs extends any[] = any[]> = ((...args: TArgs) => TReturn) & {
+  mock: { calls: TArgs[]; results: Array<{ type: string; value: TReturn }> }
+  mockImplementation: (fn: (...args: TArgs) => TReturn) => MockFn<TReturn, TArgs>
+  mockReturnValue: (value: TReturn) => MockFn<TReturn, TArgs>
+  mockResolvedValue: (value: Awaited<TReturn>) => MockFn<TReturn, TArgs>
+  mockRejectedValue: (value: unknown) => MockFn<TReturn, TArgs>
+  mockClear: () => void
+  mockReset: () => void
+}
+
 export interface PostHogCoreTestClientMocks {
-  fetch: jest.Mock<Promise<PostHogFetchResponse>, [string, PostHogFetchOptions]>
+  fetch: MockFn<Promise<PostHogFetchResponse>, [string, PostHogFetchOptions]>
   storage: {
-    getItem: jest.Mock<any | undefined, [string]>
-    setItem: jest.Mock<void, [string, any | null]>
+    getItem: MockFn<any | undefined, [string]>
+    setItem: MockFn<void, [string, any | null]>
   }
 }
 
@@ -62,10 +76,10 @@ export const createTestClient = (
   storageCache: { [key: string]: string | JsonType } = {}
 ): [PostHogCoreTestClient, PostHogCoreTestClientMocks] => {
   const mocks = {
-    fetch: jest.fn(),
+    fetch: vi.fn(),
     storage: {
-      getItem: jest.fn((key) => storageCache[key]),
-      setItem: jest.fn((key, val) => {
+      getItem: vi.fn((key: string) => storageCache[key]),
+      setItem: vi.fn((key: string, val: any) => {
         storageCache[key] = val == null ? undefined : val
       }),
     },

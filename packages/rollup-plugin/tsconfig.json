@@ -10,6 +10,13 @@
         "skipLibCheck": true,
         "declaration": true,
         "declarationMap": true,
-        "lib": ["DOM"]
-    }
+        "lib": [
+            "DOM"
+        ]
+    },
+    "exclude": [
+        "node_modules",
+        "dist",
+        "vitest.config.mts"
+    ]
 }

@@ -7,7 +7,7 @@ describe('PostHog Core', () => {
 
   describe('flush', () => {
     beforeEach(() => {
-      jest.useFakeTimers()
+      vi.useFakeTimers()
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
         flushAt: 5,
         fetchRetryCount: 3,
@@ -17,7 +17,7 @@ describe('PostHog Core', () => {
     })
 
     it("doesn't fail when queue is empty", async () => {
-      jest.useRealTimers()
+      vi.useRealTimers()
       await expect(posthog.flush()).resolves.not.toThrow()
       expect(mocks.fetch).not.toHaveBeenCalled()
     })
@@ -60,7 +60,7 @@ describe('PostHog Core', () => {
       posthog.capture('test-event-1')
 
       const time = Date.now()
-      jest.useRealTimers()
+      vi.useRealTimers()
       await expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchHttpError')
       expect(mocks.fetch).toHaveBeenCalledTimes(4)
       expect(Date.now() - time).toBeGreaterThan(300)
@@ -74,7 +74,7 @@ describe('PostHog Core', () => {
       posthog.capture('test-event-1')
 
       const time = Date.now()
-      jest.useRealTimers()
+      vi.useRealTimers()
       await expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchNetworkError')
       expect(mocks.fetch).toHaveBeenCalledTimes(4)
       expect(Date.now() - time).toBeGreaterThan(300)
@@ -82,7 +82,7 @@ describe('PostHog Core', () => {
     })
 
     it('skips when client is disabled', async () => {
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 2 })
+      [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 2 })
 
       posthog.capture('test-event-1')
       await waitForPromises()
@@ -98,7 +98,7 @@ describe('PostHog Core', () => {
     })
 
     it('does not get stuck in a loop when new events are added while flushing', async () => {
-      jest.useRealTimers()
+      vi.useRealTimers()
       mocks.fetch.mockImplementation(async () => {
         posthog.capture('another-event')
         await delay(10)
@@ -115,7 +115,7 @@ describe('PostHog Core', () => {
     })
 
     it('should flush all events even if larger than batch size', async () => {
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
+      [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
 
       const successfulMessages: any[] = []
 
@@ -146,7 +146,7 @@ describe('PostHog Core', () => {
     })
 
     it('should reduce the batch size without dropping events if received 413', async () => {
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
+      [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
       const successfulMessages: any[] = []
 
       mocks.fetch.mockImplementation(async (_, options) => {
@@ -183,7 +183,7 @@ describe('PostHog Core', () => {
     })
 
     it('should treat a 413 at batchSize 1 as a regular error', async () => {
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
+      [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
 
       mocks.fetch.mockImplementation(async () => {
         return Promise.resolve({
@@ -199,7 +199,7 @@ describe('PostHog Core', () => {
     })
 
     it('should stop at first error', async () => {
-      jest.useRealTimers()
+      vi.useRealTimers()
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10, fetchRetryDelay: 1 })
       posthog['maxBatchSize'] = 1 // a bit contrived because usually maxBatchSize >= flushAt
       const successfulMessages: any[] = []
