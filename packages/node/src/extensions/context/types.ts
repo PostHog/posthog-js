@@ -1,6 +1,7 @@
 export interface ContextData {
   distinctId?: string
   sessionId?: string
+  groups?: Record<string, string | number>
   properties?: Record<string, any>
 }
 

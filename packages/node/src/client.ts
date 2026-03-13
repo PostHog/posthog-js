@@ -1990,6 +1990,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const contextData = this.context?.get()
 
     let mergedDistinctId = distinctId || contextData?.distinctId
+    let mergedGroups = groups ?? contextData?.groups
 
     const mergedProperties = {
       ...this.props,
@@ -2011,7 +2012,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       distinctId: mergedDistinctId,
       event,
       properties: mergedProperties,
-      groups,
+      groups: mergedGroups,
       sendFeatureFlags,
       timestamp,
       disableGeoip,
