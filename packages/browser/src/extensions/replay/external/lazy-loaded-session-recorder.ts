@@ -916,8 +916,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._maxDepthExceeded = false
         getRRWeb()?.resetMaxDepthState?.()
 
-        this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
-
         this._clearConditionalRecordingPersistence()
 
         // Restart the recorder under the new session. This is the single place
@@ -933,6 +931,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
         this.stop()
         this.start('session_id_changed')
+
+        // These events go to the new session's buffer (after start() reinitializes rrweb)
+        this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
 
         if (shouldLinkSessions) {
             this._tryAddCustomEvent('$session_starting', {
