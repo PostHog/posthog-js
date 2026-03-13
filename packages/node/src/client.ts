@@ -1699,7 +1699,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // Cancel any pending debounced flush — shutdown will flush directly.
     const resolve = this._consumeWaitUntilCycle()
 
-    this.featureFlagsPoller?.stopPoller(shutdownTimeoutMs)
+    await this.featureFlagsPoller?.stopPoller(shutdownTimeoutMs)
     this.errorTracking.shutdown()
     try {
       return await super._shutdown(shutdownTimeoutMs)
