@@ -19,6 +19,7 @@ export const generate = action({
   handler: async (ctx, args) => {
     const { thread } = await supportAgent.createThread(ctx, {})
 
+    const traceId = crypto.randomUUID()
     const startTime = Date.now()
 
     // Collect usage metadata from the usageHandler callback, then combine it
@@ -46,6 +47,9 @@ export const generate = action({
       distinctId: args.distinctId ?? 'anonymous',
       event: '$ai_generation',
       properties: {
+        // Trace ID groups multiple generations into a single trace
+        $ai_trace_id: traceId,
+
         // Core identification
         $ai_provider: usageData.provider,
         $ai_model: usageData.model,

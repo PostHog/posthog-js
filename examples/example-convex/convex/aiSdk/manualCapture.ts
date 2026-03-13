@@ -14,6 +14,7 @@ export const generate = action({
     distinctId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const traceId = crypto.randomUUID()
     const startTime = Date.now()
 
     const result = await generateText({
@@ -27,6 +28,9 @@ export const generate = action({
       distinctId: args.distinctId ?? 'anonymous',
       event: '$ai_generation',
       properties: {
+        // Trace ID groups multiple generations into a single trace
+        $ai_trace_id: traceId,
+
         // Core identification
         $ai_provider: 'openai',
         $ai_model: 'gpt-4o-mini',
