@@ -4,10 +4,10 @@ import type { GetFlagsResult, JsonType, PostHogCoreOptions, PostHogFetchOptions,
 const version = '2.0.0-alpha'
 
 export interface PostHogCoreTestClientMocks {
-  fetch: jest.Mock<Promise<PostHogFetchResponse>, [string, PostHogFetchOptions]>
+  fetch: vi.Mock<Promise<PostHogFetchResponse>, [string, PostHogFetchOptions]>
   storage: {
-    getItem: jest.Mock<any | undefined, [string]>
-    setItem: jest.Mock<void, [string, any | null]>
+    getItem: vi.Mock<any | undefined, [string]>
+    setItem: vi.Mock<void, [string, any | null]>
   }
 }
 
@@ -62,10 +62,10 @@ export const createTestClient = (
   storageCache: { [key: string]: string | JsonType } = {}
 ): [PostHogCoreTestClient, PostHogCoreTestClientMocks] => {
   const mocks = {
-    fetch: jest.fn(),
+    fetch: vi.fn(),
     storage: {
-      getItem: jest.fn((key) => storageCache[key]),
-      setItem: jest.fn((key, val) => {
+      getItem: vi.fn((key) => storageCache[key]),
+      setItem: vi.fn((key, val) => {
         storageCache[key] = val == null ? undefined : val
       }),
     },

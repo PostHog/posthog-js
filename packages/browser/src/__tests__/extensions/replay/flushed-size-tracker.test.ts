@@ -1,6 +1,5 @@
 import { FlushedSizeTracker } from '../../../extensions/replay/external/flushed-size-tracker'
 import { PostHog } from '../../../posthog-core'
-import { jest } from '@jest/globals'
 import { PostHogPersistence } from '../../../posthog-persistence'
 import { createMockPostHog, createMockConfig } from '../../helpers/posthog-instance'
 
@@ -31,7 +30,7 @@ describe('FlushedSizeTracker', () => {
 
     afterEach(() => {
         persistence.clear()
-        jest.clearAllMocks()
+        vi.clearAllMocks()
     })
 
     describe('constructor', () => {

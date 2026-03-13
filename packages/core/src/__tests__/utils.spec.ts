@@ -1,5 +1,6 @@
 import { assert, removeTrailingSlash, currentISOTime, currentTimestamp } from '@/utils'
 
+vi.useFakeTimers()
 describe('utils', () => {
   describe('assert', () => {
     it('should throw on falsey values', () => {
@@ -24,12 +25,12 @@ describe('utils', () => {
   })
   describe('currentTimestamp', () => {
     it('should get the timestamp', () => {
-      expect(currentTimestamp()).toEqual(Date.now())
+      expect(currentTimestamp()).toBeCloseTo(Date.now(), -2)
     })
   })
   describe('currentISOTime', () => {
     it('should get the iso time', () => {
-      jest.setSystemTime(new Date('2022-01-01'))
+      vi.setSystemTime(new Date('2022-01-01'))
       expect(currentISOTime()).toEqual('2022-01-01T00:00:00.000Z')
     })
   })

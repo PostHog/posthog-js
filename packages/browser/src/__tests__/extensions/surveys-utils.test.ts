@@ -653,7 +653,7 @@ describe('sendSurveyEvent', () => {
     })
 
     it('includes custom properties in captured event', () => {
-        const mockCapture = jest.fn()
+        const mockCapture = vi.fn()
         const mockPostHog = { capture: mockCapture } as unknown as PostHog
 
         sendSurveyEvent({
@@ -680,7 +680,7 @@ describe('sendSurveyEvent', () => {
     })
 
     it('works without custom properties', () => {
-        const mockCapture = jest.fn()
+        const mockCapture = vi.fn()
         const mockPostHog = { capture: mockCapture } as unknown as PostHog
 
         sendSurveyEvent({

@@ -6,10 +6,10 @@ import { defaultPostHog } from './helpers/posthog-instance'
 
 describe('identify()', () => {
     let instance: PostHog
-    let beforeSendMock: jest.Mock
+    let beforeSendMock: vi.Mock
 
     beforeEach(() => {
-        beforeSendMock = jest.fn().mockImplementation((e) => e)
+        beforeSendMock = vi.fn().mockImplementation((e) => e)
         const token = uuidv7()
         // NOTE: Temporary change whilst testing remote config
         assignableWindow._POSTHOG_REMOTE_CONFIG = {
@@ -30,13 +30,13 @@ describe('identify()', () => {
         )
 
         instance = Object.assign(posthog, {
-            register: jest.fn(),
+            register: vi.fn(),
             featureFlags: {
-                setAnonymousDistinctId: jest.fn(),
-                setPersonPropertiesForFlags: jest.fn(),
-                reloadFeatureFlags: jest.fn(),
+                setAnonymousDistinctId: vi.fn(),
+                setPersonPropertiesForFlags: vi.fn(),
+                reloadFeatureFlags: vi.fn(),
             },
-            unregister: jest.fn(),
+            unregister: vi.fn(),
         })
 
         instance.persistence!.set_property(USER_STATE, 'anonymous')
@@ -229,7 +229,7 @@ describe('identify()', () => {
 
     describe('invalid id passed', () => {
         it('does not update user', () => {
-            console.error = jest.fn()
+            console.error = vi.fn()
 
             instance.debug()
 
@@ -244,7 +244,7 @@ describe('identify()', () => {
         })
 
         it('does not update user when distinct ID is $posthog_cookieless', () => {
-            console.error = jest.fn()
+            console.error = vi.fn()
 
             instance.debug()
 

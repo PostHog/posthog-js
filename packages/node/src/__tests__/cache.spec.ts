@@ -3,15 +3,15 @@ import { PostHogFeatureFlag } from '../types'
 import { PostHog } from '../entrypoints/index.node'
 import { anyLocalEvalCall, apiImplementation } from './utils'
 
-jest.spyOn(console, 'debug').mockImplementation()
-jest.spyOn(console, 'warn').mockImplementation()
+vi.spyOn(console, 'debug').mockImplementation()
+vi.spyOn(console, 'warn').mockImplementation()
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
 describe('FlagDefinitionCacheProvider Integration', () => {
   let posthog: PostHog
-  let mockCacheProvider: jest.Mocked<FlagDefinitionCacheProvider>
-  let onErrorMock: jest.Mock
+  let mockCacheProvider: vi.Mocked<FlagDefinitionCacheProvider>
+  let onErrorMock: vi.Mock
 
   const testFlagDataApiResponse = {
     flags: [
@@ -47,16 +47,16 @@ describe('FlagDefinitionCacheProvider Integration', () => {
     cohorts: {},
   }
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   beforeEach(() => {
     mockedFetch.mockClear()
-    onErrorMock = jest.fn()
+    onErrorMock = vi.fn()
     mockCacheProvider = {
-      getFlagDefinitions: jest.fn(),
-      shouldFetchFlagDefinitions: jest.fn(),
-      onFlagDefinitionsReceived: jest.fn(),
-      shutdown: jest.fn(),
+      getFlagDefinitions: vi.fn(),
+      shouldFetchFlagDefinitions: vi.fn(),
+      onFlagDefinitionsReceived: vi.fn(),
+      shutdown: vi.fn(),
     }
   })
 
@@ -79,7 +79,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
       })
 
       // Wait for initial load
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalled()
       expect(mockedFetch).not.toHaveBeenCalled()
@@ -97,7 +97,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
       })
 
       // Wait for initial load from cache
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalled()
       expect(posthog.isLocalEvaluationReady()).toBe(true)
@@ -116,7 +116,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         fetchRetryCount: 0,
       })
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       // When shouldFetchFlagDefinitions returns true, we fetch directly without checking cache
       expect(mockCacheProvider.getFlagDefinitions).not.toHaveBeenCalled()
@@ -124,7 +124,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
     })
 
     it('emits localEvaluationFlagsLoaded event with correct flag count after loading from cache', async () => {
-      const onLoadMock = jest.fn()
+      const onLoadMock = vi.fn()
       mockCacheProvider.getFlagDefinitions.mockReturnValue(testFlagData)
       mockCacheProvider.shouldFetchFlagDefinitions.mockResolvedValue(false)
 
@@ -137,7 +137,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
 
       posthog.on('localEvaluationFlagsLoaded', onLoadMock)
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       expect(onLoadMock).toHaveBeenCalledWith(1)
     })
@@ -177,7 +177,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         fetchRetryCount: 0,
       })
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       expect(mockCacheProvider.shouldFetchFlagDefinitions).toHaveBeenCalled()
     })
@@ -195,7 +195,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         fetchRetryCount: 0,
       })
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
       expect(mockCacheProvider.onFlagDefinitionsReceived).toHaveBeenCalledWith(testFlagData)
@@ -216,7 +216,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         fetchRetryCount: 0,
       })
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       // Should not fetch from API when shouldFetch is false and we have flags from cache
       expect(mockCacheProvider.shouldFetchFlagDefinitions).toHaveBeenCalled()
@@ -237,7 +237,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         fetchRetryCount: 0,
       })
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       // Should fetch despite shouldFetch returning false because we have no flags at all
       expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
@@ -254,7 +254,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         fetchRetryCount: 0,
       })
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       expect(mockCacheProvider.onFlagDefinitionsReceived).not.toHaveBeenCalled()
     })
@@ -279,7 +279,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
 
       posthog.on('error', onErrorMock)
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       // Error might be emitted, but the key is that initialization continues
       // Should still fetch from API despite cache error
@@ -303,7 +303,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
 
       posthog.on('error', onErrorMock)
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       expect(onErrorMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -331,7 +331,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
 
       posthog.on('error', onErrorMock)
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       expect(onErrorMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -357,7 +357,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
 
       posthog.on('error', onErrorMock)
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
       await posthog.shutdown()
 
       expect(onErrorMock).toHaveBeenCalledWith(
@@ -381,7 +381,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         fetchRetryCount: 0,
       })
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       expect(posthog.isLocalEvaluationReady()).toBe(true)
     })
@@ -397,7 +397,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         fetchRetryCount: 0,
       })
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       expect(posthog.isLocalEvaluationReady()).toBe(true)
     })
@@ -415,7 +415,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         fetchRetryCount: 0,
       })
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       expect(mockCacheProvider.shouldFetchFlagDefinitions).toHaveBeenCalled()
       expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
@@ -434,7 +434,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         fetchRetryCount: 0,
       })
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       expect(mockCacheProvider.shouldFetchFlagDefinitions).toHaveBeenCalled()
       expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
@@ -452,7 +452,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         fetchRetryCount: 0,
       })
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
       await posthog.shutdown()
 
       expect(mockCacheProvider.shutdown).toHaveBeenCalled()
@@ -470,7 +470,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         fetchRetryCount: 0,
       })
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
       await posthog.shutdown()
 
       expect(mockCacheProvider.shutdown).toHaveBeenCalled()
@@ -489,7 +489,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         fetchRetryCount: 0,
       })
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       const flagValue = await posthog.getFeatureFlag('test-flag', 'user-123')
       expect(flagValue).toBeDefined()
@@ -508,7 +508,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         fetchRetryCount: 0,
       })
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       expect(mockCacheProvider.onFlagDefinitionsReceived).toHaveBeenCalledWith(testFlagData)
       expect(posthog.isLocalEvaluationReady()).toBe(true)
@@ -525,7 +525,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         fetchRetryCount: 0,
       })
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       // Verify cache provider was used to load flags
       expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalled()
@@ -545,7 +545,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         fetchRetryCount: 0,
       })
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       expect(posthog.isLocalEvaluationReady()).toBe(true)
       expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
@@ -579,7 +579,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         fetchRetryCount: 0,
       })
 
-      await jest.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
 
       // Should still initialize with stale data
       expect(posthog.isLocalEvaluationReady()).toBe(true)

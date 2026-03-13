@@ -7,27 +7,27 @@ const EPOCH = 1_600_000_000
 describe('RequestQueue', () => {
     describe('setting flush timeout', () => {
         it('can override the flush timeout', () => {
-            const queue = new RequestQueue(jest.fn(), { flush_interval_ms: 1000 })
+            const queue = new RequestQueue(vi.fn(), { flush_interval_ms: 1000 })
             expect(queue['_flushTimeoutMs']).toEqual(1000)
         })
 
         it('defaults to 3000 when not configured', () => {
-            const queue = new RequestQueue(jest.fn(), {})
+            const queue = new RequestQueue(vi.fn(), {})
             expect(queue['_flushTimeoutMs']).toEqual(DEFAULT_FLUSH_INTERVAL_MS)
         })
 
         it('defaults to 3000 when no config', () => {
-            const queue = new RequestQueue(jest.fn())
+            const queue = new RequestQueue(vi.fn())
             expect(queue['_flushTimeoutMs']).toEqual(DEFAULT_FLUSH_INTERVAL_MS)
         })
 
         it('cannot set below 250', () => {
-            const queue = new RequestQueue(jest.fn(), { flush_interval_ms: 249 })
+            const queue = new RequestQueue(vi.fn(), { flush_interval_ms: 249 })
             expect(queue['_flushTimeoutMs']).toEqual(250)
         })
 
         it('cannot set above 5000', () => {
-            const queue = new RequestQueue(jest.fn(), { flush_interval_ms: 5001 })
+            const queue = new RequestQueue(vi.fn(), { flush_interval_ms: 5001 })
             expect(queue['_flushTimeoutMs']).toEqual(5000)
         })
 
@@ -43,11 +43,11 @@ describe('RequestQueue', () => {
         let queue: RequestQueue
 
         beforeEach(() => {
-            sendRequest = jest.fn()
+            sendRequest = vi.fn()
             queue = new RequestQueue(sendRequest, {})
-            jest.useFakeTimers()
-            jest.setSystemTime(EPOCH - 3000) // Running the timers will add 3 seconds
-            jest.spyOn(console, 'warn').mockImplementation(() => {})
+            vi.useFakeTimers()
+            vi.setSystemTime(EPOCH - 3000) // Running the timers will add 3 seconds
+            vi.spyOn(console, 'warn').mockImplementation(() => {})
         })
 
         it('handles poll after enqueueing requests', () => {
@@ -74,10 +74,10 @@ describe('RequestQueue', () => {
 
             expect(sendRequest).toHaveBeenCalledTimes(0)
 
-            jest.runOnlyPendingTimers()
+            vi.runOnlyPendingTimers()
 
             expect(sendRequest).toHaveBeenCalledTimes(3)
-            expect(jest.mocked(sendRequest).mock.calls).toEqual([
+            expect(vi.mocked(sendRequest).mock.calls).toEqual([
                 [
                     {
                         url: '/e',

@@ -24,9 +24,9 @@ describe(`Module-based loader in Node env`, () => {
         } as any
         // assignableWindow.__PosthogExtensions__ = {}
 
-        jest.useFakeTimers()
-        jest.spyOn(posthog, '_send_request').mockReturnValue()
-        jest.spyOn(window!.console, 'log').mockImplementation()
+        vi.useFakeTimers()
+        vi.spyOn(posthog, '_send_request').mockReturnValue()
+        vi.spyOn(window!.console, 'log').mockImplementation()
     })
 
     it('should load and capture the pageview event', () => {
@@ -45,7 +45,7 @@ describe(`Module-based loader in Node env`, () => {
             },
         })
 
-        jest.runOnlyPendingTimers()
+        vi.runOnlyPendingTimers()
 
         sinon.assert.calledOnce(posthog.capture as sinon.SinonSpy<any>)
         const captureArgs = (posthog.capture as sinon.SinonSpy<any>).args[0]
@@ -65,8 +65,8 @@ describe(`Module-based loader in Node env`, () => {
     })
 
     it(`always returns posthog from init`, () => {
-        console.error = jest.fn()
-        console.warn = jest.fn()
+        console.error = vi.fn()
+        console.warn = vi.fn()
 
         expect(posthog.init(`my-test`, { disable_surveys: true, disable_conversations: true }, 'sdk-1')).toBeInstanceOf(
             PostHog

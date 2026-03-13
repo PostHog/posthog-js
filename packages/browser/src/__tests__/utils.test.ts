@@ -9,7 +9,6 @@
 
 import { _copyAndTruncateStrings, isCrossDomainCookie, migrateConfigField } from '../utils'
 import { isLikelyBot, DEFAULT_BLOCKED_UA_STRS, isBlockedUA, NavigatorUAData } from '../utils/blocked-uas'
-import { expect } from '@jest/globals'
 
 import { _base64Encode } from '../utils/encode-utils'
 import { getPersonPropertiesHash, propertyComparisons } from '../utils/property-utils'
@@ -478,7 +477,7 @@ describe('utils', () => {
         })
 
         it('logs deprecation warning when using old field', () => {
-            const mockLogger = { warn: jest.fn() }
+            const mockLogger = { warn: vi.fn() }
             migrateConfigField({ oldField: 'oldValue' }, 'newField', 'oldField', 'default', mockLogger)
             expect(mockLogger.warn).toHaveBeenCalledWith(
                 expect.stringContaining("Config field 'oldField' is deprecated")

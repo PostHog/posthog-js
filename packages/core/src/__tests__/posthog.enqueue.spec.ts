@@ -1,12 +1,13 @@
 import { PostHogPersistedProperty } from '@/types'
 import { createTestClient, PostHogCoreTestClient, PostHogCoreTestClientMocks } from '@/testing'
 
+vi.useFakeTimers()
 describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient
   let mocks: PostHogCoreTestClientMocks
 
   beforeEach(() => {
-    jest.setSystemTime(new Date('2022-01-01'))
+    vi.setSystemTime(new Date('2022-01-01'))
   })
 
   function createSut(maxQueueSize: number = 1000, flushAt: number = 20): void {

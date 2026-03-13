@@ -1,15 +1,19 @@
 import { getServerSidePostHog } from '../src/pages/getServerSidePostHog'
 
-const mockEnterContext = jest.fn()
-const mockGetAllFlags = jest.fn()
-const mockGetAllFlagsAndPayloads = jest.fn()
+const { mockEnterContext, mockGetAllFlags, mockGetAllFlagsAndPayloads } = vi.hoisted(() => ({
+    mockEnterContext: vi.fn(),
+    mockGetAllFlags: vi.fn(),
+    mockGetAllFlagsAndPayloads: vi.fn(),
+}))
 
-jest.mock('posthog-node', () => ({
-    PostHog: jest.fn().mockImplementation(() => ({
-        enterContext: mockEnterContext,
-        getAllFlags: mockGetAllFlags,
-        getAllFlagsAndPayloads: mockGetAllFlagsAndPayloads,
-    })),
+vi.mock('posthog-node', () => ({
+    PostHog: vi.fn().mockImplementation(function () {
+        return {
+            enterContext: mockEnterContext,
+            getAllFlags: mockGetAllFlags,
+            getAllFlagsAndPayloads: mockGetAllFlagsAndPayloads,
+        }
+    }),
 }))
 
 function createMockContext(cookies: Record<string, string> = {}) {
@@ -29,7 +33,7 @@ function createMockContext(cookies: Record<string, string> = {}) {
 
 describe('getServerSidePostHog', () => {
     beforeEach(() => {
-        jest.clearAllMocks()
+        vi.clearAllMocks()
         delete process.env.NEXT_PUBLIC_POSTHOG_KEY
     })
 

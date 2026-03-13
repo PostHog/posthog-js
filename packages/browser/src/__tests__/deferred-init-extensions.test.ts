@@ -2,10 +2,10 @@ import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { RemoteConfig } from '../types'
 
-jest.mock('../utils/globals', () => {
-    const orig = jest.requireActual('../utils/globals')
-    const mockURLGetter = jest.fn()
-    const mockReferrerGetter = jest.fn()
+vi.mock('../utils/globals', async () => {
+    const orig = await vi.importActual('../utils/globals')
+    const mockURLGetter = vi.fn()
+    const mockReferrerGetter = vi.fn()
     return {
         ...orig,
         mockURLGetter,
@@ -36,7 +36,7 @@ const { mockURLGetter, mockReferrerGetter } = require('../utils/globals')
 
 describe('deferred extension initialization', () => {
     beforeEach(() => {
-        console.error = jest.fn()
+        console.error = vi.fn()
         mockReferrerGetter.mockReturnValue('https://referrer.com')
         mockURLGetter.mockReturnValue('https://example.com')
     })
@@ -131,7 +131,7 @@ describe('deferred extension initialization', () => {
             expect((posthog as any)._pendingRemoteConfig).toEqual(remoteConfig)
 
             // Spy on _onRemoteConfig to see if it gets called again during replay
-            const onRemoteConfigSpy = jest.spyOn(posthog as any, '_onRemoteConfig')
+            const onRemoteConfigSpy = vi.spyOn(posthog as any, '_onRemoteConfig')
 
             // Wait for extensions to initialize
             await new Promise((resolve) => setTimeout(resolve, 200))

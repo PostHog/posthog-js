@@ -1,40 +1,39 @@
 {
-  "name": "posthog-js-lite",
-  "version": "4.5.5",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/PostHog/posthog-js.git",
-    "directory": "packages/web"
-  },
-  "main": "dist/index.cjs",
-  "module": "dist/index.mjs",
-  "types": "dist/index.d.ts",
-  "scripts": {
-    "clean": "rimraf dist coverage",
-    "test:unit": "jest -c jest.config.js",
-    "lint": "eslint src test",
-    "lint:fix": "eslint src test --fix",
-    "prebuild": "node -p \"'export const version = ' + JSON.stringify(require('./package.json').version)\" > src/version.ts",
-    "build": "rollup -c",
-    "dev": "rollup -c -w",
-    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
-    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
-  },
-  "files": [
-    "dist",
-    "src"
-  ],
-  "dependencies": {
-    "@posthog/core": "workspace:*"
-  },
-  "devDependencies": {
-    "@babel/preset-env": "catalog:",
-    "@babel/preset-typescript": "catalog:",
-    "@posthog-tooling/tsconfig-base": "workspace:*",
-    "@posthog-tooling/rollup-utils": "workspace:*",
-    "@types/jest": "catalog:",
-    "jest": "catalog:",
-    "jest-environment-jsdom": "catalog:"
-  }
+    "name": "posthog-js-lite",
+    "version": "4.5.5",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/PostHog/posthog-js.git",
+        "directory": "packages/web"
+    },
+    "main": "dist/index.cjs",
+    "module": "dist/index.mjs",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "clean": "rimraf dist coverage",
+        "test:unit": "vitest run",
+        "lint": "eslint src test",
+        "lint:fix": "eslint src test --fix",
+        "prebuild": "node -p \"'export const version = ' + JSON.stringify(require('./package.json').version)\" > src/version.ts",
+        "build": "rollup -c",
+        "dev": "rollup -c -w",
+        "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+    },
+    "files": [
+        "dist",
+        "src"
+    ],
+    "dependencies": {
+        "@posthog/core": "workspace:*"
+    },
+    "devDependencies": {
+        "@babel/preset-env": "catalog:",
+        "@babel/preset-typescript": "catalog:",
+        "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@posthog-tooling/rollup-utils": "workspace:*",
+        "vitest": "catalog:",
+        "jsdom": "catalog:"
+    }
 }

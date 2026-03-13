@@ -1,5 +1,7 @@
 import { createTestClient, waitForPromises, PostHogCoreTestClient, PostHogCoreTestClientMocks } from '@/testing'
 
+vi.useFakeTimers()
+
 describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient
   let mocks: PostHogCoreTestClientMocks
@@ -78,7 +80,7 @@ describe('PostHog Core', () => {
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
         bootstrap: { distinctId: 'new_id', isIdentifiedId: true },
       })
-      jest.runOnlyPendingTimers()
+      vi.runOnlyPendingTimers()
 
       expect((posthog as any).getDistinctId()).toEqual('new_id')
       expect((posthog as any).getAnonymousId()).not.toEqual('new_id')
@@ -96,7 +98,7 @@ describe('PostHog Core', () => {
         disabled: true,
         flushAt: 1,
       })
-      jest.runOnlyPendingTimers()
+      vi.runOnlyPendingTimers()
 
       expect(posthog.getFeatureFlags()).toEqual(undefined)
       posthog.capture('test')

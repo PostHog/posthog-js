@@ -1,6 +1,5 @@
 // https://eslint.org/docs/v8.x/use/configure/configuration-files
 const rules = {
-    'prettier/prettier': 'error',
     'prefer-spread': 'off',
     '@typescript-eslint/no-empty-function': 'off',
     '@typescript-eslint/no-this-alias': 'off',
@@ -11,6 +10,7 @@ const rules = {
     'no-empty': 'off',
     'no-console': 'error',
     'no-only-tests/no-only-tests': 'error',
+    '@vitest/expect-expect': 'off',
     'posthog-js/no-external-replay-imports': 'error',
     '@typescript-eslint/naming-convention': [
         'error',
@@ -26,7 +26,6 @@ const rules = {
 const extend = [
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
-    'prettier',
     'plugin:compat/recommended',
     'plugin:posthog-js/all',
 ]
@@ -36,7 +35,6 @@ module.exports = {
     env: {
         browser: true,
         es6: true,
-        'jest/globals': true,
     },
     globals: {
         given: 'readonly',
@@ -45,11 +43,10 @@ module.exports = {
     },
     parser: '@typescript-eslint/parser',
     plugins: [
-        'prettier',
         '@typescript-eslint',
         'eslint-plugin-react',
         'eslint-plugin-react-hooks',
-        'jest',
+        '@vitest',
         'no-only-tests',
     ],
     extends: extend,

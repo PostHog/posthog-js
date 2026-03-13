@@ -1,15 +1,15 @@
 import { PostHog } from '@/entrypoints/index.node'
 import { waitForPromises } from './utils'
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
-jest.useFakeTimers()
+vi.useFakeTimers()
 
 // Helper to wait for flush to complete
 const waitForFlushTimer = async (): Promise<void> => {
   await waitForPromises()
   // To trigger the flush via the timer
-  jest.runOnlyPendingTimers()
+  vi.runOnlyPendingTimers()
   // Then wait for the flush promise
   await waitForPromises()
 }

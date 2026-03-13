@@ -7,7 +7,7 @@ describe('PostHog Core', () => {
 
   describe('flush', () => {
     beforeEach(() => {
-      jest.useFakeTimers()
+      vi.useFakeTimers()
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
         flushAt: 5,
         fetchRetryCount: 3,
@@ -17,7 +17,7 @@ describe('PostHog Core', () => {
     })
 
     it("doesn't fail when queue is empty", async () => {
-      jest.useRealTimers()
+      vi.useRealTimers()
       await expect(posthog.flush()).resolves.not.toThrow()
       expect(mocks.fetch).not.toHaveBeenCalled()
     })
@@ -60,7 +60,7 @@ describe('PostHog Core', () => {
       posthog.capture('test-event-1')
 
       const time = Date.now()
-      jest.useRealTimers()
+      vi.useRealTimers()
       await expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchHttpError')
       expect(mocks.fetch).toHaveBeenCalledTimes(4)
       expect(Date.now() - time).toBeGreaterThan(300)
@@ -74,7 +74,7 @@ describe('PostHog Core', () => {
       posthog.capture('test-event-1')
 
       const time = Date.now()
-      jest.useRealTimers()
+      vi.useRealTimers()
       await expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchNetworkError')
       expect(mocks.fetch).toHaveBeenCalledTimes(4)
       expect(Date.now() - time).toBeGreaterThan(300)
@@ -98,7 +98,7 @@ describe('PostHog Core', () => {
     })
 
     it('does not get stuck in a loop when new events are added while flushing', async () => {
-      jest.useRealTimers()
+      vi.useRealTimers()
       mocks.fetch.mockImplementation(async () => {
         posthog.capture('another-event')
         await delay(10)
@@ -199,7 +199,7 @@ describe('PostHog Core', () => {
     })
 
     it('should stop at first error', async () => {
-      jest.useRealTimers()
+      vi.useRealTimers()
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10, fetchRetryDelay: 1 })
       posthog['maxBatchSize'] = 1 // a bit contrived because usually maxBatchSize >= flushAt
       const successfulMessages: any[] = []

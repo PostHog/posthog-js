@@ -1,6 +1,5 @@
 /// <reference lib="dom" />
 
-import { expect } from '@jest/globals'
 import { shouldRecordBody } from '../../../../extensions/replay/external/network-plugin'
 
 // Mock Request class since jsdom might not provide it
@@ -247,61 +246,55 @@ describe('network plugin', () => {
 
     describe('network observer lifecycle', () => {
         describe('singleton initialization and cleanup', () => {
-            it('should initialize successfully on first call', () => {
-                jest.isolateModules(() => {
-                    // eslint-disable-next-line @typescript-eslint/no-require-imports
-                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
-                    const { mockWindow, observerCallbacks } = createMockWindow()
-                    global.PerformanceObserver = mockWindow.PerformanceObserver
+            it('should initialize successfully on first call', async () => {
+                vi.resetModules()
+                const { getRecordNetworkPlugin } = await import('../../../../extensions/replay/external/network-plugin')
+                const { mockWindow, observerCallbacks } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
 
-                    const plugin = getRecordNetworkPlugin()
-                    const cleanup = plugin.observer(() => {}, mockWindow, {})
+                const plugin = getRecordNetworkPlugin()
+                const cleanup = plugin.observer(() => {}, mockWindow, {})
 
-                    expect(typeof cleanup).toBe('function')
-                    expect(observerCallbacks.length).toBe(1)
-                })
+                expect(typeof cleanup).toBe('function')
+                expect(observerCallbacks.length).toBe(1)
             })
 
-            it('should allow re-initialization after cleanup', () => {
-                jest.isolateModules(() => {
-                    // eslint-disable-next-line @typescript-eslint/no-require-imports
-                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
-                    const { mockWindow, observerCallbacks } = createMockWindow()
-                    global.PerformanceObserver = mockWindow.PerformanceObserver
+            it('should allow re-initialization after cleanup', async () => {
+                vi.resetModules()
+                const { getRecordNetworkPlugin } = await import('../../../../extensions/replay/external/network-plugin')
+                const { mockWindow, observerCallbacks } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
 
-                    const plugin1 = getRecordNetworkPlugin()
-                    const cleanup1 = plugin1.observer(() => {}, mockWindow, {})
-                    expect(observerCallbacks.length).toBe(1)
+                const plugin1 = getRecordNetworkPlugin()
+                const cleanup1 = plugin1.observer(() => {}, mockWindow, {})
+                expect(observerCallbacks.length).toBe(1)
 
-                    cleanup1()
-                    expect(observerCallbacks.length).toBe(0)
+                cleanup1()
+                expect(observerCallbacks.length).toBe(0)
 
-                    const plugin2 = getRecordNetworkPlugin()
-                    const cleanup2 = plugin2.observer(() => {}, mockWindow, {})
-                    expect(observerCallbacks.length).toBe(1)
+                const plugin2 = getRecordNetworkPlugin()
+                const cleanup2 = plugin2.observer(() => {}, mockWindow, {})
+                expect(observerCallbacks.length).toBe(1)
 
-                    cleanup2()
-                })
+                cleanup2()
             })
 
-            it('should handle multiple cleanup calls safely', () => {
-                jest.isolateModules(() => {
-                    // eslint-disable-next-line @typescript-eslint/no-require-imports
-                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
-                    const { mockWindow, observerCallbacks } = createMockWindow()
-                    global.PerformanceObserver = mockWindow.PerformanceObserver
+            it('should handle multiple cleanup calls safely', async () => {
+                vi.resetModules()
+                const { getRecordNetworkPlugin } = await import('../../../../extensions/replay/external/network-plugin')
+                const { mockWindow, observerCallbacks } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
 
-                    const plugin = getRecordNetworkPlugin()
-                    const cleanup = plugin.observer(() => {}, mockWindow, {})
+                const plugin = getRecordNetworkPlugin()
+                const cleanup = plugin.observer(() => {}, mockWindow, {})
 
-                    expect(() => {
-                        cleanup()
-                        cleanup()
-                        cleanup()
-                    }).not.toThrow()
+                expect(() => {
+                    cleanup()
+                    cleanup()
+                    cleanup()
+                }).not.toThrow()
 
-                    expect(observerCallbacks.length).toBe(0)
-                })
+                expect(observerCallbacks.length).toBe(0)
             })
         })
 
@@ -309,20 +302,18 @@ describe('network plugin', () => {
             let mockWindow: any
             let xhr: any
 
-            beforeEach(() => {
-                jest.isolateModules(() => {
-                    // eslint-disable-next-line @typescript-eslint/no-require-imports
-                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
-                    const mock = createMockWindow()
-                    mockWindow = mock.mockWindow
+            beforeEach(async () => {
+                vi.resetModules()
+                const { getRecordNetworkPlugin } = await import('../../../../extensions/replay/external/network-plugin')
+                const mock = createMockWindow()
+                mockWindow = mock.mockWindow
 
-                    global.PerformanceObserver = mockWindow.PerformanceObserver
+                global.PerformanceObserver = mockWindow.PerformanceObserver
 
-                    const plugin = getRecordNetworkPlugin({ recordBody: true })
-                    plugin.observer(() => {}, mockWindow, { recordBody: true })
+                const plugin = getRecordNetworkPlugin({ recordBody: true })
+                plugin.observer(() => {}, mockWindow, { recordBody: true })
 
-                    xhr = new mockWindow.XMLHttpRequest()
-                })
+                xhr = new mockWindow.XMLHttpRequest()
             })
 
             it('should remove readystatechange listener on successful request', () => {

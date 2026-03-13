@@ -1,6 +1,6 @@
 /* eslint-disable compat/compat */
 import { render, fireEvent, waitFor } from '@testing-library/preact'
-import '@testing-library/jest-dom'
+import '@testing-library/jest-dom/vitest'
 import { ConversationsWidget } from '../../../extensions/conversations/external/components/ConversationsWidget'
 import { ConversationsRemoteConfig } from '../../../posthog-conversations-types'
 
@@ -13,7 +13,7 @@ describe('ConversationsWidget restore request UI', () => {
     }
 
     beforeEach(() => {
-        Element.prototype.scrollIntoView = jest.fn()
+        Element.prototype.scrollIntoView = vi.fn()
     })
 
     it('should open restore request view from footer link', () => {
@@ -21,8 +21,8 @@ describe('ConversationsWidget restore request UI', () => {
             <ConversationsWidget
                 config={config}
                 initialState="open"
-                onSendMessage={jest.fn().mockResolvedValue(undefined)}
-                onRequestRestoreLink={jest.fn().mockResolvedValue({ ok: true })}
+                onSendMessage={vi.fn().mockResolvedValue(undefined)}
+                onRequestRestoreLink={vi.fn().mockResolvedValue({ ok: true })}
             />
         )
 
@@ -38,8 +38,8 @@ describe('ConversationsWidget restore request UI', () => {
             <ConversationsWidget
                 config={config}
                 initialState="open"
-                onSendMessage={jest.fn().mockResolvedValue(undefined)}
-                onRequestRestoreLink={jest.fn().mockResolvedValue({ ok: true })}
+                onSendMessage={vi.fn().mockResolvedValue(undefined)}
+                onRequestRestoreLink={vi.fn().mockResolvedValue({ ok: true })}
             />
         )
 
@@ -50,12 +50,12 @@ describe('ConversationsWidget restore request UI', () => {
     })
 
     it('should request restore link and show success message', async () => {
-        const onRequestRestoreLink = jest.fn().mockResolvedValue({ ok: true })
+        const onRequestRestoreLink = vi.fn().mockResolvedValue({ ok: true })
         const { getByText, getByPlaceholderText } = render(
             <ConversationsWidget
                 config={config}
                 initialState="open"
-                onSendMessage={jest.fn().mockResolvedValue(undefined)}
+                onSendMessage={vi.fn().mockResolvedValue(undefined)}
                 onRequestRestoreLink={onRequestRestoreLink}
             />
         )
@@ -73,15 +73,15 @@ describe('ConversationsWidget restore request UI', () => {
     })
 
     it('should return to ticket view when closing restore request with multiple tickets', () => {
-        const onViewChange = jest.fn()
+        const onViewChange = vi.fn()
         const { getByText, getByLabelText } = render(
             <ConversationsWidget
                 config={config}
                 initialState="open"
                 initialView="tickets"
                 hasMultipleTickets={true}
-                onSendMessage={jest.fn().mockResolvedValue(undefined)}
-                onRequestRestoreLink={jest.fn().mockResolvedValue({ ok: true })}
+                onSendMessage={vi.fn().mockResolvedValue(undefined)}
+                onRequestRestoreLink={vi.fn().mockResolvedValue({ ok: true })}
                 onViewChange={onViewChange}
             />
         )
@@ -98,8 +98,8 @@ describe('ConversationsWidget restore request UI', () => {
             <ConversationsWidget
                 config={{ ...config, requireEmail: true }}
                 initialState="open"
-                onSendMessage={jest.fn().mockResolvedValue(undefined)}
-                onRequestRestoreLink={jest.fn().mockResolvedValue({ ok: true })}
+                onSendMessage={vi.fn().mockResolvedValue(undefined)}
+                onRequestRestoreLink={vi.fn().mockResolvedValue({ ok: true })}
                 isUserIdentified={false}
                 initialUserTraits={null}
             />

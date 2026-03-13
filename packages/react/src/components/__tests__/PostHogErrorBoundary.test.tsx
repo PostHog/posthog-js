@@ -68,7 +68,7 @@ describe('captureException processing', () => {
 
     it('should call capture with a stacktrace', () => {
         renderWithError({ message: 'Kaboom', fallback: <div></div>, additionalProperties: {} })
-        const captureCalls = (posthog.capture as jest.Mock).mock.calls
+        const captureCalls = (posthog.capture as vi.Mock).mock.calls
         expect(captureCalls.length).toBe(1)
         const exceptionList = captureCalls[0][1].$exception_list
         expect(exceptionList.length).toBe(1)
@@ -81,7 +81,7 @@ function mockFunction(object: any, funcName: string) {
     const originalFunc = object[funcName]
 
     beforeEach(() => {
-        object[funcName] = jest.fn()
+        object[funcName] = vi.fn()
     })
 
     afterEach(() => {

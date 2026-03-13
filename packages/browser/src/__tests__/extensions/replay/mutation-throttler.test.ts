@@ -4,10 +4,9 @@ import {
     MUTATION_SOURCE_TYPE,
 } from '../../../extensions/replay/external/sessionrecording-utils'
 import type { rrwebRecord } from '../../../extensions/replay/types/rrweb'
-import { jest } from '@jest/globals'
 import type { eventWithTime, mutationData } from '../../../extensions/replay/types/rrweb-types'
 
-jest.useFakeTimers()
+vi.useFakeTimers()
 
 const makeEvent = (mutations: {
     adds?: mutationData['adds']
@@ -26,14 +25,14 @@ const makeEvent = (mutations: {
 })
 
 describe('MutationThrottler', () => {
-    const mockGetNode = jest.fn()
-    const mockGetId = jest.fn()
-    const rrwebMock: jest.Mock<rrwebRecord> = {
+    const mockGetNode = vi.fn()
+    const mockGetId = vi.fn()
+    const rrwebMock: vi.Mock<rrwebRecord> = {
         mirror: {
             getNode: mockGetNode,
             getId: mockGetId,
         },
-    } as unknown as jest.Mock<rrwebRecord>
+    } as unknown as vi.Mock<rrwebRecord>
 
     let mutationThrottler: MutationThrottler
     let onBlockedNodeMock: (id: number, node: Node | null) => void
@@ -42,14 +41,14 @@ describe('MutationThrottler', () => {
         mockGetNode.mockReturnValueOnce({ nodeName: 'div' })
         mockGetId.mockReturnValueOnce(1)
 
-        onBlockedNodeMock = jest.fn()
+        onBlockedNodeMock = vi.fn()
         mutationThrottler = new MutationThrottler(rrwebMock as unknown as rrwebRecord, {
             onBlockedNode: onBlockedNodeMock,
         })
     })
 
     afterEach(() => {
-        jest.clearAllMocks()
+        vi.clearAllMocks()
     })
 
     test('event is passed through unchanged when not throttled', () => {
@@ -135,7 +134,7 @@ describe('MutationThrottler', () => {
 
     describe('stop()', () => {
         test('clears the rate limiter interval', () => {
-            const stopSpy = jest.spyOn(mutationThrottler['_rateLimiter'], 'stop')
+            const stopSpy = vi.spyOn(mutationThrottler['_rateLimiter'], 'stop')
 
             mutationThrottler.stop()
 

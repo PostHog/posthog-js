@@ -12,7 +12,8 @@
                 ".babelrc",
                 "babel.config.js",
                 "rollup.config.mjs",
-                "rslib.config.mjs"
+                "rslib.config.mjs",
+                "vitest.config.mts"
             ],
             "outputs": ["dist/**", "lib/**", "react/**"],
             "env": ["WRITE_MANGLED_PROPERTIES"]

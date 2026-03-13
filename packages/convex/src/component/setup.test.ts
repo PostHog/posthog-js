@@ -1,5 +1,4 @@
 /// <reference types="vite/client" />
-import { test } from '@jest/globals'
 import schema from './schema.js'
 import { convexTest } from 'convex-test'
 export const modules = import.meta.glob('./**/*.*s')

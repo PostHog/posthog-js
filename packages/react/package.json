@@ -15,9 +15,9 @@
         "clean": "rimraf dist",
         "build": "rollup -c",
         "dev": "rollup -cw",
-        "test:unit": "jest",
+        "test:unit": "vitest run",
         "lint": "eslint src",
-        "test:debug": "jest --runInBand",
+        "test:debug": "vitest run --pool=forks --poolOptions.forks.singleFork",
         "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },
@@ -50,10 +50,7 @@
         "@testing-library/jest-dom": "catalog:",
         "@testing-library/react": "catalog:",
         "@types/react": "catalog:",
-        "@types/jest": "catalog:",
         "cross-env": "^7.0.3",
-        "jest": "catalog:",
-        "jest-environment-jsdom": "catalog:",
         "posthog-js": "workspace:*",
         "react": "catalog:",
         "react-dom": "catalog:",
@@ -61,6 +58,8 @@
         "rollup": "^2.35.1",
         "rollup-plugin-copy": "^3.5.0",
         "tslib": "catalog:",
-        "typescript": "catalog:"
+        "typescript": "catalog:",
+        "vitest": "catalog:",
+        "jsdom": "catalog:"
     }
 }

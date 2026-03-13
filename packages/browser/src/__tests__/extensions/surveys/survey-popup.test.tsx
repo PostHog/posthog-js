@@ -1,4 +1,4 @@
-import '@testing-library/jest-dom'
+import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact'
 import { SurveyPopup } from '../../../extensions/surveys'
 import * as surveyUtils from '../../../extensions/surveys/surveys-extension-utils' // Import all utils
@@ -6,20 +6,20 @@ import { Survey, SurveyQuestionType, SurveyType } from '../../../posthog-surveys
 import * as uuid from '../../../uuidv7' // Import uuidv7
 
 // Mock the utility functions
-jest.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
-    ...jest.requireActual('../../../extensions/surveys/surveys-extension-utils'), // Keep original implementations for non-mocked parts
-    getInProgressSurveyState: jest.fn(),
-    sendSurveyEvent: jest.fn(),
-    dismissedSurveyEvent: jest.fn(),
+vi.mock('../../../extensions/surveys/surveys-extension-utils', async () => ({
+    ...await vi.importActual('../../../extensions/surveys/surveys-extension-utils'), // Keep original implementations for non-mocked parts
+    getInProgressSurveyState: vi.fn(),
+    sendSurveyEvent: vi.fn(),
+    dismissedSurveyEvent: vi.fn(),
 }))
 
 // Mock uuidv7
-jest.mock('../../../uuidv7')
+vi.mock('../../../uuidv7')
 
 // Mock PostHog instance needed by event handlers
 const mockPosthog = {
-    capture: jest.fn(),
-    get_session_replay_url: jest.fn().mockReturnValue('http://example.com/replay'),
+    capture: vi.fn(),
+    get_session_replay_url: vi.fn().mockReturnValue('http://example.com/replay'),
 }
 
 describe('SurveyPopup', () => {
@@ -64,31 +64,31 @@ describe('SurveyPopup', () => {
     }
 
     // Mock functions passed as props
-    let mockRemoveSurveyFromFocus: jest.Mock
-    let mockOnCloseConfirmationMessage: jest.Mock
+    let mockRemoveSurveyFromFocus: vi.Mock
+    let mockOnCloseConfirmationMessage: vi.Mock
 
     // Type cast mocks for easier usage
-    const mockedGetInProgressSurveyState = surveyUtils.getInProgressSurveyState as jest.Mock
+    const mockedGetInProgressSurveyState = surveyUtils.getInProgressSurveyState as vi.Mock
     // Removed unused mocks for set/clear state
-    // const mockedSetInProgressSurveyState = surveyUtils.setInProgressSurveyState as jest.Mock
-    // const mockedClearInProgressSurveyState = surveyUtils.clearInProgressSurveyState as jest.Mock
-    const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as jest.Mock
-    const mockedDismissedSurveyEvent = surveyUtils.dismissedSurveyEvent as jest.Mock
-    const mockedUuidv7 = uuid.uuidv7 as jest.Mock
+    // const mockedSetInProgressSurveyState = surveyUtils.setInProgressSurveyState as vi.Mock
+    // const mockedClearInProgressSurveyState = surveyUtils.clearInProgressSurveyState as vi.Mock
+    const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as vi.Mock
+    const mockedDismissedSurveyEvent = surveyUtils.dismissedSurveyEvent as vi.Mock
+    const mockedUuidv7 = uuid.uuidv7 as vi.Mock
 
     beforeEach(() => {
         cleanup()
-        jest.clearAllMocks()
+        vi.clearAllMocks()
         // Mock uuidv7 to return a predictable value
         mockedUuidv7.mockReturnValue('new-uuid-generated')
         // Default mock for getInProgressSurveyState (no state)
         mockedGetInProgressSurveyState.mockReturnValue(null)
 
-        mockRemoveSurveyFromFocus = jest.fn()
-        mockOnCloseConfirmationMessage = jest.fn()
+        mockRemoveSurveyFromFocus = vi.fn()
+        mockOnCloseConfirmationMessage = vi.fn()
 
         // Mock form.submit to prevent JSDOM error
-        HTMLFormElement.prototype.submit = jest.fn()
+        HTMLFormElement.prototype.submit = vi.fn()
     })
 
     afterEach(() => {

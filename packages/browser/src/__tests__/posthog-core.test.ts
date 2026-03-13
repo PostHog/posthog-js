@@ -4,13 +4,12 @@ import { uuidv7 } from '../uuidv7'
 import { SurveyEventName, SurveyEventProperties } from '../posthog-surveys-types'
 import { ProductTourEventName, ProductTourEventProperties } from '../posthog-product-tours-types'
 import { SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
-import { beforeEach } from '@jest/globals'
 
-jest.mock('../utils/globals', () => {
-    const orig = jest.requireActual('../utils/globals')
-    const mockURL = jest.fn().mockReturnValue('https://example.com')
-    const mockReferrer = jest.fn().mockReturnValue('https://referrer.com')
-    const mockHostName = jest.fn().mockReturnValue('example.com')
+vi.mock('../utils/globals', async () => {
+    const orig = await vi.importActual('../utils/globals')
+    const mockURL = vi.fn().mockReturnValue('https://example.com')
+    const mockReferrer = vi.fn().mockReturnValue('https://referrer.com')
+    const mockHostName = vi.fn().mockReturnValue('example.com')
     return {
         ...orig,
         mockURL,
@@ -45,7 +44,7 @@ describe('posthog core', () => {
         mockURL.mockReturnValue('https://example.com')
         mockHostName.mockReturnValue('example.com')
         // otherwise surveys code logs an error and fails the test
-        console.error = jest.fn()
+        console.error = vi.fn()
     })
 
     it('exposes the version', () => {
@@ -54,9 +53,9 @@ describe('posthog core', () => {
 
     describe('posthog debug logging', () => {
         beforeEach(() => {
-            console.error = jest.fn()
-            console.log = jest.fn()
-            console.warn = jest.fn()
+            console.error = vi.fn()
+            console.log = vi.fn()
+            console.warn = vi.fn()
         })
 
         it('log when setting debug to false', () => {
@@ -90,7 +89,7 @@ describe('posthog core', () => {
             event: 'prop',
         }
         const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
-            const beforeSendMock = jest.fn().mockImplementation((e) => e)
+            const beforeSendMock = vi.fn().mockImplementation((e) => e)
             const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
             posthog.debug()
             return { posthog, beforeSendMock }
@@ -128,10 +127,10 @@ describe('posthog core', () => {
             })
 
             it('does not capture if rate limit is in place', () => {
-                jest.useFakeTimers()
-                jest.setSystemTime(Date.now())
+                vi.useFakeTimers()
+                vi.setSystemTime(Date.now())
 
-                console.error = jest.fn()
+                console.error = vi.fn()
                 const { posthog, beforeSendMock } = setup()
                 for (let i = 0; i < 100; i++) {
                     posthog.capture(eventName, eventProperties)
@@ -379,7 +378,7 @@ describe('posthog core', () => {
 
     describe('product tour capture()', () => {
         const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
-            const beforeSendMock = jest.fn().mockImplementation((e) => e)
+            const beforeSendMock = vi.fn().mockImplementation((e) => e)
             const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
             return { posthog, beforeSendMock }
         }
@@ -425,7 +424,7 @@ describe('posthog core', () => {
 
     describe('setInternalOrTestUser()', () => {
         const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
-            const beforeSendMock = jest.fn().mockImplementation((e) => e)
+            const beforeSendMock = vi.fn().mockImplementation((e) => e)
             const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
             return { posthog, beforeSendMock }
         }
@@ -562,7 +561,7 @@ describe('posthog core', () => {
 
         it('should execute methods normally when no Proxy interference', () => {
             const posthog = defaultPostHog()
-            const captureSpy = jest.spyOn(posthog, 'capture').mockImplementation()
+            const captureSpy = vi.spyOn(posthog, 'capture').mockImplementation()
 
             posthog.push(['capture', 'test-event', { foo: 'bar' }])
 
@@ -572,8 +571,8 @@ describe('posthog core', () => {
 
         it('should handle _execute_array with array of commands', () => {
             const posthog = defaultPostHog()
-            const registerSpy = jest.spyOn(posthog, 'register').mockImplementation()
-            const captureSpy = jest.spyOn(posthog, 'capture').mockImplementation()
+            const registerSpy = vi.spyOn(posthog, 'register').mockImplementation()
+            const captureSpy = vi.spyOn(posthog, 'capture').mockImplementation()
 
             posthog._execute_array([
                 ['register', { key: 'value' }],

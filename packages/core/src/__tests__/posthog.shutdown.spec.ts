@@ -6,7 +6,7 @@ describe('PostHog Core', () => {
 
   describe('shutdown', () => {
     beforeEach(() => {
-      jest.useRealTimers()
+      vi.useRealTimers()
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
         flushAt: 10,
         preloadFeatureFlags: false,

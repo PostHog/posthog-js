@@ -6,8 +6,8 @@ import { PostHogConfig, Properties } from '../types'
 import { PostHogPersistence } from '../posthog-persistence'
 import { createMockPostHog } from './helpers/posthog-instance'
 
-jest.mock('../uuidv7')
-jest.mock('../storage')
+vi.mock('../uuidv7')
+vi.mock('../storage')
 
 const SESSION_LENGTH_LIMIT_MS = 24 * 3600 * 1000
 const SESSION_TIMEOUT_MS = DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS * 1000
@@ -27,7 +27,7 @@ describe('SessionIdManager property-based tests', () => {
             createMockPostHog({
                 config: config as PostHogConfig,
                 persistence: phPersistence as PostHogPersistence,
-                register: jest.fn(),
+                register: vi.fn(),
             }),
             () => `session-${++uuidCounter}`,
             () => `window-${++uuidCounter}`
@@ -36,7 +36,7 @@ describe('SessionIdManager property-based tests', () => {
     const resetPersistence = () => {
         persistence = {
             props: { [SESSION_ID]: undefined },
-            register: jest.fn().mockImplementation((props) => {
+            register: vi.fn().mockImplementation((props) => {
                 Object.assign(persistence.props, props)
             }),
             _disabled: false,
@@ -46,8 +46,8 @@ describe('SessionIdManager property-based tests', () => {
     beforeEach(() => {
         uuidCounter = 0
         resetPersistence()
-        ;(sessionStore._is_supported as jest.Mock).mockReturnValue(true)
-        ;(sessionStore._parse as jest.Mock).mockReturnValue(null)
+        ;(sessionStore._is_supported as vi.Mock).mockReturnValue(true)
+        ;(sessionStore._parse as vi.Mock).mockReturnValue(null)
     })
 
     it('generates new session when no session id exists', () => {
@@ -115,7 +115,7 @@ describe('SessionIdManager property-based tests', () => {
                     const startTimestamp = lastActivityTimestamp - 1000
 
                     persistence.props[SESSION_ID] = [lastActivityTimestamp, 'existing-session', startTimestamp]
-                    ;(sessionStore._parse as jest.Mock).mockReturnValue('existing-window')
+                    ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
 
                     const manager = sessionIdMgr(persistence)
                     const result = manager.checkAndGetSessionAndWindowId(false, currentTimestamp)
@@ -142,7 +142,7 @@ describe('SessionIdManager property-based tests', () => {
                     const startTimestamp = lastActivityTimestamp - 1000
 
                     persistence.props[SESSION_ID] = [lastActivityTimestamp, 'existing-session', startTimestamp]
-                    ;(sessionStore._parse as jest.Mock).mockReturnValue('existing-window')
+                    ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
 
                     const manager = sessionIdMgr(persistence)
                     const result = manager.checkAndGetSessionAndWindowId(true, currentTimestamp)
@@ -170,7 +170,7 @@ describe('SessionIdManager property-based tests', () => {
                     const lastActivityTimestamp = currentTimestamp - 1000
 
                     persistence.props[SESSION_ID] = [lastActivityTimestamp, 'existing-session', startTimestamp]
-                    ;(sessionStore._parse as jest.Mock).mockReturnValue('existing-window')
+                    ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
 
                     const manager = sessionIdMgr(persistence)
                     const result = manager.checkAndGetSessionAndWindowId(readOnly, currentTimestamp)
@@ -199,7 +199,7 @@ describe('SessionIdManager property-based tests', () => {
                     const startTimestamp = currentTimestamp - timeSinceStart
 
                     persistence.props[SESSION_ID] = [lastActivityTimestamp, 'existing-session', startTimestamp]
-                    ;(sessionStore._parse as jest.Mock).mockReturnValue('existing-window')
+                    ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
 
                     const manager = sessionIdMgr(persistence)
                     const result = manager.checkAndGetSessionAndWindowId(readOnly, currentTimestamp)
@@ -232,7 +232,7 @@ describe('SessionIdManager property-based tests', () => {
                             uuidCounter = 0
                             resetPersistence()
                             persistence.props[SESSION_ID] = [activityTimestamp, 'existing-session', startTimestamp]
-                            ;(sessionStore._parse as jest.Mock).mockReturnValue('existing-window')
+                            ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
 
                             const manager = sessionIdMgr(persistence)
                             const result = manager.checkAndGetSessionAndWindowId(readOnly, currentTimestamp)
@@ -267,7 +267,7 @@ describe('SessionIdManager property-based tests', () => {
                         resetPersistence()
                         const lastActivityTimestamp = currentTimestamp - 1000
                         persistence.props[SESSION_ID] = [lastActivityTimestamp, 'existing-session', startTimestamp]
-                        ;(sessionStore._parse as jest.Mock).mockReturnValue('existing-window')
+                        ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
 
                         const manager = sessionIdMgr(persistence)
                         const result = manager.checkAndGetSessionAndWindowId(false, currentTimestamp)
@@ -304,7 +304,7 @@ describe('SessionIdManager property-based tests', () => {
                         const startTimestamp = originalActivityTimestamp - 1000
 
                         persistence.props[SESSION_ID] = [originalActivityTimestamp, 'existing-session', startTimestamp]
-                        ;(sessionStore._parse as jest.Mock).mockReturnValue('existing-window')
+                        ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
 
                         const manager = sessionIdMgr(persistence)
                         manager.checkAndGetSessionAndWindowId(readOnly, currentTimestamp)
@@ -331,7 +331,7 @@ describe('SessionIdManager property-based tests', () => {
                     uuidCounter = 0
                     resetPersistence()
                     persistence.props[SESSION_ID] = [timestamp - 1000, 'existing-session', timestamp - 2000]
-                    ;(sessionStore._parse as jest.Mock).mockReturnValue(hasExistingWindowId ? 'existing-window' : null)
+                    ;(sessionStore._parse as vi.Mock).mockReturnValue(hasExistingWindowId ? 'existing-window' : null)
 
                     const manager = sessionIdMgr(persistence)
                     const result = manager.checkAndGetSessionAndWindowId(readOnly, timestamp)
@@ -362,7 +362,7 @@ describe('SessionIdManager property-based tests', () => {
                     const activityIncrement = Math.floor(SESSION_TIMEOUT_MS / (callCount + 1))
 
                     persistence.props[SESSION_ID] = [startTimestamp, 'existing-session', startTimestamp]
-                    ;(sessionStore._parse as jest.Mock).mockReturnValue('existing-window')
+                    ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
 
                     const manager = sessionIdMgr(persistence)
 
@@ -393,7 +393,7 @@ describe('SessionIdManager property-based tests', () => {
                     uuidCounter = 0
                     resetPersistence()
                     persistence.props[SESSION_ID] = [lastActivityTimestamp, 'existing-session', startTimestamp]
-                    ;(sessionStore._parse as jest.Mock).mockReturnValue('existing-window')
+                    ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
 
                     const manager = sessionIdMgr(persistence)
                     const result1 = manager.checkAndGetSessionAndWindowId(readOnly, timestamp)
@@ -421,7 +421,7 @@ describe('SessionIdManager property-based tests', () => {
                     uuidCounter = 0
                     resetPersistence()
                     persistence.props[SESSION_ID] = [lastActivityTimestamp, 'existing-session']
-                    ;(sessionStore._parse as jest.Mock).mockReturnValue('existing-window')
+                    ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
 
                     const manager = sessionIdMgr(persistence)
                     const result = manager.checkAndGetSessionAndWindowId(false, currentTimestamp)

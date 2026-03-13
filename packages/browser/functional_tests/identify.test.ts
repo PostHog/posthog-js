@@ -35,7 +35,7 @@ describe('FunctionalTests / Identify', () => {
             )
         )
 
-        expect(jest.mocked(logger).error).toBeCalledTimes(0)
+        expect(vi.mocked(logger).error).toBeCalledTimes(0)
     })
 
     test('identify sends an engage request if identify called twice with the same distinct id and with $set/$set_once', async () => {

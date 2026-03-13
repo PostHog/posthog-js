@@ -4,13 +4,14 @@ import { PostHog } from '@/entrypoints/index.node'
 import { PostHogInterceptor } from '@/extensions/nestjs'
 import { waitForPromises } from '../utils'
 
-jest.mock('../../version', () => ({ version: '1.2.3' }))
+vi.useFakeTimers()
+vi.mock('../../version', () => ({ version: '1.2.3' }))
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
 const waitForFlushTimer = async (): Promise<void> => {
   await waitForPromises()
-  jest.runOnlyPendingTimers()
+  vi.runOnlyPendingTimers()
   await waitForPromises()
 }
 

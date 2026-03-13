@@ -7,7 +7,7 @@ import { window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
 import { cookieStore, resetLocalStorageSupported, resetSessionStorageSupported, sessionStore } from '../storage'
 import { defaultPostHog } from './helpers/posthog-instance'
-import Mock = jest.Mock
+import Mock = vi.Mock
 
 let referrer = '' // No referrer by default
 Object.defineProperty(document, 'referrer', { get: () => referrer })
@@ -65,7 +65,7 @@ describe('persistence', () => {
         it(`should only call save if props changes`, () => {
             const lib = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
             lib.register({ distinct_id: 'hi', test_prop: 'test_val' })
-            const saveMock: Mock = jest.fn()
+            const saveMock: Mock = vi.fn()
             lib.save = saveMock
 
             lib.register({ distinct_id: 'hi', test_prop: 'test_val' })
@@ -454,7 +454,7 @@ describe('posthog instance persistence', () => {
         resetLocalStorageSupported()
     })
     it('should not write to storage if opt_out_persistence_by_default and opt_out_capturing_by_default is true', () => {
-        const sessionSpy = jest.spyOn(sessionStore, '_set')
+        const sessionSpy = vi.spyOn(sessionStore, '_set')
 
         // init posthog while opting out
         const posthog = defaultPostHog().init(
@@ -470,7 +470,7 @@ describe('posthog instance persistence', () => {
         // Spy on the created store instance's _set method
         // Note: We spy after initialization, so we're checking that no further calls are made
         const createdStore = (posthog.persistence as any)._storage
-        const localPlusCookieSpy = jest.spyOn(createdStore, '_set')
+        const localPlusCookieSpy = vi.spyOn(createdStore, '_set')
 
         // we do one call to check if session storage is supported, but don't actually store anything
         // the important thing is that we don't store the session id or window id, etc. This test was added alongside
@@ -485,7 +485,7 @@ describe('posthog instance persistence', () => {
     })
 
     it('should write to storage if opt_out_persistence_by_default and opt_out_capturing_by_default is false', () => {
-        const sessionSpy = jest.spyOn(sessionStore, '_set')
+        const sessionSpy = vi.spyOn(sessionStore, '_set')
 
         // init posthog while opting out
         const posthog = defaultPostHog().init(
@@ -500,7 +500,7 @@ describe('posthog instance persistence', () => {
 
         // Spy on the created store instance's _set method
         const createdStore = (posthog.persistence as any)._storage
-        const localPlusCookieSpy = jest.spyOn(createdStore, '_set')
+        const localPlusCookieSpy = vi.spyOn(createdStore, '_set')
 
         // Trigger a save to verify storage is called
         if (posthog.persistence) {

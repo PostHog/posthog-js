@@ -174,10 +174,10 @@ describe(`event-utils`, () => {
     })
 
     describe('browser language', () => {
-        let languageGetter: jest.SpyInstance
+        let languageGetter: vi.SpyInstance
 
         beforeEach(() => {
-            languageGetter = jest.spyOn(window.navigator, 'language', 'get')
+            languageGetter = vi.spyOn(window.navigator, 'language', 'get')
             languageGetter.mockReturnValue('pt-BR')
         })
 

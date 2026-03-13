@@ -8,13 +8,13 @@ import { assignableWindow } from '../../utils/globals'
 import { DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
 import { WEB_VITALS_ENABLED_SERVER_SIDE, WEB_VITALS_ALLOWED_METRICS } from '../../constants'
 
-jest.useFakeTimers()
+vi.useFakeTimers()
 
-let mockLocation: jest.Mock
+let mockLocation: vi.Mock
 
-jest.mock('../../utils/globals', () => {
-    const original = jest.requireActual('../../utils/globals')
-    mockLocation = jest.fn().mockReturnValue({
+vi.mock('../../utils/globals', async () => {
+    const original = await vi.importActual('../../utils/globals')
+    mockLocation = vi.fn().mockReturnValue({
         protocol: 'http:',
         host: 'localhost',
         pathname: '/',
@@ -44,12 +44,12 @@ jest.mock('../../utils/globals', () => {
 
 describe('web vitals', () => {
     let posthog: PostHog
-    let beforeSendMock = jest.fn().mockImplementation((e) => e)
+    let beforeSendMock = vi.fn().mockImplementation((e) => e)
     let onLCPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
     let onCLSCallback: ((metric: Record<string, any>) => void) | undefined = undefined
     let onFCPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
     let onINPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
-    const loadScriptMock = jest.fn()
+    const loadScriptMock = vi.fn()
 
     const emitAllMetrics = () => {
         onLCPCallback?.({ name: 'LCP', value: 123.45, extra: 'property' })
@@ -186,7 +186,7 @@ describe('web vitals', () => {
 
                 expect(beforeSendMock).toBeCalledTimes(0)
 
-                jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+                vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
                 // for some reason advancing the timer emits a $pageview event as well 🤷
                 expect(beforeSendMock.mock.lastCall).toMatchObject([
@@ -206,7 +206,7 @@ describe('web vitals', () => {
 
                 expect(beforeSendMock).toBeCalledTimes(0)
 
-                jest.advanceTimersByTime(1000 + 1)
+                vi.advanceTimersByTime(1000 + 1)
 
                 expect(beforeSendMock.mock.lastCall).toMatchObject([
                     {
@@ -224,7 +224,7 @@ describe('web vitals', () => {
 
                 expect(beforeSendMock).toBeCalledTimes(0)
 
-                jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+                vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
                 expect(beforeSendMock.mock.calls).toEqual([])
             })
@@ -235,7 +235,7 @@ describe('web vitals', () => {
 
                 expect(beforeSendMock).toBeCalledTimes(0)
 
-                jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+                vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
                 expect(beforeSendMock).toBeCalledTimes(1)
             })
@@ -264,13 +264,13 @@ describe('web vitals', () => {
             [false, 'web-vitals'],
             [true, 'web-vitals-with-attribution'],
         ])('when web_vitals_attribution is %p, should load %s bundle', async (attributionConfig, expectedBundle) => {
-            const loadScriptMock = jest.fn().mockImplementation((_ph, _kind, callback) => {
+            const loadScriptMock = vi.fn().mockImplementation((_ph, _kind, callback) => {
                 assignableWindow.__PosthogExtensions__ = {}
                 assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
-                    onLCP: jest.fn(),
-                    onCLS: jest.fn(),
-                    onFCP: jest.fn(),
-                    onINP: jest.fn(),
+                    onLCP: vi.fn(),
+                    onCLS: vi.fn(),
+                    onFCP: vi.fn(),
+                    onINP: vi.fn(),
                 }
                 callback()
             })
@@ -293,7 +293,7 @@ describe('web vitals', () => {
 
     describe('onRemoteConfig empty config handling', () => {
         beforeEach(async () => {
-            beforeSendMock = jest.fn()
+            beforeSendMock = vi.fn()
             posthog = await createPosthogInstance(uuidv7(), {
                 before_send: beforeSendMock,
             })
@@ -348,7 +348,7 @@ describe('web vitals', () => {
                 },
             }
 
-            beforeSendMock = jest.fn()
+            beforeSendMock = vi.fn()
             posthog = await createPosthogInstance(uuidv7(), {
                 before_send: beforeSendMock,
             })

@@ -1,6 +1,6 @@
 /* eslint-disable compat/compat */
 import { render } from '@testing-library/preact'
-import '@testing-library/jest-dom'
+import '@testing-library/jest-dom/vitest'
 import { RichContent } from '../../../extensions/conversations/external/components/RichContent'
 import { TipTapDoc } from '../../../posthog-conversations-types'
 

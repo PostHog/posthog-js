@@ -8,11 +8,11 @@ import { navigator } from '../utils/globals'
 
 describe('bot detection and pageview collection', () => {
     let posthog: PostHog
-    let beforeSendMock: jest.Mock
+    let beforeSendMock: vi.Mock
     let originalUserAgent: string
 
     const createPostHog = async (config: Partial<PostHogConfig> = {}) => {
-        beforeSendMock = jest.fn().mockImplementation((e) => e)
+        beforeSendMock = vi.fn().mockImplementation((e) => e)
         const posthog = await new Promise<PostHog>(
             (resolve) =>
                 defaultPostHog().init(

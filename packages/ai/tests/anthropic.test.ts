@@ -64,19 +64,19 @@ interface MockAsyncIterator<T> {
   [Symbol.asyncIterator](): AsyncIterator<T>
 }
 
-jest.mock('posthog-node', () => {
+vi.mock('posthog-node', () => {
   return {
-    PostHog: jest.fn().mockImplementation(() => {
+    PostHog: vi.fn().mockImplementation(function() {
       return {
-        capture: jest.fn(),
-        captureImmediate: jest.fn(),
+        capture: vi.fn(),
+        captureImmediate: vi.fn(),
         privacy_mode: false, // Note: This is the correct property name per PostHog Node SDK
       }
     }),
   }
 })
 
-jest.mock('@anthropic-ai/sdk', () => {
+vi.mock('@anthropic-ai/sdk', () => {
   // Mock Messages class
   class MockMessages {
     create(..._args: any[]): any {
@@ -230,7 +230,7 @@ const createMockStreamChunks = (options: MockAnthropicResponseOptions = {}): Moc
  * @param expectations - Object containing expected values for the capture call
  */
 const assertPostHogCapture = (mockClient: PostHog, expectations: CaptureExpectations): void => {
-  const captureMock = mockClient.capture as jest.Mock
+  const captureMock = mockClient.capture as vi.Mock
   expect(captureMock).toHaveBeenCalledTimes(1)
 
   const [captureArgs] = captureMock.mock.calls
@@ -322,7 +322,7 @@ describe('PostHogAnthropic', () => {
   })
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
 
     // Reset the default mocks
     mockPostHogClient = new (PostHog as any)()
@@ -342,8 +342,8 @@ describe('PostHogAnthropic', () => {
     })
 
     // Mock the create method
-    const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
-    ;(MessagesMock.prototype.create as jest.Mock) = jest.fn().mockImplementation((params: any) => {
+    const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
+    ;(MessagesMock.prototype.create as vi.Mock) = vi.fn().mockImplementation((params: any) => {
       if (params.stream) {
         // Return a mock stream
         const mockStream = {
@@ -385,7 +385,7 @@ describe('PostHogAnthropic', () => {
         properties: { custom_prop: 'test_value' },
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
       expect(properties['$ai_usage']).toBeDefined()
@@ -403,7 +403,7 @@ describe('PostHogAnthropic', () => {
 
       expect(response).toEqual(mockResponse)
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
       expect(properties['$ai_tokens_source']).toBe('passthrough')
@@ -423,7 +423,7 @@ describe('PostHogAnthropic', () => {
         posthogDistinctId: 'test-user-123',
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
 
@@ -448,7 +448,7 @@ describe('PostHogAnthropic', () => {
         posthogDistinctId: 'test-user-123',
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
 
@@ -509,7 +509,7 @@ describe('PostHogAnthropic', () => {
       // Allow async capture to complete
       await waitForAsyncCapture()
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       expect(captureMock).toHaveBeenCalledTimes(1)
 
       const [captureArgs] = captureMock.mock.calls
@@ -563,7 +563,7 @@ describe('PostHogAnthropic', () => {
       // Allow async capture to complete
       await waitForAsyncCapture()
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
 
@@ -620,7 +620,7 @@ describe('PostHogAnthropic', () => {
         posthogDistinctId: 'test-user-123',
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
 
@@ -679,7 +679,7 @@ describe('PostHogAnthropic', () => {
         posthogDistinctId: 'test-user-123',
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
 
@@ -814,8 +814,8 @@ describe('PostHogAnthropic', () => {
       const apiError = new Error('API Error') as Error & { status: number }
       apiError.status = 429
 
-      const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
-      ;(MessagesMock.prototype.create as jest.Mock) = jest.fn().mockRejectedValue(apiError)
+      const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
+      ;(MessagesMock.prototype.create as vi.Mock) = vi.fn().mockRejectedValue(apiError)
 
       await expect(
         client.messages.create({
@@ -832,7 +832,7 @@ describe('PostHogAnthropic', () => {
         outputTokens: 0,
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
 
@@ -845,7 +845,7 @@ describe('PostHogAnthropic', () => {
 
       // Create a mock stream that throws an error
       const errorStream = {
-        tee: jest.fn().mockReturnValue([
+        tee: vi.fn().mockReturnValue([
           {
             async *[Symbol.asyncIterator]() {
               throw streamError
@@ -861,8 +861,8 @@ describe('PostHogAnthropic', () => {
         ]),
       }
 
-      const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
-      ;(MessagesMock.prototype.create as jest.Mock) = jest.fn().mockResolvedValue(errorStream)
+      const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
+      ;(MessagesMock.prototype.create as vi.Mock) = vi.fn().mockResolvedValue(errorStream)
 
       const stream = await client.messages.create({
         model: 'claude-3-opus-20240229',
@@ -914,7 +914,7 @@ describe('PostHogAnthropic', () => {
         posthogCaptureImmediate: true,
       })
 
-      const captureImmediateMock = mockPostHogClient.captureImmediate as jest.Mock
+      const captureImmediateMock = mockPostHogClient.captureImmediate as vi.Mock
       expect(captureImmediateMock).toHaveBeenCalledTimes(1)
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(0)
     })
@@ -929,7 +929,7 @@ describe('PostHogAnthropic', () => {
         posthogDistinctId: 'test-user-123',
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
 
@@ -948,7 +948,7 @@ describe('PostHogAnthropic', () => {
         posthogTraceId: 'trace-789',
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { distinctId, properties } = captureArgs[0]
 
@@ -965,7 +965,7 @@ describe('PostHogAnthropic', () => {
         posthogTraceId: 'trace-789',
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { distinctId, properties } = captureArgs[0]
 
@@ -1066,7 +1066,7 @@ describe('PostHogAnthropic', () => {
         posthogDistinctId: 'test-user-123',
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
 

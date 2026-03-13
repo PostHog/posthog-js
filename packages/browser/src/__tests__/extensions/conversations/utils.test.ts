@@ -249,12 +249,12 @@ Done!`
 
     describe('formatRelativeTime', () => {
         beforeEach(() => {
-            jest.useFakeTimers()
-            jest.setSystemTime(new Date('2024-01-15T12:00:00Z'))
+            vi.useFakeTimers()
+            vi.setSystemTime(new Date('2024-01-15T12:00:00Z'))
         })
 
         afterEach(() => {
-            jest.useRealTimers()
+            vi.useRealTimers()
         })
 
         it('should return empty string for undefined input', () => {

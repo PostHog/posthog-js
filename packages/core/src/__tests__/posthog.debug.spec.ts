@@ -2,10 +2,10 @@ import { createTestClient, PostHogCoreTestClient, PostHogCoreTestClientMocks } f
 
 describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient
-  let logSpy: jest.SpyInstance
+  let logSpy: vi.SpyInstance
 
   beforeEach(() => {
-    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {})
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
     ;[posthog] = createTestClient('TEST_API_KEY', {})
   })
 

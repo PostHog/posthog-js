@@ -5,17 +5,17 @@ import { useThumbSurvey } from '../useThumbSurvey'
 import { SurveyEventName, SurveyEventProperties } from 'posthog-js'
 import { isUndefined } from '../../utils/type-utils'
 
-jest.useFakeTimers()
+vi.useFakeTimers()
 
 describe('useThumbSurvey hook', () => {
     let posthog: PostHog
-    let captureMock: jest.Mock
-    let displaySurveyMock: jest.Mock
+    let captureMock: vi.Mock
+    let displaySurveyMock: vi.Mock
     let wrapper: React.FC<{ children: React.ReactNode }>
 
     beforeEach(() => {
-        captureMock = jest.fn()
-        displaySurveyMock = jest.fn()
+        captureMock = vi.fn()
+        displaySurveyMock = vi.fn()
 
         posthog = {
             capture: captureMock,
@@ -92,7 +92,7 @@ describe('useThumbSurvey hook', () => {
         })
 
         it('should call onResponse callback', () => {
-            const onResponse = jest.fn()
+            const onResponse = vi.fn()
             const { result } = renderHook(() => useThumbSurvey({ surveyId: 'test-survey', onResponse }), { wrapper })
 
             act(() => {

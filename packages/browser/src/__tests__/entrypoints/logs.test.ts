@@ -2,37 +2,37 @@ import { assignableWindow } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
 
 // Mock external OpenTelemetry dependencies
-jest.mock('@opentelemetry/api-logs', () => ({
+vi.mock('@opentelemetry/api-logs', () => ({
     logs: {
-        setGlobalLoggerProvider: jest.fn(),
-        getLogger: jest.fn(() => ({
-            emit: jest.fn(),
+        setGlobalLoggerProvider: vi.fn(),
+        getLogger: vi.fn(() => ({
+            emit: vi.fn(),
         })),
     },
 }))
 
-jest.mock('@opentelemetry/exporter-logs-otlp-http', () => ({
-    OTLPLogExporter: jest.fn().mockImplementation(() => ({
-        export: jest.fn(),
-        shutdown: jest.fn(),
+vi.mock('@opentelemetry/exporter-logs-otlp-http', () => ({
+    OTLPLogExporter: vi.fn().mockImplementation(() => ({
+        export: vi.fn(),
+        shutdown: vi.fn(),
     })),
 }))
 
-jest.mock('@opentelemetry/sdk-logs', () => ({
-    LoggerProvider: jest.fn().mockImplementation(() => ({
-        getLogger: jest.fn(() => ({
-            emit: jest.fn(),
+vi.mock('@opentelemetry/sdk-logs', () => ({
+    LoggerProvider: vi.fn().mockImplementation(() => ({
+        getLogger: vi.fn(() => ({
+            emit: vi.fn(),
         })),
-        shutdown: jest.fn(),
+        shutdown: vi.fn(),
     })),
-    BatchLogRecordProcessor: jest.fn().mockImplementation(() => ({
-        onEmit: jest.fn(),
-        shutdown: jest.fn(),
+    BatchLogRecordProcessor: vi.fn().mockImplementation(() => ({
+        onEmit: vi.fn(),
+        shutdown: vi.fn(),
     })),
 }))
 
-jest.mock('@opentelemetry/resources', () => ({
-    resourceFromAttributes: jest.fn((attrs) => ({
+vi.mock('@opentelemetry/resources', () => ({
+    resourceFromAttributes: vi.fn((attrs) => ({
         attributes: attrs,
     })),
 }))
@@ -41,17 +41,17 @@ describe('logs entrypoint', () => {
     let mockPostHog: PostHog
     let originalConsole: Console
     let mockLogger: any
-    let mockEmit: jest.Mock
+    let mockEmit: vi.Mock
 
     beforeEach(() => {
-        jest.resetModules()
-        jest.clearAllMocks()
+        vi.resetModules()
+        vi.clearAllMocks()
 
         // Store original console
         originalConsole = { ...console }
 
         // Set up mock logger
-        mockEmit = jest.fn()
+        mockEmit = vi.fn()
         mockLogger = { emit: mockEmit }
 
         // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -65,14 +65,14 @@ describe('logs entrypoint', () => {
                 token: 'test-token',
             },
             sessionManager: {
-                checkAndGetSessionAndWindowId: jest.fn(() => ({
+                checkAndGetSessionAndWindowId: vi.fn(() => ({
                     sessionId: 'session-123',
                     windowId: 'window-456',
                     sessionStartTimestamp: new Date('2023-01-01T10:00:00Z').getTime(),
                     lastActivityTimestamp: new Date('2023-01-01T10:30:00Z').getTime(),
                 })),
             },
-            get_distinct_id: jest.fn(() => 'user-123'),
+            get_distinct_id: vi.fn(() => 'user-123'),
         } as unknown as PostHog
 
         // Mock assignableWindow
@@ -86,11 +86,11 @@ describe('logs entrypoint', () => {
 
         Object.defineProperty(assignableWindow, 'console', {
             value: {
-                log: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn(),
-                debug: jest.fn(),
+                log: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn(),
+                debug: vi.fn(),
             },
             writable: true,
         })

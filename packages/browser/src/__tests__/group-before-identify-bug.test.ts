@@ -4,10 +4,10 @@
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 
-jest.mock('../utils/globals', () => {
-    const orig = jest.requireActual('../utils/globals')
-    const mockURLGetter = jest.fn()
-    const mockReferrerGetter = jest.fn()
+vi.mock('../utils/globals', async () => {
+    const orig = await vi.importActual('../utils/globals')
+    const mockURLGetter = vi.fn()
+    const mockReferrerGetter = vi.fn()
     return {
         ...orig,
         mockURLGetter,
@@ -44,7 +44,7 @@ describe('group before identify bug', () => {
 
     it('should include initial UTM params in $identify even when group() is called first', async () => {
         const token = uuidv7()
-        const beforeSendMock = jest.fn().mockImplementation((e) => e)
+        const beforeSendMock = vi.fn().mockImplementation((e) => e)
 
         const posthog = await createPosthogInstance(token, {
             before_send: beforeSendMock,
@@ -78,7 +78,7 @@ describe('group before identify bug', () => {
 
     it('should include initial UTM params when identify() is called without group() first', async () => {
         const token = uuidv7()
-        const beforeSendMock = jest.fn().mockImplementation((e) => e)
+        const beforeSendMock = vi.fn().mockImplementation((e) => e)
 
         const posthog = await createPosthogInstance(token, {
             before_send: beforeSendMock,

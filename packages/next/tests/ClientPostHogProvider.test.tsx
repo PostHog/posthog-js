@@ -2,29 +2,32 @@ import React from 'react'
 import { render, screen } from '@testing-library/react'
 import { ClientPostHogProvider } from '../src/client/ClientPostHogProvider'
 
-const mockPostHogProvider = jest.fn(({ children }: { children: React.ReactNode }) => (
+const { mockPostHogProvider } = vi.hoisted(() => ({
+    mockPostHogProvider: vi.fn(({ children }: { children: React.ReactNode }),
+}))
+
     <div data-testid="posthog-provider">{children}</div>
 ))
-jest.mock('posthog-js/react', () => ({
+vi.mock('posthog-js/react', () => ({
     PostHogProvider: (props: any) => mockPostHogProvider(props),
 }))
 
 import posthogJs from 'posthog-js'
 
-jest.mock('posthog-js', () => ({
+vi.mock('posthog-js', () => ({
     __esModule: true,
     default: {
         __loaded: false,
-        init: jest.fn(),
+        init: vi.fn(),
     },
 }))
 
-const mockPostHogJs = posthogJs as jest.Mocked<typeof posthogJs> & { __loaded: boolean }
+const mockPostHogJs = posthogJs as vi.Mocked<typeof posthogJs> & { __loaded: boolean }
 
 describe('ClientPostHogProvider', () => {
     beforeEach(() => {
         mockPostHogProvider.mockClear()
-        ;(mockPostHogJs.init as jest.Mock).mockClear()
+        ;(mockPostHogJs.init as vi.Mock).mockClear()
         mockPostHogJs.__loaded = false
     })
 
@@ -123,7 +126,7 @@ describe('ClientPostHogProvider', () => {
     })
 
     it('renders children and warns when apiKey is empty', () => {
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
         render(
             <ClientPostHogProvider apiKey="">
                 <div data-testid="child">Child</div>

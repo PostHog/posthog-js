@@ -1,125 +1,124 @@
 {
-  "name": "@posthog/ai",
-  "version": "7.11.2",
-  "description": "PostHog Node.js AI integrations",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/PostHog/posthog-js.git",
-    "directory": "packages/ai"
-  },
-  "main": "dist/index.cjs",
-  "module": "dist/index.mjs",
-  "types": "dist/index.d.ts",
-  "license": "MIT",
-  "scripts": {
-    "clean": "rimraf dist",
-    "test:unit": "jest",
-    "lint": "eslint src tests",
-    "lint:fix": "eslint src tests --fix",
-    "build": "rollup -c",
-    "dev": "rollup -c --watch",
-    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
-    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
-  },
-  "devDependencies": {
-    "@ai-sdk/provider": "^3.0.8",
-    "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/sdk-trace-base": "^2.2.0",
-    "@babel/preset-env": "catalog:",
-    "@babel/preset-typescript": "catalog:",
-    "@posthog-tooling/rollup-utils": "workspace:*",
-    "@posthog-tooling/tsconfig-base": "workspace:*",
-    "@types/jest": "catalog:",
-    "jest": "catalog:",
-    "node-fetch": "^3.3.2",
-    "posthog-node": "workspace:*"
-  },
-  "keywords": [
-    "posthog",
-    "ai",
-    "openai",
-    "anthropic",
-    "gemini",
-    "llm",
-    "observability"
-  ],
-  "engines": {
-    "node": "^20.20.0 || >=22.22.0"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
-    "@google/genai": "^1.43.0",
-    "@langchain/core": "^1.1.29",
-    "@posthog/core": "workspace:*",
-    "langchain": "^1.2.28",
-    "openai": "^6.25.0",
-    "uuid": "^11.1.0",
-    "zod": "^4.1.13"
-  },
-  "peerDependencies": {
-    "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/sdk-trace-base": "^2.2.0",
-    "@ai-sdk/provider": "^2.0.0 || ^3.0.0",
-    "posthog-node": "^5.0.0"
-  },
-  "peerDependenciesMeta": {
-    "@opentelemetry/api": {
-      "optional": true
+    "name": "@posthog/ai",
+    "version": "7.11.2",
+    "description": "PostHog Node.js AI integrations",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/PostHog/posthog-js.git",
+        "directory": "packages/ai"
     },
-    "@opentelemetry/sdk-trace-base": {
-      "optional": true
+    "main": "dist/index.cjs",
+    "module": "dist/index.mjs",
+    "types": "dist/index.d.ts",
+    "license": "MIT",
+    "scripts": {
+        "clean": "rimraf dist",
+        "test:unit": "vitest run",
+        "lint": "eslint src tests",
+        "lint:fix": "eslint src tests --fix",
+        "build": "rollup -c",
+        "dev": "rollup -c --watch",
+        "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },
-    "@ai-sdk/provider": {
-      "optional": true
-    }
-  },
-  "files": [
-    "dist"
-  ],
-  "exports": {
-    ".": {
-      "require": "./dist/index.cjs",
-      "import": "./dist/index.mjs",
-      "types": "./dist/index.d.ts"
+    "devDependencies": {
+        "@ai-sdk/provider": "^3.0.8",
+        "@opentelemetry/api": "^1.9.0",
+        "@opentelemetry/sdk-trace-base": "^2.2.0",
+        "@babel/preset-env": "catalog:",
+        "@babel/preset-typescript": "catalog:",
+        "@posthog-tooling/rollup-utils": "workspace:*",
+        "@posthog-tooling/tsconfig-base": "workspace:*",
+        "node-fetch": "^3.3.2",
+        "posthog-node": "workspace:*",
+        "vitest": "catalog:"
     },
-    "./anthropic": {
-      "require": "./dist/anthropic/index.cjs",
-      "import": "./dist/anthropic/index.mjs",
-      "types": "./dist/anthropic/index.d.ts"
+    "keywords": [
+        "posthog",
+        "ai",
+        "openai",
+        "anthropic",
+        "gemini",
+        "llm",
+        "observability"
+    ],
+    "engines": {
+        "node": "^20.20.0 || >=22.22.0"
     },
-    "./gemini": {
-      "require": "./dist/gemini/index.cjs",
-      "import": "./dist/gemini/index.mjs",
-      "types": "./dist/gemini/index.d.ts"
+    "dependencies": {
+        "@anthropic-ai/sdk": "^0.78.0",
+        "@google/genai": "^1.43.0",
+        "@langchain/core": "^1.1.29",
+        "@posthog/core": "workspace:*",
+        "langchain": "^1.2.28",
+        "openai": "^6.25.0",
+        "uuid": "^11.1.0",
+        "zod": "^4.1.13"
     },
-    "./openai": {
-      "require": "./dist/openai/index.cjs",
-      "import": "./dist/openai/index.mjs",
-      "types": "./dist/openai/index.d.ts"
+    "peerDependencies": {
+        "@opentelemetry/api": "^1.9.0",
+        "@opentelemetry/sdk-trace-base": "^2.2.0",
+        "@ai-sdk/provider": "^2.0.0 || ^3.0.0",
+        "posthog-node": "^5.0.0"
     },
-    "./vercel": {
-      "require": "./dist/vercel/index.cjs",
-      "import": "./dist/vercel/index.mjs",
-      "types": "./dist/vercel/index.d.ts"
+    "peerDependenciesMeta": {
+        "@opentelemetry/api": {
+            "optional": true
+        },
+        "@opentelemetry/sdk-trace-base": {
+            "optional": true
+        },
+        "@ai-sdk/provider": {
+            "optional": true
+        }
     },
-    "./otel": {
-      "require": "./dist/otel/index.cjs",
-      "import": "./dist/otel/index.mjs",
-      "types": "./dist/otel/index.d.ts"
+    "files": [
+        "dist"
+    ],
+    "exports": {
+        ".": {
+            "require": "./dist/index.cjs",
+            "import": "./dist/index.mjs",
+            "types": "./dist/index.d.ts"
+        },
+        "./anthropic": {
+            "require": "./dist/anthropic/index.cjs",
+            "import": "./dist/anthropic/index.mjs",
+            "types": "./dist/anthropic/index.d.ts"
+        },
+        "./gemini": {
+            "require": "./dist/gemini/index.cjs",
+            "import": "./dist/gemini/index.mjs",
+            "types": "./dist/gemini/index.d.ts"
+        },
+        "./openai": {
+            "require": "./dist/openai/index.cjs",
+            "import": "./dist/openai/index.mjs",
+            "types": "./dist/openai/index.d.ts"
+        },
+        "./vercel": {
+            "require": "./dist/vercel/index.cjs",
+            "import": "./dist/vercel/index.mjs",
+            "types": "./dist/vercel/index.d.ts"
+        },
+        "./otel": {
+            "require": "./dist/otel/index.cjs",
+            "import": "./dist/otel/index.mjs",
+            "types": "./dist/otel/index.d.ts"
+        },
+        "./langchain": {
+            "require": "./dist/langchain/index.cjs",
+            "import": "./dist/langchain/index.mjs",
+            "types": "./dist/langchain/index.d.ts"
+        }
     },
-    "./langchain": {
-      "require": "./dist/langchain/index.cjs",
-      "import": "./dist/langchain/index.mjs",
-      "types": "./dist/langchain/index.d.ts"
-    }
-  },
-  "directories": {
-    "lib": "lib",
-    "test": "tests"
-  },
-  "author": "PostHog",
-  "bugs": {
-    "url": "https://github.com/PostHog/posthog-js-lite/issues"
-  },
-  "homepage": "https://github.com/PostHog/posthog-js-lite#readme"
+    "directories": {
+        "lib": "lib",
+        "test": "tests"
+    },
+    "author": "PostHog",
+    "bugs": {
+        "url": "https://github.com/PostHog/posthog-js-lite/issues"
+    },
+    "homepage": "https://github.com/PostHog/posthog-js-lite#readme"
 }

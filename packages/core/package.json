@@ -1,69 +1,68 @@
 {
-  "name": "@posthog/core",
-  "version": "1.23.4",
-  "license": "MIT",
-  "main": "dist/index.js",
-  "module": "dist/index.mjs",
-  "types": "dist/index.d.ts",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/PostHog/posthog-js.git",
-    "directory": "packages/core"
-  },
-  "files": [
-    "dist",
-    "src",
-    "!src/__tests__"
-  ],
-  "scripts": {
-    "clean": "rimraf dist",
-    "lint": "eslint src",
-    "lint:fix": "eslint src --fix",
-    "build": "rslib build",
-    "dev": "rslib build -w",
-    "test:unit": "jest",
-    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
-  },
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "require": "./dist/index.js",
-      "import": "./dist/index.mjs"
+    "name": "@posthog/core",
+    "version": "1.23.4",
+    "license": "MIT",
+    "main": "dist/index.js",
+    "module": "dist/index.mjs",
+    "types": "dist/index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/PostHog/posthog-js.git",
+        "directory": "packages/core"
     },
-    "./error-tracking": {
-      "types": "./dist/error-tracking/index.d.ts",
-      "require": "./dist/error-tracking/index.js",
-      "import": "./dist/error-tracking/index.mjs"
+    "files": [
+        "dist",
+        "src",
+        "!src/__tests__"
+    ],
+    "scripts": {
+        "clean": "rimraf dist",
+        "lint": "eslint src",
+        "lint:fix": "eslint src --fix",
+        "build": "rslib build",
+        "dev": "rslib build -w",
+        "test:unit": "vitest run",
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },
-    "./vendor/*": {
-      "types": "./dist/vendor/*.d.ts",
-      "require": "./dist/vendor/*.js",
-      "import": "./dist/vendor/*.mjs"
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "require": "./dist/index.js",
+            "import": "./dist/index.mjs"
+        },
+        "./error-tracking": {
+            "types": "./dist/error-tracking/index.d.ts",
+            "require": "./dist/error-tracking/index.js",
+            "import": "./dist/error-tracking/index.mjs"
+        },
+        "./vendor/*": {
+            "types": "./dist/vendor/*.d.ts",
+            "require": "./dist/vendor/*.js",
+            "import": "./dist/vendor/*.mjs"
+        },
+        "./testing": {
+            "types": "./dist/testing/index.d.ts",
+            "require": "./dist/testing/index.js",
+            "import": "./dist/testing/index.mjs"
+        },
+        "./utils": {
+            "types": "./dist/utils/index.d.ts",
+            "require": "./dist/utils/index.js",
+            "import": "./dist/utils/index.mjs"
+        },
+        "./process": {
+            "types": "./dist/process/index.d.ts",
+            "require": "./dist/process/index.js",
+            "import": "./dist/process/index.mjs"
+        }
     },
-    "./testing": {
-      "types": "./dist/testing/index.d.ts",
-      "require": "./dist/testing/index.js",
-      "import": "./dist/testing/index.mjs"
+    "devDependencies": {
+        "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@rslib/core": "catalog:",
+        "@types/cross-spawn": "^6.0.6",
+        "vitest": "catalog:"
     },
-    "./utils": {
-      "types": "./dist/utils/index.d.ts",
-      "require": "./dist/utils/index.js",
-      "import": "./dist/utils/index.mjs"
-    },
-    "./process": {
-      "types": "./dist/process/index.d.ts",
-      "require": "./dist/process/index.js",
-      "import": "./dist/process/index.mjs"
+    "dependencies": {
+        "cross-spawn": "^7.0.6"
     }
-  },
-  "devDependencies": {
-    "@posthog-tooling/tsconfig-base": "workspace:*",
-    "@rslib/core": "catalog:",
-    "@types/cross-spawn": "^6.0.6",
-    "@types/jest": "catalog:",
-    "jest": "catalog:"
-  },
-  "dependencies": {
-    "cross-spawn": "^7.0.6"
-  }
 }

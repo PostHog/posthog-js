@@ -4,7 +4,7 @@ import { AIMessage } from '@langchain/core/messages'
 import { version } from '../package.json'
 
 const mockPostHogClient = {
-  capture: jest.fn(),
+  capture: vi.fn(),
 } as unknown as PostHog
 
 describe('LangChainCallbackHandler', () => {
@@ -14,7 +14,7 @@ describe('LangChainCallbackHandler', () => {
     handler = new LangChainCallbackHandler({
       client: mockPostHogClient,
     })
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   it('should include $ai_lib and $ai_lib_version in captured events', async () => {
@@ -64,7 +64,7 @@ describe('LangChainCallbackHandler', () => {
 
     // Verify capture was called
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     // Check $ai_lib and $ai_lib_version
     expect(captureCall[0].properties['$ai_lib']).toBe('posthog-ai')
@@ -111,9 +111,9 @@ describe('LangChainCallbackHandler', () => {
 
   it('should handle LLM start with tool calls correctly', () => {
     // Spy on private methods
-    const logDebugEventSpy = jest.spyOn(handler as any, '_logDebugEvent')
-    const setParentOfRunSpy = jest.spyOn(handler as any, '_setParentOfRun')
-    const setLLMMetadataSpy = jest.spyOn(handler as any, '_setLLMMetadata')
+    const logDebugEventSpy = vi.spyOn(handler as any, '_logDebugEvent')
+    const setParentOfRunSpy = vi.spyOn(handler as any, '_setParentOfRun')
+    const setLLMMetadataSpy = vi.spyOn(handler as any, '_setLLMMetadata')
 
     const serialized = {
       lc: 1,
@@ -199,7 +199,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Input tokens should NOT be reduced for OpenAI: 150 (no subtraction)
@@ -253,7 +253,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Input tokens should NOT be reduced for OpenAI: 80 (no subtraction)
@@ -304,7 +304,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Input tokens should remain unchanged at 100
@@ -356,7 +356,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Input tokens should remain 0 (no subtraction because input_tokens is falsy)
@@ -410,7 +410,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Input tokens should be reduced for Anthropic: 1200 - 800 = 400
@@ -463,7 +463,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Should subtract because model name contains "anthropic": 500 - 200 = 300
@@ -516,7 +516,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Should be max(100 - 150, 0) = 0
@@ -568,7 +568,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Input tokens should be reduced for Anthropic: 1000 - 800 = 200
@@ -623,7 +623,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Input tokens should be reduced for Anthropic: 2000 - 800 - 500 = 700
@@ -677,7 +677,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Input tokens should NOT be reduced for OpenAI
