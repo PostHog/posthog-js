@@ -1,7 +1,7 @@
 import { Logger, createLogger } from '@posthog/core'
 import { PluginConfig, resolveConfig, ResolvedPluginConfig } from './config'
 import webpack from 'webpack'
-import { spawnLocal } from '@posthog/core/process'
+import { spawnLocal, computeChunkId, buildCodeSnippet, buildChunkComment } from '@posthog/core/process'
 import path from 'path'
 
 export * from './config'
@@ -31,10 +31,63 @@ export class PosthogWebpackPlugin {
             append: this.resolvedConfig.sourcemaps.deleteAfterUpload ? false : undefined,
         }).apply(compiler)
 
+        const { RawSource, ConcatSource } = compiler.webpack.sources
+
+        compiler.hooks.compilation.tap('PosthogWebpackPlugin', (compilation) => {
+            compilation.hooks.processAssets.tap(
+                {
+                    name: 'PosthogWebpackPlugin',
+                    stage: webpack.Compilation.PROCESS_ASSETS_STAGE_REPORT,
+                },
+                (assets) => {
+                    for (const chunk of compilation.chunks) {
+                        for (const file of chunk.files) {
+                            if (!/\.(js|mjs|cjs)$/.test(file)) {
+                                continue
+                            }
+
+                            const jsAsset = assets[file]
+                            const mapFile = `${file}.map`
+                            const mapAsset = assets[mapFile]
+
+                            if (!jsAsset || !mapAsset) {
+                                continue
+                            }
+
+                            const jsSource = jsAsset.source().toString()
+                            const mapSource = mapAsset.source().toString()
+
+                            const chunkId = computeChunkId(jsSource, mapSource)
+                            const snippet = buildCodeSnippet(chunkId)
+                            const comment = buildChunkComment(chunkId)
+
+                            // Inject snippet (prepend) and comment (append) using ConcatSource
+                            // which handles source map concatenation automatically
+                            const newJsSource = new ConcatSource(
+                                new RawSource(snippet),
+                                jsAsset,
+                                new RawSource(comment)
+                            )
+                            compilation.updateAsset(file, newJsSource)
+
+                            // Add chunk_id to the source map JSON
+                            try {
+                                const mapJson = JSON.parse(mapSource)
+                                mapJson.chunk_id = chunkId
+                                compilation.updateAsset(mapFile, new RawSource(JSON.stringify(mapJson)))
+                            } catch {
+                                this.logger.error(`Failed to parse source map for ${file}`)
+                            }
+                        }
+                    }
+                }
+            )
+        })
+
         const onDone = async (stats: webpack.Stats, callback: any): Promise<void> => {
             callback = callback || (() => {})
             try {
-                await this.processSourceMaps(stats.compilation, this.resolvedConfig)
+                await this.uploadSourceMaps(stats.compilation, this.resolvedConfig)
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : error
                 this.logger.error('Error running PostHog webpack plugin:', errorMessage)
@@ -49,17 +102,13 @@ export class PosthogWebpackPlugin {
         }
     }
 
-    async processSourceMaps(compilation: webpack.Compilation, config: ResolvedPluginConfig): Promise<void> {
+    async uploadSourceMaps(compilation: webpack.Compilation, config: ResolvedPluginConfig): Promise<void> {
         const outputDirectory = compilation.outputOptions.path
-        const args = []
-
-        // chunks are output outside of the output directory for server chunks
-        args.push('sourcemap', 'process')
+        const args = ['sourcemap', 'upload']
 
         const chunkArray = Array.from(compilation.chunks)
 
         if (chunkArray.length == 0) {
-            // No chunks generated, skipping sourcemap processing.
             return
         }
 
