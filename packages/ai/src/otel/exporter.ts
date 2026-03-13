@@ -30,6 +30,9 @@ export interface PostHogTraceExporterOptions {
  */
 export class PostHogTraceExporter extends OTLPTraceExporter {
   constructor(options: PostHogTraceExporterOptions) {
+    if (!options.apiKey) {
+      throw new Error('PostHogTraceExporter requires an apiKey')
+    }
     const host = new URL(options.host || 'https://us.i.posthog.com').origin
     super({
       url: `${host}/i/v0/ai/otel`,

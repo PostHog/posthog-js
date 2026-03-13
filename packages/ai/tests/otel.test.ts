@@ -1,10 +1,9 @@
 import { PostHogTraceExporter } from '../src/otel'
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 
 jest.mock('@opentelemetry/exporter-trace-otlp-http', () => {
   return {
-    OTLPTraceExporter: jest.fn().mockImplementation(function (this: any, config: any) {
-      this._config = config
-    }),
+    OTLPTraceExporter: jest.fn(),
   }
 })
 
@@ -39,13 +38,17 @@ describe('PostHogTraceExporter', () => {
       expectedUrl: 'https://custom.posthog.com/i/v0/ai/otel',
     },
   ])('configures the OTLP exporter correctly with $name', ({ apiKey, host, expectedUrl }) => {
-    const exporter = new PostHogTraceExporter({ apiKey, host })
+    new PostHogTraceExporter({ apiKey, host })
 
-    expect((exporter as any)._config).toEqual({
+    expect(OTLPTraceExporter).toHaveBeenCalledWith({
       url: expectedUrl,
       headers: {
         Authorization: `Bearer ${apiKey}`,
       },
     })
+  })
+
+  it('throws when apiKey is missing', () => {
+    expect(() => new PostHogTraceExporter({ apiKey: '' })).toThrow('PostHogTraceExporter requires an apiKey')
   })
 })
