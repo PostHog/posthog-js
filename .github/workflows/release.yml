@@ -29,7 +29,7 @@ jobs:
             has-changesets: ${{ steps.check.outputs.has-changesets }}
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
               with:
                   ref: main
                   fetch-depth: 0
@@ -89,7 +89,7 @@ jobs:
                   private-key: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_PRIVATE_KEY }} # Secrets available only inside the `NPM Release` environment, requires approval from a maintainer
 
             - name: Checkout repository
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
               with:
                   ref: main
                   fetch-depth: 0
@@ -204,7 +204,7 @@ jobs:
 
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
               with:
                   ref: ${{ needs.version-bump.outputs.commit-hash }}
                   fetch-depth: 0
@@ -340,7 +340,7 @@ jobs:
         if: always() && needs.publish.result == 'success' && needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
 
             - name: Notify Slack - Released
               continue-on-error: true # Slack failure shouldn't mark release as failed

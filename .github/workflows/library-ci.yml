@@ -15,7 +15,7 @@ jobs:
     name: Unit tests
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup environment
         uses: ./.github/actions/setup
@@ -29,7 +29,7 @@ jobs:
     name: Playwright E2E tests
     runs-on: depot-ubuntu-latest-8
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -57,7 +57,7 @@ jobs:
         run: pnpm exec playwright test --workers=5
         working-directory: packages/browser
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: ${{ !cancelled() && steps.is-affected.outputs.is-affected == 'true' }}
         with:
           name: playwright-report
@@ -69,7 +69,7 @@ jobs:
     runs-on: depot-ubuntu-latest-8
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -207,7 +207,7 @@ jobs:
               comment_id: process.env.COMMENT_ID
             })
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: ${{ !cancelled() && steps.is-affected.outputs.is-affected == 'true' }}
         with:
           name: playwright-compat-report
@@ -218,7 +218,7 @@ jobs:
     name: Functional tests
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup environment
         uses: ./.github/actions/setup
         with:
@@ -229,7 +229,7 @@ jobs:
     name: Lint
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup environment
         uses: ./.github/actions/setup
       - name: Lint all packages
@@ -241,7 +241,7 @@ jobs:
     name: Write mangled property names
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup environment
         uses: ./.github/actions/setup

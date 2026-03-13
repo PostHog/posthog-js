@@ -16,12 +16,12 @@ jobs:
       pull-requests: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup
 
       - name: Upload bundle size visualization
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         id: viz-upload
         with:
           name: bundle-stats-array.html
