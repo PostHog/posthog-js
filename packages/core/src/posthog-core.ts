@@ -416,7 +416,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   groups(groups: PostHogGroupProperties): void {
     this.wrap(() => {
-      if (!this._requirePersonProcessing('posthog.group')) {
+      if (this._personProfiles === 'never') {
+        this._logger.error('posthog.group was called, but personProfiles is set to "never". This call will be ignored.')
         return
       }
 
@@ -460,7 +461,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     options?: PostHogCaptureOptions
   ): void {
     this.wrap(() => {
-      if (!this._requirePersonProcessing('posthog.groupIdentify')) {
+      if (this._personProfiles === 'never') {
+        this._logger.error(
+          'posthog.groupIdentify was called, but personProfiles is set to "never". This call will be ignored.'
+        )
         return
       }
 
@@ -1230,7 +1234,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    *
    * Returns false if:
    * - person_profiles is 'never', OR
-   * - person_profiles is 'identified_only' AND user is not identified AND has no groups AND person processing was not enabled
+   * - person_profiles is 'identified_only' AND user is not identified AND person processing was not enabled
    *
    * @internal
    */
@@ -1244,13 +1248,13 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     }
 
     // person_profiles === 'identified_only'
-    // Check if user is identified, has groups, or person processing was explicitly enabled
+    // Check if user is identified or person processing was explicitly enabled
+    // Note: groups are independent of person processing
     const isIdentified = this._isIdentified()
-    const hasGroups = Object.keys(this._getGroups()).length > 0
     const personProcessingEnabled =
       this.getPersistedProperty<boolean>(PostHogPersistedProperty.EnablePersonProcessing) === true
 
-    return isIdentified || hasGroups || personProcessingEnabled
+    return isIdentified || personProcessingEnabled
   }
 
   /**
