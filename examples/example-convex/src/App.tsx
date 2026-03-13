@@ -88,6 +88,11 @@ function App() {
   const [exceptionProps, setExceptionProps] = useState('{"page":"/checkout"}')
   const [exceptionDistinctId, setExceptionDistinctId] = useState('')
 
+  // 7. AI Generation
+  const [aiLibrary, setAiLibrary] = useState<'agent' | 'ai-sdk'>('agent')
+  const [aiCapture, setAiCapture] = useState<'manual' | 'withTracing' | 'otel'>('manual')
+  const [aiPrompt, setAiPrompt] = useState('What is PostHog?')
+
   // 6. Feature Flags
   const [flagKey, setFlagKey] = useState('test-flag')
   const [ffGroups, setFfGroups] = useState('{"company":"acme"}')
@@ -117,6 +122,13 @@ function App() {
   const groupIdentifyM = useMutation(api.example.testGroupIdentify)
   const aliasM = useMutation(api.example.testAlias)
   const captureExceptionM = useMutation(api.example.testCaptureException)
+
+  const agentManualA = useAction(api.convexAgent.manualCapture.generate)
+  const agentTracedA = useAction(api.convexAgent.withTracing.generate)
+  const agentOtelA = useAction(api.convexAgent.openTelemetry.generate)
+  const aiSdkManualA = useAction(api.aiSdk.manualCapture.generate)
+  const aiSdkTracedA = useAction(api.aiSdk.withTracing.generate)
+  const aiSdkOtelA = useAction(api.aiSdk.openTelemetry.generate)
 
   const getFeatureFlagA = useAction(api.example.testGetFeatureFlag)
   const isFeatureEnabledA = useAction(api.example.testIsFeatureEnabled)
@@ -501,6 +513,51 @@ function App() {
               getAllFlagsAndPayloads
             </button>
           </div>
+        </Section>
+
+        {/* 7. AI Generation */}
+        <Section num={7} title="AI Generation" accent="#e879f9">
+          <div className="field-grid">
+            <Field label="Library">
+              <select value={aiLibrary} onChange={(e) => setAiLibrary(e.target.value as typeof aiLibrary)}>
+                <option value="agent">@convex-dev/agent</option>
+                <option value="ai-sdk">AI SDK</option>
+              </select>
+            </Field>
+            <Field label="Capture method">
+              <select value={aiCapture} onChange={(e) => setAiCapture(e.target.value as typeof aiCapture)}>
+                <option value="manual">Manual capture</option>
+                <option value="withTracing">@posthog/ai withTracing</option>
+                <option value="otel">OpenTelemetry</option>
+              </select>
+            </Field>
+            <Field label="Prompt" wide>
+              <textarea value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} rows={2} />
+            </Field>
+          </div>
+          <div className="actions">
+            <button
+              {...btnProps('ai-generate')}
+              onClick={() => {
+                const args = { prompt: aiPrompt, distinctId }
+                const actions = {
+                  'agent-manual': agentManualA,
+                  'agent-withTracing': agentTracedA,
+                  'agent-otel': agentOtelA,
+                  'ai-sdk-manual': aiSdkManualA,
+                  'ai-sdk-withTracing': aiSdkTracedA,
+                  'ai-sdk-otel': aiSdkOtelA,
+                }
+                const action = actions[`${aiLibrary}-${aiCapture}`]
+                run('ai-generate', () => action(args))
+              }}
+            >
+              Generate
+            </button>
+          </div>
+          <p className="section-note">
+            Captures <code>$ai_generation</code> events to PostHog using the selected approach.
+          </p>
         </Section>
       </div>
 
