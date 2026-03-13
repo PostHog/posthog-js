@@ -918,22 +918,26 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._clearConditionalRecordingPersistence()
 
-        // Restart the recorder under the new session. This is the single place
-        // that handles session rotation for the recorder — stop() flushes the
-        // old session's buffer, start() initializes rrweb under the new session.
+        // Restart the recorder under the new session — but only if the recorder
+        // is currently running. If it's already stopped (e.g., after forcedIdleReset),
+        // we must not restart it here because the caller has its own restart mechanism
+        // that respects sampling decisions and trigger matching.
+        //
         // This callback fires synchronously during checkAndGetSessionAndWindowId(),
         // whether called from _updateWindowAndSessionIds (rrweb events) or from
         // _calculate_event_properties in posthog-core (analytics events like
         // $pageleave, $exception). The latter case is critical because the recorder
         // may be idle, and _updateWindowAndSessionIds returns early when idle.
-        if (this._isIdle) {
-            this._isIdle = 'unknown'
-        }
-        this.stop()
-        this.start('session_id_changed')
+        if (this._stopRrweb) {
+            if (this._isIdle) {
+                this._isIdle = 'unknown'
+            }
+            this.stop()
+            this.start('session_id_changed')
 
-        // These events go to the new session's buffer (after start() reinitializes rrweb)
-        this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
+            // These events go to the new session's buffer (after start() reinitializes rrweb)
+            this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
+        }
 
         if (shouldLinkSessions) {
             this._tryAddCustomEvent('$session_starting', {
