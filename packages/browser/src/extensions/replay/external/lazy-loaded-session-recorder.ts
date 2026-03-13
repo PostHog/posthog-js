@@ -920,20 +920,19 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._clearConditionalRecordingPersistence()
 
-        if (this._isIdle === true) {
-            // When idle, _updateWindowAndSessionIds returns early at the _isIdle guard
-            // and will never detect the session change or call stop()/start().
-            // This happens when analytics events (e.g. $pageleave, $exception) trigger
-            // session rotation via checkAndGetSessionAndWindowId in posthog-core,
-            // bypassing the recorder's rrweb event path entirely.
+        // Restart the recorder under the new session. This is the single place
+        // that handles session rotation for the recorder — stop() flushes the
+        // old session's buffer, start() initializes rrweb under the new session.
+        // This callback fires synchronously during checkAndGetSessionAndWindowId(),
+        // whether called from _updateWindowAndSessionIds (rrweb events) or from
+        // _calculate_event_properties in posthog-core (analytics events like
+        // $pageleave, $exception). The latter case is critical because the recorder
+        // may be idle, and _updateWindowAndSessionIds returns early when idle.
+        if (this._isIdle) {
             this._isIdle = 'unknown'
-            this.stop()
-            this.start('session_id_changed')
-            return
         }
-
-        // When not idle, _updateWindowAndSessionIds handles the restart — it will
-        // detect the session change and call stop()/start() after this callback returns.
+        this.stop()
+        this.start('session_id_changed')
 
         if (shouldLinkSessions) {
             this._tryAddCustomEvent('$session_starting', {
@@ -946,10 +945,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 // so we don't extend reported session time with a debug event
                 lastActivityTimestamp: this._lastActivityTimestamp,
             })
-        }
-
-        if (isNumber(this._sampleRate) && isNullish(this._samplingSessionListener)) {
-            this._makeSamplingDecision(sessionId)
         }
     }
 
@@ -1483,16 +1478,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             event.timestamp
         )
 
-        const sessionIdChanged = this._sessionId !== sessionId
-        const windowIdChanged = this._windowId !== windowId
-
+        // _onSessionIdCallback handles stop()/start() when the session changes —
+        // it fires synchronously during checkAndGetSessionAndWindowId above.
+        // We only need to update our local IDs and handle the returning-from-idle case.
         this._windowId = windowId
         this._sessionId = sessionId
 
-        if (sessionIdChanged || windowIdChanged) {
-            this.stop()
-            this.start('session_id_changed')
-        } else if (returningFromIdle) {
+        if (returningFromIdle) {
             this._scheduleFullSnapshot()
         }
     }
