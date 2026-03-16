@@ -30,7 +30,7 @@ import { createMockPostHog, createMockConfig } from '../../helpers/posthog-insta
 
 // Type and source defined here designate a non-user-generated recording event
 
-jest.mock('../../../config', () => ({ LIB_VERSION: '0.0.1' }))
+jest.mock('../../../config', () => ({ LIB_VERSION: '0.0.1', LIB_NAME: 'web' }))
 
 const EMPTY_BUFFER = {
     data: [],

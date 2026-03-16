@@ -1224,7 +1224,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     $snapshot_data: snapshotBuffer.data,
                     $session_id: snapshotBuffer.sessionId,
                     $window_id: snapshotBuffer.windowId,
-                    $lib: 'web',
+                    $lib: Config.LIB_NAME,
                     $lib_version: Config.LIB_VERSION,
                 })
             })

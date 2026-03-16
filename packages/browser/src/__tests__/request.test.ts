@@ -17,7 +17,7 @@ jest.mock('../utils/globals', () => ({
 import { fetch, XMLHttpRequest, navigator } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
 
-jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45' }))
+jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45', LIB_NAME: 'web' }))
 
 const flushPromises = async () => {
     jest.useRealTimers()

@@ -303,7 +303,7 @@ export function getEventProperties(
             $screen_width: window?.screen.width,
             $viewport_height: window?.innerHeight,
             $viewport_width: window?.innerWidth,
-            $lib: 'web',
+            $lib: Config.LIB_NAME,
             $lib_version: Config.LIB_VERSION,
             $insert_id: Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10),
             $time: Date.now() / 1000, // epoch time in seconds

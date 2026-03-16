@@ -5,6 +5,7 @@ import packageInfo from '../package.json'
 const Config = {
     DEBUG: false,
     LIB_VERSION: packageInfo.version,
+    LIB_NAME: 'web',
 }
 
 export default Config
