@@ -263,7 +263,7 @@ export const request = (_options: RequestWithOptions) => {
 
     options.url = extendURLParams(options.url, {
         _: new Date().getTime().toString(),
-        ver: Config.LIB_VERSION,
+        ver: Config.JS_SDK_VERSION,
         compression: options.compression,
     })
 
