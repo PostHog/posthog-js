@@ -494,6 +494,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "undefined",
     "number"
   ],
+  "advanced_feature_flags_dedup_per_session": [
+    "false",
+    "true"
+  ],
   "surveys_request_timeout_ms": "number",
   "remote_config_refresh_interval_ms": [
     "undefined",
