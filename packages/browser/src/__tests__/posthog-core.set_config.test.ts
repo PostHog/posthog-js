@@ -50,7 +50,7 @@ describe('posthog.set_config', () => {
 
     describe('debug flag behavior', () => {
         it.each([
-            { initial: false, setValue: true, expectedDebug: true, expectedStorage: '"true"' },
+            { initial: false, setValue: true, expectedDebug: true, expectedStorage: 'true' },
             { initial: true, setValue: false, expectedDebug: false, expectedStorage: null },
         ])(
             'should set debug to $setValue when initially $initial',
@@ -84,7 +84,7 @@ describe('posthog.set_config', () => {
 
             posthog.set_config({ debug: true })
 
-            expect(localStorage.getItem('ph_debug')).toBe('"true"')
+            expect(localStorage.getItem('ph_debug')).toBe('true')
         })
 
         it('should remove ph_debug from localStorage when debug is set to false', () => {
@@ -105,7 +105,7 @@ describe('posthog.set_config', () => {
             posthog.set_config({ debug: true })
             expect(posthog.config.debug).toBe(true)
             expect(Config.DEBUG).toBe(true)
-            expect(localStorage.getItem('ph_debug')).toBe('"true"')
+            expect(localStorage.getItem('ph_debug')).toBe('true')
 
             posthog.set_config({ debug: false })
             expect(posthog.config.debug).toBe(false)
@@ -115,7 +115,7 @@ describe('posthog.set_config', () => {
             posthog.set_config({ debug: true })
             expect(posthog.config.debug).toBe(true)
             expect(Config.DEBUG).toBe(true)
-            expect(localStorage.getItem('ph_debug')).toBe('"true"')
+            expect(localStorage.getItem('ph_debug')).toBe('true')
         })
 
         it('should not modify debug if not a boolean', () => {
