@@ -3466,6 +3466,8 @@ describe('Lazy SessionRecording', () => {
                 },
                 lastActivityTimestamp: expect.any(Number),
             })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledTimes(3)
         })
 
         it('emits session linking events on session past maximum length', () => {
@@ -3509,6 +3511,8 @@ describe('Lazy SessionRecording', () => {
                 },
                 lastActivityTimestamp: expect.any(Number),
             })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledTimes(3)
         })
 
         it('includes flushed_size with actual data size in session ending event', () => {
@@ -3586,6 +3590,8 @@ describe('Lazy SessionRecording', () => {
                     sessionPastMaximumLength: false,
                 },
             })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledTimes(1)
         })
 
         it('always emits $session_id_change event regardless of change reason', () => {
