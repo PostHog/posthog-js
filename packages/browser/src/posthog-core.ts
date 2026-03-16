@@ -233,6 +233,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     advanced_disable_feature_flags: false,
     advanced_disable_feature_flags_on_first_load: false,
     advanced_only_evaluate_survey_feature_flags: false,
+    advanced_feature_flags_dedup_per_session: false,
     advanced_enable_surveys: false,
     advanced_disable_toolbar_metrics: false,
     feature_flag_request_timeout_ms: 3000,

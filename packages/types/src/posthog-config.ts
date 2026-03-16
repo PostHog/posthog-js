@@ -1211,6 +1211,21 @@ export interface PostHogConfig {
     feature_flag_cache_ttl_ms?: number
 
     /**
+     * When enabled, `$feature_flag_called` event deduplication is scoped to the current session.
+     *
+     * By default, the SDK deduplicates `$feature_flag_called` events globally and only re-emits
+     * them when `identify` (with a new distinct ID) or `reset` is called. This can be problematic
+     * for experiments: if a flag is checked before an experiment starts, the event is cached and
+     * won't fire again for that user until identify/reset, meaning the experiment never sees the event.
+     *
+     * When this option is `true`, the deduplication cache is keyed on the session ID, so each new
+     * session will re-emit `$feature_flag_called` for every flag that is checked.
+     *
+     * @default false
+     */
+    advanced_feature_flags_dedup_per_session: boolean
+
+    /**
      * Sets timeout for fetching surveys
      *
      * @default 10000

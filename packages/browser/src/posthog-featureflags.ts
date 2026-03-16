@@ -28,6 +28,7 @@ import {
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
     FLAG_CALL_REPORTED,
+    FLAG_CALL_REPORTED_SESSION_ID,
 } from './constants'
 
 import { isUndefined, isArray, isNull } from '@posthog/core'
@@ -727,7 +728,20 @@ export class PostHogFeatureFlags implements Extension {
         const flagReportValue = String(flagValue)
         const requestId = this._instance.get_property(PERSISTENCE_FEATURE_FLAG_REQUEST_ID) || undefined
         const evaluatedAt = this._instance.get_property(PERSISTENCE_FEATURE_FLAG_EVALUATED_AT) || undefined
-        const flagCallReported: Record<string, string[]> = this._instance.get_property(FLAG_CALL_REPORTED) || {}
+        let flagCallReported: Record<string, string[]> = this._instance.get_property(FLAG_CALL_REPORTED) || {}
+
+        // When session-scoped dedup is enabled, reset the reported flags whenever the session changes.
+        if (this._instance.config.advanced_feature_flags_dedup_per_session) {
+            const currentSessionId = this._instance.get_session_id()
+            const storedSessionId = this._instance.get_property(FLAG_CALL_REPORTED_SESSION_ID)
+            if (currentSessionId && currentSessionId !== storedSessionId) {
+                flagCallReported = {}
+                this._instance.persistence?.register({
+                    [FLAG_CALL_REPORTED]: flagCallReported,
+                    [FLAG_CALL_REPORTED_SESSION_ID]: currentSessionId,
+                })
+            }
+        }
 
         if (options.send_event || !('send_event' in options)) {
             if (!(key in flagCallReported) || !flagCallReported[key].includes(flagReportValue)) {

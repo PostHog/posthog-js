@@ -291,6 +291,104 @@ describe('featureflags', () => {
         })
     })
 
+    describe('advanced_feature_flags_dedup_per_session', () => {
+        let currentSessionId: string
+
+        beforeEach(() => {
+            currentSessionId = 'session-1'
+            instance.config.advanced_feature_flags_dedup_per_session = true
+            instance.get_session_id = () => currentSessionId
+        })
+
+        it('should re-emit $feature_flag_called when session changes', () => {
+            featureFlags._hasLoadedFlags = true
+
+            expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
+            expect(instance.capture).toHaveBeenCalledTimes(1)
+            expect(instance.get_property('$flag_call_reported')).toEqual({ 'beta-feature': ['true'] })
+            expect(instance.get_property('$flag_call_reported_session_id')).toEqual('session-1')
+
+            // Same session: should NOT re-emit
+            expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
+            expect(instance.capture).toHaveBeenCalledTimes(1)
+
+            // New session: should re-emit
+            currentSessionId = 'session-2'
+            expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
+            expect(instance.capture).toHaveBeenCalledTimes(2)
+            expect(instance.get_property('$flag_call_reported')).toEqual({ 'beta-feature': ['true'] })
+            expect(instance.get_property('$flag_call_reported_session_id')).toEqual('session-2')
+        })
+
+        it('should not re-emit when option is off (default behavior)', () => {
+            instance.config.advanced_feature_flags_dedup_per_session = false
+            featureFlags._hasLoadedFlags = true
+
+            expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
+            expect(instance.capture).toHaveBeenCalledTimes(1)
+
+            // Simulate session change
+            currentSessionId = 'session-2'
+            expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
+            expect(instance.capture).toHaveBeenCalledTimes(1) // still deduped
+        })
+
+        it('should track different flag values within a session', () => {
+            featureFlags._hasLoadedFlags = true
+
+            expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
+            expect(instance.capture).toHaveBeenCalledTimes(1)
+
+            // Change flag value within same session
+            instance.persistence.register({
+                $enabled_feature_flags: { 'beta-feature': 'variant-1' },
+            })
+            expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
+            expect(instance.capture).toHaveBeenCalledTimes(2)
+            expect(instance.get_property('$flag_call_reported')).toEqual({
+                'beta-feature': ['true', 'variant-1'],
+            })
+        })
+
+        it('should reset flag reports for all flags on session change', () => {
+            featureFlags._hasLoadedFlags = true
+
+            expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
+            expect(featureFlags.isFeatureEnabled('multivariate-flag')).toEqual(true)
+            expect(instance.capture).toHaveBeenCalledTimes(2)
+            expect(instance.get_property('$flag_call_reported')).toEqual({
+                'beta-feature': ['true'],
+                'multivariate-flag': ['variant-1'],
+            })
+
+            // New session: all flags should re-emit
+            currentSessionId = 'session-2'
+            expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
+            expect(instance.capture).toHaveBeenCalledTimes(3)
+            // Previous session's multivariate-flag entry is gone
+            expect(instance.get_property('$flag_call_reported')).toEqual({ 'beta-feature': ['true'] })
+
+            expect(featureFlags.isFeatureEnabled('multivariate-flag')).toEqual(true)
+            expect(instance.capture).toHaveBeenCalledTimes(4)
+            expect(instance.get_property('$flag_call_reported')).toEqual({
+                'beta-feature': ['true'],
+                'multivariate-flag': ['variant-1'],
+            })
+        })
+
+        it('should not clear flag reports when session id is empty', () => {
+            featureFlags._hasLoadedFlags = true
+            currentSessionId = ''
+
+            expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
+            expect(instance.capture).toHaveBeenCalledTimes(1)
+
+            // With empty session id, dedup should work normally (not reset)
+            expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
+            expect(instance.capture).toHaveBeenCalledTimes(1)
+        })
+    })
+
     it('should return the right feature flag and not call capture', () => {
         featureFlags._hasLoadedFlags = true
 

@@ -57,6 +57,7 @@ export const SURVEYS_ACTIVATED = '$surveys_activated'
 export const PRODUCT_TOURS_ACTIVATED = '$product_tours_activated'
 export const CONVERSATIONS = '$conversations'
 export const FLAG_CALL_REPORTED = '$flag_call_reported'
+export const FLAG_CALL_REPORTED_SESSION_ID = '$flag_call_reported_session_id'
 export const PERSISTENCE_FEATURE_FLAG_ERRORS = '$feature_flag_errors'
 export const PERSISTENCE_FEATURE_FLAG_EVALUATED_AT = '$feature_flag_evaluated_at'
 export const USER_STATE = '$user_state'
@@ -99,6 +100,7 @@ export const PERSISTENCE_RESERVED_PROPERTIES = [
     STORED_PERSON_PROPERTIES_KEY,
     SURVEYS,
     FLAG_CALL_REPORTED,
+    FLAG_CALL_REPORTED_SESSION_ID,
     PERSISTENCE_FEATURE_FLAG_ERRORS,
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     CLIENT_SESSION_PROPS,
