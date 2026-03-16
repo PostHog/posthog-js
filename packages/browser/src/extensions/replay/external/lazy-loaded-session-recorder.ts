@@ -920,10 +920,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._clearConditionalRecordingPersistence()
 
-        // Note: We don't call stop()/start() here because _updateWindowAndSessionIds
-        // already handles the restart. This callback fires synchronously during
-        // checkAndGetSessionAndWindowId(), so _updateWindowAndSessionIds will detect
-        // the session change and handle the restart after this callback returns.
+        // When idle, _updateWindowAndSessionIds bails early and won't pick up the
+        // session change, so we restart here. Otherwise it handles the restart after
+        // this callback returns.
+        if (this._isIdle === true) {
+            this._isIdle = 'unknown'
+            this.stop()
+            this.start('session_id_changed')
+        }
 
         if (shouldLinkSessions) {
             this._tryAddCustomEvent('$session_starting', {

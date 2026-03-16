@@ -1198,6 +1198,48 @@ describe('Lazy SessionRecording', () => {
                     windowId: expect.any(String),
                 })
             })
+
+            it('restarts recorder when session rotates externally while idle', () => {
+                // Regression test: analytics events (e.g. $pageleave, $exception) can trigger
+                // session rotation via checkAndGetSessionAndWindowId in posthog-core while the
+                // recorder is idle. _onSessionIdCallback must restart the recorder in this case
+                // because _updateWindowAndSessionIds returns early when _isIdle is true.
+                const firstActivityTimestamp = startingTimestamp + 100
+                const idleTriggerTimestamp = startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000
+                // past the session timeout so the session manager will rotate
+                const rotationTimestamp = sessionManager['_sessionTimeoutMs'] + startingTimestamp + 1000
+
+                // Step 1: emit an active event to establish the session
+                emitActiveEvent(firstActivityTimestamp)
+                const firstSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
+
+                // Step 2: prepare a rotated session ID for when the session manager rotates
+                sessionIdGeneratorMock.mockClear()
+                const rotatedSessionId = 'externally-rotated-session-id'
+                sessionIdGeneratorMock.mockImplementation(() => rotatedSessionId)
+
+                // Step 3: trigger idle state via an inactive event after the idle threshold
+                emitInactiveEvent(idleTriggerTimestamp, true)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(true)
+
+                // Step 4: simulate what happens when an analytics event (e.g. $pageleave)
+                // triggers session rotation. In production, posthog-core calls
+                // checkAndGetSessionAndWindowId() during _calculate_event_properties,
+                // which rotates the session in the session manager and then fires the
+                // _onSessionIdCallback synchronously.
+                jest.useFakeTimers().setSystemTime(new Date(rotationTimestamp))
+                const { sessionId: newSessionId } = sessionManager.checkAndGetSessionAndWindowId(
+                    false,
+                    rotationTimestamp
+                )
+                expect(newSessionId).toEqual(rotatedSessionId)
+                expect(newSessionId).not.toEqual(firstSessionId)
+
+                // The session manager fires _onSessionIdCallback synchronously during
+                // checkAndGetSessionAndWindowId, so the recorder should have already restarted
+                const recorderSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
+                expect(recorderSessionId).toEqual(rotatedSessionId)
+            })
         })
 
         describe('scheduled full snapshots', () => {
