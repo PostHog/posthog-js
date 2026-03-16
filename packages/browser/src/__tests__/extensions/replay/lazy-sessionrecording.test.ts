@@ -52,7 +52,7 @@ import {
 
 // Type and source defined here designate a non-user-generated recording event
 
-jest.mock('../../../config', () => ({ LIB_VERSION: '0.0.1' }))
+jest.mock('../../../config', () => ({ LIB_VERSION: '0.0.1', LIB_NAME: 'web' }))
 
 const mockRemoteConfigLoad = jest.fn()
 jest.mock('../../../remote-config', () => ({

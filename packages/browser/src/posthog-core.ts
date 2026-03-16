@@ -2906,6 +2906,18 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
+     * @internal
+     * Allows wrapper SDKs (e.g. posthog-flutter, posthog-react-native) to override the
+     * `$lib` and `$lib_version` properties sent with every event.
+     *
+     * This is not a public API and may change without notice.
+     */
+    _overrideSDKInfo(sdkName: string, sdkVersion: string): void {
+        Config.LIB_NAME = sdkName
+        Config.LIB_VERSION = sdkVersion
+    }
+
+    /**
      * turns session recording on, and updates the config option `disable_session_recording` to false
      *
      * {@label Session replay}
