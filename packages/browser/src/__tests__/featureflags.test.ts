@@ -958,6 +958,42 @@ describe('featureflags', () => {
             })
         })
 
+        describe('plain array and object shorthand forms', () => {
+            it('supports plain array to enable flags', () => {
+                featureFlags.overrideFeatureFlags(['beta-feature', 'alpha-feature-2'])
+
+                expect(featureFlags.getFlagVariants()).toEqual({
+                    'beta-feature': true,
+                    'alpha-feature-2': true,
+                })
+            })
+
+            it('supports plain object to set variants', () => {
+                featureFlags.overrideFeatureFlags({
+                    'beta-feature': 'variant-1',
+                    'alpha-feature-2': false,
+                })
+
+                expect(featureFlags.getFlagVariants()).toEqual({
+                    'beta-feature': 'variant-1',
+                    'alpha-feature-2': false,
+                })
+            })
+
+            it('plain object does not affect payloads', () => {
+                featureFlags.overrideFeatureFlags({ 'beta-feature': 'variant-1' })
+
+                expect(featureFlags.getFlagVariants()).toEqual({
+                    'beta-feature': 'variant-1',
+                    'alpha-feature-2': true,
+                })
+                expect(featureFlags.getFlagPayloads()).toEqual({
+                    'beta-feature': { original: 'payload' },
+                    'alpha-feature-2': 123,
+                })
+            })
+        })
+
         describe('callback behavior', () => {
             let callbackSpy: jest.Mock
 

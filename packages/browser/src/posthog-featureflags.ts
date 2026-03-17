@@ -946,6 +946,8 @@ export class PostHogFeatureFlags implements Extension {
      *     - posthog.featureFlags.overrideFeatureFlags(false) // clear all overrides
      *     - posthog.featureFlags.overrideFeatureFlags(['beta-feature']) // enable flags
      *     - posthog.featureFlags.overrideFeatureFlags({'beta-feature': 'variant'}) // set variants
+     *     - posthog.featureFlags.overrideFeatureFlags({ flags: ['beta-feature'] }) // enable flags
+     *     - posthog.featureFlags.overrideFeatureFlags({ flags: {'beta-feature': 'variant'} }) // set variants
      *     - posthog.featureFlags.overrideFeatureFlags({ // set both flags and payloads
      *         flags: {'beta-feature': 'variant'},
      *         payloads: { 'beta-feature': { someData: true } }
@@ -966,6 +968,18 @@ export class PostHogFeatureFlags implements Extension {
             this._fireFeatureFlagsCallbacks()
 
             return forceDebugLogger.info('All overrides cleared')
+        }
+
+        // Array syntax: ['flag-a', 'flag-b'] -> { 'flag-a': true, 'flag-b': true }
+        if (isArray(overrideOptions)) {
+            const flagsObj: Record<string, string | boolean> = {}
+            for (let i = 0; i < overrideOptions.length; i++) {
+                flagsObj[overrideOptions[i]] = true
+            }
+            this._instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flagsObj })
+            this._fireFeatureFlagsCallbacks()
+
+            return forceDebugLogger.info('Flag overrides set', { flags: overrideOptions })
         }
 
         if (
@@ -1011,6 +1025,16 @@ export class PostHogFeatureFlags implements Extension {
 
             this._fireFeatureFlagsCallbacks()
             return
+        }
+
+        // Fallback: treat as Record<string, string | boolean>, e.g. {'beta-feature': 'variant'}
+        if (overrideOptions && typeof overrideOptions === 'object') {
+            this._instance.persistence.register({
+                [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: overrideOptions as Record<string, string | boolean>,
+            })
+            this._fireFeatureFlagsCallbacks()
+
+            return forceDebugLogger.info('Flag overrides set', { flags: overrideOptions })
         }
 
         this._fireFeatureFlagsCallbacks()
