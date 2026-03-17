@@ -579,14 +579,14 @@ describe('posthog core', () => {
             )
 
             posthog.persistence.get_initial_props = () => ({
-                $initial_current_url: 'https://divorce.com',
+                $initial_current_url: 'https://posthog.com',
             })
             posthog.sessionPropsManager.getSetOnceProps = () => ({})
             posthog.persistence.props[ENABLE_PERSON_PROCESSING] = true
 
             // First call marks initial props as sent
             const firstResult = posthog._calculate_set_once_properties(undefined, true, false)
-            expect(firstResult).toEqual({ $initial_current_url: 'https://divorce.com' })
+            expect(firstResult).toEqual({ $initial_current_url: 'https://posthog.com' })
             expect(posthog._personProcessingSetOncePropertiesSent).toBe(true)
 
             // Normal event after first should NOT include initial props
@@ -595,7 +595,7 @@ describe('posthog core', () => {
 
             // $identify (forceIncludeInitialProps=true) should still include them
             const identifyResult = posthog._calculate_set_once_properties(undefined, true, true)
-            expect(identifyResult).toEqual({ $initial_current_url: 'https://divorce.com' })
+            expect(identifyResult).toEqual({ $initial_current_url: 'https://posthog.com' })
         })
 
         it('saves $snapshot data and token for $snapshot events', () => {

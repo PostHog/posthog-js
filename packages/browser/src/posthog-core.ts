@@ -1211,8 +1211,8 @@ export class PostHog implements PostHogInterface {
         // initial person props as sent. This ensures they're included with subsequent
         // $identify calls.
         const markSetOnceAsSent = event_name !== '$groupidentify'
-        // $identify should always include initial props regardless of whether they've been sent,
-        // because it can land on a different Kafka partition than earlier anonymous events
+        // $identify should always include initial props because it creates/merges persons
+        // and may be processed before earlier anonymous events on the server
         const forceIncludeInitialProps = event_name === '$identify'
         const setOnceProperties = this._calculate_set_once_properties(
             options?.$set_once,
@@ -1461,7 +1461,7 @@ export class PostHog implements PostHogInterface {
      * @param markAsSent - if true, marks the properties as sent so they won't be included in future events.
      *                     Set to false for events like $groupidentify where the server doesn't process person props.
      * @param forceIncludeInitialProps - if true, include initial person props even if they've already been sent.
-     *                                   Used for $identify events which may be processed before earlier anonymous events.
+     *                                   Used for $identify which creates/merges persons and may be processed out of order.
      */
     _calculate_set_once_properties(
         dataSetOnce?: Properties,
