@@ -1211,7 +1211,14 @@ export class PostHog implements PostHogInterface {
         // initial person props as sent. This ensures they're included with subsequent
         // $identify calls.
         const markSetOnceAsSent = event_name !== '$groupidentify'
-        const setOnceProperties = this._calculate_set_once_properties(options?.$set_once, markSetOnceAsSent)
+        // $identify should always include initial props regardless of whether they've been sent,
+        // because it can land on a different Kafka partition than earlier anonymous events
+        const forceIncludeInitialProps = event_name === '$identify'
+        const setOnceProperties = this._calculate_set_once_properties(
+            options?.$set_once,
+            markSetOnceAsSent,
+            forceIncludeInitialProps
+        )
         if (setOnceProperties) {
             data.$set_once = setOnceProperties
         }
@@ -1453,13 +1460,19 @@ export class PostHog implements PostHogInterface {
      * @param dataSetOnce
      * @param markAsSent - if true, marks the properties as sent so they won't be included in future events.
      *                     Set to false for events like $groupidentify where the server doesn't process person props.
+     * @param forceIncludeInitialProps - if true, include initial person props even if they've already been sent.
+     *                                   Used for $identify events which may be processed before earlier anonymous events.
      */
-    _calculate_set_once_properties(dataSetOnce?: Properties, markAsSent: boolean = true): Properties | undefined {
+    _calculate_set_once_properties(
+        dataSetOnce?: Properties,
+        markAsSent: boolean = true,
+        forceIncludeInitialProps: boolean = false
+    ): Properties | undefined {
         if (!this.persistence || !this._hasPersonProcessing()) {
             return dataSetOnce
         }
 
-        if (this._personProcessingSetOncePropertiesSent) {
+        if (this._personProcessingSetOncePropertiesSent && !forceIncludeInitialProps) {
             // We only need to send these properties once. Sending them with later events would be redundant and would
             // just require extra work on the server to process them.
             return dataSetOnce

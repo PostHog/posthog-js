@@ -570,6 +570,34 @@ describe('posthog core', () => {
             })
         })
 
+        it('includes initial person props in $identify even after they have been sent', () => {
+            posthog = posthogWith(
+                {
+                    api_host: 'https://custom.posthog.com',
+                },
+                overrides
+            )
+
+            posthog.persistence.get_initial_props = () => ({
+                $initial_current_url: 'https://divorce.com',
+            })
+            posthog.sessionPropsManager.getSetOnceProps = () => ({})
+            posthog.persistence.props[ENABLE_PERSON_PROCESSING] = true
+
+            // First call marks initial props as sent
+            const firstResult = posthog._calculate_set_once_properties(undefined, true, false)
+            expect(firstResult).toEqual({ $initial_current_url: 'https://divorce.com' })
+            expect(posthog._personProcessingSetOncePropertiesSent).toBe(true)
+
+            // Normal event after first should NOT include initial props
+            const normalResult = posthog._calculate_set_once_properties(undefined, true, false)
+            expect(normalResult).toBeUndefined()
+
+            // $identify (forceIncludeInitialProps=true) should still include them
+            const identifyResult = posthog._calculate_set_once_properties(undefined, true, true)
+            expect(identifyResult).toEqual({ $initial_current_url: 'https://divorce.com' })
+        })
+
         it('saves $snapshot data and token for $snapshot events', () => {
             posthog = posthogWith({}, overrides)
 
