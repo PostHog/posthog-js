@@ -633,13 +633,49 @@ export class PostHog implements PostHogInterface {
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
         // eslint-disable-next-line posthog-js/no-direct-undefined-check
         if (config.bootstrap?.distinctID !== undefined) {
-            const uuid = this.config.get_device_id(uuidv7())
-            const deviceID = config.bootstrap?.isIdentifiedID ? uuid : config.bootstrap.distinctID
-            this.persistence.set_property(USER_STATE, config.bootstrap?.isIdentifiedID ? 'identified' : 'anonymous')
-            this.register({
-                distinct_id: config.bootstrap.distinctID,
-                $device_id: deviceID,
-            })
+            const bootstrapDistinctId = config.bootstrap.distinctID
+            const existingDistinctId = this.get_distinct_id()
+            const existingUserState = this.persistence.get_property(USER_STATE)
+
+            if (
+                config.bootstrap.isIdentifiedID &&
+                existingDistinctId != null &&
+                existingDistinctId !== bootstrapDistinctId &&
+                existingUserState === 'anonymous'
+            ) {
+                // The server bootstrapped flags for an identified user, but local persistence
+                // still has an anonymous ID from a previous session. Calling identify() merges
+                // the anonymous user into the identified user, ensuring consistent identity
+                // for feature flag evaluation and preventing duplicate $feature_flag_called events.
+                //
+                // Note: this runs during _init(), before _loaded() enables the request queue.
+                // The $identify event is enqueued and flushed once the queue starts. The
+                // reloadFeatureFlags() call inside identify() sets _reloadDebouncer, so the
+                // subsequent ensureFlagsLoaded() from _onRemoteConfig is a no-op (no double request).
+                this.identify(bootstrapDistinctId)
+            } else if (
+                config.bootstrap.isIdentifiedID &&
+                existingDistinctId != null &&
+                existingDistinctId !== bootstrapDistinctId &&
+                existingUserState === 'identified'
+            ) {
+                // The existing user is already identified with a different ID. Silently
+                // switching identities without an $identify event would corrupt analytics.
+                // Preserve the existing identity and log a warning.
+                logger.warn(
+                    'Bootstrap distinctID differs from an already-identified user. ' +
+                        'The existing identity is preserved. Call reset() before reinitializing ' +
+                        'if you intend to switch users.'
+                )
+            } else {
+                const uuid = this.config.get_device_id(uuidv7())
+                const deviceID = config.bootstrap.isIdentifiedID ? uuid : bootstrapDistinctId
+                this.persistence.set_property(USER_STATE, config.bootstrap.isIdentifiedID ? 'identified' : 'anonymous')
+                this.register({
+                    distinct_id: bootstrapDistinctId,
+                    $device_id: deviceID,
+                })
+            }
         }
 
         if (startInCookielessMode) {
