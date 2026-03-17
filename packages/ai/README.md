@@ -24,7 +24,7 @@ const client = new OpenAI({
 })
 
 const completion = await client.chat.completions.create({
-  model: 'gpt-4o-mini',
+  model: 'gpt-5-mini',
   messages: [{ role: 'user', content: 'Tell me a fun fact about hedgehogs' }],
   posthogDistinctId: 'user_123', // optional
   posthogTraceId: 'trace_123', // optional
@@ -62,7 +62,7 @@ const sdk = new NodeSDK({
 sdk.start()
 
 const result = await generateText({
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-5-mini'),
   prompt: 'Write a short haiku about debugging',
   experimental_telemetry: {
     isEnabled: true,

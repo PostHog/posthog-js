@@ -155,7 +155,7 @@ describe('$-prefixed property serialization', () => {
       distinctId: 'user-1',
       event: '$ai_generation',
       properties: {
-        $ai_model: 'gpt-4o-mini',
+        $ai_model: 'gpt-5-mini',
         $ai_provider: 'openai',
         $ai_input_tokens: 10,
         $ai_output_tokens: 20,
@@ -165,7 +165,7 @@ describe('$-prefixed property serialization', () => {
     const [, , args] = ctx.scheduler.runAfter.mock.calls[0]
     expect(typeof args.properties).toBe('string')
     expect(JSON.parse(args.properties)).toEqual({
-      $ai_model: 'gpt-4o-mini',
+      $ai_model: 'gpt-5-mini',
       $ai_provider: 'openai',
       $ai_input_tokens: 10,
       $ai_output_tokens: 20,
