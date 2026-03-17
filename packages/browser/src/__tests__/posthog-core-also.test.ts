@@ -570,32 +570,56 @@ describe('posthog core', () => {
             })
         })
 
-        it('includes initial person props in $identify even after they have been sent', () => {
-            posthog = posthogWith(
-                {
-                    api_host: 'https://custom.posthog.com',
-                },
-                overrides
-            )
+        describe('initial person props and $identify interaction', () => {
+            const setupPosthogWithInitialProps = () => {
+                posthog = posthogWith(
+                    {
+                        api_host: 'https://custom.posthog.com',
+                    },
+                    overrides
+                )
 
-            posthog.persistence.get_initial_props = () => ({
-                $initial_current_url: 'https://posthog.com',
+                posthog.persistence.get_initial_props = () => ({
+                    $initial_current_url: 'https://posthog.com',
+                })
+                posthog.sessionPropsManager.getSetOnceProps = () => ({})
+                posthog.persistence.props[ENABLE_PERSON_PROCESSING] = true
+                return posthog
+            }
+
+            it('$identify as first event includes initial props and marks as sent', () => {
+                const posthog = setupPosthogWithInitialProps()
+                expect(posthog._personProcessingSetOncePropertiesSent).toBe(false)
+
+                const result = posthog._calculate_set_once_properties(undefined, true, true)
+                expect(result).toEqual({ $initial_current_url: 'https://posthog.com' })
+                expect(posthog._personProcessingSetOncePropertiesSent).toBe(true)
             })
-            posthog.sessionPropsManager.getSetOnceProps = () => ({})
-            posthog.persistence.props[ENABLE_PERSON_PROCESSING] = true
 
-            // First call marks initial props as sent
-            const firstResult = posthog._calculate_set_once_properties(undefined, true, false)
-            expect(firstResult).toEqual({ $initial_current_url: 'https://posthog.com' })
-            expect(posthog._personProcessingSetOncePropertiesSent).toBe(true)
+            it('$identify after another event has already sent props still includes initial props', () => {
+                const posthog = setupPosthogWithInitialProps()
 
-            // Normal event after first should NOT include initial props
-            const normalResult = posthog._calculate_set_once_properties(undefined, true, false)
-            expect(normalResult).toBeUndefined()
+                // First normal event sends and marks initial props
+                const firstResult = posthog._calculate_set_once_properties(undefined, true, false)
+                expect(firstResult).toEqual({ $initial_current_url: 'https://posthog.com' })
+                expect(posthog._personProcessingSetOncePropertiesSent).toBe(true)
 
-            // $identify (forceIncludeInitialProps=true) should still include them
-            const identifyResult = posthog._calculate_set_once_properties(undefined, true, true)
-            expect(identifyResult).toEqual({ $initial_current_url: 'https://posthog.com' })
+                // $identify still includes them even though they've been sent
+                const identifyResult = posthog._calculate_set_once_properties(undefined, true, true)
+                expect(identifyResult).toEqual({ $initial_current_url: 'https://posthog.com' })
+            })
+
+            it('normal event after initial props have been sent does not include them', () => {
+                const posthog = setupPosthogWithInitialProps()
+
+                // First event sends initial props
+                posthog._calculate_set_once_properties(undefined, true, false)
+                expect(posthog._personProcessingSetOncePropertiesSent).toBe(true)
+
+                // Second normal event should NOT include initial props
+                const result = posthog._calculate_set_once_properties(undefined, true, false)
+                expect(result).toBeUndefined()
+            })
         })
 
         it('saves $snapshot data and token for $snapshot events', () => {
