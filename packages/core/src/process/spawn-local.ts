@@ -19,6 +19,9 @@ export async function spawnLocal(
   })
 
   if (options.stdin !== undefined && child.stdin) {
+    child.stdin.on('error', () => {
+      // Swallow EPIPE: child may exit before consuming all stdin
+    })
     child.stdin.write(options.stdin)
     child.stdin.end()
   }
