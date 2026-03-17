@@ -18,7 +18,7 @@ export const generate = action({
     const startTime = Date.now()
 
     const result = await generateText({
-      model: openai('gpt-4o-mini'),
+      model: openai('gpt-5-mini'),
       prompt: args.prompt,
     })
 
@@ -33,7 +33,7 @@ export const generate = action({
 
         // Core identification
         $ai_provider: 'openai',
-        $ai_model: 'gpt-4o-mini',
+        $ai_model: 'gpt-5-mini',
 
         // Token usage
         $ai_input_tokens: result.usage.inputTokens,

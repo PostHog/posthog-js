@@ -24,7 +24,7 @@ const client = new OpenAI({
 })
 
 const completion = await client.chat.completions.create({
-  model: 'gpt-3.5-turbo',
+  model: 'gpt-5-mini',
   messages: [{ role: 'user', content: 'Tell me a fun fact about hedgehogs' }],
   posthogDistinctId: 'user_123', // optional
   posthogTraceId: 'trace_123', // optional
@@ -39,60 +39,43 @@ console.log(completion.choices[0].message.content)
 await phClient.shutdown()
 ```
 
-## OTEL + AI SDK (`experimental_telemetry`)
+## OpenTelemetry
 
-Use this when working with Vercel AI SDK telemetry. `@posthog/ai` exposes an OTEL `SpanProcessor` that maps spans to PostHog AI events and sends them through `posthog-node`.
+`@posthog/ai` provides a `PostHogTraceExporter` that sends OpenTelemetry traces to PostHog's OTLP ingestion endpoint. PostHog converts `gen_ai.*` spans into `$ai_generation` events server-side. This works with any LLM provider SDK that supports OpenTelemetry.
+
+```bash
+npm install @posthog/ai @opentelemetry/sdk-node @opentelemetry/exporter-trace-otlp-http
+```
 
 ```typescript
 import { NodeSDK } from '@opentelemetry/sdk-node'
-import { PostHog } from 'posthog-node'
 import { generateText } from 'ai'
 import { openai } from '@ai-sdk/openai'
-import { PostHogSpanProcessor } from '@posthog/ai/otel'
-
-const phClient = new PostHog('<YOUR_PROJECT_API_KEY>', { host: 'https://us.i.posthog.com' })
+import { PostHogTraceExporter } from '@posthog/ai/otel'
 
 const sdk = new NodeSDK({
-  spanProcessors: [
-    new PostHogSpanProcessor(phClient),
-  ],
+  traceExporter: new PostHogTraceExporter({
+    apiKey: '<YOUR_PROJECT_API_KEY>',
+    host: 'https://us.i.posthog.com', // optional, defaults to https://us.i.posthog.com
+  }),
 })
-
 sdk.start()
 
-await generateText({
-  model: openai('gpt-5.1'),
+const result = await generateText({
+  model: openai('gpt-5-mini'),
   prompt: 'Write a short haiku about debugging',
   experimental_telemetry: {
     isEnabled: true,
     functionId: 'my-awesome-function',
     metadata: {
+      posthog_distinct_id: 'user_123',
       conversation_id: 'abc123',
-      plan: 'pro',
     },
   },
 })
 
-await phClient.shutdown()
+await sdk.shutdown()
 ```
-
-### Custom Mappers
-
-The OTEL processor supports adapter mappers for different span formats:
-
-- `aiSdkSpanMapper` is the default mapper.
-- You can pass custom `mappers` in `PostHogSpanProcessor` options to support additional span schemas.
-
-### Per-call Metadata (Recommended)
-
-For dynamic properties, pass values in `experimental_telemetry.metadata` on each AI SDK call.
-These are captured from `ai.telemetry.metadata.*` and forwarded as PostHog event properties.
-Use processor options (`posthogProperties`) only for global defaults.
-
-## Notes
-
-- The OTEL route currently maps supported spans into PostHog AI events (manual capture path).
-- Existing wrapper-based tracing (for example `withTracing`) still works and is unchanged.
 
 LLM Observability [docs](https://posthog.com/docs/ai-engineering/observability)
 
