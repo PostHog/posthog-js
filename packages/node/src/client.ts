@@ -1970,7 +1970,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   ): Promise<void> {
     if (!ErrorTracking.isPreviouslyCapturedError(error)) {
       const syntheticException = new Error('PostHog syntheticException')
-      this.addPendingPromise(
+      return this.addPendingPromise(
         ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
           this.captureImmediate(msg)
         )
