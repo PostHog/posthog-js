@@ -959,25 +959,16 @@ describe('featureflags', () => {
         })
 
         describe('plain array and object shorthand forms', () => {
-            it('supports plain array to enable flags', () => {
-                featureFlags.overrideFeatureFlags(['beta-feature', 'alpha-feature-2'])
-
-                expect(featureFlags.getFlagVariants()).toEqual({
-                    'beta-feature': true,
-                    'alpha-feature-2': true,
-                })
-            })
-
-            it('supports plain object to set variants', () => {
-                featureFlags.overrideFeatureFlags({
-                    'beta-feature': 'variant-1',
-                    'alpha-feature-2': false,
-                })
-
-                expect(featureFlags.getFlagVariants()).toEqual({
-                    'beta-feature': 'variant-1',
-                    'alpha-feature-2': false,
-                })
+            it.each([
+                ['plain array', ['beta-feature', 'alpha-feature-2'], { 'beta-feature': true, 'alpha-feature-2': true }],
+                [
+                    'plain object',
+                    { 'beta-feature': 'variant-1', 'alpha-feature-2': false },
+                    { 'beta-feature': 'variant-1', 'alpha-feature-2': false },
+                ],
+            ])('supports %s shorthand form for flag overrides', (_, input, expected) => {
+                featureFlags.overrideFeatureFlags(input as any)
+                expect(featureFlags.getFlagVariants()).toEqual(expected)
             })
 
             it('plain object does not affect payloads', () => {

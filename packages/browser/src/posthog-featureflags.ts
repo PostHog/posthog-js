@@ -61,6 +61,15 @@ const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
 const PERSISTENCE_FEATURE_FLAG_REQUEST_ID = '$feature_flag_request_id'
 
+/** Converts an array of flag names to a Record where each flag is set to true. */
+const arrayToFlagsRecord = (flags: string[]): Record<string, string | boolean> => {
+    const flagsObj: Record<string, string | boolean> = {}
+    for (let i = 0; i < flags.length; i++) {
+        flagsObj[flags[i]] = true
+    }
+    return flagsObj
+}
+
 export const filterActiveFeatureFlags = (featureFlags?: Record<string, string | boolean>) => {
     const activeFeatureFlags: Record<string, string | boolean> = {}
     for (const [key, value] of entries(featureFlags || {})) {
@@ -972,10 +981,7 @@ export class PostHogFeatureFlags implements Extension {
 
         // Array syntax: ['flag-a', 'flag-b'] -> { 'flag-a': true, 'flag-b': true }
         if (isArray(overrideOptions)) {
-            const flagsObj: Record<string, string | boolean> = {}
-            for (let i = 0; i < overrideOptions.length; i++) {
-                flagsObj[overrideOptions[i]] = true
-            }
+            const flagsObj = arrayToFlagsRecord(overrideOptions)
             this._instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flagsObj })
             this._fireFeatureFlagsCallbacks()
 
@@ -997,10 +1003,7 @@ export class PostHogFeatureFlags implements Extension {
                     forceDebugLogger.info('Flag overrides cleared')
                 } else if (options.flags) {
                     if (isArray(options.flags)) {
-                        const flagsObj: Record<string, string | boolean> = {}
-                        for (let i = 0; i < options.flags.length; i++) {
-                            flagsObj[options.flags[i]] = true
-                        }
+                        const flagsObj = arrayToFlagsRecord(options.flags)
                         this._instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flagsObj })
                     } else {
                         this._instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: options.flags })
