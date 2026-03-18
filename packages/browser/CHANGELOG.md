@@ -1,5 +1,28 @@
 # posthog-js
 
+## 1.361.0
+
+### Minor Changes
+
+- [#3201](https://github.com/PostHog/posthog-js/pull/3201) [`552c018`](https://github.com/PostHog/posthog-js/commit/552c01843b9ae1fbf8fdf1a2e98e0b7fdc37c851) Thanks [@frankh](https://github.com/frankh)! - Add a serviceName config option to logs config
+  (2026-03-18)
+
+- [#3240](https://github.com/PostHog/posthog-js/pull/3240) [`e4a58d0`](https://github.com/PostHog/posthog-js/commit/e4a58d0a071c7605a69ae4492efd895cd50047bd) Thanks [@marandaneto](https://github.com/marandaneto)! - Add internal `_overrideSDKInfo` method to allow wrapper SDKs to override `$lib` and `$lib_version` event properties
+  (2026-03-18)
+
+- [#3241](https://github.com/PostHog/posthog-js/pull/3241) [`fe1fd7b`](https://github.com/PostHog/posthog-js/commit/fe1fd7b222b2ca51164e01fceca892628efac89c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: add `advanced_feature_flags_dedup_per_session` config option to scope `$feature_flag_called` deduplication to the current session
+  (2026-03-18)
+
+### Patch Changes
+
+- [#3239](https://github.com/PostHog/posthog-js/pull/3239) [`bf4f078`](https://github.com/PostHog/posthog-js/commit/bf4f078096c506906afecb1dbe9fc31100900a0f) Thanks [@jonathanlab](https://github.com/jonathanlab)! - fix: debug mode not persisting across page navigations
+  (2026-03-18)
+
+- [#3228](https://github.com/PostHog/posthog-js/pull/3228) [`8773fdf`](https://github.com/PostHog/posthog-js/commit/8773fdfdb87980da3db1f141099577424b35153b) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix: restart session recorder when session rotates externally while idle, preventing "Recording not found" for sessions where analytics events triggered session rotation
+  (2026-03-18)
+- Updated dependencies [[`552c018`](https://github.com/PostHog/posthog-js/commit/552c01843b9ae1fbf8fdf1a2e98e0b7fdc37c851), [`fe1fd7b`](https://github.com/PostHog/posthog-js/commit/fe1fd7b222b2ca51164e01fceca892628efac89c)]:
+    - @posthog/types@1.361.0
+
 ## 1.360.2
 
 ### Patch Changes

@@ -1,5 +1,17 @@
 # posthog-ai
 
+## 7.12.0
+
+### Minor Changes
+
+- [#3232](https://github.com/PostHog/posthog-js/pull/3232) [`476a823`](https://github.com/PostHog/posthog-js/commit/476a82369b61dcb21f204509d917e64a51736a19) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Replace otel client-side span mapping with PostHogTraceExporter. PostHog now converts gen_ai.\* spans into $ai_generation events server-side, so the client-side mapper pipeline (PostHogSpanProcessor, captureSpan, aiSdkSpanMapper) has been replaced with a simple OTLPTraceExporter wrapper.
+  (2026-03-18)
+
+### Patch Changes
+
+- Updated dependencies [[`697e423`](https://github.com/PostHog/posthog-js/commit/697e4237ca945caa33b26f35872951ad0e7530d4)]:
+  - posthog-node@5.28.3
+
 ## 7.11.2
 
 ### Patch Changes
