@@ -29,7 +29,7 @@ export const generate = action({
   handler: async (ctx, args) => {
     // Wrap the model with PostHog tracing before passing it to the agent.
     // Every LLM call the agent makes will automatically capture $ai_generation events.
-    const model = withTracing(openai('gpt-4o-mini'), phClient as unknown as WithTracingPostHog, {
+    const model = withTracing(openai('gpt-5-mini'), phClient as unknown as WithTracingPostHog, {
       posthogDistinctId: args.distinctId,
     })
 

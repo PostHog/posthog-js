@@ -28,7 +28,7 @@ export const generate = action({
   handler: async (_ctx, args) => {
     // Wrap the model with PostHog tracing — this automatically captures
     // $ai_generation events with token usage, latency, and content.
-    const model = withTracing(openai('gpt-4o-mini'), phClient as unknown as WithTracingPostHog, {
+    const model = withTracing(openai('gpt-5-mini'), phClient as unknown as WithTracingPostHog, {
       posthogDistinctId: args.distinctId,
     })
 

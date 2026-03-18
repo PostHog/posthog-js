@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.28.3
+
+### Patch Changes
+
+- [#3243](https://github.com/PostHog/posthog-js/pull/3243) [`697e423`](https://github.com/PostHog/posthog-js/commit/697e4237ca945caa33b26f35872951ad0e7530d4) Thanks [@hpouillot](https://github.com/hpouillot)! - fix captureExceptionImmediate return value
+  (2026-03-18)
+
 ## 5.28.2
 
 ### Patch Changes

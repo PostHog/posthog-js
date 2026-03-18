@@ -7,7 +7,7 @@ import { posthog } from '../posthog.js'
 
 const supportAgent = new Agent(components.agent, {
   name: 'support-agent',
-  languageModel: openai('gpt-4o-mini'),
+  languageModel: openai('gpt-5-mini'),
   instructions: 'You are a helpful support agent. Answer questions concisely.',
 })
 
