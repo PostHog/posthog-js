@@ -3,6 +3,7 @@ import { mockLogger } from './helpers/mock-logger'
 import * as globals from '../utils/globals'
 import { document, window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
+import { isUndefined } from '@posthog/core'
 import { ENABLE_PERSON_PROCESSING, USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { PostHogConfig, RemoteConfig } from '../types'
@@ -794,6 +795,7 @@ describe('posthog core', () => {
         it('sets the right distinctID', () => {
             const posthog = posthogWith(
                 {
+                    token: 'bootstrap-distinctid-' + uuidv7(),
                     bootstrap: {
                         distinctID: 'abcd',
                     },
@@ -820,6 +822,7 @@ describe('posthog core', () => {
         it('treats identified distinctIDs appropriately', () => {
             const posthog = posthogWith(
                 {
+                    token: 'bootstrap-identified-' + uuidv7(),
                     bootstrap: {
                         distinctID: 'abcd',
                         isIdentifiedID: true,
@@ -941,6 +944,141 @@ describe('posthog core', () => {
 
             posthog.featureFlags.onFeatureFlags(() => (called = true))
             expect(called).toEqual(false)
+        })
+
+        describe('auto-identify on bootstrap', () => {
+            afterEach(() => {
+                jest.restoreAllMocks()
+            })
+
+            it('calls identify when bootstrap has identified distinctID that differs from persisted anonymous ID', () => {
+                const token = 'auto-identify-test-' + uuidv7()
+
+                // First instance creates an anonymous user in persistence
+                const first = posthogWith({ token })
+                expect(first.get_distinct_id()).toBeTruthy()
+                expect(first.persistence.get_property(USER_STATE)).toBe('anonymous')
+
+                const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
+                const captureSpy = jest.spyOn(PostHog.prototype, 'capture')
+
+                // Second instance bootstraps with an identified user
+                const second = posthogWith({
+                    token,
+                    bootstrap: {
+                        distinctID: 'user-123',
+                        isIdentifiedID: true,
+                    },
+                })
+
+                expect(identifySpy).toHaveBeenCalledWith('user-123')
+                expect(second.get_distinct_id()).toBe('user-123')
+                expect(second.persistence.get_property(USER_STATE)).toBe('identified')
+
+                // Verify the $identify event includes the anonymous-to-identified mapping
+                const captureCall = captureSpy.mock.calls.find((call) => call[0] === '$identify')
+                expect(captureCall).toBeDefined()
+                expect(captureCall![1]).toMatchObject({
+                    distinct_id: 'user-123',
+                    $anon_distinct_id: expect.any(String),
+                })
+
+                // Subsequent identify with the same ID should be a no-op
+                identifySpy.mockClear()
+                second.identify('user-123')
+                // identify is called but since distinct_id matches, no $identify event fires
+                expect(second.get_distinct_id()).toBe('user-123')
+            })
+
+            it('does not call identify when bootstrap distinctID matches persisted ID', () => {
+                const token = 'auto-identify-same-' + uuidv7()
+
+                // First instance creates an anonymous user
+                const first = posthogWith({ token })
+                const anonId = first.get_distinct_id()
+
+                const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
+
+                // Second instance bootstraps with the same anonymous ID
+                posthogWith({
+                    token,
+                    bootstrap: {
+                        distinctID: anonId,
+                        isIdentifiedID: true,
+                    },
+                })
+
+                expect(identifySpy).not.toHaveBeenCalled()
+            })
+
+            it.each([
+                { isIdentifiedID: false, description: 'false' },
+                { isIdentifiedID: undefined, description: 'omitted' },
+            ])('does not call identify when isIdentifiedID is $description', ({ isIdentifiedID }) => {
+                const token = 'auto-identify-non-true-' + uuidv7()
+
+                // First instance creates an anonymous user
+                posthogWith({ token })
+
+                const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
+
+                // Second instance bootstraps with isIdentifiedID that is not true
+                posthogWith({
+                    token,
+                    bootstrap: {
+                        distinctID: 'user-456',
+                        ...(!isUndefined(isIdentifiedID) && { isIdentifiedID }),
+                    },
+                })
+
+                expect(identifySpy).not.toHaveBeenCalled()
+            })
+
+            it('does not call identify when there is no existing persisted ID (first visit)', () => {
+                const token = 'auto-identify-first-visit-' + uuidv7()
+
+                const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
+
+                // First visit with bootstrap - no prior persistence
+                const posthog = posthogWith({
+                    token,
+                    bootstrap: {
+                        distinctID: 'user-789',
+                        isIdentifiedID: true,
+                    },
+                })
+
+                expect(identifySpy).not.toHaveBeenCalled()
+                expect(posthog.get_distinct_id()).toBe('user-789')
+                expect(posthog.persistence.get_property(USER_STATE)).toBe('identified')
+            })
+
+            it('does not call identify when existing user is already identified', () => {
+                const token = 'auto-identify-already-id-' + uuidv7()
+
+                // First instance: create and identify a user
+                const first = posthogWith({ token }, { capture: jest.fn() })
+                first.identify('existing-user')
+                expect(first.persistence.get_property(USER_STATE)).toBe('identified')
+
+                const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
+
+                // Second instance bootstraps with a different identified user
+                const second = posthogWith({
+                    token,
+                    bootstrap: {
+                        distinctID: 'new-user',
+                        isIdentifiedID: true,
+                    },
+                })
+
+                // Should NOT auto-identify because user was already identified
+                expect(identifySpy).not.toHaveBeenCalled()
+
+                // Existing identity should be preserved (bootstrap should NOT silently switch identities)
+                expect(second.get_distinct_id()).toBe('existing-user')
+                expect(second.persistence.get_property(USER_STATE)).toBe('identified')
+            })
         })
     })
 
