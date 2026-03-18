@@ -62,8 +62,8 @@ const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_paylo
 const PERSISTENCE_FEATURE_FLAG_REQUEST_ID = '$feature_flag_request_id'
 
 /** Converts an array of flag names to a Record where each flag is set to true. */
-const arrayToFlagsRecord = (flags: string[]): Record<string, string | boolean> => {
-    const flagsObj: Record<string, string | boolean> = {}
+const arrayToFlagsRecord = (flags: string[]): Record<string, true> => {
+    const flagsObj: Record<string, true> = {}
     for (let i = 0; i < flags.length; i++) {
         flagsObj[flags[i]] = true
     }
@@ -1040,7 +1040,7 @@ export class PostHogFeatureFlags implements Extension {
             return forceDebugLogger.info('Flag overrides set', { flags: overrideOptions })
         }
 
-        this._fireFeatureFlagsCallbacks()
+        logger.warn('Invalid overrideOptions provided to overrideFeatureFlags', { overrideOptions })
     }
 
     /*
