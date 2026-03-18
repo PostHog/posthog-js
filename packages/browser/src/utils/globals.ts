@@ -278,9 +278,6 @@ if (typeof File === 'undefined') {
     ;(global as any).File = function () {}
 }
 
-export const ArrayProto = Array.prototype
-export const nativeForEach = ArrayProto.forEach
-export const nativeIndexOf = ArrayProto.indexOf
 
 export const navigator = global?.navigator
 export const document = global?.document

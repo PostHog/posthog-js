@@ -1,4 +1,4 @@
-import { each, find } from './utils'
+import { each } from './utils'
 import Config from './config'
 import { Compression, RequestWithOptions, RequestResponse } from './types'
 import { formDataToQuery } from './utils/request-utils'
@@ -274,7 +274,7 @@ export const request = (_options: RequestWithOptions) => {
     )
 
     const transportMethod =
-        find(availableTransports, (t) => t.transport === transport)?.method ?? availableTransports[0].method
+        availableTransports.find((t) => t.transport === transport)?.method ?? availableTransports[0].method
 
     if (!transportMethod) {
         throw new Error('No available transport method')

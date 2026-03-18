@@ -4,13 +4,13 @@ import { PostHog } from './posthog-core'
 
 import { document, window } from './utils/globals'
 import { getEventTarget, getParentElement } from './autocapture-utils'
-import { HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
+import { DOM_EVENT_BEFOREUNLOAD, DOM_EVENT_VISIBILITYCHANGE, HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
 import { isNumber, isNullish, isEmptyObject, isObject } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { isElementInToolbar, isElementNode, isTag } from './utils/element-utils'
 import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensions/dead-clicks-autocapture'
 import { includes } from '@posthog/core'
-import { addEventListener, extendArray } from './utils'
+import { addEventListener } from './utils'
 import { maskQueryParams } from './utils/request-utils'
 import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from './utils/event-utils'
 import type { Extension } from './extensions/types'
@@ -55,6 +55,11 @@ export class Heatmaps implements Extension {
     instance: PostHog
     rageclicks: RageClick
     _enabledServerSide: boolean = false
+
+    private get _config() {
+        return this.instance.config
+    }
+
     _initialized = false
     _mouseMoveTimeout: ReturnType<typeof setTimeout> | undefined
 
@@ -79,20 +84,20 @@ export class Heatmaps implements Extension {
     public get flushIntervalMilliseconds(): number {
         let flushInterval = DEFAULT_FLUSH_INTERVAL
         if (
-            isObject(this.instance.config.capture_heatmaps) &&
-            this.instance.config.capture_heatmaps.flush_interval_milliseconds
+            isObject(this._config.capture_heatmaps) &&
+            this._config.capture_heatmaps.flush_interval_milliseconds
         ) {
-            flushInterval = this.instance.config.capture_heatmaps.flush_interval_milliseconds
+            flushInterval = this._config.capture_heatmaps.flush_interval_milliseconds
         }
         return flushInterval
     }
 
     public get isEnabled(): boolean {
-        if (!isNullish(this.instance.config.capture_heatmaps)) {
-            return this.instance.config.capture_heatmaps !== false
+        if (!isNullish(this._config.capture_heatmaps)) {
+            return this._config.capture_heatmaps !== false
         }
-        if (!isNullish(this.instance.config.enable_heatmaps)) {
-            return this.instance.config.enable_heatmaps
+        if (!isNullish(this._config.enable_heatmaps)) {
+            return this._config.enable_heatmaps
         }
         return this._enabledServerSide
     }
@@ -159,7 +164,7 @@ export class Heatmaps implements Extension {
         }
 
         this._flushHandler = this._flush.bind(this)
-        addEventListener(window, 'beforeunload', this._flushHandler)
+        addEventListener(window, DOM_EVENT_BEFOREUNLOAD, this._flushHandler)
 
         this._onClickHandler = (e) => this._onClick((e || window?.event) as MouseEvent)
         addEventListener(document, 'click', this._onClickHandler, { capture: true })
@@ -175,7 +180,7 @@ export class Heatmaps implements Extension {
         this._deadClicksCapture.startIfEnabledOrStop()
 
         this._onVisibilityChange_handler = this._onVisibilityChange.bind(this)
-        addEventListener(document, 'visibilitychange', this._onVisibilityChange_handler)
+        addEventListener(document, DOM_EVENT_VISIBILITYCHANGE, this._onVisibilityChange_handler)
 
         this._initialized = true
     }
@@ -186,7 +191,7 @@ export class Heatmaps implements Extension {
         }
 
         if (this._flushHandler) {
-            window.removeEventListener('beforeunload', this._flushHandler)
+            window.removeEventListener(DOM_EVENT_BEFOREUNLOAD, this._flushHandler)
         }
 
         if (this._onClickHandler) {
@@ -198,7 +203,7 @@ export class Heatmaps implements Extension {
         }
 
         if (this._onVisibilityChange_handler) {
-            document.removeEventListener('visibilitychange', this._onVisibilityChange_handler)
+            document.removeEventListener(DOM_EVENT_VISIBILITYCHANGE, this._onVisibilityChange_handler)
         }
 
         clearTimeout(this._mouseMoveTimeout)
@@ -264,11 +269,11 @@ export class Heatmaps implements Extension {
         const href = window.location.href
 
         // mask url query params
-        const maskPersonalDataProperties = this.instance.config.mask_personal_data_properties
-        const customPersonalDataProperties = this.instance.config.custom_personal_data_properties
+        const maskPersonalDataProperties = this._config.mask_personal_data_properties
+        const customPersonalDataProperties = this._config.custom_personal_data_properties
 
         const paramsToMask = maskPersonalDataProperties
-            ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
+            ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
             : []
 
         const url = maskQueryParams(href, paramsToMask, MASKED)

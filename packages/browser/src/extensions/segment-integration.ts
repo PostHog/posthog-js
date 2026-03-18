@@ -19,7 +19,7 @@
 import { PostHog } from '../posthog-core'
 import { createLogger } from '../utils/logger'
 
-import { USER_STATE } from '../constants'
+import { EVENT_IDENTIFY, EVENT_PAGEVIEW, USER_STATE, USER_STATE_IDENTIFIED } from '../constants'
 import { isFunction } from '@posthog/core'
 import { uuidv7 } from '../uuidv7'
 
@@ -63,8 +63,8 @@ const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
         // eslint-disable-next-line compat/compat
         load: () => Promise.resolve(),
         track: (ctx) => enrichEvent(ctx, ctx.event.event),
-        page: (ctx) => enrichEvent(ctx, '$pageview'),
-        identify: (ctx) => enrichEvent(ctx, '$identify'),
+        page: (ctx) => enrichEvent(ctx, EVENT_PAGEVIEW),
+        identify: (ctx) => enrichEvent(ctx, EVENT_IDENTIFY),
         screen: (ctx) => enrichEvent(ctx, '$screen'),
     }
 }
@@ -86,7 +86,7 @@ function setupPostHogFromSegment(posthog: PostHog, done: () => void) {
                 distinct_id: user.id(),
                 $device_id: getSegmentAnonymousId(),
             })
-            posthog.persistence!.set_property(USER_STATE, 'identified')
+            posthog.persistence!.set_property(USER_STATE, USER_STATE_IDENTIFIED)
         }
 
         done()

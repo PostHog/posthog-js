@@ -26,8 +26,6 @@ if (!Number.isInteger) {
     }
 }
 
-const DIGITS = '0123456789abcdef'
-
 /** Represents a UUID as a 16-byte byte array. */
 export class UUID {
     /** @param bytes - The 16-byte byte array representation. */
@@ -87,7 +85,7 @@ export class UUID {
     toString(): string {
         let text = ''
         for (let i = 0; i < this.bytes.length; i++) {
-            text = text + DIGITS.charAt(this.bytes[i] >>> 4) + DIGITS.charAt(this.bytes[i] & 0xf)
+            text = text + (this.bytes[i] >>> 4).toString(16) + (this.bytes[i] & 0xf).toString(16)
             if (i === 3 || i === 5 || i === 7 || i === 9) {
                 text += '-'
             }

@@ -68,8 +68,6 @@ const plugins = (es5, noExternal) => [
         babelHelpers: 'bundled',
         plugins: [
             '@babel/plugin-transform-nullish-coalescing-operator',
-            // Explicitly included so we transform 1 ** 2 to Math.pow(1, 2) for ES6 compatability
-            '@babel/plugin-transform-exponentiation-operator',
         ],
         presets: [
             [
@@ -103,6 +101,14 @@ const plugins = (es5, noExternal) => [
         toplevel: true,
         compress: {
             ecma: es5 ? 5 : 6,
+            passes: 2,
+            pure_getters: true,
+            unsafe_methods: true,
+            unsafe_comps: true,
+            unsafe_math: true,
+            booleans_as_integers: true,
+            unsafe_proto: true,
+            unsafe_regexp: true,
         },
         format: {
             comments: false,

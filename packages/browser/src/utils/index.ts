@@ -1,111 +1,74 @@
-import { Breaker, PostHogConfig, Properties } from '../types'
-import { nativeForEach, nativeIndexOf } from './globals'
+import { PostHogConfig, Properties } from '../types'
 import { logger } from './logger'
 import { isFormData, isNull, isNullish, isNumber, isString, hasOwnProperty, isArray } from '@posthog/core'
 
-const breaker: Breaker = {}
-
 export function eachArray<E = any>(
     obj: E[] | null | undefined,
-    iterator: (value: E, key: number) => void | Breaker,
-    thisArg?: any
+    iterator: (value: E, key: number) => void
 ): void {
     if (isArray(obj)) {
-        if (nativeForEach && obj.forEach === nativeForEach) {
-            obj.forEach(iterator, thisArg)
-        } else if ('length' in obj && obj.length === +obj.length) {
-            for (let i = 0, l = obj.length; i < l; i++) {
-                if (i in obj && iterator.call(thisArg, obj[i], i) === breaker) {
-                    return
-                }
-            }
-        }
+        obj.forEach(iterator)
     }
 }
 
-/**
- * @param {*=} obj
- * @param {function(...*)=} iterator
- * @param {Object=} thisArg
- */
-export function each(obj: any, iterator: (value: any, key: any) => void | Breaker, thisArg?: any): void {
+export function each(obj: any, iterator: (value: any, key: any) => void): void {
     if (isNullish(obj)) {
         return
     }
     if (isArray(obj)) {
-        return eachArray(obj, iterator, thisArg)
+        obj.forEach(iterator)
+        return
     }
     if (isFormData(obj)) {
-        for (const pair of obj.entries()) {
-            if (iterator.call(thisArg, pair[1], pair[0]) === breaker) {
-                return
-            }
-        }
+        obj.forEach((val: any, key: any) => iterator(val, key))
         return
     }
     for (const key in obj) {
         if (hasOwnProperty.call(obj, key)) {
-            if (iterator.call(thisArg, obj[key], key) === breaker) {
-                return
-            }
+            iterator(obj[key], key)
         }
     }
 }
 
 export const extend = function (obj: Record<string, any>, ...args: Record<string, any>[]): Record<string, any> {
-    eachArray(args, function (source) {
+    for (const source of args) {
         for (const prop in source) {
             if (source[prop] !== void 0) {
                 obj[prop] = source[prop]
             }
         }
-    })
+    }
     return obj
 }
 
 export const extendArray = function <T>(obj: T[], ...args: T[][]): T[] {
-    eachArray(args, function (source) {
-        eachArray(source, function (item) {
+    for (const source of args) {
+        for (const item of source) {
             obj.push(item)
-        })
-    })
+        }
+    }
     return obj
 }
 
 export const include = function (
     obj: null | string | Array<any> | Record<string, any>,
     target: any
-): boolean | Breaker {
-    let found = false
+): boolean {
     if (isNull(obj)) {
-        return found
+        return false
     }
-    if (nativeIndexOf && obj.indexOf === nativeIndexOf) {
-        return obj.indexOf(target) != -1
+    if (isArray(obj) || isString(obj)) {
+        return (obj as any).indexOf(target) !== -1
     }
-    each(obj, function (value) {
-        if (found || (found = value === target)) {
-            return breaker
+    for (const key in obj) {
+        if (hasOwnProperty.call(obj, key) && (obj as any)[key] === target) {
+            return true
         }
-        return
-    })
-    return found
-}
-
-/**
- * Object.entries() polyfill
- * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/entries
- */
-export function entries<T = any>(obj: Record<string, T>): [string, T][] {
-    const ownProps = Object.keys(obj)
-    let i = ownProps.length
-    const resArray = new Array(i) // preallocate the Array
-
-    while (i--) {
-        resArray[i] = [ownProps[i], obj[ownProps[i]]]
     }
-    return resArray
+    return false
 }
+
+export const entries = Object.entries
 
 export const trySafe = function <T>(fn: () => T): T | undefined {
     try {

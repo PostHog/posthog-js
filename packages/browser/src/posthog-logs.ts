@@ -1,3 +1,4 @@
+import { LOAD_EXT_NOT_FOUND } from './constants'
 import { PostHog } from './posthog-core'
 import { RemoteConfig } from './types'
 import { isNullish } from '@posthog/core'
@@ -45,7 +46,7 @@ export class PostHogLogs implements Extension {
 
         const loadExternalDependency = phExtensions.loadExternalDependency
         if (!loadExternalDependency) {
-            logger.error('PostHog loadExternalDependency extension not found.')
+            logger.error(LOAD_EXT_NOT_FOUND)
             return
         }
 

@@ -16,6 +16,8 @@ import { isLikelyBot } from './utils/blocked-uas'
 import { getCampaignParams } from './utils/event-utils'
 import { Extension } from './extensions/types'
 
+const BOT_REFUSE_MSG = 'Refusing to render web experiment since the viewer is a likely bot'
+
 export const webExperimentUrlValidationMap: Record<
     WebExperimentUrlMatchType,
     (conditionsUrl: string, location: Location) => boolean
@@ -33,6 +35,10 @@ export const webExperimentUrlValidationMap: Record<
 export class WebExperiments implements Extension {
     private _flagToExperiments?: Map<string, WebExperiment>
 
+    private get _config() {
+        return this._instance.config
+    }
+
     constructor(private _instance: PostHog) {
         this._instance.onFeatureFlags((flags: string[]) => {
             this.onFeatureFlags(flags)
@@ -44,11 +50,11 @@ export class WebExperiments implements Extension {
 
     onFeatureFlags(flags: string[]) {
         if (this._is_bot()) {
-            WebExperiments._logInfo('Refusing to render web experiment since the viewer is a likely bot')
+            WebExperiments._logInfo(BOT_REFUSE_MSG)
             return
         }
 
-        if (this._instance.config.disable_web_experiments) {
+        if (this._config.disable_web_experiments) {
             return
         }
 
@@ -95,7 +101,7 @@ export class WebExperiments implements Extension {
     }
 
     loadIfEnabled() {
-        if (this._instance.config.disable_web_experiments) {
+        if (this._config.disable_web_experiments) {
             return
         }
 
@@ -141,7 +147,7 @@ export class WebExperiments implements Extension {
     }
 
     public getWebExperiments(callback: WebExperimentsCallback, forceReload: boolean, previewing?: boolean) {
-        if (this._instance.config.disable_web_experiments && !previewing) {
+        if (this._config.disable_web_experiments && !previewing) {
             return callback([])
         }
 
@@ -153,7 +159,7 @@ export class WebExperiments implements Extension {
         this._instance._send_request({
             url: this._instance.requestRouter.endpointFor(
                 'api',
-                `/api/web_experiments/?token=${this._instance.config.token}`
+                `/api/web_experiments/?token=${this._config.token}`
             ),
             method: 'GET',
             callback: (response) => {
@@ -244,7 +250,7 @@ export class WebExperiments implements Extension {
 
     private _applyTransforms(experiment: string, variant: string, transforms: WebExperimentTransform[]) {
         if (this._is_bot()) {
-            WebExperiments._logInfo('Refusing to render web experiment since the viewer is a likely bot')
+            WebExperiments._logInfo(BOT_REFUSE_MSG)
             return
         }
 
@@ -278,7 +284,7 @@ export class WebExperiments implements Extension {
 
     _is_bot(): boolean | undefined {
         if (navigator && this._instance) {
-            return isLikelyBot(navigator, this._instance.config.custom_blocked_useragents)
+            return isLikelyBot(navigator, this._config.custom_blocked_useragents)
         } else {
             return undefined
         }
