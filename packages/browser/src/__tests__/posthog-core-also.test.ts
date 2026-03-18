@@ -935,9 +935,6 @@ describe('posthog core', () => {
                 second.identify('user-123')
                 // identify is called but since distinct_id matches, no $identify event fires
                 expect(second.get_distinct_id()).toBe('user-123')
-
-                identifySpy.mockRestore()
-                captureSpy.mockRestore()
             })
 
             it('does not call identify when bootstrap distinctID matches persisted ID', () => {
@@ -959,30 +956,29 @@ describe('posthog core', () => {
                 })
 
                 expect(identifySpy).not.toHaveBeenCalled()
-
-                identifySpy.mockRestore()
             })
 
-            it('does not call identify when isIdentifiedID is false', () => {
-                const token = 'auto-identify-anon-' + uuidv7()
+            it.each([
+                { isIdentifiedID: false, description: 'false' },
+                { isIdentifiedID: undefined, description: 'omitted' },
+            ])('does not call identify when isIdentifiedID is $description', ({ isIdentifiedID }) => {
+                const token = 'auto-identify-non-true-' + uuidv7()
 
                 // First instance creates an anonymous user
                 posthogWith({ token })
 
                 const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
 
-                // Second instance bootstraps without isIdentifiedID
+                // Second instance bootstraps with isIdentifiedID that is not true
                 posthogWith({
                     token,
                     bootstrap: {
                         distinctID: 'user-456',
-                        isIdentifiedID: false,
+                        ...(isIdentifiedID !== undefined && { isIdentifiedID }),
                     },
                 })
 
                 expect(identifySpy).not.toHaveBeenCalled()
-
-                identifySpy.mockRestore()
             })
 
             it('does not call identify when there is no existing persisted ID (first visit)', () => {
@@ -1002,8 +998,6 @@ describe('posthog core', () => {
                 expect(identifySpy).not.toHaveBeenCalled()
                 expect(posthog.get_distinct_id()).toBe('user-789')
                 expect(posthog.persistence.get_property(USER_STATE)).toBe('identified')
-
-                identifySpy.mockRestore()
             })
 
             it('does not call identify when existing user is already identified', () => {
@@ -1031,29 +1025,6 @@ describe('posthog core', () => {
                 // Existing identity should be preserved (bootstrap should NOT silently switch identities)
                 expect(second.get_distinct_id()).toBe('existing-user')
                 expect(second.persistence.get_property(USER_STATE)).toBe('identified')
-
-                identifySpy.mockRestore()
-            })
-
-            it('does not call identify when isIdentifiedID is omitted', () => {
-                const token = 'auto-identify-undefined-' + uuidv7()
-
-                // First instance creates an anonymous user
-                posthogWith({ token })
-
-                const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
-
-                // Second instance bootstraps without isIdentifiedID
-                posthogWith({
-                    token,
-                    bootstrap: {
-                        distinctID: 'user-omitted',
-                    },
-                })
-
-                expect(identifySpy).not.toHaveBeenCalled()
-
-                identifySpy.mockRestore()
             })
         })
     })

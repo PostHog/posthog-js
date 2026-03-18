@@ -643,7 +643,7 @@ export class PostHog implements PostHogInterface {
                 existingDistinctId !== bootstrapDistinctId &&
                 existingUserState === 'anonymous'
             ) {
-                // The server bootstrapped flags for an identified user, but local persistence
+                // The server bootstrapped identity for an identified user, but local persistence
                 // still has an anonymous ID from a previous session. Calling identify() merges
                 // the anonymous user into the identified user, ensuring consistent identity
                 // for feature flag evaluation and preventing duplicate $feature_flag_called events.
