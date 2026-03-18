@@ -98,6 +98,13 @@ jobs:
               run: |
                   gh pr merge "$PR_NUMBER" --auto --squash
 
+            - name: Assign reviewers
+              env:
+                  GH_TOKEN: ${{ steps.upgrader.outputs.token }}
+                  PR_NUMBER: ${{ steps.main-repo-pr.outputs.pull-request-number }}
+              run: |
+                  gh pr edit "$PR_NUMBER" --repo PostHog/posthog --add-reviewer PostHog/client-libraries-approvers --add-reviewer PostHog/team-client-libraries
+
             # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
             - name: Send failure event to PostHog
               if: ${{ failure() }}
