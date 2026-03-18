@@ -1,5 +1,17 @@
 # @posthog/rollup-plugin
 
+## 1.3.0
+
+### Minor Changes
+
+- [#3246](https://github.com/PostHog/posthog-js/pull/3246) [`9cd2313`](https://github.com/PostHog/posthog-js/commit/9cd23138343e1020811f85853d6016cc985bb24f) Thanks [@hpouillot](https://github.com/hpouillot)! - pipe chunk file path to stdin
+  (2026-03-18)
+
+### Patch Changes
+
+- Updated dependencies [[`9cd2313`](https://github.com/PostHog/posthog-js/commit/9cd23138343e1020811f85853d6016cc985bb24f)]:
+    - @posthog/core@1.24.0
+
 ## 1.2.16
 
 ### Patch Changes

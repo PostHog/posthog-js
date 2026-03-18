@@ -1,5 +1,18 @@
 # posthog-js
 
+## 1.362.0
+
+### Minor Changes
+
+- [#3244](https://github.com/PostHog/posthog-js/pull/3244) [`ff8a93e`](https://github.com/PostHog/posthog-js/commit/ff8a93e99bb9bab98d02074d84973430d279a29d) Thanks [@sampennington](https://github.com/sampennington)! - Fixed $set_once initial person properties (e.g. $initial_current_url) not being included with $identify calls when they had already been sent with a prior event. This ensures initial properties are reliably set when identifying users across subdomains, even if an anonymous event was captured first.
+  (2026-03-18)
+
+### Patch Changes
+
+- Updated dependencies [[`9cd2313`](https://github.com/PostHog/posthog-js/commit/9cd23138343e1020811f85853d6016cc985bb24f)]:
+    - @posthog/core@1.24.0
+    - @posthog/types@1.362.0
+
 ## 1.361.1
 
 ### Patch Changes
