@@ -59,10 +59,11 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
             sequential: true,
             async handler(options: OutputOptions, bundle: { [fileName: string]: OutputAsset | OutputChunk }) {
                 if (!posthogOptions.sourcemaps.enabled) return
-                const args = ['sourcemap', 'process']
+                const args = ['sourcemap', 'process', '--stdin']
                 const cliPath = posthogOptions.cliBinaryPath
                 const chunks: { [fileName: string]: OutputChunk } = {}
-                const basePaths = []
+                const filePaths: string[] = []
+                const basePaths: string[] = []
 
                 if (options.dir) {
                     basePaths.push(options.dir)
@@ -78,11 +79,11 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                     if (chunk.type === 'chunk' && isJsFile) {
                         const chunkPath = path.resolve(...basePaths, fileName)
                         chunks[chunkPath] = chunk
-                        args.push('--file', chunkPath)
+                        filePaths.push(chunkPath)
                     }
                 }
 
-                if (Object.keys(chunks).length === 0) {
+                if (filePaths.length === 0) {
                     console.log(
                         'No chunks found, skipping sourcemap processing for this stage. Your build may be multi-stage and this stage may not be relevant'
                     )
@@ -111,6 +112,7 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                     },
                     stdio: 'inherit',
                     cwd: process.cwd(),
+                    stdin: filePaths.join('\n') + '\n',
                 })
 
                 // we need to update code for others plugins to work

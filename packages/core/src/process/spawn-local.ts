@@ -7,13 +7,27 @@ export async function spawnLocal(
     env: NodeJS.ProcessEnv
     stdio: 'inherit' | 'ignore'
     cwd: string
+    stdin?: string
   }
 ): Promise<void> {
+  const stdioOption = options.stdin !== undefined ? ['pipe' as const, options.stdio, options.stdio] : options.stdio
+
   const child = spawn(executable, [...args], {
-    stdio: options.stdio ?? 'inherit',
+    stdio: stdioOption,
     env: options.env,
     cwd: options.cwd,
   })
+
+  if (options.stdin !== undefined && child.stdin) {
+    child.stdin.on('error', (err: any) => {
+      if (err.code !== 'EPIPE') {
+        throw err
+      }
+      // Swallow EPIPE: child may exit before consuming all stdin
+    })
+    child.stdin.write(options.stdin)
+    child.stdin.end()
+  }
 
   await new Promise<void>((resolve, reject) => {
     child.on('close', (code) => {

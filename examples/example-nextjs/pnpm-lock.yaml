@@ -4,7 +4,7 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-pnpmfileChecksum: sha256-N3riA/tbAnNXqNYCauSgZTrb8uBs1MMWnJDTJCSRm8c=
+pnpmfileChecksum: sha256-yVJZ6vhbVglHX96LCyXF5k3CRZo/MEv/K0owx+7kTTo=
 
 importers:
 
@@ -451,19 +451,19 @@ packages:
     hasBin: true
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-iNC53tOGhUAUrhbU8gOYRBK9Czb4XUOnGiE0se/YCmQAJ4o8NtyGlY9KrOK7V1hQij+J02Cq0Kr3cDNFVi45yQ==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.22.0
+    resolution: {integrity: sha512-aEILeZZxezBcpnw1Qw9rIPY9fk3knJpgK1QSsLjgV2oLe4vHLoQBAjomUZjeSRV7a4ZhxgVCcGiEzCKx0fh3SA==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.23.4
 
   '@posthog/nextjs-config@file:../../target/posthog-nextjs-config.tgz':
-    resolution: {integrity: sha512-io0oWSjR90FiVA+ztKsRBu58kndZ+uOVxRUk7qj68lQjnB8XzV+ARqzrZZViqETw5agUpSmPnCD72tcMrjftvg==, tarball: file:../../target/posthog-nextjs-config.tgz}
-    version: 1.8.15
+    resolution: {integrity: sha512-WabQNu/HQ0vvmcwq2q3TtoMjqvEQD2ELZVIo0QMu19lOULKEQ7rwQW7GJdq8xix3bAzBmcnk4ymXImRMvE5izg==, tarball: file:../../target/posthog-nextjs-config.tgz}
+    version: 1.8.21
     engines: {node: ^20.20.0 || >=22.22.0}
     peerDependencies:
       next: '>12.1.0'
 
   '@posthog/react@file:../../target/posthog-react.tgz':
-    resolution: {integrity: sha512-Zusq8bKCtxcbaR/Jf1CZXfjoxZ3PMnyuxjpyRZecUggvUJ+VYB4A6eLtkMvDCanLYOUOhCGRb4ZU2KdJzklqzQ==, tarball: file:../../target/posthog-react.tgz}
-    version: 1.7.1
+    resolution: {integrity: sha512-8cy6dGMddTWnB+zJO9RV18OteHBKC4t+Dhyta6m/3fXyNFZBe4gaDZfCeoa1CQRb8RJ0OBH8SdzK97193lXW2A==, tarball: file:../../target/posthog-react.tgz}
+    version: 1.8.2
     peerDependencies:
       '@types/react': '>=16.8.0'
       posthog-js: '>=1.257.2'
@@ -473,12 +473,12 @@ packages:
         optional: true
 
   '@posthog/types@file:../../target/posthog-types.tgz':
-    resolution: {integrity: sha512-WDjJ0MZziuORnGfd2U2VrXpVef3knxQDdw18BVqpK4OgY9ZFgUQ3rQGcaMmVF7g/yUnu7acm9EbWoDq+USnTlw==, tarball: file:../../target/posthog-types.tgz}
-    version: 1.345.4
+    resolution: {integrity: sha512-lmtEiooXww4DPNya4drWvfTtN1/f9OTbRVYWKGbsorlYts2yWPQ24HdT/BPVSJrjxjuTp9niQHt/97QppxVZmQ==, tarball: file:../../target/posthog-types.tgz}
+    version: 1.360.2
 
   '@posthog/webpack-plugin@file:../../target/posthog-webpack-plugin.tgz':
-    resolution: {integrity: sha512-ZihcnkXgOlCD/KyQEb+nf26D2l6a/zb/iKTHh4C1qyhWADOrdFPNW+MgcRdZZz1C2VKwWIk09gTXv28w5NKWGw==, tarball: file:../../target/posthog-webpack-plugin.tgz}
-    version: 1.2.21
+    resolution: {integrity: sha512-hF3//oaGTTmYua4jztIgQy3aLDpIhQ2/WvVIjvZYTZG/Gv1IoqvxS67TqMHqgBcMcFadsTSQqkbOKjR3cPdQNQ==, tarball: file:../../target/posthog-webpack-plugin.tgz}
+    version: 1.2.27
     peerDependencies:
       webpack: ^5
 
@@ -1020,8 +1020,8 @@ packages:
     resolution: {integrity: sha512-35mSku4ZXK0vfCuHEDAwt55dg2jNajHZ1odvF+8SSr82EsZY4QmXfuWso8oEd8zRhVObSN18aM0CjSdoBX7zIw==}
     engines: {node: '>=0.10.0'}
 
-  dompurify@3.3.1:
-    resolution: {integrity: sha512-qkdCKzLNtrgPFP1Vo+98FRzJnBRGe4ffyCea9IwHB1fyxPOeNTHpLKYGd4Uk9xvNoH0ZoOjwZxNptyMwqrId1Q==}
+  dompurify@3.3.3:
+    resolution: {integrity: sha512-Oj6pzI2+RqBfFG+qOaOLbFXLQ90ARpcGG6UePL82bJLtdsa6CYJD7nmiU8MW9nQNOtCHV3lZ/Bzq1X0QYbBZCA==}
 
   dunder-proto@1.0.1:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
@@ -1741,13 +1741,18 @@ packages:
     engines: {node: ^10 || ^12 || >=14}
 
   posthog-js@file:../../target/posthog-js.tgz:
-    resolution: {integrity: sha512-7ZzKusXEHt1wdMObnJu27he0F678Nb/u9/WDLvQkHqJ2F8Pwtcv14aicJuIiFoGJ+vLf7Z3ui3aJ/eX8qX+Y9g==, tarball: file:../../target/posthog-js.tgz}
-    version: 1.345.4
+    resolution: {integrity: sha512-Xg4fv7qknJ+PUlLvoLKaF4o1ehNkvwB+vfcEuXrFNub/lalW0d+OeNtsS2AQTnNwWlf8TAAq2btWmfAoVI5u5Q==, tarball: file:../../target/posthog-js.tgz}
+    version: 1.360.2
 
   posthog-node@file:../../target/posthog-node.tgz:
-    resolution: {integrity: sha512-Exz53XrnxE/fCkRNCdS28+N1nWnDVA6kWUzYXbPXB7Yp63pPO+n1GreV0TwQLDsh5Tb6/BqnUlk7lWWxUHSljw==, tarball: file:../../target/posthog-node.tgz}
-    version: 5.24.15
+    resolution: {integrity: sha512-c3Hagz0R6UUS8PmsHeWDzyPyt3kDLR/+tSXGAsqI1YcixBy4JdekKpqLf8V4FXqNCdaj8/zTGgXpIVMUn8jnYg==, tarball: file:../../target/posthog-node.tgz}
+    version: 5.28.2
     engines: {node: ^20.20.0 || >=22.22.0}
+    peerDependencies:
+      rxjs: ^7.0.0
+    peerDependenciesMeta:
+      rxjs:
+        optional: true
 
   preact@10.28.3:
     resolution: {integrity: sha512-tCmoRkPQLpBeWzpmbhryairGnhW9tKV6c6gr/w+RhoRoKEJwsjzipwp//1oCpGPOchvSLaAPlpcJi9MwMmoPyA==}
@@ -3065,7 +3070,7 @@ snapshots:
     dependencies:
       esutils: 2.0.3
 
-  dompurify@3.3.1:
+  dompurify@3.3.3:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -3931,7 +3936,7 @@ snapshots:
       '@posthog/core': file:../../target/posthog-core.tgz
       '@posthog/types': file:../../target/posthog-types.tgz
       core-js: 3.47.0
-      dompurify: 3.3.1
+      dompurify: 3.3.3
       fflate: 0.4.8
       preact: 10.28.3
       query-selector-shadow-dom: 1.0.1

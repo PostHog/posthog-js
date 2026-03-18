@@ -51,10 +51,7 @@ export class PosthogWebpackPlugin {
 
     async processSourceMaps(compilation: webpack.Compilation, config: ResolvedPluginConfig): Promise<void> {
         const outputDirectory = compilation.outputOptions.path
-        const args = []
-
-        // chunks are output outside of the output directory for server chunks
-        args.push('sourcemap', 'process')
+        const args = ['sourcemap', 'process', '--stdin']
 
         const chunkArray = Array.from(compilation.chunks)
 
@@ -63,10 +60,11 @@ export class PosthogWebpackPlugin {
             return
         }
 
+        const filePaths: string[] = []
         chunkArray.forEach((chunk) =>
             chunk.files.forEach((file) => {
                 const chunkPath = path.resolve(outputDirectory, file)
-                args.push('--file', chunkPath)
+                filePaths.push(chunkPath)
             })
         )
 
@@ -96,6 +94,7 @@ export class PosthogWebpackPlugin {
                 POSTHOG_CLI_PROJECT_ID: config.projectId,
             },
             stdio: 'inherit',
+            stdin: filePaths.join('\n') + '\n',
         })
     }
 }
