@@ -3,6 +3,7 @@ import { mockLogger } from './helpers/mock-logger'
 import * as globals from '../utils/globals'
 import { document, window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
+import { isUndefined } from '@posthog/core'
 import { ENABLE_PERSON_PROCESSING, USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { PostHogConfig, RemoteConfig } from '../types'
@@ -974,7 +975,7 @@ describe('posthog core', () => {
                     token,
                     bootstrap: {
                         distinctID: 'user-456',
-                        ...(isIdentifiedID !== undefined && { isIdentifiedID }),
+                        ...(!isUndefined(isIdentifiedID) && { isIdentifiedID }),
                     },
                 })
 
