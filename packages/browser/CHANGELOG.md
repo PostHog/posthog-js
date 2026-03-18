@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.361.1
+
+### Patch Changes
+
+- [#3249](https://github.com/PostHog/posthog-js/pull/3249) [`c265d62`](https://github.com/PostHog/posthog-js/commit/c265d6207c43986d0599ad2464df53e2b813f08c) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: preserve `_overrideSDKInfo` from terser mangling so wrapper SDKs can call it
+  (2026-03-18)
+- Updated dependencies []:
+    - @posthog/types@1.361.1
+
 ## 1.361.0
 
 ### Minor Changes
