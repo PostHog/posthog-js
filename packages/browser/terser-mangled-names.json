@@ -355,7 +355,6 @@
         "_options",
         "_originalUserConfig",
         "_originatedFromCaptureException",
-        "_overrideSDKInfo",
         "_override_warning",
         "_pageHideListener",
         "_pageViewFallBack",
