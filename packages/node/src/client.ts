@@ -109,7 +109,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   constructor(apiKey: string, options: PostHogOptions = {}) {
     super(apiKey, options)
 
-    this.options = { ...defaultsThatVaryByConfig(options.defaults), ...options }
+    const { strictCapture: strictCaptureDefault } = defaultsThatVaryByConfig(options.defaults)
+    this.options = {
+      ...options,
+      strictCapture: options.strictCapture ?? strictCaptureDefault,
+    }
     this.context = this.initializeContext()
 
     this.options.featureFlagsPollingInterval =

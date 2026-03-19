@@ -413,73 +413,33 @@ describe('PostHog Node.js', () => {
       warnSpy.mockRestore()
     })
 
-    it('should throw if capture is called with a string when strictCapture is enabled', async () => {
-      const ph = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        strictCapture: true,
-      })
+    it.each([
+      ['capture', { strictCapture: true }],
+      ['capture', { defaults: '2026-03-19' }],
+      ['capture', { defaults: '2026-03-19', strictCapture: undefined }],
+      ['captureImmediate', { strictCapture: true }],
+      ['captureImmediate', { defaults: '2026-03-19' }],
+      ['captureImmediate', { defaults: '2026-03-19', strictCapture: undefined }],
+    ] as const)('should throw if %s is called with a string when %j', async (method, extraOptions) => {
+      const ph = new PostHog('TEST_API_KEY', { host: 'http://example.com', ...extraOptions })
       // @ts-expect-error - Testing the error when passing a string instead of an object
-      expect(() => ph.capture('test-event')).toThrow(TypeError)
+      await expect(Promise.resolve().then(() => ph[method]('test-event'))).rejects.toThrow(TypeError)
       await ph.shutdown()
     })
 
-    it('should throw if captureImmediate is called with a string when strictCapture is enabled', async () => {
-      const ph = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        strictCapture: true,
-      })
-      // @ts-expect-error - Testing the error when passing a string instead of an object
-      await expect(ph.captureImmediate('test-event')).rejects.toThrow(TypeError)
-      await ph.shutdown()
-    })
-
-    it('should throw if capture is called with a string when defaults >= 2026-03-19', async () => {
-      const ph = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        defaults: '2026-03-19',
-      })
-      // @ts-expect-error - Testing the error when passing a string instead of an object
-      expect(() => ph.capture('test-event')).toThrow(TypeError)
-      await ph.shutdown()
-    })
-
-    it('should throw if captureImmediate is called with a string when defaults >= 2026-03-19', async () => {
-      const ph = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        defaults: '2026-03-19',
-      })
-      // @ts-expect-error - Testing the error when passing a string instead of an object
-      await expect(ph.captureImmediate('test-event')).rejects.toThrow(TypeError)
-      await ph.shutdown()
-    })
-
-    it('should warn if capture is called with a string when defaults is unset', () => {
-      const ph = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        defaults: 'unset',
-      })
+    it.each([
+      ['capture', { defaults: 'unset' as const }],
+      ['captureImmediate', { defaults: 'unset' as const }],
+      ['capture', { defaults: '2026-03-19' as const, strictCapture: false }],
+      ['captureImmediate', { defaults: '2026-03-19' as const, strictCapture: false }],
+    ])('should warn if %s is called with a string when %j', async (method, extraOptions) => {
+      const ph = new PostHog('TEST_API_KEY', { host: 'http://example.com', ...extraOptions })
       ph.debug(true)
       // @ts-expect-error - Testing the warning when passing a string instead of an object
-      ph.capture('test-event')
+      ph[method]('test-event')
       expect(warnSpy).toHaveBeenCalledWith(
         '[PostHog]',
-        'Called capture() with a string as the first argument when an object was expected.'
-      )
-      ph.shutdown()
-    })
-
-    it('should allow explicit strictCapture: false to override defaults', async () => {
-      const ph = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        defaults: '2026-03-19',
-        strictCapture: false,
-      })
-      ph.debug(true)
-      // @ts-expect-error - Testing the warning when passing a string instead of an object
-      ph.capture('test-event')
-      expect(warnSpy).toHaveBeenCalledWith(
-        '[PostHog]',
-        'Called capture() with a string as the first argument when an object was expected.'
+        `Called ${method}() with a string as the first argument when an object was expected.`
       )
       await ph.shutdown()
     })
