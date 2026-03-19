@@ -205,16 +205,19 @@ export function _copyAndTruncateStrings<T extends Record<string, any> = Record<s
     object: T,
     maxStringLength: number | null
 ): T {
-    return deepCircularCopy(object, isNull(maxStringLength) ? undefined : (value: any) => {
-        // Only create a new string (via slice) when truncation is actually needed
-        if (isString(value) && value.length > maxStringLength) {
-            return (value as string).slice(0, maxStringLength)
-        }
-        return value
-    }) as T
+    return deepCircularCopy(
+        object,
+        isNull(maxStringLength)
+            ? undefined
+            : (value: any) => {
+                  // Only create a new string (via slice) when truncation is actually needed
+                  if (isString(value) && value.length > maxStringLength) {
+                      return (value as string).slice(0, maxStringLength)
+                  }
+                  return value
+              }
+    ) as T
 }
-
-
 
 // NOTE: Update PostHogConfig docs if you change this list
 // We will not try to catch all bullets here, but we should make an effort to catch the most common ones

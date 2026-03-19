@@ -92,7 +92,7 @@ export class PageViewManager {
             return { $pageview_id: pageviewId }
         }
 
-        let properties: PageViewEventProperties = {
+        const properties: PageViewEventProperties = {
             $pageview_id: pageviewId,
             $prev_pageview_id: previousPageView.pageViewId,
         }

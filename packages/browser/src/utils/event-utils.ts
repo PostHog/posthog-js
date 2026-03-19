@@ -1,5 +1,5 @@
 import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
-import { isNull, stripLeadingDollar } from '@posthog/core'
+import { isNull, isUndefined, stripLeadingDollar } from '@posthog/core'
 import { Properties } from '../types'
 import Config from '../config'
 import { extend, extendArray } from './index'
@@ -284,7 +284,7 @@ export function getInitialPersonPropsFromInfo(info: Record<string, any>): Record
 // Cache timezone since it doesn't change during a page session
 let _cachedTimezone: string | undefined | null = null
 export function getTimezone(): string | undefined {
-    if (_cachedTimezone === null) {
+    if (isNull(_cachedTimezone)) {
         try {
             _cachedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
         } catch {
@@ -364,7 +364,7 @@ export function getEventProperties(
         properties.$timezone = timezone
     }
     const timezoneOffset = getTimezoneOffset()
-    if (timezoneOffset !== undefined) {
+    if (!isUndefined(timezoneOffset)) {
         properties.$timezone_offset = timezoneOffset
     }
 

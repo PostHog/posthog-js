@@ -1,4 +1,4 @@
-import { entries, extend } from './utils'
+import { extend } from './utils'
 import { PostHog } from './posthog-core'
 import {
     FlagsResponse,

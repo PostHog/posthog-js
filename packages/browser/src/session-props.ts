@@ -13,7 +13,6 @@ import type { SessionIdManager } from './sessionid'
 import type { PostHogPersistence } from './posthog-persistence'
 import { CLIENT_SESSION_PROPS } from './constants'
 import type { PostHog } from './posthog-core'
-import { stripEmptyProperties } from './utils'
 import { stripLeadingDollar, isString, isNumber } from '@posthog/core'
 
 interface LegacySessionSourceProps {

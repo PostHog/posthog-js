@@ -22,7 +22,7 @@ import {
     getSearchInfo,
 } from './utils/event-utils'
 import { logger } from './utils/logger'
-import { stripLeadingDollar, isEmptyObject, isObject } from '@posthog/core'
+import { stripLeadingDollar, isObject } from '@posthog/core'
 
 // Pre-computed Set for O(1) lookups instead of O(n) array scanning in properties()
 export const PERSISTENCE_RESERVED_SET = new Set(PERSISTENCE_RESERVED_PROPERTIES)

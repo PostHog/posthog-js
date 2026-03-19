@@ -1433,7 +1433,7 @@ export class PostHog implements PostHogInterface {
         const startTimestamp = readOnly ? undefined : this.persistence.remove_event_timer(eventName)
 
         if (eventName === '$snapshot') {
-            let properties = { ...eventProperties }
+            const properties = { ...eventProperties }
             properties['token'] = this.config.token
             properties['$config_defaults'] = this.config.defaults
             if (
@@ -3001,7 +3001,10 @@ export class PostHog implements PostHogInterface {
             const isPersistenceDisabled = this._is_persistence_disabled()
             this.persistence?.update_config(
                 this.config,
-                { persistence: oldPersistence, cookie_persisted_properties: oldCookiePersistedProperties } as PostHogConfig,
+                {
+                    persistence: oldPersistence,
+                    cookie_persisted_properties: oldCookiePersistedProperties,
+                } as PostHogConfig,
                 isPersistenceDisabled
             )
             // Only recreate sessionPersistence if the persistence type actually changed
