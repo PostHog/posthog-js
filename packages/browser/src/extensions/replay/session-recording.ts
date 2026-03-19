@@ -269,7 +269,8 @@ export class SessionRecording implements Extension {
 
     private _onScriptLoaded(startReason?: SessionStartReason) {
         if (!assignableWindow.__PosthogExtensions__?.initSessionRecording) {
-            throw Error('Called on script loaded before session recording is available')
+            logger.error('Called on script loaded before session recording is available')
+            return
         }
 
         if (!this._lazyLoadedSessionRecording) {
