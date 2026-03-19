@@ -18,6 +18,11 @@ export class RateLimiter {
     instance: PostHog
     serverLimits: Record<string, number> = {}
     lastEventRateLimited = false
+    // Reusable result object to avoid per-call allocation
+    private _rateLimitResult: { isRateLimited: boolean; remainingTokens: number } = {
+        isRateLimited: false,
+        remainingTokens: 0,
+    }
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -43,7 +48,7 @@ export class RateLimiter {
         // This is primarily to prevent runaway loops from flooding capture with millions of events for a single user.
         // It's as much for our protection as theirs.
         const { captureEventsBurstLimit, captureEventsPerSecond } = this
-        const now = new Date().getTime()
+        const now = Date.now()
         const bucket = this.instance.persistence?.get_property(CAPTURE_RATE_LIMIT) ?? {
             tokens: captureEventsBurstLimit,
             last: now,
@@ -77,10 +82,9 @@ export class RateLimiter {
         this.lastEventRateLimited = isRateLimited
         this.instance.persistence?.set_property(CAPTURE_RATE_LIMIT, bucket)
 
-        return {
-            isRateLimited,
-            remainingTokens: bucket.tokens,
-        }
+        this._rateLimitResult.isRateLimited = isRateLimited
+        this._rateLimitResult.remainingTokens = bucket.tokens
+        return this._rateLimitResult
     }
 
     public isServerRateLimited(batchKey: string | undefined): boolean {

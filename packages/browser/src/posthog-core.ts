@@ -5,6 +5,7 @@ import {
     COOKIELESS_MODE_FLAG_PROPERTY,
     COOKIELESS_SENTINEL_VALUE,
     ENABLE_PERSON_PROCESSING,
+    ENABLED_FEATURE_FLAGS,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
     SURVEYS_REQUEST_TIMEOUT_MS,
@@ -14,7 +15,7 @@ import { isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-auto
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
 import { PageViewManager } from './page-view'
-import { PostHogPersistence } from './posthog-persistence'
+import { PostHogPersistence, PERSISTENCE_RESERVED_SET } from './posthog-persistence'
 import {
     type DisplaySurveyOptions,
     type SurveyCallback,
@@ -146,6 +147,36 @@ let _executeArrayDepth = 0
 
 const __NOOP = () => {}
 
+/**
+ * Extends a target object with non-reserved persistence properties directly,
+ * avoiding the intermediate object created by persistence.properties().
+ */
+function _extendWithPersistenceProps(target: Properties, persistence: PostHogPersistence): void {
+    // If props is available, iterate directly to avoid creating an intermediate object.
+    // Fall back to properties() for test mocks that don't expose props.
+    const props = persistence.props
+    if (!props || typeof (persistence as any)._isFeatureFlagCacheStale !== 'function') {
+        extend(target, persistence.properties())
+        return
+    }
+    const propKeys = Object.keys(props)
+    for (let i = 0; i < propKeys.length; i++) {
+        const k = propKeys[i]
+        const v = props[k]
+        if (k === ENABLED_FEATURE_FLAGS && isObject(v)) {
+            // Expand feature flags — skip if cache is stale
+            if (!persistence._isFeatureFlagCacheStale()) {
+                const flagKeys = Object.keys(v)
+                for (let j = 0; j < flagKeys.length; j++) {
+                    target[`$feature/${flagKeys[j]}`] = v[flagKeys[j]]
+                }
+            }
+        } else if (!PERSISTENCE_RESERVED_SET.has(k)) {
+            target[k] = v
+        }
+    }
+}
+
 const PRIMARY_INSTANCE_NAME = 'posthog'
 
 /*
@@ -176,6 +207,17 @@ const defaultsThatVaryByConfig = (
     internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
 })
 
+// Hoisted shared values for defaultConfig to avoid creating new instances per call
+const _defaultOnRequestError = (res: any) => {
+    logger.error('Bad HTTP status: ' + res.statusCode + ' ' + res.text)
+}
+const _defaultGetDeviceId = (uuid: string) => uuid
+const _defaultEmptyArray: string[] = []
+const _defaultEmptyHeaders: Record<string, string> = {}
+const _defaultBootstrap = {}
+const _defaultRequestQueueConfig = { flush_interval_ms: DEFAULT_FLUSH_INTERVAL_MS }
+const _defaultErrorTracking = {}
+
 // NOTE: Remember to update `types.ts` when changing a default value
 // to guarantee documentation is up to date, make sure to also update our website docs
 // NOTE²: This shouldn't ever change because we try very hard to be backwards-compatible
@@ -188,11 +230,11 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     cross_subdomain_cookie: isCrossDomainCookie(document?.location),
     persistence: 'localStorage+cookie', // up to 1.92.0 this was 'cookie'. It's easy to migrate as 'localStorage+cookie' will migrate data from cookie storage
     persistence_name: '',
-    cookie_persisted_properties: [],
+    cookie_persisted_properties: _defaultEmptyArray,
     loaded: __NOOP,
     save_campaign_params: true,
-    custom_campaign_params: [],
-    custom_blocked_useragents: [],
+    custom_campaign_params: _defaultEmptyArray,
+    custom_blocked_useragents: _defaultEmptyArray,
     save_referrer: true,
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     defaults: defaults ?? 'unset',
@@ -218,16 +260,16 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     consent_persistence_name: null,
     opt_out_capturing_cookie_prefix: null,
     opt_in_site_apps: false,
-    property_denylist: [],
+    property_denylist: _defaultEmptyArray,
     respect_dnt: false,
     sanitize_properties: null,
-    request_headers: {}, // { header: value, header2: value }
+    request_headers: _defaultEmptyHeaders, // { header: value, header2: value }
     request_batching: true,
     properties_string_max_length: 65535,
     mask_all_element_attributes: false,
     mask_all_text: false,
     mask_personal_data_properties: false,
-    custom_personal_data_properties: [],
+    custom_personal_data_properties: _defaultEmptyArray,
     advanced_disable_flags: false,
     advanced_disable_decide: false,
     advanced_disable_feature_flags: false,
@@ -238,20 +280,17 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     advanced_disable_toolbar_metrics: false,
     feature_flag_request_timeout_ms: 3000,
     surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
-    on_request_error: (res) => {
-        const error = 'Bad HTTP status: ' + res.statusCode + ' ' + res.text
-        logger.error(error)
-    },
-    get_device_id: (uuid) => uuid,
+    on_request_error: _defaultOnRequestError,
+    get_device_id: _defaultGetDeviceId,
     capture_performance: undefined,
     name: 'posthog',
-    bootstrap: {},
+    bootstrap: _defaultBootstrap,
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
     person_profiles: 'identified_only',
     before_send: undefined,
-    request_queue_config: { flush_interval_ms: DEFAULT_FLUSH_INTERVAL_MS },
-    error_tracking: {},
+    request_queue_config: _defaultRequestQueueConfig,
+    error_tracking: _defaultErrorTracking,
 
     // Used for internal testing
     _onCapture: __NOOP,
@@ -263,29 +302,42 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
 })
 
 export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
-    const renames: Partial<PostHogConfig> = {}
-    if (!isUndefined(origConfig.process_person)) {
-        renames.person_profiles = origConfig.process_person
-    }
-    if (!isUndefined(origConfig.xhr_headers)) {
-        renames.request_headers = origConfig.xhr_headers
-    }
-    if (!isUndefined(origConfig.cookie_name)) {
-        renames.persistence_name = origConfig.cookie_name
-    }
-    if (!isUndefined(origConfig.disable_cookie)) {
-        renames.disable_persistence = origConfig.disable_cookie
-    }
-    if (!isUndefined(origConfig.store_google)) {
-        renames.save_campaign_params = origConfig.store_google
-    }
-    if (!isUndefined(origConfig.verbose)) {
-        renames.debug = origConfig.verbose
-    }
-    // on_xhr_error is not present, as the type is different to on_request_error
+    // Check if any renames are needed before creating objects
+    const hasRenames =
+        !isUndefined(origConfig.process_person) ||
+        !isUndefined(origConfig.xhr_headers) ||
+        !isUndefined(origConfig.cookie_name) ||
+        !isUndefined(origConfig.disable_cookie) ||
+        !isUndefined(origConfig.store_google) ||
+        !isUndefined(origConfig.verbose)
 
-    // the original config takes priority over the renames
-    const newConfig = extend({}, renames, origConfig)
+    let newConfig: Partial<PostHogConfig>
+    if (hasRenames) {
+        const renames: Partial<PostHogConfig> = {}
+        if (!isUndefined(origConfig.process_person)) {
+            renames.person_profiles = origConfig.process_person
+        }
+        if (!isUndefined(origConfig.xhr_headers)) {
+            renames.request_headers = origConfig.xhr_headers
+        }
+        if (!isUndefined(origConfig.cookie_name)) {
+            renames.persistence_name = origConfig.cookie_name
+        }
+        if (!isUndefined(origConfig.disable_cookie)) {
+            renames.disable_persistence = origConfig.disable_cookie
+        }
+        if (!isUndefined(origConfig.store_google)) {
+            renames.save_campaign_params = origConfig.store_google
+        }
+        if (!isUndefined(origConfig.verbose)) {
+            renames.debug = origConfig.verbose
+        }
+        // the original config takes priority over the renames
+        newConfig = extend({}, renames, origConfig)
+    } else {
+        // No renames needed — return origConfig directly to avoid intermediate object
+        newConfig = origConfig
+    }
 
     // merge property_blacklist into property_denylist
     if (isArray(origConfig.property_blacklist)) {
@@ -418,7 +470,10 @@ export class PostHog implements PostHogInterface {
     }
 
     constructor() {
-        this.config = defaultConfig()
+        // Use empty config stub — _init() will set the real config via set_config().
+        // This avoids creating the full 70+ property defaultConfig() object that gets
+        // immediately discarded. All managers handle undefined config properties safely.
+        this.config = {} as PostHogConfig
 
         this.SentryIntegration = SentryIntegration
         this.sentryIntegration = (options?: SentryIntegrationOptions) => sentryIntegration(this, options)
@@ -461,7 +516,11 @@ export class PostHog implements PostHogInterface {
             },
         }
 
-        this.on('eventCaptured', (data) => logger.info(`send "${data?.event}"`, data))
+        this.on('eventCaptured', (data) => {
+            if (Config.DEBUG) {
+                logger.info(`send "${data?.event}"`, data)
+            }
+        })
     }
 
     // Initialization methods
@@ -580,9 +639,7 @@ export class PostHog implements PostHogInterface {
                 ? this.persistence
                 : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, persistenceDisabled)
 
-        // should I store the initial person profiles config in persistence?
-        const initialPersistenceProps = { ...this.persistence.props }
-        const initialSessionProps = { ...this.sessionPersistence.props }
+        // Debug copies of initial persistence state — created lazily below only in debug mode
 
         this.register({ $initialization_time: new Date().toISOString() })
 
@@ -625,8 +682,8 @@ export class PostHog implements PostHogInterface {
                 this: this,
                 config,
                 thisC: { ...this.config },
-                p: initialPersistenceProps,
-                s: initialSessionProps,
+                p: { ...this.persistence.props },
+                s: { ...this.sessionPersistence.props },
             })
         }
 
@@ -1259,13 +1316,6 @@ export class PostHog implements PostHogInterface {
             data.$set_once = setOnceProperties
         }
 
-        data = _copyAndTruncateStrings(data, options?._noTruncate ? null : this.config.properties_string_max_length)
-        data.timestamp = timestamp
-        if (!isUndefined(options?.timestamp)) {
-            data.properties['$event_time_override_provided'] = true
-            data.properties['$event_time_override_system_time'] = systemTime
-        }
-
         if (event_name === SurveyEventName.DISMISSED || event_name === SurveyEventName.SENT) {
             const surveyId = properties?.[SurveyEventProperties.SURVEY_ID]
             const surveyIteration = properties?.[SurveyEventProperties.SURVEY_ITERATION]
@@ -1296,11 +1346,24 @@ export class PostHog implements PostHogInterface {
 
         // Top-level $set overriding values from the one from properties is taken from the plugin-server normalizeEvent
         // This doesn't handle $set_once, because posthog-people doesn't either
-        const finalSet = { ...data.properties['$set'], ...data['$set'] }
-        if (!isEmptyObject(finalSet)) {
-            this.setPersonPropertiesForFlags(finalSet)
+        const propSet = data.properties['$set']
+        const dataSet = data['$set']
+        if (propSet || dataSet) {
+            const finalSet = propSet && dataSet ? { ...propSet, ...dataSet } : propSet || dataSet || {}
+            if (!isEmptyObject(finalSet)) {
+                this.setPersonPropertiesForFlags(finalSet)
+            }
         }
 
+        // Set timestamp before before_send so callbacks can see it
+        data.timestamp = timestamp
+        if (!isUndefined(options?.timestamp)) {
+            data.properties['$event_time_override_provided'] = true
+            data.properties['$event_time_override_system_time'] = systemTime
+        }
+
+        // Run before_send BEFORE the expensive deep copy — if the event is rejected,
+        // we avoid the deepCircularCopy allocation entirely
         if (!isNullish(this.config.before_send)) {
             const beforeSendResult = this._runBeforeSend(data)
             if (!beforeSendResult) {
@@ -1308,6 +1371,14 @@ export class PostHog implements PostHogInterface {
             } else {
                 data = beforeSendResult
             }
+        }
+
+        data = _copyAndTruncateStrings(data, options?._noTruncate ? null : this.config.properties_string_max_length)
+        // Re-set timestamp after deep copy since deepCircularCopy mangles Date objects
+        data.timestamp = timestamp
+        if (!isUndefined(options?.timestamp)) {
+            data.properties['$event_time_override_provided'] = true
+            data.properties['$event_time_override_system_time'] = systemTime
         }
 
         this._internalEventEmitter.emit('eventCaptured', data)
@@ -1360,21 +1431,20 @@ export class PostHog implements PostHogInterface {
 
         // set defaults
         const startTimestamp = readOnly ? undefined : this.persistence.remove_event_timer(eventName)
-        let properties = { ...eventProperties }
-        properties['token'] = this.config.token
-        properties['$config_defaults'] = this.config.defaults
-
-        if (
-            this.config.cookieless_mode == 'always' ||
-            (this.config.cookieless_mode == 'on_reject' && this.consent.isExplicitlyOptedOut())
-        ) {
-            // Set a flag to tell the plugin server to use cookieless server hash mode
-            properties[COOKIELESS_MODE_FLAG_PROPERTY] = true
-        }
 
         if (eventName === '$snapshot') {
-            const persistenceProps = { ...this.persistence.properties(), ...this.sessionPersistence.properties() }
-            properties['distinct_id'] = persistenceProps.distinct_id
+            let properties = { ...eventProperties }
+            properties['token'] = this.config.token
+            properties['$config_defaults'] = this.config.defaults
+            if (
+                this.config.cookieless_mode == 'always' ||
+                (this.config.cookieless_mode == 'on_reject' && this.consent.isExplicitlyOptedOut())
+            ) {
+                properties[COOKIELESS_MODE_FLAG_PROPERTY] = true
+            }
+            // Read distinct_id without creating intermediate merged objects
+            const sessionProps = this.sessionPersistence.properties()
+            properties['distinct_id'] = sessionProps.distinct_id ?? this.persistence.properties().distinct_id
             if (
                 // we spotted one customer that was managing to send `false` for ~9k events a day
                 !(isString(properties['distinct_id']) || isNumber(properties['distinct_id'])) ||
@@ -1385,10 +1455,33 @@ export class PostHog implements PostHogInterface {
             return properties
         }
 
-        const infoProperties = getEventProperties(
+        // Build the final properties object in one pass using infoProperties as base.
+        // Priority: event properties > session persistence > persistence > info properties.
+        // We start with infoProperties (a fresh object from getEventProperties), then
+        // extend persistence properties directly into it (avoids creating intermediate objects).
+        let properties = getEventProperties(
             this.config.mask_personal_data_properties,
             this.config.custom_personal_data_properties
         )
+        // Write persistence and session persistence properties directly into the target,
+        // filtering reserved keys inline to avoid intermediate object allocations
+        _extendWithPersistenceProps(properties, this.persistence)
+        if (this.sessionPersistence !== this.persistence) {
+            _extendWithPersistenceProps(properties, this.sessionPersistence)
+        }
+        // Event properties override everything
+        extend(properties, eventProperties)
+
+        // Add SDK-managed properties
+        properties['token'] = this.config.token
+        properties['$config_defaults'] = this.config.defaults
+
+        if (
+            this.config.cookieless_mode == 'always' ||
+            (this.config.cookieless_mode == 'on_reject' && this.consent.isExplicitlyOptedOut())
+        ) {
+            properties[COOKIELESS_MODE_FLAG_PROPERTY] = true
+        }
 
         if (this.sessionManager) {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId(
@@ -1415,15 +1508,13 @@ export class PostHog implements PostHogInterface {
             properties['$lib_custom_api_host'] = this.config.api_host
         }
 
-        let pageviewProperties: Record<string, any>
         if (eventName === '$pageview' && !readOnly) {
-            pageviewProperties = this.pageViewManager.doPageView(timestamp, uuid)
+            extend(properties, this.pageViewManager.doPageView(timestamp, uuid))
         } else if (eventName === '$pageleave' && !readOnly) {
-            pageviewProperties = this.pageViewManager.doPageLeave(timestamp)
+            extend(properties, this.pageViewManager.doPageLeave(timestamp))
         } else {
-            pageviewProperties = this.pageViewManager.doEvent()
+            properties['$pageview_id'] = this.pageViewManager._currentPageview?.pageViewId
         }
-        properties = extend(properties, pageviewProperties)
 
         if (eventName === '$pageview' && document) {
             properties['title'] = document.title
@@ -1441,25 +1532,13 @@ export class PostHog implements PostHogInterface {
             properties['$browser_type'] = this._is_bot() ? 'bot' : 'browser'
         }
 
-        // note: extend writes to the first object, so lets make sure we
-        // don't write to the persistence properties object and info
-        // properties object by passing in a new object
-
-        // update properties with pageview info and super-properties
-        properties = extend(
-            {},
-            infoProperties,
-            this.persistence.properties(),
-            this.sessionPersistence.properties(),
-            properties
-        )
-
         properties['$is_identified'] = this._isIdentified()
 
         if (isArray(this.config.property_denylist)) {
-            each(this.config.property_denylist, function (denylisted_prop) {
-                delete properties[denylisted_prop]
-            })
+            const denylist = this.config.property_denylist
+            for (let i = 0; i < denylist.length; i++) {
+                delete properties[denylist[i]]
+            }
         } else {
             logger.error(
                 'Invalid value for property_denylist config: ' +
@@ -2911,16 +2990,30 @@ export class PostHog implements PostHogInterface {
      * @param {Partial<PostHogConfig>} config A dictionary of new configuration values to update
      */
     set_config(config: Partial<PostHogConfig>): void {
-        const oldConfig = { ...this.config }
+        // Only save the fields that update_config actually compares, avoiding a full config spread
+        const oldPersistence = this.config.persistence
+        const oldCookiePersistedProperties = this.config.cookie_persisted_properties
+        // Full copy only needed for debug logging
+        const oldConfig = Config.DEBUG ? { ...this.config } : undefined
         if (isObject(config)) {
             extend(this.config, configRenames(config))
 
             const isPersistenceDisabled = this._is_persistence_disabled()
-            this.persistence?.update_config(this.config, oldConfig, isPersistenceDisabled)
-            this.sessionPersistence =
-                this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
-                    ? this.persistence
-                    : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, isPersistenceDisabled)
+            this.persistence?.update_config(
+                this.config,
+                { persistence: oldPersistence, cookie_persisted_properties: oldCookiePersistedProperties } as PostHogConfig,
+                isPersistenceDisabled
+            )
+            // Only recreate sessionPersistence if the persistence type actually changed
+            if (oldPersistence !== this.config.persistence) {
+                this.sessionPersistence =
+                    this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
+                        ? this.persistence
+                        : new PostHogPersistence(
+                              { ...this.config, persistence: 'sessionStorage' },
+                              isPersistenceDisabled
+                          )
+            }
 
             const debugConfigFromLocalStorage = this._checkLocalStorageForDebug(this.config.debug)
             if (isBoolean(debugConfigFromLocalStorage)) {
@@ -3340,7 +3433,10 @@ export class PostHog implements PostHogInterface {
             )
             return false
         }
-        this._register_single(ENABLE_PERSON_PROCESSING, true)
+        // Only register if not already set to avoid creating an object per capture
+        if (this.persistence && !this.persistence.props[ENABLE_PERSON_PROCESSING]) {
+            this._register_single(ENABLE_PERSON_PROCESSING, true)
+        }
         return true
     }
 

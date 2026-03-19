@@ -1,10 +1,6 @@
 export class SimpleEventEmitter {
     private _events: { [key: string]: ((...args: any[]) => void)[] } = {}
 
-    constructor() {
-        this._events = {}
-    }
-
     on(event: string, listener: (...args: any[]) => void): () => void {
         if (!this._events[event]) {
             this._events[event] = []
@@ -12,16 +8,28 @@ export class SimpleEventEmitter {
         this._events[event].push(listener)
 
         return () => {
-            this._events[event] = this._events[event].filter((x) => x !== listener)
+            const listeners = this._events[event]
+            if (listeners) {
+                const idx = listeners.indexOf(listener)
+                if (idx !== -1) {
+                    listeners.splice(idx, 1)
+                }
+            }
         }
     }
 
     emit(event: string, payload: any): void {
-        for (const listener of this._events[event] || []) {
-            listener(payload)
+        const listeners = this._events[event]
+        if (listeners) {
+            for (let i = 0; i < listeners.length; i++) {
+                listeners[i](payload)
+            }
         }
-        for (const listener of this._events['*'] || []) {
-            listener(event, payload)
+        const wildcardListeners = this._events['*']
+        if (wildcardListeners) {
+            for (let i = 0; i < wildcardListeners.length; i++) {
+                wildcardListeners[i](event, payload)
+            }
         }
     }
 }

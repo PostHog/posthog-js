@@ -53,22 +53,30 @@ export function each(obj: any, iterator: (value: any, key: any) => void | Breake
 }
 
 export const extend = function (obj: Record<string, any>, ...args: Record<string, any>[]): Record<string, any> {
-    eachArray(args, function (source) {
-        for (const prop in source) {
-            if (source[prop] !== void 0) {
-                obj[prop] = source[prop]
+    for (let i = 0; i < args.length; i++) {
+        const source = args[i]
+        if (source) {
+            const keys = Object.keys(source)
+            for (let j = 0; j < keys.length; j++) {
+                const prop = keys[j]
+                if (source[prop] !== void 0) {
+                    obj[prop] = source[prop]
+                }
             }
         }
-    })
+    }
     return obj
 }
 
 export const extendArray = function <T>(obj: T[], ...args: T[][]): T[] {
-    eachArray(args, function (source) {
-        eachArray(source, function (item) {
-            obj.push(item)
-        })
-    })
+    for (let i = 0; i < args.length; i++) {
+        const source = args[i]
+        if (source) {
+            for (let j = 0; j < source.length; j++) {
+                obj.push(source[j])
+            }
+        }
+    }
     return obj
 }
 
@@ -139,11 +147,14 @@ export const safewrapClass = function (klass: Function, functions: string[]): vo
 
 export const stripEmptyProperties = function (p: Properties): Properties {
     const ret: Properties = {}
-    each(p, function (v, k) {
+    const keys = Object.keys(p)
+    for (let i = 0; i < keys.length; i++) {
+        const k = keys[i]
+        const v = p[k]
         if ((isString(v) && v.length > 0) || isNumber(v)) {
             ret[k] = v
         }
-    })
+    }
     return ret
 }
 
@@ -170,17 +181,20 @@ function deepCircularCopy<T extends Record<string, any> = Record<string, any>>(
         let result: T
 
         if (isArray(value)) {
-            result = [] as any as T
-            eachArray(value, (it) => {
-                result.push(internalDeepCircularCopy(it))
-            })
+            result = new Array(value.length) as any as T
+            for (let i = 0; i < value.length; i++) {
+                ;(result as any)[i] = internalDeepCircularCopy(value[i] as any)
+            }
         } else {
             result = {} as T
-            each(value, (val, key) => {
+            const keys = Object.keys(value)
+            for (let i = 0; i < keys.length; i++) {
+                const k = keys[i]
+                const val = value[k]
                 if (!COPY_IN_PROGRESS_SET.has(val)) {
-                    ;(result as any)[key] = internalDeepCircularCopy(val, key)
+                    ;(result as any)[k] = internalDeepCircularCopy(val as any, k)
                 }
-            })
+            }
         }
         return result
     }
@@ -191,13 +205,16 @@ export function _copyAndTruncateStrings<T extends Record<string, any> = Record<s
     object: T,
     maxStringLength: number | null
 ): T {
-    return deepCircularCopy(object, (value: any) => {
-        if (isString(value) && !isNull(maxStringLength)) {
+    return deepCircularCopy(object, isNull(maxStringLength) ? undefined : (value: any) => {
+        // Only create a new string (via slice) when truncation is actually needed
+        if (isString(value) && value.length > maxStringLength) {
             return (value as string).slice(0, maxStringLength)
         }
         return value
     }) as T
 }
+
+
 
 // NOTE: Update PostHogConfig docs if you change this list
 // We will not try to catch all bullets here, but we should make an effort to catch the most common ones

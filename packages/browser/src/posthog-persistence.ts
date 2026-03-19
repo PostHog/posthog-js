@@ -1,6 +1,6 @@
 /* eslint camelcase: "off" */
 
-import { each, extend, include, stripEmptyProperties } from './utils'
+import { extend } from './utils'
 import { cookieStore, createLocalPlusCookieStore, localStore, memoryStore, sessionStore } from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
 import {
@@ -13,7 +13,7 @@ import {
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
 } from './constants'
 
-import { isUndefined } from '@posthog/core'
+import { isUndefined, isString, isNumber } from '@posthog/core'
 import {
     getCampaignParams,
     getInitialPersonPropsFromInfo,
@@ -23,6 +23,9 @@ import {
 } from './utils/event-utils'
 import { logger } from './utils/logger'
 import { stripLeadingDollar, isEmptyObject, isObject } from '@posthog/core'
+
+// Pre-computed Set for O(1) lookups instead of O(n) array scanning in properties()
+export const PERSISTENCE_RESERVED_SET = new Set(PERSISTENCE_RESERVED_PROPERTIES)
 
 const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [
     'cookie',
@@ -160,20 +163,23 @@ export class PostHogPersistence {
     properties(): Properties {
         const p: Properties = {}
 
-        // Filter out reserved properties
-        each(this.props, (v, k) => {
+        // Filter out reserved properties using direct iteration
+        const propKeys = Object.keys(this.props)
+        for (let i = 0; i < propKeys.length; i++) {
+            const k = propKeys[i]
+            const v = this.props[k]
             if (k === ENABLED_FEATURE_FLAGS && isObject(v)) {
                 // Skip $feature/ properties if cache is stale
                 if (!this._isFeatureFlagCacheStale()) {
-                    const keys = Object.keys(v)
-                    for (let i = 0; i < keys.length; i++) {
-                        p[`$feature/${keys[i]}`] = v[keys[i]]
+                    const flagKeys = Object.keys(v)
+                    for (let j = 0; j < flagKeys.length; j++) {
+                        p[`$feature/${flagKeys[j]}`] = v[flagKeys[j]]
                     }
                 }
-            } else if (!include(PERSISTENCE_RESERVED_PROPERTIES, k)) {
+            } else if (!PERSISTENCE_RESERVED_SET.has(k)) {
                 p[k] = v
             }
-        })
+        }
         return p
     }
 
@@ -237,12 +243,14 @@ export class PostHogPersistence {
 
             let hasChanges = false
 
-            each(props, (val, prop) => {
+            const keys = Object.keys(props)
+            for (let i = 0; i < keys.length; i++) {
+                const prop = keys[i]
                 if (!this.props.hasOwnProperty(prop) || this.props[prop] === default_value) {
-                    this.props[prop] = val
+                    this.props[prop] = props[prop]
                     hasChanges = true
                 }
-            })
+            }
 
             if (hasChanges) {
                 this.save()
@@ -263,12 +271,15 @@ export class PostHogPersistence {
 
             let hasChanges = false
 
-            each(props, (val, prop) => {
-                if (props.hasOwnProperty(prop) && this.props[prop] !== val) {
+            const keys = Object.keys(props)
+            for (let i = 0; i < keys.length; i++) {
+                const prop = keys[i]
+                const val = props[prop]
+                if (this.props[prop] !== val) {
                     this.props[prop] = val
                     hasChanges = true
                 }
-            })
+            }
 
             if (hasChanges) {
                 this.save()
@@ -292,24 +303,49 @@ export class PostHogPersistence {
                 this._config.mask_personal_data_properties,
                 this._config.custom_personal_data_properties
             )
-            // only save campaign params if there were any
-            if (!isEmptyObject(stripEmptyProperties(campaignParams))) {
+            // Check if there are any non-empty values without creating a new object
+            let hasNonEmpty = false
+            const keys = Object.keys(campaignParams)
+            for (let i = 0; i < keys.length; i++) {
+                const v = campaignParams[keys[i]]
+                if ((isString(v) && v.length > 0) || isNumber(v)) {
+                    hasNonEmpty = true
+                    break
+                }
+            }
+            if (hasNonEmpty) {
                 this.register(campaignParams)
             }
             this._campaign_params_saved = true
         }
     }
+    private _search_keyword_checked: boolean = false
     update_search_keyword(): void {
+        // document.referrer doesn't change during a page session,
+        // so we only need to check once
+        if (this._search_keyword_checked) {
+            return
+        }
+        this._search_keyword_checked = true
         this.register(getSearchInfo())
     }
 
     update_referrer_info(): void {
+        // Skip creating the referrer info object if both keys are already registered
+        if (this.props.hasOwnProperty('$referrer') && this.props.hasOwnProperty('$referring_domain')) {
+            return
+        }
         this.register_once(getReferrerInfo(), undefined)
     }
 
     set_initial_person_info(): void {
         if (this.props[INITIAL_CAMPAIGN_PARAMS] || this.props[INITIAL_REFERRER_INFO]) {
             // the user has initial properties stored the previous way, don't save them again
+            return
+        }
+
+        // Skip if already set (avoids creating getPersonInfo objects on every capture)
+        if (this.props.hasOwnProperty(INITIAL_PERSON_INFO)) {
             return
         }
 
@@ -329,14 +365,17 @@ export class PostHogPersistence {
 
         // this section isn't written to anymore, but we should keep reading from it for backwards compatibility
         // for a while
-        each([INITIAL_REFERRER_INFO, INITIAL_CAMPAIGN_PARAMS], (key) => {
-            const initialReferrerInfo = this.props[key]
+        const legacyKeys = [INITIAL_REFERRER_INFO, INITIAL_CAMPAIGN_PARAMS]
+        for (let i = 0; i < legacyKeys.length; i++) {
+            const initialReferrerInfo = this.props[legacyKeys[i]]
             if (initialReferrerInfo) {
-                each(initialReferrerInfo, function (v, k) {
-                    p['$initial_' + stripLeadingDollar(k)] = v
-                })
+                const infoKeys = Object.keys(initialReferrerInfo)
+                for (let j = 0; j < infoKeys.length; j++) {
+                    const k = infoKeys[j]
+                    p['$initial_' + stripLeadingDollar(k)] = initialReferrerInfo[k]
+                }
             }
-        })
+        }
         const initialPersonInfo = this.props[INITIAL_PERSON_INFO]
         if (initialPersonInfo) {
             const initialPersonProps = getInitialPersonPropsFromInfo(initialPersonInfo)
@@ -351,11 +390,13 @@ export class PostHogPersistence {
     // returns the passed in object
 
     safe_merge(props: Properties): Properties {
-        each(this.props, function (val, prop) {
+        const keys = Object.keys(this.props)
+        for (let i = 0; i < keys.length; i++) {
+            const prop = keys[i]
             if (!(prop in props)) {
-                props[prop] = val
+                props[prop] = this.props[prop]
             }
-        })
+        }
 
         return props
     }

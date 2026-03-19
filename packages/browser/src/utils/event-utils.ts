@@ -2,12 +2,20 @@ import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
 import { isNull, stripLeadingDollar } from '@posthog/core'
 import { Properties } from '../types'
 import Config from '../config'
-import { each, extend, extendArray, stripEmptyProperties } from './index'
+import { extend, extendArray } from './index'
 import { document, location, userAgent, window } from './globals'
 import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from '@posthog/core'
 import { cookieStore } from '../storage'
 
 const URL_REGEX_PREFIX = 'https?://(.*)'
+
+// Pre-compiled search engine regex patterns to avoid creating strings on every call
+const _searchEngineRegex = {
+    google: new RegExp(URL_REGEX_PREFIX + 'google.([^/?]*)'),
+    bing: new RegExp(URL_REGEX_PREFIX + 'bing.com'),
+    yahoo: new RegExp(URL_REGEX_PREFIX + 'yahoo.com'),
+    duckduckgo: new RegExp(URL_REGEX_PREFIX + 'duckduckgo.com'),
+}
 
 // CAMPAIGN_PARAMS and EVENT_TO_PERSON_PROPERTIES should be kept in sync with
 // https://github.com/PostHog/posthog/blob/master/plugin-server/src/utils/db/utils.ts#L60
@@ -89,11 +97,11 @@ export function getCampaignParams(
 
     const paramsToMask = maskPersonalDataProperties
         ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
-        : []
+        : undefined
 
     // Initially get campaign params from the URL
     const urlCampaignParams = _getCampaignParamsFromUrl(
-        maskQueryParams(document.URL, paramsToMask, MASKED),
+        paramsToMask ? maskQueryParams(document.URL, paramsToMask, MASKED) : document.URL,
         customTrackedParams
     )
 
@@ -107,23 +115,48 @@ export function getCampaignParams(
 }
 
 function _getCampaignParamsFromUrl(url: string, customParams?: string[]): Record<string, string> {
-    const campaign_keywords = CAMPAIGN_PARAMS.concat(customParams || [])
+    const campaign_keywords = customParams?.length ? CAMPAIGN_PARAMS.concat(customParams) : CAMPAIGN_PARAMS
+
+    // Parse query string once instead of calling getQueryParam N times
+    // (each call splits the URL, hash, and query string independently)
+    const withoutHash: string = url.split('#')[0] || ''
+    const queryString: string = (withoutHash.split(/\?(.*)/)[1] || '').replace(/^\?+/g, '')
+
+    // Build a lookup of query params from the URL
+    const queryLookup: Record<string, string> = {}
+    if (queryString) {
+        const queryParts = queryString.split('&')
+        for (let i = 0; i < queryParts.length; i++) {
+            const eqIdx = queryParts[i].indexOf('=')
+            if (eqIdx > 0) {
+                const key = queryParts[i].substring(0, eqIdx)
+                let value = queryParts[i].substring(eqIdx + 1)
+                try {
+                    value = decodeURIComponent(value)
+                } catch {
+                    // noop
+                }
+                queryLookup[key] = value
+            }
+        }
+    }
 
     const params: Record<string, any> = {}
-    each(campaign_keywords, function (kwkey) {
-        const kw = getQueryParam(url, kwkey)
-        params[kwkey] = kw ? kw : null
-    })
+    for (let i = 0; i < campaign_keywords.length; i++) {
+        const kwkey = campaign_keywords[i]
+        params[kwkey] = queryLookup[kwkey] || null
+    }
 
     return params
 }
 
 function _getCampaignParamsFromCookie(): Record<string, string> {
     const params: Record<string, any> = {}
-    each(COOKIE_CAMPAIGN_PARAMS, function (kwkey) {
+    for (let i = 0; i < COOKIE_CAMPAIGN_PARAMS.length; i++) {
+        const kwkey = COOKIE_CAMPAIGN_PARAMS[i]
         const kw = cookieStore._get(kwkey)
         params[kwkey] = kw ? kw : null
-    })
+    }
 
     return params
 }
@@ -132,13 +165,13 @@ function _getSearchEngine(referrer: string): string | null {
     if (!referrer) {
         return null
     } else {
-        if (referrer.search(URL_REGEX_PREFIX + 'google.([^/?]*)') === 0) {
+        if (_searchEngineRegex.google.test(referrer)) {
             return 'google'
-        } else if (referrer.search(URL_REGEX_PREFIX + 'bing.com') === 0) {
+        } else if (_searchEngineRegex.bing.test(referrer)) {
             return 'bing'
-        } else if (referrer.search(URL_REGEX_PREFIX + 'yahoo.com') === 0) {
+        } else if (_searchEngineRegex.yahoo.test(referrer)) {
             return 'yahoo'
-        } else if (referrer.search(URL_REGEX_PREFIX + 'duckduckgo.com') === 0) {
+        } else if (_searchEngineRegex.duckduckgo.test(referrer)) {
             return 'duckduckgo'
         } else {
             return null
@@ -204,12 +237,12 @@ export function getReferrerInfo(): Record<string, any> {
 export function getPersonInfo(maskPersonalDataProperties?: boolean, customPersonalDataProperties?: string[]) {
     const paramsToMask = maskPersonalDataProperties
         ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
-        : []
+        : undefined
     const url = location?.href.substring(0, 1000)
     // we're being a bit more economical with bytes here because this is stored in the cookie
     return {
         r: getReferrer().substring(0, 1000),
-        u: url ? maskQueryParams(url, paramsToMask, MASKED) : undefined,
+        u: url ? (paramsToMask ? maskQueryParams(url, paramsToMask, MASKED) : url) : undefined,
     }
 }
 
@@ -240,18 +273,25 @@ export function getPersonPropsFromInfo(info: Record<string, any>): Record<string
 export function getInitialPersonPropsFromInfo(info: Record<string, any>): Record<string, any> {
     const personProps = getPersonPropsFromInfo(info)
     const props: Record<string, any> = {}
-    each(personProps, function (val: any, key: string) {
-        props[`$initial_${stripLeadingDollar(key)}`] = val
-    })
+    const keys = Object.keys(personProps)
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i]
+        props[`$initial_${stripLeadingDollar(key)}`] = personProps[key]
+    }
     return props
 }
 
+// Cache timezone since it doesn't change during a page session
+let _cachedTimezone: string | undefined | null = null
 export function getTimezone(): string | undefined {
-    try {
-        return Intl.DateTimeFormat().resolvedOptions().timeZone
-    } catch {
-        return undefined
+    if (_cachedTimezone === null) {
+        try {
+            _cachedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+        } catch {
+            _cachedTimezone = undefined
+        }
     }
+    return _cachedTimezone
 }
 
 export function getTimezoneOffset(): number | undefined {
@@ -271,42 +311,62 @@ export function getEventProperties(
     }
     const paramsToMask = maskPersonalDataProperties
         ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
-        : []
+        : undefined
     const [os_name, os_version] = detectOS(userAgent)
 
-    return extend(
-        stripEmptyProperties({
-            $os: os_name,
-            $os_version: os_version,
-            $browser: detectBrowser(userAgent, navigator.vendor),
-            $device: detectDevice(userAgent),
-            $device_type: detectDeviceType(userAgent, {
-                // eslint-disable-next-line compat/compat
-                userAgentDataPlatform: navigator?.userAgentData?.platform,
-                maxTouchPoints: navigator?.maxTouchPoints,
-                screenWidth: window?.screen?.width,
-                screenHeight: window?.screen?.height,
-                devicePixelRatio: window?.devicePixelRatio,
-            }),
-            $timezone: getTimezone(),
-            $timezone_offset: getTimezoneOffset(),
-        }),
-        {
-            $current_url: maskQueryParams(location?.href, paramsToMask, MASKED),
-            $host: location?.host,
-            $pathname: location?.pathname,
-            $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
-            $browser_version: detectBrowserVersion(userAgent, navigator.vendor),
-            $browser_language: getBrowserLanguage(),
-            $browser_language_prefix: getBrowserLanguagePrefix(),
-            $screen_height: window?.screen.height,
-            $screen_width: window?.screen.width,
-            $viewport_height: window?.innerHeight,
-            $viewport_width: window?.innerWidth,
-            $lib: Config.LIB_NAME,
-            $lib_version: Config.LIB_VERSION,
-            $insert_id: Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10),
-            $time: Date.now() / 1000, // epoch time in seconds
-        }
-    )
+    // Build properties in a single object to avoid intermediate allocations
+    const properties: Properties = {
+        $current_url: paramsToMask ? maskQueryParams(location?.href, paramsToMask, MASKED) : location?.href,
+        $host: location?.host,
+        $pathname: location?.pathname,
+        $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
+        $browser_version: detectBrowserVersion(userAgent, navigator.vendor),
+        $browser_language: getBrowserLanguage(),
+        $browser_language_prefix: getBrowserLanguagePrefix(),
+        $screen_height: window?.screen.height,
+        $screen_width: window?.screen.width,
+        $viewport_height: window?.innerHeight,
+        $viewport_width: window?.innerWidth,
+        $lib: Config.LIB_NAME,
+        $lib_version: Config.LIB_VERSION,
+        $insert_id: Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10),
+        $time: Date.now() / 1000, // epoch time in seconds
+    }
+
+    // Add optional OS/browser/device properties directly (avoids stripEmptyProperties + extend)
+    if (os_name) {
+        properties.$os = os_name
+    }
+    if (os_version) {
+        properties.$os_version = os_version
+    }
+    const browser = detectBrowser(userAgent, navigator.vendor)
+    if (browser) {
+        properties.$browser = browser
+    }
+    const device = detectDevice(userAgent)
+    if (device) {
+        properties.$device = device
+    }
+    const deviceType = detectDeviceType(userAgent, {
+        // eslint-disable-next-line compat/compat
+        userAgentDataPlatform: navigator?.userAgentData?.platform,
+        maxTouchPoints: navigator?.maxTouchPoints,
+        screenWidth: window?.screen?.width,
+        screenHeight: window?.screen?.height,
+        devicePixelRatio: window?.devicePixelRatio,
+    })
+    if (deviceType) {
+        properties.$device_type = deviceType
+    }
+    const timezone = getTimezone()
+    if (timezone) {
+        properties.$timezone = timezone
+    }
+    const timezoneOffset = getTimezoneOffset()
+    if (timezoneOffset !== undefined) {
+        properties.$timezone_offset = timezoneOffset
+    }
+
+    return properties
 }
