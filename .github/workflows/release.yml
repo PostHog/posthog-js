@@ -31,7 +31,7 @@ jobs:
             - name: Checkout repository
               uses: actions/checkout@v6
               with:
-                  ref: main
+                  ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.pull_request.merge_commit_sha }}
                   fetch-depth: 0
 
             - name: Check for changesets
@@ -70,6 +70,7 @@ jobs:
             contents: read
         outputs:
             commit-hash: ${{ steps.commit-version-bump.outputs.commit-hash }}
+            release-branch: ${{ steps.create-release-branch.outputs.branch-name }}
         steps:
             - name: Notify Slack - Approved
               continue-on-error: true # Don't block release if Slack notification fails
@@ -88,12 +89,20 @@ jobs:
                   app-id: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_APP_ID }}
                   private-key: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_PRIVATE_KEY }} # Secrets available only inside the `NPM Release` environment, requires approval from a maintainer
 
-            - name: Checkout repository
+            - name: Checkout repository at trigger commit
               uses: actions/checkout@v6
               with:
-                  ref: main
+                  ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.pull_request.merge_commit_sha }}
                   fetch-depth: 0
                   token: ${{ steps.releaser.outputs.token }}
+
+            - name: Create release branch from trigger commit
+              id: create-release-branch
+              run: |
+                  BRANCH_NAME="release/${{ github.run_id }}"
+                  git checkout -b "$BRANCH_NAME"
+                  git push origin "$BRANCH_NAME"
+                  echo "branch-name=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
 
             - name: Setup environment
               uses: ./.github/actions/setup
@@ -118,7 +127,7 @@ jobs:
               with:
                   commit_message: 'chore: update versions and lockfile [version bump]'
                   repo: ${{ github.repository }}
-                  branch: main
+                  branch: ${{ steps.create-release-branch.outputs.branch-name }}
               env:
                   GITHUB_TOKEN: ${{ steps.releaser.outputs.token }}
 
@@ -262,7 +271,7 @@ jobs:
                   # and that this workflow is always running for the most recent entry in the file
                   LAST_CHANGELOG_ENTRY=$(awk -v defText="see CHANGELOG.md" '/^## /{if (flag) exit; flag=1} flag && /^##$/{exit} flag; END{if (!flag) print defText}' CHANGELOG.md)
                   gh release create "$PACKAGE_NAME@$COMMITTED_VERSION" \
-                    --target main \
+                    --target ${{ needs.version-bump.outputs.commit-hash }} \
                     --title "$PACKAGE_NAME@$COMMITTED_VERSION" \
                     --notes "$LAST_CHANGELOG_ENTRY"
 
@@ -333,11 +342,46 @@ jobs:
                   message: '❌ Failed to release `${{ matrix.package.name }}@v${{ steps.check-package-version.outputs.committed-version }}`! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
                   emoji_reaction: 'x'
 
+    merge-release-branch:
+        name: Merge release branch back to main
+        needs: [version-bump, publish]
+        runs-on: ubuntu-latest
+        if: always() && needs.publish.result == 'success' && needs.version-bump.outputs.release-branch != ''
+        environment: 'NPM Release' # Re-uses the already-approved environment from version-bump (no second approval needed)
+        permissions:
+            contents: write
+        steps:
+            - name: Get GitHub App token
+              id: releaser
+              uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+              with:
+                  app-id: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_APP_ID }}
+                  private-key: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_PRIVATE_KEY }}
+
+            - name: Checkout repository
+              uses: actions/checkout@v6
+              with:
+                  ref: main
+                  fetch-depth: 0
+                  token: ${{ steps.releaser.outputs.token }}
+
+            - name: Merge release branch to main
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git fetch origin ${{ needs.version-bump.outputs.release-branch }}
+                  git merge origin/${{ needs.version-bump.outputs.release-branch }} --no-edit
+                  git push origin main
+
+            - name: Delete release branch
+              run: |
+                  git push origin --delete ${{ needs.version-bump.outputs.release-branch }}
+
     notify-released:
         name: Notify Slack - Released
-        needs: [notify-approval-needed, publish]
+        needs: [notify-approval-needed, merge-release-branch]
         runs-on: ubuntu-latest
-        if: always() && needs.publish.result == 'success' && needs.notify-approval-needed.outputs.slack_ts != ''
+        if: always() && needs.merge-release-branch.result == 'success' && needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
             - name: Checkout repository
               uses: actions/checkout@v6
