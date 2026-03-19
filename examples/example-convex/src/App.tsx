@@ -122,6 +122,7 @@ function App() {
   const groupIdentifyM = useMutation(api.example.testGroupIdentify)
   const aliasM = useMutation(api.example.testAlias)
   const captureExceptionM = useMutation(api.example.testCaptureException)
+  const throwErrorM = useMutation(api.example.testThrowError)
 
   const agentManualA = useAction(api.convexAgent.manualCapture.generate)
   const agentTracedA = useAction(api.convexAgent.withTracing.generate)
@@ -430,6 +431,18 @@ function App() {
               }
             >
               Capture Exception
+            </button>
+            <button
+              {...btnProps('throwError')}
+              onClick={() =>
+                run('throwError', () =>
+                  throwErrorM({
+                    errorMessage: errorMsg,
+                  })
+                )
+              }
+            >
+              Throw Error
             </button>
           </div>
         </Section>
