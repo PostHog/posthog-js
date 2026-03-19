@@ -54,7 +54,7 @@ export class PostHogExceptions implements Extension {
 
     private get _captureExtensionExceptions() {
         const enabled_server_side = !!this._instance.get_property(ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS)
-        const enabled_client_side = this._instance.config.error_tracking.captureExtensionExceptions
+        const enabled_client_side = this._instance.config.error_tracking?.captureExtensionExceptions
         return enabled_client_side ?? enabled_server_side ?? false
     }
 
@@ -85,7 +85,7 @@ export class PostHogExceptions implements Extension {
             }
 
             if (
-                !this._instance.config.error_tracking.__capturePostHogExceptions &&
+                !this._instance.config.error_tracking?.__capturePostHogExceptions &&
                 this._isPostHogException(exceptionList)
             ) {
                 logger.info('Skipping exception capture because it was thrown by the PostHog SDK')

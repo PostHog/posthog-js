@@ -26,8 +26,8 @@ export class ExceptionObserver {
         // refills at a rate of one token / 10 second period
         // e.g. will capture 1 exception rate limited exception every 10 seconds until burst ends
         this._rateLimiter = new BucketedRateLimiter({
-            refillRate: this._instance.config.error_tracking.__exceptionRateLimiterRefillRate ?? 1,
-            bucketSize: this._instance.config.error_tracking.__exceptionRateLimiterBucketSize ?? 10,
+            refillRate: this._instance.config.error_tracking?.__exceptionRateLimiterRefillRate ?? 1,
+            bucketSize: this._instance.config.error_tracking?.__exceptionRateLimiterBucketSize ?? 10,
             refillInterval: 10000, // ten seconds in milliseconds,
             _logger: logger,
         })
