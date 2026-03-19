@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-env node */
 /**
  * Strict Capture Demo
  *
@@ -8,13 +9,17 @@
  *
  * Usage:
  *   node examples/strict-capture-test.mjs
+ *   POSTHOG_PROJECT_API_KEY=phc_... node examples/strict-capture-test.mjs
  */
 
 const { PostHog } = await import('../dist/entrypoints/index.node.mjs')
 
+const API_KEY = process.env.POSTHOG_PROJECT_API_KEY || 'fake-key'
+const HOST = process.env.POSTHOG_HOST || 'http://localhost:8000'
+
 // --- Strict mode (via versioned defaults) ---
-const strict = new PostHog('fake-key', {
-  host: 'http://localhost:8000',
+const strict = new PostHog(API_KEY, {
+  host: HOST,
   defaults: '2026-03-19',
 })
 
@@ -30,8 +35,8 @@ try {
 }
 
 // --- Legacy mode (no defaults) ---
-const legacy = new PostHog('fake-key', {
-  host: 'http://localhost:8000',
+const legacy = new PostHog(API_KEY, {
+  host: HOST,
 })
 legacy.debug(true)
 
