@@ -26,6 +26,10 @@ test-result.json
 yarn-error.log
 stats.html
 bundle-stats*.html
+
+# vite temp files
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
 .eslintcache
 cypress/downloads/downloads.html
 /test-results/
