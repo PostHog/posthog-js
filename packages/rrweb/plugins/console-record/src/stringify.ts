@@ -46,7 +46,7 @@ function pathToSelector(node: HTMLElement): string | '' {
     return path
 }
 
-function isArray(obj: unknown): boolean {
+function isArray(obj: unknown): obj is unknown[] {
     return Array.isArray(obj)
 }
 
