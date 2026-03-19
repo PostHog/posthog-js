@@ -8,6 +8,8 @@ import type {
 } from '@posthog/core'
 import { ContextData, ContextOptions } from './extensions/context/types'
 
+export type NodeConfigDefaults = '2026-03-19' | 'unset'
+
 import type { FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
 
 export type IdentifyMessage = {
@@ -215,6 +217,25 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
    * @default false
    */
   strictLocalEvaluation?: boolean
+  /**
+   * Configuration defaults for breaking changes. When set to a specific date,
+   * enables new default behaviors introduced on that date.
+   *
+   * - `'unset'`: Legacy default behaviors
+   * - `'2026-03-19'`: capture() and captureImmediate() throw on invalid arguments
+   *
+   * @default 'unset'
+   */
+  defaults?: NodeConfigDefaults
+  /**
+   * When enabled, capture() and captureImmediate() throw an error instead of
+   * warning when called with invalid arguments (e.g., a string instead of an
+   * EventMessage object).
+   *
+   * Defaults to `true` when `defaults >= '2026-03-19'`, `false` otherwise.
+   * Explicitly setting this overrides the defaults-based value.
+   */
+  strictCapture?: boolean
   /**
    * Provides the API to extend the lifetime of a serverless invocation until
    * background work (like flushing analytics events) completes after the response

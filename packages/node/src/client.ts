@@ -22,6 +22,7 @@ import {
   GroupIdentifyMessage,
   IdentifyMessage,
   IPostHog,
+  NodeConfigDefaults,
   OverrideFeatureFlagsOptions,
   PostHogOptions,
   SendFeatureFlagsOptions,
@@ -48,6 +49,10 @@ const MAX_CACHE_SIZE = 50 * 1000
 
 const WAITUNTIL_DEBOUNCE_MS = 50
 const WAITUNTIL_MAX_WAIT_MS = 500
+
+const defaultsThatVaryByConfig = (defaults?: NodeConfigDefaults): Pick<PostHogOptions, 'strictCapture'> => ({
+  strictCapture: !!defaults && defaults !== 'unset' && defaults >= '2026-03-19',
+})
 
 // The actual exported Nodejs API.
 export abstract class PostHogBackendClient extends PostHogCoreStateless implements IPostHog {
@@ -104,7 +109,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   constructor(apiKey: string, options: PostHogOptions = {}) {
     super(apiKey, options)
 
-    this.options = options
+    this.options = { ...defaultsThatVaryByConfig(options.defaults), ...options }
     this.context = this.initializeContext()
 
     this.options.featureFlagsPollingInterval =
@@ -431,7 +436,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   capture(props: EventMessage): void {
     if (typeof props === 'string') {
-      this._logger.warn('Called capture() with a string as the first argument when an object was expected.')
+      const msg = 'Called capture() with a string as the first argument when an object was expected.'
+      if (this.options.strictCapture) {
+        throw new TypeError(msg)
+      }
+      this._logger.warn(msg)
     }
     if (props.event === '$exception' && !props._originatedFromCaptureException) {
       this._logger.warn(
@@ -500,7 +509,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   async captureImmediate(props: EventMessage): Promise<void> {
     if (typeof props === 'string') {
-      this._logger.warn('Called captureImmediate() with a string as the first argument when an object was expected.')
+      const msg = 'Called captureImmediate() with a string as the first argument when an object was expected.'
+      if (this.options.strictCapture) {
+        throw new TypeError(msg)
+      }
+      this._logger.warn(msg)
     }
     if (props.event === '$exception' && !props._originatedFromCaptureException) {
       this._logger.warn(
