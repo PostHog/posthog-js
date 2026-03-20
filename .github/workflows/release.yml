@@ -358,24 +358,20 @@ jobs:
                   app-id: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_APP_ID }}
                   private-key: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_PRIVATE_KEY }}
 
-            - name: Checkout repository
-              uses: actions/checkout@v6
-              with:
-                  ref: main
-                  fetch-depth: 0
-                  token: ${{ steps.releaser.outputs.token }}
-
-            - name: Merge release branch to main
+            - name: Merge release branch to main via API
+              env:
+                  GH_TOKEN: ${{ steps.releaser.outputs.token }}
               run: |
-                  git config user.name "github-actions[bot]"
-                  git config user.email "github-actions[bot]@users.noreply.github.com"
-                  git fetch origin ${{ needs.version-bump.outputs.release-branch }}
-                  git merge origin/${{ needs.version-bump.outputs.release-branch }} --no-edit
-                  git push origin main
+                  gh api "repos/${{ github.repository }}/merges" \
+                    -f base="main" \
+                    -f head="${{ needs.version-bump.outputs.release-branch }}" \
+                    -f commit_message="chore: merge ${{ needs.version-bump.outputs.release-branch }} into main [skip ci]"
 
             - name: Delete release branch
+              env:
+                  GH_TOKEN: ${{ steps.releaser.outputs.token }}
               run: |
-                  git push origin --delete ${{ needs.version-bump.outputs.release-branch }}
+                  gh api "repos/${{ github.repository }}/git/refs/heads/${{ needs.version-bump.outputs.release-branch }}" -X DELETE
 
     notify-released:
         name: Notify Slack - Released
