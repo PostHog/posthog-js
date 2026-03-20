@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Base64 Image Test</title>
+  </head>
+  <body>
+    <!-- Small 1x1 red pixel PNG (base64: 68 bytes, image: 1x1) -->
+    <img
+      id="small-image"
+      src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
+      alt="Small red pixel"
+      width="100"
+      height="100"
+    />
+
+    <!-- Medium 16x16 gradient PNG (base64: ~200 bytes) -->
+    <img
+      id="medium-image"
+      src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAABJSURBVDiNY2AYBaNgFIwCoAAggBhIBP8h+D8DA8N/SjCIjYxBbGQM4oPEkDEMYmNikBgyRjaAZAAQwNRA/0YBqQAggBgYhg4AANm8Awz/4Ll3AAAAAElFTkSuQmCC"
+      alt="Medium gradient"
+      width="100"
+      height="100"
+    />
+
+    <!-- Script to create a large base64 image dynamically -->
+    <script>
+      // Create a 2000x2000 canvas with random content
+      const canvas = document.createElement('canvas');
+      canvas.width = 2000;
+      canvas.height = 2000;
+      const ctx = canvas.getContext('2d');
+
+      // Fill with a gradient to make it compressible
+      const gradient = ctx.createLinearGradient(0, 0, 2000, 2000);
+      gradient.addColorStop(0, 'red');
+      gradient.addColorStop(0.5, 'blue');
+      gradient.addColorStop(1, 'green');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 2000, 2000);
+
+      // Add some text to make it more realistic
+      ctx.fillStyle = 'white';
+      ctx.font = '48px serif';
+      ctx.fillText('Large Test Image', 100, 100);
+
+      // Create image element with the large PNG
+      const largeImg = document.createElement('img');
+      largeImg.id = 'large-image';
+      largeImg.src = canvas.toDataURL('image/png'); // This will be large (>1MB likely)
+      largeImg.alt = 'Large test image';
+      largeImg.width = 200;
+      largeImg.height = 200;
+      document.body.appendChild(largeImg);
+    </script>
+
+    <!-- Create an extremely large image that should be skipped from recompression -->
+    <script>
+      // Create a 5000x5000 canvas
+      const hugeCanvas = document.createElement('canvas');
+      hugeCanvas.width = 5000;
+      hugeCanvas.height = 5000;
+      const hugeCtx = hugeCanvas.getContext('2d');
+
+      // Simple fill to keep it somewhat compressible
+      hugeCtx.fillStyle = 'black';
+      hugeCtx.fillRect(0, 0, 5000, 5000);
+      hugeCtx.fillStyle = 'white';
+      hugeCtx.font = '72px serif';
+      hugeCtx.fillText('Huge Image - Should Skip Recompression', 100, 200);
+
+      const hugeImg = document.createElement('img');
+      hugeImg.id = 'huge-image';
+      hugeImg.src = hugeCanvas.toDataURL('image/png');
+      hugeImg.alt = 'Huge test image';
+      hugeImg.width = 300;
+      hugeImg.height = 300;
+      document.body.appendChild(hugeImg);
+    </script>
+  </body>
+</html>
