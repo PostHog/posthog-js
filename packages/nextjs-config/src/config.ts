@@ -73,7 +73,7 @@ function withWebpackConfig(userWebpackConfig: NextConfig['webpack'], posthogConf
             },
           }
         }
-        webpackConfig.plugins.push(new PosthogWebpackPlugin(currentConfig))
+        webpackConfig.plugins.push(new PosthogWebpackPlugin(currentConfig, true))
       }
     }
     return webpackConfig
