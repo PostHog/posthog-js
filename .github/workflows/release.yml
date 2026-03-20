@@ -344,7 +344,7 @@ jobs:
 
     merge-release-branch:
         name: Merge release branch back to main
-        needs: [version-bump, publish]
+        needs: [version-bump, publish, notify-approval-needed]
         runs-on: ubuntu-latest
         if: always() && needs.publish.result == 'success' && needs.version-bump.outputs.release-branch != ''
         environment: 'NPM Release' # Re-uses the already-approved environment from version-bump (no second approval needed)
@@ -368,10 +368,22 @@ jobs:
                     -f commit_message="chore: merge ${{ needs.version-bump.outputs.release-branch }} into main [skip ci]"
 
             - name: Delete release branch
+              if: always()
               env:
                   GH_TOKEN: ${{ steps.releaser.outputs.token }}
               run: |
-                  gh api "repos/${{ github.repository }}/git/refs/heads/${{ needs.version-bump.outputs.release-branch }}" -X DELETE
+                  gh api "repos/${{ github.repository }}/git/refs/heads/${{ needs.version-bump.outputs.release-branch }}" -X DELETE || true
+
+            - name: Notify Slack - Merge Failed
+              continue-on-error: true
+              if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
+              uses: PostHog/.github/.github/actions/slack-thread-reply@main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '⚠️ Packages published but failed to merge `${{ needs.version-bump.outputs.release-branch }}` back to main! Manual merge required. <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  emoji_reaction: 'warning'
 
     notify-released:
         name: Notify Slack - Released
