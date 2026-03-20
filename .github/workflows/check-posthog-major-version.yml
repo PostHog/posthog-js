@@ -24,6 +24,9 @@ jobs:
         
       - name: Check for major version bumps
         id: check-major
+        env:
+          # Avoid wrapping labels JSON in shell single quotes; apostrophes in label text break the script.
+          PR_LABELS_JSON: ${{ toJSON(github.event.pull_request.labels) }}
         run: |
           # Get only added changeset files in this PR
           changesets=$(git diff --name-only --diff-filter=A origin/${{ github.base_ref }}...HEAD | grep '^\.changeset/.*\.md$' | grep -v 'README.md' || true)
@@ -33,7 +36,7 @@ jobs:
             echo "no_changesets=true" >> $GITHUB_OUTPUT
 
             # Check if PR has release label
-            has_release_label=$(echo '${{ toJSON(github.event.pull_request.labels) }}' | jq -r '.[] | select(.name == "release") | .name')
+            has_release_label=$(echo "$PR_LABELS_JSON" | jq -r '.[] | select(.name == "release") | .name')
 
             if [ -n "$has_release_label" ]; then
               echo "❌ Error: PR has 'release' label but no changeset found"
