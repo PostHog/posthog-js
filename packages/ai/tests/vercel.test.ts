@@ -220,6 +220,32 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       expect(captureCall[0].properties['$ai_usage'].providerMetadata).toBeDefined()
     })
 
+    it('should handle undefined content in tool-call-only responses', async () => {
+      const baseModel: LanguageModelV3 = {
+        specificationVersion: 'v3' as const,
+        provider: 'openai',
+        modelId: 'gpt-4o',
+        supportedUrls: {},
+        doGenerate: jest.fn().mockResolvedValue({
+          content: undefined,
+          text: '',
+          usage: v3TokenUsage(10, 5),
+          response: { modelId: 'gpt-4o' },
+          providerMetadata: {},
+          finishReason: { unified: 'stop' as const, raw: undefined },
+          warnings: [],
+        }),
+        doStream: jest.fn(),
+      }
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+      })
+
+      await expect(model.doGenerate({ prompt: [] } as any)).resolves.not.toThrow()
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    })
+
     it('should track time to first token in V3 streaming', async () => {
       const streamParts: LanguageModelV3StreamPart[] = [
         { type: 'text-delta', id: 'text-1', delta: 'Hello ' },
