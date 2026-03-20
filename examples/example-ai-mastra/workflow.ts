@@ -18,8 +18,7 @@ const weatherTool = createTool({
     longitude: z.number(),
     location_name: z.string(),
   }),
-  execute: async ({ context }) => {
-    const { latitude, longitude, location_name } = context;
+  execute: async ({ latitude, longitude, location_name }) => {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`;
     const resp = await fetch(url);
     const data = await resp.json();
@@ -31,10 +30,7 @@ const weatherTool = createTool({
 const agent = new Agent({
   name: "Weather Agent",
   instructions: "You are a helpful assistant with access to weather data.",
-  model: {
-    provider: "OPEN_AI",
-    name: "gpt-4o-mini",
-  },
+  model: { id: "openai/gpt-5-mini" },
   tools: { get_weather: weatherTool },
 });
 
@@ -53,7 +49,7 @@ async function main() {
     event: "$ai_generation",
     properties: {
       $ai_trace_id: traceId,
-      $ai_model: "gpt-4o-mini",
+      $ai_model: "gpt-5-mini",
       $ai_provider: "openai",
       $ai_input_tokens: result.usage?.promptTokens,
       $ai_output_tokens: result.usage?.completionTokens,

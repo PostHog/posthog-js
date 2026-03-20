@@ -14,7 +14,14 @@ const client = new OpenAI({
 
 async function main() {
   // Replace with the path to your audio file
-  const audioPath = "audio.mp3";
+  const audioPath = process.env.AUDIO_PATH || "audio.mp3";
+
+  if (!fs.existsSync(audioPath)) {
+    console.log(`Skipping: audio file not found at '${audioPath}'`);
+    console.log("Set AUDIO_PATH to a valid audio file (mp3, wav, m4a, etc.)");
+    await phClient.shutdown();
+    return;
+  }
 
   const transcription = await client.audio.transcriptions.create({
     file: fs.createReadStream(audioPath),

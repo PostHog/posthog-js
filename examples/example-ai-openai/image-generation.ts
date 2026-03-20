@@ -1,4 +1,4 @@
-/** OpenAI image generation via Responses API, tracked by PostHog. */
+/** OpenAI image generation, tracked by PostHog. */
 
 import { PostHog } from "posthog-node";
 import { OpenAI } from "@posthog/ai/openai";
@@ -12,19 +12,16 @@ const client = new OpenAI({
 });
 
 async function main() {
-  const response = await client.responses.create({
-    model: "gpt-image-1-mini",
-    input: "A hedgehog wearing a PostHog t-shirt, pixel art style",
-    tools: [{ type: "image_generation" }],
-    posthogDistinctId: "example-user",
+  // Note: @posthog/ai does not wrap images.generate yet,
+  // so this call is not automatically tracked.
+  const response = await client.images.generate({
+    model: "gpt-image-1",
+    prompt: "A hedgehog wearing a PostHog t-shirt, pixel art style",
+    size: "1024x1024",
   });
 
-  for (const item of response.output) {
-    if ("type" in item && item.type === "image_generation_call") {
-      const imageBase64 = (item as any).result as string;
-      console.log(`Generated image: ${imageBase64.length} chars of base64 data`);
-    }
-  }
+  const imageBase64 = response.data[0].b64_json!;
+  console.log(`Generated image: ${imageBase64.length} chars of base64 data`);
 
   await phClient.shutdown();
 }

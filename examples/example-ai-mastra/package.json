@@ -9,7 +9,7 @@
   "dependencies": {
     "posthog-node": "*",
     "@posthog/ai": "*",
-    "@mastra/core": "^0.10.0",
+    "@mastra/core": "^1.14.0",
     "zod": "^3.0.0"
   },
   "devDependencies": {
