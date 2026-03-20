@@ -20,12 +20,14 @@ export class PosthogWebpackPlugin {
     }
 
     apply(compiler: webpack.Compiler): void {
-        new compiler.webpack.SourceMapDevToolPlugin({
-            filename: '[file].map',
-            noSources: false,
-            moduleFilenameTemplate: '[resource-path]',
-            append: this.resolvedConfig.sourcemaps.deleteAfterUpload ? false : undefined,
-        }).apply(compiler)
+        if (this.resolvedConfig.sourcemaps.enabled) {
+            new compiler.webpack.SourceMapDevToolPlugin({
+                filename: '[file].map',
+                noSources: false,
+                moduleFilenameTemplate: '[resource-path]',
+                append: this.resolvedConfig.sourcemaps.deleteAfterUpload ? false : undefined,
+            }).apply(compiler)
+        }
 
         const onDone = async (stats: webpack.Stats, callback: any): Promise<void> => {
             callback = callback || (() => {})
@@ -46,6 +48,8 @@ export class PosthogWebpackPlugin {
     }
 
     async processSourceMaps(compilation: webpack.Compilation, config: ResolvedPluginConfig): Promise<void> {
+        if (!config.sourcemaps.enabled) return
+
         const outputDirectory = compilation.outputOptions.path
         const chunkArray = Array.from(compilation.chunks)
 
