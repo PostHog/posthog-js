@@ -1,0 +1,20 @@
+{
+  "name": "example-ai-langchain",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "chat": "tsx callback-handler.ts"
+  },
+  "dependencies": {
+    "posthog-node": "*",
+    "@posthog/ai": "*",
+    "langchain": "^0.3.0",
+    "@langchain/core": "^0.3.0",
+    "@langchain/openai": "^0.3.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
