@@ -269,7 +269,10 @@ export class SessionRecording implements Extension {
 
     private _onScriptLoaded(startReason?: SessionStartReason) {
         if (!assignableWindow.__PosthogExtensions__?.initSessionRecording) {
-            throw Error('Called on script loaded before session recording is available')
+            logger.warn(
+                'Session recording script not loaded - this may be due to an ad blocker blocking the recording script'
+            )
+            return
         }
 
         if (!this._lazyLoadedSessionRecording) {
