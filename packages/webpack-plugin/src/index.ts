@@ -1,7 +1,7 @@
 import { Logger, createLogger } from '@posthog/core'
 import { PluginConfig, resolveConfig, ResolvedPluginConfig } from './config'
+import { runSourcemapCli } from '@posthog/core/process'
 import webpack from 'webpack'
-import { spawnLocal } from '@posthog/core/process'
 import path from 'path'
 
 export * from './config'
@@ -10,17 +10,13 @@ export class PosthogWebpackPlugin {
     resolvedConfig: ResolvedPluginConfig
     logger: Logger
 
-    constructor(pluginConfig: PluginConfig) {
+    constructor(pluginConfig: PluginConfig)
+    constructor(pluginConfig: ResolvedPluginConfig, resolved: true)
+    constructor(pluginConfig: PluginConfig | ResolvedPluginConfig, resolved?: boolean) {
         this.logger = createLogger('[PostHog Webpack]')
-        this.resolvedConfig = resolveConfig(pluginConfig)
-        assertValue(
-            this.resolvedConfig.personalApiKey,
-            `Personal API key not provided. If you are using turbo, make sure to add env variables to your turbo config`
-        )
-        assertValue(
-            this.resolvedConfig.projectId,
-            `projectId (or deprecated envId) not provided. If you are using turbo, make sure to add env variables to your turbo config`
-        )
+        this.resolvedConfig = resolved
+            ? (pluginConfig as ResolvedPluginConfig)
+            : resolveConfig(pluginConfig as PluginConfig)
     }
 
     apply(compiler: webpack.Compiler): void {
@@ -51,8 +47,6 @@ export class PosthogWebpackPlugin {
 
     async processSourceMaps(compilation: webpack.Compilation, config: ResolvedPluginConfig): Promise<void> {
         const outputDirectory = compilation.outputOptions.path
-        const args = ['sourcemap', 'process', '--stdin']
-
         const chunkArray = Array.from(compilation.chunks)
 
         if (chunkArray.length == 0) {
@@ -68,39 +62,6 @@ export class PosthogWebpackPlugin {
             })
         )
 
-        if (config.sourcemaps.releaseName) {
-            args.push('--release-name', config.sourcemaps.releaseName)
-        }
-
-        if (config.sourcemaps.releaseVersion) {
-            args.push('--release-version', config.sourcemaps.releaseVersion)
-        }
-
-        if (config.sourcemaps.deleteAfterUpload) {
-            args.push('--delete-after')
-        }
-
-        if (config.sourcemaps.batchSize) {
-            args.push('--batch-size', config.sourcemaps.batchSize.toString())
-        }
-
-        await spawnLocal(config.cliBinaryPath, args, {
-            cwd: process.cwd(),
-            env: {
-                RUST_LOG: `posthog_cli=${config.logLevel}`,
-                ...process.env,
-                POSTHOG_CLI_HOST: config.host,
-                POSTHOG_CLI_API_KEY: config.personalApiKey,
-                POSTHOG_CLI_PROJECT_ID: config.projectId,
-            },
-            stdio: 'inherit',
-            stdin: filePaths.join('\n') + '\n',
-        })
-    }
-}
-
-function assertValue(value: any, message: string): void {
-    if (!value) {
-        throw new Error(message)
+        await runSourcemapCli(config, { filePaths })
     }
 }
