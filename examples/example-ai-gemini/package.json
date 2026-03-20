@@ -1,0 +1,19 @@
+{
+  "name": "example-ai-gemini",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "chat": "tsx chat.ts",
+    "chat:stream": "tsx streaming.ts"
+  },
+  "dependencies": {
+    "posthog-node": "*",
+    "@posthog/ai": "*",
+    "@google/genai": "^1.43.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
