@@ -64,6 +64,7 @@ async function main() {
     console.log(message.content);
   }
 
+  // In production, send tool results back to the model for a final response.
   if (message.tool_calls) {
     for (const toolCall of message.tool_calls) {
       const args = JSON.parse(toolCall.function.arguments);

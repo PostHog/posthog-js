@@ -50,6 +50,7 @@ async function main() {
     input: [{ role: "user", content: "What's the weather like in Tokyo?" }],
   });
 
+  // In production, send tool results back to the model for a final response.
   for (const item of response.output) {
     if ("content" in item && Array.isArray(item.content)) {
       for (const content of item.content) {

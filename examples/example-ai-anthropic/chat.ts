@@ -46,6 +46,7 @@ async function main() {
     ],
   });
 
+  // In production, send tool results back to the model for a final response.
   for (const block of response.content) {
     if (block.type === "text") {
       console.log(block.text);

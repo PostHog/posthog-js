@@ -44,6 +44,7 @@ async function main() {
     },
   });
 
+  // In production, send tool results back to the model for a final response.
   for (const part of response.candidates?.[0]?.content?.parts ?? []) {
     if (part.text) {
       console.log(part.text);
