@@ -427,7 +427,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             mergedOptions.posthogModelOverride ?? (result.response?.modelId ? result.response.modelId : model.modelId)
           const provider = mergedOptions.posthogProviderOverride ?? extractProvider(model)
           const baseURL = '' // cannot currently get baseURL from vercel
-          const content = mapVercelOutput(result.content as LanguageModelContent[])
+          const content = mapVercelOutput((result.content ?? []) as LanguageModelContent[])
           const latency = (Date.now() - startTime) / 1000
           const providerMetadata = result.providerMetadata
           const additionalTokenValues = extractAdditionalTokenValues(providerMetadata)
