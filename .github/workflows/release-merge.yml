@@ -37,18 +37,20 @@ jobs:
               if: steps.check-branch.outputs.exists == 'true'
               env:
                   GH_TOKEN: ${{ github.token }}
+                  BRANCH_NAME: ${{ steps.check-branch.outputs.branch-name }}
               run: |
                   gh api "repos/${{ github.repository }}/merges" \
                     -f base="main" \
-                    -f head="${{ steps.check-branch.outputs.branch-name }}" \
-                    -f commit_message="chore: merge ${{ steps.check-branch.outputs.branch-name }} into main [skip ci]"
+                    -f head="$BRANCH_NAME" \
+                    -f commit_message="chore: merge $BRANCH_NAME into main [skip ci]"
 
             - name: Delete release branch
-              if: success() && steps.check-branch.outputs.exists == 'true'
+              if: always() && steps.check-branch.outputs.exists == 'true'
               env:
                   GH_TOKEN: ${{ github.token }}
+                  BRANCH_NAME: ${{ steps.check-branch.outputs.branch-name }}
               run: |
-                  gh api "repos/${{ github.repository }}/git/refs/heads/${{ steps.check-branch.outputs.branch-name }}" -X DELETE || true
+                  gh api "repos/${{ github.repository }}/git/refs/heads/$BRANCH_NAME" -X DELETE || true
 
             - name: Download Slack thread timestamp
               if: always()
