@@ -1,5 +1,19 @@
 # posthog-js
 
+## 1.363.0
+
+### Minor Changes
+
+- [#3247](https://github.com/PostHog/posthog-js/pull/3247) [`7efa558`](https://github.com/PostHog/posthog-js/commit/7efa558fa0a5e3355d4f3c7974ec20b6a1b810b4) Thanks [@dmarticus](https://github.com/dmarticus)! - prevent silent identity switch during bootstrap and auto-identify anonymous users
+  (2026-03-20)
+
+### Patch Changes
+
+- [#3245](https://github.com/PostHog/posthog-js/pull/3245) [`1acd6fd`](https://github.com/PostHog/posthog-js/commit/1acd6fdfaaa46da71ca15bba2916c3bb81c3e7ef) Thanks [@dmarticus](https://github.com/dmarticus)! - handle plain array and object forms in overrideFeatureFlags
+  (2026-03-20)
+- Updated dependencies [[`1acd6fd`](https://github.com/PostHog/posthog-js/commit/1acd6fdfaaa46da71ca15bba2916c3bb81c3e7ef)]:
+    - @posthog/types@1.363.0
+
 ## 1.362.0
 
 ### Minor Changes
