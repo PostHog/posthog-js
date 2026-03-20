@@ -1,7 +1,7 @@
 /** Anthropic streaming chat, tracked by PostHog. */
 
 import { PostHog } from "posthog-node";
-import { Anthropic } from "@posthog/ai";
+import { Anthropic } from "@posthog/ai/anthropic";
 
 const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
   host: process.env.POSTHOG_HOST || "https://us.i.posthog.com",

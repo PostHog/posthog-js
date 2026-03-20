@@ -1,7 +1,7 @@
 /** Vercel AI SDK with Google Gemini backend, streaming, tracked by PostHog. */
 
 import { PostHog } from "posthog-node";
-import { withTracing } from "@posthog/ai";
+import { withTracing } from "@posthog/ai/vercel";
 import { streamText } from "ai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { z } from "zod";

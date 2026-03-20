@@ -1,7 +1,7 @@
 /** OpenAI Chat Completions API with tool calling, tracked by PostHog. */
 
 import { PostHog } from "posthog-node";
-import { OpenAI } from "@posthog/ai";
+import { OpenAI } from "@posthog/ai/openai";
 
 const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
   host: process.env.POSTHOG_HOST || "https://us.i.posthog.com",

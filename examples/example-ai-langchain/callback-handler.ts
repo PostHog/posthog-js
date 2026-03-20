@@ -1,7 +1,7 @@
 /** LangChain with PostHog callback handler for tracking LLM calls. */
 
 import { PostHog } from "posthog-node";
-import { LangChainCallbackHandler } from "@posthog/ai";
+import { LangChainCallbackHandler } from "@posthog/ai/langchain";
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage } from "@langchain/core/messages";
 

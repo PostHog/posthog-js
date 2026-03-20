@@ -1,6 +1,6 @@
 /** PostHog OTEL trace exporter for any OpenTelemetry-instrumented AI SDK. */
 
-import { PostHogTraceExporter } from "@posthog/ai";
+import { PostHogTraceExporter } from "@posthog/ai/otel";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { SimpleSpanProcessor } from "@opentelemetry/sdk-trace-node";
 

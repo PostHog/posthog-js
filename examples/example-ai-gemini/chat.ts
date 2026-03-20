@@ -1,7 +1,7 @@
 /** Gemini chat with tool calling, tracked by PostHog. */
 
 import { PostHog } from "posthog-node";
-import { GoogleGenAI } from "@posthog/ai";
+import { Gemini as GoogleGenAI } from "@posthog/ai/gemini";
 import type { FunctionDeclaration, Type } from "@google/genai";
 
 const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {

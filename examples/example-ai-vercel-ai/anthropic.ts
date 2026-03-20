@@ -1,7 +1,7 @@
 /** Vercel AI with Anthropic backend, tracked by PostHog. */
 
 import { PostHog } from "posthog-node";
-import { withTracing } from "@posthog/ai";
+import { withTracing } from "@posthog/ai/vercel";
 import { generateText } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 

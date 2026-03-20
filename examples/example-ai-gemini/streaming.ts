@@ -1,7 +1,7 @@
 /** Gemini streaming chat, tracked by PostHog. */
 
 import { PostHog } from "posthog-node";
-import { GoogleGenAI } from "@posthog/ai";
+import { Gemini as GoogleGenAI } from "@posthog/ai/gemini";
 
 const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
   host: process.env.POSTHOG_HOST || "https://us.i.posthog.com",

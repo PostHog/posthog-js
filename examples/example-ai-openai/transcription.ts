@@ -1,7 +1,7 @@
 /** OpenAI audio transcription (Whisper), tracked by PostHog. */
 
 import { PostHog } from "posthog-node";
-import { OpenAI } from "@posthog/ai";
+import { OpenAI } from "@posthog/ai/openai";
 import * as fs from "fs";
 
 const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {

@@ -1,7 +1,7 @@
 /** Vercel AI generateObject for structured output, tracked by PostHog. */
 
 import { PostHog } from "posthog-node";
-import { withTracing } from "@posthog/ai";
+import { withTracing } from "@posthog/ai/vercel";
 import { generateObject } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
