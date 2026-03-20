@@ -1,0 +1,79 @@
+name: 'Release - Merge back to main'
+
+# Runs after the Release workflow completes successfully.
+# Separated into its own workflow to avoid requiring a second approval
+# for the 'NPM Release' environment. workflow_run triggers run on the
+# default branch with access to repository secrets, no environment gate needed.
+
+on:
+    workflow_run:
+        workflows: ['Release']
+        types: [completed]
+
+permissions:
+    contents: write
+
+jobs:
+    merge-release-branch:
+        name: Merge release branch back to main
+        runs-on: ubuntu-latest
+        if: github.event.workflow_run.conclusion == 'success'
+        steps:
+            - name: Check if release branch exists
+              id: check-branch
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  BRANCH_NAME: release/${{ github.event.workflow_run.id }}
+              run: |
+                  echo "branch-name=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
+                  if gh api "repos/${{ github.repository }}/git/ref/heads/$BRANCH_NAME" > /dev/null 2>&1; then
+                    echo "exists=true" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "No release branch found ($BRANCH_NAME). Nothing to merge."
+                    echo "exists=false" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Merge release branch to main via API
+              if: steps.check-branch.outputs.exists == 'true'
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  gh api "repos/${{ github.repository }}/merges" \
+                    -f base="main" \
+                    -f head="${{ steps.check-branch.outputs.branch-name }}" \
+                    -f commit_message="chore: merge ${{ steps.check-branch.outputs.branch-name }} into main [skip ci]"
+
+            - name: Delete release branch
+              if: always() && steps.check-branch.outputs.exists == 'true'
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  gh api "repos/${{ github.repository }}/git/refs/heads/${{ steps.check-branch.outputs.branch-name }}" -X DELETE || true
+
+            - name: Download Slack thread timestamp
+              if: always()
+              id: slack-ts
+              uses: actions/download-artifact@v4
+              with:
+                  name: slack-thread-ts
+                  run-id: ${{ github.event.workflow_run.id }}
+                  github-token: ${{ github.token }}
+              continue-on-error: true
+
+            - name: Read Slack thread timestamp
+              if: always() && steps.slack-ts.outcome == 'success'
+              id: read-slack-ts
+              run: |
+                  SLACK_TS=$(cat slack_ts.txt)
+                  echo "slack_ts=$SLACK_TS" >> "$GITHUB_OUTPUT"
+
+            - name: Notify Slack - Merge Failed
+              continue-on-error: true
+              if: failure() && steps.read-slack-ts.outputs.slack_ts != ''
+              uses: PostHog/.github/.github/actions/slack-thread-reply@main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ steps.read-slack-ts.outputs.slack_ts }}
+                  message: '⚠️ Packages published but failed to merge `${{ steps.check-branch.outputs.branch-name }}` back to main! Manual merge required. <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  emoji_reaction: 'warning'

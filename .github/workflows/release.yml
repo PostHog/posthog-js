@@ -342,58 +342,12 @@ jobs:
                   message: '❌ Failed to release `${{ matrix.package.name }}@v${{ steps.check-package-version.outputs.committed-version }}`! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
                   emoji_reaction: 'x'
 
-    merge-release-branch:
-        name: Merge release branch back to main
-        needs: [version-bump, publish, notify-approval-needed]
-        runs-on: ubuntu-latest
-        if: always() && needs.publish.result == 'success' && needs.version-bump.outputs.release-branch != ''
-        environment: 'NPM Release' # Re-uses the already-approved environment from version-bump (no second approval needed)
-        permissions:
-            contents: write
-        steps:
-            - name: Get GitHub App token
-              id: releaser
-              uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
-              with:
-                  app-id: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_APP_ID }}
-                  private-key: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_PRIVATE_KEY }}
-
-            - name: Merge release branch to main via API
-              env:
-                  GH_TOKEN: ${{ steps.releaser.outputs.token }}
-              run: |
-                  gh api "repos/${{ github.repository }}/merges" \
-                    -f base="main" \
-                    -f head="${{ needs.version-bump.outputs.release-branch }}" \
-                    -f commit_message="chore: merge ${{ needs.version-bump.outputs.release-branch }} into main [skip ci]"
-
-            - name: Delete release branch
-              if: always()
-              env:
-                  GH_TOKEN: ${{ steps.releaser.outputs.token }}
-              run: |
-                  gh api "repos/${{ github.repository }}/git/refs/heads/${{ needs.version-bump.outputs.release-branch }}" -X DELETE || true
-
-            - name: Notify Slack - Merge Failed
-              continue-on-error: true
-              if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
-              uses: PostHog/.github/.github/actions/slack-thread-reply@main
-              with:
-                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
-                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
-                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '⚠️ Packages published but failed to merge `${{ needs.version-bump.outputs.release-branch }}` back to main! Manual merge required. <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
-                  emoji_reaction: 'warning'
-
     notify-released:
         name: Notify Slack - Released
-        needs: [notify-approval-needed, merge-release-branch]
+        needs: [notify-approval-needed, publish]
         runs-on: ubuntu-latest
-        if: always() && needs.merge-release-branch.result == 'success' && needs.notify-approval-needed.outputs.slack_ts != ''
+        if: always() && needs.publish.result == 'success' && needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
-            - name: Checkout repository
-              uses: actions/checkout@v6
-
             - name: Notify Slack - Released
               continue-on-error: true # Slack failure shouldn't mark release as failed
               uses: PostHog/.github/.github/actions/slack-thread-reply@main
@@ -403,3 +357,14 @@ jobs:
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
                   message: '🚀 All packages released successfully!'
                   emoji_reaction: 'rocket'
+
+            # Persist slack_ts so the release-merge workflow can thread replies
+            - name: Save Slack thread timestamp
+              run: echo "${{ needs.notify-approval-needed.outputs.slack_ts }}" > slack_ts.txt
+
+            - name: Upload Slack thread timestamp
+              uses: actions/upload-artifact@v4
+              with:
+                  name: slack-thread-ts
+                  path: slack_ts.txt
+                  retention-days: 1
