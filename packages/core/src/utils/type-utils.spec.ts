@@ -1,4 +1,4 @@
-import { isNumber, isPositiveNumber } from './type-utils'
+import { isEvent, isNumber, isPositiveNumber } from './type-utils'
 
 describe('type-utils', () => {
   describe('isNumber', () => {
@@ -16,6 +16,33 @@ describe('type-utils', () => {
       [{}, false],
     ])('isNumber(%p) returns %p', (value, expected) => {
       expect(isNumber(value)).toBe(expected)
+    })
+  })
+
+  describe('isEvent', () => {
+    it('returns false without throwing when Event global is undefined', () => {
+      const originalEvent = globalThis.Event
+      try {
+        delete globalThis.Event
+        expect(() => isEvent(new Error('test'))).not.toThrow()
+        expect(isEvent(new Error('test'))).toBe(false)
+      } finally {
+        globalThis.Event = originalEvent
+      }
+    })
+
+    it('returns true for Event instances when Event global exists', () => {
+      if (typeof Event !== 'undefined') {
+        expect(isEvent(new Event('test'))).toBe(true)
+      }
+    })
+
+    it('returns false for non-Event values', () => {
+      expect(isEvent(new Error('test'))).toBe(false)
+      expect(isEvent('string')).toBe(false)
+      expect(isEvent({})).toBe(false)
+      expect(isEvent(null)).toBe(false)
+      expect(isEvent(undefined)).toBe(false)
     })
   })
 
