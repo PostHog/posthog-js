@@ -2,6 +2,14 @@ import { PostHogConfig, Properties } from '../types'
 import { logger } from './logger'
 import { isFormData, isNull, isNullish, isNumber, isString, hasOwnProperty, isArray } from '@posthog/core'
 
+export function find<T>(value: T[], predicate: (value: T) => boolean): T | undefined {
+    for (let i = 0; i < value.length; i++) {
+        if (predicate(value[i])) {
+            return value[i]
+        }
+    }
+}
+
 export function eachArray<E = any>(obj: E[] | null | undefined, iterator: (value: E, key: number) => void): void {
     if (isArray(obj)) {
         obj.forEach(iterator)
