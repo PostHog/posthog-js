@@ -1,5 +1,19 @@
 # @posthog/core
 
+## 1.24.1
+
+### Patch Changes
+
+- [#3265](https://github.com/PostHog/posthog-js/pull/3265) [`314120a`](https://github.com/PostHog/posthog-js/commit/314120aa2377b3c8031dd774833fe9082ecdbd39) Thanks [@hpouillot](https://github.com/hpouillot)! - fix sourcemap upload with stdin, clean config
+  (2026-03-20)
+
+## 1.24.0
+
+### Minor Changes
+
+- [#3246](https://github.com/PostHog/posthog-js/pull/3246) [`9cd2313`](https://github.com/PostHog/posthog-js/commit/9cd23138343e1020811f85853d6016cc985bb24f) Thanks [@hpouillot](https://github.com/hpouillot)! - pipe chunk file path to stdin
+  (2026-03-18)
+
 ## 1.23.4
 
 ### Patch Changes

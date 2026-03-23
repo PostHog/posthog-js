@@ -1,0 +1,24 @@
+{
+  "name": "example-ai-openai",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "chat": "tsx chat-completions.ts",
+    "chat:stream": "tsx chat-completions-streaming.ts",
+    "responses": "tsx responses.ts",
+    "responses:stream": "tsx responses-streaming.ts",
+    "embeddings": "tsx embeddings.ts",
+    "transcription": "tsx transcription.ts",
+    "image": "tsx image-generation.ts"
+  },
+  "dependencies": {
+    "posthog-node": "*",
+    "@posthog/ai": "*",
+    "openai": "^4.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

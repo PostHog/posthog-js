@@ -1,0 +1,27 @@
+{
+  "name": "example-ai-vercel-ai",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "generate": "tsx generate-text.ts",
+    "stream": "tsx stream-text.ts",
+    "object": "tsx generate-object.ts",
+    "object:stream": "tsx stream-object.ts",
+    "anthropic": "tsx anthropic.ts",
+    "google": "tsx google.ts"
+  },
+  "dependencies": {
+    "posthog-node": "*",
+    "@posthog/ai": "*",
+    "ai": "^4.0.0",
+    "@ai-sdk/openai": "^1.0.0",
+    "@ai-sdk/anthropic": "^1.0.0",
+    "@ai-sdk/google": "^1.0.0",
+    "zod": "^3.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

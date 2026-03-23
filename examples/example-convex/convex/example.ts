@@ -115,6 +115,15 @@ export const testCaptureException = mutation({
   },
 })
 
+export const testThrowError = mutation({
+  args: {
+    errorMessage: v.string(),
+  },
+  handler: async (_ctx, args) => {
+    throw new Error(args.errorMessage)
+  },
+})
+
 // --- Feature flag methods (actions) ---
 
 const featureFlagArgs = {

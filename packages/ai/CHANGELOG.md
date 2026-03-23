@@ -1,5 +1,23 @@
 # posthog-ai
 
+## 7.12.2
+
+### Patch Changes
+
+- [#3264](https://github.com/PostHog/posthog-js/pull/3264) [`d5b84c4`](https://github.com/PostHog/posthog-js/commit/d5b84c44848066f8005ce5462349e5ca46715b24) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Fix crash in Vercel AI middleware when model returns only tool calls with no text content
+  (2026-03-20)
+- Updated dependencies [[`314120a`](https://github.com/PostHog/posthog-js/commit/314120aa2377b3c8031dd774833fe9082ecdbd39)]:
+  - @posthog/core@1.24.1
+  - posthog-node@5.28.5
+
+## 7.12.1
+
+### Patch Changes
+
+- Updated dependencies [[`9cd2313`](https://github.com/PostHog/posthog-js/commit/9cd23138343e1020811f85853d6016cc985bb24f)]:
+  - @posthog/core@1.24.0
+  - posthog-node@5.28.4
+
 ## 7.12.0
 
 ### Minor Changes

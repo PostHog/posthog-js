@@ -218,6 +218,9 @@ export interface PostHog {
          *     flags: {'beta-feature': 'variant'},
          *     payloads: { 'beta-feature': { someData: true } }
          * })
+         * posthog.featureFlags.overrideFeatureFlags({ // only override payloads
+         *     payloads: { 'beta-feature': { someData: true } }
+         * })
          * ```
          */
         overrideFeatureFlags(overrideOptions: OverrideFeatureFlagsOptions): void

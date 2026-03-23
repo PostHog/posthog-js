@@ -1,5 +1,23 @@
 # @posthog/nextjs-config
 
+## 1.8.23
+
+### Patch Changes
+
+- [#3265](https://github.com/PostHog/posthog-js/pull/3265) [`314120a`](https://github.com/PostHog/posthog-js/commit/314120aa2377b3c8031dd774833fe9082ecdbd39) Thanks [@hpouillot](https://github.com/hpouillot)! - fix sourcemap upload with stdin, clean config
+  (2026-03-20)
+- Updated dependencies [[`314120a`](https://github.com/PostHog/posthog-js/commit/314120aa2377b3c8031dd774833fe9082ecdbd39)]:
+  - @posthog/webpack-plugin@1.3.1
+  - @posthog/core@1.24.1
+
+## 1.8.22
+
+### Patch Changes
+
+- Updated dependencies [[`9cd2313`](https://github.com/PostHog/posthog-js/commit/9cd23138343e1020811f85853d6016cc985bb24f)]:
+  - @posthog/webpack-plugin@1.3.0
+  - @posthog/core@1.24.0
+
 ## 1.8.21
 
 ### Patch Changes
