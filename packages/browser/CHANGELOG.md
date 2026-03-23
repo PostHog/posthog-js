@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.363.3
+
+### Patch Changes
+
+- [#3253](https://github.com/PostHog/posthog-js/pull/3253) [`42fbd41`](https://github.com/PostHog/posthog-js/commit/42fbd4190ac4c4ce850158407512d15fa2e590c8) Thanks [@marandaneto](https://github.com/marandaneto)! - Reduce browser SDK bundle size by ~6.6 KB (-3.7%) through code modernization, build config tuning, string deduplication, enum-to-const conversions, and property access shorthand getters.
+  (2026-03-23)
+- Updated dependencies []:
+    - @posthog/types@1.363.3
+
 ## 1.363.2
 
 ### Patch Changes
