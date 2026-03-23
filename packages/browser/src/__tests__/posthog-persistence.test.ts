@@ -332,6 +332,42 @@ describe('persistence', () => {
             })
         })
 
+        it('should prefer cookie-backed identity and session properties over stale localStorage values', () => {
+            const cookieSource = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
+            cookieSource.register({
+                distinct_id: 'fresh-distinct-id',
+                [DEVICE_ID]: 'fresh-device-id',
+                [SESSION_ID]: [2_000, 'fresh-session-id', 1_500],
+                [INITIAL_PERSON_INFO]: { u: 'https://fresh.example.com', r: 'https://ref.example.com' },
+                [USER_STATE]: 'identified',
+            })
+
+            // Simulate stale per-subdomain localStorage from an old visit while cookie values
+            // were refreshed recently on a different subdomain.
+            localStorage.setItem(
+                'ph__posthog',
+                JSON.stringify({
+                    distinct_id: 'stale-distinct-id',
+                    [DEVICE_ID]: 'stale-device-id',
+                    [SESSION_ID]: [1_000, 'stale-session-id', 900],
+                    [INITIAL_PERSON_INFO]: { u: 'https://stale.example.com', r: 'https://stale-ref.example.com' },
+                    [USER_STATE]: 'anonymous',
+                    stale_local_only_prop: 'kept',
+                })
+            )
+
+            const hydrated = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
+
+            expect(hydrated.props).toEqual({
+                distinct_id: 'fresh-distinct-id',
+                [DEVICE_ID]: 'fresh-device-id',
+                [SESSION_ID]: [2_000, 'fresh-session-id', 1_500],
+                [INITIAL_PERSON_INFO]: { u: 'https://fresh.example.com', r: 'https://ref.example.com' },
+                [USER_STATE]: 'identified',
+                stale_local_only_prop: 'kept',
+            })
+        })
+
         it('should persist custom properties to cookies when using localStorage+cookie', () => {
             const customProp = 'my_custom_prop'
             const token = uuidv7()

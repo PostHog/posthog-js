@@ -285,7 +285,13 @@ export const createLocalPlusCookieStore = (customCookieProperties: readonly stri
                     // See if there's a cookie stored with data.
                     cookieProperties = cookieStore._parse(name) || {}
                 } catch {}
-                const value = extend(cookieProperties, JSON.parse(localStore._get(name) || '{}'))
+                const value = extend(
+                    {},
+                    JSON.parse(localStore._get(name) || '{}'),
+                    // Cookie-persisted properties must win over localStorage to keep
+                    // cross-subdomain identity/session values consistent.
+                    cookieProperties
+                )
                 localStore._set(name, value)
                 return value
             } catch {
