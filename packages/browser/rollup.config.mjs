@@ -106,7 +106,6 @@ const plugins = (es5, noExternal) => [
             unsafe_methods: true,
             unsafe_comps: true,
             unsafe_math: true,
-            booleans_as_integers: true,
             unsafe_proto: true,
             unsafe_regexp: true,
         },
