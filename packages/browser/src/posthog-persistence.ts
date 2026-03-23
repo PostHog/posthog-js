@@ -170,7 +170,7 @@ export class PostHogPersistence {
                         p[`$feature/${keys[i]}`] = v[keys[i]]
                     }
                 }
-            } else if (!PERSISTENCE_RESERVED_PROPERTIES.includes(k)) {
+            } else if (PERSISTENCE_RESERVED_PROPERTIES.indexOf(k) === -1) {
                 p[k] = v
             }
         })
