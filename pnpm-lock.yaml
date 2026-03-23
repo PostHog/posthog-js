@@ -316,14 +316,14 @@ importers:
         specifier: workspace:*
         version: link:../../tooling/rollup-utils
       '@posthog/rrweb-plugin-console-record':
-        specifier: ^0.0.47
-        version: 0.0.47(@posthog/rrweb-utils@0.0.47)(@posthog/rrweb@0.0.47)
+        specifier: ^0.0.48
+        version: 0.0.48(@posthog/rrweb-utils@0.0.48)(@posthog/rrweb@0.0.48)
       '@posthog/rrweb-record':
-        specifier: ^0.0.47
-        version: 0.0.47
+        specifier: ^0.0.48
+        version: 0.0.48
       '@posthog/rrweb-types':
-        specifier: ^0.0.47
-        version: 0.0.47
+        specifier: ^0.0.48
+        version: 0.0.48
       '@rollup/plugin-babel':
         specifier: ^6.0.4
         version: 6.0.4(@babel/core@7.28.5)(@types/babel__core@7.1.18)(rollup@4.53.3)
@@ -3968,29 +3968,29 @@ packages:
     engines: {node: '>=14', npm: '>=6'}
     hasBin: true
 
-  '@posthog/rrdom@0.0.47':
-    resolution: {integrity: sha512-j04wuEE+BSxss1URMHcnCyAGIf76eHdykbIbl3743JKdrh6i6mlNc/JzesHRhD+LVTvYl+pgPD+KOuyI2U7v+Q==}
+  '@posthog/rrdom@0.0.48':
+    resolution: {integrity: sha512-TqXpkFXRiiq0Z6yPuXk4u7xAxx+r5dxLfbLEA/ITNg08v0v0VqhTkkbQ7obJ6Ek7YD9w28ywNEwRSadbax+Ufg==}
 
-  '@posthog/rrweb-plugin-console-record@0.0.47':
-    resolution: {integrity: sha512-3uGA0z93sPFOndFrphFhdEgGFB3n5+TVgohnYvdILIU3MImZnyry2a26130+LXohlmxy/m4+6vfkMKUVlj+vtg==}
+  '@posthog/rrweb-plugin-console-record@0.0.48':
+    resolution: {integrity: sha512-WVsbCdMBs+Fg2qGef3q6Rbe1y9yBvBI/tD2bA4m5kStArRV2ZnVlCdM2ecpIUA6oD7+FAe/NeVWTw9audQrOkQ==}
     peerDependencies:
-      '@posthog/rrweb': 0.0.47
-      '@posthog/rrweb-utils': 0.0.47
+      '@posthog/rrweb': 0.0.48
+      '@posthog/rrweb-utils': 0.0.48
 
-  '@posthog/rrweb-record@0.0.47':
-    resolution: {integrity: sha512-rrtQxhok/ZyfgbwzsPUbkRu6ShDAEKxa4hcHRoAh56bt3WQ3qKy46pNb/W6NF7svcSiDHZLNxMNOBRCT3DLqtQ==}
+  '@posthog/rrweb-record@0.0.48':
+    resolution: {integrity: sha512-Tonc9iH/INJW+2jXM1Q4R9ISe7oepNDM0hdGrGMXPlUGc+L2ogWEBUMq0qvX+J3xIewxZWuBnfQ22ejV8jCN7w==}
 
-  '@posthog/rrweb-snapshot@0.0.47':
-    resolution: {integrity: sha512-R22QjWgKSHLoqNl/HmIJ/W5CTb3CWhI4P4r6NHTMXEqyo3whvbcWo1QpLhAFD9B/whbVPoqBLLX5hAgH43Jp2w==}
+  '@posthog/rrweb-snapshot@0.0.48':
+    resolution: {integrity: sha512-GIQH0NxoeoMOILbTRB9aYJ9kGyxlHO6ZDJKG7SgVQ94pbd2uGL+1mXmaWpu2ZRyTAUGyW0ekIKpV0+mqhcikGA==}
 
-  '@posthog/rrweb-types@0.0.47':
-    resolution: {integrity: sha512-HP0CHcUwttuu1uh1J4f1uYl2jaXcmgkNCZCmgPl30Q6TIx8ipL0w9NqN2YkOyvfNSt5cX2PtWMLbDhWkMsUO1g==}
+  '@posthog/rrweb-types@0.0.48':
+    resolution: {integrity: sha512-f5glNJgcJVQ/OAsM533p7btDMpFf5lKkUXG+SaKir0siwHuzKoHq61j0JIk6zuEkb3duf/ujA1r2wkohgD8hbQ==}
 
-  '@posthog/rrweb-utils@0.0.47':
-    resolution: {integrity: sha512-PRLOGZqW92rOT87V1pX96RJjKnD7dCiL5iT7gFtvuIShVX2ZyORJJZ36Sr1UjK7AY3KTT06nI9yLl9EG/jJiGw==}
+  '@posthog/rrweb-utils@0.0.48':
+    resolution: {integrity: sha512-X3NqqnfHCKFN0PsomjkJmqJVK13tmAXzKxss+6qoVMPizKIE+iH2Jo2kdcVuGKp1bSZJZ86J4YT9emX74ArwMw==}
 
-  '@posthog/rrweb@0.0.47':
-    resolution: {integrity: sha512-XcZUg63PUNXd77Po2aL8cXfuw/3slQMivxyCrkof1CCR+S91/Eqyo6j601IrAs7jUfzuuDpCuLwSJ9lpSb0G3A==}
+  '@posthog/rrweb@0.0.48':
+    resolution: {integrity: sha512-yTCy05edNFydumIti3jkHt0r8UkNdYm8f3DlM6eUvV02/+aJu00+oodN3VJJ4UxjuOvVA1eJMHVv+3Dt+7QHzw==}
 
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
@@ -17665,37 +17665,37 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  '@posthog/rrdom@0.0.47':
+  '@posthog/rrdom@0.0.48':
     dependencies:
-      '@posthog/rrweb-snapshot': 0.0.47
+      '@posthog/rrweb-snapshot': 0.0.48
 
-  '@posthog/rrweb-plugin-console-record@0.0.47(@posthog/rrweb-utils@0.0.47)(@posthog/rrweb@0.0.47)':
+  '@posthog/rrweb-plugin-console-record@0.0.48(@posthog/rrweb-utils@0.0.48)(@posthog/rrweb@0.0.48)':
     dependencies:
-      '@posthog/rrweb': 0.0.47
-      '@posthog/rrweb-utils': 0.0.47
+      '@posthog/rrweb': 0.0.48
+      '@posthog/rrweb-utils': 0.0.48
 
-  '@posthog/rrweb-record@0.0.47':
+  '@posthog/rrweb-record@0.0.48':
     dependencies:
-      '@posthog/rrweb': 0.0.47
-      '@posthog/rrweb-types': 0.0.47
-      '@posthog/rrweb-utils': 0.0.47
+      '@posthog/rrweb': 0.0.48
+      '@posthog/rrweb-types': 0.0.48
+      '@posthog/rrweb-utils': 0.0.48
 
-  '@posthog/rrweb-snapshot@0.0.47':
+  '@posthog/rrweb-snapshot@0.0.48':
     dependencies:
       '@types/postcss-safe-parser': 5.0.4
       postcss: 8.5.6
       postcss-safe-parser: 7.0.1(postcss@8.5.6)
 
-  '@posthog/rrweb-types@0.0.47': {}
+  '@posthog/rrweb-types@0.0.48': {}
 
-  '@posthog/rrweb-utils@0.0.47': {}
+  '@posthog/rrweb-utils@0.0.48': {}
 
-  '@posthog/rrweb@0.0.47':
+  '@posthog/rrweb@0.0.48':
     dependencies:
-      '@posthog/rrdom': 0.0.47
-      '@posthog/rrweb-snapshot': 0.0.47
-      '@posthog/rrweb-types': 0.0.47
-      '@posthog/rrweb-utils': 0.0.47
+      '@posthog/rrdom': 0.0.48
+      '@posthog/rrweb-snapshot': 0.0.48
+      '@posthog/rrweb-types': 0.0.48
+      '@posthog/rrweb-utils': 0.0.48
       '@types/css-font-loading-module': 0.0.7
       '@xstate/fsm': 1.5.2
       base64-arraybuffer: 1.0.2
