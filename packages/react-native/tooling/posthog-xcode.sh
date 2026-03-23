@@ -36,18 +36,18 @@ if [ -f "$HOME/.posthog/posthog-cli" ]; then
   PH_CLI_PATH="$HOME/.posthog/posthog-cli"
 else
   # Check if installed via npm -g @posthog/cli
-  NPM_GLOBAL_PREFIX=$(npm prefix -g 2>/dev/null)
+  NPM_GLOBAL_PREFIX=$(npm prefix -g 2>/dev/null || true)
   if [ -n "$NPM_GLOBAL_PREFIX" ] && [ -f "$NPM_GLOBAL_PREFIX/bin/posthog-cli" ]; then
     PH_CLI_PATH="$NPM_GLOBAL_PREFIX/bin/posthog-cli"
   else
     # Check if installed as local dependency
-    NPM_LOCAL_ROOT=$(npm root 2>/dev/null)
+    NPM_LOCAL_ROOT=$(npm root 2>/dev/null || true)
     if [ -n "$NPM_LOCAL_ROOT" ] && [ -f "$NPM_LOCAL_ROOT/.bin/posthog-cli" ]; then
       PH_CLI_PATH="$NPM_LOCAL_ROOT/.bin/posthog-cli"
     else
       # Fallback to searching common locations
       export PATH="/usr/local/bin:/opt/homebrew/bin:$HOME/.cargo/bin:$HOME/.local/bin:$HOME/.posthog:$PATH"
-      PH_CLI_PATH=$(command -v posthog-cli 2>/dev/null)
+      PH_CLI_PATH=$(command -v posthog-cli 2>/dev/null || true)
     fi
   fi
 fi
