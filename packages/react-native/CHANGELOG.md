@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.37.6
+
+### Patch Changes
+
+- [#3270](https://github.com/PostHog/posthog-js/pull/3270) [`693cc0d`](https://github.com/PostHog/posthog-js/commit/693cc0d6c9a8ba795baa53ff66b0bc9cd4d46296) Thanks [@cat-ph](https://github.com/cat-ph)! - prevent xcode build abort when npm is not in PATH
+  (2026-03-23)
+
 ## 4.37.5
 
 ### Patch Changes

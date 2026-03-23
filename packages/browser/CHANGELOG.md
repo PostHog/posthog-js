@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.363.2
+
+### Patch Changes
+
+- [#3267](https://github.com/PostHog/posthog-js/pull/3267) [`e5ef520`](https://github.com/PostHog/posthog-js/commit/e5ef5201bf764aac11a765549f9561010d3b4329) Thanks [@ksvat](https://github.com/ksvat)! - bump rrweb dependency version
+  (2026-03-23)
+
+- [#3260](https://github.com/PostHog/posthog-js/pull/3260) [`1435ec8`](https://github.com/PostHog/posthog-js/commit/1435ec8bb64dd6ac8f5359630b7f01b051cc5fe6) Thanks [@kyleswank](https://github.com/kyleswank)! - Log warning instead of throwing error when session recording script is blocked by ad blockers
+  (2026-03-23)
+- Updated dependencies []:
+    - @posthog/types@1.363.2
+
 ## 1.363.1
 
 ### Patch Changes
