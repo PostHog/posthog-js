@@ -45,6 +45,7 @@ export const getQueryParam = function (url: string, param: string): string {
         const queryStart = withoutHash.indexOf('?')
         if (queryStart === -1) return ''
         const cleanedUrl = withoutHash.substring(0, queryStart + 1) + withoutHash.substring(queryStart + 1).replace(/^\?+/g, '')
+        // Providing a minimal base URL prevents parsing from throwing if the input is a relative URL
         const parsedUrl = new URL(cleanedUrl, 'http://a')
         return parsedUrl.searchParams.get(param) || ''
     } catch {
