@@ -3599,7 +3599,7 @@ export class PostHog implements PostHogInterface {
      * Usually this means that the user has not opted out of capturing, but the exact behaviour can be controlled by
      * some config options.
      *
-     * Additionally, if the cookieless_mode is set to COOKIELESS_ON_REJECT, we will capture events in cookieless mode if the
+     * Additionally, if the cookieless_mode is set to `'on_reject'`, we will capture events in cookieless mode if the
      * user has explicitly opted out.
      *
      * {@label Privacy}
