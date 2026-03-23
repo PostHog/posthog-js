@@ -1,5 +1,5 @@
 import { PostHog } from './posthog-core'
-import { find } from './utils'
+import { COOKIELESS_ALWAYS, COOKIELESS_ON_REJECT } from './constants'
 import { assignableWindow, navigator } from './utils/globals'
 import { cookieStore, localStore } from './storage'
 import { PersistentStore } from './types'
@@ -7,11 +7,12 @@ import { isNoLike, isYesLike } from '@posthog/core'
 
 const OPT_OUT_PREFIX = '__ph_opt_in_out_'
 
-export enum ConsentStatus {
-    PENDING = -1,
-    DENIED = 0,
-    GRANTED = 1,
-}
+export const ConsentStatus = {
+    PENDING: -1,
+    DENIED: 0,
+    GRANTED: 1,
+} as const
+export type ConsentStatus = (typeof ConsentStatus)[keyof typeof ConsentStatus]
 
 /**
  * ConsentManager provides tools for managing user consent as configured by the application.
@@ -34,7 +35,7 @@ export class ConsentManager {
     }
 
     public isOptedOut() {
-        if (this._config.cookieless_mode === 'always') {
+        if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
             return true
         }
         // we are opted out if:
@@ -44,7 +45,7 @@ export class ConsentManager {
         return (
             this.consent === ConsentStatus.DENIED ||
             (this.consent === ConsentStatus.PENDING &&
-                (this._config.opt_out_capturing_by_default || this._config.cookieless_mode === 'on_reject'))
+                (this._config.opt_out_capturing_by_default || this._config.cookieless_mode === COOKIELESS_ON_REJECT))
         )
     }
 
@@ -114,15 +115,10 @@ export class ConsentManager {
         if (!this._config.respect_dnt) {
             return false
         }
-        return !!find(
-            [
-                navigator?.doNotTrack, // standard
-                (navigator as any)?.['msDoNotTrack'],
-                assignableWindow['doNotTrack'],
-            ],
-            (dntValue): boolean => {
-                return isYesLike(dntValue)
-            }
-        )
+        return [
+            navigator?.doNotTrack, // standard
+            (navigator as any)?.['msDoNotTrack'],
+            assignableWindow['doNotTrack'],
+        ].some((dntValue) => isYesLike(dntValue))
     }
 }

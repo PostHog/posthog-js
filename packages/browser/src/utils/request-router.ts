@@ -6,11 +6,12 @@ import { PostHog } from '../posthog-core'
  * on the type of request (events, replays, flags, etc.) and handle overrides that may come from configs or the flags endpoint
  */
 
-export enum RequestRouterRegion {
-    US = 'us',
-    EU = 'eu',
-    CUSTOM = 'custom',
-}
+export const RequestRouterRegion = {
+    US: 'us',
+    EU: 'eu',
+    CUSTOM: 'custom',
+} as const
+export type RequestRouterRegion = (typeof RequestRouterRegion)[keyof typeof RequestRouterRegion]
 
 export type RequestRouterTarget = 'api' | 'ui' | 'assets' | 'flags'
 

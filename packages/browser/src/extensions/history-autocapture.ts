@@ -1,4 +1,5 @@
 import { PostHog } from '../posthog-core'
+import { EVENT_PAGEVIEW } from '../constants'
 import { window } from '../utils/globals'
 import { addEventListener } from '../utils'
 import { logger } from '../utils/logger'
@@ -95,7 +96,7 @@ export class HistoryAutocapture implements Extension {
 
             // Only capture pageview if the pathname has changed and the feature is enabled
             if (currentPathname !== this._lastPathname && this.isEnabled) {
-                this._instance.capture('$pageview', { navigation_type: navigationType })
+                this._instance.capture(EVENT_PAGEVIEW, { navigation_type: navigationType })
             }
 
             this._lastPathname = currentPathname

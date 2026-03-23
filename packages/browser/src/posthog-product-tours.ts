@@ -37,6 +37,10 @@ export class PostHogProductTours implements Extension {
     private _productTourManager: ProductTourManagerInterface | null = null
     private _cachedTours: ProductTour[] | null = null
 
+    private get _persistence() {
+        return this._instance.persistence
+    }
+
     constructor(instance: PostHog) {
         this._instance = instance
     }
@@ -50,8 +54,8 @@ export class PostHogProductTours implements Extension {
             return
         }
 
-        if (this._instance.persistence) {
-            this._instance.persistence.register({
+        if (this._persistence) {
+            this._persistence.register({
                 [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: !!response.productTours,
             })
         }
@@ -92,7 +96,7 @@ export class PostHogProductTours implements Extension {
             return
         }
 
-        const persistence = this._instance.persistence
+        const persistence = this._persistence
         if (persistence) {
             const storedTours = persistence.props[PRODUCT_TOURS_STORAGE_KEY]
             if (isArray(storedTours) && !forceReload) {
@@ -169,7 +173,7 @@ export class PostHogProductTours implements Extension {
 
     clearCache(): void {
         this._cachedTours = null
-        this._instance.persistence?.unregister(PRODUCT_TOURS_STORAGE_KEY)
+        this._persistence?.unregister(PRODUCT_TOURS_STORAGE_KEY)
     }
 
     resetTour(tourId: string): void {

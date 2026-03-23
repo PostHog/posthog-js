@@ -1,3 +1,4 @@
+import { LOAD_EXT_NOT_FOUND } from '../../constants'
 import { PostHog } from '../../posthog-core'
 import {
     ConversationsRemoteConfig,
@@ -18,6 +19,7 @@ import { isToolbarInstance } from '../../utils'
 import { Extension } from '../types'
 
 const logger = createLogger('[Conversations]')
+const NOT_AVAILABLE = 'Conversations not available yet.'
 
 export type ConversationsManager = LazyLoadedConversationsInterface
 
@@ -128,7 +130,7 @@ export class PostHogConversations implements Extension {
             // If we reach here, conversations code is not loaded yet
             const loadExternalDependency = phExtensions.loadExternalDependency
             if (!loadExternalDependency) {
-                this._handleLoadError('PostHog loadExternalDependency extension not found.')
+                this._handleLoadError(LOAD_EXT_NOT_FOUND)
                 return
             }
 
@@ -235,7 +237,7 @@ export class PostHogConversations implements Extension {
         newTicket?: boolean
     ): Promise<SendMessageResponse | null> {
         if (!this._conversationsManager) {
-            logger.warn('Conversations not available yet.')
+            logger.warn(NOT_AVAILABLE)
             return null
         }
         return this._conversationsManager.sendMessage(message, userTraits, newTicket)
@@ -258,7 +260,7 @@ export class PostHogConversations implements Extension {
      */
     async getMessages(ticketId?: string, after?: string): Promise<GetMessagesResponse | null> {
         if (!this._conversationsManager) {
-            logger.warn('Conversations not available yet.')
+            logger.warn(NOT_AVAILABLE)
             return null
         }
         return this._conversationsManager.getMessages(ticketId, after)
@@ -276,7 +278,7 @@ export class PostHogConversations implements Extension {
      */
     async markAsRead(ticketId?: string): Promise<MarkAsReadResponse | null> {
         if (!this._conversationsManager) {
-            logger.warn('Conversations not available yet.')
+            logger.warn(NOT_AVAILABLE)
             return null
         }
         return this._conversationsManager.markAsRead(ticketId)
@@ -298,7 +300,7 @@ export class PostHogConversations implements Extension {
      */
     async getTickets(options?: GetTicketsOptions): Promise<GetTicketsResponse | null> {
         if (!this._conversationsManager) {
-            logger.warn('Conversations not available yet.')
+            logger.warn(NOT_AVAILABLE)
             return null
         }
         return this._conversationsManager.getTickets(options)
@@ -312,7 +314,7 @@ export class PostHogConversations implements Extension {
      */
     async requestRestoreLink(email: string): Promise<RequestRestoreLinkResponse | null> {
         if (!this._conversationsManager) {
-            logger.warn('Conversations not available yet.')
+            logger.warn(NOT_AVAILABLE)
             return null
         }
         return this._conversationsManager.requestRestoreLink(email)
@@ -326,7 +328,7 @@ export class PostHogConversations implements Extension {
      */
     async restoreFromToken(restoreToken: string): Promise<RestoreFromTokenResponse | null> {
         if (!this._conversationsManager) {
-            logger.warn('Conversations not available yet.')
+            logger.warn(NOT_AVAILABLE)
             return null
         }
         return this._conversationsManager.restoreFromToken(restoreToken)
@@ -339,7 +341,7 @@ export class PostHogConversations implements Extension {
      */
     async restoreFromUrlToken(): Promise<RestoreFromTokenResponse | null> {
         if (!this._conversationsManager) {
-            logger.warn('Conversations not available yet.')
+            logger.warn(NOT_AVAILABLE)
             return null
         }
         return this._conversationsManager.restoreFromUrlToken()

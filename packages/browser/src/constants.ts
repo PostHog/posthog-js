@@ -112,6 +112,28 @@ export const PERSISTENCE_RESERVED_PROPERTIES = [
 ]
 
 export const SURVEYS_REQUEST_TIMEOUT_MS = 10000
+export const LOAD_EXT_NOT_FOUND = 'PostHog loadExternalDependency extension not found.'
+
+/* EVENT NAMES - interned to reduce bundle size */
+/* COOKIELESS MODE VALUES */
+export const COOKIELESS_ON_REJECT = 'on_reject' as const
+export const COOKIELESS_ALWAYS = 'always' as const
+
+/* USER STATE VALUES */
+export const USER_STATE_ANONYMOUS = 'anonymous'
+export const USER_STATE_IDENTIFIED = 'identified'
+
+/* PERSON PROFILE MODES */
+export const PERSON_PROFILES_IDENTIFIED_ONLY = 'identified_only' as const
+
+/* DOM EVENT NAMES - interned to reduce bundle size */
+export const DOM_EVENT_VISIBILITYCHANGE = 'visibilitychange'
+export const DOM_EVENT_BEFOREUNLOAD = 'beforeunload'
+
+export const EVENT_PAGEVIEW = '$pageview'
+export const EVENT_PAGELEAVE = '$pageleave'
+export const EVENT_IDENTIFY = '$identify'
+export const EVENT_GROUPIDENTIFY = '$groupidentify'
 
 /* Z-INDEX HIERARCHY: tours > surveys > support */
 export const Z_INDEX_TOURS = 2147483646

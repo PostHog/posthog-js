@@ -1,5 +1,5 @@
 import { PostHogPersistence } from './posthog-persistence'
-import { SESSION_ID } from './constants'
+import { COOKIELESS_ALWAYS, DOM_EVENT_BEFOREUNLOAD, SESSION_ID } from './constants'
 import { sessionStore } from './storage'
 import { PostHogConfig, SessionIdChangedCallback } from './types'
 import { uuid7ToTimestampMs, uuidv7 } from './uuidv7'
@@ -48,7 +48,7 @@ export class SessionIdManager {
         if (!instance.persistence) {
             throw new Error('SessionIdManager requires a PostHogPersistence instance')
         }
-        if (instance.config.cookieless_mode === 'always') {
+        if (instance.config.cookieless_mode === COOKIELESS_ALWAYS) {
             throw new Error('SessionIdManager cannot be used with cookieless_mode="always"')
         }
 
@@ -210,7 +210,7 @@ export class SessionIdManager {
 
         // Remove the beforeunload event listener
         if (this._beforeUnloadListener && window) {
-            window.removeEventListener('beforeunload', this._beforeUnloadListener, { capture: false } as any)
+            window.removeEventListener(DOM_EVENT_BEFOREUNLOAD, this._beforeUnloadListener, { capture: false } as any)
             this._beforeUnloadListener = undefined
         }
 
@@ -230,7 +230,7 @@ export class SessionIdManager {
                 sessionStore._remove(this._primary_window_exists_storage_key)
             }
         }
-        addEventListener(window, 'beforeunload', this._beforeUnloadListener, { capture: false })
+        addEventListener(window, DOM_EVENT_BEFOREUNLOAD, this._beforeUnloadListener, { capture: false })
     }
 
     private _sessionHasBeenIdleTooLong = (timestamp: unknown, lastActivityTimestamp: unknown): boolean => {
@@ -257,7 +257,7 @@ export class SessionIdManager {
      * @param {Number} timestamp (optional) Defaults to the current time. The timestamp to be stored with the sessionId (used when determining if a new sessionId should be generated)
      */
     checkAndGetSessionAndWindowId(readOnly = false, _timestamp: number | null = null) {
-        if (this._config.cookieless_mode === 'always') {
+        if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
             throw new Error('checkAndGetSessionAndWindowId should not be called with cookieless_mode="always"')
         }
         const timestamp = _timestamp || new Date().getTime()

@@ -18,11 +18,8 @@ const LOCALSTORAGE_KEY = '_postHogToolbarParams'
 
 const logger = createLogger('[Toolbar]')
 
-enum ToolbarState {
-    UNINITIALIZED = 0,
-    LOADING = 1,
-    LOADED = 2,
-}
+const ToolbarState = { UNINITIALIZED: 0, LOADING: 1, LOADED: 2 } as const
+type ToolbarState = (typeof ToolbarState)[keyof typeof ToolbarState]
 
 export class Toolbar implements Extension {
     instance: PostHog

@@ -1,6 +1,6 @@
 /* eslint camelcase: "off" */
 
-import { each, extend, include, stripEmptyProperties } from './utils'
+import { each, extend, stripEmptyProperties } from './utils'
 import { cookieStore, createLocalPlusCookieStore, localStore, memoryStore, sessionStore } from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
 import {
@@ -170,7 +170,7 @@ export class PostHogPersistence {
                         p[`$feature/${keys[i]}`] = v[keys[i]]
                     }
                 }
-            } else if (!include(PERSISTENCE_RESERVED_PROPERTIES, k)) {
+            } else if (PERSISTENCE_RESERVED_PROPERTIES.indexOf(k) === -1) {
                 p[k] = v
             }
         })

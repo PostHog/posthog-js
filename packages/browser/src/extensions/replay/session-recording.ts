@@ -5,6 +5,7 @@ import {
     SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER,
     SESSION_RECORDING_OVERRIDE_URL_TRIGGER,
     SESSION_RECORDING_REMOTE_CONFIG,
+    COOKIELESS_ALWAYS,
 } from '../../constants'
 import { PostHog } from '../../posthog-core'
 import { RemoteConfigLoader } from '../../remote-config'
@@ -38,6 +39,14 @@ export class SessionRecording implements Extension {
 
     private _recordingStatus: SessionRecordingStatus = DISABLED
 
+    private get _config() {
+        return this._instance.config
+    }
+
+    private get _persistence() {
+        return this._instance.persistence
+    }
+
     private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
 
@@ -58,7 +67,7 @@ export class SessionRecording implements Extension {
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
 
-        if (this._instance.config.cookieless_mode === 'always') {
+        if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
             throw new Error(LOGGER_PREFIX + ' cannot be used with cookieless_mode="always"')
         }
     }
@@ -69,8 +78,8 @@ export class SessionRecording implements Extension {
 
     private get _isRecordingEnabled() {
         const enabled_server_side = !!this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)?.enabled
-        const enabled_client_side = !this._instance.config.disable_session_recording
-        const isDisabled = this._instance.config.disable_session_recording || this._instance.consent.isOptedOut()
+        const enabled_client_side = !this._config.disable_session_recording
+        const isDisabled = this._config.disable_session_recording || this._instance.consent.isOptedOut()
         return window && enabled_server_side && enabled_client_side && !isDisabled
     }
 
@@ -148,7 +157,7 @@ export class SessionRecording implements Extension {
     }
 
     private _resetSampling() {
-        this._instance.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
+        this._persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
     }
 
     private _validateSampleRate(rate: unknown, source: string): number | null {
@@ -164,15 +173,15 @@ export class SessionRecording implements Extension {
     }
 
     private _persistRemoteConfig(response: RemoteConfig): void {
-        if (this._instance.persistence) {
-            const persistence = this._instance.persistence
+        if (this._persistence) {
+            const persistence = this._persistence
 
             const persistResponse = () => {
                 const sessionRecordingConfigResponse =
                     response.sessionRecording === false ? undefined : response.sessionRecording
 
                 const localSampleRate = this._validateSampleRate(
-                    this._instance.config.session_recording?.sampleRate,
+                    this._config.session_recording?.sampleRate,
                     'session_recording.sampleRate'
                 )
                 const remoteSampleRate = this._validateSampleRate(
@@ -317,7 +326,7 @@ export class SessionRecording implements Extension {
      * */
     public overrideLinkedFlag() {
         if (!this._lazyLoadedSessionRecording) {
-            this._instance.persistence?.register({
+            this._persistence?.register({
                 [SESSION_RECORDING_OVERRIDE_LINKED_FLAG]: true,
             })
         }
@@ -333,7 +342,7 @@ export class SessionRecording implements Extension {
      * */
     public overrideSampling() {
         if (!this._lazyLoadedSessionRecording) {
-            this._instance.persistence?.register({
+            this._persistence?.register({
                 [SESSION_RECORDING_OVERRIDE_SAMPLING]: true,
             })
         }
@@ -349,7 +358,7 @@ export class SessionRecording implements Extension {
      * */
     public overrideTrigger(triggerType: TriggerType) {
         if (!this._lazyLoadedSessionRecording) {
-            this._instance.persistence?.register({
+            this._persistence?.register({
                 [triggerType === 'url'
                     ? SESSION_RECORDING_OVERRIDE_URL_TRIGGER
                     : SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER]: true,

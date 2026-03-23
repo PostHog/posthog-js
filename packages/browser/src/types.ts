@@ -437,8 +437,6 @@ export interface PersistentStore {
     _remove: (name: string, cross_subdomain?: boolean) => void
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export type Breaker = {}
 export type EventHandler = (event: Event) => boolean | void
 
 export type SnippetArrayItem = [method: string, ...args: any[]]
@@ -521,7 +519,8 @@ export type OverrideConfig = {
     event_trigger: boolean
 }
 
-export enum Compression {
-    GZipJS = 'gzip-js',
-    Base64 = 'base64',
-}
+export const Compression = {
+    GZipJS: 'gzip-js',
+    Base64: 'base64',
+} as const
+export type Compression = (typeof Compression)[keyof typeof Compression]

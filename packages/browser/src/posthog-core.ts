@@ -4,11 +4,22 @@ import {
     ALIAS_ID_KEY,
     COOKIELESS_MODE_FLAG_PROPERTY,
     COOKIELESS_SENTINEL_VALUE,
+    COOKIELESS_ON_REJECT,
+    DEVICE_ID,
+    PERSON_PROFILES_IDENTIFIED_ONLY,
+    USER_STATE_ANONYMOUS,
+    USER_STATE_IDENTIFIED,
+    DOM_EVENT_VISIBILITYCHANGE,
     ENABLE_PERSON_PROCESSING,
+    EVENT_GROUPIDENTIFY,
+    EVENT_IDENTIFY,
+    EVENT_PAGELEAVE,
+    EVENT_PAGEVIEW,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
     SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
+    COOKIELESS_ALWAYS,
 } from './constants'
 import { isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { setupSegmentIntegration } from './extensions/segment-integration'
@@ -145,6 +156,10 @@ const instances: Record<string, PostHog> = {}
 let _executeArrayDepth = 0
 
 const __NOOP = () => {}
+const CONSENT_COOKIELESS_WARN = 'Consent opt in/out is not valid with cookieless_mode="always" and will be ignored'
+const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
+const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
+const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
 
 const PRIMARY_INSTANCE_NAME = 'posthog'
 
@@ -248,7 +263,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
-    person_profiles: 'identified_only',
+    person_profiles: PERSON_PROFILES_IDENTIFIED_ONLY,
     before_send: undefined,
     request_queue_config: { flush_interval_ms: DEFAULT_FLUSH_INTERVAL_MS },
     error_tracking: {},
@@ -262,25 +277,21 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     ...defaultsThatVaryByConfig(defaults),
 })
 
+const CONFIG_RENAMES: [keyof PostHogConfig, keyof PostHogConfig][] = [
+    ['process_person', 'person_profiles'],
+    ['xhr_headers', 'request_headers'],
+    ['cookie_name', 'persistence_name'],
+    ['disable_cookie', 'disable_persistence'],
+    ['store_google', 'save_campaign_params'],
+    ['verbose', 'debug'],
+]
+
 export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
     const renames: Partial<PostHogConfig> = {}
-    if (!isUndefined(origConfig.process_person)) {
-        renames.person_profiles = origConfig.process_person
-    }
-    if (!isUndefined(origConfig.xhr_headers)) {
-        renames.request_headers = origConfig.xhr_headers
-    }
-    if (!isUndefined(origConfig.cookie_name)) {
-        renames.persistence_name = origConfig.cookie_name
-    }
-    if (!isUndefined(origConfig.disable_cookie)) {
-        renames.disable_persistence = origConfig.disable_cookie
-    }
-    if (!isUndefined(origConfig.store_google)) {
-        renames.save_campaign_params = origConfig.store_google
-    }
-    if (!isUndefined(origConfig.verbose)) {
-        renames.debug = origConfig.verbose
+    for (const [oldKey, newKey] of CONFIG_RENAMES) {
+        if (!isUndefined((origConfig as any)[oldKey])) {
+            ;(renames as any)[newKey] = (origConfig as any)[oldKey]
+        }
     }
     // on_xhr_error is not present, as the type is different to on_request_error
 
@@ -294,7 +305,7 @@ export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostH
         } else if (isArray(origConfig.property_denylist)) {
             newConfig.property_denylist = [...origConfig.property_blacklist, ...origConfig.property_denylist]
         } else {
-            logger.error('Invalid value for property_denylist config: ' + origConfig.property_denylist)
+            logger.error(DENYLIST_INVALID + origConfig.property_denylist)
         }
     }
 
@@ -594,8 +605,8 @@ export class PostHog implements PostHogInterface {
         this.__request_queue = []
 
         const startInCookielessMode =
-            this.config.cookieless_mode === 'always' ||
-            (this.config.cookieless_mode === 'on_reject' && this.consent.isExplicitlyOptedOut())
+            this.config.cookieless_mode === COOKIELESS_ALWAYS ||
+            (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isExplicitlyOptedOut())
 
         if (!startInCookielessMode) {
             this.sessionManager = new SessionIdManager(this)
@@ -641,7 +652,7 @@ export class PostHog implements PostHogInterface {
                 config.bootstrap.isIdentifiedID &&
                 existingDistinctId != null &&
                 existingDistinctId !== bootstrapDistinctId &&
-                existingUserState === 'anonymous'
+                existingUserState === USER_STATE_ANONYMOUS
             ) {
                 // The server bootstrapped identity for an identified user, but local persistence
                 // still has an anonymous ID from a previous session. Calling identify() merges
@@ -657,7 +668,7 @@ export class PostHog implements PostHogInterface {
                 config.bootstrap.isIdentifiedID &&
                 existingDistinctId != null &&
                 existingDistinctId !== bootstrapDistinctId &&
-                existingUserState === 'identified'
+                existingUserState === USER_STATE_IDENTIFIED
             ) {
                 // The existing user is already identified with a different ID. Silently
                 // switching identities without an $identify event would corrupt analytics.
@@ -670,7 +681,10 @@ export class PostHog implements PostHogInterface {
             } else {
                 const uuid = this.config.get_device_id(uuidv7())
                 const deviceID = config.bootstrap.isIdentifiedID ? uuid : bootstrapDistinctId
-                this.persistence.set_property(USER_STATE, config.bootstrap.isIdentifiedID ? 'identified' : 'anonymous')
+                this.persistence.set_property(
+                    USER_STATE,
+                    config.bootstrap.isIdentifiedID ? USER_STATE_IDENTIFIED : USER_STATE_ANONYMOUS
+                )
                 this.register({
                     distinct_id: bootstrapDistinctId,
                     $device_id: deviceID,
@@ -700,7 +714,7 @@ export class PostHog implements PostHogInterface {
                 ''
             )
             // distinct id == $device_id is a proxy for anonymous user
-            this.persistence.set_property(USER_STATE, 'anonymous')
+            this.persistence.set_property(USER_STATE, USER_STATE_ANONYMOUS)
         }
         // Set up event handler for pageleave
         // Use `onpagehide` if available, see https://calendar.perfplanet.com/2020/beaconing-in-practice/#beaconing-reliability-avoiding-abandons
@@ -893,7 +907,9 @@ export class PostHog implements PostHogInterface {
         }
 
         this.set_config({
-            person_profiles: this._initialPersonProfilesConfig ? this._initialPersonProfilesConfig : 'identified_only',
+            person_profiles: this._initialPersonProfilesConfig
+                ? this._initialPersonProfilesConfig
+                : PERSON_PROFILES_IDENTIFIED_ONLY,
         })
 
         this._extensions.forEach((ext) => ext.onRemoteConfig?.(config))
@@ -923,7 +939,7 @@ export class PostHog implements PostHogInterface {
             // NOTE: We want to fire this on the next tick as the previous implementation had this side effect
             // and some clients may rely on it
             setTimeout(() => {
-                if (this.consent.isOptedIn() || this.config.cookieless_mode === 'always') {
+                if (this.consent.isOptedIn() || this.config.cookieless_mode === COOKIELESS_ALWAYS) {
                     this._captureInitialPageview()
                 }
             }, 1)
@@ -955,13 +971,13 @@ export class PostHog implements PostHogInterface {
 
         if (!this.config.request_batching) {
             if (this._shouldCapturePageleave()) {
-                this.capture('$pageleave', null, { transport: 'sendBeacon' })
+                this.capture(EVENT_PAGELEAVE, null, { transport: 'sendBeacon' })
             }
             return
         }
 
         if (this._shouldCapturePageleave()) {
-            this.capture('$pageleave')
+            this.capture(EVENT_PAGELEAVE)
         }
 
         this._requestQueue?.unload()
@@ -1064,23 +1080,17 @@ export class PostHog implements PostHogInterface {
             })
 
             const execute = function (calls: SnippetArrayItem[], thisArg: any) {
-                eachArray(
-                    calls,
-                    function (item) {
-                        if (isArray(item[0])) {
-                            // chained call
-                            let caller = thisArg
-                            each(item, function (call) {
-                                caller = caller[call[0]].apply(caller, call.slice(1))
-                            })
-                        } else {
-                            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                            // @ts-ignore
-                            this[item[0]].apply(this, item.slice(1))
-                        }
-                    },
-                    thisArg
-                )
+                eachArray(calls, function (item) {
+                    if (isArray(item[0])) {
+                        // chained call
+                        let caller = thisArg
+                        each(item, function (call) {
+                            caller = caller[call[0]].apply(caller, call.slice(1))
+                        })
+                    } else {
+                        thisArg[item[0]].apply(thisArg, item.slice(1))
+                    }
+                })
             }
 
             execute(alias_calls, this)
@@ -1228,7 +1238,7 @@ export class PostHog implements PostHogInterface {
         }
 
         // Route pageviews to $bot_pageview when bot detected and preview flag enabled
-        if (event_name === '$pageview' && this.config.__preview_capture_bot_pageviews && isBot) {
+        if (event_name === EVENT_PAGEVIEW && this.config.__preview_capture_bot_pageviews && isBot) {
             data.event = '$bot_pageview'
             // While it's obvious that a $bot_pageview is (likely) from a bot, we explicitly set $browser_type
             // to make it easy to filter and test bot pageviews in the product
@@ -1246,10 +1256,10 @@ export class PostHog implements PostHogInterface {
         // $groupidentify doesn't process person $set_once on the server, so don't mark
         // initial person props as sent. This ensures they're included with subsequent
         // $identify calls.
-        const markSetOnceAsSent = event_name !== '$groupidentify'
+        const markSetOnceAsSent = event_name !== EVENT_GROUPIDENTIFY
         // $identify should always include initial props because it creates/merges persons
         // and may be processed before earlier anonymous events on the server
-        const forceIncludeInitialProps = event_name === '$identify'
+        const forceIncludeInitialProps = event_name === EVENT_IDENTIFY
         const setOnceProperties = this._calculate_set_once_properties(
             options?.$set_once,
             markSetOnceAsSent,
@@ -1365,8 +1375,8 @@ export class PostHog implements PostHogInterface {
         properties['$config_defaults'] = this.config.defaults
 
         if (
-            this.config.cookieless_mode == 'always' ||
-            (this.config.cookieless_mode == 'on_reject' && this.consent.isExplicitlyOptedOut())
+            this.config.cookieless_mode == COOKIELESS_ALWAYS ||
+            (this.config.cookieless_mode == COOKIELESS_ON_REJECT && this.consent.isExplicitlyOptedOut())
         ) {
             // Set a flag to tell the plugin server to use cookieless server hash mode
             properties[COOKIELESS_MODE_FLAG_PROPERTY] = true
@@ -1416,16 +1426,16 @@ export class PostHog implements PostHogInterface {
         }
 
         let pageviewProperties: Record<string, any>
-        if (eventName === '$pageview' && !readOnly) {
+        if (eventName === EVENT_PAGEVIEW && !readOnly) {
             pageviewProperties = this.pageViewManager.doPageView(timestamp, uuid)
-        } else if (eventName === '$pageleave' && !readOnly) {
+        } else if (eventName === EVENT_PAGELEAVE && !readOnly) {
             pageviewProperties = this.pageViewManager.doPageLeave(timestamp)
         } else {
             pageviewProperties = this.pageViewManager.doEvent()
         }
         properties = extend(properties, pageviewProperties)
 
-        if (eventName === '$pageview' && document) {
+        if (eventName === EVENT_PAGEVIEW && document) {
             properties['title'] = document.title
         }
 
@@ -1462,7 +1472,7 @@ export class PostHog implements PostHogInterface {
             })
         } else {
             logger.error(
-                'Invalid value for property_denylist config: ' +
+                DENYLIST_INVALID +
                     this.config.property_denylist +
                     ' or property_blacklist config: ' +
                     this.config.property_blacklist
@@ -1471,7 +1481,7 @@ export class PostHog implements PostHogInterface {
 
         const sanitize_properties = this.config.sanitize_properties
         if (sanitize_properties) {
-            logger.error('sanitize_properties is deprecated. Use before_send instead')
+            logger.error(SANITIZE_DEPRECATED)
             properties = sanitize_properties(properties, eventName)
         }
 
@@ -1519,7 +1529,7 @@ export class PostHog implements PostHogInterface {
         let setOnceProperties = extend({}, initialProps, sessionProps || {}, dataSetOnce || {})
         const sanitize_properties = this.config.sanitize_properties
         if (sanitize_properties) {
-            logger.error('sanitize_properties is deprecated. Use before_send instead')
+            logger.error(SANITIZE_DEPRECATED)
             setOnceProperties = sanitize_properties(setOnceProperties, '$set_once')
         }
         if (markAsSent) {
@@ -2078,7 +2088,7 @@ export class PostHog implements PostHogInterface {
      */
     onSurveysLoaded(callback: SurveyCallback): () => void {
         if (!this.surveys) {
-            callback([], { isLoaded: false, error: 'Surveys module not available' })
+            callback([], { isLoaded: false, error: SURVEYS_NOT_AVAILABLE })
             return () => {}
         }
         return this.surveys.onSurveysLoaded(callback)
@@ -2128,7 +2138,7 @@ export class PostHog implements PostHogInterface {
     getSurveys(callback: SurveyCallback, forceReload = false): void {
         this.surveys
             ? this.surveys.getSurveys(callback, forceReload)
-            : callback([], { isLoaded: false, error: 'Surveys module not available' })
+            : callback([], { isLoaded: false, error: SURVEYS_NOT_AVAILABLE })
     }
 
     /**
@@ -2151,7 +2161,7 @@ export class PostHog implements PostHogInterface {
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false): void {
         this.surveys
             ? this.surveys.getActiveMatchingSurveys(callback, forceReload)
-            : callback([], { isLoaded: false, error: 'Surveys module not available' })
+            : callback([], { isLoaded: false, error: SURVEYS_NOT_AVAILABLE })
     }
 
     /**
@@ -2243,7 +2253,7 @@ export class PostHog implements PostHogInterface {
         return (
             this.surveys?.canRenderSurvey(surveyId) ?? {
                 visible: false,
-                disabledReason: 'Surveys module not available',
+                disabledReason: SURVEYS_NOT_AVAILABLE,
             }
         )
     }
@@ -2276,7 +2286,7 @@ export class PostHog implements PostHogInterface {
         return (
             this.surveys?.canRenderSurveyAsync(surveyId, forceReload) ??
             // eslint-disable-next-line compat/compat
-            Promise.resolve({ visible: false, disabledReason: 'Surveys module not available' })
+            Promise.resolve({ visible: false, disabledReason: SURVEYS_NOT_AVAILABLE })
         )
     }
 
@@ -2358,7 +2368,7 @@ export class PostHog implements PostHogInterface {
         const previous_distinct_id = this.get_distinct_id()
         this.register({ $user_id: new_distinct_id })
 
-        if (!this.get_property('$device_id')) {
+        if (!this.get_property(DEVICE_ID)) {
             // The persisted distinct id might not actually be a device id at all
             // it might be a distinct id of the user from before
             const device_id = previous_distinct_id
@@ -2377,12 +2387,13 @@ export class PostHog implements PostHogInterface {
             this.register({ distinct_id: new_distinct_id })
         }
 
-        const isKnownAnonymous = (this.persistence.get_property(USER_STATE) || 'anonymous') === 'anonymous'
+        const isKnownAnonymous =
+            (this.persistence.get_property(USER_STATE) || USER_STATE_ANONYMOUS) === USER_STATE_ANONYMOUS
 
         // send an $identify event any time the distinct_id is changing and the old ID is an anonymous ID
         // - logic on the server will determine whether or not to do anything with it.
         if (new_distinct_id !== previous_distinct_id && isKnownAnonymous) {
-            this.persistence.set_property(USER_STATE, 'identified')
+            this.persistence.set_property(USER_STATE, USER_STATE_IDENTIFIED)
 
             // Update current user properties
             this.setPersonPropertiesForFlags(
@@ -2391,7 +2402,7 @@ export class PostHog implements PostHogInterface {
             )
 
             this.capture(
-                '$identify',
+                EVENT_IDENTIFY,
                 {
                     distinct_id: new_distinct_id,
                     $anon_distinct_id: previous_distinct_id,
@@ -2531,7 +2542,7 @@ export class PostHog implements PostHogInterface {
         this.register({ $groups: { ...existingGroups, [groupType]: groupKey } })
 
         if (groupPropertiesToSet) {
-            this.capture('$groupidentify', {
+            this.capture(EVENT_GROUPIDENTIFY, {
                 $group_type: groupType,
                 $group_key: groupKey,
                 $group_set: groupPropertiesToSet,
@@ -2691,7 +2702,7 @@ export class PostHog implements PostHogInterface {
         if (!this.__loaded) {
             return logger.uninitializedWarning('posthog.reset')
         }
-        const device_id = this.get_property('$device_id')
+        const device_id = this.get_property(DEVICE_ID)
         this.consent.reset()
         this.persistence?.clear()
         this.sessionPersistence?.clear()
@@ -2700,10 +2711,10 @@ export class PostHog implements PostHogInterface {
         // the debouncer, so if the order were reversed a pending refresh could fire after reset.
         this._remoteConfigLoader?.stop()
         this.featureFlags?.reset()
-        this.persistence?.set_property(USER_STATE, 'anonymous')
+        this.persistence?.set_property(USER_STATE, USER_STATE_ANONYMOUS)
         this.sessionManager?.resetSessionId()
         this._cachedPersonProperties = null
-        if (this.config.cookieless_mode === 'always') {
+        if (this.config.cookieless_mode === COOKIELESS_ALWAYS) {
             this.register_once(
                 {
                     distinct_id: COOKIELESS_SENTINEL_VALUE,
@@ -3250,15 +3261,15 @@ export class PostHog implements PostHogInterface {
 
     _isIdentified(): boolean {
         return (
-            this.persistence?.get_property(USER_STATE) === 'identified' ||
-            this.sessionPersistence?.get_property(USER_STATE) === 'identified'
+            this.persistence?.get_property(USER_STATE) === USER_STATE_IDENTIFIED ||
+            this.sessionPersistence?.get_property(USER_STATE) === USER_STATE_IDENTIFIED
         )
     }
 
     _hasPersonProcessing(): boolean {
         return !(
             this.config.person_profiles === 'never' ||
-            (this.config.person_profiles === 'identified_only' &&
+            (this.config.person_profiles === PERSON_PROFILES_IDENTIFIED_ONLY &&
                 !this._isIdentified() &&
                 isEmptyObject(this.getGroups()) &&
                 !this.persistence?.props?.[ALIAS_ID_KEY] &&
@@ -3350,7 +3361,7 @@ export class PostHog implements PostHogInterface {
         }
         const isOptedOut = this.consent.isOptedOut()
         const defaultPersistenceDisabled =
-            this.config.opt_out_persistence_by_default || this.config.cookieless_mode === 'on_reject'
+            this.config.opt_out_persistence_by_default || this.config.cookieless_mode === COOKIELESS_ON_REJECT
 
         // TRICKY: We want a deterministic state for persistence so that a new pageload has the same persistence
         return this.config.disable_persistence || (isOptedOut && !!defaultPersistenceDisabled)
@@ -3410,11 +3421,11 @@ export class PostHog implements PostHogInterface {
         captureEventName?: EventName | null | false /** event name to be used for capturing the opt-in action */
         captureProperties?: Properties /** set of properties to be captured along with the opt-in action */
     }): void {
-        if (this.config.cookieless_mode === 'always') {
-            logger.warn('Consent opt in/out is not valid with cookieless_mode="always" and will be ignored')
+        if (this.config.cookieless_mode === COOKIELESS_ALWAYS) {
+            logger.warn(CONSENT_COOKIELESS_WARN)
             return
         }
-        if (this.config.cookieless_mode === 'on_reject' && this.consent.isExplicitlyOptedOut()) {
+        if (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isExplicitlyOptedOut()) {
             // If the user has explicitly opted out on_reject mode, then before we can start sending regular non-cookieless events
             // we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
             this.reset(true)
@@ -3446,7 +3457,7 @@ export class PostHog implements PostHogInterface {
         this.sessionRecording?.startIfEnabledOrStop()
 
         // Reinitialize surveys if we're in cookieless mode and just opted in
-        if (this.config.cookieless_mode == 'on_reject') {
+        if (this.config.cookieless_mode == COOKIELESS_ON_REJECT) {
             this.surveys?.loadIfEnabled()
         }
 
@@ -3478,12 +3489,12 @@ export class PostHog implements PostHogInterface {
      * @public
      */
     opt_out_capturing(): void {
-        if (this.config.cookieless_mode === 'always') {
-            logger.warn('Consent opt in/out is not valid with cookieless_mode="always" and will be ignored')
+        if (this.config.cookieless_mode === COOKIELESS_ALWAYS) {
+            logger.warn(CONSENT_COOKIELESS_WARN)
             return
         }
 
-        if (this.config.cookieless_mode === 'on_reject' && this.consent.isOptedIn()) {
+        if (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isOptedIn()) {
             // If the user has opted in, we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
             this.reset(true)
         }
@@ -3491,8 +3502,8 @@ export class PostHog implements PostHogInterface {
         this.consent.optInOut(false)
         this._sync_opt_out_with_persistence()
 
-        if (this.config.cookieless_mode === 'on_reject') {
-            // If cookieless_mode is 'on_reject', we start capturing events in cookieless mode
+        if (this.config.cookieless_mode === COOKIELESS_ON_REJECT) {
+            // If cookieless_mode is COOKIELESS_ON_REJECT, we start capturing events in cookieless mode
             this.register({
                 distinct_id: COOKIELESS_SENTINEL_VALUE,
                 $device_id: null,
@@ -3588,7 +3599,7 @@ export class PostHog implements PostHogInterface {
      * Usually this means that the user has not opted out of capturing, but the exact behaviour can be controlled by
      * some config options.
      *
-     * Additionally, if the cookieless_mode is set to 'on_reject', we will capture events in cookieless mode if the
+     * Additionally, if the cookieless_mode is set to `'on_reject'`, we will capture events in cookieless mode if the
      * user has explicitly opted out.
      *
      * {@label Privacy}
@@ -3600,10 +3611,10 @@ export class PostHog implements PostHogInterface {
      * @returns {boolean} whether the posthog library is capturing events
      */
     is_capturing(): boolean {
-        if (this.config.cookieless_mode === 'always') {
+        if (this.config.cookieless_mode === COOKIELESS_ALWAYS) {
             return true
         }
-        if (this.config.cookieless_mode === 'on_reject') {
+        if (this.config.cookieless_mode === COOKIELESS_ON_REJECT) {
             return this.consent.isExplicitlyOptedOut() || this.consent.isOptedIn()
         } else {
             return !this.has_opted_out_capturing()
@@ -3644,7 +3655,7 @@ export class PostHog implements PostHogInterface {
         if (document.visibilityState !== 'visible') {
             if (!this._visibilityStateListener) {
                 this._visibilityStateListener = this._captureInitialPageview.bind(this)
-                addEventListener(document, 'visibilitychange', this._visibilityStateListener)
+                addEventListener(document, DOM_EVENT_VISIBILITYCHANGE, this._visibilityStateListener)
             }
 
             return
@@ -3653,11 +3664,11 @@ export class PostHog implements PostHogInterface {
         // Extra check here to guarantee we only ever trigger a single `$pageview` event
         if (!this._initialPageviewCaptured) {
             this._initialPageviewCaptured = true
-            this.capture('$pageview', { title: document.title }, { send_instantly: true })
+            this.capture(EVENT_PAGEVIEW, { title: document.title }, { send_instantly: true })
 
             // After we've captured the initial pageview, we can remove the listener
             if (this._visibilityStateListener) {
-                document.removeEventListener('visibilitychange', this._visibilityStateListener)
+                document.removeEventListener(DOM_EVENT_VISIBILITYCHANGE, this._visibilityStateListener)
                 this._visibilityStateListener = null
             }
         }

@@ -5,6 +5,7 @@ import { assignableWindow } from './utils/globals'
 import { createLogger } from './utils/logger'
 
 const logger = createLogger('[SiteApps]')
+const APP_INIT_ERROR = 'Error while initializing PostHog app with config id '
 
 export class SiteApps implements Extension {
     apps: Record<string, SiteApp>
@@ -121,7 +122,7 @@ export class SiteApps implements Extension {
             }
             hasInitReturned = true
         } catch (e) {
-            logger.error(`Error while initializing PostHog app with config id ${loader.id}`, e)
+            logger.error(APP_INIT_ERROR + loader.id, e)
             onLoaded(false)
         }
 
@@ -201,7 +202,7 @@ export class SiteApps implements Extension {
             assignableWindow[`__$$ph_site_app_${id}`] = this._instance
             assignableWindow.__PosthogExtensions__?.loadSiteApp?.(this._instance, url, (err) => {
                 if (err) {
-                    return logger.error(`Error while initializing PostHog app with config id ${id}`, err)
+                    return logger.error(APP_INIT_ERROR + id, err)
                 }
             })
         }
