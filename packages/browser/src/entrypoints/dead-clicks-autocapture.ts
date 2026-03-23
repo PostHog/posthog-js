@@ -1,4 +1,4 @@
-import { assignableWindow, document as _document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
+import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { PostHog } from '../posthog-core'
 import { isNull, isNumber, isUndefined } from '@posthog/core'
 import { autocaptureCompatibleElements, getEventTarget } from '../autocapture-utils'
@@ -99,7 +99,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         assignableWindow.removeEventListener('click', this._onClick)
         assignableWindow.removeEventListener('scroll', this._onScroll, { capture: true })
         assignableWindow.removeEventListener('selectionchange', this._onSelectionChange)
-        _document?.removeEventListener('visibilitychange', this._onVisibilityChange)
+        document?.removeEventListener('visibilitychange', this._onVisibilityChange)
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -160,7 +160,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _startVisibilityChangeObserver() {
-        _document?.addEventListener('visibilitychange', this._onVisibilityChange)
+        document?.addEventListener('visibilitychange', this._onVisibilityChange)
     }
 
     private _onVisibilityChange = (): void => {
