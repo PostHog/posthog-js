@@ -1,5 +1,4 @@
 import { QueuedRequestWithOptions, RequestQueueConfig } from './types'
-import { each } from './utils'
 
 import { isArray, isUndefined, clampToRange } from '@posthog/core'
 import { logger } from './utils/logger'
@@ -39,13 +38,17 @@ export class RequestQueue {
         const requestValues = Object.values(requests)
 
         // Always force events to be sent before recordings, as events are more important, and recordings are bigger and thus less likely to arrive
-        const sortedRequests = [
-            ...requestValues.filter((r) => r.url.indexOf('/e') === 0),
-            ...requestValues.filter((r) => r.url.indexOf('/e') !== 0),
-        ]
-        sortedRequests.map((req) => {
-            this._sendRequest({ ...req, transport: 'sendBeacon' })
-        })
+        // Send event requests first (url starts with '/e'), then everything else
+        for (let i = 0; i < requestValues.length; i++) {
+            if (requestValues[i].url.indexOf('/e') === 0) {
+                this._sendRequest({ ...requestValues[i], transport: 'sendBeacon' })
+            }
+        }
+        for (let i = 0; i < requestValues.length; i++) {
+            if (requestValues[i].url.indexOf('/e') !== 0) {
+                this._sendRequest({ ...requestValues[i], transport: 'sendBeacon' })
+            }
+        }
     }
 
     enable(): void {
@@ -66,10 +69,11 @@ export class RequestQueue {
                     const now = new Date().getTime()
 
                     if (req.data && isArray(req.data)) {
-                        each(req.data, (data) => {
-                            data['offset'] = Math.abs(data['timestamp'] - now)
-                            delete data['timestamp']
-                        })
+                        const dataArr = req.data
+                        for (let i = 0; i < dataArr.length; i++) {
+                            dataArr[i]['offset'] = Math.abs(dataArr[i]['timestamp'] - now)
+                            delete dataArr[i]['timestamp']
+                        }
                     }
                     this._sendRequest(req)
                 }
@@ -84,16 +88,16 @@ export class RequestQueue {
 
     private _formatQueue(): Record<string, QueuedRequestWithOptions> {
         const requests: Record<string, QueuedRequestWithOptions> = {}
-        each(this._queue, (request: QueuedRequestWithOptions) => {
-            const req = request
+        const queue = this._queue
+        for (let i = 0; i < queue.length; i++) {
+            const req = queue[i]
             const key = (req ? req.batchKey : null) || req.url
             if (isUndefined(requests[key])) {
-                // TODO: What about this -it seems to batch data into an array - do we always want that?
                 requests[key] = { ...req, data: [] }
             }
 
             requests[key].data?.push(req.data)
-        })
+        }
 
         this._queue = []
         return requests

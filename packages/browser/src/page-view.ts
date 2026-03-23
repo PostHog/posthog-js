@@ -1,7 +1,6 @@
 import { window } from './utils/globals'
 import { PostHog } from './posthog-core'
 import { clampToRange, isUndefined } from '@posthog/core'
-import { extend } from './utils'
 import { logger } from './utils/logger'
 import { SessionIdChangedCallback } from './types'
 
@@ -93,7 +92,7 @@ export class PageViewManager {
             return { $pageview_id: pageviewId }
         }
 
-        let properties: PageViewEventProperties = {
+        const properties: PageViewEventProperties = {
             $pageview_id: pageviewId,
             $prev_pageview_id: previousPageView.pageViewId,
         }
@@ -130,16 +129,14 @@ export class PageViewManager {
                 const maxContentPercentage =
                     maxContentHeight <= 1 ? 1 : clampToRange(maxContentY / maxContentHeight, 0, 1, logger)
 
-                properties = extend(properties, {
-                    $prev_pageview_last_scroll: lastScrollY,
-                    $prev_pageview_last_scroll_percentage: lastScrollPercentage,
-                    $prev_pageview_max_scroll: maxScrollY,
-                    $prev_pageview_max_scroll_percentage: maxScrollPercentage,
-                    $prev_pageview_last_content: lastContentY,
-                    $prev_pageview_last_content_percentage: lastContentPercentage,
-                    $prev_pageview_max_content: maxContentY,
-                    $prev_pageview_max_content_percentage: maxContentPercentage,
-                })
+                properties.$prev_pageview_last_scroll = lastScrollY
+                properties.$prev_pageview_last_scroll_percentage = lastScrollPercentage
+                properties.$prev_pageview_max_scroll = maxScrollY
+                properties.$prev_pageview_max_scroll_percentage = maxScrollPercentage
+                properties.$prev_pageview_last_content = lastContentY
+                properties.$prev_pageview_last_content_percentage = lastContentPercentage
+                properties.$prev_pageview_max_content = maxContentY
+                properties.$prev_pageview_max_content_percentage = maxContentPercentage
             }
         }
 

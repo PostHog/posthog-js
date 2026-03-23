@@ -1,4 +1,4 @@
-import { entries, extend } from './utils'
+import { extend } from './utils'
 import { PostHog } from './posthog-core'
 import {
     FlagsResponse,
@@ -56,6 +56,7 @@ export const FeatureFlagError = {
 } as const
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
+const _emptyErrors: string[] = [] // Shared empty array to avoid allocation per flag check
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
 const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
@@ -72,9 +73,13 @@ const arrayToFlagsRecord = (flags: string[]): Record<string, true> => {
 
 export const filterActiveFeatureFlags = (featureFlags?: Record<string, string | boolean>) => {
     const activeFeatureFlags: Record<string, string | boolean> = {}
-    for (const [key, value] of entries(featureFlags || {})) {
-        if (value) {
-            activeFeatureFlags[key] = value
+    if (featureFlags) {
+        const keys = Object.keys(featureFlags)
+        for (let i = 0; i < keys.length; i++) {
+            const key = keys[i]
+            if (featureFlags[key]) {
+                activeFeatureFlags[key] = featureFlags[key]
+            }
         }
     }
     return activeFeatureFlags
@@ -151,15 +156,21 @@ export const parseFlagsResponse = (
         }
     }
 
-    persistence &&
-        persistence.register({
+    if (persistence) {
+        const propsToRegister: Record<string, any> = {
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFeatureFlags)),
             [ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
             [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
             [PERSISTENCE_FEATURE_FLAG_DETAILS]: newFeatureFlagDetails || {},
-            ...(requestId ? { [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: requestId } : {}),
-            ...(evaluatedAt ? { [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: evaluatedAt } : {}),
-        })
+        }
+        if (requestId) {
+            propsToRegister[PERSISTENCE_FEATURE_FLAG_REQUEST_ID] = requestId
+        }
+        if (evaluatedAt) {
+            propsToRegister[PERSISTENCE_FEATURE_FLAG_EVALUATED_AT] = evaluatedAt
+        }
+        persistence.register(propsToRegister)
+    }
 }
 
 const normalizeFlagsResponse = (response: Partial<FlagsResponse>): Partial<FlagsResponse> => {
@@ -167,18 +178,21 @@ const normalizeFlagsResponse = (response: Partial<FlagsResponse>): Partial<Flags
 
     if (flagDetails) {
         // This is a /flags?v=2 request.
+        const flagKeys = Object.keys(flagDetails)
 
         // Map of flag keys to flag values: Record<string, string | boolean>
-        response.featureFlags = Object.fromEntries(
-            Object.keys(flagDetails).map((flag) => [flag, flagDetails[flag].variant ?? flagDetails[flag].enabled])
-        )
-        // Map of flag keys to flag payloads: Record<string, JsonType>
-        response.featureFlagPayloads = Object.fromEntries(
-            Object.keys(flagDetails)
-                .filter((flag) => flagDetails[flag].enabled)
-                .filter((flag) => flagDetails[flag].metadata?.payload)
-                .map((flag) => [flag, flagDetails[flag].metadata?.payload])
-        )
+        const featureFlags: Record<string, string | boolean> = {}
+        const featureFlagPayloads: Record<string, any> = {}
+        for (let i = 0; i < flagKeys.length; i++) {
+            const flag = flagKeys[i]
+            const detail = flagDetails[flag]
+            featureFlags[flag] = detail.variant ?? detail.enabled
+            if (detail.enabled && detail.metadata?.payload) {
+                featureFlagPayloads[flag] = detail.metadata.payload
+            }
+        }
+        response.featureFlags = featureFlags
+        response.featureFlagPayloads = featureFlagPayloads
     } else {
         logger.warn(
             'Using an older version of the feature flags endpoint. Please upgrade your PostHog server to the latest version'
@@ -332,6 +346,15 @@ export class PostHogFeatureFlags implements Extension {
 
     getFlags(): string[] {
         return Object.keys(this.getFlagVariants())
+    }
+
+    /** Check if any flags are cached without creating an array via Object.keys */
+    private _hasCachedFlags(): boolean {
+        const variants = this.getFlagVariants()
+        for (const _key in variants) {
+            return true
+        }
+        return false
     }
 
     getFlagsWithDetails(): Record<string, FeatureFlagDetail> {
@@ -651,7 +674,7 @@ export class PostHogFeatureFlags implements Extension {
         if (options.fresh && !this._flagsLoadedFromRemote) {
             return undefined
         }
-        if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
+        if (!this._hasLoadedFlags && !this._hasCachedFlags()) {
             logger.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
@@ -720,7 +743,7 @@ export class PostHogFeatureFlags implements Extension {
         if (options.fresh && !this._flagsLoadedFromRemote) {
             return undefined
         }
-        if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
+        if (!this._hasLoadedFlags && !this._hasCachedFlags()) {
             logger.warn('getFeatureFlagResult for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
@@ -762,10 +785,13 @@ export class PostHogFeatureFlags implements Extension {
                 this._instance.persistence?.register({ [FLAG_CALL_REPORTED]: flagCallReported })
 
                 const flagDetails = this.getFeatureFlagDetails(key)
-                const errors: string[] = [...(this._instance.get_property(PERSISTENCE_FEATURE_FLAG_ERRORS) ?? [])]
-                if (isUndefined(flagValue)) {
-                    errors.push(FeatureFlagError.FLAG_MISSING)
-                }
+                const existingErrors: string[] | undefined = this._instance.get_property(
+                    PERSISTENCE_FEATURE_FLAG_ERRORS
+                )
+                // Avoid array spread when not adding new errors (common path)
+                const errors: string[] = isUndefined(flagValue)
+                    ? [...(existingErrors || []), FeatureFlagError.FLAG_MISSING]
+                    : existingErrors || _emptyErrors
 
                 const properties: Record<string, any | undefined> = {
                     $feature_flag: key,
@@ -900,7 +926,7 @@ export class PostHogFeatureFlags implements Extension {
         if (options.fresh && !this._flagsLoadedFromRemote) {
             return undefined
         }
-        if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
+        if (!this._hasLoadedFlags && !this._hasCachedFlags()) {
             logger.warn('isFeatureEnabled for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
@@ -1162,15 +1188,14 @@ export class PostHogFeatureFlags implements Extension {
      * to update user properties.
      */
     setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
-        // Get persisted person properties
+        // Get persisted person properties and merge new properties into it
         const existingProperties = this._instance.get_property(STORED_PERSON_PROPERTIES_KEY) || {}
+        // Merge directly into existing object to avoid spread allocation
+        const merged = extend(existingProperties, properties)
 
-        this._instance.register({
-            [STORED_PERSON_PROPERTIES_KEY]: {
-                ...existingProperties,
-                ...properties,
-            },
-        })
+        const propsToRegister: Record<string, any> = {}
+        propsToRegister[STORED_PERSON_PROPERTIES_KEY] = merged
+        this._instance.register(propsToRegister)
 
         if (reloadFeatureFlags) {
             this._instance.reloadFeatureFlags()

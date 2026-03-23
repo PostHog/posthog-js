@@ -13,8 +13,7 @@ import type { SessionIdManager } from './sessionid'
 import type { PostHogPersistence } from './posthog-persistence'
 import { CLIENT_SESSION_PROPS } from './constants'
 import type { PostHog } from './posthog-core'
-import { each, stripEmptyProperties } from './utils'
-import { stripLeadingDollar } from '@posthog/core'
+import { stripLeadingDollar, isString, isNumber } from '@posthog/core'
 
 interface LegacySessionSourceProps {
     initialPathName: string
@@ -47,6 +46,7 @@ export class SessionPropsManager {
     private readonly _sessionSourceParamGenerator: (
         instance?: PostHog
     ) => LegacySessionSourceProps | CurrentSessionSourceProps
+    private _cachedSessionProps: Record<string, any> | null = null
 
     constructor(
         instance: PostHog,
@@ -71,6 +71,9 @@ export class SessionPropsManager {
         if (stored && stored.sessionId === sessionId) {
             return
         }
+
+        // Invalidate cached session props when session changes
+        this._cachedSessionProps = null
 
         const newProps: StoredSessionSourceProps = {
             sessionId,
@@ -100,15 +103,28 @@ export class SessionPropsManager {
     }
 
     getSessionProps() {
+        // Cache session props since they only change when the session changes
+        if (this._cachedSessionProps) {
+            return this._cachedSessionProps
+        }
+
         // it's the same props, but don't include null for unset properties, and add a prefix
+        const setOnceProps = this.getSetOnceProps()
         const p: Record<string, any> = {}
-        each(stripEmptyProperties(this.getSetOnceProps()), (v, k) => {
-            if (k === '$current_url') {
-                // $session_entry_current_url would be a weird name, call it $session_entry_url instead
-                k = 'url'
+        const keys = Object.keys(setOnceProps)
+        for (let i = 0; i < keys.length; i++) {
+            let k = keys[i]
+            const v = setOnceProps[k]
+            // only include non-empty string or number values
+            if ((isString(v) && v.length > 0) || isNumber(v)) {
+                if (k === '$current_url') {
+                    // $session_entry_current_url would be a weird name, call it $session_entry_url instead
+                    k = 'url'
+                }
+                p[`$session_entry_${stripLeadingDollar(k)}`] = v
             }
-            p[`$session_entry_${stripLeadingDollar(k)}`] = v
-        })
+        }
+        this._cachedSessionProps = p
         return p
     }
 }
