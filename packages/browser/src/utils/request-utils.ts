@@ -40,14 +40,8 @@ export const formDataToQuery = function (formdata: Record<string, any> | FormDat
 
 export const getQueryParam = function (url: string, param: string): string {
     try {
-        // Normalize URLs with duplicate ? marks (e.g. ??test=123) by cleaning query string
-        const withoutHash = url.split('#')[0] || ''
-        const queryStart = withoutHash.indexOf('?')
-        if (queryStart === -1) return ''
-        const cleanedUrl = withoutHash.substring(0, queryStart + 1) + withoutHash.substring(queryStart + 1).replace(/^\?+/g, '')
         // Providing a minimal base URL prevents parsing from throwing if the input is a relative URL
-        const parsedUrl = new URL(cleanedUrl, 'http://a')
-        return parsedUrl.searchParams.get(param) || ''
+        return new URL(url.split('#')[0] || '', 'http://a').searchParams.get(param) || ''
     } catch {
         return ''
     }
