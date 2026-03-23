@@ -8,6 +8,7 @@ export function find<T>(value: T[], predicate: (value: T) => boolean): T | undef
             return value[i]
         }
     }
+    return undefined
 }
 
 export function eachArray<E = any>(obj: E[] | null | undefined, iterator: (value: E, key: number) => void): void {
