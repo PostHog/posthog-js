@@ -228,10 +228,7 @@ export class PostHogFeatureFlags implements Extension {
      * Check if the feature flag cache is stale based on the configured TTL.
      */
     private _isCacheStale(): boolean {
-        return (
-            this._persistence?._isFeatureFlagCacheStale(this._config.feature_flag_cache_ttl_ms) ??
-            false
-        )
+        return this._persistence?._isFeatureFlagCacheStale(this._config.feature_flag_cache_ttl_ms) ?? false
     }
 
     /**
@@ -789,8 +786,7 @@ export class PostHogFeatureFlags implements Extension {
                     $feature_flag_request_id: requestId,
                     $feature_flag_evaluated_at: evaluatedAt,
                     $feature_flag_bootstrapped_response: this._config.bootstrap?.featureFlags?.[key] || null,
-                    $feature_flag_bootstrapped_payload:
-                        this._config.bootstrap?.featureFlagPayloads?.[key] || null,
+                    $feature_flag_bootstrapped_payload: this._config.bootstrap?.featureFlagPayloads?.[key] || null,
                     // If we haven't yet received a response from the /flags endpoint, we must have used the bootstrapped value
                     $used_bootstrap_value: !this._flagsLoadedFromRemote,
                 }
@@ -1081,8 +1077,7 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     updateEarlyAccessFeatureEnrollment(key: string, isEnrolled: boolean, stage?: string): void {
-        const existing_early_access_features: EarlyAccessFeature[] =
-            this._prop(PERSISTENCE_EARLY_ACCESS_FEATURES) || []
+        const existing_early_access_features: EarlyAccessFeature[] = this._prop(PERSISTENCE_EARLY_ACCESS_FEATURES) || []
         const feature = existing_early_access_features.find((f) => f.flagKey === key)
 
         const enrollmentPersonProp = {

@@ -7,7 +7,6 @@ import { assignableWindow, window, location } from '../../utils/globals'
 import { maskQueryParams } from '../../utils/request-utils'
 import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from '../../utils/event-utils'
 
-
 const logger = createLogger('[Web Vitals]')
 
 type WebVitalsMetricCallback = (metric: any) => void
@@ -61,8 +60,7 @@ export class WebVitalsAutocapture {
 
     public get _maxAllowedValue(): number {
         const configured =
-            isObject(this._perfConfig) &&
-            isNumber(this._perfConfig.__web_vitals_max_value)
+            isObject(this._perfConfig) && isNumber(this._perfConfig.__web_vitals_max_value)
                 ? this._perfConfig.__web_vitals_max_value
                 : FIFTEEN_MINUTES_IN_MILLIS
         // you can set to 0 to disable the check or any value over ten seconds

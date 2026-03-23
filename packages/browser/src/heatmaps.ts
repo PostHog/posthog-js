@@ -83,10 +83,7 @@ export class Heatmaps implements Extension {
 
     public get flushIntervalMilliseconds(): number {
         let flushInterval = DEFAULT_FLUSH_INTERVAL
-        if (
-            isObject(this._config.capture_heatmaps) &&
-            this._config.capture_heatmaps.flush_interval_milliseconds
-        ) {
+        if (isObject(this._config.capture_heatmaps) && this._config.capture_heatmaps.flush_interval_milliseconds) {
             flushInterval = this._config.capture_heatmaps.flush_interval_milliseconds
         }
         return flushInterval

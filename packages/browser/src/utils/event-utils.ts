@@ -215,8 +215,7 @@ export function getPersonInfo(maskPersonalDataProperties?: boolean, customPerson
 
 export function getPersonPropsFromInfo(info: Record<string, any>): Record<string, any> {
     const { r: referrer, u: url } = info
-    const referring_domain =
-        referrer == null ? undefined : referrer == DIRECT ? DIRECT : convertToURL(referrer)?.host
+    const referring_domain = referrer == null ? undefined : referrer == DIRECT ? DIRECT : convertToURL(referrer)?.host
 
     const props: Record<string, string | undefined> = {
         $referrer: referrer,

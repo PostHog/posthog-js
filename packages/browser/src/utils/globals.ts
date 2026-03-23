@@ -278,7 +278,6 @@ if (typeof File === 'undefined') {
     ;(global as any).File = function () {}
 }
 
-
 export const navigator = global?.navigator
 export const document = global?.document
 export const location = global?.location

@@ -2,7 +2,6 @@ import { each } from './'
 
 import { isArray, isFile, isUndefined } from '@posthog/core'
 
-
 const localDomains = ['localhost', '127.0.0.1']
 
 /**
@@ -13,6 +12,7 @@ const localDomains = ['localhost', '127.0.0.1']
  */
 export const convertToURL = (url: string): URL | null => {
     try {
+        // eslint-disable-next-line compat/compat
         return new URL(url)
     } catch {
         return null
@@ -40,7 +40,7 @@ export const formDataToQuery = function (formdata: Record<string, any> | FormDat
 
 export const getQueryParam = function (url: string, param: string): string {
     try {
-        // Providing a minimal base URL prevents parsing from throwing if the input is a relative URL
+        // eslint-disable-next-line compat/compat -- IE11/op_mini unsupported; URL() is the modern standard
         return new URL(url.split('#')[0] || '', 'http://a').searchParams.get(param) || ''
     } catch {
         return ''

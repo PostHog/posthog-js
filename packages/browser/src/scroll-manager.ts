@@ -72,9 +72,7 @@ export class ScrollManager {
 
     public scrollElement(): Element | undefined {
         if (this._scrollRoot) {
-            const selectors = isArray(this._scrollRoot)
-                ? this._scrollRoot
-                : [this._scrollRoot]
+            const selectors = isArray(this._scrollRoot) ? this._scrollRoot : [this._scrollRoot]
             for (const selector of selectors) {
                 const element = window?.document.querySelector(selector)
                 if (element) {

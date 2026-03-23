@@ -2,10 +2,7 @@ import { PostHogConfig, Properties } from '../types'
 import { logger } from './logger'
 import { isFormData, isNull, isNullish, isNumber, isString, hasOwnProperty, isArray } from '@posthog/core'
 
-export function eachArray<E = any>(
-    obj: E[] | null | undefined,
-    iterator: (value: E, key: number) => void
-): void {
+export function eachArray<E = any>(obj: E[] | null | undefined, iterator: (value: E, key: number) => void): void {
     if (isArray(obj)) {
         obj.forEach(iterator)
     }

@@ -681,7 +681,10 @@ export class PostHog implements PostHogInterface {
             } else {
                 const uuid = this.config.get_device_id(uuidv7())
                 const deviceID = config.bootstrap.isIdentifiedID ? uuid : bootstrapDistinctId
-                this.persistence.set_property(USER_STATE, config.bootstrap.isIdentifiedID ? USER_STATE_IDENTIFIED : USER_STATE_ANONYMOUS)
+                this.persistence.set_property(
+                    USER_STATE,
+                    config.bootstrap.isIdentifiedID ? USER_STATE_IDENTIFIED : USER_STATE_ANONYMOUS
+                )
                 this.register({
                     distinct_id: bootstrapDistinctId,
                     $device_id: deviceID,
@@ -904,7 +907,9 @@ export class PostHog implements PostHogInterface {
         }
 
         this.set_config({
-            person_profiles: this._initialPersonProfilesConfig ? this._initialPersonProfilesConfig : PERSON_PROFILES_IDENTIFIED_ONLY,
+            person_profiles: this._initialPersonProfilesConfig
+                ? this._initialPersonProfilesConfig
+                : PERSON_PROFILES_IDENTIFIED_ONLY,
         })
 
         this._extensions.forEach((ext) => ext.onRemoteConfig?.(config))
@@ -2382,7 +2387,8 @@ export class PostHog implements PostHogInterface {
             this.register({ distinct_id: new_distinct_id })
         }
 
-        const isKnownAnonymous = (this.persistence.get_property(USER_STATE) || USER_STATE_ANONYMOUS) === USER_STATE_ANONYMOUS
+        const isKnownAnonymous =
+            (this.persistence.get_property(USER_STATE) || USER_STATE_ANONYMOUS) === USER_STATE_ANONYMOUS
 
         // send an $identify event any time the distinct_id is changing and the old ID is an anonymous ID
         // - logic on the server will determine whether or not to do anything with it.
