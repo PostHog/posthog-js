@@ -208,6 +208,20 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(fakeInstance.capture).not.toHaveBeenCalled()
         })
 
+        it('click followed by a visibility change, not a dead click', () => {
+            lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                node: document.body,
+                originalEvent: { type: 'click' } as MouseEvent,
+                timestamp: 900,
+            })
+            lazyLoadedDeadClicksAutocapture['_lastVisibilityChange'] = 999
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
         it('click followed by a selection change outside of threshold, dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,

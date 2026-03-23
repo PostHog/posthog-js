@@ -204,6 +204,8 @@ export interface DeadClickCandidate {
     mutationDelayMs?: number
     // time between click and the most recent selection changed event
     selectionChangedDelayMs?: number
+    // time between click and the most recent visibility change event
+    visibilityChangedDelayMs?: number
     // if neither scroll nor mutation seen before threshold passed
     absoluteDelayMs?: number
 }
