@@ -160,7 +160,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _startVisibilityChangeObserver() {
-        document?.addEventListener('visibilitychange', this._onVisibilityChange)
+        addEventListener(document, 'visibilitychange', this._onVisibilityChange)
     }
 
     private _onVisibilityChange = (): void => {

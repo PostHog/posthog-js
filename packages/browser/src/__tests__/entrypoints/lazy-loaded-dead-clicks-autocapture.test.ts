@@ -250,6 +250,8 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                     $dead_click_scroll_timeout: false,
                     $dead_click_selection_changed_delay_ms: 100,
                     $dead_click_selection_changed_timeout: true,
+                    $dead_click_visibility_changed_delay_ms: undefined,
+                    $dead_click_visibility_changed_timeout: false,
                     $el_text: 'text',
                     $elements: [
                         {
@@ -291,6 +293,8 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                     $dead_click_scroll_timeout: false,
                     $dead_click_selection_changed_delay_ms: undefined,
                     $dead_click_selection_changed_timeout: false,
+                    $dead_click_visibility_changed_delay_ms: undefined,
+                    $dead_click_visibility_changed_timeout: false,
                     $el_text: 'text',
                     $elements: [
                         {
@@ -334,6 +338,8 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                     $dead_click_scroll_timeout: true,
                     $dead_click_selection_changed_delay_ms: undefined,
                     $dead_click_selection_changed_timeout: false,
+                    $dead_click_visibility_changed_delay_ms: undefined,
+                    $dead_click_visibility_changed_timeout: false,
                     $el_text: 'text',
                     $elements: [
                         {
@@ -376,6 +382,8 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                     $dead_click_scroll_timeout: false,
                     $dead_click_selection_changed_delay_ms: undefined,
                     $dead_click_selection_changed_timeout: false,
+                    $dead_click_visibility_changed_delay_ms: undefined,
+                    $dead_click_visibility_changed_timeout: false,
                     $el_text: 'text',
                     $elements: [
                         {
