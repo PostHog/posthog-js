@@ -1,6 +1,8 @@
 import { each } from './'
 
 import { isArray, isFile, isUndefined } from '@posthog/core'
+import { logger } from './logger'
+import { document } from './globals'
 
 const localDomains = ['localhost', '127.0.0.1']
 
@@ -10,13 +12,14 @@ const localDomains = ['localhost', '127.0.0.1']
  * there's a lot of overlap between HTMLHyperlinkElementUtils and URL
  * meaning useful properties like `pathname` are available on both
  */
-export const convertToURL = (url: string): URL | null => {
-    try {
-        // eslint-disable-next-line compat/compat
-        return new URL(url)
-    } catch {
+export const convertToURL = (url: string): HTMLAnchorElement | null => {
+    const location = document?.createElement('a')
+    if (isUndefined(location)) {
         return null
     }
+
+    location.href = url
+    return location
 }
 
 export const formDataToQuery = function (formdata: Record<string, any> | FormData, arg_separator = '&'): string {
@@ -39,11 +42,34 @@ export const formDataToQuery = function (formdata: Record<string, any> | FormDat
 }
 
 export const getQueryParam = function (url: string, param: string): string {
-    try {
-        // eslint-disable-next-line compat/compat -- IE11/op_mini unsupported; URL() is the modern standard
-        return new URL(url.split('#')[0] || '', 'http://a').searchParams.get(param) || ''
-    } catch {
+    const withoutHash: string = url.split('#')[0] || ''
+
+    // Split only on the first ? to sort problem out for those with multiple ?s
+    // and then remove them
+    const queryParams: string = withoutHash.split(/\?(.*)/)[1] || ''
+    const cleanedQueryParams = queryParams.replace(/^\?+/g, '')
+
+    const queryParts = cleanedQueryParams.split('&')
+    let keyValuePair
+
+    for (let i = 0; i < queryParts.length; i++) {
+        const parts = queryParts[i].split('=')
+        if (parts[0] === param) {
+            keyValuePair = parts
+            break
+        }
+    }
+
+    if (!isArray(keyValuePair) || keyValuePair.length < 2) {
         return ''
+    } else {
+        let result = keyValuePair[1]
+        try {
+            result = decodeURIComponent(result)
+        } catch {
+            logger.error('Skipping decoding for malformed query param: ' + result)
+        }
+        return result.replace(/\+/g, ' ')
     }
 }
 

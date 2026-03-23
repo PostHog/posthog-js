@@ -47,7 +47,20 @@ export const extend = function (obj: Record<string, any>, ...args: Record<string
     return obj
 }
 
-export const entries = Object.entries
+/**
+ * Object.entries() polyfill
+ * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/entries
+ */
+export function entries<T = any>(obj: Record<string, T>): [string, T][] {
+    const ownProps = Object.keys(obj)
+    let i = ownProps.length
+    const resArray = new Array(i) // preallocate the Array
+
+    while (i--) {
+        resArray[i] = [ownProps[i], obj[ownProps[i]]]
+    }
+    return resArray
+}
 
 export const trySafe = function <T>(fn: () => T): T | undefined {
     try {

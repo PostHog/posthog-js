@@ -44,8 +44,7 @@ describe('request utils', () => {
             ['gets param when no match with trailing slash', '/', 'name', ''],
             ['gets param when no match and there are params', '/?test=123', 'name', ''],
             ['gets param when no match and there are params with trailing slash', '/?test=123', 'name', ''],
-            ['with duplicate question marks the extra ? is part of the param name', '??test=123', 'test', ''],
-            ['with duplicate question marks can get ?test param', '??test=123', '?test', '123'],
+            ['gets param when we have duplicate question marks', '??test=123', 'test', '123'],
             ['gets trailing param when we have duplicate question marks', '??test=123&name=john', 'name', 'john'],
         ])('%s', (_name, url, param, expected) => {
             expect(getQueryParam(`https://example.com${url}`, param)).toEqual(expected)
