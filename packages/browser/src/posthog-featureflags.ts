@@ -997,7 +997,7 @@ export class PostHogFeatureFlags implements Extension {
         // Array syntax: ['flag-a', 'flag-b'] -> { 'flag-a': true, 'flag-b': true }
         if (isArray(overrideOptions)) {
             const flagsObj = arrayToFlagsRecord(overrideOptions)
-            this._persistence?.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flagsObj })
+            this._persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flagsObj })
             this._fireFeatureFlagsCallbacks()
 
             return forceDebugLogger.info('Flag overrides set', { flags: overrideOptions })
@@ -1047,7 +1047,7 @@ export class PostHogFeatureFlags implements Extension {
 
         // Fallback: treat as Record<string, string | boolean>, e.g. {'beta-feature': 'variant'}
         if (overrideOptions && typeof overrideOptions === 'object') {
-            this._persistence?.register({
+            this._persistence.register({
                 [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: overrideOptions as Record<string, string | boolean>,
             })
             this._fireFeatureFlagsCallbacks()
