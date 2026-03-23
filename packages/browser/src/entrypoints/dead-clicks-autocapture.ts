@@ -164,7 +164,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _onVisibilityChange = (): void => {
-        this._lastVisibilityChange = Date.now()
+        if (document?.visibilityState === 'visible') {
+            this._lastVisibilityChange = Date.now()
+        }
     }
 
     private _ignoreClick(click: DeadClickCandidate | null): boolean {
@@ -221,10 +223,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 this._lastSelectionChanged && click.timestamp <= this._lastSelectionChanged
                     ? this._lastSelectionChanged - click.timestamp
                     : undefined
-            click.visibilityChangedDelayMs =
-                this._lastVisibilityChange && click.timestamp <= this._lastVisibilityChange
-                    ? this._lastVisibilityChange - click.timestamp
-                    : undefined
+            click.visibilityChangedDelayMs = this._lastVisibilityChange
+                ? Math.abs(click.timestamp - this._lastVisibilityChange)
+                : undefined
 
             const scrollTimeout = checkTimeout(click.scrollDelayMs, this._config.scroll_threshold_ms)
             const selectionChangedTimeout = checkTimeout(
@@ -247,7 +248,6 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 click.visibilityChangedDelayMs < this._config.selection_change_threshold_ms
 
             if (hadScroll || hadMutation || hadSelectionChange || hadVisibilityChange) {
-                // ignore clicks that had a scroll or mutation
                 continue
             }
 
