@@ -41,33 +41,6 @@ export const extend = function (obj: Record<string, any>, ...args: Record<string
     return obj
 }
 
-export const extendArray = function <T>(obj: T[], ...args: T[][]): T[] {
-    for (const source of args) {
-        for (const item of source) {
-            obj.push(item)
-        }
-    }
-    return obj
-}
-
-export const include = function (
-    obj: null | string | Array<any> | Record<string, any>,
-    target: any
-): boolean {
-    if (isNull(obj)) {
-        return false
-    }
-    if (isArray(obj) || isString(obj)) {
-        return (obj as any).indexOf(target) !== -1
-    }
-    for (const key in obj) {
-        if (hasOwnProperty.call(obj, key) && (obj as any)[key] === target) {
-            return true
-        }
-    }
-    return false
-}
-
 export const entries = Object.entries
 
 export const trySafe = function <T>(fn: () => T): T | undefined {
@@ -185,15 +158,6 @@ export function isCrossDomainCookie(documentLocation: Location | undefined) {
     }
 
     return true
-}
-
-export function find<T>(value: T[], predicate: (value: T) => boolean): T | undefined {
-    for (let i = 0; i < value.length; i++) {
-        if (predicate(value[i])) {
-            return value[i]
-        }
-    }
-    return undefined
 }
 
 // Use this instead of element.addEventListener to avoid eslint errors

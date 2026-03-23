@@ -1,5 +1,5 @@
 import { PostHog } from './posthog-core'
-import { COOKIELESS_ON_REJECT } from './constants'
+import { COOKIELESS_ALWAYS, COOKIELESS_ON_REJECT } from './constants'
 import { assignableWindow, navigator } from './utils/globals'
 import { cookieStore, localStore } from './storage'
 import { PersistentStore } from './types'
@@ -35,7 +35,7 @@ export class ConsentManager {
     }
 
     public isOptedOut() {
-        if (this._config.cookieless_mode === 'always') {
+        if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
             return true
         }
         // we are opted out if:

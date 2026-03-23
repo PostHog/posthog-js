@@ -117,6 +117,7 @@ export const LOAD_EXT_NOT_FOUND = 'PostHog loadExternalDependency extension not 
 /* EVENT NAMES - interned to reduce bundle size */
 /* COOKIELESS MODE VALUES */
 export const COOKIELESS_ON_REJECT = 'on_reject' as const
+export const COOKIELESS_ALWAYS = 'always' as const
 
 /* USER STATE VALUES */
 export const USER_STATE_ANONYMOUS = 'anonymous'

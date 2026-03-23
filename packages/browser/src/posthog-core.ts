@@ -19,6 +19,7 @@ import {
     PEOPLE_DISTINCT_ID_KEY,
     SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
+    COOKIELESS_ALWAYS,
 } from './constants'
 import { isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { setupSegmentIntegration } from './extensions/segment-integration'
@@ -604,7 +605,7 @@ export class PostHog implements PostHogInterface {
         this.__request_queue = []
 
         const startInCookielessMode =
-            this.config.cookieless_mode === 'always' ||
+            this.config.cookieless_mode === COOKIELESS_ALWAYS ||
             (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isExplicitlyOptedOut())
 
         if (!startInCookielessMode) {
@@ -933,7 +934,7 @@ export class PostHog implements PostHogInterface {
             // NOTE: We want to fire this on the next tick as the previous implementation had this side effect
             // and some clients may rely on it
             setTimeout(() => {
-                if (this.consent.isOptedIn() || this.config.cookieless_mode === 'always') {
+                if (this.consent.isOptedIn() || this.config.cookieless_mode === COOKIELESS_ALWAYS) {
                     this._captureInitialPageview()
                 }
             }, 1)
@@ -1369,7 +1370,7 @@ export class PostHog implements PostHogInterface {
         properties['$config_defaults'] = this.config.defaults
 
         if (
-            this.config.cookieless_mode == 'always' ||
+            this.config.cookieless_mode == COOKIELESS_ALWAYS ||
             (this.config.cookieless_mode == COOKIELESS_ON_REJECT && this.consent.isExplicitlyOptedOut())
         ) {
             // Set a flag to tell the plugin server to use cookieless server hash mode
@@ -2707,7 +2708,7 @@ export class PostHog implements PostHogInterface {
         this.persistence?.set_property(USER_STATE, USER_STATE_ANONYMOUS)
         this.sessionManager?.resetSessionId()
         this._cachedPersonProperties = null
-        if (this.config.cookieless_mode === 'always') {
+        if (this.config.cookieless_mode === COOKIELESS_ALWAYS) {
             this.register_once(
                 {
                     distinct_id: COOKIELESS_SENTINEL_VALUE,
@@ -3414,7 +3415,7 @@ export class PostHog implements PostHogInterface {
         captureEventName?: EventName | null | false /** event name to be used for capturing the opt-in action */
         captureProperties?: Properties /** set of properties to be captured along with the opt-in action */
     }): void {
-        if (this.config.cookieless_mode === 'always') {
+        if (this.config.cookieless_mode === COOKIELESS_ALWAYS) {
             logger.warn(CONSENT_COOKIELESS_WARN)
             return
         }
@@ -3482,7 +3483,7 @@ export class PostHog implements PostHogInterface {
      * @public
      */
     opt_out_capturing(): void {
-        if (this.config.cookieless_mode === 'always') {
+        if (this.config.cookieless_mode === COOKIELESS_ALWAYS) {
             logger.warn(CONSENT_COOKIELESS_WARN)
             return
         }
@@ -3604,7 +3605,7 @@ export class PostHog implements PostHogInterface {
      * @returns {boolean} whether the posthog library is capturing events
      */
     is_capturing(): boolean {
-        if (this.config.cookieless_mode === 'always') {
+        if (this.config.cookieless_mode === COOKIELESS_ALWAYS) {
             return true
         }
         if (this.config.cookieless_mode === COOKIELESS_ON_REJECT) {

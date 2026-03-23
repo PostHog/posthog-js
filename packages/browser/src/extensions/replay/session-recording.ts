@@ -5,6 +5,7 @@ import {
     SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER,
     SESSION_RECORDING_OVERRIDE_URL_TRIGGER,
     SESSION_RECORDING_REMOTE_CONFIG,
+    COOKIELESS_ALWAYS,
 } from '../../constants'
 import { PostHog } from '../../posthog-core'
 import { RemoteConfigLoader } from '../../remote-config'
@@ -66,7 +67,7 @@ export class SessionRecording implements Extension {
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
 
-        if (this._config.cookieless_mode === 'always') {
+        if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
             throw new Error(LOGGER_PREFIX + ' cannot be used with cookieless_mode="always"')
         }
     }
