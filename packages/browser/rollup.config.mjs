@@ -379,9 +379,14 @@ const typeTargets = entrypoints
     .filter((file) => file.endsWith('.es.ts'))
     .map((file) => {
         const source = `./lib/src/entrypoints/${file.replace('.ts', '.d.ts')}`
+        const isExtensionBundles = file === 'extension-bundles.es.ts'
         /** @type {import('rollup').RollupOptions} */
         return {
             input: source,
+            // extension-bundles types must reference module.slim rather than inlining
+            // their own copies — classes with private fields are nominally typed, so
+            // duplicate declarations across .d.ts files are incompatible.
+            ...(isExtensionBundles ? { external: [/module\.slim/] } : {}),
             output: [
                 {
                     dir: path.resolve('./dist'),
@@ -392,7 +397,20 @@ const typeTargets = entrypoints
                 json(),
                 dts({
                     exclude: [],
+                    ...(isExtensionBundles ? { respectExternal: true } : {}),
                 }),
+                // dts preserves the tsc-era path (e.g. './module.slim.es') but the
+                // output has been renamed to module.slim.d.ts — fix the reference.
+                ...(isExtensionBundles
+                    ? [
+                          {
+                              name: 'fix-dts-external-paths',
+                              renderChunk(code) {
+                                  return code.replace(/\.\/module\.slim\.es(?=['"])/g, './module.slim')
+                              },
+                          },
+                      ]
+                    : []),
             ],
         }
     })
