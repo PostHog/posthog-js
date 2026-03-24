@@ -208,6 +208,23 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(fakeInstance.capture).not.toHaveBeenCalled()
         })
 
+        it.each([
+            { scenario: 'visibility change after click', clickTimestamp: 900, visibilityTimestamp: 999 },
+            { scenario: 'visibility change just before click', clickTimestamp: 950, visibilityTimestamp: 900 },
+        ])('$scenario, not a dead click', ({ clickTimestamp, visibilityTimestamp }) => {
+            lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                node: document.body,
+                originalEvent: { type: 'click' } as MouseEvent,
+                timestamp: clickTimestamp,
+            })
+            lazyLoadedDeadClicksAutocapture['_lastVisibilityChange'] = visibilityTimestamp
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
         it('click followed by a selection change outside of threshold, dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
@@ -233,6 +250,8 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                     $dead_click_scroll_timeout: false,
                     $dead_click_selection_changed_delay_ms: 100,
                     $dead_click_selection_changed_timeout: true,
+                    $dead_click_visibility_changed_delay_ms: undefined,
+                    $dead_click_visibility_changed_timeout: false,
                     $el_text: 'text',
                     $elements: [
                         {
@@ -274,6 +293,8 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                     $dead_click_scroll_timeout: false,
                     $dead_click_selection_changed_delay_ms: undefined,
                     $dead_click_selection_changed_timeout: false,
+                    $dead_click_visibility_changed_delay_ms: undefined,
+                    $dead_click_visibility_changed_timeout: false,
                     $el_text: 'text',
                     $elements: [
                         {
@@ -317,6 +338,8 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                     $dead_click_scroll_timeout: true,
                     $dead_click_selection_changed_delay_ms: undefined,
                     $dead_click_selection_changed_timeout: false,
+                    $dead_click_visibility_changed_delay_ms: undefined,
+                    $dead_click_visibility_changed_timeout: false,
                     $el_text: 'text',
                     $elements: [
                         {
@@ -359,6 +382,8 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                     $dead_click_scroll_timeout: false,
                     $dead_click_selection_changed_delay_ms: undefined,
                     $dead_click_selection_changed_timeout: false,
+                    $dead_click_visibility_changed_delay_ms: undefined,
+                    $dead_click_visibility_changed_timeout: false,
                     $el_text: 'text',
                     $elements: [
                         {
