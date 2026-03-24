@@ -16,12 +16,7 @@ import { type fullSnapshotEvent, type metaEvent } from '../../../extensions/repl
 import Mock = jest.Mock
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
-import {
-    allMatchSessionRecordingStatus,
-    AndTriggerMatching,
-    anyMatchSessionRecordingStatus,
-    OrTriggerMatching,
-} from '../../../extensions/replay/external/triggerMatching'
+import { AndTriggerMatching, OrTriggerMatching } from '../../../extensions/replay/external/triggerMatching'
 import {
     LazyLoadedSessionRecording,
     RECORDING_REMOTE_CONFIG_TTL_MS,
@@ -197,12 +192,9 @@ describe('SessionRecording', () => {
                     sessionRecording: { endpoint: '/s/', triggerMatchType: 'any' },
                 })
             )
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_statusMatcher']).toBe(
-                anyMatchSessionRecordingStatus
-            )
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_triggerMatching']).toBeInstanceOf(
-                OrTriggerMatching
-            )
+            // Trigger matching is now internal to V1 strategy
+            const strategy = sessionRecording['_lazyLoadedSessionRecording']['_strategy']
+            expect(strategy?.['_triggerStatusMatcher']).toBeInstanceOf(OrTriggerMatching)
         })
 
         it('uses allMatchSessionRecordingStatus when triggerMatching is "all"', () => {
@@ -211,12 +203,9 @@ describe('SessionRecording', () => {
                     sessionRecording: { endpoint: '/s/', triggerMatchType: 'all' },
                 })
             )
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_statusMatcher']).toBe(
-                allMatchSessionRecordingStatus
-            )
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_triggerMatching']).toBeInstanceOf(
-                AndTriggerMatching
-            )
+            // Trigger matching is now internal to V1 strategy
+            const strategy = sessionRecording['_lazyLoadedSessionRecording']['_strategy']
+            expect(strategy?.['_triggerStatusMatcher']).toBeInstanceOf(AndTriggerMatching)
         })
 
         it('uses most restrictive when triggerMatching is not specified', () => {
@@ -225,12 +214,9 @@ describe('SessionRecording', () => {
                     sessionRecording: { endpoint: '/s/' },
                 })
             )
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_statusMatcher']).toBe(
-                allMatchSessionRecordingStatus
-            )
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_triggerMatching']).toBeInstanceOf(
-                AndTriggerMatching
-            )
+            // Trigger matching is now internal to V1 strategy
+            const strategy = sessionRecording['_lazyLoadedSessionRecording']['_strategy']
+            expect(strategy?.['_triggerStatusMatcher']).toBeInstanceOf(AndTriggerMatching)
         })
 
         it('when the first event is a meta it does not take a manual full snapshot', () => {

@@ -246,6 +246,16 @@ export type SessionRecordingRemoteConfig = SessionRecordingCanvasOptions & {
      * which nobody wanted, now the default is all
      */
     triggerMatchType?: 'any' | 'all'
+    /**
+     * Config version - defaults to 1 (legacy)
+     * When version is 2, triggerGroups is used instead of individual trigger fields
+     */
+    version?: 1 | 2
+    /**
+     * V2 Trigger Groups - multiple named trigger groups with their own conditions and sample rates
+     * Only used when version === 2
+     */
+    triggerGroups?: SessionRecordingTriggerGroup[]
 }
 
 /**
@@ -486,6 +496,22 @@ export const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debu
 export interface SessionRecordingUrlTrigger {
     url: string
     matching: 'regex'
+}
+
+/**
+ * V2 Trigger Group - represents a single trigger group with its own conditions and sample rate
+ */
+export interface SessionRecordingTriggerGroup {
+    id: string
+    name: string
+    sampleRate: number
+    minDurationMs?: number
+    conditions: {
+        matchType: 'any' | 'all'
+        events?: string[]
+        urls?: SessionRecordingUrlTrigger[]
+        flag?: string | FlagVariant
+    }
 }
 
 export type PropertyMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'

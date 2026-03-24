@@ -217,6 +217,9 @@ export class SessionRecording implements Extension {
                         triggerMatchType: sessionRecordingConfigResponse?.triggerMatchType,
                         masking: sessionRecordingConfigResponse?.masking,
                         urlTriggers: sessionRecordingConfigResponse?.urlTriggers,
+                        // V2 fields - will be undefined for V1 configs
+                        version: sessionRecordingConfigResponse?.version,
+                        triggerGroups: sessionRecordingConfigResponse?.triggerGroups,
                     } satisfies SessionRecordingPersistedConfig,
                 })
             }
