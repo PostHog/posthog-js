@@ -459,4 +459,46 @@ describe('PostHog Context', () => {
       expect(body.distinct_id).toBe('explicit-user')
     })
   })
+
+  describe('captureException with context', () => {
+    it('should use distinctId from context when captureException is called without distinctId', async () => {
+      posthog.withContext({ distinctId: 'context-user' }, () => {
+        posthog.captureException(new Error('test error'))
+      })
+
+      await waitForFlush()
+
+      const events = getLastBatchEvents()
+      expect(events).toHaveLength(1)
+      expect(events?.[0].event).toBe('$exception')
+      expect(events?.[0].distinct_id).toBe('context-user')
+      expect(events?.[0].properties.$process_person_profile).toBeUndefined()
+    })
+
+    it('should prefer explicit distinctId over context distinctId in captureException', async () => {
+      posthog.withContext({ distinctId: 'context-user' }, () => {
+        posthog.captureException(new Error('test error'), 'explicit-user')
+      })
+
+      await waitForFlush()
+
+      const events = getLastBatchEvents()
+      expect(events).toHaveLength(1)
+      expect(events?.[0].event).toBe('$exception')
+      expect(events?.[0].distinct_id).toBe('explicit-user')
+    })
+
+    it('should use personless processing when captureException has no distinctId and no context', async () => {
+      posthog.captureException(new Error('test error'))
+
+      await waitForFlush()
+
+      const events = getLastBatchEvents()
+      expect(events).toHaveLength(1)
+      expect(events?.[0].event).toBe('$exception')
+      expect(events?.[0].distinct_id).toBeTruthy()
+      expect(typeof events?.[0].distinct_id).toBe('string')
+      expect(events?.[0].properties.$process_person_profile).toBe(false)
+    })
+  })
 })
