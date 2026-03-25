@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.363.5
+
+### Patch Changes
+
+- [#3278](https://github.com/PostHog/posthog-js/pull/3278) [`c59dc90`](https://github.com/PostHog/posthog-js/commit/c59dc90e167f2e1dc3fc4e53d2d716f9dc5e3c70) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add tree-shakeable ESM extension-bundles entry point for slim builds
+  (2026-03-25)
+
+- [#3274](https://github.com/PostHog/posthog-js/pull/3274) [`ba08262`](https://github.com/PostHog/posthog-js/commit/ba08262a0bcf4ae1db3ef3bb841e0ad07002fbea) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: document visibility change shoudln't capture dead click
+  (2026-03-25)
+- Updated dependencies [[`ba08262`](https://github.com/PostHog/posthog-js/commit/ba08262a0bcf4ae1db3ef3bb841e0ad07002fbea)]:
+    - @posthog/types@1.363.5
+
 ## 1.363.4
 
 ### Patch Changes

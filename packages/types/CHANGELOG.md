@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.363.5
+
+### Patch Changes
+
+- [#3274](https://github.com/PostHog/posthog-js/pull/3274) [`ba08262`](https://github.com/PostHog/posthog-js/commit/ba08262a0bcf4ae1db3ef3bb841e0ad07002fbea) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: document visibility change shoudln't capture dead click
+  (2026-03-25)
+
 ## 1.363.4
 
 ## 1.363.3
