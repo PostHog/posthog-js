@@ -47,12 +47,12 @@
     "node": "^20.20.0 || >=22.22.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
-    "@google/genai": "^1.43.0",
+    "@anthropic-ai/sdk": "^0.80.0",
+    "@google/genai": "^1.46.0",
     "@langchain/core": "^1.1.29",
     "@posthog/core": "workspace:*",
     "langchain": "^1.2.28",
-    "openai": "^6.25.0",
+    "openai": "^6.32.0",
     "uuid": "^11.1.0",
     "zod": "^4.1.13"
   },
