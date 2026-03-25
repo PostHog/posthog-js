@@ -488,6 +488,9 @@ describe('PostHog Context', () => {
       const run = () => posthog.captureException(new Error('test error'), explicitDistinctId)
       contextDistinctId ? posthog.withContext({ distinctId: contextDistinctId }, run) : run()
 
+      // captureException uses addPendingPromise with an async buildEventMessage,
+      // so we need extra microtask cycles to let the promise chain resolve before flushing
+      await waitForPromises()
       await waitForFlush()
 
       const events = getLastBatchEvents()
