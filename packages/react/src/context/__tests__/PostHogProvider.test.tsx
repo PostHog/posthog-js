@@ -2,6 +2,7 @@ import * as React from 'react'
 import { render, act } from '@testing-library/react'
 import { PostHogProvider, PostHog } from '..'
 import posthogJs from 'posthog-js'
+import { setDefaultPostHogInstance } from '../posthog-default'
 
 // Mock posthog-js
 jest.mock('posthog-js', () => ({
@@ -12,6 +13,9 @@ jest.mock('posthog-js', () => ({
         __loaded: false,
     },
 }))
+
+// Register the mock as the default instance (normally done by index.ts)
+setDefaultPostHogInstance(posthogJs)
 
 describe('PostHogProvider component', () => {
     it('should render children components', () => {

@@ -50,7 +50,8 @@
         "dist/*",
         "react/dist/**",
         "react/package.json",
-        "react/surveys/package.json"
+        "react/surveys/package.json",
+        "react/slim/package.json"
     ],
     "dependencies": {
         "@posthog/core": "workspace:*",

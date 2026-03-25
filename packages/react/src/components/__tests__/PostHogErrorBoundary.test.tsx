@@ -4,6 +4,10 @@ import * as React from 'react'
 import { render } from '@testing-library/react'
 import { __POSTHOG_ERROR_MESSAGES, PostHogErrorBoundary } from '../PostHogErrorBoundary'
 import posthog from 'posthog-js'
+import { setDefaultPostHogInstance } from '../../context/posthog-default'
+
+// Register posthog as the default instance (normally done by index.ts)
+setDefaultPostHogInstance(posthog)
 
 describe('PostHogErrorBoundary component', () => {
     mockFunction(console, 'error')
