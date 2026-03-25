@@ -1,6 +1,6 @@
 import { addUncaughtExceptionListener, addUnhandledRejectionListener } from './autocapture'
 import { PostHogBackendClient } from '@/client'
-import { isObject, uuidv7 } from '@posthog/core'
+import { isObject } from '@posthog/core'
 import { EventMessage, PostHogOptions } from '@/types'
 import type { Logger } from '@posthog/core'
 import { BucketedRateLimiter } from '@posthog/core'
@@ -46,12 +46,6 @@ export default class ErrorTracking {
   ): Promise<EventMessage> {
     const properties: EventMessage['properties'] = { ...additionalProperties }
 
-    // Given stateless nature of Node SDK we capture exceptions using personless processing when no
-    // user can be determined because a distinct_id is not provided e.g. exception autocapture
-    if (!distinctId) {
-      properties.$process_person_profile = false
-    }
-
     const exceptionProperties = this.errorPropertiesBuilder.buildFromUnknown(error, hint)
     exceptionProperties.$exception_list = await this.errorPropertiesBuilder.modifyFrames(
       exceptionProperties.$exception_list
@@ -59,7 +53,9 @@ export default class ErrorTracking {
 
     return {
       event: '$exception',
-      distinctId: distinctId || uuidv7(),
+      // Leave distinctId resolution to prepareEventMessage which checks request context
+      // and falls back to a random UUID with $process_person_profile = false
+      distinctId: distinctId,
       properties: {
         ...exceptionProperties,
         ...properties,

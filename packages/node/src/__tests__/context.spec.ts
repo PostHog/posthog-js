@@ -459,4 +459,45 @@ describe('PostHog Context', () => {
       expect(body.distinct_id).toBe('explicit-user')
     })
   })
+
+  it.each([
+    {
+      label: 'no distinctId and no context → personless',
+      contextDistinctId: undefined,
+      explicitDistinctId: undefined,
+      expectedDistinctId: (id: string) => expect(typeof id).toBe('string'),
+      expectedProcessPersonProfile: false,
+    },
+    {
+      label: 'context distinctId only → uses context',
+      contextDistinctId: 'context-user',
+      explicitDistinctId: undefined,
+      expectedDistinctId: (id: string) => expect(id).toBe('context-user'),
+      expectedProcessPersonProfile: undefined,
+    },
+    {
+      label: 'explicit distinctId overrides context',
+      contextDistinctId: 'context-user',
+      explicitDistinctId: 'explicit-user',
+      expectedDistinctId: (id: string) => expect(id).toBe('explicit-user'),
+      expectedProcessPersonProfile: undefined,
+    },
+  ])(
+    'captureException $label',
+    async ({ contextDistinctId, explicitDistinctId, expectedDistinctId, expectedProcessPersonProfile }) => {
+      const run = () => posthog.captureException(new Error('test error'), explicitDistinctId)
+      contextDistinctId ? posthog.withContext({ distinctId: contextDistinctId }, run) : run()
+
+      // captureException uses addPendingPromise with an async buildEventMessage,
+      // so we need extra microtask cycles to let the promise chain resolve before flushing
+      await waitForPromises()
+      await waitForFlush()
+
+      const events = getLastBatchEvents()
+      expect(events).toHaveLength(1)
+      expect(events?.[0].event).toBe('$exception')
+      expectedDistinctId(events?.[0].distinct_id)
+      expect(events?.[0].properties.$process_person_profile).toBe(expectedProcessPersonProfile)
+    }
+  )
 })
