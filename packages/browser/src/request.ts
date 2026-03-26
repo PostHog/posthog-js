@@ -122,8 +122,8 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
  */
 const preEncodeAsync = async (options: RequestWithEncodedBody): Promise<RequestWithEncodedBody> => {
     const jsonData = jsonStringify(options.data)
-    // Pipe the JSON string directly through CompressionStream and read as ArrayBuffer,
-    // avoiding intermediate Blob allocations.
+    // Create an input Blob to get a ReadableStream, pipe through CompressionStream,
+    // and read the compressed output directly as an ArrayBuffer (no output Blob needed).
     const stream = new Blob([jsonData]).stream().pipeThrough(new CompressionStream('gzip'))
     const body = await new Response(stream).arrayBuffer()
     return {
