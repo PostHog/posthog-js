@@ -67,12 +67,14 @@ export const getAppProperties = (): PostHogCustomAppProperties => {
     }
 
     properties.$os_version = OptionalExpoDevice.osVersion
+    properties.$is_emulator = !OptionalExpoDevice.isDevice
   } else if (OptionalReactNativeDeviceInfo) {
     properties.$device_manufacturer = returnPropertyIfNotUnknown(OptionalReactNativeDeviceInfo.getManufacturerSync())
     // react-native-device-info already maps the device model identifier to a human readable name
     properties.$device_name = returnPropertyIfNotUnknown(OptionalReactNativeDeviceInfo.getModel())
     properties.$os_name = returnPropertyIfNotUnknown(OptionalReactNativeDeviceInfo.getSystemName())
     properties.$os_version = returnPropertyIfNotUnknown(OptionalReactNativeDeviceInfo.getSystemVersion())
+    properties.$is_emulator = OptionalReactNativeDeviceInfo.isEmulatorSync()
   }
 
   if (OptionalExpoLocalization) {
