@@ -184,6 +184,7 @@ describe('PostHog React Native', () => {
       $device_manufacturer: 'mock',
       $device_type: 'Mobile',
       // $device_name: 'mock', (deleted)
+      $is_emulator: false,
       $os_name: 'mock',
       $os_version: 'mock',
       $locale: 'mock',

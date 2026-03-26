@@ -88,6 +88,8 @@ export interface PostHogCustomAppProperties {
   $locale?: string | null
   /** Timezone of the device like "Europe/Berlin" */
   $timezone?: string | null
+  /** Whether the app is running on an emulator/simulator */
+  $is_emulator?: boolean | null
 }
 
 export type PostHogSessionReplayConfig = {
