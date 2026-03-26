@@ -4,10 +4,15 @@ import { Compression, RequestWithOptions, RequestResponse } from './types'
 import { formDataToQuery } from './utils/request-utils'
 
 import { logger } from './utils/logger'
-import { AbortController, fetch, navigator, XMLHttpRequest } from './utils/globals'
+import { AbortController, CompressionStream, fetch, navigator, XMLHttpRequest } from './utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
 
 import { _base64Encode } from './utils/encode-utils'
+import { gzipCompress } from '@posthog/core'
+
+interface RequestWithEncodedBody extends RequestWithOptions {
+    _encodedBody?: EncodedBody
+}
 
 // eslint-disable-next-line compat/compat
 export const SUPPORTS_REQUEST = !!XMLHttpRequest || !!fetch
@@ -68,7 +73,13 @@ const encodeToDataString = (data: string | Record<string, any>): string => {
     return 'data=' + encodeURIComponent(typeof data === 'string' ? data : jsonStringify(data))
 }
 
-const encodePostData = ({ data, compression }: RequestWithOptions): EncodedBody | undefined => {
+const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefined => {
+    // Use pre-encoded body if available (set by async compression in the request entrypoint)
+    if (options._encodedBody) {
+        return options._encodedBody
+    }
+
+    const { data, compression } = options
     if (!data) {
         return
     }
@@ -98,6 +109,31 @@ const encodePostData = ({ data, compression }: RequestWithOptions): EncodedBody 
         contentType: CONTENT_TYPE_JSON,
         body: jsonBody,
         estimatedSize: new Blob([jsonBody]).size,
+    }
+}
+
+/**
+ * Pre-encode the request body using async native CompressionStream.
+ * This avoids blocking the main thread with fflate's synchronous gzip,
+ * which can take 300ms+ on constrained devices.
+ *
+ * Callers must check preconditions (data exists, gzip compression, CompressionStream available)
+ * before calling this function. Uses `gzipCompress` from @posthog/core.
+ */
+const preEncodeAsync = async (options: RequestWithEncodedBody): Promise<RequestWithEncodedBody> => {
+    const jsonData = jsonStringify(options.data)
+    const compressed = await gzipCompress(jsonData, Config.DEBUG)
+    if (!compressed) {
+        return options
+    }
+    const body = await compressed.arrayBuffer()
+    return {
+        ...options,
+        _encodedBody: {
+            contentType: CONTENT_TYPE_PLAIN,
+            body,
+            estimatedSize: body.byteLength,
+        },
     }
 }
 
@@ -258,7 +294,7 @@ if (navigator?.sendBeacon) {
 // This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
 export const request = (_options: RequestWithOptions) => {
     // Clone the options so we don't modify the original object
-    const options = { ..._options }
+    const options: RequestWithEncodedBody = { ..._options }
     options.timeout = options.timeout || 60000
 
     options.url = extendURLParams(options.url, {
@@ -280,5 +316,24 @@ export const request = (_options: RequestWithOptions) => {
         throw new Error('No available transport method')
     }
 
-    transportMethod(options)
+    // For non-sendBeacon transports, use async native CompressionStream when available
+    // to avoid blocking the main thread with fflate's synchronous gzip (which can take 300ms+).
+    // sendBeacon must remain synchronous as it's used during page unload.
+    if (
+        transport !== 'sendBeacon' &&
+        options.data &&
+        options.compression === Compression.GZipJS &&
+        !!CompressionStream
+    ) {
+        preEncodeAsync(options)
+            .then((encodedOptions) => {
+                transportMethod(encodedOptions)
+            })
+            .catch(() => {
+                // If async compression fails, fall back to the synchronous fflate path
+                transportMethod(options)
+            })
+    } else {
+        transportMethod(options)
+    }
 }

@@ -113,6 +113,7 @@
         "_elementSelectors",
         "_elementsChainAsString",
         "_enabledServerSide",
+        "_encodedBody",
         "_endpoint",
         "_enforceIdleTimeout",
         "_enqueue",
