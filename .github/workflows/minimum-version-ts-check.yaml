@@ -23,7 +23,7 @@ jobs:
           - version: "5.9.2"
             extra-flags: "--moduleResolution node"
           - version: "latest"
-            extra-flags: "--moduleResolution node"
+            extra-flags: "--moduleResolution node --ignoreConfig --ignoreDeprecations 6.0"
           - version: "6.0.0-dev.20251204"
             extra-flags: "--ignoreConfig"
     steps:
