@@ -19,11 +19,11 @@ jobs:
         node-version: [20, 22, 24]
         typescript-version:
           - version: "4.7.4"
-            extra-flags: "--moduleResolution node"
+            extra-flags: "--moduleResolution node --ignoreConfig"
           - version: "5.9.2"
-            extra-flags: "--moduleResolution node"
+            extra-flags: "--moduleResolution node --ignoreConfig"
           - version: "latest"
-            extra-flags: "--moduleResolution node"
+            extra-flags: "--moduleResolution node --ignoreConfig"
           - version: "6.0.0-dev.20251204"
             extra-flags: "--ignoreConfig"
     steps:
