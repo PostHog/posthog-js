@@ -1,5 +1,5 @@
 export { getFeatureFlagValue } from './featureFlagUtils'
-export { gzipCompress, isGzipSupported } from './gzip'
+export { gzipCompress } from './gzip'
 export * from './utils'
 export * as ErrorTracking from './error-tracking'
 export { uuidv7 } from './vendor/uuidv7'
