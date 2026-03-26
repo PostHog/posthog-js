@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.28.6
+
+### Patch Changes
+
+- [#3282](https://github.com/PostHog/posthog-js/pull/3282) [`5784dca`](https://github.com/PostHog/posthog-js/commit/5784dcaeb71f7e67d9c9df28f116886a573d19df) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: captureException now uses distinctId from request context
+  (2026-03-26)
+
 ## 5.28.5
 
 ### Patch Changes
