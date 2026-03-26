@@ -318,7 +318,7 @@ export const request = (_options: RequestWithOptions) => {
     // For non-sendBeacon transports, use async native CompressionStream when available
     // to avoid blocking the main thread with fflate's synchronous gzip (which can take 300ms+).
     // sendBeacon must remain synchronous as it's used during page unload.
-    if (transport !== 'sendBeacon' && options.compression === Compression.GZipJS && isGzipSupported()) {
+    if (transport !== 'sendBeacon' && options.data && options.compression === Compression.GZipJS && isGzipSupported()) {
         preEncodeAsync(options)
             .then((encodedOptions) => {
                 transportMethod(encodedOptions)
