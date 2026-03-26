@@ -2,7 +2,7 @@ import type { PostHog } from 'posthog-js'
 
 let defaultPostHogInstance: PostHog | undefined
 
-export function setDefaultPostHogInstance(instance: PostHog): void {
+export function setDefaultPostHogInstance(instance: PostHog | undefined): void {
     defaultPostHogInstance = instance
 }
 

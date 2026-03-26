@@ -1,4 +1,6 @@
 {
+    "name": "@posthog/react-slim",
+    "private": true,
     "main": "../dist/umd/slim/index.js",
     "module": "../dist/esm/slim/index.js",
     "types": "../dist/types/slim/index.d.ts"

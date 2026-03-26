@@ -14,10 +14,15 @@ jest.mock('posthog-js', () => ({
     },
 }))
 
-// Register the mock as the default instance (normally done by index.ts)
-setDefaultPostHogInstance(posthogJs)
-
 describe('PostHogProvider component', () => {
+    beforeEach(() => {
+        setDefaultPostHogInstance(posthogJs)
+    })
+
+    afterEach(() => {
+        setDefaultPostHogInstance(undefined)
+    })
+
     it('should render children components', () => {
         const posthog = {} as unknown as PostHog
         const { getByText } = render(

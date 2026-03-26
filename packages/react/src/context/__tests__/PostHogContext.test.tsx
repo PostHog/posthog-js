@@ -1,9 +1,27 @@
 import * as React from 'react'
 import { render } from '@testing-library/react'
 import { PostHogProvider, PostHog } from '..'
+import posthogJs from 'posthog-js'
+import { setDefaultPostHogInstance } from '../posthog-default'
+
+jest.mock('posthog-js', () => ({
+    __esModule: true,
+    default: {
+        init: jest.fn(),
+        __loaded: false,
+    },
+}))
 
 describe('PostHogContext component', () => {
     const posthog = {} as unknown as PostHog
+
+    beforeEach(() => {
+        setDefaultPostHogInstance(posthogJs)
+    })
+
+    afterEach(() => {
+        setDefaultPostHogInstance(undefined)
+    })
 
     it('should return a client instance from the context if available', () => {
         render(

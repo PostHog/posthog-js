@@ -6,10 +6,15 @@ import { __POSTHOG_ERROR_MESSAGES, PostHogErrorBoundary } from '../PostHogErrorB
 import posthog from 'posthog-js'
 import { setDefaultPostHogInstance } from '../../context/posthog-default'
 
-// Register posthog as the default instance (normally done by index.ts)
-setDefaultPostHogInstance(posthog)
-
 describe('PostHogErrorBoundary component', () => {
+    beforeEach(() => {
+        setDefaultPostHogInstance(posthog)
+    })
+
+    afterEach(() => {
+        setDefaultPostHogInstance(undefined)
+    })
+
     mockFunction(console, 'error')
     mockFunction(console, 'warn')
     mockFunction(posthog, 'captureException')
@@ -64,6 +69,14 @@ describe('PostHogErrorBoundary component', () => {
 })
 
 describe('captureException processing', () => {
+    beforeEach(() => {
+        setDefaultPostHogInstance(posthog)
+    })
+
+    afterEach(() => {
+        setDefaultPostHogInstance(undefined)
+    })
+
     mockFunction(console, 'error')
     mockFunction(console, 'warn')
     mockFunction(posthog, 'capture')

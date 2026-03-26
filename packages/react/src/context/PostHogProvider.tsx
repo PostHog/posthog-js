@@ -61,22 +61,17 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
             return client
         }
 
-        const defaultInstance = getDefaultPostHogInstance()
+        const defaultInstance = getDefaultPostHogInstance() as PostHog
 
         if (apiKey) {
-            if (!defaultInstance) {
-                console.error(
-                    '[PostHog.js] You passed `apiKey` to PostHogProvider but are using the slim bundle (@posthog/react/slim) which does not include a default PostHog instance. Please pass a `client` prop instead.'
-                )
-            }
             // return the global client, we'll initialize it in the useEffect
-            return defaultInstance as PostHog
+            return defaultInstance
         }
 
         console.warn(
             '[PostHog.js] No `apiKey` or `client` were provided to `PostHogProvider`. Using default global `window.posthog` instance. You must initialize it manually. This is not recommended behavior.'
         )
-        return (defaultInstance ?? undefined) as unknown as PostHog
+        return defaultInstance
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [client, apiKey, JSON.stringify(options)]) // Stringify options to be a stable reference
 
@@ -87,11 +82,7 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
             // if the user has passed their own client, assume they will also handle calling init().
             return
         }
-        const defaultInstance = getDefaultPostHogInstance()
-        if (!defaultInstance) {
-            // slim bundle without a client — nothing to init
-            return
-        }
+        const defaultInstance = getDefaultPostHogInstance() as PostHog
         const previousInitialization = previousInitializationRef.current
 
         if (!previousInitialization) {
