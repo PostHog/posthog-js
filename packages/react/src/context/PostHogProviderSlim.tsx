@@ -16,7 +16,7 @@ export function PostHogProvider({
     children?: React.ReactNode
 }) {
     return (
-        <PostHogContext.Provider value={{ client, bootstrap: client?.config?.bootstrap }}>
+        <PostHogContext.Provider value={{ client, bootstrap: client.config?.bootstrap }}>
             {children}
         </PostHogContext.Provider>
     )

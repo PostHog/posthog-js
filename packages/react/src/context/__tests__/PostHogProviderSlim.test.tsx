@@ -7,12 +7,19 @@ import type { PostHog } from 'posthog-js'
 // Do NOT call setDefaultPostHogInstance — this simulates the slim bundle
 // where no default instance exists.
 
-function TestConsumer() {
+let contextClient: PostHog | undefined
+
+function ClientConsumer() {
     const { client } = React.useContext(PostHogContext)
-    return <div data-testid="client-exists">{client ? 'yes' : 'no'}</div>
+    contextClient = client
+    return <div>consumed</div>
 }
 
 describe('PostHogProvider (slim)', () => {
+    afterEach(() => {
+        contextClient = undefined
+    })
+
     it('renders children', () => {
         const client = { config: {} } as unknown as PostHog
         const { getByText } = render(
@@ -23,14 +30,14 @@ describe('PostHogProvider (slim)', () => {
         expect(getByText('Hello')).toBeTruthy()
     })
 
-    it('provides the client via context', () => {
+    it('provides the exact client instance via context', () => {
         const client = { config: {} } as unknown as PostHog
-        const { getByTestId } = render(
+        render(
             <PostHogProvider client={client}>
-                <TestConsumer />
+                <ClientConsumer />
             </PostHogProvider>
         )
-        expect(getByTestId('client-exists').textContent).toBe('yes')
+        expect(contextClient).toBe(client)
     })
 
     it('provides bootstrap from client config', () => {
