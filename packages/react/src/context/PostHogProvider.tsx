@@ -61,6 +61,9 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
             return client
         }
 
+        // Indirection so the slim bundle can omit the posthog-js runtime import.
+        // Always defined here: the full entrypoint (index.ts) calls
+        // setDefaultPostHogInstance(posthogJs) before any component renders.
         const defaultInstance = getDefaultPostHogInstance() as PostHog
 
         if (apiKey) {
@@ -82,6 +85,7 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
             // if the user has passed their own client, assume they will also handle calling init().
             return
         }
+        // See comment in useMemo above for why this indirection exists.
         const defaultInstance = getDefaultPostHogInstance() as PostHog
         const previousInitialization = previousInitializationRef.current
 

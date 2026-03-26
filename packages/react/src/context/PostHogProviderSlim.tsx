@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import type { PostHog } from 'posthog-js'
 import { PostHogContext } from './PostHogContext'
 
@@ -15,8 +15,9 @@ export function PostHogProvider({
     client: PostHog
     children?: React.ReactNode
 }) {
+    const value = useMemo(() => ({ client, bootstrap: client.config?.bootstrap }), [client])
     return (
-        <PostHogContext.Provider value={{ client, bootstrap: client.config?.bootstrap }}>
+        <PostHogContext.Provider value={value}>
             {children}
         </PostHogContext.Provider>
     )
