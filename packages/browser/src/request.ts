@@ -122,7 +122,7 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
  */
 const preEncodeAsync = async (options: RequestWithEncodedBody): Promise<RequestWithEncodedBody> => {
     const jsonData = jsonStringify(options.data)
-    const compressed = await gzipCompress(jsonData, false)
+    const compressed = await gzipCompress(jsonData, Config.DEBUG)
     if (!compressed) {
         return options
     }
