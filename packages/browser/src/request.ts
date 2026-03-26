@@ -8,7 +8,7 @@ import { AbortController, fetch, navigator, XMLHttpRequest } from './utils/globa
 import { gzipSync, strToU8 } from 'fflate'
 
 import { _base64Encode } from './utils/encode-utils'
-import { isGzipSupported } from '@posthog/core'
+import { gzipCompress, isGzipSupported } from '@posthog/core'
 
 interface RequestWithEncodedBody extends RequestWithOptions {
     _encodedBody?: EncodedBody
@@ -122,10 +122,11 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
  */
 const preEncodeAsync = async (options: RequestWithEncodedBody): Promise<RequestWithEncodedBody> => {
     const jsonData = jsonStringify(options.data)
-    // Create an input Blob to get a ReadableStream, pipe through CompressionStream,
-    // and read the compressed output directly as an ArrayBuffer (no output Blob needed).
-    const stream = new Blob([jsonData]).stream().pipeThrough(new CompressionStream('gzip'))
-    const body = await new Response(stream).arrayBuffer()
+    const compressed = await gzipCompress(jsonData, false)
+    if (!compressed) {
+        return options
+    }
+    const body = await compressed.arrayBuffer()
     return {
         ...options,
         _encodedBody: {
