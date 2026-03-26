@@ -2290,6 +2290,26 @@ export class PostHog implements PostHogInterface {
         )
     }
 
+    private _validateIdentifyId(id: string | undefined): id is string {
+        if (!id || isEmptyString(id)) {
+            logger.critical('Unique user id has not been set in posthog.identify')
+            return false
+        }
+        if (id === COOKIELESS_SENTINEL_VALUE) {
+            logger.critical(
+                `The string "${id}" was set in posthog.identify which indicates an error. This ID is only used as a sentinel value.`
+            )
+            return false
+        }
+        if (isDistinctIdStringLike(id) || ['undefined', 'null'].includes(id.toLowerCase())) {
+            logger.critical(
+                `The string "${id}" was set in posthog.identify which indicates an error. This ID should be unique to the user and not a hardcoded string.`
+            )
+            return false
+        }
+        return true
+    }
+
     /**
      * Associates a user with a unique identifier instead of an auto-generated ID.
      * Learn more about [identifying users](/docs/product-analytics/identify)
@@ -2342,22 +2362,7 @@ export class PostHog implements PostHogInterface {
             )
         }
 
-        //if the new_distinct_id has not been set ignore the identify event
-        if (!new_distinct_id) {
-            logger.error('Unique user id has not been set in posthog.identify')
-            return
-        }
-
-        if (isDistinctIdStringLike(new_distinct_id)) {
-            logger.critical(
-                `The string "${new_distinct_id}" was set in posthog.identify which indicates an error. This ID should be unique to the user and not a hardcoded string.`
-            )
-            return
-        }
-        if (new_distinct_id === COOKIELESS_SENTINEL_VALUE) {
-            logger.critical(
-                `The string "${COOKIELESS_SENTINEL_VALUE}" was set in posthog.identify which indicates an error. This ID is only used as a sentinel value.`
-            )
+        if (!this._validateIdentifyId(new_distinct_id)) {
             return
         }
 
