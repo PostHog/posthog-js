@@ -1,5 +1,20 @@
 # posthog-js
 
+## 1.364.0
+
+### Minor Changes
+
+- [#3285](https://github.com/PostHog/posthog-js/pull/3285) [`00a5079`](https://github.com/PostHog/posthog-js/commit/00a50795a16e9274fc6b4ea642b4a5e270f07222) Thanks [@pauldambra](https://github.com/pauldambra)! - Reject the strings "undefined" and "null" in posthog.identify(). All invalid distinct IDs now log a critical console error (always visible, not debug-only).
+  (2026-03-27)
+
+### Patch Changes
+
+- [#3286](https://github.com/PostHog/posthog-js/pull/3286) [`8d34289`](https://github.com/PostHog/posthog-js/commit/8d34289f7cf91945223eed4366b11fb187a63a40) Thanks [@marandaneto](https://github.com/marandaneto)! - Use async native CompressionStream for gzip compression to avoid blocking the main thread
+  (2026-03-27)
+- Updated dependencies [[`8d34289`](https://github.com/PostHog/posthog-js/commit/8d34289f7cf91945223eed4366b11fb187a63a40)]:
+    - @posthog/core@1.24.2
+    - @posthog/types@1.364.0
+
 ## 1.363.6
 
 ### Patch Changes

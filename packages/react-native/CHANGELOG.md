@@ -1,5 +1,17 @@
 # posthog-react-native
 
+## 4.38.0
+
+### Minor Changes
+
+- [#3287](https://github.com/PostHog/posthog-js/pull/3287) [`470907d`](https://github.com/PostHog/posthog-js/commit/470907dcbcf0a0bd73819fa7610716b9a1f65536) Thanks [@marandaneto](https://github.com/marandaneto)! - Add $is_emulator property to detect emulator/simulator environments
+  (2026-03-27)
+
+### Patch Changes
+
+- Updated dependencies [[`8d34289`](https://github.com/PostHog/posthog-js/commit/8d34289f7cf91945223eed4366b11fb187a63a40)]:
+  - @posthog/core@1.24.2
+
 ## 4.37.6
 
 ### Patch Changes
