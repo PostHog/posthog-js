@@ -1,6 +1,6 @@
 {
     "name": "@posthog/webpack-plugin",
-    "version": "1.3.2",
+    "version": "1.3.3",
     "description": "Webpack plugin for Posthog 🦔",
     "repository": {
         "type": "git",

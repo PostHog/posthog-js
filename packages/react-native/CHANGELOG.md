@@ -1,5 +1,31 @@
 # posthog-react-native
 
+## 4.39.0
+
+### Minor Changes
+
+- [#3292](https://github.com/PostHog/posthog-js/pull/3292) [`4bdfdbc`](https://github.com/PostHog/posthog-js/commit/4bdfdbcfe6a5600664a609a6b17c7d7cb72cd20f) Thanks [@marandaneto](https://github.com/marandaneto)! - `captureAppLifecycleEvents` is now enabled by default. If you want to disable it, you can set `captureAppLifecycleEvents: false` in the PostHog options:
+
+  ```js
+  const posthog = new PostHog('<ph_project_api_key>', {
+    captureAppLifecycleEvents: false,
+  })
+  ```
+
+  Or when using the PostHogProvider:
+
+  ````jsx
+  <PostHogProvider apiKey="<ph_project_api_key>" options={{ captureAppLifecycleEvents: false }}>
+    <MyApp />
+  </PostHogProvider>
+  ``` (2026-03-27)
+  ````
+
+### Patch Changes
+
+- Updated dependencies [[`4bdfdbc`](https://github.com/PostHog/posthog-js/commit/4bdfdbcfe6a5600664a609a6b17c7d7cb72cd20f)]:
+  - @posthog/core@1.24.3
+
 ## 4.38.0
 
 ### Minor Changes

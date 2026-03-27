@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.24.3
+
+### Patch Changes
+
+- [#3292](https://github.com/PostHog/posthog-js/pull/3292) [`4bdfdbc`](https://github.com/PostHog/posthog-js/commit/4bdfdbcfe6a5600664a609a6b17c7d7cb72cd20f) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `@default` JSDoc tags to `PostHogCoreOptions` configuration properties for better IDE documentation and discoverability.
+  (2026-03-27)
+
 ## 1.24.2
 
 ### Patch Changes
