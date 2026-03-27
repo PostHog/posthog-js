@@ -221,8 +221,6 @@ jobs:
       - uses: actions/checkout@v6
       - name: Setup environment
         uses: ./.github/actions/setup
-        with:
-          build: true
       - run: pnpm test:functional
 
   lint:
@@ -232,6 +230,8 @@ jobs:
       - uses: actions/checkout@v6
       - name: Setup environment
         uses: ./.github/actions/setup
+        with:
+          build: false
       - name: Lint all packages
         run: pnpm lint
       - name: Lint playground files
