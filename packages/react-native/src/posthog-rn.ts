@@ -274,6 +274,7 @@ export class PostHog extends PostHogCore {
         }
       }
 
+      // captureAppLifecycleEvents defaults to true; only skip if explicitly set to false
       if (options?.captureAppLifecycleEvents !== false) {
         void this.captureAppLifecycleEvents()
       }
