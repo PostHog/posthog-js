@@ -562,6 +562,7 @@
         "_urlTriggerStatus",
         "_urlTriggers",
         "_validateEmail",
+        "_validateIdentifyId",
         "_validateSampleRate",
         "_visibilityChangeListener",
         "_visibilityStateListener",
