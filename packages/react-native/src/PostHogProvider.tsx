@@ -146,9 +146,7 @@ export const PostHogProvider = ({
     const parsedOptions = {
       ...options,
       captureAppLifecycleEvents:
-        options?.captureAppLifecycleEvents !== undefined
-          ? options.captureAppLifecycleEvents
-          : !captureNone,
+        options?.captureAppLifecycleEvents !== undefined ? options.captureAppLifecycleEvents : !captureNone,
     }
 
     return new PostHog(apiKey ?? '', parsedOptions)
