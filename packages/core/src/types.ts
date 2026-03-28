@@ -173,6 +173,18 @@ export type PostHogCaptureOptions = {
   _originatedFromCaptureException?: boolean
 }
 
+export type PostHogIdentifyOptions = PostHogCaptureOptions & {
+  /**
+   * When true, prevents the SDK from automatically reloading feature flags
+   * after the distinct_id changes. This is useful when the person merge
+   * triggered by identify may not have propagated server-side yet, which
+   * can cause the server to re-bucket the user under a different variant.
+   *
+   * @default false
+   */
+  disableFeatureFlagReload?: boolean
+}
+
 export type PostHogFetchResponse = {
   status: number
   text: () => Promise<string>

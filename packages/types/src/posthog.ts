@@ -7,7 +7,7 @@
 
 import type { PostHogConfig } from './posthog-config'
 import type { Properties, JsonType } from './common'
-import type { CaptureResult, CaptureOptions } from './capture'
+import type { CaptureResult, CaptureOptions, IdentifyOptions } from './capture'
 import type {
     FeatureFlagsCallback,
     EarlyAccessFeatureCallback,
@@ -111,7 +111,12 @@ export interface PostHog {
      * @param userPropertiesToSet - Properties to set on the user (using $set)
      * @param userPropertiesToSetOnce - Properties to set once on the user (using $set_once)
      */
-    identify(new_distinct_id?: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void
+    identify(
+        new_distinct_id?: string,
+        userPropertiesToSet?: Properties,
+        userPropertiesToSetOnce?: Properties,
+        options?: IdentifyOptions
+    ): void
 
     /**
      * Set properties on the current user.

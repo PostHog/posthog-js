@@ -3,6 +3,7 @@ import { AppState, Dimensions, Linking, Platform } from 'react-native'
 import {
   JsonType,
   PostHogCaptureOptions,
+  PostHogIdentifyOptions,
   PostHogCore,
   PostHogCoreOptions,
   PostHogEventProperties,
@@ -1114,9 +1115,9 @@ export class PostHog extends PostHogCore {
    *
    * @param distinctId - A unique identifier for your user. Typically either their email or database ID.
    * @param properties - Optional dictionary with key:value pairs to set the person properties
-   * @param options - Optional capture options
+   * @param options - Optional identify options (extends capture options with disableFeatureFlagReload)
    */
-  identify(distinctId?: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
+  identify(distinctId?: string, properties?: PostHogEventProperties, options?: PostHogIdentifyOptions): void {
     const previousDistinctId = this.getDistinctId()
     super.identify(distinctId, properties, options)
 

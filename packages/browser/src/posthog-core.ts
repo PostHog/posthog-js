@@ -2331,7 +2331,12 @@ export class PostHog implements PostHogInterface {
      *  it will be overwritten by the value in userPropertiesToSet.
      * @param {Object} [userPropertiesToSetOnce] Optional: An associative array of properties to store about the user. If property is previously set, this does not override that value.
      */
-    identify(new_distinct_id?: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void {
+    identify(
+        new_distinct_id?: string,
+        userPropertiesToSet?: Properties,
+        userPropertiesToSetOnce?: Properties,
+        options?: { disableFeatureFlagReload?: boolean }
+    ): void {
         if (!this.__loaded || !this.persistence) {
             return logger.uninitializedWarning('posthog.identify')
         }
@@ -2429,7 +2434,9 @@ export class PostHog implements PostHogInterface {
         // Reload active feature flags if the user identity changes.
         // Note we don't reload this on property changes as these get processed async
         if (new_distinct_id !== previous_distinct_id) {
-            this.reloadFeatureFlags()
+            if (!options?.disableFeatureFlagReload) {
+                this.reloadFeatureFlags()
+            }
             // also clear any stored flag calls
             this.unregister(FLAG_CALL_REPORTED)
         }

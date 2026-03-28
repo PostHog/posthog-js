@@ -324,6 +324,22 @@ describe('PostHog Core', () => {
       expect(batchCalls.length).toBe(0)
     })
 
+    it('should not reload feature flags when disableFeatureFlagReload is true', async () => {
+      posthog.identify('id-1', { foo: 'bar' }, { disableFeatureFlagReload: true })
+      await waitForPromises()
+      // Only the batch call, no flags call
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      const batchCall = mocks.fetch.mock.calls[0]
+      expect(batchCall[0]).toEqual('https://us.i.posthog.com/batch/')
+    })
+
+    it('should still reload feature flags when disableFeatureFlagReload is false', async () => {
+      posthog.identify('id-1', { foo: 'bar' }, { disableFeatureFlagReload: false })
+      await waitForPromises()
+      // Both batch and flags calls
+      expect(mocks.fetch).toHaveBeenCalledTimes(2)
+    })
+
     it('should not send event when only distinct_id is provided (no properties)', async () => {
       // First identify
       posthog.identify('id-1')

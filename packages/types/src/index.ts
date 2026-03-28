@@ -18,6 +18,7 @@ export type {
     EventName,
     CaptureResult,
     CaptureOptions,
+    IdentifyOptions,
     BeforeSendFn,
 } from './capture'
 

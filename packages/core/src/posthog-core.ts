@@ -5,6 +5,7 @@ import type {
   PostHogCoreOptions,
   PostHogEventProperties,
   PostHogCaptureOptions,
+  PostHogIdentifyOptions,
   JsonType,
   PostHogRemoteConfig,
   FeatureFlagValue,
@@ -295,7 +296,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    *** TRACKING
    ***/
 
-  identify(distinctId?: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
+  identify(distinctId?: string, properties?: PostHogEventProperties, options?: PostHogIdentifyOptions): void {
     this.wrap(() => {
       if (!this._requirePersonProcessing('posthog.identify')) {
         return
@@ -331,7 +332,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         this.setPersistedProperty(PostHogPersistedProperty.DistinctId, distinctId)
         // Mark the user as identified
         this.setPersistedProperty(PostHogPersistedProperty.PersonMode, 'identified')
-        this.reloadFeatureFlags()
+
+        if (!options?.disableFeatureFlagReload) {
+          this.reloadFeatureFlags()
+        }
 
         super.identifyStateless(distinctId, allProperties, options)
 

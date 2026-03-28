@@ -305,6 +305,21 @@ describe('identify()', () => {
 
             expect(instance.unregister).toHaveBeenCalledWith('$flag_call_reported')
         })
+
+        it('does not reload feature flags when disableFeatureFlagReload is true', () => {
+            instance.identify('a-new-id', undefined, undefined, { disableFeatureFlagReload: true })
+
+            expect(instance.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
+            // should still clear flag calls and set anonymous distinct id
+            expect(instance.unregister).toHaveBeenCalledWith('$flag_call_reported')
+            expect(instance.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
+        })
+
+        it('still reloads feature flags when disableFeatureFlagReload is false', () => {
+            instance.identify('a-new-id', undefined, undefined, { disableFeatureFlagReload: false })
+
+            expect(instance.featureFlags.reloadFeatureFlags).toHaveBeenCalled()
+        })
     })
 
     describe('setPersonProperties', () => {

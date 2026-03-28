@@ -34,7 +34,14 @@ import type { PostHogLogs } from './posthog-logs'
 export type { Property, Properties, JsonType, JsonRecord } from '@posthog/types'
 
 // Capture types
-export type { KnownEventName, EventName, CaptureResult, CaptureOptions, BeforeSendFn } from '@posthog/types'
+export type {
+    KnownEventName,
+    EventName,
+    CaptureResult,
+    CaptureOptions,
+    IdentifyOptions,
+    BeforeSendFn,
+} from '@posthog/types'
 
 // Feature flag types
 export type {
