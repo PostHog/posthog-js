@@ -3,6 +3,7 @@ import type { PostHogOptions, IPostHog } from 'posthog-node'
 import { getOrCreateNodeClient } from '../server/nodeClientCache'
 import { cookieStoreFromHeader, readPostHogCookie, cookieStateToProperties, isOptedOut } from '../shared/cookie'
 import { resolveApiKey } from '../shared/config'
+import { readTracingHeaders } from '../shared/tracing-headers'
 
 /**
  * Creates a PostHog server client scoped to the current request.
@@ -41,8 +42,22 @@ export async function getServerSidePostHog(
 
     if (!isOptedOut(cookieStore, resolvedApiKey)) {
         const state = readPostHogCookie(cookieStore, resolvedApiKey)
-        const properties = cookieStateToProperties(state)
-        client.enterContext({ distinctId: state?.distinctId, sessionId: state?.sessionId, properties })
+        const tracing = readTracingHeaders(ctx.req.headers)
+
+        // Merge cookie identity with tracing headers. Tracing headers take
+        // precedence because they represent the browser's current state and
+        // are set per-request by the browser SDK.
+        const mergedProperties: Record<string, string> = {
+            ...cookieStateToProperties(state),
+            ...(tracing.sessionId ? { $session_id: tracing.sessionId } : {}),
+            ...(tracing.windowId ? { $window_id: tracing.windowId } : {}),
+        }
+        const properties = Object.keys(mergedProperties).length > 0 ? mergedProperties : undefined
+        client.enterContext({
+            distinctId: tracing.distinctId || state?.distinctId,
+            sessionId: tracing.sessionId || state?.sessionId,
+            properties,
+        })
     }
 
     return client
