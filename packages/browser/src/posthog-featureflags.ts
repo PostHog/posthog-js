@@ -1186,8 +1186,10 @@ export class PostHogFeatureFlags implements Extension {
         const setOnceProps: Properties = {}
         if (propertiesSetOnce) {
             for (const key in propertiesSetOnce) {
-                if (!(key in existingProperties)) {
-                    setOnceProps[key] = propertiesSetOnce[key]
+                if (Object.prototype.hasOwnProperty.call(propertiesSetOnce, key)) {
+                    if (!(key in existingProperties)) {
+                        setOnceProps[key] = propertiesSetOnce[key]
+                    }
                 }
             }
         }
