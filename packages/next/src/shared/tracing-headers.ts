@@ -1,3 +1,4 @@
+import { isFunction, isArray } from '@posthog/core'
 import type { PostHogCookieState } from './cookie'
 import { cookieStateToProperties } from './cookie'
 
@@ -28,11 +29,11 @@ export function readTracingHeaders(
     headers: { get(name: string): string | null } | Record<string, string | string[] | undefined>
 ): TracingHeaderValues {
     const getValue = (name: string): string | undefined => {
-        if (typeof (headers as { get: unknown }).get === 'function') {
+        if (isFunction((headers as { get: unknown }).get)) {
             return (headers as { get(name: string): string | null }).get(name) ?? undefined
         }
         const value = (headers as Record<string, string | string[] | undefined>)[name]
-        return typeof value === 'string' ? value : Array.isArray(value) ? value[0] : undefined
+        return typeof value === 'string' ? value : isArray(value) ? value[0] : undefined
     }
 
     return {
