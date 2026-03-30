@@ -12,6 +12,7 @@
         "start": "pnpm build-react && NODE_OPTIONS=\"--max-old-space-size=8192\" pnpm build-rollup -w",
         "dev": "tsc -b && NODE_OPTIONS=\"--max-old-space-size=8192\" rollup -cw",
         "build": "tsc -b && rollup -c",
+        "postbuild": "node scripts/strip-lib-package-json.js",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
         "lint": "eslint src && eslint playwright",
         "lint:fix": "eslint src --fix && eslint playwright --fix",
