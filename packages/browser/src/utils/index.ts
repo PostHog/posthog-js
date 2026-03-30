@@ -144,10 +144,10 @@ function deepCircularCopy<T extends Record<string, any> = Record<string, any>>(
 
 export function _copyAndTruncateStrings<T extends Record<string, any> = Record<string, any>>(
     object: T,
-    maxStringLength: number | null
+    maxStringLength: number
 ): T {
     return deepCircularCopy(object, (value: any) => {
-        if (isString(value) && !isNull(maxStringLength)) {
+        if (isString(value)) {
             return (value as string).slice(0, maxStringLength)
         }
         return value

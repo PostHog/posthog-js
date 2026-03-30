@@ -1269,7 +1269,9 @@ export class PostHog implements PostHogInterface {
             data.$set_once = setOnceProperties
         }
 
-        data = _copyAndTruncateStrings(data, options?._noTruncate ? null : this.config.properties_string_max_length)
+        if (!options?._noTruncate) {
+            data = _copyAndTruncateStrings(data, this.config.properties_string_max_length)
+        }
         data.timestamp = timestamp
         if (!isUndefined(options?.timestamp)) {
             data.properties['$event_time_override_provided'] = true
