@@ -121,29 +121,17 @@ module.exports = {
                     return
                 }
 
-                // Allow: all TypeScript type-level usage
+                // Allow: all TypeScript type-level usage (annotations, generics, predicates, implements/extends)
                 if (
                     parent.type === 'TSTypeReference' ||
                     parent.type === 'TSTypeAnnotation' ||
                     parent.type === 'TSTypeQuery' ||
                     parent.type === 'TSQualifiedName' ||
-                    parent.type === 'TSTypeParameterInstantiation'
+                    parent.type === 'TSTypeParameterInstantiation' ||
+                    parent.type === 'TSTypePredicate' ||
+                    parent.type === 'TSClassImplements' ||
+                    parent.type === 'TSInterfaceHeritage'
                 ) {
-                    return
-                }
-
-                // Allow: type predicates (err is Event)
-                if (parent.type === 'TSTypePredicate') {
-                    return
-                }
-
-                // Allow: implements / extends in class declarations (type-level)
-                if (parent.type === 'TSClassImplements' || parent.type === 'TSInterfaceHeritage') {
-                    return
-                }
-
-                // Allow: generic type arguments on class/function (ErrorTrackingCoercer<Event>)
-                if (parent.type === 'TSTypeParameterInstantiation') {
                     return
                 }
 
