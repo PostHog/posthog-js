@@ -12,6 +12,7 @@ const rules = {
     'no-console': 'error',
     'no-only-tests/no-only-tests': 'error',
     'posthog-js/no-external-replay-imports': 'error',
+    'posthog-js/no-unsafe-web-global': 'off',
     '@typescript-eslint/naming-convention': [
         'error',
         {
@@ -94,6 +95,18 @@ module.exports = {
                 'compat/compat': 'off',
             },
         },
+        {
+            // @posthog/core is shared by browser and React Native — Web API globals
+            // like Event, ErrorEvent, etc. don't exist in Hermes/JSC and referencing
+            // them as values throws a ReferenceError at runtime.
+            files: ['packages/core/src/**'],
+            excludedFiles: ['**/*.spec.*', '**/*.test.*'],
+            rules: {
+                'posthog-js/no-unsafe-web-global': 'error',
+            },
+        },
     ],
     ignorePatterns: ['node_modules', 'dist', 'next-env.d.ts', '.next', 'packages/browser/playground/hydration/vendor'],
+
+
 }
