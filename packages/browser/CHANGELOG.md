@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.364.2
+
+### Patch Changes
+
+- [#3297](https://github.com/PostHog/posthog-js/pull/3297) [`341caaf`](https://github.com/PostHog/posthog-js/commit/341caaf627d752b35a3b9461a8b1f1fd532f306f) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: wrap sendBeacon body in Blob to ensure Content-Type header is set
+  (2026-03-30)
+- Updated dependencies [[`a863914`](https://github.com/PostHog/posthog-js/commit/a863914bca09643f2aef7ca029b96de9cbfbc24c)]:
+    - @posthog/core@1.24.4
+    - @posthog/types@1.364.2
+
 ## 1.364.1
 
 ### Patch Changes

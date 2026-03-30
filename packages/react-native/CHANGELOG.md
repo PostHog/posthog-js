@@ -1,5 +1,14 @@
 # posthog-react-native
 
+## 4.39.1
+
+### Patch Changes
+
+- [#3296](https://github.com/PostHog/posthog-js/pull/3296) [`a863914`](https://github.com/PostHog/posthog-js/commit/a863914bca09643f2aef7ca029b96de9cbfbc24c) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix `captureException` crashing with `ReferenceError: Property 'Event' doesn't exist`
+  (2026-03-30)
+- Updated dependencies [[`a863914`](https://github.com/PostHog/posthog-js/commit/a863914bca09643f2aef7ca029b96de9cbfbc24c)]:
+  - @posthog/core@1.24.4
+
 ## 4.39.0
 
 ### Minor Changes
