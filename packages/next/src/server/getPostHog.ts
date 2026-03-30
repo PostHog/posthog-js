@@ -4,9 +4,9 @@ import { isFunction } from '@posthog/core'
 import type { PostHogOptions, IPostHog } from 'posthog-node'
 import { cookies, headers } from 'next/headers'
 import { getOrCreateNodeClient } from './nodeClientCache'
-import { readPostHogCookie, cookieStateToProperties, isOptedOut } from '../shared/cookie'
+import { readPostHogCookie, isOptedOut } from '../shared/cookie'
 import { resolveApiKey } from '../shared/config'
-import { readTracingHeaders } from '../shared/tracing-headers'
+import { readTracingHeaders, buildContextData } from '../shared/tracing-headers'
 
 /**
  * Returns a PostHog server client scoped to the current request.
@@ -15,7 +15,7 @@ import { readTracingHeaders } from '../shared/tracing-headers'
  * request-scoped client. Methods like `getAllFlags()`, `getFeatureFlagResult()`,
  * and `capture()` automatically use the current user's identity.
  *
- * Calls `cookies()` internally, which opts the route into dynamic rendering.
+ * Calls `cookies()` and `headers()` internally, which opts the route into dynamic rendering.
  *
  * @param apiKey - PostHog project API key. If omitted, reads from `NEXT_PUBLIC_POSTHOG_KEY`.
  * @param options - Optional `posthog-node` configuration (e.g., `{ host: '...' }`).
@@ -47,21 +47,7 @@ export async function getPostHog(apiKey?: string, options?: Partial<PostHogOptio
     const state = readPostHogCookie(cookieStore, resolvedApiKey)
     const headerStore = await headers()
     const tracing = readTracingHeaders(headerStore)
-
-    // Merge cookie identity with tracing headers. Tracing headers take
-    // precedence because they represent the browser's current state and
-    // are set per-request by the browser SDK.
-    const mergedProperties: Record<string, string> = {
-        ...cookieStateToProperties(state),
-        ...(tracing.sessionId ? { $session_id: tracing.sessionId } : {}),
-        ...(tracing.windowId ? { $window_id: tracing.windowId } : {}),
-    }
-    const properties = Object.keys(mergedProperties).length > 0 ? mergedProperties : undefined
-    const contextData = {
-        distinctId: tracing.distinctId || state?.distinctId,
-        sessionId: tracing.sessionId || state?.sessionId,
-        properties,
-    }
+    const contextData = buildContextData(tracing, state)
 
     // Wrap the shared client in a Proxy that applies request-scoped context
     // to every method call. We can't use enterContext() here because

@@ -1,3 +1,6 @@
+import type { PostHogCookieState } from './cookie'
+import { cookieStateToProperties } from './cookie'
+
 /**
  * Header names used by the PostHog browser SDK's tracing headers feature.
  *
@@ -36,5 +39,28 @@ export function readTracingHeaders(
         distinctId: getValue(POSTHOG_DISTINCT_ID_HEADER) || undefined,
         sessionId: getValue(POSTHOG_SESSION_ID_HEADER) || undefined,
         windowId: getValue(POSTHOG_WINDOW_ID_HEADER) || undefined,
+    }
+}
+
+/**
+ * Builds context data by merging cookie state with tracing headers.
+ *
+ * Tracing headers take precedence over cookie values for `distinctId` and
+ * `sessionId` because they represent the browser's current state and are
+ * set per-request by the browser SDK.
+ */
+export function buildContextData(
+    tracing: TracingHeaderValues,
+    state: PostHogCookieState | null
+): { distinctId: string | undefined; sessionId: string | undefined; properties: Record<string, string> | undefined } {
+    const mergedProperties: Record<string, string> = {
+        ...cookieStateToProperties(state),
+        ...(tracing.sessionId ? { $session_id: tracing.sessionId } : {}),
+        ...(tracing.windowId ? { $window_id: tracing.windowId } : {}),
+    }
+    return {
+        distinctId: tracing.distinctId || state?.distinctId,
+        sessionId: tracing.sessionId || state?.sessionId,
+        properties: Object.keys(mergedProperties).length > 0 ? mergedProperties : undefined,
     }
 }
