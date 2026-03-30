@@ -1,4 +1,4 @@
-import { FeatureFlagResult } from 'posthog-js'
+import type { FeatureFlagResult } from 'posthog-js'
 import { useContext, useEffect, useState } from 'react'
 import { PostHogContext } from '../context'
 import { isUndefined } from '../utils/type-utils'

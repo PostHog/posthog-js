@@ -27,7 +27,8 @@
     "files": [
         "dist",
         "src",
-        "surveys"
+        "surveys",
+        "slim"
     ],
     "peerDependencies": {
         "@types/react": ">=16.8.0",
