@@ -1,6 +1,6 @@
 import { PostHogConfig, Properties } from '../types'
 import { logger } from './logger'
-import { isFormData, isNull, isNullish, isNumber, isString, hasOwnProperty, isArray } from '@posthog/core'
+import { isFormData, isNullish, isNumber, isString, hasOwnProperty, isArray } from '@posthog/core'
 
 export function find<T>(value: T[], predicate: (value: T) => boolean): T | undefined {
     for (let i = 0; i < value.length; i++) {
