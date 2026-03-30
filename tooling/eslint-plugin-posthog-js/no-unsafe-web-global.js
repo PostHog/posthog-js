@@ -145,10 +145,6 @@ module.exports = {
                     return
                 }
 
-                // Allow: as expressions (x as ErrorEvent) — the identifier is in a type position
-                if (parent.type === 'TSAsExpression' && parent.typeAnnotation === node) {
-                    return
-                }
 
                 // Allow: import specifiers
                 if (
