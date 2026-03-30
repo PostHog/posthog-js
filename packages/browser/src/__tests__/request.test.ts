@@ -502,11 +502,15 @@ describe('request', () => {
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
                     'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=gzip-js&beacon=1',
-                    expect.any(ArrayBuffer)
+                    expect.any(Blob)
                 )
-                const arrayBuffer = mockedNavigator?.sendBeacon.mock.calls[0][1] as ArrayBuffer
-
-                const result = new TextDecoder().decode(arrayBuffer)
+                const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
+                expect(blob.type).toBe('text/plain')
+                const result = await new Promise<string>((resolve) => {
+                    const reader = new FileReader()
+                    reader.onload = () => resolve(reader.result as string)
+                    reader.readAsText(blob)
+                })
 
                 expect(result).toMatchInlineSnapshot(`
                 "�      �VJ��W�RJJ,R� ��+�
