@@ -33,7 +33,7 @@ catalog:
   tslib: ^2.5.0
   typescript: 5.8.2
 
-minimumReleaseAge: 4320
+minimumReleaseAge: 10080
 
 minimumReleaseAgeExclude:
   - dompurify@3.3.2

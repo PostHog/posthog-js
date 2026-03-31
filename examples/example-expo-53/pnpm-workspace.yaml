@@ -1,2 +1,3 @@
 pnpmfile: ../.pnpmfile.cjs
 nodeLinker: hoisted
+minimumReleaseAge: 10080

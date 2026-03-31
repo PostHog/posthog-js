@@ -7,3 +7,4 @@ onlyBuiltDependencies:
 
 nodeLinker: hoisted
 pnpmfile: ../.pnpmfile.cjs
+minimumReleaseAge: 10080
