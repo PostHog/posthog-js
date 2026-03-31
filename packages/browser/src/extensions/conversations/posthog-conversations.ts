@@ -1,6 +1,7 @@
 import { LOAD_EXT_NOT_FOUND } from '../../constants'
 import { PostHog } from '../../posthog-core'
 import {
+    ConversationsIdentityConfig,
     ConversationsRemoteConfig,
     GetMessagesResponse,
     GetTicketsOptions,
@@ -70,6 +71,7 @@ export class PostHogConversations implements Extension {
         // Reset local state
         this._isConversationsEnabled = undefined
         this._remoteConfig = null
+        delete this._instance.config.conversations
     }
 
     loadIfEnabled() {
@@ -381,5 +383,34 @@ export class PostHogConversations implements Extension {
      */
     getWidgetSessionId(): string | null {
         return this._conversationsManager?.getWidgetSessionId() ?? null
+    }
+
+    /**
+     * Set HMAC-based identity for conversations.
+     * Switches from anonymous widget_session_id mode to server-verified identity mode.
+     * Can be called before or after the conversations manager loads.
+     *
+     * @param identity - The identity config containing distinct_id and HMAC hash
+     *
+     * @example
+     * posthog.conversations.setIdentity({
+     *   identity_distinct_id: 'user_123',
+     *   identity_hash: 'a1b2c3d4e5f6...',
+     * })
+     */
+    setIdentity(identity: ConversationsIdentityConfig): void {
+        this._instance.config.conversations = identity
+        this._conversationsManager?.setIdentity(identity)
+    }
+
+    /**
+     * Clear HMAC-based identity, reverting to anonymous widget_session_id mode.
+     *
+     * @example
+     * posthog.conversations.clearIdentity()
+     */
+    clearIdentity(): void {
+        delete this._instance.config.conversations
+        this._conversationsManager?.clearIdentity()
     }
 }
