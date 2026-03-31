@@ -120,6 +120,8 @@ export class WrappedCompletions extends Completions {
               const contentBlocks: FormattedContent = []
               let accumulatedContent = ''
               let modelFromResponse: string | undefined
+              let completionIdFromResponse: string | undefined
+              let systemFingerprintFromResponse: string | null | undefined
               let firstTokenTime: number | undefined
               let usage: {
                 inputTokens?: number
@@ -145,9 +147,15 @@ export class WrappedCompletions extends Completions {
               let rawUsageData: unknown
 
               for await (const chunk of stream1) {
-                // Extract model from chunk (Chat Completions chunks have model field)
+                // Extract model and completion metadata from chunk
                 if (!modelFromResponse && chunk.model) {
                   modelFromResponse = chunk.model
+                }
+                if (!completionIdFromResponse && chunk.id) {
+                  completionIdFromResponse = chunk.id
+                }
+                if (systemFingerprintFromResponse === undefined && chunk.system_fingerprint) {
+                  systemFingerprintFromResponse = chunk.system_fingerprint
                 }
 
                 const choice = chunk?.choices?.[0]
@@ -274,6 +282,8 @@ export class WrappedCompletions extends Completions {
                   rawUsage: rawUsageData,
                 },
                 tools: availableTools,
+                completionId: completionIdFromResponse,
+                systemFingerprint: systemFingerprintFromResponse,
               })
             } catch (error: unknown) {
               const enrichedError = await sendEventWithErrorToPosthog({
@@ -325,6 +335,9 @@ export class WrappedCompletions extends Completions {
                 rawUsage: result.usage,
               },
               tools: availableTools,
+              completionId: result.id,
+              systemFingerprint: result.system_fingerprint,
+              requestId: (result as any)._request_id,
             })
           }
           return result
@@ -407,6 +420,7 @@ export class WrappedResponses extends Responses {
             try {
               let finalContent: unknown[] = []
               let modelFromResponse: string | undefined
+              let completionIdFromResponse: string | undefined
               let firstTokenTime: number | undefined
               let usage: {
                 inputTokens?: number
@@ -428,9 +442,12 @@ export class WrappedResponses extends Responses {
                 }
 
                 if ('response' in chunk && chunk.response) {
-                  // Extract model from response object in chunk (for stored prompts)
+                  // Extract model and completion ID from response object in chunk
                   if (!modelFromResponse && chunk.response.model) {
                     modelFromResponse = chunk.response.model
+                  }
+                  if (!completionIdFromResponse && chunk.response.id) {
+                    completionIdFromResponse = chunk.response.id
                   }
 
                   const chunkWebSearchCount = calculateWebSearchCount(chunk.response)
@@ -486,6 +503,7 @@ export class WrappedResponses extends Responses {
                   rawUsage: rawUsageData,
                 },
                 tools: availableTools,
+                completionId: completionIdFromResponse,
               })
             } catch (error: unknown) {
               const enrichedError = await sendEventWithErrorToPosthog({
@@ -539,6 +557,8 @@ export class WrappedResponses extends Responses {
                 rawUsage: result.usage,
               },
               tools: availableTools,
+              completionId: result.id,
+              requestId: (result as any)._request_id,
             })
           }
           return result
@@ -610,6 +630,8 @@ export class WrappedResponses extends Responses {
               cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
               rawUsage: result.usage,
             },
+            completionId: result.id,
+            requestId: (result as any)._request_id,
           })
           return result
         },

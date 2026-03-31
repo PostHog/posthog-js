@@ -107,6 +107,8 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
               const contentBlocks: FormattedContent = []
               let accumulatedContent = ''
               let modelFromResponse: string | undefined
+              let completionIdFromResponse: string | undefined
+              let systemFingerprintFromResponse: string | null | undefined
               let firstTokenTime: number | undefined
               let usage: {
                 inputTokens?: number
@@ -129,9 +131,15 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
               >()
 
               for await (const chunk of stream1) {
-                // Extract model from response if not in params
+                // Extract model and completion metadata from chunk
                 if (!modelFromResponse && chunk.model) {
                   modelFromResponse = chunk.model
+                }
+                if (!completionIdFromResponse && chunk.id) {
+                  completionIdFromResponse = chunk.id
+                }
+                if (systemFingerprintFromResponse === undefined && chunk.system_fingerprint) {
+                  systemFingerprintFromResponse = chunk.system_fingerprint
                 }
 
                 const choice = chunk?.choices?.[0]
@@ -242,6 +250,8 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 params: body,
                 httpStatus: 200,
                 usage,
+                completionId: completionIdFromResponse,
+                systemFingerprint: systemFingerprintFromResponse,
               })
             } catch (error: unknown) {
               const enrichedError = await sendEventWithErrorToPosthog({
@@ -288,6 +298,9 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 reasoningTokens: result.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.prompt_tokens_details?.cached_tokens ?? 0,
               },
+              completionId: result.id,
+              systemFingerprint: result.system_fingerprint,
+              requestId: (result as any)._request_id,
             })
           }
           return result
@@ -370,6 +383,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             try {
               let finalContent: any[] = []
               let modelFromResponse: string | undefined
+              let completionIdFromResponse: string | undefined
               let firstTokenTime: number | undefined
               let usage: {
                 inputTokens?: number
@@ -388,9 +402,12 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 }
 
                 if ('response' in chunk && chunk.response) {
-                  // Extract model from response if not in params (for stored prompts)
+                  // Extract model and completion ID from response object in chunk
                   if (!modelFromResponse && chunk.response.model) {
                     modelFromResponse = chunk.response.model
+                  }
+                  if (!completionIdFromResponse && chunk.response.id) {
+                    completionIdFromResponse = chunk.response.id
                   }
                 }
                 if (
@@ -426,6 +443,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 params: body,
                 httpStatus: 200,
                 usage,
+                completionId: completionIdFromResponse,
               })
             } catch (error: unknown) {
               const enrichedError = await sendEventWithErrorToPosthog({
@@ -471,6 +489,8 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
               },
+              completionId: result.id,
+              requestId: (result as any)._request_id,
             })
           }
           return result
@@ -535,6 +555,8 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
             cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
           },
+          completionId: result.id,
+          requestId: (result as any)._request_id,
         })
         return result
       },
