@@ -121,7 +121,7 @@ export class WrappedCompletions extends Completions {
               let accumulatedContent = ''
               let modelFromResponse: string | undefined
               let completionIdFromResponse: string | undefined
-              let systemFingerprintFromResponse: string | null | undefined
+              let systemFingerprintFromResponse: string | undefined
               let firstTokenTime: number | undefined
               let usage: {
                 inputTokens?: number
@@ -337,7 +337,7 @@ export class WrappedCompletions extends Completions {
               tools: availableTools,
               completionId: result.id,
               systemFingerprint: result.system_fingerprint,
-              requestId: (result as any)._request_id,
+              requestId: (result as any)._request_id, // x-request-id header exposed by the OpenAI SDK
             })
           }
           return result
@@ -558,7 +558,7 @@ export class WrappedResponses extends Responses {
               },
               tools: availableTools,
               completionId: result.id,
-              requestId: (result as any)._request_id,
+              requestId: (result as any)._request_id, // x-request-id header exposed by the OpenAI SDK
             })
           }
           return result

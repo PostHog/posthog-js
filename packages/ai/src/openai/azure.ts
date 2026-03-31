@@ -108,7 +108,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
               let accumulatedContent = ''
               let modelFromResponse: string | undefined
               let completionIdFromResponse: string | undefined
-              let systemFingerprintFromResponse: string | null | undefined
+              let systemFingerprintFromResponse: string | undefined
               let firstTokenTime: number | undefined
               let usage: {
                 inputTokens?: number
@@ -300,7 +300,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
               },
               completionId: result.id,
               systemFingerprint: result.system_fingerprint,
-              requestId: (result as any)._request_id,
+              requestId: (result as any)._request_id, // x-request-id header exposed by the OpenAI SDK
             })
           }
           return result
@@ -490,7 +490,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
               },
               completionId: result.id,
-              requestId: (result as any)._request_id,
+              requestId: (result as any)._request_id, // x-request-id header exposed by the OpenAI SDK
             })
           }
           return result
