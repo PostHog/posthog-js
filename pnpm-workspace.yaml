@@ -49,3 +49,6 @@ minimumReleaseAgeExclude:
 supportedArchitectures:
   cpu: [x64, arm64v8, arm64]
   os: [linux, darwin]
+
+blockExoticSubdeps: true
+trustPolicy: no-downgrade
