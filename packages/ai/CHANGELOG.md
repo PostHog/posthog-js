@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 7.12.6
+
+### Patch Changes
+
+- [#3299](https://github.com/PostHog/posthog-js/pull/3299) [`4561c25`](https://github.com/PostHog/posthog-js/commit/4561c250dee55e5d045692cd4ea77c15da02b9f5) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Remove PostHogTraceExporter from the main entry point to avoid crashing when @opentelemetry/exporter-trace-otlp-http is not installed. Use `@posthog/ai/otel` to import it instead.
+  (2026-03-31)
+
 ## 7.12.5
 
 ### Patch Changes

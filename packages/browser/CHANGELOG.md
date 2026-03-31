@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.364.3
+
+### Patch Changes
+
+- [#3300](https://github.com/PostHog/posthog-js/pull/3300) [`bab5f3a`](https://github.com/PostHog/posthog-js/commit/bab5f3a0c061dc48c2b573136c03758a3ba3c301) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Strip workspace:\* references from lib/package.json after build
+  (2026-03-31)
+- Updated dependencies []:
+    - @posthog/types@1.364.3
+
 ## 1.364.2
 
 ### Patch Changes
