@@ -204,6 +204,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true"
   ],
+  "conversations": [
+    "undefined",
+    "{ identity_distinct_id: string; identity_hash: string; }"
+  ],
   "disable_web_experiments": [
     "false",
     "true"
