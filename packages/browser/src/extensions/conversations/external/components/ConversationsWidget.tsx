@@ -497,20 +497,26 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
      * Update identity mode state (called by manager on setIdentity/clearIdentity)
      */
     setIdentityMode(isIdentityMode: boolean): void {
-        this.setState((prevState) => {
-            const update: Partial<WidgetState> = { isIdentityMode }
-            const viewNeedsReset =
-                prevState.view === 'identification' ||
-                prevState.view === 'restore_request' ||
-                prevState.view === 'messages'
-            if (viewNeedsReset) {
-                update.view = prevState.hasMultipleTickets ? 'tickets' : 'messages'
-                if (this.props.onViewChange) {
-                    this.props.onViewChange(update.view as WidgetView)
+        let nextView: WidgetView | undefined
+        this.setState(
+            (prevState) => {
+                const update: Partial<WidgetState> = { isIdentityMode }
+                const viewNeedsReset =
+                    prevState.view === 'identification' ||
+                    prevState.view === 'restore_request' ||
+                    prevState.view === 'messages'
+                if (viewNeedsReset) {
+                    nextView = prevState.hasMultipleTickets ? 'tickets' : 'messages'
+                    update.view = nextView
+                }
+                return update as WidgetState
+            },
+            () => {
+                if (nextView && this.props.onViewChange) {
+                    this.props.onViewChange(nextView)
                 }
             }
-            return update as WidgetState
-        })
+        )
     }
 
     /**

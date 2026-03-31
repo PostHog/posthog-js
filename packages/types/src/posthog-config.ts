@@ -856,8 +856,8 @@ export interface PostHogConfig {
      * ```
      */
     conversations?: {
-        identity_distinct_id?: string
-        identity_hash?: string
+        identity_distinct_id: string
+        identity_hash: string
     }
 
     /**
