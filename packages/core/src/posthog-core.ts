@@ -443,11 +443,17 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     options?: PostHogCaptureOptions
   ): void {
     this.wrap(() => {
+      const existingGroups = (this.props.$groups as PostHogGroupProperties) || {}
+      const isNewGroup = existingGroups[groupType] !== groupKey
+
       this.groups({
         [groupType]: groupKey,
       })
 
-      if (groupProperties) {
+      // Send $groupidentify when the group is new/changed OR when properties
+      // are provided. Skip only when the group already exists with the same
+      // key and no new properties are being set.
+      if (isNewGroup || groupProperties) {
         this.groupIdentify(groupType, groupKey, groupProperties, options)
       }
     })
