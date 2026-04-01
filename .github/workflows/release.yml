@@ -224,7 +224,7 @@ jobs:
 
             - name: Check ${{ matrix.package.name }} version and detect an update
               id: check-package-version
-              uses: PostHog/check-package-version@v2.1.0
+              uses: PostHog/check-package-version@v2
               with:
                   path: ${{ steps.get-package-path.outputs.path }}
 
@@ -355,7 +355,7 @@ jobs:
 
             - name: Check posthog-js version
               id: check-version
-              uses: PostHog/check-package-version@v2.1.0
+              uses: PostHog/check-package-version@v2
               with:
                   path: packages/browser
 
