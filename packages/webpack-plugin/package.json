@@ -17,7 +17,8 @@
     "types": "./dist/index.d.ts",
     "dependencies": {
         "@posthog/cli": "catalog:",
-        "@posthog/core": "workspace:*"
+        "@posthog/core": "workspace:*",
+        "@posthog/plugin-utils": "workspace:*"
     },
     "files": [
         "dist",

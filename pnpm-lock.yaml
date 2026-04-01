@@ -531,10 +531,6 @@ importers:
         version: 7.3.1(@types/node@24.10.13)(jiti@2.6.1)(lightningcss@1.27.0)(terser@5.44.1)(yaml@2.8.0)
 
   packages/core:
-    dependencies:
-      cross-spawn:
-        specifier: ^7.0.6
-        version: 7.0.6
     devDependencies:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
@@ -542,9 +538,6 @@ importers:
       '@rslib/core':
         specifier: 'catalog:'
         version: 0.10.6(@microsoft/api-extractor@7.55.1(@types/node@24.10.13))(typescript@5.9.3)
-      '@types/cross-spawn':
-        specifier: ^6.0.6
-        version: 6.0.6
       '@types/jest':
         specifier: 'catalog:'
         version: 29.5.14
@@ -615,9 +608,9 @@ importers:
       '@posthog/cli':
         specifier: 'catalog:'
         version: 0.7.3
-      '@posthog/core':
+      '@posthog/plugin-utils':
         specifier: workspace:*
-        version: link:../core
+        version: link:../plugin-utils
       '@posthog/webpack-plugin':
         specifier: workspace:*
         version: link:../webpack-plugin
@@ -695,6 +688,9 @@ importers:
       '@posthog/core':
         specifier: workspace:*
         version: link:../core
+      '@posthog/plugin-utils':
+        specifier: workspace:*
+        version: link:../plugin-utils
       posthog-js:
         specifier: workspace:*
         version: link:../browser
@@ -723,6 +719,28 @@ importers:
       nuxt:
         specifier: ^4.1.2
         version: 4.1.3(@parcel/watcher@2.5.1)(@types/node@20.19.9)(@vercel/functions@3.4.3)(@vue/compiler-sfc@3.5.22)(db0@0.3.4)(eslint@9.37.0(jiti@2.6.1))(ioredis@5.8.1)(lightningcss@1.27.0)(magicast@0.3.5)(optionator@0.9.4)(rollup@4.53.3)(terser@5.44.1)(typescript@5.9.3)(vite@7.3.1(@types/node@20.19.9)(jiti@2.6.1)(lightningcss@1.27.0)(terser@5.44.1)(yaml@2.8.0))(yaml@2.8.0)
+
+  packages/plugin-utils:
+    dependencies:
+      cross-spawn:
+        specifier: ^7.0.6
+        version: 7.0.6
+    devDependencies:
+      '@posthog-tooling/tsconfig-base':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig-base
+      '@rslib/core':
+        specifier: 'catalog:'
+        version: 0.10.6(@microsoft/api-extractor@7.55.1(@types/node@24.10.13))(typescript@5.9.3)
+      '@types/cross-spawn':
+        specifier: ^6.0.6
+        version: 6.0.6
+      '@types/jest':
+        specifier: 'catalog:'
+        version: 29.5.14
+      jest:
+        specifier: 'catalog:'
+        version: 29.7.0(@types/node@24.10.13)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@24.10.13)(typescript@5.9.3))
 
   packages/react:
     devDependencies:
@@ -919,9 +937,9 @@ importers:
       '@posthog/cli':
         specifier: 'catalog:'
         version: 0.7.3
-      '@posthog/core':
+      '@posthog/plugin-utils':
         specifier: workspace:*
-        version: link:../core
+        version: link:../plugin-utils
     devDependencies:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
@@ -996,6 +1014,9 @@ importers:
       '@posthog/core':
         specifier: workspace:*
         version: link:../core
+      '@posthog/plugin-utils':
+        specifier: workspace:*
+        version: link:../plugin-utils
     devDependencies:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
@@ -6428,10 +6449,6 @@ packages:
 
   cross-fetch@3.2.0:
     resolution: {integrity: sha512-Q+xVJLoGOeIMXZmbUK4HYk+69cQH6LudR0Vu/pRm2YlU/hDV9CiS0gKUMaWY5f2NeUH9C1nV3bsTlCo0FsTV1Q==}
-
-  cross-spawn@6.0.5:
-    resolution: {integrity: sha512-eTVLrBSt7fjbDygz805pMnstIs2VTBNkRm0qxZd+M7A5XDdxVRWO5MxGBXZhjY4cqLYLdtrGqRf8mBPmzwSpWQ==}
-    engines: {node: '>=4.8'}
 
   cross-spawn@6.0.6:
     resolution: {integrity: sha512-VqCUuhcd1iB+dsv8gxPttb5iZh/D0iubSP21g36KXdEuf6I5JiioesUVjpCdHV9MZRUfVFlvwtIUyPfxo5trtw==}
@@ -20872,14 +20889,6 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  cross-spawn@6.0.5:
-    dependencies:
-      nice-try: 1.0.5
-      path-key: 2.0.1
-      semver: 5.7.2
-      shebang-command: 1.2.0
-      which: 1.3.1
-
   cross-spawn@6.0.6:
     dependencies:
       nice-try: 1.0.5
@@ -22310,7 +22319,7 @@ snapshots:
       '@expo/cli': 0.1.7
       '@expo/vector-icons': 13.0.0
       babel-preset-expo: 9.1.0(@babel/core@7.28.5)
-      cross-spawn: 6.0.5
+      cross-spawn: 6.0.6
       expo-application: 4.1.0(expo@45.0.8(@babel/core@7.28.5))
       expo-asset: 8.5.0
       expo-constants: 13.1.1(expo@45.0.8(@babel/core@7.28.5))

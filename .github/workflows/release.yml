@@ -198,6 +198,7 @@ jobs:
                     - name: '@posthog/convex'
                     - name: '@posthog/nextjs-config'
                     - name: '@posthog/nuxt'
+                    - name: '@posthog/plugin-utils'
                     - name: '@posthog/rollup-plugin'
                     - name: '@posthog/types'
                     - name: '@posthog/webpack-plugin'
