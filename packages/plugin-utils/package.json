@@ -1,0 +1,46 @@
+{
+  "name": "@posthog/plugin-utils",
+  "version": "1.0.0",
+  "description": "Shared CLI and sourcemap utilities for PostHog build plugins",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/plugin-utils"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "!src/__tests__/**",
+    "!src/**/*.spec.ts"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "build": "rslib build",
+    "dev": "rslib build -w",
+    "test:unit": "jest",
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+  },
+  "dependencies": {
+    "cross-spawn": "^7.0.6"
+  },
+  "devDependencies": {
+    "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@rslib/core": "catalog:",
+    "@types/cross-spawn": "^6.0.6",
+    "@types/jest": "catalog:",
+    "jest": "catalog:"
+  }
+}
