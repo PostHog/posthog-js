@@ -434,7 +434,7 @@ jobs:
         name: Notify Slack - Released
         needs: [notify-approval-needed, publish, upload-s3]
         runs-on: ubuntu-latest
-        if: always() && needs.publish.result == 'success' && needs.upload-s3.result == 'success' && needs.notify-approval-needed.outputs.slack_ts != ''
+        if: always() && needs.publish.result == 'success' && (needs.upload-s3.result == 'success' || needs.upload-s3.result == 'skipped') && needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
             - name: Checkout repository
               uses: actions/checkout@v6
