@@ -161,6 +161,12 @@ test.describe('surveys - core display logic', () => {
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
 
+        // Poll until the SDK writes the lastSeenSurveyDate to localStorage
+        await expect(async () => {
+            const val = await page.evaluate(() => window.localStorage.getItem('lastSeenSurveyDate'))
+            expect(val).not.toBeNull()
+        }).toPass({ timeout: 5000 })
+
         const lastSeenDate = await page.evaluate(() => {
             return window.localStorage.getItem('lastSeenSurveyDate')
         })

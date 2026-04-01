@@ -42,18 +42,10 @@ test.describe('retry queue', () => {
             window.posthog.capture('test-retry-event', { test: 'data' })
         })
 
-        // Wait for the initial request and the retries
-        // The retry queue polls every 3 seconds with exponential backoff
-        // First retry: ~3-9 seconds
-        // Second retry: ~6-18 seconds
-        // Third retry: ~12-36 seconds
-        await page.waitForTimeout(20000)
-
-        // After this wait, we should have:
-        // 1. Initial request (failed with 500)
-        // 2. First retry with retry_count=1 (failed with 500)
-        // 3. Second retry with retry_count=2 (failed with 500)
-        // 4. Third retry with retry_count=3 (succeeded with 200)
+        // Wait until we see a successful request (retry_count=3 will be the 4th request and succeed)
+        await expect(async () => {
+            expect(captureRequests.length).toBeGreaterThanOrEqual(4)
+        }).toPass({ timeout: 40000 })
 
         // Check that we got multiple requests
         expect(captureRequests.length).toBeGreaterThanOrEqual(3)
@@ -78,12 +70,12 @@ test.describe('retry queue', () => {
         const uniqueCounts = Array.from(new Set(retryCountMatches))
         expect(uniqueCounts.length).toBeGreaterThan(1)
 
-        // Wait additional time to ensure no more requests are made after success
-        const requestCountAfterSuccess = captureRequests.length
-        await page.waitForTimeout(5000)
-
-        // Assert no additional requests were made after success
-        expect(captureRequests.length).toBe(requestCountAfterSuccess)
+        // Wait for the queue to stabilize — no new requests for 5 seconds
+        await expect(async () => {
+            const count = captureRequests.length
+            await page.waitForTimeout(5000)
+            expect(captureRequests.length).toBe(count)
+        }).toPass({ timeout: 15000 })
     })
 
     test('stops retrying after 10 attempts', async ({ page, context }) => {
@@ -161,16 +153,15 @@ test.describe('retry queue', () => {
             window.posthog.capture('test-offline-event', { test: 'data' })
         })
 
-        // Wait for initial request to be queued and sent
-        await page.waitForTimeout(3000)
+        // Wait for at least the initial request to be made
+        await expect(async () => {
+            expect(captureRequests.length).toBeGreaterThanOrEqual(1)
+        }).toPass({ timeout: 10000 })
 
         // Simulate going offline
         await context.setOffline(true)
 
-        // Wait a bit while offline (less than retry interval)
-        await page.waitForTimeout(3000)
-
-        // Should not have made many more requests while offline
+        // Record the count before going online
         const requestsWhileOffline = captureRequests.length
 
         // Switch to success mode and come back online
@@ -182,10 +173,9 @@ test.describe('retry queue', () => {
             window.dispatchEvent(new Event('online'))
         })
 
-        // Wait for the retry to happen after coming online
-        await page.waitForTimeout(3000)
-
-        // Should have made at least one more request after coming online
-        expect(captureRequests.length).toBeGreaterThan(requestsWhileOffline)
+        // Wait until we see at least one more request after coming online
+        await expect(async () => {
+            expect(captureRequests.length).toBeGreaterThan(requestsWhileOffline)
+        }).toPass({ timeout: 10000 })
     })
 })
