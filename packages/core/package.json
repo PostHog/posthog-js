@@ -56,6 +56,5 @@
     "@rslib/core": "catalog:",
     "@types/jest": "catalog:",
     "jest": "catalog:"
-  },
-  "dependencies": {}
+  }
 }
