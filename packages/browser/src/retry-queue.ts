@@ -83,6 +83,7 @@ export class RetryQueue {
                         })
                         return
                     }
+                    this._instance._onFlushFailure(options)
                 }
 
                 options.callback?.(response)

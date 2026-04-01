@@ -55,6 +55,11 @@
         "react/slim/package.json"
     ],
     "dependencies": {
+        "@opentelemetry/api": "^1.9.0",
+        "@opentelemetry/api-logs": "^0.208.0",
+        "@opentelemetry/exporter-logs-otlp-http": "^0.208.0",
+        "@opentelemetry/resources": "^2.2.0",
+        "@opentelemetry/sdk-logs": "^0.208.0",
         "@posthog/core": "workspace:*",
         "@posthog/types": "workspace:*",
         "core-js": "^3.38.1",
@@ -62,12 +67,7 @@
         "fflate": "^0.4.8",
         "preact": "^10.28.2",
         "query-selector-shadow-dom": "^1.0.1",
-        "web-vitals": "^5.1.0",
-        "@opentelemetry/api": "^1.9.0",
-        "@opentelemetry/api-logs": "^0.208.0",
-        "@opentelemetry/exporter-logs-otlp-http": "^0.208.0",
-        "@opentelemetry/resources": "^2.2.0",
-        "@opentelemetry/sdk-logs": "^0.208.0"
+        "web-vitals": "^5.1.0"
     },
     "devDependencies": {
         "@babel/core": "catalog:",
@@ -110,6 +110,7 @@
         "date-fns": "^3.6.0",
         "dotenv": "^17.2.0",
         "expect": "^29.7.0",
+        "fake-indexeddb": "^6.2.5",
         "fast-check": "^2.17.0",
         "http-server": "14.1.1",
         "husky": "^8.0.1",
