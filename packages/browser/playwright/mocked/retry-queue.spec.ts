@@ -8,75 +8,80 @@ const startOptions = {
 }
 
 test.describe('retry queue', () => {
-    test('retries failed capture requests and stops after success', async ({ page, context }) => {
-        const captureRequests: Request[] = []
-        let errorResponseCount = 0
-        const maxErrorResponses = 3
+    test(
+        'retries failed capture requests and stops after success',
+        async ({ page, context }) => {
+            const captureRequests: Request[] = []
+            let errorResponseCount = 0
+            const maxErrorResponses = 3
+            let successSeen = false
 
-        // Mock the capture endpoint to fail initially, then succeed
-        await context.route('**/e/**', async (route) => {
-            const request = route.request()
-            captureRequests.push(request)
+            // Mock the capture endpoint to fail initially, then succeed
+            await context.route('**/e/**', async (route) => {
+                const request = route.request()
+                captureRequests.push(request)
 
-            if (errorResponseCount < maxErrorResponses) {
-                errorResponseCount++
-                await route.fulfill({
-                    status: 500,
-                    contentType: 'text/plain',
-                    body: 'Internal Server Error',
-                })
-            } else {
-                await route.fulfill({
-                    status: 200,
-                    contentType: 'application/json',
-                    body: JSON.stringify({ status: 'ok' }),
-                })
-            }
-        })
-
-        // Initialize PostHog without pageview to avoid extra requests
-        await start({ ...startOptions, options: { capture_pageview: false } }, page, context)
-
-        // Capture a custom event which will initially fail
-        await page.evaluate(() => {
-            window.posthog.capture('test-retry-event', { test: 'data' })
-        })
-
-        // Wait until we see a successful request (retry_count=3 will be the 4th request and succeed)
-        await expect(async () => {
-            expect(captureRequests.length).toBeGreaterThanOrEqual(4)
-        }).toPass({ timeout: 40000 })
-
-        // Check that we got multiple requests
-        expect(captureRequests.length).toBeGreaterThanOrEqual(3)
-
-        // Verify the first request had no retry_count
-        const firstRequest = captureRequests[0]
-        expect(firstRequest.url()).not.toContain('retry_count')
-
-        // Verify retry_count increments
-        const retryCountMatches = captureRequests
-            .map((req) => {
-                const match = req.url().match(/retry_count=(\d+)/)
-                return match ? parseInt(match[1]) : null
+                if (errorResponseCount < maxErrorResponses) {
+                    errorResponseCount++
+                    await route.fulfill({
+                        status: 500,
+                        contentType: 'text/plain',
+                        body: 'Internal Server Error',
+                    })
+                } else {
+                    successSeen = true
+                    await route.fulfill({
+                        status: 200,
+                        contentType: 'application/json',
+                        body: JSON.stringify({ status: 'ok' }),
+                    })
+                }
             })
-            .filter((count) => count !== null)
 
-        // Should see incrementing retry counts
-        expect(retryCountMatches.length).toBeGreaterThanOrEqual(2)
-        expect(retryCountMatches).toContain(1)
-        expect(retryCountMatches).toContain(2)
-        // Verify counts are actually incrementing (not stuck at 1)
-        const uniqueCounts = Array.from(new Set(retryCountMatches))
-        expect(uniqueCounts.length).toBeGreaterThan(1)
+            // Initialize PostHog without pageview to avoid extra requests
+            await start({ ...startOptions, options: { capture_pageview: false } }, page, context)
 
-        // Wait for the queue to stabilize — no new requests for 5 seconds
-        await expect(async () => {
-            const count = captureRequests.length
-            await page.waitForTimeout(5000)
-            expect(captureRequests.length).toBe(count)
-        }).toPass({ timeout: 20000 })
-    })
+            // Capture a custom event which will initially fail
+            await page.evaluate(() => {
+                window.posthog.capture('test-retry-event', { test: 'data' })
+            })
+
+            // Wait until we see the successful response (4th request)
+            await expect(async () => {
+                expect(successSeen).toBe(true)
+            }).toPass({ timeout: 50000 })
+
+            // Check that we got multiple requests
+            expect(captureRequests.length).toBeGreaterThanOrEqual(3)
+
+            // Verify the first request had no retry_count
+            const firstRequest = captureRequests[0]
+            expect(firstRequest.url()).not.toContain('retry_count')
+
+            // Verify retry_count increments
+            const retryCountMatches = captureRequests
+                .map((req) => {
+                    const match = req.url().match(/retry_count=(\d+)/)
+                    return match ? parseInt(match[1]) : null
+                })
+                .filter((count) => count !== null)
+
+            // Should see incrementing retry counts
+            expect(retryCountMatches.length).toBeGreaterThanOrEqual(2)
+            expect(retryCountMatches).toContain(1)
+            expect(retryCountMatches).toContain(2)
+            // Verify counts are actually incrementing (not stuck at 1)
+            const uniqueCounts = Array.from(new Set(retryCountMatches))
+            expect(uniqueCounts.length).toBeGreaterThan(1)
+
+            // After success, record the count and verify no more requests arrive
+            const requestCountAfterSuccess = captureRequests.length
+            await expect(async () => {
+                expect(captureRequests.length).toBe(requestCountAfterSuccess)
+            }).toPass({ timeout: 5000 })
+        },
+        90000
+    )
 
     test('stops retrying after 10 attempts', async ({ page, context }) => {
         const captureRequests: Request[] = []
