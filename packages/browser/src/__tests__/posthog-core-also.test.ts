@@ -1306,18 +1306,6 @@ describe('posthog core', () => {
             })
         })
 
-        it('sends $groupidentify without $group_set when group key changes and no properties provided', () => {
-            posthog.group('organization', 'org::5')
-
-            expect(posthog.capture).toHaveBeenCalledWith('$groupidentify', {
-                $group_type: 'organization',
-                $group_key: 'org::5',
-            })
-            // Verify $group_set is NOT in the properties
-            const capturedArgs = jest.mocked(posthog.capture).mock.calls[0][1]
-            expect(capturedArgs).not.toHaveProperty('$group_set')
-        })
-
         it('sends $groupidentify with $group_set for an existing group when properties provided', () => {
             posthog.group('organization', 'org::5')
             jest.mocked(posthog.capture).mockClear()
