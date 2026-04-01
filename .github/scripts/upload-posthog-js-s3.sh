@@ -56,6 +56,18 @@ if jq -e --arg v "$VERSION" '.[] | select(.version == $v)' "$TMPWORKDIR/versions
 else
     jq --arg v "$VERSION" --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         '. + [{"version": $v, "timestamp": $ts}]' "$TMPWORKDIR/versions.json" > "$TMPWORKDIR/versions_updated.json"
+
+    # Validate the updated manifest before uploading: must be a non-empty JSON array
+    # where every entry has .version and .timestamp strings.
+    if ! jq -e 'if type != "array" then error
+        elif length == 0 then error
+        elif any(.[]; (.version | type) != "string" or (.timestamp | type) != "string") then error
+        else true end' "$TMPWORKDIR/versions_updated.json" > /dev/null 2>&1; then
+        echo "ERROR: versions_updated.json failed validation — aborting upload" >&2
+        cat "$TMPWORKDIR/versions_updated.json" >&2
+        exit 1
+    fi
+
     aws s3 cp "$TMPWORKDIR/versions_updated.json" "s3://$BUCKET/versions.json" \
         --content-type "application/json"
     echo "Added v$VERSION to versions.json"
