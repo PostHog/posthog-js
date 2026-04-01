@@ -58,9 +58,10 @@ else
         '. + [{"version": $v, "timestamp": $ts}]' "$TMPWORKDIR/versions.json" > "$TMPWORKDIR/versions_updated.json"
 
     # Validate the updated manifest before uploading: must be a non-empty JSON array
-    # where every entry has .version and .timestamp strings.
-    if ! jq -e 'if type != "array" then error
-        elif length == 0 then error
+    # where every entry has .version and .timestamp strings, and length is exactly original + 1.
+    EXPECTED_LENGTH=$(( $(jq 'length' "$TMPWORKDIR/versions.json") + 1 ))
+    if ! jq -e --argjson expected "$EXPECTED_LENGTH" 'if type != "array" then error
+        elif length != $expected then error
         elif any(.[]; (.version | type) != "string" or (.timestamp | type) != "string") then error
         else true end' "$TMPWORKDIR/versions_updated.json" > /dev/null 2>&1; then
         echo "ERROR: versions_updated.json failed validation — aborting upload" >&2
