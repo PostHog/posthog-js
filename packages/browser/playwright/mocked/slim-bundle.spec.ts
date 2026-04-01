@@ -323,122 +323,31 @@ test.describe('slim bundle + extension bundles (#3313)', () => {
         expect(errors).toEqual([])
     })
 
-    // ── SiteAppsExtensions ──────────────────────────────────────────────
+    // ── Every extension bundle: init does not crash ───────────────────
 
-    test('SiteAppsExtensions: init does not crash', async ({ page }) => {
-        // SiteApps accesses this._instance._addCaptureHook (reserved, should be safe)
-        const errors: string[] = []
-        page.on('pageerror', (error) => errors.push(error.message))
+    for (const extName of [
+        'SiteAppsExtensions',
+        'SessionReplayExtensions',
+        'ExperimentsExtensions',
+        'ConversationsExtensions',
+        'LogsExtensions',
+        'ProductToursExtensions',
+        'TracingExtensions',
+    ] as const) {
+        test(`${extName}: init does not crash`, async ({ page }) => {
+            const errors: string[] = []
+            page.on('pageerror', (error) => errors.push(error.message))
 
-        await page.goto(SLIM_BUNDLE_URL)
-        await waitForSlimBundleReady(page)
+            await page.goto(SLIM_BUNDLE_URL)
+            await waitForSlimBundleReady(page)
 
-        const error = await initPostHogWithExtensions(page, 'SiteAppsExtensions')
-        await page.waitForTimeout(1000)
+            const error = await initPostHogWithExtensions(page, extName)
+            await page.waitForTimeout(1000)
 
-        expect(error).toBeNull()
-        expect(errors).toEqual([])
-    })
-
-    // ── SessionReplayExtensions ─────────────────────────────────────────
-
-    test('SessionReplayExtensions: init does not crash', async ({ page }) => {
-        const errors: string[] = []
-        page.on('pageerror', (error) => errors.push(error.message))
-
-        await page.goto(SLIM_BUNDLE_URL)
-        await waitForSlimBundleReady(page)
-
-        const error = await initPostHogWithExtensions(page, 'SessionReplayExtensions')
-        await page.waitForTimeout(1000)
-
-        expect(error).toBeNull()
-        expect(errors).toEqual([])
-    })
-
-    // ── ExperimentsExtensions ───────────────────────────────────────────
-
-    test('ExperimentsExtensions: init does not crash', async ({ page }) => {
-        // WebExperiments accesses this._instance._send_request (reserved)
-        // but also includes FeatureFlagsExtensions (broken)
-        const errors: string[] = []
-        page.on('pageerror', (error) => errors.push(error.message))
-
-        await page.goto(SLIM_BUNDLE_URL)
-        await waitForSlimBundleReady(page)
-
-        const error = await initPostHogWithExtensions(page, 'ExperimentsExtensions')
-        await page.waitForTimeout(1000)
-
-        expect(error).toBeNull()
-        expect(errors).toEqual([])
-    })
-
-    // ── ConversationsExtensions ─────────────────────────────────────────
-
-    test('ConversationsExtensions: init does not crash', async ({ page }) => {
-        const errors: string[] = []
-        page.on('pageerror', (error) => errors.push(error.message))
-
-        await page.goto(SLIM_BUNDLE_URL)
-        await waitForSlimBundleReady(page)
-
-        const error = await initPostHogWithExtensions(page, 'ConversationsExtensions')
-        await page.waitForTimeout(1000)
-
-        expect(error).toBeNull()
-        expect(errors).toEqual([])
-    })
-
-    // ── LogsExtensions ──────────────────────────────────────────────────
-
-    test('LogsExtensions: init does not crash', async ({ page }) => {
-        const errors: string[] = []
-        page.on('pageerror', (error) => errors.push(error.message))
-
-        await page.goto(SLIM_BUNDLE_URL)
-        await waitForSlimBundleReady(page)
-
-        const error = await initPostHogWithExtensions(page, 'LogsExtensions')
-        await page.waitForTimeout(1000)
-
-        expect(error).toBeNull()
-        expect(errors).toEqual([])
-    })
-
-    // ── ProductToursExtensions ──────────────────────────────────────────
-
-    test('ProductToursExtensions: init does not crash', async ({ page }) => {
-        // ProductTours accesses this._instance._send_request (reserved) and
-        // this._instance.persistence (not mangled), but includes FeatureFlagsExtensions
-        const errors: string[] = []
-        page.on('pageerror', (error) => errors.push(error.message))
-
-        await page.goto(SLIM_BUNDLE_URL)
-        await waitForSlimBundleReady(page)
-
-        const error = await initPostHogWithExtensions(page, 'ProductToursExtensions')
-        await page.waitForTimeout(1000)
-
-        expect(error).toBeNull()
-        expect(errors).toEqual([])
-    })
-
-    // ── TracingExtensions ───────────────────────────────────────────────
-
-    test('TracingExtensions: init does not crash', async ({ page }) => {
-        const errors: string[] = []
-        page.on('pageerror', (error) => errors.push(error.message))
-
-        await page.goto(SLIM_BUNDLE_URL)
-        await waitForSlimBundleReady(page)
-
-        const error = await initPostHogWithExtensions(page, 'TracingExtensions')
-        await page.waitForTimeout(1000)
-
-        expect(error).toBeNull()
-        expect(errors).toEqual([])
-    })
+            expect(error).toBeNull()
+            expect(errors).toEqual([])
+        })
+    }
 
     // ── AllExtensions ───────────────────────────────────────────────────
 

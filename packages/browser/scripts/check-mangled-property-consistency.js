@@ -75,11 +75,11 @@ const shared = Object.keys(ext)
 
 const mismatches = []
 for (const name of shared) {
-    const s = new Set(slim[name])
-    const e = new Set(ext[name])
-    const common = [...s].filter((n) => e.has(n))
-    if (common.length === 0) {
-        mismatches.push({ property: name, slim: [...s], ext: [...e] })
+    const s = slim[name]
+    const e = ext[name]
+    // Terser should produce exactly one mangled name per property per compilation unit.
+    if (s[0] !== e[0] || s.length !== 1 || e.length !== 1) {
+        mismatches.push({ property: name, slim: s, ext: e })
     }
 }
 
