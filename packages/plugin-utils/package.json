@@ -1,6 +1,6 @@
 {
   "name": "@posthog/plugin-utils",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Shared CLI and sourcemap utilities for PostHog build plugins",
   "license": "MIT",
   "repository": {
