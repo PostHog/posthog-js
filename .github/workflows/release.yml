@@ -365,7 +365,7 @@ jobs:
             # Upload to US (us-east-1)
             - name: Configure AWS credentials (US)
               if: steps.check-version.outputs.is-new-version == 'true'
-              uses: aws-actions/configure-aws-credentials@v4
+              uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6
               with:
                   role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_US }}
                   aws-region: us-east-1
@@ -379,7 +379,7 @@ jobs:
             # Upload to EU (eu-central-1)
             - name: Configure AWS credentials (EU)
               if: steps.check-version.outputs.is-new-version == 'true'
-              uses: aws-actions/configure-aws-credentials@v4
+              uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6
               with:
                   role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_EU }}
                   aws-region: eu-central-1
