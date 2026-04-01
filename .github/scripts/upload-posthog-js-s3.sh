@@ -36,27 +36,27 @@ aws s3 cp "$DIST_DIR/" "s3://$BUCKET/$VERSION/" \
     --content-type "application/javascript"
 
 echo "==> Updating versions.json in s3://$BUCKET/"
-TMPDIR="$(mktemp -d)"
-trap 'rm -rf "$TMPDIR"' EXIT
+TMPWORKDIR="$(mktemp -d)"
+trap 'rm -rf "$TMPWORKDIR"' EXIT
 
 # Distinguish "file doesn't exist" from real errors (auth, network).
 # A blind fallback to '[]' on any error would silently drop all previous versions.
-if aws s3 cp "s3://$BUCKET/versions.json" "$TMPDIR/versions.json"; then
+if aws s3 cp "s3://$BUCKET/versions.json" "$TMPWORKDIR/versions.json"; then
     echo "Downloaded existing versions.json"
 elif aws s3api head-object --bucket "$BUCKET" --key "versions.json" 2>/dev/null; then
     echo "ERROR: versions.json exists but could not be downloaded" >&2
     exit 1
 else
     echo "No existing versions.json found, starting fresh"
-    echo '[]' > "$TMPDIR/versions.json"
+    echo '[]' > "$TMPWORKDIR/versions.json"
 fi
 
-if jq -e --arg v "$VERSION" '.[] | select(.version == $v)' "$TMPDIR/versions.json" > /dev/null 2>&1; then
+if jq -e --arg v "$VERSION" '.[] | select(.version == $v)' "$TMPWORKDIR/versions.json" > /dev/null 2>&1; then
     echo "Version $VERSION already in versions.json, skipping"
 else
     jq --arg v "$VERSION" --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-        '. + [{"version": $v, "timestamp": $ts}]' "$TMPDIR/versions.json" > "$TMPDIR/versions_updated.json"
-    aws s3 cp "$TMPDIR/versions_updated.json" "s3://$BUCKET/versions.json" \
+        '. + [{"version": $v, "timestamp": $ts}]' "$TMPWORKDIR/versions.json" > "$TMPWORKDIR/versions_updated.json"
+    aws s3 cp "$TMPWORKDIR/versions_updated.json" "s3://$BUCKET/versions.json" \
         --content-type "application/json"
     echo "Added v$VERSION to versions.json"
 fi
