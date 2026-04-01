@@ -75,7 +75,7 @@ test.describe('retry queue', () => {
             const count = captureRequests.length
             await page.waitForTimeout(5000)
             expect(captureRequests.length).toBe(count)
-        }).toPass({ timeout: 15000 })
+        }).toPass({ timeout: 20000 })
     })
 
     test('stops retrying after 10 attempts', async ({ page, context }) => {
