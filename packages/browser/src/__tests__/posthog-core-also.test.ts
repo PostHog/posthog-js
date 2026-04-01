@@ -1258,7 +1258,19 @@ describe('posthog core', () => {
             expect(posthog.persistence!.props['$stored_group_properties']).toEqual(undefined)
         })
 
-        it('does not result in a capture call', () => {
+        it('sends $groupidentify for a new group even without properties', () => {
+            posthog.group('organization', 'org::5')
+
+            expect(posthog.capture).toHaveBeenCalledWith('$groupidentify', {
+                $group_type: 'organization',
+                $group_key: 'org::5',
+            })
+        })
+
+        it('does not send $groupidentify when group already exists with same key and no properties', () => {
+            posthog.group('organization', 'org::5')
+            jest.mocked(posthog.capture).mockClear()
+
             posthog.group('organization', 'org::5')
 
             expect(posthog.capture).not.toHaveBeenCalled()
@@ -1281,7 +1293,7 @@ describe('posthog core', () => {
             expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(3)
         })
 
-        it('captures $groupidentify event', () => {
+        it('captures $groupidentify event with $group_set when properties provided', () => {
             posthog.group('organization', 'org::5', { group: 'property', foo: 5 })
 
             expect(posthog.capture).toHaveBeenCalledWith('$groupidentify', {
@@ -1291,6 +1303,31 @@ describe('posthog core', () => {
                     group: 'property',
                     foo: 5,
                 },
+            })
+        })
+
+        it('sends $groupidentify without $group_set when group key changes and no properties provided', () => {
+            posthog.group('organization', 'org::5')
+
+            expect(posthog.capture).toHaveBeenCalledWith('$groupidentify', {
+                $group_type: 'organization',
+                $group_key: 'org::5',
+            })
+            // Verify $group_set is NOT in the properties
+            const capturedArgs = jest.mocked(posthog.capture).mock.calls[0][1]
+            expect(capturedArgs).not.toHaveProperty('$group_set')
+        })
+
+        it('sends $groupidentify with $group_set for an existing group when properties provided', () => {
+            posthog.group('organization', 'org::5')
+            jest.mocked(posthog.capture).mockClear()
+
+            posthog.group('organization', 'org::5', { name: 'PostHog' })
+
+            expect(posthog.capture).toHaveBeenCalledWith('$groupidentify', {
+                $group_type: 'organization',
+                $group_key: 'org::5',
+                $group_set: { name: 'PostHog' },
             })
         })
 
@@ -1316,9 +1353,10 @@ describe('posthog core', () => {
 
                 posthog.capture('some_event', { prop: 5 })
 
-                expect(posthog._requestQueue!.enqueue).toHaveBeenCalledTimes(1)
+                // 2 $groupidentify calls from group() + 1 some_event
+                expect(posthog._requestQueue!.enqueue).toHaveBeenCalledTimes(3)
 
-                const eventPayload = jest.mocked(posthog._requestQueue!.enqueue).mock.calls[0][0]
+                const eventPayload = jest.mocked(posthog._requestQueue!.enqueue).mock.calls[2][0]
                 // need to help TS know event payload data is not an array
                 // eslint-disable-next-line posthog-js/no-direct-array-check
                 if (Array.isArray(eventPayload.data!)) {
