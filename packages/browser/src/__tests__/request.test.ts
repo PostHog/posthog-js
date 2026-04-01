@@ -455,6 +455,7 @@ describe('request', () => {
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
+                expect(blob.type).toBe('application/json')
 
                 const reader = new FileReader()
                 const result = await new Promise((resolve) => {
@@ -480,6 +481,7 @@ describe('request', () => {
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
+                expect(blob.type).toBe('application/x-www-form-urlencoded')
 
                 const reader = new FileReader()
                 const result = await new Promise((resolve) => {
@@ -517,6 +519,45 @@ describe('request', () => {
                    "
             `)
             })
+
+            it('should not call sendBeacon when body is undefined', () => {
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/',
+                        method: 'POST',
+                        data: undefined,
+                    })
+                )
+
+                expect(mockedNavigator?.sendBeacon).not.toHaveBeenCalled()
+            })
+
+            it.each([
+                ['no compression', undefined, 'application/json'],
+                ['base64 compression', Compression.Base64, 'application/x-www-form-urlencoded'],
+                ['gzip compression', Compression.GZipJS, 'text/plain'],
+            ])(
+                'always sends a Blob with correct Content-Type for %s',
+                (_name: string, compression: Compression | undefined, expectedContentType: string) => {
+                    request(
+                        createRequest({
+                            url: 'https://any.posthog-instance.com/',
+                            method: 'POST',
+                            compression,
+                            data: { event: 'test' },
+                        })
+                    )
+
+                    expect(mockedNavigator?.sendBeacon).toHaveBeenCalledTimes(1)
+                    const body = mockedNavigator?.sendBeacon.mock.calls[0][1]
+
+                    // The body must always be a Blob so the browser sets the Content-Type header.
+                    // Sending a raw ArrayBuffer (as happened before the fix in #3297) causes the
+                    // browser to omit Content-Type, which breaks proxies/WAFs/CDNs that require it.
+                    expect(body).toBeInstanceOf(Blob)
+                    expect((body as Blob).type).toBe(expectedContentType)
+                }
+            )
         })
     })
 })
