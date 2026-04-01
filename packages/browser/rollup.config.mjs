@@ -17,7 +17,18 @@ const WRITE_MANGLED_PROPERTIES = process.env.WRITE_MANGLED_PROPERTIES
 const nameCachePath = './terser-mangled-names.json'
 let nameCache = {}
 
+// Shared across all entries so mangled property names are consistent between
+// module.slim.js and extension-bundles.js — see #3313.
+// Only property names (props) are shared; top-level variable names (vars) are
+// reset per-entry by the plugin below since each module has its own scope.
+
 const plugins = (es5, noExternal) => [
+    {
+        name: 'reset-vars-name-cache',
+        buildStart() {
+            nameCache.vars = { props: {} }
+        },
+    },
     json(),
     resolve({ browser: true }),
     typescript({ sourceMap: true, outDir: './dist', module: 'es2015' }),
@@ -99,7 +110,7 @@ const plugins = (es5, noExternal) => [
         ],
     }),
     terser({
-        nameCache: WRITE_MANGLED_PROPERTIES ? nameCache : undefined, // using a shared nameCache leads to race conditions and broken builds, so don't use in general, only when writing the mangled names
+        nameCache,
         toplevel: true,
         compress: {
             ecma: es5 ? 5 : 6,
