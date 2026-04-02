@@ -1,6 +1,6 @@
 import type { eventWithTime, pluginEvent } from '../types/rrweb-types'
 
-import { isObject } from '@posthog/core'
+import { isArray, isObject } from '@posthog/core'
 import { SnapshotBuffer } from './lazy-loaded-session-recorder'
 
 // taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
@@ -43,7 +43,7 @@ export function estimateJsonSize(value: unknown): number {
         case 'boolean':
             return value ? 4 : 5
         case 'object': {
-            if (Array.isArray(value)) {
+            if (isArray(value)) {
                 let size = 2
                 for (let i = 0; i < value.length; i++) {
                     if (i > 0) size += 1

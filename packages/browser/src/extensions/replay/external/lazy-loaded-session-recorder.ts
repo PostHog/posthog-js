@@ -42,6 +42,7 @@ import { MutationThrottler } from './mutation-throttler'
 import { createLogger } from '../../../utils/logger'
 import {
     clampToRange,
+    isArray,
     isBoolean,
     isFunction,
     isNull,
@@ -203,7 +204,7 @@ function gzipToString(data: unknown): string {
 const GZIPPED_EMPTY_ARRAY = gzipToString([])
 
 function gzipField(data: unknown): string {
-    return Array.isArray(data) && data.length === 0 ? GZIPPED_EMPTY_ARRAY : gzipToString(data)
+    return isArray(data) && data.length === 0 ? GZIPPED_EMPTY_ARRAY : gzipToString(data)
 }
 
 /**
