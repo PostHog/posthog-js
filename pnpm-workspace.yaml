@@ -36,13 +36,13 @@ catalog:
 minimumReleaseAge: 10080
 
 minimumReleaseAgeExclude:
-  - "@posthog/rrweb-plugin-console-record@0.0.53"
-  - "@posthog/rrweb-record@0.0.53"
-  - "@posthog/rrweb-types@0.0.53"
-  - "@posthog/rrweb-utils@0.0.53"
-  - "@posthog/rrweb@0.0.53"
-  - "@posthog/rrweb-snapshot@0.0.53"
-  - "@posthog/rrdom@0.0.53"
+  - "@posthog/rrweb-plugin-console-record@0.0.54"
+  - "@posthog/rrweb-record@0.0.54"
+  - "@posthog/rrweb-types@0.0.54"
+  - "@posthog/rrweb-utils@0.0.54"
+  - "@posthog/rrweb@0.0.54"
+  - "@posthog/rrweb-snapshot@0.0.54"
+  - "@posthog/rrdom@0.0.54"
   - "@posthog/cli"
   - "posthog-react-native-session-replay"
 
