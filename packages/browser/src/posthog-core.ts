@@ -930,6 +930,11 @@ export class PostHog implements PostHogInterface {
             const pattern = this.config.internal_or_test_user_hostname
             const matches = typeof pattern === 'string' ? hostname === pattern : pattern.test(hostname)
             if (matches) {
+                logger.info(
+                    `Hostname "${hostname}" matches internal_or_test_user_hostname pattern. ` +
+                        `Marking user as internal/test user and enabling person processing. ` +
+                        `See https://posthog.com/docs/references/posthog-js#PostHog-setInternalOrTestUser`
+                )
                 this.setInternalOrTestUser()
             }
         }
