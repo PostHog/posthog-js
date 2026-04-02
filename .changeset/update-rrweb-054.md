@@ -10,4 +10,3 @@ Changes from [0.0.53 to 0.0.55](https://github.com/PostHog/posthog-rrweb/compare
 - fix: skip unchanged setAttribute calls to prevent replay flicker ([#158](https://github.com/PostHog/posthog-rrweb/pull/158))
 - fix: clear mutation buffer on iframe pagehide to prevent recording corruption ([#157](https://github.com/PostHog/posthog-rrweb/pull/157))
 - fix: handle SecurityError in IframeManager destroy and removeIframeById ([#163](https://github.com/PostHog/posthog-rrweb/pull/163))
-- revert "fix: remove postcss from rrweb-record bundle" ([#165](https://github.com/PostHog/posthog-rrweb/pull/165))
