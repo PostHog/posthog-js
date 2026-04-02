@@ -1,11 +1,32 @@
-// Import the shared OTEL setup which registers PostHogTraceExporter
-// as a span processor on the global tracer provider.
-import '../otelSetup.js'
+// Convex runs in a V8 isolate without the `performance` global that
+// @opentelemetry/core expects. This must be imported before any OTEL module.
+import '../polyfills.js'
 
+import { trace } from '@opentelemetry/api'
+import { BasicTracerProvider, BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
+import { resourceFromAttributes } from '@opentelemetry/resources'
 import { generateText } from 'ai'
 import { openai } from '@ai-sdk/openai'
+import { PostHogTraceExporter } from '@posthog/ai/otel'
 import { action } from '../_generated/server'
 import { v } from 'convex/values'
+
+// PostHogTraceExporter is a standard OTEL SpanExporter — add it as a span
+// processor alongside any other exporters you use (e.g. Datadog, Honeycomb).
+const provider = new BasicTracerProvider({
+    resource: resourceFromAttributes({
+        'service.name': 'example-convex',
+    }),
+    spanProcessors: [
+        new BatchSpanProcessor(
+            new PostHogTraceExporter({
+                apiKey: process.env.POSTHOG_API_KEY!,
+                host: process.env.POSTHOG_HOST,
+            })
+        ),
+    ],
+})
+trace.setGlobalTracerProvider(provider)
 
 // Demonstrates using the Vercel AI SDK's experimental_telemetry with
 // PostHog's PostHogTraceExporter to automatically capture $ai_generation events.
