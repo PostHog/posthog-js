@@ -13,7 +13,7 @@ import { action } from '../_generated/server'
 import { v } from 'convex/values'
 
 // PostHogTraceExporter is a standard OTEL SpanExporter — add it as a span
-// processor alongside any other exporters you use (e.g. Datadog, Honeycomb).
+// processor alongside any other exporters in your OTEL setup.
 const provider = new BasicTracerProvider({
     resource: resourceFromAttributes({
         'service.name': 'example-convex',
