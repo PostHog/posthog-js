@@ -202,8 +202,8 @@ function gzipToString(data: unknown): string {
 
 const GZIPPED_EMPTY_ARRAY = gzipToString([])
 
-function gzipField(data: unknown[]): string {
-    return data.length === 0 ? GZIPPED_EMPTY_ARRAY : gzipToString(data)
+function gzipField(data: unknown): string {
+    return Array.isArray(data) && data.length === 0 ? GZIPPED_EMPTY_ARRAY : gzipToString(data)
 }
 
 /**
