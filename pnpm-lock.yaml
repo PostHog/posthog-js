@@ -319,14 +319,14 @@ importers:
         specifier: workspace:*
         version: link:../../tooling/rollup-utils
       '@posthog/rrweb-plugin-console-record':
-        specifier: ^0.0.54
-        version: 0.0.54(@posthog/rrweb-utils@0.0.54)(@posthog/rrweb@0.0.54)
+        specifier: ^0.0.55
+        version: 0.0.55(@posthog/rrweb-utils@0.0.55)(@posthog/rrweb@0.0.55)
       '@posthog/rrweb-record':
-        specifier: ^0.0.54
-        version: 0.0.54
+        specifier: ^0.0.55
+        version: 0.0.55
       '@posthog/rrweb-types':
-        specifier: ^0.0.54
-        version: 0.0.54
+        specifier: ^0.0.55
+        version: 0.0.55
       '@rollup/plugin-babel':
         specifier: ^6.0.4
         version: 6.0.4(@babel/core@7.28.5)(@types/babel__core@7.1.18)(rollup@4.53.3)
@@ -540,13 +540,13 @@ importers:
         version: link:../../tooling/tsconfig-base
       '@rslib/core':
         specifier: 'catalog:'
-        version: 0.10.6(@microsoft/api-extractor@7.55.1(@types/node@22.19.1))(typescript@5.9.3)
+        version: 0.10.6(@microsoft/api-extractor@7.55.1(@types/node@24.10.13))(typescript@5.9.3)
       '@types/jest':
         specifier: 'catalog:'
         version: 29.5.14
       jest:
         specifier: 'catalog:'
-        version: 29.7.0(@types/node@22.19.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.9.3))
+        version: 29.7.0(@types/node@24.10.13)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@24.10.13)(typescript@5.9.3))
 
   packages/next:
     dependencies:
@@ -2736,7 +2736,7 @@ packages:
 
   '@expo/bunyan@4.0.0':
     resolution: {integrity: sha512-Ydf4LidRB/EBI+YrB+cVLqIseiRfjUI/AeHBgjGMtq3GroraDu81OV7zqophRgupngoL3iS3JUMDMnxO7g39qA==}
-    engines: {node: '>=0.10.0'}
+    engines: {'0': node >=0.10.0}
 
   '@expo/bunyan@4.0.1':
     resolution: {integrity: sha512-+Lla7nYSiHZirgK+U/uYzsLv/X+HaJienbD5AKX1UQZHYfWaP+9uuQluRB4GrEVWF0GZ7vEVp/jzaOT9k/SQlg==}
@@ -3992,29 +3992,29 @@ packages:
     engines: {node: '>=14', npm: '>=6'}
     hasBin: true
 
-  '@posthog/rrdom@0.0.54':
-    resolution: {integrity: sha512-677IY8yvIasdD5MFdhHg8WhuOGETKAviL60lC1eKzLxIC6ovoJFP6Js25TQAkyJw5mpsbKuJJ4KlEjuK2ni1Jw==}
+  '@posthog/rrdom@0.0.55':
+    resolution: {integrity: sha512-8wo2ISix/zDEqQDcI74nGyDZG08p4MSXqi4M0Zh6+/nVX0QvfLFWr/8ZCs0E4yMZKVtN8nRM34/UTsZEq0AxRQ==}
 
-  '@posthog/rrweb-plugin-console-record@0.0.54':
-    resolution: {integrity: sha512-aKsEWZUm2BLn9hU1Uh+uU12DFQEvw03huJu/pUHRGG1Na4b+sG0gnsxtTBjMeaLcf+rBPv7OG5IyH079kV68KA==}
+  '@posthog/rrweb-plugin-console-record@0.0.55':
+    resolution: {integrity: sha512-hnrRISTOcizHFSa65F/jVwjmsIpyuU6r06Kd66WsiPsSN+gYqPr9D7Fk5cZOlYXH63tsKmpRHilmoS1WKalF8w==}
     peerDependencies:
-      '@posthog/rrweb': 0.0.54
-      '@posthog/rrweb-utils': 0.0.54
+      '@posthog/rrweb': 0.0.55
+      '@posthog/rrweb-utils': 0.0.55
 
-  '@posthog/rrweb-record@0.0.54':
-    resolution: {integrity: sha512-gox534V8C68xSMwAD7OzEfqGE8H5f5c3Id+/Iz750JrccHTlX8a+5Tl3jlKjIEFQSDQar1osTNe0uwTNCyNGwQ==}
+  '@posthog/rrweb-record@0.0.55':
+    resolution: {integrity: sha512-bsd25GmJsx35DkJO71V76htYky54ey5dbF3oHELJkTjnqiUZsUdcohvdGbxTuEPaNN8zG3f4GYo0e8TI/57xug==}
 
-  '@posthog/rrweb-snapshot@0.0.54':
-    resolution: {integrity: sha512-YEBHBb8c/w/Ae8vX6hDdsQuMOiRhkbFd/8f3qENJag/npENqYwbeJikoDd9HjiKfKlUv/9xClU8P+/8f+GCc1g==}
+  '@posthog/rrweb-snapshot@0.0.55':
+    resolution: {integrity: sha512-bu+/GTQHBynJCCMj4s8B2G7RwC8YbKHGBSPXPrOUMkU5SbWuullhQkv3PWmzTnHV/6Rgmgj33cXbNhUPF49qeg==}
 
-  '@posthog/rrweb-types@0.0.54':
-    resolution: {integrity: sha512-T6YSfwojdSu9Phfs9dj/IVwwLgXzoOGKf6dZd9W+LlhUzaE8ZXKrA1Y6ejoatA+xR3Vv6t2ZkVQBdU02AeGgSw==}
+  '@posthog/rrweb-types@0.0.55':
+    resolution: {integrity: sha512-jkAplXr7WYiDWc9KYap4qBvfIkBraJBOtGhJQlj+7LvbpFyv/PBw/rxYYFEhm67CzWOhUNiUNTimTex8DxmoQQ==}
 
-  '@posthog/rrweb-utils@0.0.54':
-    resolution: {integrity: sha512-sLH3N7tgvvwwzrxGUnivlowKfNS61RYYg/FeQOVeCjwnAGLE8Wosba4PhEXL0m1fh6HODZqFft8I6PDmVIbwKA==}
+  '@posthog/rrweb-utils@0.0.55':
+    resolution: {integrity: sha512-FfUrSan8Djodiu/Kp4UVQDz3JqiYYtZUNvuoDJsYt9rvdvgpSRMZOiXcKg6RPZ9L851sen/0+nvDC7L9cBu8uQ==}
 
-  '@posthog/rrweb@0.0.54':
-    resolution: {integrity: sha512-/KMhZCNy25+SKjdqJVPY041q02GY1BjNUzye0TpEpI/1bsil3YeImZyvO1YUpsWsUp7BCUyMzavUKqWQ9ZHfgg==}
+  '@posthog/rrweb@0.0.55':
+    resolution: {integrity: sha512-G253LinESqTyo4byj3XVowsHKQqm+v01oViAdDKvRAhZrF26K4XhGJZ5qgKXG1+WHXUqq5JjCrfYUOGay4dzew==}
 
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
@@ -16337,43 +16337,6 @@ snapshots:
       - ts-node
     optional: true
 
-  '@jest/core@29.7.0(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.9.3))':
-    dependencies:
-      '@jest/console': 29.7.0
-      '@jest/reporters': 29.7.0(node-notifier@8.0.2)
-      '@jest/test-result': 29.7.0
-      '@jest/transform': 29.7.0
-      '@jest/types': 29.6.3
-      '@types/node': 22.19.1
-      ansi-escapes: 4.3.2
-      chalk: 4.1.2
-      ci-info: 3.9.0
-      exit: 0.1.2
-      graceful-fs: 4.2.11
-      jest-changed-files: 29.7.0
-      jest-config: 29.7.0(@types/node@22.19.1)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.9.3))
-      jest-haste-map: 29.7.0
-      jest-message-util: 29.7.0
-      jest-regex-util: 29.6.3
-      jest-resolve: 29.7.0
-      jest-resolve-dependencies: 29.7.0
-      jest-runner: 29.7.0
-      jest-runtime: 29.7.0
-      jest-snapshot: 29.7.0
-      jest-util: 29.7.0
-      jest-validate: 29.7.0
-      jest-watcher: 29.7.0
-      micromatch: 4.0.8
-      pretty-format: 29.7.0
-      slash: 3.0.0
-      strip-ansi: 6.0.1
-    optionalDependencies:
-      node-notifier: 8.0.2
-    transitivePeerDependencies:
-      - babel-plugin-macros
-      - supports-color
-      - ts-node
-
   '@jest/core@29.7.0(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.5.0)(typescript@5.8.2))':
     dependencies:
       '@jest/console': 29.7.0
@@ -17689,37 +17652,37 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  '@posthog/rrdom@0.0.54':
+  '@posthog/rrdom@0.0.55':
     dependencies:
-      '@posthog/rrweb-snapshot': 0.0.54
+      '@posthog/rrweb-snapshot': 0.0.55
 
-  '@posthog/rrweb-plugin-console-record@0.0.54(@posthog/rrweb-utils@0.0.54)(@posthog/rrweb@0.0.54)':
+  '@posthog/rrweb-plugin-console-record@0.0.55(@posthog/rrweb-utils@0.0.55)(@posthog/rrweb@0.0.55)':
     dependencies:
-      '@posthog/rrweb': 0.0.54
-      '@posthog/rrweb-utils': 0.0.54
+      '@posthog/rrweb': 0.0.55
+      '@posthog/rrweb-utils': 0.0.55
 
-  '@posthog/rrweb-record@0.0.54':
+  '@posthog/rrweb-record@0.0.55':
     dependencies:
-      '@posthog/rrweb': 0.0.54
-      '@posthog/rrweb-types': 0.0.54
-      '@posthog/rrweb-utils': 0.0.54
+      '@posthog/rrweb': 0.0.55
+      '@posthog/rrweb-types': 0.0.55
+      '@posthog/rrweb-utils': 0.0.55
 
-  '@posthog/rrweb-snapshot@0.0.54':
+  '@posthog/rrweb-snapshot@0.0.55':
     dependencies:
       '@types/postcss-safe-parser': 5.0.4
       postcss: 8.5.6
       postcss-safe-parser: 7.0.1(postcss@8.5.6)
 
-  '@posthog/rrweb-types@0.0.54': {}
+  '@posthog/rrweb-types@0.0.55': {}
 
-  '@posthog/rrweb-utils@0.0.54': {}
+  '@posthog/rrweb-utils@0.0.55': {}
 
-  '@posthog/rrweb@0.0.54':
+  '@posthog/rrweb@0.0.55':
     dependencies:
-      '@posthog/rrdom': 0.0.54
-      '@posthog/rrweb-snapshot': 0.0.54
-      '@posthog/rrweb-types': 0.0.54
-      '@posthog/rrweb-utils': 0.0.54
+      '@posthog/rrdom': 0.0.55
+      '@posthog/rrweb-snapshot': 0.0.55
+      '@posthog/rrweb-types': 0.0.55
+      '@posthog/rrweb-utils': 0.0.55
       '@types/css-font-loading-module': 0.0.7
       '@xstate/fsm': 1.5.2
       base64-arraybuffer: 1.0.2
@@ -18237,15 +18200,6 @@ snapshots:
       tinyglobby: 0.2.15
     optionalDependencies:
       '@microsoft/api-extractor': 7.55.1(@types/node@22.16.5)
-      typescript: 5.9.3
-
-  '@rslib/core@0.10.6(@microsoft/api-extractor@7.55.1(@types/node@22.19.1))(typescript@5.9.3)':
-    dependencies:
-      '@rsbuild/core': 1.4.8
-      rsbuild-plugin-dts: 0.10.6(@microsoft/api-extractor@7.55.1(@types/node@22.19.1))(@rsbuild/core@1.4.8)(typescript@5.9.3)
-      tinyglobby: 0.2.15
-    optionalDependencies:
-      '@microsoft/api-extractor': 7.55.1(@types/node@22.19.1)
       typescript: 5.9.3
 
   '@rslib/core@0.10.6(@microsoft/api-extractor@7.55.1(@types/node@24.10.13))(typescript@5.8.2)':
@@ -20830,21 +20784,6 @@ snapshots:
       - supports-color
       - ts-node
     optional: true
-
-  create-jest@29.7.0(@types/node@22.19.1)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.9.3)):
-    dependencies:
-      '@jest/types': 29.6.3
-      chalk: 4.1.2
-      exit: 0.1.2
-      graceful-fs: 4.2.11
-      jest-config: 29.7.0(@types/node@22.19.1)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.9.3))
-      jest-util: 29.7.0
-      prompts: 2.4.2
-    transitivePeerDependencies:
-      - '@types/node'
-      - babel-plugin-macros
-      - supports-color
-      - ts-node
 
   create-jest@29.7.0(@types/node@22.5.0)(ts-node@10.9.2(@types/node@22.5.0)(typescript@5.8.2)):
     dependencies:
@@ -23881,27 +23820,6 @@ snapshots:
       - ts-node
     optional: true
 
-  jest-cli@29.7.0(@types/node@22.19.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.9.3)):
-    dependencies:
-      '@jest/core': 29.7.0(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.9.3))
-      '@jest/test-result': 29.7.0
-      '@jest/types': 29.6.3
-      chalk: 4.1.2
-      create-jest: 29.7.0(@types/node@22.19.1)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.9.3))
-      exit: 0.1.2
-      import-local: 3.2.0
-      jest-config: 29.7.0(@types/node@22.19.1)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.9.3))
-      jest-util: 29.7.0
-      jest-validate: 29.7.0
-      yargs: 17.7.2
-    optionalDependencies:
-      node-notifier: 8.0.2
-    transitivePeerDependencies:
-      - '@types/node'
-      - babel-plugin-macros
-      - supports-color
-      - ts-node
-
   jest-cli@29.7.0(@types/node@22.5.0)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.5.0)(typescript@5.8.2)):
     dependencies:
       '@jest/core': 29.7.0(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.5.0)(typescript@5.8.2))
@@ -24120,37 +24038,6 @@ snapshots:
       - babel-plugin-macros
       - supports-color
     optional: true
-
-  jest-config@29.7.0(@types/node@22.19.1)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.9.3)):
-    dependencies:
-      '@babel/core': 7.28.5
-      '@jest/test-sequencer': 29.7.0
-      '@jest/types': 29.6.3
-      babel-jest: 29.7.0(@babel/core@7.28.5)
-      chalk: 4.1.2
-      ci-info: 3.9.0
-      deepmerge: 4.3.1
-      glob: 7.2.3
-      graceful-fs: 4.2.11
-      jest-circus: 29.7.0
-      jest-environment-node: 29.7.0
-      jest-get-type: 29.6.3
-      jest-regex-util: 29.6.3
-      jest-resolve: 29.7.0
-      jest-runner: 29.7.0
-      jest-util: 29.7.0
-      jest-validate: 29.7.0
-      micromatch: 4.0.8
-      parse-json: 5.2.0
-      pretty-format: 29.7.0
-      slash: 3.0.0
-      strip-json-comments: 3.1.1
-    optionalDependencies:
-      '@types/node': 22.19.1
-      ts-node: 10.9.2(@types/node@22.19.1)(typescript@5.9.3)
-    transitivePeerDependencies:
-      - babel-plugin-macros
-      - supports-color
 
   jest-config@29.7.0(@types/node@22.19.1)(ts-node@10.9.2(@types/node@22.5.0)(typescript@5.8.2)):
     dependencies:
@@ -24773,20 +24660,6 @@ snapshots:
       - supports-color
       - ts-node
     optional: true
-
-  jest@29.7.0(@types/node@22.19.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.9.3)):
-    dependencies:
-      '@jest/core': 29.7.0(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.9.3))
-      '@jest/types': 29.6.3
-      import-local: 3.2.0
-      jest-cli: 29.7.0(@types/node@22.19.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.9.3))
-    optionalDependencies:
-      node-notifier: 8.0.2
-    transitivePeerDependencies:
-      - '@types/node'
-      - babel-plugin-macros
-      - supports-color
-      - ts-node
 
   jest@29.7.0(@types/node@22.5.0)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.5.0)(typescript@5.8.2)):
     dependencies:
@@ -28365,18 +28238,6 @@ snapshots:
       '@microsoft/api-extractor': 7.55.1(@types/node@22.16.5)
       typescript: 5.9.3
 
-  rsbuild-plugin-dts@0.10.6(@microsoft/api-extractor@7.55.1(@types/node@22.19.1))(@rsbuild/core@1.4.8)(typescript@5.9.3):
-    dependencies:
-      '@ast-grep/napi': 0.37.0
-      '@rsbuild/core': 1.4.8
-      magic-string: 0.30.21
-      picocolors: 1.1.1
-      tinyglobby: 0.2.15
-      tsconfig-paths: 4.2.0
-    optionalDependencies:
-      '@microsoft/api-extractor': 7.55.1(@types/node@22.19.1)
-      typescript: 5.9.3
-
   rsbuild-plugin-dts@0.10.6(@microsoft/api-extractor@7.55.1(@types/node@24.10.13))(@rsbuild/core@1.4.8)(typescript@5.8.2):
     dependencies:
       '@ast-grep/napi': 0.37.0
@@ -29793,25 +29654,6 @@ snapshots:
       typescript: 5.8.2
       v8-compile-cache-lib: 3.0.1
       yn: 3.1.1
-
-  ts-node@10.9.2(@types/node@22.19.1)(typescript@5.9.3):
-    dependencies:
-      '@cspotcode/source-map-support': 0.8.1
-      '@tsconfig/node10': 1.0.12
-      '@tsconfig/node12': 1.0.11
-      '@tsconfig/node14': 1.0.3
-      '@tsconfig/node16': 1.0.4
-      '@types/node': 22.19.1
-      acorn: 8.15.0
-      acorn-walk: 8.3.4
-      arg: 4.1.3
-      create-require: 1.1.1
-      diff: 4.0.2
-      make-error: 1.3.6
-      typescript: 5.9.3
-      v8-compile-cache-lib: 3.0.1
-      yn: 3.1.1
-    optional: true
 
   ts-node@10.9.2(@types/node@22.5.0)(typescript@5.8.2):
     dependencies:
