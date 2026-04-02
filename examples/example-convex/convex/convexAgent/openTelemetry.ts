@@ -1,6 +1,9 @@
-"use node"
+// Convex runs in a V8 isolate without the `performance` global that
+// @opentelemetry/core expects. This must be imported before any OTEL module.
+import '../polyfills.js'
 
-import { NodeSDK } from '@opentelemetry/sdk-node'
+import { trace } from '@opentelemetry/api'
+import { BasicTracerProvider, BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 import { Agent } from '@convex-dev/agent'
 import { openai } from '@ai-sdk/openai'
@@ -13,49 +16,50 @@ import { v } from 'convex/values'
 // experimental_telemetry and PostHog's PostHogTraceExporter to
 // automatically capture $ai_generation events.
 export const generate = action({
-  args: {
-    prompt: v.string(),
-    distinctId: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const distinctId = args.distinctId ?? 'anonymous'
+    args: {
+        prompt: v.string(),
+        distinctId: v.optional(v.string()),
+    },
+    handler: async (ctx, args) => {
+        const distinctId = args.distinctId ?? 'anonymous'
 
-    const sdk = new NodeSDK({
-      resource: resourceFromAttributes({
-        'service.name': 'example-convex',
-        'user.id': distinctId,
-      }),
-      traceExporter: new PostHogTraceExporter({
-        apiKey: process.env.POSTHOG_API_KEY!,
-        host: process.env.POSTHOG_HOST,
-      }),
-    })
-    sdk.start()
+        const exporter = new PostHogTraceExporter({
+            apiKey: process.env.POSTHOG_API_KEY!,
+            host: process.env.POSTHOG_HOST,
+        })
+        const provider = new BasicTracerProvider({
+            resource: resourceFromAttributes({
+                'service.name': 'example-convex',
+                'user.id': distinctId,
+            }),
+            spanProcessors: [new BatchSpanProcessor(exporter)],
+        })
+        trace.setGlobalTracerProvider(provider)
 
-    const supportAgent = new Agent(components.agent, {
-      name: 'support-agent',
-      languageModel: openai('gpt-5-mini'),
-      instructions: 'You are a helpful support agent. Answer questions concisely.',
-    })
+        const supportAgent = new Agent(components.agent, {
+            name: 'support-agent',
+            languageModel: openai('gpt-5-mini'),
+            instructions: 'You are a helpful support agent. Answer questions concisely.',
+        })
 
-    const { thread } = await supportAgent.createThread(ctx, {})
+        const { thread } = await supportAgent.createThread(ctx, {})
 
-    const result = await thread.generateText({
-      prompt: args.prompt,
-      experimental_telemetry: {
-        isEnabled: true,
-        functionId: 'convex-agent-otel',
-        metadata: {
-          posthog_distinct_id: distinctId,
-        },
-      },
-    })
+        const result = await thread.generateText({
+            prompt: args.prompt,
+            experimental_telemetry: {
+                isEnabled: true,
+                functionId: 'convex-agent-otel',
+                metadata: {
+                    posthog_distinct_id: distinctId,
+                },
+            },
+        })
 
-    await sdk.shutdown()
+        await provider.shutdown()
 
-    return {
-      text: result.text,
-      usage: result.totalUsage,
-    }
-  },
+        return {
+            text: result.text,
+            usage: result.totalUsage,
+        }
+    },
 })
