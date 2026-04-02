@@ -36,8 +36,18 @@ export function estimateJsonSize(value: unknown): number {
         return 0
     }
     switch (typeof value) {
-        case 'string':
-            return value.length + 2
+        case 'string': {
+            let extra = 0
+            for (let i = 0; i < value.length; i++) {
+                const c = value.charCodeAt(i)
+                if (c === 0x22 || c === 0x5c) {
+                    extra += 1
+                } else if (c < 0x20) {
+                    extra += c === 0x08 || c === 0x09 || c === 0x0a || c === 0x0c || c === 0x0d ? 1 : 5
+                }
+            }
+            return value.length + 2 + extra
+        }
         case 'number':
             return String(value).length
         case 'boolean':

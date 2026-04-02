@@ -363,6 +363,11 @@ describe(`SessionRecording utility functions`, () => {
             ['object with undefined values', { a: 1, b: undefined, c: 'three' }],
             ['array with elements', [1, 'two', true, null]],
             ['array with undefined', [1, undefined, 3]],
+            ['string with double quotes', 'say "hi"'],
+            ['string with backslash', 'C:\\Users\\foo'],
+            ['string with newline', 'line1\nline2'],
+            ['string with tab', 'col1\tcol2'],
+            ['string with control char', 'before\x00after'],
             [
                 'compressed-event-like structure',
                 {
