@@ -12,6 +12,24 @@ import { components } from '../_generated/api'
 import { action } from '../_generated/server'
 import { v } from 'convex/values'
 
+// Initialize the tracer provider once at module scope so it persists across
+// warm invocations of the Convex V8 isolate. Per-request attributes like
+// distinctId are passed via experimental_telemetry metadata instead.
+const provider = new BasicTracerProvider({
+    resource: resourceFromAttributes({
+        'service.name': 'example-convex',
+    }),
+    spanProcessors: [
+        new BatchSpanProcessor(
+            new PostHogTraceExporter({
+                apiKey: process.env.POSTHOG_API_KEY!,
+                host: process.env.POSTHOG_HOST,
+            })
+        ),
+    ],
+})
+trace.setGlobalTracerProvider(provider)
+
 // Demonstrates using @convex-dev/agent with the Vercel AI SDK's
 // experimental_telemetry and PostHog's PostHogTraceExporter to
 // automatically capture $ai_generation events.
@@ -22,19 +40,6 @@ export const generate = action({
     },
     handler: async (ctx, args) => {
         const distinctId = args.distinctId ?? 'anonymous'
-
-        const exporter = new PostHogTraceExporter({
-            apiKey: process.env.POSTHOG_API_KEY!,
-            host: process.env.POSTHOG_HOST,
-        })
-        const provider = new BasicTracerProvider({
-            resource: resourceFromAttributes({
-                'service.name': 'example-convex',
-                'user.id': distinctId,
-            }),
-            spanProcessors: [new BatchSpanProcessor(exporter)],
-        })
-        trace.setGlobalTracerProvider(provider)
 
         const supportAgent = new Agent(components.agent, {
             name: 'support-agent',
@@ -54,8 +59,6 @@ export const generate = action({
                 },
             },
         })
-
-        await provider.shutdown()
 
         return {
             text: result.text,
