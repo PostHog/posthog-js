@@ -8,6 +8,7 @@ import {
     splitBuffer,
     SEVEN_MEGABYTES,
     estimateSize,
+    estimateJsonSize,
     circularReferenceReplacer,
 } from '../../../extensions/replay/external/sessionrecording-utils'
 import { largeString, threeMBAudioURI, threeMBImageURI } from '../test_data/sessionrecording-utils-test-data'
@@ -342,6 +343,44 @@ describe(`SessionRecording utility functions`, () => {
             const result = splitBuffer(buffer)
 
             expect(result).toEqual([buffer])
+        })
+    })
+
+    describe('estimateJsonSize', () => {
+        it.each([
+            ['null', null],
+            ['string', 'hello'],
+            ['empty string', ''],
+            ['number', 42],
+            ['negative number', -1],
+            ['float', 3.14],
+            ['true', true],
+            ['false', false],
+            ['empty object', {}],
+            ['empty array', []],
+            ['simple object', { a: 1, b: 'two' }],
+            ['nested object', { a: { b: { c: 3 } } }],
+            ['object with undefined values', { a: 1, b: undefined, c: 'three' }],
+            ['array with elements', [1, 'two', true, null]],
+            ['array with undefined', [1, undefined, 3]],
+            [
+                'compressed-event-like structure',
+                {
+                    type: 3,
+                    timestamp: 1700000000000,
+                    cv: '2024-10',
+                    data: {
+                        source: 0,
+                        texts: 'H4sIAAAAAAAAA8tIzcnJBwCGphA2BQAAAA==',
+                        attributes: 'H4sIAAAAAAAAA8tIzcnJBwCGphA2BQAAAA==',
+                        removes: 'H4sIAAAAAAAAA8tIzcnJBwCGphA2BQAAAA==',
+                        adds: 'H4sIAAAAAAAAA0tMTgYAYKMCpQQAAAA=',
+                        isAttachIframe: true,
+                    },
+                },
+            ],
+        ])('matches JSON.stringify length for %s', (_label, value) => {
+            expect(estimateJsonSize(value)).toBe(JSON.stringify(value)?.length ?? 0)
         })
     })
 

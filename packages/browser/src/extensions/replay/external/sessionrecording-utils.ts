@@ -28,6 +28,48 @@ export function estimateSize(sizeable: unknown): number {
     return JSON.stringify(sizeable, circularReferenceReplacer())?.length || 0
 }
 
+export function estimateJsonSize(value: unknown): number {
+    if (value === null) {
+        return 4
+    }
+    if (value === undefined) {
+        return 0
+    }
+    switch (typeof value) {
+        case 'string':
+            return value.length + 2
+        case 'number':
+            return String(value).length
+        case 'boolean':
+            return value ? 4 : 5
+        case 'object': {
+            if (Array.isArray(value)) {
+                let size = 2
+                for (let i = 0; i < value.length; i++) {
+                    if (i > 0) size += 1
+                    const el = value[i]
+                    size += el === undefined || el === null ? 4 : estimateJsonSize(el)
+                }
+                return size
+            }
+            const obj = value as Record<string, unknown>
+            let size = 2
+            let first = true
+            for (const key in obj) {
+                if (!Object.prototype.hasOwnProperty.call(obj, key)) continue
+                const val = obj[key]
+                if (val === undefined) continue
+                if (!first) size += 1
+                first = false
+                size += key.length + 3 + estimateJsonSize(val)
+            }
+            return size
+        }
+        default:
+            return 0
+    }
+}
+
 export const replacementImageURI =
     'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2IiBmaWxsPSJibGFjayIvPgo8cGF0aCBkPSJNOCAwSDE2TDAgMTZWOEw4IDBaIiBmaWxsPSIjMkQyRDJEIi8+CjxwYXRoIGQ9Ik0xNiA4VjE2SDhMMTYgOFoiIGZpbGw9IiMyRDJEMkQiLz4KPC9zdmc+Cg=='
 

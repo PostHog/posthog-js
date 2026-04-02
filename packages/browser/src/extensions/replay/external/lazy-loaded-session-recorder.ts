@@ -29,7 +29,12 @@ import {
     TriggerType,
     URLTriggerMatching,
 } from './triggerMatching'
-import { estimateSize, INCREMENTAL_SNAPSHOT_EVENT_TYPE, truncateLargeConsoleLogs } from './sessionrecording-utils'
+import {
+    estimateJsonSize,
+    estimateSize,
+    INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+    truncateLargeConsoleLogs,
+} from './sessionrecording-utils'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
 import { assignableWindow, LazyLoadedSessionRecordingInterface, window, document } from '../../../utils/globals'
 import { addEventListener } from '../../../utils'
@@ -195,49 +200,63 @@ function gzipToString(data: unknown): string {
     return strFromU8(gzipSync(strToU8(JSON.stringify(data))), true)
 }
 
+const GZIPPED_EMPTY_ARRAY = gzipToString([])
+
+function gzipField(data: unknown[]): string {
+    return data.length === 0 ? GZIPPED_EMPTY_ARRAY : gzipToString(data)
+}
+
 /**
  * rrweb's packer takes an event and returns a string or the reverse on `unpack`.
  * but we want to be able to inspect metadata during ingestion.
  * and don't want to compress the entire event,
  * so we have a custom packer that only compresses part of some events
+ *
+ * returns the compressed event and its estimated JSON size,
+ * avoiding a redundant JSON.stringify for size estimation
  */
-function compressEvent(event: eventWithTime): eventWithTime | compressedEventWithTime {
+function compressEvent(
+    event: eventWithTime
+): { event: eventWithTime | compressedEventWithTime; size: number } {
     try {
         if (event.type === EventType.FullSnapshot) {
-            return {
+            const compressed = {
                 ...event,
                 data: gzipToString(event.data),
-                cv: '2024-10',
+                cv: '2024-10' as const,
             }
+            return { event: compressed, size: estimateJsonSize(compressed) }
         }
         if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.Mutation) {
-            return {
+            const compressed = {
                 ...event,
-                cv: '2024-10',
+                cv: '2024-10' as const,
                 data: {
                     ...event.data,
-                    texts: gzipToString(event.data.texts),
-                    attributes: gzipToString(event.data.attributes),
-                    removes: gzipToString(event.data.removes),
-                    adds: gzipToString(event.data.adds),
+                    texts: gzipField(event.data.texts),
+                    attributes: gzipField(event.data.attributes),
+                    removes: gzipField(event.data.removes),
+                    adds: gzipField(event.data.adds),
                 },
             }
+            return { event: compressed, size: estimateJsonSize(compressed) }
         }
         if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.StyleSheetRule) {
-            return {
+            const compressed = {
                 ...event,
-                cv: '2024-10',
+                cv: '2024-10' as const,
                 data: {
                     ...event.data,
                     adds: event.data.adds ? gzipToString(event.data.adds) : undefined,
                     removes: event.data.removes ? gzipToString(event.data.removes) : undefined,
                 },
             }
+            return { event: compressed, size: estimateJsonSize(compressed) }
         }
     } catch (e) {
         logger.error('could not compress event - will use uncompressed event', e)
     }
-    return event
+    return { event, size: estimateSize(event) }
 }
 
 function isCustomEvent(e: eventWithTime, tag: string): e is eventWithTime & customEvent {
@@ -1115,9 +1134,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
         }
 
-        const eventToSend =
-            (this._instance.config.session_recording.compress_events ?? true) ? compressEvent(event) : event
-        const size = estimateSize(eventToSend)
+        const { event: eventToSend, size } =
+            (this._instance.config.session_recording.compress_events ?? true)
+                ? compressEvent(event)
+                : { event, size: estimateSize(event) }
 
         const properties = {
             $snapshot_bytes: size,
