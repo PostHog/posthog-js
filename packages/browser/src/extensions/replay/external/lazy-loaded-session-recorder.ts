@@ -201,10 +201,14 @@ function gzipToString(data: unknown): string {
     return strFromU8(gzipSync(strToU8(JSON.stringify(data))), true)
 }
 
-const GZIPPED_EMPTY_ARRAY = gzipToString([])
+let _gzippedEmptyArray: string | undefined
 
 function gzipField(data: unknown): string {
-    return isArray(data) && data.length === 0 ? GZIPPED_EMPTY_ARRAY : gzipToString(data)
+    if (isArray(data) && data.length === 0) {
+        _gzippedEmptyArray = _gzippedEmptyArray ?? gzipToString([])
+        return _gzippedEmptyArray
+    }
+    return gzipToString(data)
 }
 
 /**
