@@ -3,7 +3,7 @@
 import '../polyfills.js'
 
 import { trace } from '@opentelemetry/api'
-import { BasicTracerProvider, BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
+import { BasicTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 import { generateText } from 'ai'
 import { openai } from '@ai-sdk/openai'
@@ -18,7 +18,7 @@ const provider = new BasicTracerProvider({
         'service.name': 'example-convex',
     }),
     spanProcessors: [
-        new BatchSpanProcessor(
+        new SimpleSpanProcessor(
             new PostHogTraceExporter({
                 apiKey: process.env.POSTHOG_API_KEY!,
                 host: process.env.POSTHOG_HOST,
