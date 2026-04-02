@@ -28,7 +28,12 @@ export function estimateSize(sizeable: unknown): number {
     return JSON.stringify(sizeable, circularReferenceReplacer())?.length || 0
 }
 
-export function estimateJsonSize(value: unknown): number {
+// Lightweight size estimate for compressed events without allocating a JSON string.
+// Intentionally loose: does not account for JSON escaping of strings or keys.
+// This is fine because compressed event strings are base64 gzip output (safe alphabet)
+// and keys are known-safe identifiers. Used only for buffer threshold checks (~1MB)
+// and split-buffer decisions (~7MB) where a few bytes of drift don't matter.
+export function estimateCompressedEventSize(value: unknown): number {
     if (value === null) {
         return 4
     }
@@ -36,18 +41,8 @@ export function estimateJsonSize(value: unknown): number {
         return 0
     }
     switch (typeof value) {
-        case 'string': {
-            let extra = 0
-            for (let i = 0; i < value.length; i++) {
-                const c = value.charCodeAt(i)
-                if (c === 0x22 || c === 0x5c) {
-                    extra += 1
-                } else if (c < 0x20) {
-                    extra += c === 0x08 || c === 0x09 || c === 0x0a || c === 0x0c || c === 0x0d ? 1 : 5
-                }
-            }
-            return value.length + 2 + extra
-        }
+        case 'string':
+            return value.length + 2
         case 'number':
             return String(value).length
         case 'boolean':
@@ -58,7 +53,7 @@ export function estimateJsonSize(value: unknown): number {
                 for (let i = 0; i < value.length; i++) {
                     if (i > 0) size += 1
                     const el = value[i]
-                    size += el === undefined || el === null ? 4 : estimateJsonSize(el)
+                    size += el === undefined || el === null ? 4 : estimateCompressedEventSize(el)
                 }
                 return size
             }
@@ -71,7 +66,7 @@ export function estimateJsonSize(value: unknown): number {
                 if (val === undefined) continue
                 if (!first) size += 1
                 first = false
-                size += key.length + 3 + estimateJsonSize(val)
+                size += key.length + 3 + estimateCompressedEventSize(val)
             }
             return size
         }

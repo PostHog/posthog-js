@@ -30,7 +30,7 @@ import {
     URLTriggerMatching,
 } from './triggerMatching'
 import {
-    estimateJsonSize,
+    estimateCompressedEventSize,
     estimateSize,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     truncateLargeConsoleLogs,
@@ -226,7 +226,7 @@ function compressEvent(
                 data: gzipToString(event.data),
                 cv: '2024-10' as const,
             }
-            return { event: compressed, size: estimateJsonSize(compressed) }
+            return { event: compressed, size: estimateCompressedEventSize(compressed) }
         }
         if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.Mutation) {
             const compressed = {
@@ -240,7 +240,7 @@ function compressEvent(
                     adds: gzipField(event.data.adds),
                 },
             }
-            return { event: compressed, size: estimateJsonSize(compressed) }
+            return { event: compressed, size: estimateCompressedEventSize(compressed) }
         }
         if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.StyleSheetRule) {
             const compressed = {
@@ -252,7 +252,7 @@ function compressEvent(
                     removes: event.data.removes ? gzipToString(event.data.removes) : undefined,
                 },
             }
-            return { event: compressed, size: estimateJsonSize(compressed) }
+            return { event: compressed, size: estimateCompressedEventSize(compressed) }
         }
     } catch (e) {
         logger.error('could not compress event - will use uncompressed event', e)

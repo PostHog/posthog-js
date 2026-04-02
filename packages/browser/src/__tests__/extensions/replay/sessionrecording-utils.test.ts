@@ -8,7 +8,7 @@ import {
     splitBuffer,
     SEVEN_MEGABYTES,
     estimateSize,
-    estimateJsonSize,
+    estimateCompressedEventSize,
     circularReferenceReplacer,
 } from '../../../extensions/replay/external/sessionrecording-utils'
 import { largeString, threeMBAudioURI, threeMBImageURI } from '../test_data/sessionrecording-utils-test-data'
@@ -346,7 +346,7 @@ describe(`SessionRecording utility functions`, () => {
         })
     })
 
-    describe('estimateJsonSize', () => {
+    describe('estimateCompressedEventSize', () => {
         it.each([
             ['null', null],
             ['string', 'hello'],
@@ -363,11 +363,6 @@ describe(`SessionRecording utility functions`, () => {
             ['object with undefined values', { a: 1, b: undefined, c: 'three' }],
             ['array with elements', [1, 'two', true, null]],
             ['array with undefined', [1, undefined, 3]],
-            ['string with double quotes', 'say "hi"'],
-            ['string with backslash', 'C:\\Users\\foo'],
-            ['string with newline', 'line1\nline2'],
-            ['string with tab', 'col1\tcol2'],
-            ['string with control char', 'before\x00after'],
             [
                 'compressed-event-like structure',
                 {
@@ -385,7 +380,7 @@ describe(`SessionRecording utility functions`, () => {
                 },
             ],
         ])('matches JSON.stringify length for %s', (_label, value) => {
-            expect(estimateJsonSize(value)).toBe(JSON.stringify(value)?.length ?? 0)
+            expect(estimateCompressedEventSize(value)).toBe(JSON.stringify(value)?.length ?? 0)
         })
     })
 
