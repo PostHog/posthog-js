@@ -44,8 +44,9 @@ describe('posthog core', () => {
         mockReferrer.mockReturnValue('https://referrer.com')
         mockURL.mockReturnValue('https://example.com')
         mockHostName.mockReturnValue('example.com')
-        // otherwise surveys code logs an error and fails the test
+        // otherwise surveys code logs an error/warning and fails the test
         console.error = jest.fn()
+        console.warn = jest.fn()
     })
 
     it('exposes the version', () => {
@@ -481,6 +482,9 @@ describe('posthog core', () => {
                 const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
                 expect(setEvents.length).toEqual(1)
                 expect(setEvents[0][0].properties.$set).toEqual({ $internal_or_test_user: true })
+                expect(console.warn).toHaveBeenCalledWith(
+                    expect.stringContaining('Hostname "localhost" matches internal_or_test_user_hostname config')
+                )
             })
 
             it('should work with string exact match', () => {
@@ -492,6 +496,9 @@ describe('posthog core', () => {
 
                 const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
                 expect(setEvents.length).toEqual(1)
+                expect(console.warn).toHaveBeenCalledWith(
+                    expect.stringContaining('Hostname "localhost" matches internal_or_test_user_hostname config')
+                )
             })
 
             it('should not match partial strings', () => {
