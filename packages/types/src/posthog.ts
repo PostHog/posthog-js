@@ -307,7 +307,11 @@ export interface PostHog {
      * @param properties - The properties to set
      * @param reloadFeatureFlags - Whether to reload feature flags after setting
      */
-    setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags?: boolean, propertiesSetOnce?: Properties): void
+    setPersonPropertiesForFlags(
+        properties: Properties,
+        reloadFeatureFlags?: boolean,
+        propertiesSetOnce?: Properties
+    ): void
 
     /**
      * Reset person properties used for feature flag evaluation.
