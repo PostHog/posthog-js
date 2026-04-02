@@ -216,9 +216,7 @@ function gzipField(data: unknown): string {
  * returns the compressed event and its estimated JSON size,
  * avoiding a redundant JSON.stringify for size estimation
  */
-function compressEvent(
-    event: eventWithTime
-): { event: eventWithTime | compressedEventWithTime; size: number } {
+function compressEvent(event: eventWithTime): { event: eventWithTime | compressedEventWithTime; size: number } {
     try {
         if (event.type === EventType.FullSnapshot) {
             const compressed = {

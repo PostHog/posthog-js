@@ -1,6 +1,6 @@
 import type { eventWithTime, pluginEvent } from '../types/rrweb-types'
 
-import { isArray, isObject } from '@posthog/core'
+import { isArray, isNull, isObject, isUndefined } from '@posthog/core'
 import { SnapshotBuffer } from './lazy-loaded-session-recorder'
 
 // taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
@@ -34,10 +34,10 @@ export function estimateSize(sizeable: unknown): number {
 // and keys are known-safe identifiers. Used only for buffer threshold checks (~1MB)
 // and split-buffer decisions (~7MB) where a few bytes of drift don't matter.
 export function estimateCompressedEventSize(value: unknown): number {
-    if (value === null) {
+    if (isNull(value)) {
         return 4
     }
-    if (value === undefined) {
+    if (isUndefined(value)) {
         return 0
     }
     switch (typeof value) {
@@ -53,7 +53,7 @@ export function estimateCompressedEventSize(value: unknown): number {
                 for (let i = 0; i < value.length; i++) {
                     if (i > 0) size += 1
                     const el = value[i]
-                    size += el === undefined || el === null ? 4 : estimateCompressedEventSize(el)
+                    size += isUndefined(el) || isNull(el) ? 4 : estimateCompressedEventSize(el)
                 }
                 return size
             }
@@ -63,7 +63,7 @@ export function estimateCompressedEventSize(value: unknown): number {
             for (const key in obj) {
                 if (!Object.prototype.hasOwnProperty.call(obj, key)) continue
                 const val = obj[key]
-                if (val === undefined) continue
+                if (isUndefined(val)) continue
                 if (!first) size += 1
                 first = false
                 size += key.length + 3 + estimateCompressedEventSize(val)
