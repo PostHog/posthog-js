@@ -692,7 +692,14 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
 
         try {
+            const identityBefore = this._identityConfig
+            const ticketBefore = this._currentTicketId
             const response = await this.getMessages(this._currentTicketId, this._lastMessageTimestamp || undefined)
+
+            // Discard stale response if identity or ticket changed while in-flight
+            if (this._identityConfig !== identityBefore || this._currentTicketId !== ticketBefore) {
+                return
+            }
 
             // Update unread count from response
             if (isNumber(response.unread_count)) {
@@ -864,30 +871,47 @@ export class ConversationsManager implements ConversationsManagerInterface {
      */
     private async _determineInitialView(): Promise<{ view: WidgetView; tickets: Ticket[] }> {
         try {
+            const identityBefore = this._identityConfig
             const response = await this.getTickets()
-            this._tickets = response.results
-            this._hasMultipleTickets = response.results.length > 1
 
-            // Calculate total unread
-            const totalUnread = response.results.reduce((sum, t) => sum + (t.unread_count || 0), 0)
-            this._unreadCount = totalUnread
-
-            // If 2+ tickets, show ticket list; otherwise show messages
-            if (response.results.length >= 2) {
-                return { view: 'tickets', tickets: response.results }
+            // If identity changed while the request was in-flight, discard this
+            // stale response -- setIdentity/clearIdentity already triggered a
+            // fresh _loadTicketsAndReconcileView() with the correct credentials.
+            if (this._identityConfig !== identityBefore) {
+                return { view: 'messages', tickets: [] }
             }
 
-            // If exactly 1 ticket, set it as current
-            if (response.results.length === 1) {
-                this._currentTicketId = response.results[0].id
-                this._persistence.saveTicketId(response.results[0].id)
-            }
-
-            return { view: 'messages', tickets: response.results }
+            const view = this._applyTicketsToState(response.results)
+            return { view, tickets: response.results }
         } catch (error) {
             logger.error('Failed to determine initial view', error)
             return { view: 'messages', tickets: [] }
         }
+    }
+
+    /**
+     * Apply a fetched ticket list to internal state and return the appropriate view.
+     * Shared by _determineInitialView (widget boot) and _loadTicketsAndReconcileView
+     * (identity change at runtime).
+     */
+    private _applyTicketsToState(tickets: Ticket[]): WidgetView {
+        this._tickets = tickets
+        this._hasMultipleTickets = tickets.length > 1
+
+        const totalUnread = tickets.reduce((sum, t) => sum + (t.unread_count || 0), 0)
+        this._unreadCount = totalUnread
+
+        if (tickets.length >= 2) {
+            this._currentTicketId = null
+            return 'tickets'
+        }
+
+        if (tickets.length === 1) {
+            this._currentTicketId = tickets[0].id
+            this._persistence.saveTicketId(tickets[0].id)
+        }
+
+        return 'messages'
     }
 
     /**
@@ -1146,15 +1170,15 @@ export class ConversationsManager implements ConversationsManagerInterface {
     setIdentity(identity: ConversationsIdentityConfig): void {
         this._identityConfig = identity
         this._resetConversationState()
-        void this._loadTickets()
         this._widgetRef?.setIdentityMode(true)
+        void this._loadTicketsAndReconcileView()
     }
 
     clearIdentity(): void {
         this._identityConfig = null
         this._resetConversationState()
-        void this._loadTickets()
         this._widgetRef?.setIdentityMode(false)
+        void this._loadTicketsAndReconcileView()
     }
 
     private _resetConversationState(): void {
@@ -1162,6 +1186,29 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._persistence.clearTicketId()
         this._lastMessageTimestamp = null
         this._widgetRef?.clearMessages(true)
+    }
+
+    private async _loadTicketsAndReconcileView(): Promise<void> {
+        try {
+            const identityBefore = this._identityConfig
+            const response = await this.getTickets()
+
+            if (this._identityConfig !== identityBefore) {
+                return
+            }
+
+            const view = this._applyTicketsToState(response.results)
+            this._widgetRef?.updateTickets(response.results)
+            this._widgetRef?.setUnreadCount(this._unreadCount)
+            this._currentView = view
+            this._widgetRef?.setView(view)
+
+            if (view === 'messages' && this._currentTicketId) {
+                void this._loadMessages()
+            }
+        } catch (error) {
+            logger.error('Failed to load tickets after identity change', error)
+        }
     }
 
     /**

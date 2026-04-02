@@ -641,6 +641,16 @@ export class PostHog implements PostHogInterface {
             })
         }
 
+        // When identity_distinct_id is provided at init time, use it as the
+        // bootstrap distinct ID so the Person record is created from the first event.
+        if (this.config.identity_distinct_id && !config.bootstrap?.distinctID) {
+            config.bootstrap = {
+                ...config.bootstrap,
+                distinctID: this.config.identity_distinct_id,
+                isIdentifiedID: true,
+            }
+        }
+
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
         // eslint-disable-next-line posthog-js/no-direct-undefined-check
         if (config.bootstrap?.distinctID !== undefined) {
@@ -2776,6 +2786,7 @@ export class PostHog implements PostHogInterface {
     setIdentity(distinctId: string, hash: string): void {
         this.config.identity_distinct_id = distinctId
         this.config.identity_hash = hash
+        this.alias(distinctId)
         this.conversations?._onIdentityChanged({ identity_distinct_id: distinctId, identity_hash: hash })
     }
 
