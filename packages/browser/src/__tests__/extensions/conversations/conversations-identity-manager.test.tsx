@@ -134,11 +134,9 @@ describe('ConversationsManager Identity Verification', () => {
     }
 
     describe('init-time identity from config', () => {
-        it('should read identity from posthog.config.conversations during construction', () => {
-            ;(mockPosthog as any).config.conversations = {
-                identity_distinct_id: 'user_123',
-                identity_hash: 'abc123hash',
-            }
+        it('should read identity from top-level posthog.config during construction', () => {
+            ;(mockPosthog as any).config.identity_distinct_id = 'user_123'
+            ;(mockPosthog as any).config.identity_hash = 'abc123hash'
 
             manager = new ConversationsManager(mockConfig, mockPosthog)
 
@@ -150,10 +148,8 @@ describe('ConversationsManager Identity Verification', () => {
 
         it('should skip restore token when identity config is set', async () => {
             window.history.replaceState({}, '', '/?ph_conv_restore=restore-token-1')
-            ;(mockPosthog as any).config.conversations = {
-                identity_distinct_id: 'user_123',
-                identity_hash: 'abc123hash',
-            }
+            ;(mockPosthog as any).config.identity_distinct_id = 'user_123'
+            ;(mockPosthog as any).config.identity_hash = 'abc123hash'
 
             manager = new ConversationsManager(mockConfig, mockPosthog)
             await flushPromises()
@@ -166,16 +162,14 @@ describe('ConversationsManager Identity Verification', () => {
             expect(restoreCalls).toHaveLength(0)
         })
 
-        it('should not set identity when config.conversations is undefined', () => {
+        it('should not set identity when config fields are undefined', () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
 
             expect(manager['_identityConfig']).toBeNull()
         })
 
-        it('should not set identity when config.conversations has only partial fields', () => {
-            ;(mockPosthog as any).config.conversations = {
-                identity_distinct_id: 'user_123',
-            }
+        it('should not set identity when only one config field is set', () => {
+            ;(mockPosthog as any).config.identity_distinct_id = 'user_123'
 
             manager = new ConversationsManager(mockConfig, mockPosthog)
 
@@ -238,10 +232,8 @@ describe('ConversationsManager Identity Verification', () => {
 
     describe('API calls in identity mode', () => {
         beforeEach(() => {
-            ;(mockPosthog as any).config.conversations = {
-                identity_distinct_id: 'user_123',
-                identity_hash: 'abc123hash',
-            }
+            ;(mockPosthog as any).config.identity_distinct_id = 'user_123'
+            ;(mockPosthog as any).config.identity_hash = 'abc123hash'
             manager = new ConversationsManager(mockConfig, mockPosthog)
             jest.clearAllMocks()
         })

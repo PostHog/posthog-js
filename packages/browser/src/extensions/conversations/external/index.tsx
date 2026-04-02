@@ -363,12 +363,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
             return
         }
 
-        // Read identity from init config (set via posthog.init or setIdentity before load)
-        const configIdentity = this._posthog.config?.conversations
-        if (configIdentity?.identity_distinct_id && configIdentity?.identity_hash) {
+        // Read identity from init config (set via posthog.init or posthog.setIdentity before load)
+        const idDistinctId = this._posthog.config?.identity_distinct_id
+        const idHash = this._posthog.config?.identity_hash
+        if (idDistinctId && idHash) {
             this._identityConfig = {
-                identity_distinct_id: configIdentity.identity_distinct_id,
-                identity_hash: configIdentity.identity_hash,
+                identity_distinct_id: idDistinctId,
+                identity_hash: idHash,
             }
         }
 

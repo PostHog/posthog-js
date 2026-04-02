@@ -338,6 +338,8 @@
         "_onClick",
         "_onClickHandler",
         "_onDeadClick",
+        "_onIdentityChanged",
+        "_onIdentityCleared",
         "_onInit",
         "_onMouseMove",
         "_onMouseMoveHandler",

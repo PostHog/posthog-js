@@ -2745,9 +2745,54 @@ export class PostHog implements PostHogInterface {
             1
         )
 
+        // Clear HMAC identity verification fields
+        delete this.config.identity_distinct_id
+        delete this.config.identity_hash
+
         // Reload feature flags for the new anonymous user, just like identify()
         // does when the distinct_id changes.
         this.reloadFeatureFlags()
+    }
+
+    /**
+     * Set HMAC-based identity verification.
+     *
+     * @remarks
+     * When set, products like conversations use server-verified identity
+     * (distinct_id + HMAC hash) instead of anonymous session identifiers.
+     * The hash should be computed server-side as HMAC-SHA256 of the
+     * distinct_id using the project's API secret.
+     *
+     * @param distinctId - The verified user distinct_id
+     * @param hash - HMAC-SHA256 of distinctId using the project API secret
+     *
+     * @example
+     * ```js
+     * posthog.setIdentity('user_123', 'a1b2c3d4e5f6...')
+     * ```
+     *
+     * @public
+     */
+    setIdentity(distinctId: string, hash: string): void {
+        this.config.identity_distinct_id = distinctId
+        this.config.identity_hash = hash
+        this.conversations?._onIdentityChanged({ identity_distinct_id: distinctId, identity_hash: hash })
+    }
+
+    /**
+     * Clear HMAC-based identity verification, reverting to anonymous mode.
+     *
+     * @example
+     * ```js
+     * posthog.clearIdentity()
+     * ```
+     *
+     * @public
+     */
+    clearIdentity(): void {
+        delete this.config.identity_distinct_id
+        delete this.config.identity_hash
+        this.conversations?._onIdentityCleared()
     }
 
     /**
