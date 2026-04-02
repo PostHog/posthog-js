@@ -1,5 +1,19 @@
 # @posthog/next
 
+## 0.3.0
+
+### Minor Changes
+
+- [#3301](https://github.com/PostHog/posthog-js/pull/3301) [`bd4b0ac`](https://github.com/PostHog/posthog-js/commit/bd4b0acfb3b0d555fe25fc1af3860e778d2e08cb) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Read PostHog tracing headers (X-POSTHOG-SESSION-ID, X-POSTHOG-DISTINCT-ID, X-POSTHOG-WINDOW-ID) in getPostHog() and getServerSidePostHog()
+  (2026-04-02)
+
+### Patch Changes
+
+- Updated dependencies [[`a01a3d5`](https://github.com/PostHog/posthog-js/commit/a01a3d55dc134b1b269be58c7922ce3780c57fc5), [`68cd4e5`](https://github.com/PostHog/posthog-js/commit/68cd4e5f1133b95bcb87c382a0ae5f1bcb96903d)]:
+    - @posthog/core@1.24.6
+    - posthog-js@1.364.6
+    - posthog-node@5.28.11
+
 ## 0.2.19
 
 ### Patch Changes
