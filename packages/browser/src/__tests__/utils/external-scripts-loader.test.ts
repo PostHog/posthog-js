@@ -137,14 +137,14 @@ describe('external-scripts-loader', () => {
 
             const scripts = document!.getElementsByTagName('script')
             expect(scripts.length).toBe(1)
-            expect(scripts[0].src).toBe('https://us-assets.i.posthog.com/1.358.0/recorder.js')
+            expect(scripts[0].src).toBe('https://us-assets.i.posthog.com/static/1.358.0/recorder.js')
         })
 
         it('loads toolbar from versioned path without cache-busting', () => {
             assignableWindow.__PosthogExtensions__.loadExternalDependency(versionedPostHog, 'toolbar', callback)
 
             expect(document!.getElementsByTagName('script')[0].src).toBe(
-                'https://us-assets.i.posthog.com/1.358.0/toolbar.js'
+                'https://us-assets.i.posthog.com/static/1.358.0/toolbar.js'
             )
         })
 
@@ -166,7 +166,7 @@ describe('external-scripts-loader', () => {
             assignableWindow.__PosthogExtensions__.loadExternalDependency(euPostHog, 'recorder', callback)
 
             expect(document!.getElementsByTagName('script')[0].src).toBe(
-                'https://eu-assets.i.posthog.com/1.358.0/recorder.js'
+                'https://eu-assets.i.posthog.com/static/1.358.0/recorder.js'
             )
         })
 

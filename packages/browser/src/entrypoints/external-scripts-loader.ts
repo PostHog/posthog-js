@@ -101,7 +101,7 @@ assignableWindow.__PosthogExtensions__.loadExternalDependency = (
     // load from the version-prefixed path via the request router.
     // No cache-busting needed — the version in the URL is the cache key.
     if (posthog._resolvedSdkVersion) {
-        const url = posthog.requestRouter.endpointFor('assets', `/${posthog._resolvedSdkVersion}/${kind}.js`)
+        const url = posthog.requestRouter.endpointFor('assets', `/static/${posthog._resolvedSdkVersion}/${kind}.js`)
         loadScript(posthog, url, callback)
         return
     }
