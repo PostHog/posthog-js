@@ -839,6 +839,30 @@ export interface PostHogConfig {
     disable_conversations: boolean
 
     /**
+     * Verified distinct_id for HMAC-based identity verification.
+     * When both `identity_distinct_id` and `identity_hash` are provided,
+     * products like conversations use server-verified identity instead of
+     * anonymous session identifiers.
+     *
+     * Can be set at init time or later via `posthog.setIdentity()`.
+     *
+     * @example
+     * ```js
+     * posthog.init('phc_...', {
+     *     identity_distinct_id: 'user_123',
+     *     identity_hash: 'a1b2c3d4e5f6...',
+     * })
+     * ```
+     */
+    identity_distinct_id?: string
+
+    /**
+     * HMAC-SHA256 of `identity_distinct_id` using the project's API secret.
+     * Must be provided together with `identity_distinct_id`.
+     */
+    identity_hash?: string
+
+    /**
      * Determines whether PostHog should disable web experiments.
      *
      * Currently disabled while we're in BETA. It will be toggled to `true` in a future release.

@@ -9,6 +9,7 @@ import {
     SessionStartReason,
 } from '../types'
 import type {
+    ConversationsIdentityConfig,
     ConversationsRemoteConfig,
     GetMessagesResponse,
     GetTicketsOptions,
@@ -207,6 +208,10 @@ export interface LazyLoadedConversationsInterface {
 
     // Lifecycle
     reset: () => void
+
+    // Identity verification
+    setIdentity: (identity: ConversationsIdentityConfig) => void
+    clearIdentity: () => void
 
     // API methods
     sendMessage: (message: string, userTraits?: UserProvidedTraits, newTicket?: boolean) => Promise<SendMessageResponse>

@@ -1,6 +1,7 @@
 import { LOAD_EXT_NOT_FOUND } from '../../constants'
 import { PostHog } from '../../posthog-core'
 import {
+    ConversationsIdentityConfig,
     ConversationsRemoteConfig,
     GetMessagesResponse,
     GetTicketsOptions,
@@ -381,5 +382,32 @@ export class PostHogConversations implements Extension {
      */
     getWidgetSessionId(): string | null {
         return this._conversationsManager?.getWidgetSessionId() ?? null
+    }
+
+    /**
+     * Set HMAC-based identity for conversations.
+     * Delegates to `posthog.setIdentity()` which writes the top-level config
+     * and notifies the manager.
+     */
+    setIdentity(identity: ConversationsIdentityConfig): void {
+        this._instance.setIdentity(identity.identity_distinct_id, identity.identity_hash)
+    }
+
+    /**
+     * Clear HMAC-based identity, reverting to anonymous widget_session_id mode.
+     * Delegates to `posthog.clearIdentity()`.
+     */
+    clearIdentity(): void {
+        this._instance.clearIdentity()
+    }
+
+    /** @internal Called by PostHog.setIdentity() -- forwards to the manager without recursing */
+    _onIdentityChanged(identity: ConversationsIdentityConfig): void {
+        this._conversationsManager?.setIdentity(identity)
+    }
+
+    /** @internal Called by PostHog.clearIdentity() -- forwards to the manager without recursing */
+    _onIdentityCleared(): void {
+        this._conversationsManager?.clearIdentity()
     }
 }

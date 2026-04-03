@@ -4,6 +4,15 @@
 export type WidgetPosition = 'bottom_left' | 'bottom_right' | 'top_left' | 'top_right'
 
 /**
+ * HMAC-based identity verification config for conversations.
+ * When provided, the widget uses server-verified identity instead of widget_session_id.
+ */
+export interface ConversationsIdentityConfig {
+    identity_distinct_id: string
+    identity_hash: string
+}
+
+/**
  * Remote configuration for conversations from the PostHog server
  */
 export interface ConversationsRemoteConfig {
@@ -465,4 +474,14 @@ export interface SendMessagePayload {
      * Stored in a JSONField for flexibility
      */
     session_context?: SessionContext
+
+    /**
+     * Verified distinct_id for HMAC identity mode (requires identity_hash)
+     */
+    identity_distinct_id?: string
+
+    /**
+     * HMAC-SHA256 of identity_distinct_id using team secret_api_token
+     */
+    identity_hash?: string
 }
