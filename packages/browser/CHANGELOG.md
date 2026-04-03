@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.364.7
+
+### Patch Changes
+
+- [#3319](https://github.com/PostHog/posthog-js/pull/3319) [`b25b689`](https://github.com/PostHog/posthog-js/commit/b25b68967f7e85317e2aacb8ecc4dc66a95095eb) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: send $groupidentify for new groups even when no properties are provided
+  (2026-04-03)
+- Updated dependencies []:
+    - @posthog/types@1.364.7
+
 ## 1.364.6
 
 ### Patch Changes
