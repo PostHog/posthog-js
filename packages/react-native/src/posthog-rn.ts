@@ -218,6 +218,12 @@ export class PostHog extends PostHogCore {
 
       this.setupBootstrap(options)
 
+      // Initialize device_id if not already set. This provides a stable identifier
+      // for device-level feature flag bucketing that survives identify() and reset().
+      if (!this.getPersistedProperty(PostHogPersistedProperty.DeviceId)) {
+        this.setPersistedProperty(PostHogPersistedProperty.DeviceId, this.getAnonymousId())
+      }
+
       // Set default person properties for flags if enabled
       if (this._setDefaultPersonProperties) {
         this._setDefaultPersonPropertiesForFlags(false)
@@ -428,11 +434,17 @@ export class PostHog extends PostHogCore {
    * ```
    *
    * @param propertiesToKeep - Optional array of persisted properties to preserve during reset
+   * @param resetDeviceId - If true, generates a new device ID. Defaults to false,
+   *   preserving the device ID for stable feature flag bucketing across identity changes.
    *
    * @public
    */
-  reset(propertiesToKeep?: PostHogPersistedProperty[]): void {
-    super.reset(propertiesToKeep)
+  reset(propertiesToKeep?: PostHogPersistedProperty[], resetDeviceId?: boolean): void {
+    const keepProps = [...(propertiesToKeep || [])]
+    if (!resetDeviceId) {
+      keepProps.push(PostHogPersistedProperty.DeviceId)
+    }
+    super.reset(keepProps)
 
     if (this._setDefaultPersonProperties) {
       // Reset reloads flags asyncrhonously, but doesn't wait for it.
@@ -742,6 +754,27 @@ export class PostHog extends PostHogCore {
    */
   getDistinctId(): string {
     return super.getDistinctId()
+  }
+
+  /**
+   * Returns the stable device identifier used for device-level feature flag bucketing.
+   * This ID persists across identify() and reset() calls, only changing on reset(true)
+   * or a fresh app install.
+   *
+   * @returns The device ID, or an empty string if not yet initialized
+   */
+  getDeviceId(): string {
+    const deviceId = this.getPersistedProperty<string>(PostHogPersistedProperty.DeviceId)
+    if (!deviceId) {
+      // Lazy init for upgrades: existing installs won't have a device_id yet
+      const anonId = this.getAnonymousId()
+      if (anonId) {
+        this.setPersistedProperty(PostHogPersistedProperty.DeviceId, anonId)
+        return anonId
+      }
+      return ''
+    }
+    return deviceId
   }
 
   /**

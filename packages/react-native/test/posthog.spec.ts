@@ -1098,6 +1098,156 @@ describe('PostHog React Native', () => {
       })
     })
   })
+
+  describe('device bucketing', () => {
+    it('should initialize device_id on first init', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+
+      await posthog.ready()
+
+      const deviceId = posthog.getDeviceId()
+      expect(deviceId).toBeTruthy()
+      expect(deviceId).toEqual(posthog.getAnonymousId())
+    })
+
+    it('should persist device_id across SDK restarts', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      const originalDeviceId = posthog.getDeviceId()
+      await posthog.shutdown()
+
+      // Re-init with same storage
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      expect(posthog.getDeviceId()).toEqual(originalDeviceId)
+    })
+
+    it('should preserve device_id across identify()', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      const originalDeviceId = posthog.getDeviceId()
+      posthog.identify('user-123')
+
+      expect(posthog.getDeviceId()).toEqual(originalDeviceId)
+      expect(posthog.getDistinctId()).toEqual('user-123')
+    })
+
+    it('should preserve device_id across reset()', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      const originalDeviceId = posthog.getDeviceId()
+      posthog.identify('user-123')
+      posthog.reset()
+
+      expect(posthog.getDeviceId()).toEqual(originalDeviceId)
+      // distinct_id should have changed
+      expect(posthog.getDistinctId()).not.toEqual('user-123')
+    })
+
+    it('should regenerate device_id on reset with resetDeviceId=true', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      const originalDeviceId = posthog.getDeviceId()
+      posthog.reset(undefined, true)
+
+      await waitForExpect(200, () => {
+        const newDeviceId = posthog.getDeviceId()
+        expect(newDeviceId).toBeTruthy()
+        expect(newDeviceId).not.toEqual(originalDeviceId)
+      })
+    })
+
+    it('should send $device_id in feature flag requests', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      const deviceId = posthog.getDeviceId()
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/flags/'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining(`"$device_id":"${deviceId}"`),
+        })
+      )
+    })
+
+    it('should send the same $device_id after identify()', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      const deviceId = posthog.getDeviceId()
+      posthog.identify('user-123')
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/flags/'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining(`"$device_id":"${deviceId}"`),
+        })
+      )
+    })
+
+    it('should lazy-init device_id for upgrades via getDeviceId()', async () => {
+      // Simulate an upgrade: existing install has anonymous_id persisted but no device_id.
+      // PostHogRNStorage stores all properties in a single JSON blob under '.posthog-rn.json'.
+      const upgradeData = JSON.stringify({
+        version: 'v1',
+        content: { [PostHogPersistedProperty.AnonymousId]: 'existing-anon-id' },
+      })
+      cache['.posthog-rn.json'] = upgradeData
+
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      // device_id should be set to the existing anonymous_id during initAfterStorage
+      expect(posthog.getDeviceId()).toEqual('existing-anon-id')
+      expect(posthog.getAnonymousId()).toEqual('existing-anon-id')
+    })
+  })
 })
 
 describe('Feature flag error tracking', () => {

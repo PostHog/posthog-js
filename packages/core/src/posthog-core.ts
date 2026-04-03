@@ -701,8 +701,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           this.getPersistedProperty<Record<string, Record<string, string>>>(PostHogPersistedProperty.GroupProperties) ||
           {}
 
+        const deviceId = this.getPersistedProperty<string>(PostHogPersistedProperty.DeviceId)
+
         const extraProperties = {
           $anon_distinct_id: sendAnonDistinctId ? this.getAnonymousId() : undefined,
+          $device_id: deviceId ?? undefined,
         }
 
         const result = await super.getFlags(
