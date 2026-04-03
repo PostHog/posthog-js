@@ -15,7 +15,7 @@ const client = new OpenAI({
 async function main() {
   const response = await client.chat.completions.create({
     model: "mistral-large-latest",
-    max_completion_tokens: 1024,
+    max_tokens: 1024,
     posthogDistinctId: "example-user",
     messages: [
       { role: "user", content: "Tell me a fun fact about hedgehogs." },
