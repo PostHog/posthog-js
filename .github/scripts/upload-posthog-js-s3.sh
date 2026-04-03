@@ -27,8 +27,8 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-][a-zA-Z0-9.]+)?$ ]]; then
     exit 1
 fi
 
-echo "==> Uploading posthog-js v$VERSION to s3://$BUCKET/$VERSION/"
-aws s3 cp "$DIST_DIR/" "s3://$BUCKET/$VERSION/" \
+echo "==> Uploading posthog-js v$VERSION to s3://$BUCKET/static/$VERSION/"
+aws s3 cp "$DIST_DIR/" "s3://$BUCKET/static/$VERSION/" \
     --recursive \
     --exclude "*" \
     --include "*.js" \
