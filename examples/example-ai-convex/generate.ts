@@ -7,13 +7,13 @@
  */
 
 import { NodeSDK } from "@opentelemetry/sdk-node";
-import { resourceFromAttributes } from "@opentelemetry/resources";
+import { Resource } from "@opentelemetry/resources";
 import { PostHogTraceExporter } from "@posthog/ai/otel";
 import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
 
 const sdk = new NodeSDK({
-  resource: resourceFromAttributes({
+  resource: new Resource({
     "service.name": "example-convex-app",
     "user.id": "example-user",
   }),
