@@ -373,9 +373,55 @@ jobs:
                   retention-days: 1
                   if-no-files-found: error
 
+    build-toolbar:
+        name: Build toolbar from posthog/posthog
+        needs: [version-bump, notify-approval-needed]
+        runs-on: ubuntu-latest
+        if: always() && needs.version-bump.outputs.commit-hash != ''
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout posthog/posthog
+              uses: actions/checkout@v6
+              with:
+                  repository: PostHog/posthog
+                  ref: master
+                  fetch-depth: 1
+
+            - name: Install pnpm
+              uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin v4.2.0
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v5
+              with:
+                  node-version: '24'
+                  cache: 'pnpm'
+
+            - name: Install frontend dependencies
+              run: pnpm --filter=@posthog/frontend... install --frozen-lockfile
+
+            - name: Build toolbar
+              run: node frontend/bin/build-toolbar.mjs
+
+            - name: Verify toolbar output
+              run: |
+                  if [ ! -f frontend/dist/toolbar.js ]; then
+                    echo "❌ toolbar.js not found after build"
+                    exit 1
+                  fi
+                  echo "✓ toolbar.js built successfully ($(wc -c < frontend/dist/toolbar.js) bytes)"
+
+            - name: Upload toolbar artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: toolbar-dist
+                  path: frontend/dist/toolbar.js
+                  retention-days: 1
+                  if-no-files-found: error
+
     upload-s3:
         name: Upload posthog-js dist to S3
-        needs: [build-s3-artifacts, version-bump, notify-approval-needed]
+        needs: [build-s3-artifacts, build-toolbar, version-bump, notify-approval-needed]
         runs-on: ubuntu-latest
         if: always() && needs.build-s3-artifacts.outputs.is-new-version == 'true'
         environment: 'S3 Upload' # For OIDC credential scoping only — no required reviewers (single approval at NPM Release)
@@ -394,6 +440,13 @@ jobs:
               uses: actions/download-artifact@v4
               with:
                   name: posthog-js-dist
+                  path: packages/browser/dist
+
+            - name: Download toolbar artifact
+              if: needs.build-toolbar.result == 'success'
+              uses: actions/download-artifact@v4
+              with:
+                  name: toolbar-dist
                   path: packages/browser/dist
 
             # Upload to US (us-east-1)
