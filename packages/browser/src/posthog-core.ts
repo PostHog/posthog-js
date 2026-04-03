@@ -930,7 +930,22 @@ export class PostHog implements PostHogInterface {
             const pattern = this.config.internal_or_test_user_hostname
             const matches = typeof pattern === 'string' ? hostname === pattern : pattern.test(hostname)
             if (matches) {
-                this.setInternalOrTestUser()
+                if (this.config.person_profiles === 'never') {
+                    logger.warn(
+                        `Hostname "${hostname}" matches internal_or_test_user_hostname pattern, ` +
+                            `but person_profiles is set to "never" so the user will not be marked as internal/test.`
+                    )
+                } else {
+                    this.setInternalOrTestUser()
+                    // Log after setInternalOrTestUser so the message is only shown when the action actually took effect.
+                    // Uses console.warn directly so it's always visible, not gated by debug mode.
+                    console.warn(
+                        `[PostHog.js] Hostname "${hostname}" matches internal_or_test_user_hostname config. ` +
+                            `This user has been marked as an internal/test user and person processing has been enabled. ` +
+                            `To disable this, set internal_or_test_user_hostname to null in your PostHog config. ` +
+                            `See https://posthog.com/docs/references/posthog-js#PostHog-setInternalOrTestUser`
+                    )
+                }
             }
         }
 
