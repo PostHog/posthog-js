@@ -113,4 +113,75 @@ describe('external-scripts-loader', () => {
             delete mockPostHog.config.prepare_external_dependency_script
         })
     })
+
+    describe('versioned script loading via request router', () => {
+        const versionedPostHog = {
+            config: {
+                api_host: 'https://us.posthog.com',
+                token: 'test-token',
+                external_scripts_inject_target: 'body',
+            },
+            version: '1.0.0',
+            _resolvedSdkVersion: '1.358.0',
+        } as PostHog
+        versionedPostHog.requestRouter = new RequestRouter(versionedPostHog)
+
+        const callback = jest.fn()
+        beforeEach(() => {
+            callback.mockClear()
+            document!.getElementsByTagName('html')![0].innerHTML = ''
+        })
+
+        it('loads extensions from versioned path via request router when _resolvedSdkVersion is set', () => {
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(versionedPostHog, 'recorder', callback)
+
+            const scripts = document!.getElementsByTagName('script')
+            expect(scripts.length).toBe(1)
+            expect(scripts[0].src).toBe('https://us-assets.i.posthog.com/1.358.0/recorder.js')
+        })
+
+        it('loads toolbar from versioned path without cache-busting', () => {
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(versionedPostHog, 'toolbar', callback)
+
+            expect(document!.getElementsByTagName('script')[0].src).toBe(
+                'https://us-assets.i.posthog.com/1.358.0/toolbar.js'
+            )
+        })
+
+        it('loads remote-config from token-specific path even when _resolvedSdkVersion is set', () => {
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(versionedPostHog, 'remote-config', callback)
+
+            const scripts = document!.getElementsByTagName('script')
+            expect(scripts.length).toBe(1)
+            expect(scripts[0].src).toBe('https://us-assets.i.posthog.com/array/test-token/config.js')
+        })
+
+        it('respects EU region in versioned path', () => {
+            const euPostHog = {
+                ...versionedPostHog,
+                config: { ...versionedPostHog.config, api_host: 'https://eu.posthog.com' },
+            } as PostHog
+            euPostHog.requestRouter = new RequestRouter(euPostHog)
+
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(euPostHog, 'recorder', callback)
+
+            expect(document!.getElementsByTagName('script')[0].src).toBe(
+                'https://eu-assets.i.posthog.com/1.358.0/recorder.js'
+            )
+        })
+
+        it('falls back to /static/ path when _resolvedSdkVersion is not set', () => {
+            const noVersionPostHog = {
+                ...versionedPostHog,
+                _resolvedSdkVersion: undefined,
+            } as PostHog
+            noVersionPostHog.requestRouter = new RequestRouter(noVersionPostHog)
+
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(noVersionPostHog, 'recorder', callback)
+
+            const scripts = document!.getElementsByTagName('script')
+            expect(scripts.length).toBe(1)
+            expect(scripts[0].src).toBe('https://us-assets.i.posthog.com/static/recorder.js?v=1.0.0')
+        })
+    })
 })
