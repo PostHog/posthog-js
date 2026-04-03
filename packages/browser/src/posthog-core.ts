@@ -388,6 +388,7 @@ export class PostHog implements PostHogInterface {
     __request_queue: QueuedRequestWithOptions[]
     _pendingRemoteConfig?: RemoteConfig
     _remoteConfigLoader?: RemoteConfigLoader
+    _resolvedSdkVersion?: string
     analyticsDefaultEndpoint: string
     version: string = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
@@ -611,6 +612,13 @@ export class PostHog implements PostHogInterface {
         if (!startInCookielessMode) {
             this.sessionManager = new SessionIdManager(this)
             this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
+        }
+
+        // Read resolved SDK version from pre-loaded config (snippet v2) before extensions
+        // initialize, so loadExternalDependency uses the versioned asset path
+        const preloadedConfig = assignableWindow._POSTHOG_REMOTE_CONFIG?.[this.config.token]?.config
+        if (preloadedConfig?.sdkVersion?.resolved) {
+            this._resolvedSdkVersion = preloadedConfig.sdkVersion.resolved
         }
 
         // Conditionally defer extension initialization based on config
