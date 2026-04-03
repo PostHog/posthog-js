@@ -33,30 +33,37 @@ import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
 export { PostHogPersistedProperty }
 
 export interface PostHogOptions extends PostHogCoreOptions {
-  /** Allows you to provide the storage type. By default 'file'.
+  /**
+   * Allows you to provide the storage type.
    * 'file' will try to load the best available storage, the provided 'customStorage', 'customAsyncStorage' or in-memory storage.
+   *
+   * @default 'file'
    */
   persistence?: 'memory' | 'file'
   /** Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated */
   customAppProperties?:
     | PostHogCustomAppProperties
     | ((properties: PostHogCustomAppProperties) => PostHogCustomAppProperties)
-  /** Allows you to provide a custom asynchronous storage such as async-storage, expo-file-system or a synchronous storage such as mmkv.
+  /**
+   * Allows you to provide a custom asynchronous storage such as async-storage, expo-file-system or a synchronous storage such as mmkv.
    * If not provided, PostHog will attempt to use the best available storage via optional peer dependencies (async-storage, expo-file-system).
    * If `persistence` is set to 'memory', this option will be ignored.
    */
   customStorage?: PostHogCustomStorage
 
-  /** Captures app lifecycle events such as Application Installed, Application Updated, Application Opened, Application Became Active and Application Backgrounded.
-   * By default is false.
+  /**
+   * Captures app lifecycle events such as Application Installed, Application Updated, Application Opened, Application Became Active and Application Backgrounded.
    * Application Installed and Application Updated events are not supported with persistence set to 'memory'.
+   *
+   * @default true
    */
   captureAppLifecycleEvents?: boolean
 
   /**
    * Enable Recording of Session Replays for Android and iOS
    * Requires Record user sessions to be enabled in the PostHog Project Settings
-   * Defaults to false
+   *
+   * @default false
    */
   enableSessionReplay?: boolean
 
@@ -69,7 +76,8 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * If enabled, the session id ($session_id) will be persisted across app restarts.
    * This is an option for back compatibility, so your current data isn't skewed with the new version of the SDK.
    * If this is false, the session id will be always reset on app restart.
-   * Defaults to false
+   *
+   * @default false
    */
   enablePersistSessionIdAcrossRestart?: boolean
 
@@ -266,7 +274,8 @@ export class PostHog extends PostHogCore {
         }
       }
 
-      if (options?.captureAppLifecycleEvents) {
+      // captureAppLifecycleEvents defaults to true; only skip if explicitly set to false
+      if (options?.captureAppLifecycleEvents !== false) {
         void this.captureAppLifecycleEvents()
       }
 

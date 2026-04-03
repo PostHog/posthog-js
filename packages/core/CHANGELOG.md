@@ -1,5 +1,33 @@
 # @posthog/core
 
+## 1.24.6
+
+### Patch Changes
+
+- [#3320](https://github.com/PostHog/posthog-js/pull/3320) [`a01a3d5`](https://github.com/PostHog/posthog-js/commit/a01a3d55dc134b1b269be58c7922ce3780c57fc5) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: send $groupidentify for new groups even when no properties are provided
+  (2026-04-02)
+
+## 1.24.5
+
+### Patch Changes
+
+- [#3309](https://github.com/PostHog/posthog-js/pull/3309) [`197eeda`](https://github.com/PostHog/posthog-js/commit/197eeda0b09fd2671a8a40f1bfd48a7b940f7371) Thanks [@marandaneto](https://github.com/marandaneto)! - Extract CLI and sourcemap utilities from @posthog/core into @posthog/plugin-utils to remove cross-spawn from React Native dependencies
+  (2026-04-01)
+
+## 1.24.4
+
+### Patch Changes
+
+- [#3296](https://github.com/PostHog/posthog-js/pull/3296) [`a863914`](https://github.com/PostHog/posthog-js/commit/a863914bca09643f2aef7ca029b96de9cbfbc24c) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix `captureException` crashing in React Native with `ReferenceError: Property 'Event' doesn't exist`
+  (2026-03-30)
+
+## 1.24.3
+
+### Patch Changes
+
+- [#3292](https://github.com/PostHog/posthog-js/pull/3292) [`4bdfdbc`](https://github.com/PostHog/posthog-js/commit/4bdfdbcfe6a5600664a609a6b17c7d7cb72cd20f) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `@default` JSDoc tags to `PostHogCoreOptions` configuration properties for better IDE documentation and discoverability.
+  (2026-03-27)
+
 ## 1.24.2
 
 ### Patch Changes

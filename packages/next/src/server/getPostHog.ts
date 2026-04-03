@@ -2,10 +2,11 @@ import 'server-only'
 
 import { isFunction } from '@posthog/core'
 import type { PostHogOptions, IPostHog } from 'posthog-node'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { getOrCreateNodeClient } from './nodeClientCache'
-import { readPostHogCookie, cookieStateToProperties, isOptedOut } from '../shared/cookie'
+import { readPostHogCookie, isOptedOut } from '../shared/cookie'
 import { resolveApiKey } from '../shared/config'
+import { readTracingHeaders, buildContextData } from '../shared/tracing-headers'
 
 /**
  * Returns a PostHog server client scoped to the current request.
@@ -14,7 +15,7 @@ import { resolveApiKey } from '../shared/config'
  * request-scoped client. Methods like `getAllFlags()`, `getFeatureFlagResult()`,
  * and `capture()` automatically use the current user's identity.
  *
- * Calls `cookies()` internally, which opts the route into dynamic rendering.
+ * Calls `cookies()` and `headers()` internally, which opts the route into dynamic rendering.
  *
  * @param apiKey - PostHog project API key. If omitted, reads from `NEXT_PUBLIC_POSTHOG_KEY`.
  * @param options - Optional `posthog-node` configuration (e.g., `{ host: '...' }`).
@@ -44,8 +45,9 @@ export async function getPostHog(apiKey?: string, options?: Partial<PostHogOptio
     }
 
     const state = readPostHogCookie(cookieStore, resolvedApiKey)
-    const properties = cookieStateToProperties(state)
-    const contextData = { distinctId: state?.distinctId, sessionId: state?.sessionId, properties }
+    const headerStore = await headers()
+    const tracing = readTracingHeaders(headerStore)
+    const contextData = buildContextData(tracing, state)
 
     // Wrap the shared client in a Proxy that applies request-scoped context
     // to every method call. We can't use enterContext() here because

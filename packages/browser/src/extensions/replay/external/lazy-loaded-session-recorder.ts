@@ -126,7 +126,7 @@ export interface SnapshotBuffer {
     windowId: string
 }
 
-const ACTIVE_SOURCES = [
+const ACTIVE_SOURCES: IncrementalSource[] = [
     IncrementalSource.MouseMove,
     IncrementalSource.MouseInteraction,
     IncrementalSource.Scroll,
@@ -152,12 +152,12 @@ function getRRWebRecord(): rrwebRecordType | undefined {
 }
 
 export type compressedFullSnapshotEvent = {
-    type: EventType.FullSnapshot
+    type: typeof EventType.FullSnapshot
     data: string
 }
 
 export type compressedIncrementalSnapshotEvent = {
-    type: EventType.IncrementalSnapshot
+    type: typeof EventType.IncrementalSnapshot
     data: {
         source: IncrementalSource
         texts: string
@@ -168,9 +168,9 @@ export type compressedIncrementalSnapshotEvent = {
 }
 
 export type compressedIncrementalStyleSnapshotEvent = {
-    type: EventType.IncrementalSnapshot
+    type: typeof EventType.IncrementalSnapshot
     data: {
-        source: IncrementalSource.StyleSheetRule
+        source: typeof IncrementalSource.StyleSheetRule
         id?: number
         styleId?: number
         replace?: string

@@ -21,9 +21,23 @@ export interface PostHogProviderProps {
   apiKey?: string
   /** An existing PostHog client instance */
   client?: PostHog
-  /** Autocapture configuration - can be a boolean or detailed options */
+  /**
+   * Autocapture configuration - can be a boolean or detailed options.
+   *
+   * When not set, the default behavior is:
+   * - `captureScreens`: true
+   * - `captureTouches`: false
+   * - `captureAppLifecycleEvents`: true
+   *
+   * Set to `true` to enable all autocapture features (including touches).
+   * Set to `false` to disable all autocapture features.
+   */
   autocapture?: boolean | PostHogAutocaptureOptions
-  /** Enable debug mode for additional logging */
+  /**
+   * Enable debug mode for additional logging
+   *
+   * @default false
+   */
   debug?: boolean
   /** Custom styles for the provider wrapper View */
   style?: StyleProp<ViewStyle>
@@ -132,9 +146,7 @@ export const PostHogProvider = ({
     const parsedOptions = {
       ...options,
       captureAppLifecycleEvents:
-        options?.captureAppLifecycleEvents !== undefined
-          ? options.captureAppLifecycleEvents
-          : !captureNone && captureAll,
+        options?.captureAppLifecycleEvents !== undefined ? options.captureAppLifecycleEvents : !captureNone,
     }
 
     return new PostHog(apiKey ?? '', parsedOptions)

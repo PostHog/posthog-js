@@ -1,7 +1,6 @@
 import PostHogOpenAI from './openai'
 import PostHogAzureOpenAI from './openai/azure'
 import { wrapVercelLanguageModel } from './vercel/middleware'
-import { PostHogTraceExporter } from './otel'
 import PostHogAnthropic from './anthropic'
 import PostHogGoogleGenAI from './gemini'
 import { LangChainCallbackHandler } from './langchain/callbacks'
@@ -12,6 +11,5 @@ export { PostHogAzureOpenAI as AzureOpenAI }
 export { PostHogAnthropic as Anthropic }
 export { PostHogGoogleGenAI as GoogleGenAI }
 export { wrapVercelLanguageModel as withTracing }
-export { PostHogTraceExporter }
 export { LangChainCallbackHandler }
 export { Prompts }

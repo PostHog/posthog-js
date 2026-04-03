@@ -27,6 +27,7 @@ This is a monorepo containing multiple packages to integrate with Posthog using 
 - [@posthog/convex](./packages/convex/README.md)
 - [@posthog/nextjs-config](./packages/nextjs-config/README.md)
 - [@posthog/nuxt](./packages/nuxt/README.md)
+- [@posthog/plugin-utils](./packages/plugin-utils/README.md)
 - [@posthog/rollup-plugin](./packages/rollup-plugin/README.md)
 - [@posthog/types](./packages/types/README.md)
 - [@posthog/webpack-plugin](./packages/webpack-plugin/README.md)

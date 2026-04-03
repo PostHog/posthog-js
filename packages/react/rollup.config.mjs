@@ -64,6 +64,47 @@ const buildTypes = {
     plugins: [resolve(), dts()],
 }
 
+/**
+ * Configuration for the slim build (no posthog-js runtime dependency)
+ */
+const buildSlimEsm = {
+    external: ['posthog-js', 'react'],
+    input: 'src/slim.ts',
+    output: {
+        file: 'dist/esm/slim/index.js',
+        format: 'esm',
+        sourcemap: true,
+    },
+    plugins,
+}
+
+const buildSlimUmd = {
+    external: ['posthog-js', 'react'],
+    input: 'src/slim.ts',
+    output: {
+        file: 'dist/umd/slim/index.js',
+        name: 'PosthogReactSlim',
+        format: 'umd',
+        sourcemap: true,
+        esModule: false,
+        globals: {
+            react: 'React',
+            'posthog-js': 'posthog',
+        },
+    },
+    plugins,
+}
+
+const buildSlimTypes = {
+    external: ['posthog-js', 'react'],
+    input: 'src/slim.ts',
+    output: {
+        file: 'dist/types/slim/index.d.ts',
+        format: 'es',
+    },
+    plugins: [resolve(), dts()],
+}
+
 const buildSurveysEsm = {
     external: ['posthog-js', 'react'],
     input: 'src/surveys/index.ts',
@@ -108,9 +149,20 @@ const buildSurveysTypes = {
                 { src: 'dist/*', dest: '../browser/react/dist' },
                 { src: 'src/*', dest: '../browser/react/src' },
                 { src: 'surveys', dest: '../browser/react' },
+                { src: 'slim', dest: '../browser/react' },
             ],
         }),
     ],
 }
 
-export default [buildEsm, buildUmd, buildTypes, buildSurveysEsm, buildSurveysUmd, buildSurveysTypes]
+export default [
+    buildEsm,
+    buildUmd,
+    buildTypes,
+    buildSlimEsm,
+    buildSlimUmd,
+    buildSlimTypes,
+    buildSurveysEsm,
+    buildSurveysUmd,
+    buildSurveysTypes,
+]

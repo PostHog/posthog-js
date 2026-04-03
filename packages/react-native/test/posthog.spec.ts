@@ -480,13 +480,14 @@ describe('PostHog React Native', () => {
     it('do not rotate session id on restart', async () => {
       const sessionId = '0192244d-a627-7ae2-b22a-ccd594bed71d'
       rnStorage.setItem(PostHogPersistedProperty.SessionId, sessionId)
-      const now = JSON.stringify(Date.now())
+      const now = Date.now()
       rnStorage.setItem(PostHogPersistedProperty.SessionLastTimestamp, now)
       rnStorage.setItem(PostHogPersistedProperty.SessionStartTimestamp, now)
 
       posthog = new PostHog('1', {
         customStorage: storage,
         enablePersistSessionIdAcrossRestart: true,
+        captureAppLifecycleEvents: false,
       })
 
       expect(posthog.getPersistedProperty(PostHogPersistedProperty.SessionId)).toEqual(sessionId)
@@ -497,13 +498,14 @@ describe('PostHog React Native', () => {
     it('rotate session id on restart if persist session id across restart is disabled', async () => {
       const sessionId = '0192244d-a627-7ae2-b22a-ccd594bed71d'
       rnStorage.setItem(PostHogPersistedProperty.SessionId, sessionId)
-      const now = JSON.stringify(Date.now())
+      const now = Date.now()
       rnStorage.setItem(PostHogPersistedProperty.SessionLastTimestamp, now)
       rnStorage.setItem(PostHogPersistedProperty.SessionStartTimestamp, now)
 
       posthog = new PostHog('1', {
         customStorage: storage,
         enablePersistSessionIdAcrossRestart: false,
+        captureAppLifecycleEvents: false,
       })
 
       expect(posthog.getPersistedProperty(PostHogPersistedProperty.SessionId)).toEqual(undefined)
@@ -1109,6 +1111,7 @@ describe('Feature flag error tracking', () => {
       fetchRetryCount: 0,
       preloadFeatureFlags: false,
       sendFeatureFlagEvent: true,
+      captureAppLifecycleEvents: false,
     })
   })
 
