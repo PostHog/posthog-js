@@ -409,7 +409,9 @@ jobs:
                     echo "❌ toolbar.js not found after build"
                     exit 1
                   fi
+                  TOOLBAR_SHA=$(git rev-parse HEAD)
                   echo "✓ toolbar.js built successfully ($(wc -c < frontend/dist/toolbar.js) bytes)"
+                  echo "  Built from PostHog/posthog@${TOOLBAR_SHA}"
 
             - name: Upload toolbar artifact
               uses: actions/upload-artifact@v4
