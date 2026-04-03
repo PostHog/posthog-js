@@ -1,7 +1,7 @@
 /** Azure OpenAI chat completions, tracked by PostHog. */
 
 import { PostHog } from "posthog-node";
-import { AzureOpenAI } from "@posthog/ai/openai";
+import { AzureOpenAI } from "@posthog/ai";
 
 const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
   host: process.env.POSTHOG_HOST || "https://us.i.posthog.com",
