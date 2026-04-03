@@ -336,10 +336,11 @@ jobs:
 
     build-s3-artifacts:
         name: Build posthog-js dist for S3
-        needs: [version-bump, publish, notify-approval-needed]
+        needs: [version-bump, notify-approval-needed]
         runs-on: ubuntu-latest
-        # Run as long as the version bump committed — even if some matrix publishes failed,
-        # posthog-js might have succeeded and we still want the artifacts in S3.
+        # Run in parallel with publish — must NOT wait for publish because
+        # check-package-version compares against npm. If publish finishes first,
+        # the version is already on the registry and is-new-version returns false.
         if: always() && needs.version-bump.outputs.commit-hash != ''
         permissions:
             contents: read
