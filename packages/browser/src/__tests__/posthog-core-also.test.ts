@@ -410,7 +410,6 @@ describe('posthog core', () => {
 
             expect(posthog.analyticsDefaultEndpoint).toEqual('/i/v0/e/')
         })
-
     })
 
     describe('_calculate_event_properties()', () => {
