@@ -43,8 +43,13 @@ export function ClientPostHogProvider({ apiKey, options, bootstrap, children }: 
     // Initialize eagerly during render on the client so that child effects
     // see a fully configured posthog instance. The `__loaded` guard prevents
     // double-init (e.g. React StrictMode).
-    if (typeof window !== 'undefined' && !posthogJs.__loaded) {
+    if (!posthogJs.__loaded) {
         posthogJs.init(apiKey, mergedOptions)
+    }
+
+    if (bootstrap?.featureFlags) {
+        // If bootstrapping, update feature flags from the server
+        posthogJs.updateFlags(bootstrap.featureFlags)
     }
 
     return <ReactPostHogProvider client={posthogJs}>{children}</ReactPostHogProvider>
