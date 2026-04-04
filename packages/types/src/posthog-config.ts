@@ -1474,6 +1474,45 @@ export interface PostHogConfig {
      */
     override_display_language?: string | null
 
+    /**
+     * Enables the offline dead letter queue (DLQ) backed by IndexedDB.
+     * When enabled, events that exhaust all retry attempts are stored locally and
+     * re-sent on the next page load or when the browser comes back online.
+     *
+     * @default false
+     */
+    enable_offline_dlq?: boolean
+
+    /**
+     * Maximum age (in hours) for events stored in the DLQ.
+     * Events older than this are evicted before drain.
+     *
+     * @default 24
+     */
+    dlq_max_age_hours?: number
+
+    /**
+     * Maximum number of events the DLQ will store.
+     * Oldest events are evicted first when the cap is exceeded.
+     *
+     * @default 1000
+     */
+    dlq_max_entries?: number
+
+    /**
+     * Whether to drain the DLQ when the browser fires the `online` event.
+     *
+     * @default true
+     */
+    dlq_drain_on_online?: boolean
+
+    /**
+     * Whether to drain the DLQ shortly after SDK initialization.
+     *
+     * @default true
+     */
+    dlq_drain_on_load?: boolean
+
     // ------- PREVIEW CONFIGS -------
 
     /**

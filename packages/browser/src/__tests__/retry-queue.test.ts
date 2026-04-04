@@ -6,6 +6,7 @@ import { assignableWindow } from '../utils/globals'
 describe('RetryQueue', () => {
     const mockPosthog = {
         _send_request: jest.fn(),
+        _onFlushFailure: jest.fn(),
     }
     let retryQueue: RetryQueue
     let now = Date.now()
