@@ -4,7 +4,7 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-pnpmfileChecksum: sha256-TBLF3A8y8K13aHYWvoHwSSIvD9XE7qv/wPio5WJxnOQ=
+pnpmfileChecksum: sha256-E/exUTjXLmI/Pa1vDkU4EaSN9q+SuNvbmfGGIpXZjYw=
 
 importers:
 
@@ -194,8 +194,8 @@ packages:
     resolution: {integrity: sha512-CiyeOxFT/JZyN5m0z9PfXw4SCBJ6Sygz1Dpl0wqjlhDEGGBP1GnsUVEL0p63hoG1fcj3fHynXi9NYO4nWOL+qQ==}
     engines: {node: '>= 0.8'}
 
-  path-to-regexp@8.3.0:
-    resolution: {integrity: sha512-7jdwVIRtsP8MYpdXSwOS0YdD0Du+qOoF/AEPIt88PcCFrZCzx41oxku1jD88hZBwbNUIEfpqvuhjFaMAqMTWnA==}
+  path-to-regexp@8.4.1:
+    resolution: {integrity: sha512-fvU78fIjZ+SBM9YwCknCvKOUKkLVqtWDVctl0s7xIqfmfb38t2TT4ZU2gHm+Z8xGwgW+QWEU3oQSAzIbo89Ggw==}
 
   proxy-addr@2.0.7:
     resolution: {integrity: sha512-llQsMLSUDUPT44jdrU/O37qlnifitDP+ZwrmmZcoSKyLKvtZxpyV0n2/bD/N4tBAAZ/gJEdZU7KMraoK1+XYAg==}
@@ -461,7 +461,7 @@ snapshots:
 
   parseurl@1.3.3: {}
 
-  path-to-regexp@8.3.0: {}
+  path-to-regexp@8.4.1: {}
 
   proxy-addr@2.0.7:
     dependencies:
@@ -487,7 +487,7 @@ snapshots:
       depd: 2.0.0
       is-promise: 4.0.0
       parseurl: 1.3.3
-      path-to-regexp: 8.3.0
+      path-to-regexp: 8.4.1
     transitivePeerDependencies:
       - supports-color
 
