@@ -584,6 +584,9 @@ export type SendEventToPosthogParams = {
   exceptionId?: string
   tools?: ChatCompletionTool[] | AnthropicTool[] | GeminiTool[] | null
   captureImmediate?: boolean
+  completionId?: string
+  systemFingerprint?: string | null
+  requestId?: string
 }
 
 function sanitizeValues(obj: any): any {
@@ -690,6 +693,9 @@ export const sendEventToPosthog = async ({
   exceptionId,
   tools,
   captureImmediate = false,
+  completionId,
+  systemFingerprint,
+  requestId,
 }: SendEventToPosthogParams): Promise<void> => {
   if (!client.capture) {
     return Promise.resolve()
@@ -746,6 +752,9 @@ export const sendEventToPosthog = async ({
     $ai_tokens_source: getTokensSource(params.posthogProperties),
     ...(distinctId ? {} : { $process_person_profile: false }),
     ...(tools ? { $ai_tools: tools } : {}),
+    ...(completionId ? { $ai_completion_id: completionId } : {}),
+    ...(systemFingerprint ? { $ai_system_fingerprint: systemFingerprint } : {}),
+    ...(requestId ? { $ai_request_id: requestId } : {}),
     ...errorData,
     ...costOverrideData,
   }

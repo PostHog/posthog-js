@@ -155,6 +155,7 @@ const createMockStreamChunks = (options: {
     model: 'gpt-4',
     object: 'chat.completion.chunk',
     created: Date.now() / 1000,
+    system_fingerprint: 'fp_stream_test',
   }
 
   if (options.content) {
@@ -283,10 +284,12 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
     // Default chat completion mock for non-streaming responses
     mockOpenAiChatResponse = {
-      id: 'test-response-id',
+      id: 'chatcmpl-test-response-id',
       model: 'gpt-4',
       object: 'chat.completion',
       created: Date.now() / 1000,
+      system_fingerprint: 'fp_test123',
+      _request_id: 'req_test-request-id',
       choices: [
         {
           index: 0,
@@ -448,6 +451,9 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(properties['foo']).toBe('bar')
     expect(typeof properties['$ai_latency']).toBe('number')
     expect(properties['$ai_usage']).toBeDefined()
+    expect(properties['$ai_completion_id']).toBe('chatcmpl-test-response-id')
+    expect(properties['$ai_system_fingerprint']).toBe('fp_test123')
+    expect(properties['$ai_request_id']).toBe('req_test-request-id')
   })
 
   conditionalTest('groups', async () => {
@@ -629,6 +635,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(properties['$ai_http_status']).toBe(200)
     expect(properties['foo']).toBe('bar')
     expect(typeof properties['$ai_latency']).toBe('number')
+    expect(properties['$ai_completion_id']).toBe('test-parsed-response-id')
   })
 
   conditionalTest('responses parse with instructions parameter', async () => {
@@ -759,6 +766,9 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(properties['$ai_input_tokens']).toBe(25)
       expect(properties['$ai_output_tokens']).toBe(15)
       expect(properties['streamTest']).toBe(true)
+      // Verify completion metadata from streaming chunks
+      expect(properties['$ai_completion_id']).toBe('chatcmpl-test')
+      expect(properties['$ai_system_fingerprint']).toBe('fp_stream_test')
     })
 
     conditionalTest('handles streaming with tool calls', async () => {
