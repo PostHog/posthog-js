@@ -1,0 +1,21 @@
+{
+  "name": "example-ai-aws-bedrock",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "chat": "tsx chat.ts"
+  },
+  "dependencies": {
+    "posthog-node": "*",
+    "@posthog/ai": "*",
+    "@aws-sdk/client-bedrock-runtime": "^3.0.0",
+    "@opentelemetry/instrumentation-aws-sdk": "^0.48.0",
+    "@opentelemetry/sdk-node": "^0.55.0",
+    "@opentelemetry/resources": "^1.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
