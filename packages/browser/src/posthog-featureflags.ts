@@ -1171,13 +1171,33 @@ export class PostHogFeatureFlags implements Extension {
      * This is used when dealing with new persons / where you don't want to wait for ingestion
      * to update user properties.
      */
-    setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
+    setPersonPropertiesForFlags(
+        properties: Properties,
+        reloadFeatureFlags = true,
+        propertiesSetOnce?: Properties
+    ): void {
         // Get persisted person properties
         const existingProperties = this._prop(STORED_PERSON_PROPERTIES_KEY) || {}
+
+        // $set_once properties should only be set if the key doesn't already exist in the local
+        // cache, mirroring server-side $set_once semantics. Without this, calling identify() on
+        // every app open with $set_once values overwrites the cached value, which then overrides
+        // the correct (older) database value during flag evaluation via /flags.
+        const setOnceProps: Properties = {}
+        if (propertiesSetOnce) {
+            for (const key in propertiesSetOnce) {
+                if (Object.prototype.hasOwnProperty.call(propertiesSetOnce, key)) {
+                    if (!(key in existingProperties)) {
+                        setOnceProps[key] = propertiesSetOnce[key]
+                    }
+                }
+            }
+        }
 
         this._instance.register({
             [STORED_PERSON_PROPERTIES_KEY]: {
                 ...existingProperties,
+                ...setOnceProps,
                 ...properties,
             },
         })

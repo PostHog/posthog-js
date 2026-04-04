@@ -104,6 +104,41 @@ describe('PostHog Core', () => {
       posthog.setPersonPropertiesForFlags(props)
       expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)).toEqual(props)
     })
+
+    it('set_once properties skip keys that already exist in the cache', () => {
+      posthog.setPersonPropertiesForFlags({}, true, { first_date: '2025-01-01', plan: 'free' })
+
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)).toEqual({
+        first_date: '2025-01-01',
+        plan: 'free',
+      })
+
+      // Calling again with set_once should NOT overwrite existing keys
+      posthog.setPersonPropertiesForFlags({}, true, { first_date: '2026-03-30', new_key: 'hello' })
+
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)).toEqual({
+        first_date: '2025-01-01',
+        plan: 'free',
+        new_key: 'hello',
+      })
+    })
+
+    it('set properties overwrite existing keys even when set_once does not', () => {
+      posthog.setPersonPropertiesForFlags({}, true, { first_date: '2025-01-01' })
+
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)).toEqual({
+        first_date: '2025-01-01',
+      })
+
+      // $set should overwrite, $set_once should not
+      posthog.setPersonPropertiesForFlags({ first_date: 'overwritten' }, true, {
+        first_date: 'ignored-by-set-once',
+      })
+
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)).toEqual({
+        first_date: 'overwritten',
+      })
+    })
   })
 
   describe('setPersonProperties', () => {

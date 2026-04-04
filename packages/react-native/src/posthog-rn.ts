@@ -764,8 +764,12 @@ export class PostHog extends PostHogCore {
    * @param properties The person properties to set for flag evaluation
    * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
-  setPersonPropertiesForFlags(properties: Record<string, JsonType>, reloadFeatureFlags = true): void {
-    super.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
+  setPersonPropertiesForFlags(
+    properties: Record<string, JsonType>,
+    reloadFeatureFlags = true,
+    propertiesSetOnce?: Record<string, JsonType>
+  ): void {
+    super.setPersonPropertiesForFlags(properties, reloadFeatureFlags, propertiesSetOnce)
   }
 
   /**
@@ -1127,25 +1131,43 @@ export class PostHog extends PostHogCore {
    */
   identify(distinctId?: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
     const previousDistinctId = this.getDistinctId()
+
+    // Extract $set_once before super.identify() because core deletes it from the properties object
+    const userProps = properties?.$set || properties
+    const userPropsOnce = properties?.$set_once
+
     super.identify(distinctId, properties, options)
 
     // Automatically cache person properties for feature flag evaluation
-    // Use $set if provided, otherwise use top-level properties
-    const userProps = properties?.$set || properties
-    if (userProps && Object.keys(userProps).length > 0) {
-      const propsToCache: Record<string, string> = {}
+
+    const propsToCache: Record<string, string> = {}
+    if (userProps) {
       Object.entries(userProps).forEach(([key, value]) => {
         if (value !== null && value !== undefined) {
           propsToCache[key] = String(value)
         }
       })
-      if (Object.keys(propsToCache).length > 0) {
-        // super.identify() already handles reloading flags in all cases:
-        // - When distinctId changes: it calls reloadFeatureFlags() directly
-        // - When distinctId is the same but properties change: it calls setPersonProperties() which reloads flags
-        // So we only need to set the properties here without triggering another reload.
-        this.setPersonPropertiesForFlags(propsToCache, false)
-      }
+    }
+
+    const propsOncToCache: Record<string, string> = {}
+    if (userPropsOnce && typeof userPropsOnce === 'object') {
+      Object.entries(userPropsOnce as Record<string, unknown>).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          propsOncToCache[key] = String(value)
+        }
+      })
+    }
+
+    if (Object.keys(propsToCache).length > 0 || Object.keys(propsOncToCache).length > 0) {
+      // super.identify() already handles reloading flags in all cases:
+      // - When distinctId changes: it calls reloadFeatureFlags() directly
+      // - When distinctId is the same but properties change: it calls setPersonProperties() which reloads flags
+      // So we only need to set the properties here without triggering another reload.
+      this.setPersonPropertiesForFlags(
+        propsToCache,
+        false,
+        Object.keys(propsOncToCache).length > 0 ? propsOncToCache : undefined
+      )
     }
 
     if (this._isEnableSessionReplay() && OptionalReactNativeSessionReplay) {

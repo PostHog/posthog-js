@@ -479,14 +479,34 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   /***
    * PROPERTIES
    ***/
-  setPersonPropertiesForFlags(properties: { [type: string]: JsonType }, reloadFeatureFlags = true): void {
+  setPersonPropertiesForFlags(
+    properties: { [type: string]: JsonType },
+    reloadFeatureFlags = true,
+    propertiesSetOnce?: { [type: string]: JsonType }
+  ): void {
     this.wrap(() => {
       // Get persisted person properties
       const existingProperties =
         this.getPersistedProperty<Record<string, JsonType>>(PostHogPersistedProperty.PersonProperties) || {}
 
+      // $set_once properties should only be set if the key doesn't already exist in the local
+      // cache, mirroring server-side $set_once semantics. Without this, calling identify() on
+      // every app open with $set_once values overwrites the cached value, which then overrides
+      // the correct (older) database value during flag evaluation via /flags.
+      const setOnceProps: Record<string, JsonType> = {}
+      if (propertiesSetOnce) {
+        for (const key in propertiesSetOnce) {
+          if (Object.prototype.hasOwnProperty.call(propertiesSetOnce, key)) {
+            if (!(key in existingProperties)) {
+              setOnceProps[key] = propertiesSetOnce[key]
+            }
+          }
+        }
+      }
+
       this.setPersistedProperty<PostHogEventProperties>(PostHogPersistedProperty.PersonProperties, {
         ...existingProperties,
+        ...setOnceProps,
         ...properties,
       })
 
@@ -1365,9 +1385,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       }
 
       // Update person properties for feature flags evaluation
-      // Merge setOnce first, then set to allow overwriting
-      const mergedProperties = { ...(userPropertiesToSetOnce || {}), ...(userPropertiesToSet || {}) }
-      this.setPersonPropertiesForFlags(mergedProperties, reloadFeatureFlags)
+      this.setPersonPropertiesForFlags(userPropertiesToSet || {}, reloadFeatureFlags, userPropertiesToSetOnce)
 
       this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
 

@@ -798,14 +798,33 @@ describe('PostHog React Native', () => {
         expect(cachedProps).toEqual({ email: 'test@example.com', plan: 'premium' })
       })
 
-      it('should ignore $set_once when caching properties', async () => {
+      it('should cache $set_once properties with set-once semantics', async () => {
         posthog.identify('user-123', {
           $set: { email: 'test@example.com' },
           $set_once: { created_at: '2024-01-01' },
         })
 
         const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
-        expect(cachedProps).toEqual({ email: 'test@example.com' })
+        expect(cachedProps).toEqual({ email: 'test@example.com', created_at: '2024-01-01' })
+      })
+
+      it('should not overwrite existing keys via $set_once on subsequent identify calls', async () => {
+        posthog.identify('user-123', {
+          $set: { email: 'test@example.com' },
+          $set_once: { created_at: '2024-01-01' },
+        })
+
+        posthog.identify('user-123', {
+          $set: { email: 'new@example.com' },
+          $set_once: { created_at: '2025-06-15', new_key: 'hello' },
+        })
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+        expect(cachedProps).toEqual({
+          email: 'new@example.com',
+          created_at: '2024-01-01',
+          new_key: 'hello',
+        })
       })
 
       it('should merge properties from multiple identify() calls with $set', async () => {
