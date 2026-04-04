@@ -90,6 +90,19 @@ describe('PostHog Context', () => {
     })
   })
 
+  it('should set groups from context groups', async () => {
+    posthog.withContext({ groups: { organization: 'org-123' } }, () => {
+      posthog.capture({ event: 'test_event' })
+    })
+
+    await waitForFlush()
+
+    const events = getLastBatchEvents()
+    expect(events?.[0].groups).toMatchObject({
+      organization: 'org-123',
+    })
+  })
+
   it('should use distinctId from context if not explicitly provided', async () => {
     posthog.withContext({ distinctId: 'context-user' }, () => {
       posthog.capture({ event: 'test_event' })
@@ -99,6 +112,23 @@ describe('PostHog Context', () => {
 
     const events = getLastBatchEvents()
     expect(events?.[0].distinct_id).toBe('context-user')
+  })
+
+  it('should merge groups from context and capture', async () => {
+    posthog.withContext({ groups: { organization: 'org-123' } }, () => {
+      posthog.capture({
+        event: 'test_event',
+        groups: { team: 'team-123' },
+      })
+    })
+
+    await waitForFlush()
+
+    const events = getLastBatchEvents()
+    expect(events?.[0].groups).toEqual({
+      organization: 'org-123',
+      team: 'team-123',
+    })
   })
 
   it('should merge contexts by default (fresh: false)', async () => {
