@@ -412,6 +412,37 @@ describe('PostHog Node.js', () => {
       )
       warnSpy.mockRestore()
     })
+
+    it.each([
+      ['capture', { strictCapture: true }],
+      ['capture', { defaults: '2026-03-19' }],
+      ['capture', { defaults: '2026-03-19', strictCapture: undefined }],
+      ['captureImmediate', { strictCapture: true }],
+      ['captureImmediate', { defaults: '2026-03-19' }],
+      ['captureImmediate', { defaults: '2026-03-19', strictCapture: undefined }],
+    ] as const)('should throw if %s is called with a string when %j', async (method, extraOptions) => {
+      const ph = new PostHog('TEST_API_KEY', { host: 'http://example.com', ...extraOptions })
+      // @ts-expect-error - Testing the error when passing a string instead of an object
+      await expect(Promise.resolve().then(() => ph[method]('test-event'))).rejects.toThrow(TypeError)
+      await ph.shutdown()
+    })
+
+    it.each([
+      ['capture', { defaults: 'unset' as const }],
+      ['captureImmediate', { defaults: 'unset' as const }],
+      ['capture', { defaults: '2026-03-19' as const, strictCapture: false }],
+      ['captureImmediate', { defaults: '2026-03-19' as const, strictCapture: false }],
+    ])('should warn if %s is called with a string when %j', async (method, extraOptions) => {
+      const ph = new PostHog('TEST_API_KEY', { host: 'http://example.com', ...extraOptions })
+      ph.debug(true)
+      // @ts-expect-error - Testing the warning when passing a string instead of an object
+      ph[method]('test-event')
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[PostHog]',
+        `Called ${method}() with a string as the first argument when an object was expected.`
+      )
+      await ph.shutdown()
+    })
   })
 
   describe('before_send', () => {
