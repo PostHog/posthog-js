@@ -4,6 +4,7 @@ import React from 'react'
 import posthogJs from 'posthog-js'
 import { PostHogProvider as ReactPostHogProvider } from 'posthog-js/react'
 import type { BootstrapConfig, PostHogConfig } from 'posthog-js'
+import { usePathname } from 'next/navigation'
 
 export type { BootstrapConfig }
 
@@ -39,17 +40,14 @@ export function ClientPostHogProvider({ apiKey, options, bootstrap, children }: 
     }
 
     const mergedOptions = bootstrap ? { ...options, bootstrap: { ...options?.bootstrap, ...bootstrap } } : options
-
     // Initialize eagerly during render on the client so that child effects
     // see a fully configured posthog instance. The `__loaded` guard prevents
     // double-init (e.g. React StrictMode).
     if (!posthogJs.__loaded) {
         posthogJs.init(apiKey, mergedOptions)
-    }
-
-    if (bootstrap?.featureFlags) {
+    } else if (bootstrap?.featureFlags) {
         // If bootstrapping, update feature flags from the server
-        posthogJs.updateFlags(bootstrap.featureFlags)
+        posthogJs.updateFlags(bootstrap.featureFlags, bootstrap.featureFlagPayloads)
     }
 
     return <ReactPostHogProvider client={posthogJs}>{children}</ReactPostHogProvider>
