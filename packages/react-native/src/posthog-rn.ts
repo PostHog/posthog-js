@@ -1149,16 +1149,16 @@ export class PostHog extends PostHogCore {
       })
     }
 
-    const propsOncToCache: Record<string, string> = {}
+    const propsOnceToCache: Record<string, string> = {}
     if (userPropsOnce && typeof userPropsOnce === 'object') {
       Object.entries(userPropsOnce as Record<string, unknown>).forEach(([key, value]) => {
         if (value !== null && value !== undefined) {
-          propsOncToCache[key] = String(value)
+          propsOnceToCache[key] = String(value)
         }
       })
     }
 
-    if (Object.keys(propsToCache).length > 0 || Object.keys(propsOncToCache).length > 0) {
+    if (Object.keys(propsToCache).length > 0 || Object.keys(propsOnceToCache).length > 0) {
       // super.identify() already handles reloading flags in all cases:
       // - When distinctId changes: it calls reloadFeatureFlags() directly
       // - When distinctId is the same but properties change: it calls setPersonProperties() which reloads flags
@@ -1166,7 +1166,7 @@ export class PostHog extends PostHogCore {
       this.setPersonPropertiesForFlags(
         propsToCache,
         false,
-        Object.keys(propsOncToCache).length > 0 ? propsOncToCache : undefined
+        Object.keys(propsOnceToCache).length > 0 ? propsOnceToCache : undefined
       )
     }
 
