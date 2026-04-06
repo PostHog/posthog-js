@@ -1973,10 +1973,7 @@ describe('featureflags', () => {
 
         it('set_once properties skip keys that already exist in the cache', () => {
             featureFlags.resetPersonPropertiesForFlags()
-            featureFlags.setPersonPropertiesForFlags(
-                { $set_once: { first_date: '2025-01-01', plan: 'free' } },
-                false
-            )
+            featureFlags.setPersonPropertiesForFlags({ $set_once: { first_date: '2025-01-01', plan: 'free' } }, false)
 
             expect(instance.persistence.props.$stored_person_properties).toEqual({
                 first_date: '2025-01-01',
