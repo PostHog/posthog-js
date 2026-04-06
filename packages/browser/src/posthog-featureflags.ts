@@ -1171,24 +1171,21 @@ export class PostHogFeatureFlags implements Extension {
      * This is used when dealing with new persons / where you don't want to wait for ingestion
      * to update user properties.
      */
-    setPersonPropertiesForFlags(
-        properties: Properties,
-        reloadFeatureFlags = true,
-        propertiesSetOnce?: Properties
-    ): void {
-        // Get persisted person properties
+    setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
         const existingProperties = this._prop(STORED_PERSON_PROPERTIES_KEY) || {}
 
-        // $set_once properties should only be set if the key doesn't already exist in the local
-        // cache, mirroring server-side $set_once semantics. Without this, calling identify() on
-        // every app open with $set_once values overwrites the cached value, which then overrides
-        // the correct (older) database value during flag evaluation via /flags.
+        // If the caller passes { $set, $set_once }, split them apart so we can apply $set_once
+        // semantics (skip keys that already exist). Otherwise treat all properties as $set for
+        // backward compatibility with the public API.
+        const propsToSet = properties?.['$set'] || (!properties?.['$set_once'] ? properties : {})
+        const propsToSetOnce = properties?.['$set_once']
+
         const setOnceProps: Properties = {}
-        if (propertiesSetOnce) {
-            for (const key in propertiesSetOnce) {
-                if (Object.prototype.hasOwnProperty.call(propertiesSetOnce, key)) {
+        if (propsToSetOnce) {
+            for (const key in propsToSetOnce) {
+                if (Object.prototype.hasOwnProperty.call(propsToSetOnce, key)) {
                     if (!(key in existingProperties)) {
-                        setOnceProps[key] = propertiesSetOnce[key]
+                        setOnceProps[key] = propsToSetOnce[key]
                     }
                 }
             }
@@ -1198,7 +1195,7 @@ export class PostHogFeatureFlags implements Extension {
             [STORED_PERSON_PROPERTIES_KEY]: {
                 ...existingProperties,
                 ...setOnceProps,
-                ...properties,
+                ...propsToSet,
             },
         })
 

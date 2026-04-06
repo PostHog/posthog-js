@@ -2401,7 +2401,10 @@ export class PostHog implements PostHogInterface {
             this.persistence.set_property(USER_STATE, USER_STATE_IDENTIFIED)
 
             // Update current user properties
-            this.setPersonPropertiesForFlags(userPropertiesToSet || {}, false, userPropertiesToSetOnce)
+            this.setPersonPropertiesForFlags(
+                { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} },
+                false
+            )
 
             this.capture(
                 EVENT_IDENTIFY,
@@ -2489,7 +2492,10 @@ export class PostHog implements PostHogInterface {
         }
 
         // Update current user properties
-        this.setPersonPropertiesForFlags(userPropertiesToSet || {}, true, userPropertiesToSetOnce)
+        this.setPersonPropertiesForFlags(
+            { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} },
+            true
+        )
 
         this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
 
@@ -2603,12 +2609,8 @@ export class PostHog implements PostHogInterface {
      * @param {Object} properties The properties to override.
      * @param {Boolean} [reloadFeatureFlags] Whether to reload feature flags.
      */
-    setPersonPropertiesForFlags(
-        properties: Properties,
-        reloadFeatureFlags = true,
-        propertiesSetOnce?: Properties
-    ): void {
-        this.featureFlags?.setPersonPropertiesForFlags(properties, reloadFeatureFlags, propertiesSetOnce)
+    setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
+        this.featureFlags?.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
     /**

@@ -1973,7 +1973,10 @@ describe('featureflags', () => {
 
         it('set_once properties skip keys that already exist in the cache', () => {
             featureFlags.resetPersonPropertiesForFlags()
-            featureFlags.setPersonPropertiesForFlags({}, false, { first_date: '2025-01-01', plan: 'free' })
+            featureFlags.setPersonPropertiesForFlags(
+                { $set_once: { first_date: '2025-01-01', plan: 'free' } },
+                false
+            )
 
             expect(instance.persistence.props.$stored_person_properties).toEqual({
                 first_date: '2025-01-01',
@@ -1981,7 +1984,10 @@ describe('featureflags', () => {
             })
 
             // Calling again with set_once should NOT overwrite existing keys
-            featureFlags.setPersonPropertiesForFlags({}, false, { first_date: '2026-03-30', new_key: 'hello' })
+            featureFlags.setPersonPropertiesForFlags(
+                { $set_once: { first_date: '2026-03-30', new_key: 'hello' } },
+                false
+            )
 
             expect(instance.persistence.props.$stored_person_properties).toEqual({
                 first_date: '2025-01-01',
@@ -1992,16 +1998,17 @@ describe('featureflags', () => {
 
         it('set properties overwrite existing keys even when set_once does not', () => {
             featureFlags.resetPersonPropertiesForFlags()
-            featureFlags.setPersonPropertiesForFlags({}, false, { first_date: '2025-01-01' })
+            featureFlags.setPersonPropertiesForFlags({ $set_once: { first_date: '2025-01-01' } }, false)
 
             expect(instance.persistence.props.$stored_person_properties).toEqual({
                 first_date: '2025-01-01',
             })
 
             // $set should overwrite, $set_once should not
-            featureFlags.setPersonPropertiesForFlags({ first_date: 'overwritten' }, false, {
-                first_date: 'ignored-by-set-once',
-            })
+            featureFlags.setPersonPropertiesForFlags(
+                { $set: { first_date: 'overwritten' }, $set_once: { first_date: 'ignored-by-set-once' } },
+                false
+            )
 
             expect(instance.persistence.props.$stored_person_properties).toEqual({
                 first_date: 'overwritten',
@@ -2010,7 +2017,10 @@ describe('featureflags', () => {
 
         it('set_once properties are included in /flags request', () => {
             featureFlags.resetPersonPropertiesForFlags()
-            featureFlags.setPersonPropertiesForFlags({ plan: 'pro' }, false, { first_date: '2025-01-01' })
+            featureFlags.setPersonPropertiesForFlags(
+                { $set: { plan: 'pro' }, $set_once: { first_date: '2025-01-01' } },
+                false
+            )
 
             expect(instance.persistence.props.$stored_person_properties).toEqual({
                 plan: 'pro',

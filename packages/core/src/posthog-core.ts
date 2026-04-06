@@ -473,26 +473,24 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   /***
    * PROPERTIES
    ***/
-  setPersonPropertiesForFlags(
-    properties: { [type: string]: JsonType },
-    reloadFeatureFlags = true,
-    propertiesSetOnce?: { [type: string]: JsonType }
-  ): void {
+  setPersonPropertiesForFlags(properties: { [type: string]: JsonType }, reloadFeatureFlags = true): void {
     this.wrap(() => {
-      // Get persisted person properties
       const existingProperties =
         this.getPersistedProperty<Record<string, JsonType>>(PostHogPersistedProperty.PersonProperties) || {}
 
-      // $set_once properties should only be set if the key doesn't already exist in the local
-      // cache, mirroring server-side $set_once semantics. Without this, calling identify() on
-      // every app open with $set_once values overwrites the cached value, which then overrides
-      // the correct (older) database value during flag evaluation via /flags.
+      // If the caller passes { $set, $set_once }, split them apart so we can apply $set_once
+      // semantics (skip keys that already exist). Otherwise treat all properties as $set for
+      // backward compatibility with the public API.
+      const propsToSet =
+        (properties?.['$set'] as Record<string, JsonType>) || (!properties?.['$set_once'] ? properties : {})
+      const propsToSetOnce = properties?.['$set_once'] as Record<string, JsonType> | undefined
+
       const setOnceProps: Record<string, JsonType> = {}
-      if (propertiesSetOnce) {
-        for (const key in propertiesSetOnce) {
-          if (Object.prototype.hasOwnProperty.call(propertiesSetOnce, key)) {
+      if (propsToSetOnce) {
+        for (const key in propsToSetOnce) {
+          if (Object.prototype.hasOwnProperty.call(propsToSetOnce, key)) {
             if (!(key in existingProperties)) {
-              setOnceProps[key] = propertiesSetOnce[key]
+              setOnceProps[key] = propsToSetOnce[key]
             }
           }
         }
@@ -501,7 +499,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       this.setPersistedProperty<PostHogEventProperties>(PostHogPersistedProperty.PersonProperties, {
         ...existingProperties,
         ...setOnceProps,
-        ...properties,
+        ...propsToSet,
       })
 
       if (reloadFeatureFlags) {
@@ -1379,7 +1377,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       }
 
       // Update person properties for feature flags evaluation
-      this.setPersonPropertiesForFlags(userPropertiesToSet || {}, reloadFeatureFlags, userPropertiesToSetOnce)
+      this.setPersonPropertiesForFlags(
+        { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} },
+        reloadFeatureFlags
+      )
 
       this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
 

@@ -764,12 +764,8 @@ export class PostHog extends PostHogCore {
    * @param properties The person properties to set for flag evaluation
    * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
-  setPersonPropertiesForFlags(
-    properties: Record<string, JsonType>,
-    reloadFeatureFlags = true,
-    propertiesSetOnce?: Record<string, JsonType>
-  ): void {
-    super.setPersonPropertiesForFlags(properties, reloadFeatureFlags, propertiesSetOnce)
+  setPersonPropertiesForFlags(properties: Record<string, JsonType>, reloadFeatureFlags = true): void {
+    super.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
   }
 
   /**
@@ -1164,9 +1160,11 @@ export class PostHog extends PostHogCore {
       // - When distinctId is the same but properties change: it calls setPersonProperties() which reloads flags
       // So we only need to set the properties here without triggering another reload.
       this.setPersonPropertiesForFlags(
-        propsToCache,
-        false,
-        Object.keys(propsOnceToCache).length > 0 ? propsOnceToCache : undefined
+        {
+          $set: propsToCache,
+          ...(Object.keys(propsOnceToCache).length > 0 ? { $set_once: propsOnceToCache } : {}),
+        },
+        false
       )
     }
 
