@@ -758,8 +758,8 @@ export class PostHog extends PostHogCore {
 
   /**
    * Returns the stable device identifier used for device-level feature flag bucketing.
-   * This ID persists across identify() and reset() calls, only changing on reset(true)
-   * or a fresh app install.
+   * This ID persists across identify() and reset() calls, only changing on
+   * reset(undefined, true) or a fresh app install.
    *
    * @returns The device ID, or an empty string if not yet initialized
    */
