@@ -87,3 +87,6 @@ export type { ToolbarParams, ToolbarUserIntent, ToolbarSource, ToolbarVersion } 
 
 // Tree-shakeable extension types
 export type { TreeShakeableConfig, TreeShakeable } from './tree-shakeable'
+
+// Log capture types
+export type { LogSeverityLevel, CaptureLogOptions } from './capture-log'
