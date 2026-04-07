@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.40.1
+
+### Patch Changes
+
+- [#3291](https://github.com/PostHog/posthog-js/pull/3291) [`95ad66d`](https://github.com/PostHog/posthog-js/commit/95ad66d8cb406b253453a0c5dd01c9a5e46551a9) Thanks [@ioannisj](https://github.com/ioannisj)! - chore: bump minimum version of posthog-react-native-session-replay dependency to 1.5.2
+  (2026-04-07)
+
 ## 4.40.0
 
 ### Minor Changes
