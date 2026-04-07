@@ -4,6 +4,7 @@ import { NodeSDK } from '@opentelemetry/sdk-node'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 import { PostHogTraceExporter } from '@posthog/ai/otel'
 import { OpenAIInstrumentation } from '@opentelemetry/instrumentation-openai'
+import { AzureOpenAI } from 'openai'
 
 const sdk = new NodeSDK({
     resource: resourceFromAttributes({
@@ -19,8 +20,6 @@ const sdk = new NodeSDK({
 sdk.start()
 
 async function main() {
-    const { AzureOpenAI } = await import('openai')
-
     const client = new AzureOpenAI({
         apiKey: process.env.AZURE_OPENAI_API_KEY!,
         apiVersion: '2024-10-21',

@@ -4,6 +4,8 @@ import { NodeSDK } from '@opentelemetry/sdk-node'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 import { PostHogTraceExporter } from '@posthog/ai/otel'
 import { OpenAIInstrumentation } from '@opentelemetry/instrumentation-openai'
+import OpenAI from 'openai'
+import Instructor from '@instructor-ai/instructor'
 import { z } from 'zod'
 
 const sdk = new NodeSDK({
@@ -25,9 +27,6 @@ const UserInfo = z.object({
 })
 
 async function main() {
-    const { default: OpenAI } = await import('openai')
-    const { default: Instructor } = await import('@instructor-ai/instructor')
-
     const openai = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY!,
     })
