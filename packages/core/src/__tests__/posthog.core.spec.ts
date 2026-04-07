@@ -129,49 +129,33 @@ describe('PostHog Core', () => {
       }
     })
 
-    it('should send $device_id as a top-level field when present in personProperties', async () => {
-      mocks.fetch.mockImplementation((url) => {
-        if (url.includes('/flags/?v=2')) {
-          return Promise.resolve({
-            status: 200,
-            text: () => Promise.resolve('ok'),
-            json: () => Promise.resolve({ featureFlags: {}, featureFlagPayloads: {} }),
-          })
-        }
-        return errorAPIResponse
-      })
-
-      await posthog.getFlags('test-distinct-id', {}, { $device_id: 'device-123', email: 'test@example.com' })
-
-      expect(mocks.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/flags/?v=2'),
-        expect.objectContaining({
-          body: expect.any(String),
+    it.each([
+      [{ $device_id: 'device-123', email: 'test@example.com' }, 'device-123'],
+      [{ email: 'test@example.com' }, undefined],
+    ])(
+      'should handle $device_id top-level field correctly (props=%o)',
+      async (personProperties, expectedDeviceId) => {
+        mocks.fetch.mockImplementation((url) => {
+          if (url.includes('/flags/?v=2')) {
+            return Promise.resolve({
+              status: 200,
+              text: () => Promise.resolve('ok'),
+              json: () => Promise.resolve({ featureFlags: {}, featureFlagPayloads: {} }),
+            })
+          }
+          return errorAPIResponse
         })
-      )
 
-      const requestBody = JSON.parse(mocks.fetch.mock.calls[0][1].body)
-      expect(requestBody.$device_id).toBe('device-123')
-      expect(requestBody.person_properties.$device_id).toBe('device-123')
-    })
+        await posthog.getFlags('test-distinct-id', {}, personProperties)
 
-    it('should not include $device_id as a top-level field when not in personProperties', async () => {
-      mocks.fetch.mockImplementation((url) => {
-        if (url.includes('/flags/?v=2')) {
-          return Promise.resolve({
-            status: 200,
-            text: () => Promise.resolve('ok'),
-            json: () => Promise.resolve({ featureFlags: {}, featureFlagPayloads: {} }),
-          })
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+        const requestBody = JSON.parse(mocks.fetch.mock.calls[0][1].body)
+        expect(requestBody.$device_id).toBe(expectedDeviceId)
+        if (expectedDeviceId) {
+          expect(requestBody.person_properties.$device_id).toBe(expectedDeviceId)
         }
-        return errorAPIResponse
-      })
-
-      await posthog.getFlags('test-distinct-id', {}, { email: 'test@example.com' })
-
-      const requestBody = JSON.parse(mocks.fetch.mock.calls[0][1].body)
-      expect(requestBody.$device_id).toBeUndefined()
-    })
+      }
+    )
 
     it('should handle network errors', async () => {
       const emitSpy = jest.spyOn(posthog['_events'], 'emit')
