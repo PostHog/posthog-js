@@ -93,6 +93,22 @@ export type {
 // Toolbar types
 export type { ToolbarUserIntent, ToolbarSource, ToolbarVersion, ToolbarParams } from '@posthog/types'
 
+// Log capture types
+export type {
+    LogSeverityLevel,
+    OtlpSeverityText,
+    OtlpSeverityEntry,
+    LogAttributeValue,
+    LogAttributes,
+    CaptureLogOptions,
+    Logger,
+    OtlpAnyValue,
+    OtlpKeyValue,
+    OtlpLogRecord,
+    OtlpLogsPayload,
+    LogSdkContext,
+} from '@posthog/types'
+
 // Re-export KnownUnsafeEditableEvent from @posthog/core for backwards compatibility
 export type { KnownUnsafeEditableEvent } from '@posthog/core'
 

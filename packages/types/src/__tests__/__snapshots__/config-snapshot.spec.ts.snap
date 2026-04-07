@@ -197,6 +197,30 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "serviceName": [
         "undefined",
         "string"
+      ],
+      "environment": [
+        "undefined",
+        "string"
+      ],
+      "serviceVersion": [
+        "undefined",
+        "string"
+      ],
+      "resourceAttributes": [
+        "undefined",
+        "LogAttributes"
+      ],
+      "flushIntervalMs": [
+        "undefined",
+        "number"
+      ],
+      "maxBufferSize": [
+        "undefined",
+        "number"
+      ],
+      "maxLogsPerInterval": [
+        "undefined",
+        "number"
       ]
     }
   ],

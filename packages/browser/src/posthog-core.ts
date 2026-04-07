@@ -44,6 +44,7 @@ import { SessionPropsManager } from './session-props'
 import { SessionIdManager } from './sessionid'
 import { localStore } from './storage'
 import {
+    CaptureLogOptions,
     CaptureOptions,
     CaptureResult,
     Compression,
@@ -1005,6 +1006,7 @@ export class PostHog implements PostHogInterface {
             this.capture(EVENT_PAGELEAVE)
         }
 
+        this.logs?.flushLogs('sendBeacon')
         this._requestQueue?.unload()
         this._retryQueue?.unload()
     }
@@ -3217,6 +3219,46 @@ export class PostHog implements PostHogInterface {
             ...errorToProperties,
             ...additionalProperties,
         })
+    }
+
+    /**
+     * Capture a log entry and send it to the PostHog logs endpoint.
+     *
+     * {@label Logs}
+     *
+     * @public
+     *
+     * @example
+     * ```js
+     * posthog.captureLog({
+     *   body: 'checkout completed',
+     *   level: 'info',
+     *   attributes: { order_id: 'ord_789', amount_cents: 4999 },
+     * })
+     * ```
+     *
+     * @param {CaptureLogOptions} options The log entry options
+     */
+    captureLog(options: CaptureLogOptions): void {
+        this.logs?.captureLog(options)
+    }
+
+    private static _noopLogger = (() => {
+        const noop = () => {}
+        return { trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop }
+    })()
+
+    /**
+     * Logger with convenience methods for each severity level.
+     *
+     * @example
+     * ```js
+     * posthog.logger.info('checkout completed', { order_id: 'ord_789' })
+     * posthog.logger.error('payment failed', { error_code: 'E001' })
+     * ```
+     */
+    get logger() {
+        return this.logs?.logger ?? PostHog._noopLogger
     }
 
     /**

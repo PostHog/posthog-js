@@ -73,6 +73,7 @@ export type {
     SlimDOMOptions,
     SessionRecordingOptions,
     RequestQueueConfig,
+    LogCaptureOptions,
     PostHogConfig,
 } from './posthog-config'
 
@@ -87,3 +88,19 @@ export type { ToolbarParams, ToolbarUserIntent, ToolbarSource, ToolbarVersion } 
 
 // Tree-shakeable extension types
 export type { TreeShakeableConfig, TreeShakeable } from './tree-shakeable'
+
+// Log capture types
+export type {
+    LogSeverityLevel,
+    OtlpSeverityText,
+    OtlpSeverityEntry,
+    LogAttributeValue,
+    LogAttributes,
+    CaptureLogOptions,
+    Logger,
+    OtlpAnyValue,
+    OtlpKeyValue,
+    OtlpLogRecord,
+    OtlpLogsPayload,
+    LogSdkContext,
+} from './capture-log'
