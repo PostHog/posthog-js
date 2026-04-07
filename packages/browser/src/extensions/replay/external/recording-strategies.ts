@@ -13,6 +13,7 @@ import {
     SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX,
     SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX,
     SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX,
+    STORED_PERSON_PROPERTIES_KEY,
 } from '../../../constants'
 import {
     EventTriggerMatching,
@@ -33,6 +34,7 @@ import {
 import { sampleOnProperty } from '../../sampling'
 import { isBoolean, isNull, isNullish, isNumber } from '@posthog/core'
 import { createLogger } from '../../../utils/logger'
+import { matchTriggerPropertyFilters } from '../../../utils/property-utils'
 
 const logger = createLogger('[SessionRecording]')
 
@@ -370,9 +372,12 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
                 onPause,
                 onResume,
                 (triggerType) => {
-                    // Use per-group activation instead of global V1 _activateTrigger
+                    // Check group-level property filters before activating
+                    if (!this._checkGroupLevelProperties(matcher, undefined)) {
+                        return
+                    }
+
                     matcher.activateTrigger(triggerType, sessionId)
-                    // Update session properties after activation
                     this.updateActiveTriggers(sessionId)
                 },
                 sessionId
@@ -403,6 +408,27 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
                     matcher.checkEventTriggerConditions(
                         event.event,
                         (triggerType) => {
+                            // Check group-level property filters
+                            if (!this._checkGroupLevelProperties(matcher, event.properties)) {
+                                return
+                            }
+
+                            // Check per-event property filters
+                            const eventTriggers = matcher.group.conditions.events || []
+                            const matchedTrigger = eventTriggers.find((t) => t.name === event.event)
+                            if (matchedTrigger?.properties && matchedTrigger.properties.length > 0) {
+                                const personProperties = this._instance.get_property(STORED_PERSON_PROPERTIES_KEY)
+                                if (
+                                    !matchTriggerPropertyFilters(
+                                        matchedTrigger.properties,
+                                        event.properties,
+                                        personProperties
+                                    )
+                                ) {
+                                    return
+                                }
+                            }
+
                             matcher.activateTrigger(triggerType, sessionId)
                             this.updateActiveTriggers(sessionId)
                         },
@@ -519,6 +545,18 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
         this._triggerGroupMatchers = []
         this._triggerGroupSamplingResults.clear()
         this._urlTriggerMatching.stop()
+    }
+
+    private _checkGroupLevelProperties(
+        matcher: TriggerGroupMatching,
+        eventProperties: Record<string, any> | undefined
+    ): boolean {
+        const groupProperties = matcher.group.conditions.properties
+        if (!groupProperties || groupProperties.length === 0) {
+            return true
+        }
+        const personProperties = this._instance.get_property(STORED_PERSON_PROPERTIES_KEY)
+        return matchTriggerPropertyFilters(groupProperties, eventProperties, personProperties)
     }
 
     private _setupTriggerGroups(groups: SessionRecordingTriggerGroup[]) {

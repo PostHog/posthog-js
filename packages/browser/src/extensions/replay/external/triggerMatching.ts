@@ -338,7 +338,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
             onResume()
         }
 
-        // Check URL triggers (V1 only - V2 handles per-group)
+        // Check URL triggers
         const isActivated = this._urlTriggerStatus(sessionId) === TRIGGER_ACTIVATED
         const urlMatches = sessionRecordingUrlTriggerMatches(url, this._urlTriggers, this._compiledTriggerRegexes)
 
@@ -528,7 +528,7 @@ export class TriggerGroupMatching implements TriggerStatusMatching {
             this._combinedMatching = new AlwaysActivatedTriggerMatching()
         } else {
             // V2: Events arrive as objects {name, properties?} from the server.
-            // Extract just the names for now — property filter evaluation comes later.
+            // Extract just the names — property filter evaluation is handled by the strategy.
             const eventNames = (group.conditions.events || []).map((e) => e.name)
 
             // Convert group config to the format expected by the individual matchers
@@ -536,7 +536,7 @@ export class TriggerGroupMatching implements TriggerStatusMatching {
                 urlTriggers: group.conditions.urls || [],
                 eventTriggers: eventNames,
                 linkedFlag: group.conditions.flag || null,
-                urlBlocklist: [], // groups don't have blocklist
+                urlBlocklist: [],
             }
 
             this._urlTriggerMatching.onConfig(config)

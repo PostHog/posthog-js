@@ -4494,6 +4494,126 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_isBelowMinimumDuration']()).toBe(false)
         })
 
+        it('blocks event trigger activation when per-event property filters fail', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'high-value-errors',
+                                name: 'High Value Errors',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [
+                                        {
+                                            name: 'purchase_error',
+                                            properties: [
+                                                { key: 'amount', type: 'event', operator: 'gt', value: '100' },
+                                            ],
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Event name matches but property filter fails
+            simpleEventEmitter.emit('eventCaptured', { event: 'purchase_error', properties: { amount: 50 } })
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Event name matches and property filter passes
+            simpleEventEmitter.emit('eventCaptured', { event: 'purchase_error', properties: { amount: 200 } })
+            expect(sessionRecording.status).toBe('sampled')
+        })
+
+        it('blocks trigger activation when group-level property filters fail', () => {
+            // Set person properties
+            posthog.persistence?.register({ $stored_person_properties: { country: 'DE' } })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'us-only',
+                                name: 'US Only',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [{ name: '$exception' }],
+                                    properties: [{ key: 'country', type: 'person', operator: 'exact', value: 'US' }],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Event name matches but group-level person property fails (country is DE, not US)
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Update person properties to US
+            posthog.persistence?.register({ $stored_person_properties: { country: 'US' } })
+
+            // Now it should match
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+            expect(sessionRecording.status).toBe('sampled')
+        })
+
+        it('checks both group-level and per-event properties (both must pass)', () => {
+            posthog.persistence?.register({ $stored_person_properties: { country: 'US' } })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'us-high-value',
+                                name: 'US High Value',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [
+                                        {
+                                            name: 'purchase',
+                                            properties: [
+                                                { key: 'amount', type: 'event', operator: 'gt', value: '100' },
+                                            ],
+                                        },
+                                    ],
+                                    properties: [{ key: 'country', type: 'person', operator: 'exact', value: 'US' }],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Group passes (US) but per-event fails (amount 50)
+            simpleEventEmitter.emit('eventCaptured', { event: 'purchase', properties: { amount: 50 } })
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Both pass
+            simpleEventEmitter.emit('eventCaptured', { event: 'purchase', properties: { amount: 200 } })
+            expect(sessionRecording.status).toBe('sampled')
+        })
+
         it('stops checking triggers after initial buffer flush (performance optimization)', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
