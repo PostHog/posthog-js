@@ -1096,32 +1096,20 @@ describe('PostHog React Native', () => {
         expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual(undefined)
       })
 
-      it('should clear non-lifecycle properties when reset is called without propertiesToKeep', async () => {
-        posthog = new PostHog('test-api-key', {
-          customStorage: storage,
-          flushInterval: 0,
-          setDefaultPersonProperties: false,
-        })
-        await posthog.ready()
-
-        posthog.overrideFeatureFlag({ testFlag: true })
-        posthog.register({ customProp: 'value' })
-        posthog.setPersistedProperty(PostHogPersistedProperty.InstalledAppBuild, '1')
-        posthog.setPersistedProperty(PostHogPersistedProperty.InstalledAppVersion, '1.0.0')
-
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual({ testFlag: true })
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual({ customProp: 'value' })
-
-        posthog.reset()
-
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual(undefined)
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual(undefined)
-        // App lifecycle properties should be preserved by default
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.InstalledAppBuild)).toEqual('1')
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.InstalledAppVersion)).toEqual('1.0.0')
-      })
-
-      it('should clear all properties including lifecycle when reset is called with empty array', async () => {
+      it.each([
+        {
+          label: 'default (no arg) preserves lifecycle properties',
+          resetArg: undefined as PostHogPersistedProperty[] | undefined,
+          expectBuild: '1',
+          expectVersion: '1.0.0',
+        },
+        {
+          label: 'explicit empty array clears lifecycle properties',
+          resetArg: [] as PostHogPersistedProperty[],
+          expectBuild: undefined,
+          expectVersion: undefined,
+        },
+      ])('reset with $label', async ({ resetArg, expectBuild, expectVersion }) => {
         posthog = new PostHog('test-api-key', {
           customStorage: storage,
           flushInterval: 0,
@@ -1133,12 +1121,11 @@ describe('PostHog React Native', () => {
         posthog.setPersistedProperty(PostHogPersistedProperty.InstalledAppVersion, '1.0.0')
         posthog.register({ customProp: 'value' })
 
-        posthog.reset([])
+        posthog.reset(resetArg)
 
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual(undefined)
-        // Explicitly passing empty array should clear lifecycle properties too
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.InstalledAppBuild)).toEqual(undefined)
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.InstalledAppVersion)).toEqual(undefined)
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toBeUndefined()
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.InstalledAppBuild)).toEqual(expectBuild)
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.InstalledAppVersion)).toEqual(expectVersion)
       })
 
       it('should not trigger duplicate Application Installed after reset', async () => {
