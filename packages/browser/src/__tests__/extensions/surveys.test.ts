@@ -598,6 +598,18 @@ describe('SurveyManager', () => {
             const descriptionElement = surveyDiv.querySelector('.survey-question-description')
             expect(descriptionElement).not.toBeNull()
         })
+
+        it('exposes the current question index on .survey-box for embedders', () => {
+            // Embedders rendering surveys via the API (e.g. the standalone hosted survey page)
+            // need a reliable way to know which question is currently displayed so they can drive
+            // their own progress UI. Reading data-question-index works for every question type,
+            // including link questions which render no input/rating element.
+            const surveyDiv = document.createElement('div')
+            surveyManager.renderSurvey(mockSurvey, surveyDiv)
+            const surveyBox = surveyDiv.querySelector('.survey-box')
+            expect(surveyBox).not.toBeNull()
+            expect(surveyBox?.getAttribute('data-question-index')).toBe('0')
+        })
     })
 
     describe('renderSurvey with URL prefill that completes the survey', () => {
