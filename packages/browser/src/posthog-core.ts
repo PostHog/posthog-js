@@ -2404,7 +2404,7 @@ export class PostHog implements PostHogInterface {
 
             // Update current user properties
             this.setPersonPropertiesForFlags(
-                { ...(userPropertiesToSetOnce || {}), ...(userPropertiesToSet || {}) },
+                { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} },
                 false
             )
 
@@ -2494,7 +2494,10 @@ export class PostHog implements PostHogInterface {
         }
 
         // Update current user properties
-        this.setPersonPropertiesForFlags({ ...(userPropertiesToSetOnce || {}), ...(userPropertiesToSet || {}) })
+        this.setPersonPropertiesForFlags(
+            { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} },
+            true
+        )
 
         this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
 
