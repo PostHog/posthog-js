@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.25.1
+
+### Patch Changes
+
+- [#3340](https://github.com/PostHog/posthog-js/pull/3340) [`57ee5b2`](https://github.com/PostHog/posthog-js/commit/57ee5b25fd2c97f334f52b4eba28ea925033d6ed) Thanks [@dmarticus](https://github.com/dmarticus)! - Add device bucketing support to the React Native SDK for stable feature flag assignment across identity changes
+  (2026-04-07)
+
 ## 1.25.0
 
 ### Minor Changes
