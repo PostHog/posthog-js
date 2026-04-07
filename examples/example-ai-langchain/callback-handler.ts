@@ -1,18 +1,24 @@
-/** LangChain with PostHog callback handler for tracking LLM calls. */
+/** LangChain chat, tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from 'posthog-node'
-import { LangChainCallbackHandler } from '@posthog/ai/langchain'
+import { NodeSDK } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogTraceExporter } from '@posthog/ai/otel'
+import { LangChainInstrumentation } from '@traceloop/instrumentation-langchain'
 import { ChatOpenAI } from '@langchain/openai'
 import { HumanMessage } from '@langchain/core/messages'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-langchain-app',
+        'user.id': 'example-user',
+    }),
+    traceExporter: new PostHogTraceExporter({
+        apiKey: process.env.POSTHOG_API_KEY!,
+        host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+    }),
+    instrumentations: [new LangChainInstrumentation()],
 })
-
-const callbackHandler = new LangChainCallbackHandler({
-    client: phClient,
-    distinctId: 'example-user',
-})
+sdk.start()
 
 const model = new ChatOpenAI({
     modelName: 'gpt-4o-mini',
@@ -21,12 +27,10 @@ const model = new ChatOpenAI({
 })
 
 async function main() {
-    const response = await model.invoke([new HumanMessage('Explain observability in three sentences.')], {
-        callbacks: [callbackHandler],
-    })
+    const response = await model.invoke([new HumanMessage('Explain observability in three sentences.')])
 
     console.log(response.content)
-    await phClient.shutdown()
+    await sdk.shutdown()
 }
 
 main()

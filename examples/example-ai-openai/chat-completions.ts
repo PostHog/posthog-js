@@ -1,34 +1,22 @@
-/** OpenAI Chat Completions API with tool calling, tracked by PostHog. */
+/** OpenAI Chat Completions API with tool calling, tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from 'posthog-node'
-import { OpenAI } from '@posthog/ai/openai'
+import { NodeSDK } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogTraceExporter } from '@posthog/ai/otel'
+import { OpenAIInstrumentation } from '@opentelemetry/instrumentation-openai'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-openai-app',
+        'user.id': 'example-user',
+    }),
+    traceExporter: new PostHogTraceExporter({
+        apiKey: process.env.POSTHOG_API_KEY!,
+        host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+    }),
+    instrumentations: [new OpenAIInstrumentation()],
 })
-const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY!,
-    posthog: phClient,
-})
-
-const tools = [
-    {
-        type: 'function' as const,
-        function: {
-            name: 'get_weather',
-            description: 'Get current weather for a location',
-            parameters: {
-                type: 'object',
-                properties: {
-                    latitude: { type: 'number' },
-                    longitude: { type: 'number' },
-                    location_name: { type: 'string' },
-                },
-                required: ['latitude', 'longitude', 'location_name'],
-            },
-        },
-    },
-]
+sdk.start()
 
 async function getWeather(latitude: number, longitude: number, locationName: string): Promise<string> {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`
@@ -39,10 +27,34 @@ async function getWeather(latitude: number, longitude: number, locationName: str
 }
 
 async function main() {
+    const { default: OpenAI } = await import('openai')
+
+    const client = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY!,
+    })
+
+    const tools = [
+        {
+            type: 'function' as const,
+            function: {
+                name: 'get_weather',
+                description: 'Get current weather for a location',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        latitude: { type: 'number' },
+                        longitude: { type: 'number' },
+                        location_name: { type: 'string' },
+                    },
+                    required: ['latitude', 'longitude', 'location_name'],
+                },
+            },
+        },
+    ]
+
     const response = await client.chat.completions.create({
         model: 'gpt-4o-mini',
         max_completion_tokens: 1024,
-        posthogDistinctId: 'example-user',
         tools,
         tool_choice: 'auto',
         messages: [
@@ -69,7 +81,7 @@ async function main() {
         }
     }
 
-    await phClient.shutdown()
+    await sdk.shutdown()
 }
 
 main()

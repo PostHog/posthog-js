@@ -1,12 +1,12 @@
 /** AWS Bedrock chat with OpenTelemetry instrumentation, tracked by PostHog. */
 
 import { NodeSDK } from '@opentelemetry/sdk-node'
-import { Resource } from '@opentelemetry/resources'
+import { resourceFromAttributes } from '@opentelemetry/resources'
 import { PostHogTraceExporter } from '@posthog/ai/otel'
 import { AwsInstrumentation } from '@opentelemetry/instrumentation-aws-sdk'
 
 const sdk = new NodeSDK({
-    resource: new Resource({
+    resource: resourceFromAttributes({
         'service.name': 'example-bedrock-app',
     }),
     traceExporter: new PostHogTraceExporter({

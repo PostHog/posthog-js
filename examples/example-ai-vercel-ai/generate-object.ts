@@ -1,14 +1,23 @@
-/** Vercel AI generateObject for structured output, tracked by PostHog. */
+/** Vercel AI generateObject for structured output, tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from 'posthog-node'
-import { withTracing } from '@posthog/ai/vercel'
+import { NodeSDK } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogTraceExporter } from '@posthog/ai/otel'
 import { generateObject } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai'
 import { z } from 'zod'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-vercel-ai-app',
+    }),
+    traceExporter: new PostHogTraceExporter({
+        apiKey: process.env.POSTHOG_API_KEY!,
+        host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+    }),
 })
+sdk.start()
+
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 
 const WeatherSchema = z.object({
@@ -20,12 +29,15 @@ const WeatherSchema = z.object({
 })
 
 async function main() {
-    const model = withTracing(openai('gpt-4o-mini'), phClient, {
-        posthogDistinctId: 'example-user',
-    })
-
     const { object } = await generateObject({
-        model,
+        model: openai('gpt-4o-mini'),
+        experimental_telemetry: {
+            isEnabled: true,
+            functionId: 'generate-object',
+            metadata: {
+                posthog_distinct_id: 'example-user',
+            },
+        },
         schema: WeatherSchema,
         prompt: 'Describe typical weather in Dublin, Ireland in March.',
     })
@@ -36,7 +48,7 @@ async function main() {
     console.log('Conditions:', object.conditions)
     console.log('Wind:', object.windSpeed, 'km/h')
 
-    await phClient.shutdown()
+    await sdk.shutdown()
 }
 
 main()

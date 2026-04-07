@@ -1,21 +1,34 @@
-/** Anthropic streaming chat, tracked by PostHog. */
+/** Anthropic streaming chat, tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from 'posthog-node'
-import { Anthropic } from '@posthog/ai/anthropic'
+import { NodeSDK } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogTraceExporter } from '@posthog/ai/otel'
+import { AnthropicInstrumentation } from '@traceloop/instrumentation-anthropic'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-anthropic-app',
+        'user.id': 'example-user',
+    }),
+    traceExporter: new PostHogTraceExporter({
+        apiKey: process.env.POSTHOG_API_KEY!,
+        host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+    }),
+    instrumentations: [new AnthropicInstrumentation()],
 })
-const client = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY!,
-    posthog: phClient,
-})
+sdk.start()
 
 async function main() {
+    // Import after sdk.start() so the instrumentation can patch the SDK.
+    const { default: Anthropic } = await import('@anthropic-ai/sdk')
+
+    const client = new Anthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY!,
+    })
+
     const stream = await client.messages.create({
         model: 'claude-sonnet-4-5-20250929',
         max_tokens: 1024,
-        posthogDistinctId: 'example-user',
         stream: true,
         messages: [{ role: 'user', content: 'Explain observability in three sentences.' }],
     })
@@ -27,7 +40,7 @@ async function main() {
     }
 
     console.log()
-    await phClient.shutdown()
+    await sdk.shutdown()
 }
 
 main()
