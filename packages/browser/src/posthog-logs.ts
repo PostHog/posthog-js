@@ -168,9 +168,7 @@ export class PostHogLogs implements Extension {
             lib: options.service_name || 'posthog-js',
         }
 
-        if (this._instance.get_distinct_id) {
-            context.distinctId = this._instance.get_distinct_id()
-        }
+        context.distinctId = this._instance.get_distinct_id()
 
         if (this._instance.sessionManager) {
             const { sessionId } = this._instance.sessionManager.checkAndGetSessionAndWindowId(true)

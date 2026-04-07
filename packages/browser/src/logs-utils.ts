@@ -84,7 +84,8 @@ export function toOtlpKeyValueList(attrs: Record<string, string | number | boole
 
 function timestampToUnixNano(): string {
     // OTLP expects nanoseconds as a string (uint64 doesn't fit in JS number)
-    return String(Date.now() * 1_000_000)
+    // Date.now() * 1_000_000 exceeds Number.MAX_SAFE_INTEGER, so we concat instead of multiply
+    return String(Date.now()) + '000000'
 }
 
 export interface OtlpLogRecord {
