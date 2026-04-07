@@ -91,6 +91,23 @@ describe('external-scripts-loader', () => {
             )
         })
 
+        it('uses eu-assets for snippet v1 clients on the EU region', () => {
+            const euV1PostHog = {
+                config: {
+                    api_host: 'https://eu.i.posthog.com',
+                    external_scripts_inject_target: 'body',
+                },
+                version: '1.0.0',
+            } as PostHog
+            euV1PostHog.requestRouter = new RequestRouter(euV1PostHog)
+
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(euV1PostHog, 'recorder', callback)
+
+            expect(document!.getElementsByTagName('script')[0].src).toBe(
+                'https://eu-assets.i.posthog.com/static/recorder.js?v=1.0.0'
+            )
+        })
+
         it('allows adding nonce via prepare_external_dependency_script', () => {
             mockPostHog.config.prepare_external_dependency_script = (script) => {
                 script.nonce = '123'
