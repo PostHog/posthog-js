@@ -221,6 +221,7 @@ export enum PostHogPersistedProperty {
   Surveys = 'surveys', // only used by posthog-react-native
   RemoteConfig = 'remote_config',
   FlagsEndpointWasHit = 'flags_endpoint_was_hit', // only used by posthog-react-native
+  DeviceId = 'device_id', // only used by posthog-react-native
 }
 
 export type PostHogFetchOptions = {

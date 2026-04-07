@@ -728,8 +728,12 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           this.getPersistedProperty<Record<string, Record<string, string>>>(PostHogPersistedProperty.GroupProperties) ||
           {}
 
+        const deviceId = this.getPersistedProperty<string>(PostHogPersistedProperty.DeviceId)
+
         const extraProperties = {
           $anon_distinct_id: sendAnonDistinctId ? this.getAnonymousId() : undefined,
+          // Only set by the React Native SDK; omitted from JSON when DeviceId is not persisted
+          $device_id: deviceId ?? undefined,
         }
 
         const result = await super.getFlags(
