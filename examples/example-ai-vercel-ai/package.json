@@ -12,12 +12,13 @@
     "google": "tsx google.ts"
   },
   "dependencies": {
-    "posthog-node": "*",
     "@posthog/ai": "*",
     "ai": "^4.0.0",
     "@ai-sdk/openai": "^1.0.0",
     "@ai-sdk/anthropic": "^1.0.0",
     "@ai-sdk/google": "^1.0.0",
+    "@opentelemetry/sdk-node": "~0.200.0",
+    "@opentelemetry/resources": "~2.0.0",
     "zod": "^3.0.0"
   },
   "devDependencies": {

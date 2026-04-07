@@ -1,31 +1,22 @@
-/** Anthropic chat with tool calling, tracked by PostHog. */
+/** Anthropic chat with tool calling, tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from 'posthog-node'
-import { Anthropic } from '@posthog/ai/anthropic'
+import { NodeSDK } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogTraceExporter } from '@posthog/ai/otel'
+import { AnthropicInstrumentation } from '@traceloop/instrumentation-anthropic'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-anthropic-app',
+        'user.id': 'example-user',
+    }),
+    traceExporter: new PostHogTraceExporter({
+        apiKey: process.env.POSTHOG_API_KEY!,
+        host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+    }),
+    instrumentations: [new AnthropicInstrumentation()],
 })
-const client = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY!,
-    posthog: phClient,
-})
-
-const tools: Anthropic.Messages.Tool[] = [
-    {
-        name: 'get_weather',
-        description: 'Get current weather for a location',
-        input_schema: {
-            type: 'object' as const,
-            properties: {
-                latitude: { type: 'number' },
-                longitude: { type: 'number' },
-                location_name: { type: 'string' },
-            },
-            required: ['latitude', 'longitude', 'location_name'],
-        },
-    },
-]
+sdk.start()
 
 async function getWeather(latitude: number, longitude: number, locationName: string): Promise<string> {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`
@@ -36,10 +27,32 @@ async function getWeather(latitude: number, longitude: number, locationName: str
 }
 
 async function main() {
+    // Import after sdk.start() so the instrumentation can patch the SDK.
+    const { default: Anthropic } = await import('@anthropic-ai/sdk')
+
+    const client = new Anthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY!,
+    })
+
+    const tools: Anthropic.Messages.Tool[] = [
+        {
+            name: 'get_weather',
+            description: 'Get current weather for a location',
+            input_schema: {
+                type: 'object' as const,
+                properties: {
+                    latitude: { type: 'number' },
+                    longitude: { type: 'number' },
+                    location_name: { type: 'string' },
+                },
+                required: ['latitude', 'longitude', 'location_name'],
+            },
+        },
+    ]
+
     const response = await client.messages.create({
         model: 'claude-sonnet-4-5-20250929',
         max_tokens: 1024,
-        posthogDistinctId: 'example-user',
         tools,
         messages: [{ role: 'user', content: "What's the weather like in Dublin, Ireland?" }],
     })
@@ -55,7 +68,7 @@ async function main() {
         }
     }
 
-    await phClient.shutdown()
+    await sdk.shutdown()
 }
 
 main()

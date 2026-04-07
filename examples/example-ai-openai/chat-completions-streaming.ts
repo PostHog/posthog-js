@@ -1,21 +1,33 @@
-/** OpenAI Chat Completions API with streaming, tracked by PostHog. */
+/** OpenAI Chat Completions API with streaming, tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from 'posthog-node'
-import { OpenAI } from '@posthog/ai/openai'
+import { NodeSDK } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogTraceExporter } from '@posthog/ai/otel'
+import { OpenAIInstrumentation } from '@opentelemetry/instrumentation-openai'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-openai-app',
+        'user.id': 'example-user',
+    }),
+    traceExporter: new PostHogTraceExporter({
+        apiKey: process.env.POSTHOG_API_KEY!,
+        host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+    }),
+    instrumentations: [new OpenAIInstrumentation()],
 })
-const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY!,
-    posthog: phClient,
-})
+sdk.start()
 
 async function main() {
+    const { default: OpenAI } = await import('openai')
+
+    const client = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY!,
+    })
+
     const stream = await client.chat.completions.create({
         model: 'gpt-4o-mini',
         max_completion_tokens: 1024,
-        posthogDistinctId: 'example-user',
         stream: true,
         messages: [
             { role: 'system', content: 'You are a helpful assistant.' },
@@ -31,7 +43,7 @@ async function main() {
     }
 
     console.log()
-    await phClient.shutdown()
+    await sdk.shutdown()
 }
 
 main()

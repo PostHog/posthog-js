@@ -1,20 +1,26 @@
-/** LangGraph agent with PostHog callback handler for tracking LLM calls. */
+/** LangGraph agent, tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from 'posthog-node'
-import { LangChainCallbackHandler } from '@posthog/ai/langchain'
+import { NodeSDK } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogTraceExporter } from '@posthog/ai/otel'
+import { LangChainInstrumentation } from '@traceloop/instrumentation-langchain'
 import { createReactAgent } from '@langchain/langgraph/prebuilt'
 import { ChatOpenAI } from '@langchain/openai'
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-langgraph-app',
+        'user.id': 'example-user',
+    }),
+    traceExporter: new PostHogTraceExporter({
+        apiKey: process.env.POSTHOG_API_KEY!,
+        host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+    }),
+    instrumentations: [new LangChainInstrumentation()],
 })
-
-const callbackHandler = new LangChainCallbackHandler({
-    client: phClient,
-    distinctId: 'example-user',
-})
+sdk.start()
 
 const getWeather = tool((input) => `It's always sunny in ${input.city}!`, {
     name: 'get_weather',
@@ -31,13 +37,12 @@ const model = new ChatOpenAI({
 async function main() {
     const agent = createReactAgent({ llm: model, tools: [getWeather] })
 
-    const result = await agent.invoke(
-        { messages: [{ role: 'user', content: "What's the weather in Paris?" }] },
-        { callbacks: [callbackHandler] }
-    )
+    const result = await agent.invoke({
+        messages: [{ role: 'user', content: "What's the weather in Paris?" }],
+    })
 
     console.log(result.messages[result.messages.length - 1].content)
-    await phClient.shutdown()
+    await sdk.shutdown()
 }
 
 main()
