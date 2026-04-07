@@ -1,5 +1,45 @@
 # posthog-react-native
 
+## 4.40.2
+
+### Patch Changes
+
+- [#3348](https://github.com/PostHog/posthog-js/pull/3348) [`e246d07`](https://github.com/PostHog/posthog-js/commit/e246d076360bd07c0f4b754d31efc5e96b01f2d4) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: preserve app lifecycle properties on reset() to prevent duplicate Application Installed events
+  (2026-04-07)
+
+## 4.40.1
+
+### Patch Changes
+
+- [#3291](https://github.com/PostHog/posthog-js/pull/3291) [`95ad66d`](https://github.com/PostHog/posthog-js/commit/95ad66d8cb406b253453a0c5dd01c9a5e46551a9) Thanks [@ioannisj](https://github.com/ioannisj)! - chore: bump minimum version of posthog-react-native-session-replay dependency to 1.5.2
+  (2026-04-07)
+
+## 4.40.0
+
+### Minor Changes
+
+- [#3302](https://github.com/PostHog/posthog-js/pull/3302) [`fc5589f`](https://github.com/PostHog/posthog-js/commit/fc5589fcc51bd53ba818822831867d3c00d83a11) Thanks [@dmarticus](https://github.com/dmarticus)! - preserve $set_once semantics in local flag evaluation cache
+  (2026-04-07)
+
+### Patch Changes
+
+- Updated dependencies [[`fc5589f`](https://github.com/PostHog/posthog-js/commit/fc5589fcc51bd53ba818822831867d3c00d83a11)]:
+  - @posthog/core@1.25.0
+
+## 4.39.4
+
+### Patch Changes
+
+- [#3332](https://github.com/PostHog/posthog-js/pull/3332) [`3727051`](https://github.com/PostHog/posthog-js/commit/372705140150a46fd5641dbc55c27b246452ab72) Thanks [@ioannisj](https://github.com/ioannisj)! - chore: update posthog-react-native-session-replay min version to 1.5.2
+  (2026-04-03)
+
+## 4.39.3
+
+### Patch Changes
+
+- Updated dependencies [[`a01a3d5`](https://github.com/PostHog/posthog-js/commit/a01a3d55dc134b1b269be58c7922ce3780c57fc5)]:
+  - @posthog/core@1.24.6
+
 ## 4.39.2
 
 ### Patch Changes

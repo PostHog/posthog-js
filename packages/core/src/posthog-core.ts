@@ -147,6 +147,15 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return this._events.on(event, cb)
   }
 
+  /**
+   * Resets the user's ID and clears all persisted properties.
+   *
+   * Note: The event queue (`PostHogPersistedProperty.Queue`) is always preserved
+   * regardless of what is passed in `propertiesToKeep`, to ensure pending events
+   * are not lost.
+   *
+   * @param propertiesToKeep - Optional array of persisted properties to preserve during reset.
+   */
   reset(propertiesToKeep?: PostHogPersistedProperty[]): void {
     this.wrap(() => {
       const allPropertiesToKeep = [PostHogPersistedProperty.Queue, ...(propertiesToKeep || [])]
@@ -481,13 +490,31 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    ***/
   setPersonPropertiesForFlags(properties: { [type: string]: JsonType }, reloadFeatureFlags = true): void {
     this.wrap(() => {
-      // Get persisted person properties
       const existingProperties =
         this.getPersistedProperty<Record<string, JsonType>>(PostHogPersistedProperty.PersonProperties) || {}
 
+      // If the caller passes { $set, $set_once }, split them apart so we can apply $set_once
+      // semantics (skip keys that already exist). Otherwise treat all properties as $set for
+      // backward compatibility with the public API.
+      const propsToSet =
+        (properties?.['$set'] as Record<string, JsonType>) || (!properties?.['$set_once'] ? properties : {})
+      const propsToSetOnce = properties?.['$set_once'] as Record<string, JsonType> | undefined
+
+      const setOnceProps: Record<string, JsonType> = {}
+      if (propsToSetOnce) {
+        for (const key in propsToSetOnce) {
+          if (Object.prototype.hasOwnProperty.call(propsToSetOnce, key)) {
+            if (!(key in existingProperties)) {
+              setOnceProps[key] = propsToSetOnce[key]
+            }
+          }
+        }
+      }
+
       this.setPersistedProperty<PostHogEventProperties>(PostHogPersistedProperty.PersonProperties, {
         ...existingProperties,
-        ...properties,
+        ...setOnceProps,
+        ...propsToSet,
       })
 
       if (reloadFeatureFlags) {
@@ -1369,9 +1396,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       }
 
       // Update person properties for feature flags evaluation
-      // Merge setOnce first, then set to allow overwriting
-      const mergedProperties = { ...(userPropertiesToSetOnce || {}), ...(userPropertiesToSet || {}) }
-      this.setPersonPropertiesForFlags(mergedProperties, reloadFeatureFlags)
+      this.setPersonPropertiesForFlags(
+        { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} },
+        reloadFeatureFlags
+      )
 
       this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
 

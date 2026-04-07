@@ -224,7 +224,7 @@ jobs:
 
             - name: Check ${{ matrix.package.name }} version and detect an update
               id: check-package-version
-              uses: PostHog/check-package-version@v2.1.0
+              uses: PostHog/check-package-version@v2
               with:
                   path: ${{ steps.get-package-path.outputs.path }}
 
@@ -334,11 +334,163 @@ jobs:
                   message: '❌ Failed to release `${{ matrix.package.name }}@v${{ steps.check-package-version.outputs.committed-version }}`! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
                   emoji_reaction: 'x'
 
+    build-s3-artifacts:
+        name: Build posthog-js dist for S3
+        needs: [version-bump, notify-approval-needed]
+        runs-on: ubuntu-latest
+        # Run in parallel with publish — must NOT wait for publish because
+        # check-package-version compares against npm. If publish finishes first,
+        # the version is already on the registry and is-new-version returns false.
+        if: always() && needs.version-bump.outputs.commit-hash != ''
+        permissions:
+            contents: read
+        outputs:
+            is-new-version: ${{ steps.check-version.outputs.is-new-version }}
+            committed-version: ${{ steps.check-version.outputs.committed-version }}
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+              with:
+                  ref: ${{ needs.version-bump.outputs.commit-hash }}
+                  fetch-depth: 1
+
+            - name: Check posthog-js version
+              id: check-version
+              uses: PostHog/check-package-version@v2
+              with:
+                  path: packages/browser
+
+            - name: Setup environment
+              if: steps.check-version.outputs.is-new-version == 'true'
+              uses: ./.github/actions/setup
+
+            - name: Upload dist artifact
+              if: steps.check-version.outputs.is-new-version == 'true'
+              uses: actions/upload-artifact@v4
+              with:
+                  name: posthog-js-dist
+                  path: packages/browser/dist/*.js
+                  retention-days: 1
+                  if-no-files-found: error
+
+    build-toolbar:
+        name: Build toolbar from posthog/posthog
+        needs: [version-bump, notify-approval-needed]
+        runs-on: ubuntu-latest
+        if: always() && needs.version-bump.outputs.commit-hash != ''
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout posthog/posthog
+              uses: actions/checkout@v6
+              with:
+                  repository: PostHog/posthog
+                  ref: master
+                  fetch-depth: 1
+
+            - name: Install pnpm
+              uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin v4.2.0
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v5
+              with:
+                  node-version: '24'
+                  cache: 'pnpm'
+
+            - name: Install frontend dependencies
+              run: pnpm --filter=@posthog/frontend... install --frozen-lockfile
+
+            - name: Build toolbar
+              run: node frontend/bin/build-toolbar.mjs
+
+            - name: Verify toolbar output
+              run: |
+                  if [ ! -f frontend/dist/toolbar.js ]; then
+                    echo "❌ toolbar.js not found after build"
+                    exit 1
+                  fi
+                  TOOLBAR_SHA=$(git rev-parse HEAD)
+                  echo "✓ toolbar.js built successfully ($(wc -c < frontend/dist/toolbar.js) bytes)"
+                  echo "  Built from PostHog/posthog@${TOOLBAR_SHA}"
+
+            - name: Upload toolbar artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: toolbar-dist
+                  path: frontend/dist/toolbar.js
+                  retention-days: 1
+                  if-no-files-found: error
+
+    upload-s3:
+        name: Upload posthog-js dist to S3
+        needs: [build-s3-artifacts, build-toolbar, version-bump, notify-approval-needed]
+        runs-on: ubuntu-latest
+        if: always() && needs.build-s3-artifacts.outputs.is-new-version == 'true'
+        environment: 'S3 Upload' # For OIDC credential scoping only — no required reviewers (single approval at NPM Release)
+        permissions:
+            contents: read
+            id-token: write
+        steps:
+            # Sparse checkout: only the upload script — no pnpm install/build runs here.
+            - name: Checkout upload script
+              uses: actions/checkout@v6
+              with:
+                  ref: ${{ needs.version-bump.outputs.commit-hash }}
+                  sparse-checkout: .github/scripts
+
+            - name: Download dist artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: posthog-js-dist
+                  path: packages/browser/dist
+
+            - name: Download toolbar artifact
+              if: needs.build-toolbar.result == 'success'
+              uses: actions/download-artifact@v4
+              with:
+                  name: toolbar-dist
+                  path: packages/browser/dist
+
+            # Upload to US (us-east-1)
+            - name: Configure AWS credentials (US)
+              uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6
+              with:
+                  role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_US }}
+                  aws-region: us-east-1
+
+            - name: Upload dist and update manifest (US)
+              env:
+                  VERSION: ${{ needs.build-s3-artifacts.outputs.committed-version }}
+              run: .github/scripts/upload-posthog-js-s3.sh posthog-js-prod-us
+
+            # Upload to EU (eu-central-1)
+            - name: Configure AWS credentials (EU)
+              uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6
+              with:
+                  role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_EU }}
+                  aws-region: eu-central-1
+
+            - name: Upload dist and update manifest (EU)
+              env:
+                  VERSION: ${{ needs.build-s3-artifacts.outputs.committed-version }}
+              run: .github/scripts/upload-posthog-js-s3.sh posthog-js-prod-eu
+
+            - name: Notify Slack - S3 Upload Failed
+              continue-on-error: true
+              if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
+              uses: PostHog/.github/.github/actions/slack-thread-reply@main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '❌ Failed to upload posthog-js v${{ needs.build-s3-artifacts.outputs.committed-version }} dist to S3! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  emoji_reaction: 'x'
+
     notify-released:
         name: Notify Slack - Released
-        needs: [notify-approval-needed, publish]
+        needs: [notify-approval-needed, publish, upload-s3]
         runs-on: ubuntu-latest
-        if: always() && needs.publish.result == 'success' && needs.notify-approval-needed.outputs.slack_ts != ''
+        if: always() && needs.publish.result == 'success' && (needs.upload-s3.result == 'success' || needs.upload-s3.result == 'skipped') && needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
             - name: Checkout repository
               uses: actions/checkout@v6

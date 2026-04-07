@@ -1172,13 +1172,30 @@ export class PostHogFeatureFlags implements Extension {
      * to update user properties.
      */
     setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
-        // Get persisted person properties
         const existingProperties = this._prop(STORED_PERSON_PROPERTIES_KEY) || {}
+
+        // If the caller passes { $set, $set_once }, split them apart so we can apply $set_once
+        // semantics (skip keys that already exist). Otherwise treat all properties as $set for
+        // backward compatibility with the public API.
+        const propsToSet = properties?.['$set'] || (!properties?.['$set_once'] ? properties : {})
+        const propsToSetOnce = properties?.['$set_once']
+
+        const setOnceProps: Properties = {}
+        if (propsToSetOnce) {
+            for (const key in propsToSetOnce) {
+                if (Object.prototype.hasOwnProperty.call(propsToSetOnce, key)) {
+                    if (!(key in existingProperties)) {
+                        setOnceProps[key] = propsToSetOnce[key]
+                    }
+                }
+            }
+        }
 
         this._instance.register({
             [STORED_PERSON_PROPERTIES_KEY]: {
                 ...existingProperties,
-                ...properties,
+                ...setOnceProps,
+                ...propsToSet,
             },
         })
 
