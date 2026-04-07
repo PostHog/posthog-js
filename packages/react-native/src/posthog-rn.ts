@@ -413,26 +413,51 @@ export class PostHog extends PostHogCore {
    * To reset the user's ID and anonymous ID, call reset. Usually you would do this right after the user logs out.
    * This also clears all stored super properties and more.
    *
+   * By default (when `propertiesToKeep` is not provided), the app lifecycle properties
+   * (`InstalledAppBuild` and `InstalledAppVersion`) are automatically preserved to prevent
+   * duplicate "Application Installed" events on the next app launch.
+   *
+   * If you pass `propertiesToKeep` explicitly, only the properties you specify will be preserved.
+   * To keep the default app lifecycle behavior, include `PostHogPersistedProperty.InstalledAppBuild`
+   * and `PostHogPersistedProperty.InstalledAppVersion` in your array.
+   *
+   * Note: The event queue (`PostHogPersistedProperty.Queue`) is always preserved regardless of
+   * what is passed in `propertiesToKeep`, to ensure pending events are not lost.
+   *
    * {@label Identification}
    *
    * @example
    * ```js
-   * // reset after logout
+   * // reset after logout (preserves app lifecycle properties by default)
    * posthog.reset()
    * ```
    *
    * @example
    * ```js
-   * // reset but keep feature flag overrides
-   * posthog.reset([PostHogPersistedProperty.OverrideFeatureFlags])
+   * // reset but keep feature flag overrides and app lifecycle properties
+   * posthog.reset([
+   *   PostHogPersistedProperty.OverrideFeatureFlags,
+   *   PostHogPersistedProperty.InstalledAppBuild,
+   *   PostHogPersistedProperty.InstalledAppVersion,
+   * ])
    * ```
    *
-   * @param propertiesToKeep - Optional array of persisted properties to preserve during reset
+   * @param propertiesToKeep - Optional array of persisted properties to preserve during reset.
+   *   When not provided, app lifecycle properties are automatically preserved.
+   *   When provided, only the specified properties are preserved.
+   *   The event queue is always preserved regardless.
    *
    * @public
    */
   reset(propertiesToKeep?: PostHogPersistedProperty[]): void {
-    super.reset(propertiesToKeep)
+    // When propertiesToKeep is not explicitly provided, automatically preserve app lifecycle
+    // properties to prevent duplicate "Application Installed" events after reset.
+    const effectivePropertiesToKeep = propertiesToKeep ?? [
+      PostHogPersistedProperty.InstalledAppBuild,
+      PostHogPersistedProperty.InstalledAppVersion,
+    ]
+
+    super.reset(effectivePropertiesToKeep)
 
     if (this._setDefaultPersonProperties) {
       // Reset reloads flags asyncrhonously, but doesn't wait for it.
