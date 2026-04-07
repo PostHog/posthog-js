@@ -28,12 +28,50 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-][a-zA-Z0-9.]+)?$ ]]; then
 fi
 
 echo "==> Uploading posthog-js v$VERSION to s3://$BUCKET/static/$VERSION/"
+
+# All uploads are tagged `public=true` so the bucket policy
+# (see posthog-cloud-infra terraform/.../posthog-js/s3.tf) allows Cloudflare
+# to read them without authenticated requests. Objects without this tag are
+# effectively private and would 403 when fetched via the Cloudflare origin
+# rule that routes `/static/{version}/` from {us,eu}-assets.i.posthog.com
+# straight to S3. The `s3:PutObjectTagging` permission is already granted
+# to the GitHub Actions IAM role alongside `s3:PutObject`.
+PUBLIC_TAG='public=true'
+
+# JS bundles (posthog-js SDK artifacts + toolbar.js). Content type is set
+# explicitly to preserve the existing `application/javascript` behaviour.
 aws s3 cp "$DIST_DIR/" "s3://$BUCKET/static/$VERSION/" \
     --recursive \
     --exclude "*" \
     --include "*.js" \
     --cache-control "public, max-age=31536000, immutable" \
-    --content-type "application/javascript"
+    --content-type "application/javascript" \
+    --tagging "$PUBLIC_TAG"
+
+# The toolbar bundle ships a sibling CSS file and an `assets/` directory of
+# fonts/SVGs/PNGs alongside toolbar.js. These only exist when the matching
+# posthog/posthog build has run with TOOLBAR_PUBLIC_PATH set, so gate on
+# their presence to keep the upload script forward- and backward-compatible
+# (e.g. for releases that don't include a fresh toolbar build).
+if [[ -f "$DIST_DIR/toolbar.css" ]]; then
+    echo "==> Uploading toolbar.css"
+    aws s3 cp "$DIST_DIR/toolbar.css" "s3://$BUCKET/static/$VERSION/toolbar.css" \
+        --cache-control "public, max-age=31536000, immutable" \
+        --content-type "text/css" \
+        --tagging "$PUBLIC_TAG"
+fi
+
+if [[ -d "$DIST_DIR/assets" ]]; then
+    echo "==> Uploading toolbar assets/ ($(find "$DIST_DIR/assets" -type f | wc -l | tr -d ' ') files)"
+    # No explicit --content-type: let aws-cli infer from the extension so
+    # each file gets the right type (image/svg+xml, image/png, font/woff,
+    # font/woff2, etc.). aws-cli uses Python's mimetypes module which maps
+    # all of these correctly.
+    aws s3 cp "$DIST_DIR/assets/" "s3://$BUCKET/static/$VERSION/assets/" \
+        --recursive \
+        --cache-control "public, max-age=31536000, immutable" \
+        --tagging "$PUBLIC_TAG"
+fi
 
 echo "==> Updating versions.json in s3://$BUCKET/"
 TMPWORKDIR="$(mktemp -d)"
