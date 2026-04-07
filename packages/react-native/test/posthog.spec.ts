@@ -1243,7 +1243,7 @@ describe('PostHog React Native', () => {
       expect(posthog.getDistinctId()).not.toEqual('user-123')
     })
 
-    it('should regenerate device_id on reset with resetDeviceId=true', async () => {
+    it('should regenerate device_id when reset is called with explicit propertiesToKeep omitting DeviceId', async () => {
       posthog = new PostHog('test-token', {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
@@ -1252,7 +1252,8 @@ describe('PostHog React Native', () => {
       await posthog.ready()
 
       const originalDeviceId = posthog.getDeviceId()
-      posthog.reset(undefined, true)
+      // Passing an explicit list without DeviceId causes it to be cleared
+      posthog.reset([])
 
       await waitForExpect(200, () => {
         const newDeviceId = posthog.getDeviceId()
