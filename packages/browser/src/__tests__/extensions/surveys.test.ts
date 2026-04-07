@@ -610,6 +610,41 @@ describe('SurveyManager', () => {
             expect(surveyBox).not.toBeNull()
             expect(surveyBox?.getAttribute('data-question-index')).toBe('0')
         })
+
+        it('updates data-question-index when navigating to the next question', async () => {
+            const multiQuestionSurvey = {
+                ...mockSurvey,
+                questions: [
+                    {
+                        id: 'q1',
+                        question: 'Question 1',
+                        type: SurveyQuestionType.Open,
+                        optional: true,
+                    },
+                    {
+                        id: 'q2',
+                        question: 'Question 2',
+                        type: SurveyQuestionType.Open,
+                        optional: true,
+                    },
+                ],
+            } as unknown as Survey
+
+            const surveyDiv = document.createElement('div')
+            document.body.appendChild(surveyDiv)
+            surveyManager.renderSurvey(multiQuestionSurvey, surveyDiv)
+
+            expect(surveyDiv.querySelector('.survey-box')?.getAttribute('data-question-index')).toBe('0')
+
+            const submitButton = surveyDiv.querySelector<HTMLButtonElement>('.form-submit')
+            await act(async () => {
+                fireEvent.click(submitButton!)
+            })
+
+            expect(surveyDiv.querySelector('.survey-box')?.getAttribute('data-question-index')).toBe('1')
+
+            document.body.removeChild(surveyDiv)
+        })
     })
 
     describe('renderSurvey with URL prefill that completes the survey', () => {
