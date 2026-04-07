@@ -1177,15 +1177,11 @@ describe('PostHog React Native', () => {
         await posthog.ready()
 
         await waitForExpect(200, () => {
-          expect(onCapture2).toHaveBeenCalledWith(
-            expect.objectContaining({ event: 'Application Opened' })
-          )
+          expect(onCapture2).toHaveBeenCalledWith(expect.objectContaining({ event: 'Application Opened' }))
         })
 
         // Should NOT have fired "Application Installed" again
-        const installedCalls = onCapture2.mock.calls.filter(
-          (call: any[]) => call[0]?.event === 'Application Installed'
-        )
+        const installedCalls = onCapture2.mock.calls.filter((call: any[]) => call[0]?.event === 'Application Installed')
         expect(installedCalls).toHaveLength(0)
       })
     })
