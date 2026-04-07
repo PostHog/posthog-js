@@ -552,6 +552,7 @@ export interface SessionRecordingTriggerGroup {
         events?: SessionRecordingEventTrigger[]
         urls?: SessionRecordingUrlTrigger[]
         flag?: string | FlagVariant
+        properties?: SessionRecordingTriggerPropertyFilter[]
     }
 }
 

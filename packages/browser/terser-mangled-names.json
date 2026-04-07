@@ -55,6 +55,7 @@
         "_checkClickTimer",
         "_checkClicks",
         "_checkFlags",
+        "_checkGroupLevelProperties",
         "_checkInterval",
         "_checkLocalStorageForDebug",
         "_checkOverride",

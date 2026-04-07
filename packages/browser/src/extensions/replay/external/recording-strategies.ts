@@ -13,6 +13,7 @@ import {
     SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX,
     SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX,
     SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX,
+    STORED_PERSON_PROPERTIES_KEY,
 } from '../../../constants'
 import {
     EventTriggerMatching,
@@ -33,6 +34,7 @@ import {
 import { sampleOnProperty } from '../../sampling'
 import { isBoolean, isNull, isNullish, isNumber } from '@posthog/core'
 import { createLogger } from '../../../utils/logger'
+import { matchTriggerPropertyFilters } from '../../../utils/property-utils'
 
 const logger = createLogger('[SessionRecording]')
 
@@ -370,9 +372,12 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
                 onPause,
                 onResume,
                 (triggerType) => {
-                    // Use per-group activation instead of global V1 _activateTrigger
+                    // Check group-level property filters before activating
+                    if (!this._checkGroupLevelProperties(matcher, undefined)) {
+                        return
+                    }
+
                     matcher.activateTrigger(triggerType, sessionId)
-                    // Update session properties after activation
                     this.updateActiveTriggers(sessionId)
                 },
                 sessionId
@@ -403,6 +408,31 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
                     matcher.checkEventTriggerConditions(
                         event.event,
                         (triggerType) => {
+                            // Check group-level property filters
+                            if (!this._checkGroupLevelProperties(matcher, event.properties)) {
+                                return
+                            }
+
+                            // Check per-event property filters.
+                            // A group may contain multiple entries for the same event name with
+                            // different property filters — e.g. "purchase amount > 100" OR
+                            // "purchase by a VIP". Treat same-name entries as a disjunction:
+                            // activate if *any* matching clause's filters pass. An entry with no
+                            // properties is treated as an unconditional match (matching V1).
+                            const matchedTriggers = (matcher.group.conditions.events || []).filter(
+                                (t) => t.name === event.event
+                            )
+                            const personProperties = this._instance.get_property(STORED_PERSON_PROPERTIES_KEY)
+                            const anyMatched = matchedTriggers.some(
+                                (t) =>
+                                    !t.properties ||
+                                    t.properties.length === 0 ||
+                                    matchTriggerPropertyFilters(t.properties, event.properties, personProperties)
+                            )
+                            if (!anyMatched) {
+                                return
+                            }
+
                             matcher.activateTrigger(triggerType, sessionId)
                             this.updateActiveTriggers(sessionId)
                         },
@@ -519,6 +549,18 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
         this._triggerGroupMatchers = []
         this._triggerGroupSamplingResults.clear()
         this._urlTriggerMatching.stop()
+    }
+
+    private _checkGroupLevelProperties(
+        matcher: TriggerGroupMatching,
+        eventProperties: Record<string, any> | undefined
+    ): boolean {
+        const groupProperties = matcher.group.conditions.properties
+        if (!groupProperties || groupProperties.length === 0) {
+            return true
+        }
+        const personProperties = this._instance.get_property(STORED_PERSON_PROPERTIES_KEY)
+        return matchTriggerPropertyFilters(groupProperties, eventProperties, personProperties)
     }
 
     private _setupTriggerGroups(groups: SessionRecordingTriggerGroup[]) {

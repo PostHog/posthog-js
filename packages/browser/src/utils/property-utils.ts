@@ -1,7 +1,7 @@
-import { isNull, isUndefined } from '@posthog/core'
+import { isArray, isNull, isUndefined } from '@posthog/core'
 import { jsonStringify } from '../request'
 import { PropertyFilters, PropertyOperator } from '../posthog-surveys-types'
-import type { Properties } from '../types'
+import type { Properties, SessionRecordingTriggerPropertyFilter } from '../types'
 import { isMatchingRegex } from './regex-utils'
 
 export function getPersonPropertiesHash(
@@ -34,6 +34,55 @@ export const propertyComparisons: Record<PropertyOperator, (targets: string[], v
 }
 
 const toLowerCase = (v: string): string => v.toLowerCase()
+
+// Operators whose semantics mean "property is not X". When the property being
+// filtered on is missing or null, these match — absence of the property
+// satisfies a "not equal to X" check. This aligns with how PostHog's feature
+// flag matchers (posthog/queries/base.py, rust/feature-flags) treat missing
+// properties for negative operators.
+const NEGATIVE_OPERATORS: ReadonlySet<string> = new Set(['is_not', 'not_icontains', 'not_regex'])
+
+/**
+ * Evaluate trigger property filters (WHERE clauses) against event and person properties.
+ * All filters must match (implicit AND). Returns true if no filters are present.
+ */
+export function matchTriggerPropertyFilters(
+    filters: SessionRecordingTriggerPropertyFilter[] | undefined,
+    eventProperties: Properties | undefined,
+    personProperties: Properties | undefined
+): boolean {
+    if (!filters || filters.length === 0) {
+        return true
+    }
+
+    return filters.every((filter) => {
+        const source = filter.type === 'person' ? personProperties : eventProperties
+        const propertyValue = source?.[filter.key]
+        const operator = filter.operator || 'exact'
+
+        // Missing or null property: for negative operators, absence counts as a
+        // match (nothing can't equal EU, so "is_not EU" is satisfied). For
+        // positive operators, we can't confirm a match without a value.
+        if (isUndefined(propertyValue) || isNull(propertyValue)) {
+            return NEGATIVE_OPERATORS.has(operator)
+        }
+
+        const comparisonFunction = propertyComparisons[operator as PropertyOperator]
+        if (!comparisonFunction) {
+            return false
+        }
+
+        if (isUndefined(filter.value) || isNull(filter.value)) {
+            return false
+        }
+
+        // Normalize filter value and property value to string arrays for comparison
+        const targetValues = isArray(filter.value) ? filter.value.map(String) : [String(filter.value)]
+        const actualValues = isArray(propertyValue) ? propertyValue.map(String) : [String(propertyValue)]
+
+        return comparisonFunction(targetValues, actualValues)
+    })
+}
 
 export function matchPropertyFilters(
     propertyFilters: PropertyFilters | undefined,
