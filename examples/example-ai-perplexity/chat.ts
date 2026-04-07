@@ -4,6 +4,7 @@ import { NodeSDK } from '@opentelemetry/sdk-node'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 import { PostHogTraceExporter } from '@posthog/ai/otel'
 import { OpenAIInstrumentation } from '@opentelemetry/instrumentation-openai'
+import OpenAI from 'openai'
 
 const sdk = new NodeSDK({
     resource: resourceFromAttributes({
@@ -19,9 +20,6 @@ const sdk = new NodeSDK({
 sdk.start()
 
 async function main() {
-    // Import after sdk.start() so the instrumentation can patch the OpenAI SDK.
-    const { default: OpenAI } = await import('openai')
-
     const client = new OpenAI({
         baseURL: 'https://api.perplexity.ai',
         apiKey: process.env.PERPLEXITY_API_KEY!,

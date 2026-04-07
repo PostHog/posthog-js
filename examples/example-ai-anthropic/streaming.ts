@@ -4,6 +4,7 @@ import { NodeSDK } from '@opentelemetry/sdk-node'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 import { PostHogTraceExporter } from '@posthog/ai/otel'
 import { AnthropicInstrumentation } from '@traceloop/instrumentation-anthropic'
+import Anthropic from '@anthropic-ai/sdk'
 
 const sdk = new NodeSDK({
     resource: resourceFromAttributes({
@@ -19,9 +20,6 @@ const sdk = new NodeSDK({
 sdk.start()
 
 async function main() {
-    // Import after sdk.start() so the instrumentation can patch the SDK.
-    const { default: Anthropic } = await import('@anthropic-ai/sdk')
-
     const client = new Anthropic({
         apiKey: process.env.ANTHROPIC_API_KEY!,
     })
