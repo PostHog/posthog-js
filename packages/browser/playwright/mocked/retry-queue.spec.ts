@@ -9,6 +9,7 @@ const startOptions = {
 
 test.describe('retry queue', () => {
     test('retries failed capture requests and stops after success', async ({ page, context }) => {
+        test.setTimeout(90000)
         const captureRequests: Request[] = []
         let errorResponseCount = 0
         const maxErrorResponses = 3
@@ -77,9 +78,10 @@ test.describe('retry queue', () => {
         await expect(async () => {
             expect(captureRequests.length).toBe(requestCountAfterSuccess)
         }).toPass({ timeout: 5000 })
-    }, 90000)
+    })
 
     test('stops retrying after 10 attempts', async ({ page, context }) => {
+        test.setTimeout(60000)
         const captureRequests: Request[] = []
 
         // Mock the capture endpoint to always fail
@@ -122,7 +124,7 @@ test.describe('retry queue', () => {
         // Verify counts are incrementing
         expect(retryCountMatches).toContain(1)
         expect(retryCountMatches).toContain(2)
-    }, 60000)
+    })
 
     test('immediately retries when coming back online', async ({ page, context }) => {
         const captureRequests: Request[] = []
