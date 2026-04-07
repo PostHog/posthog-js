@@ -7,7 +7,7 @@ settings:
 overrides:
   node-forge: 1.3.2
 
-pnpmfileChecksum: sha256-N3riA/tbAnNXqNYCauSgZTrb8uBs1MMWnJDTJCSRm8c=
+pnpmfileChecksum: sha256-yVJZ6vhbVglHX96LCyXF5k3CRZo/MEv/K0owx+7kTTo=
 
 importers:
 
@@ -81,10 +81,10 @@ importers:
         version: 14.2.0(expo@53.0.27(@babel/core@7.29.0)(@expo/metro-runtime@5.0.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0)))(react-native-webview@13.13.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))
       posthog-react-native:
         specifier: file:../../target/posthog-react-native.tgz
-        version: file:../../target/posthog-react-native.tgz(45a89e45c18c38702cba8728e846a6a4)
+        version: file:../../target/posthog-react-native.tgz(0e498ef8c9df536eb1afa60d87f8c8ac)
       posthog-react-native-session-replay:
-        specifier: ^1.5.0
-        version: 1.5.0(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
+        specifier: ^1.5.2
+        version: 1.5.2(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
       react:
         specifier: 19.0.0
         version: 19.0.0
@@ -867,8 +867,8 @@ packages:
     engines: {node: '>=14'}
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-q9q7pO9/J5Ti99DgFsoeHwFqRYG20ZjyPPZYGsH5rTtFIHAmIc4vbspMaOD/GXBpE4NCPY0rXH3A6v7WP0El6Q==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.23.1
+    resolution: {integrity: sha512-bjfrkkzz2VIlAgZ3brGn/tR8v+rNqONscPh0QZcyu/chY6BtmT5rCQZGZUCTh1uale9jajMDlju6FVBdNQKqgA==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.23.4
 
   '@radix-ui/react-compose-refs@1.1.2':
     resolution: {integrity: sha512-z4eqJvfiNnFMHIIvXP3CY57y2WJs5g2v3X0zm9mEJkrkNv4rDxu+sg9Jh8EkXyeqBkB7SOcboo9dMVqhyrACIg==}
@@ -3128,15 +3128,15 @@ packages:
     resolution: {integrity: sha512-OCVPnIObs4N29kxTjzLfUryOkvZEq+pf8jTF0lg8E7uETuWHA+v7j3c/xJmiqpX450191LlmZfUKkXxkTry7nA==}
     engines: {node: ^10 || ^12 || >=14}
 
-  posthog-react-native-session-replay@1.5.0:
-    resolution: {integrity: sha512-3XYGSpaWDfB0s4WrZlekN+dNO/kVSWCPAUBDmayIbFfL7SJ1OTCoYQrJp+JJdm8Wf+wJmrAv7LoPOvl/mY5A0g==}
+  posthog-react-native-session-replay@1.5.2:
+    resolution: {integrity: sha512-NS/HbEOp9NQSkL99pNmkCSprLV42SHgEv7uUvCNeWByG1TG4MUMzk83U3n3V5odENphNQvkYPChRKneiKourPQ==}
     peerDependencies:
       react: '*'
       react-native: '*'
 
   posthog-react-native@file:../../target/posthog-react-native.tgz:
-    resolution: {integrity: sha512-uXnSAIBN7PjBjEfq/2pltZe+HOrZ4v+RqqsAzTaj6z2EV6POZDgsLd7ipu+19jCMN6EmVTLnLFSxFl+jqvcVCw==, tarball: file:../../target/posthog-react-native.tgz}
-    version: 4.36.1
+    resolution: {integrity: sha512-+nqFZywVNk4kgGHRrVivoReJTuC+an7Ka5ButL4nsTDso72IaRqnve7FHu4DhpNFQ3lq5N84N1nzlOUEMV7Jmw==, tarball: file:../../target/posthog-react-native.tgz}
+    version: 4.37.3
     peerDependencies:
       '@react-native-async-storage/async-storage': '>=1.0.0'
       '@react-navigation/native': '>= 5.0.0'
@@ -7760,12 +7760,12 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  posthog-react-native-session-replay@1.5.0(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0):
+  posthog-react-native-session-replay@1.5.2(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0):
     dependencies:
       react: 19.0.0
       react-native: 0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0)
 
-  posthog-react-native@file:../../target/posthog-react-native.tgz(45a89e45c18c38702cba8728e846a6a4):
+  posthog-react-native@file:../../target/posthog-react-native.tgz(0e498ef8c9df536eb1afa60d87f8c8ac):
     dependencies:
       '@posthog/core': file:../../target/posthog-core.tgz
       react-native-svg: 15.11.2(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
@@ -7775,7 +7775,7 @@ snapshots:
       expo-device: 7.1.4(expo@53.0.27(@babel/core@7.29.0)(@expo/metro-runtime@5.0.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0)))(react-native-webview@13.13.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))
       expo-file-system: 18.1.11(expo@53.0.27(@babel/core@7.29.0)(@expo/metro-runtime@5.0.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0)))(react-native-webview@13.13.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))
       expo-localization: 16.1.6(expo@53.0.27(@babel/core@7.29.0)(@expo/metro-runtime@5.0.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0)))(react-native-webview@13.13.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react@19.0.0)
-      posthog-react-native-session-replay: 1.5.0(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
+      posthog-react-native-session-replay: 1.5.2(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
       react-native-safe-area-context: 5.4.0(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
 
   prelude-ls@1.2.1: {}
