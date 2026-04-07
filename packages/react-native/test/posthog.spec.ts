@@ -1096,7 +1096,20 @@ describe('PostHog React Native', () => {
         expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual(undefined)
       })
 
-      it('should clear all properties when reset is called without propertiesToKeep', async () => {
+      it.each([
+        {
+          label: 'default (no arg) preserves lifecycle properties',
+          resetArg: undefined as PostHogPersistedProperty[] | undefined,
+          expectBuild: '1',
+          expectVersion: '1.0.0',
+        },
+        {
+          label: 'explicit empty array clears lifecycle properties',
+          resetArg: [] as PostHogPersistedProperty[],
+          expectBuild: undefined,
+          expectVersion: undefined,
+        },
+      ])('reset with $label', async ({ resetArg, expectBuild, expectVersion }) => {
         posthog = new PostHog('test-api-key', {
           customStorage: storage,
           flushInterval: 0,
@@ -1104,16 +1117,59 @@ describe('PostHog React Native', () => {
         })
         await posthog.ready()
 
-        posthog.overrideFeatureFlag({ testFlag: true })
+        posthog.setPersistedProperty(PostHogPersistedProperty.InstalledAppBuild, '1')
+        posthog.setPersistedProperty(PostHogPersistedProperty.InstalledAppVersion, '1.0.0')
         posthog.register({ customProp: 'value' })
 
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual({ testFlag: true })
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual({ customProp: 'value' })
+        posthog.reset(resetArg)
 
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toBeUndefined()
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.InstalledAppBuild)).toEqual(expectBuild)
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.InstalledAppVersion)).toEqual(expectVersion)
+      })
+
+      it('should not trigger duplicate Application Installed after reset', async () => {
+        // Simulate that the app was previously installed (build/version persisted)
+        posthog = new PostHog('test-api-key', {
+          customStorage: storage,
+          flushInterval: 0,
+          setDefaultPersonProperties: false,
+          captureAppLifecycleEvents: false,
+        })
+        await posthog.ready()
+
+        posthog.setPersistedProperty(PostHogPersistedProperty.InstalledAppBuild, '1')
+        posthog.setPersistedProperty(PostHogPersistedProperty.InstalledAppVersion, '1.0.0')
+
+        // User logs out - reset without explicit propertiesToKeep
         posthog.reset()
 
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual(undefined)
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual(undefined)
+        // Lifecycle properties should still be persisted after reset
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.InstalledAppBuild)).toEqual('1')
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.InstalledAppVersion)).toEqual('1.0.0')
+
+        await posthog.shutdown()
+
+        // Second launch - should NOT fire "Application Installed" again
+        const onCapture2 = jest.fn()
+        posthog = new PostHog('test-api-key', {
+          customStorage: storage,
+          captureAppLifecycleEvents: true,
+          customAppProperties: {
+            $app_build: '1',
+            $app_version: '1.0.0',
+          },
+        })
+        posthog.on('capture', onCapture2)
+        await posthog.ready()
+
+        await waitForExpect(200, () => {
+          expect(onCapture2).toHaveBeenCalledWith(expect.objectContaining({ event: 'Application Opened' }))
+        })
+
+        // Should NOT have fired "Application Installed" again
+        const installedCalls = onCapture2.mock.calls.filter((call: any[]) => call[0]?.event === 'Application Installed')
+        expect(installedCalls).toHaveLength(0)
       })
     })
   })
