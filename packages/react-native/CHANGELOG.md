@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.40.2
+
+### Patch Changes
+
+- [#3348](https://github.com/PostHog/posthog-js/pull/3348) [`e246d07`](https://github.com/PostHog/posthog-js/commit/e246d076360bd07c0f4b754d31efc5e96b01f2d4) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: preserve app lifecycle properties on reset() to prevent duplicate Application Installed events
+  (2026-04-07)
+
 ## 4.40.1
 
 ### Patch Changes
