@@ -10,7 +10,9 @@ import * as fs from 'fs'
 const sdk = new NodeSDK({
     resource: resourceFromAttributes({
         'service.name': 'example-openai-app',
-        'user.id': 'example-user',
+        'posthog.distinct_id': 'example-user',
+        foo: 'bar',
+        'conversation_id': 'abc-123',
     }),
     spanProcessors: [
         new tracing.SimpleSpanProcessor(

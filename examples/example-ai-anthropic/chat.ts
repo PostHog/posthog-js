@@ -9,7 +9,9 @@ import Anthropic from '@anthropic-ai/sdk'
 const sdk = new NodeSDK({
     resource: resourceFromAttributes({
         'service.name': 'example-anthropic-app',
-        'user.id': 'example-user',
+        'posthog.distinct_id': 'example-user',
+        foo: 'bar',
+        'conversation_id': 'abc-123',
     }),
     spanProcessors: [
         new tracing.SimpleSpanProcessor(
