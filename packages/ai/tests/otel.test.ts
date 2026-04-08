@@ -95,9 +95,6 @@ describe('PostHogTraceExporter AI span filtering', () => {
 
     exporter.export([makeSpan('some.operation', { 'gen_ai.model': 'gpt-4' }), makeSpan('other.operation')], callback)
 
-    expect(getSuperExport()).toHaveBeenCalledWith(
-      [expect.objectContaining({ name: 'some.operation' })],
-      callback
-    )
+    expect(getSuperExport()).toHaveBeenCalledWith([expect.objectContaining({ name: 'some.operation' })], callback)
   })
 })
