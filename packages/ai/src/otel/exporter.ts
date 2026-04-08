@@ -57,14 +57,23 @@ export class PostHogTraceExporter extends OTLPTraceExporter {
         Authorization: `Bearer ${options.apiKey}`,
       },
     })
-  }
 
-  override export(spans: ReadableSpan[], resultCallback: (result: { code: number; error?: Error }) => void): void {
-    const aiSpans = spans.filter(isAISpan)
-    if (aiSpans.length === 0) {
-      resultCallback({ code: EXPORT_SUCCESS })
-      return
+    // Wrap the inherited export method to filter to AI spans only.
+    // We access via the prototype rather than using `override` / `super.export()`
+    // because the parent's ExportResult type lives in @opentelemetry/core which
+    // isn't a direct dependency, and the dts plugin can't resolve it.
+    const parentExport = OTLPTraceExporter.prototype.export
+    const self = this
+    this.export = function (
+      spans: ReadableSpan[],
+      resultCallback: (result: { code: number; error?: Error }) => void
+    ): void {
+      const aiSpans = spans.filter(isAISpan)
+      if (aiSpans.length === 0) {
+        resultCallback({ code: EXPORT_SUCCESS })
+        return
+      }
+      parentExport.call(self, aiSpans, resultCallback)
     }
-    super.export(aiSpans, resultCallback)
   }
 }
