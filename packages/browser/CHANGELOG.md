@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.365.4
+
+### Patch Changes
+
+- [#3353](https://github.com/PostHog/posthog-js/pull/3353) [`3939856`](https://github.com/PostHog/posthog-js/commit/3939856b917a3bad696cb7e5da73d4d50c3e0c53) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Expose the current question index on `.survey-box` via a `data-question-index` attribute. This gives consumers rendering surveys via the API a reliable way to know which question is currently displayed without parsing input ids or class names — works for every question type, including link questions which render no input or rating element.
+  (2026-04-08)
+- Updated dependencies []:
+    - @posthog/types@1.365.4
+
 ## 1.365.3
 
 ### Patch Changes
