@@ -466,6 +466,12 @@ jobs:
             - name: Normalize toolbar output filenames
               run: |
                   set -euo pipefail
+                  # `set -e` alone doesn't propagate failures out of $(...)
+                  # command substitutions. Without inherit_errexit, a failing
+                  # `find frontend/dist/assets` inside an echo would silently
+                  # print "0 files" and the step would pass, only to fail
+                  # confusingly later in upload-artifact's if-no-files-found.
+                  shopt -s inherit_errexit
                   shopt -s nullglob
                   jsfiles=(frontend/dist/toolbar-*.js)
                   cssfiles=(frontend/dist/toolbar-*.css)
@@ -495,6 +501,10 @@ jobs:
             - name: Verify TOOLBAR_PUBLIC_PATH was baked into the bundle
               run: |
                   set -euo pipefail
+                  # See note in "Normalize toolbar output filenames". This
+                  # step has several $(...) substitutions (find, wc, git
+                  # rev-parse) that we want to fail loudly if they break.
+                  shopt -s inherit_errexit
                   if ! grep -aq "$TOOLBAR_PUBLIC_PATH" frontend/dist/toolbar.js; then
                       echo "❌ toolbar.js does not contain TOOLBAR_PUBLIC_PATH='$TOOLBAR_PUBLIC_PATH'"
                       echo "   posthog/posthog@$(git rev-parse HEAD) may not honour the env var yet."
