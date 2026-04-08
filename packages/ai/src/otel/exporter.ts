@@ -44,36 +44,36 @@ export interface PostHogTraceExporterOptions {
  * })
  * ```
  */
-export class PostHogTraceExporter extends OTLPTraceExporter {
+export class PostHogTraceExporter {
+  private readonly inner: OTLPTraceExporter
+
   constructor(options: PostHogTraceExporterOptions) {
     if (!options.apiKey) {
       throw new Error('PostHogTraceExporter requires an apiKey')
     }
     const host = new URL(options.host || 'https://us.i.posthog.com').origin
-    super({
+    this.inner = new OTLPTraceExporter({
       url: `${host}/i/v0/ai/otel`,
       headers: {
-        // The OTLP ingestion endpoint authenticates using the project API key as a Bearer token
         Authorization: `Bearer ${options.apiKey}`,
       },
     })
+  }
 
-    // Wrap the inherited export method to filter to AI spans only.
-    // We access via the prototype rather than using `override` / `super.export()`
-    // because the parent's ExportResult type lives in @opentelemetry/core which
-    // isn't a direct dependency, and the dts plugin can't resolve it.
-    const parentExport = OTLPTraceExporter.prototype.export
-    const self = this
-    this.export = function (
-      spans: ReadableSpan[],
-      resultCallback: (result: { code: number; error?: Error }) => void
-    ): void {
-      const aiSpans = spans.filter(isAISpan)
-      if (aiSpans.length === 0) {
-        resultCallback({ code: EXPORT_SUCCESS })
-        return
-      }
-      parentExport.call(self, aiSpans, resultCallback)
+  export(spans: ReadableSpan[], resultCallback: (result: { code: number; error?: Error }) => void): void {
+    const aiSpans = spans.filter(isAISpan)
+    if (aiSpans.length === 0) {
+      resultCallback({ code: EXPORT_SUCCESS })
+      return
     }
+    this.inner.export(aiSpans, resultCallback as any)
+  }
+
+  shutdown(): Promise<void> {
+    return this.inner.shutdown()
+  }
+
+  forceFlush(): Promise<void> {
+    return this.inner.forceFlush()
   }
 }

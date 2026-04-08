@@ -2,18 +2,20 @@ import { PostHogTraceExporter } from '../src/otel'
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base'
 
-jest.mock('@opentelemetry/exporter-trace-otlp-http', () => {
-  const MockExporter = jest.fn()
-  MockExporter.prototype.export = jest.fn()
-  return { OTLPTraceExporter: MockExporter }
-})
+const mockExport = jest.fn()
+const mockShutdown = jest.fn().mockResolvedValue(undefined)
+const mockForceFlush = jest.fn().mockResolvedValue(undefined)
+
+jest.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
+  OTLPTraceExporter: jest.fn().mockImplementation(() => ({
+    export: mockExport,
+    shutdown: mockShutdown,
+    forceFlush: mockForceFlush,
+  })),
+}))
 
 function makeSpan(name: string, attributes: Record<string, unknown> = {}): ReadableSpan {
   return { name, attributes } as unknown as ReadableSpan
-}
-
-function getSuperExport(): jest.Mock {
-  return OTLPTraceExporter.prototype.export as jest.Mock
 }
 
 describe('PostHogTraceExporter', () => {
@@ -60,6 +62,18 @@ describe('PostHogTraceExporter', () => {
   it('throws when apiKey is missing', () => {
     expect(() => new PostHogTraceExporter({ apiKey: '' })).toThrow('PostHogTraceExporter requires an apiKey')
   })
+
+  it('delegates shutdown', async () => {
+    const exporter = new PostHogTraceExporter({ apiKey: 'phc_test' })
+    await exporter.shutdown()
+    expect(mockShutdown).toHaveBeenCalled()
+  })
+
+  it('delegates forceFlush', async () => {
+    const exporter = new PostHogTraceExporter({ apiKey: 'phc_test' })
+    await exporter.forceFlush()
+    expect(mockForceFlush).toHaveBeenCalled()
+  })
 })
 
 describe('PostHogTraceExporter AI span filtering', () => {
@@ -73,7 +87,7 @@ describe('PostHogTraceExporter AI span filtering', () => {
 
     exporter.export([makeSpan('gen_ai.chat'), makeSpan('http.request'), makeSpan('llm.completion')], callback)
 
-    expect(getSuperExport()).toHaveBeenCalledWith(
+    expect(mockExport).toHaveBeenCalledWith(
       [expect.objectContaining({ name: 'gen_ai.chat' }), expect.objectContaining({ name: 'llm.completion' })],
       callback
     )
@@ -85,7 +99,7 @@ describe('PostHogTraceExporter AI span filtering', () => {
 
     exporter.export([makeSpan('http.request'), makeSpan('db.query')], callback)
 
-    expect(getSuperExport()).not.toHaveBeenCalled()
+    expect(mockExport).not.toHaveBeenCalled()
     expect(callback).toHaveBeenCalledWith({ code: 0 })
   })
 
@@ -95,6 +109,6 @@ describe('PostHogTraceExporter AI span filtering', () => {
 
     exporter.export([makeSpan('some.operation', { 'gen_ai.model': 'gpt-4' }), makeSpan('other.operation')], callback)
 
-    expect(getSuperExport()).toHaveBeenCalledWith([expect.objectContaining({ name: 'some.operation' })], callback)
+    expect(mockExport).toHaveBeenCalledWith([expect.objectContaining({ name: 'some.operation' })], callback)
   })
 })
