@@ -8,6 +8,9 @@ import { AwsInstrumentation } from '@opentelemetry/instrumentation-aws-sdk'
 const sdk = new NodeSDK({
     resource: resourceFromAttributes({
         'service.name': 'example-bedrock-app',
+        'posthog.distinct_id': 'example-user',
+        foo: 'bar',
+        'conversation_id': 'abc-123',
     }),
     spanProcessors: [
         new tracing.SimpleSpanProcessor(
