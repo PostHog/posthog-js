@@ -19,7 +19,7 @@ const sdk = new NodeSDK({
     ],
     instrumentations: [new AwsInstrumentation()],
 })
-sdk.start()
+sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
 
 async function main() {
     // Import after sdk.start() so the instrumentation can patch the AWS SDK.

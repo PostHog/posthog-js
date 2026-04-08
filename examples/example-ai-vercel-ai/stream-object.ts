@@ -20,7 +20,7 @@ const sdk = new NodeSDK({
         ),
     ],
 })
-sdk.start()
+sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 

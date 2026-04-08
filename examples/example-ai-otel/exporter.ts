@@ -13,7 +13,7 @@ const sdk = new NodeSDK({
     spanProcessors: [new SimpleSpanProcessor(exporter)],
 })
 
-sdk.start()
+sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
 console.log('OTEL SDK started with PostHog trace exporter.')
 console.log('Any gen_ai.* spans will be converted to $ai_generation events in PostHog.')
 console.log('Add your OTEL-instrumented AI SDK code here.')

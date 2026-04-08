@@ -22,7 +22,7 @@ const sdk = new NodeSDK({
     ],
     instrumentations: [new LangChainInstrumentation()],
 })
-sdk.start()
+sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
 
 const model = new ChatOpenAI({
     modelName: 'gpt-4o-mini',

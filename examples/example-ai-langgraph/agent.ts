@@ -24,7 +24,7 @@ const sdk = new NodeSDK({
     ],
     instrumentations: [new LangChainInstrumentation()],
 })
-sdk.start()
+sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
 
 const getWeather = tool((input) => `It's always sunny in ${input.city}!`, {
     name: 'get_weather',
