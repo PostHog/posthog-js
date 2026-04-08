@@ -25,7 +25,7 @@ sdk.start()
 
 async function main() {
     const client = new OpenAI({
-        baseURL: process.env.PORTKEY_GATEWAY_URL!,
+        baseURL: process.env.PORTKEY_GATEWAY_URL || 'https://api.portkey.ai/v1',
         apiKey: process.env.PORTKEY_API_KEY!,
     })
 
