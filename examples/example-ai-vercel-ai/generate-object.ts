@@ -1,6 +1,6 @@
 /** Vercel AI generateObject for structured output, tracked by PostHog via OpenTelemetry. */
 
-import { NodeSDK } from '@opentelemetry/sdk-node'
+import { NodeSDK, tracing } from '@opentelemetry/sdk-node'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 import { PostHogTraceExporter } from '@posthog/ai/otel'
 import { generateObject } from 'ai'
@@ -11,10 +11,14 @@ const sdk = new NodeSDK({
     resource: resourceFromAttributes({
         'service.name': 'example-vercel-ai-app',
     }),
-    traceExporter: new PostHogTraceExporter({
-        apiKey: process.env.POSTHOG_API_KEY!,
-        host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
-    }),
+    spanProcessors: [
+        new tracing.SimpleSpanProcessor(
+            new PostHogTraceExporter({
+                apiKey: process.env.POSTHOG_API_KEY!,
+                host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+            })
+        ),
+    ],
 })
 sdk.start()
 
@@ -47,8 +51,6 @@ async function main() {
     console.log('Humidity:', object.humidity, '%')
     console.log('Conditions:', object.conditions)
     console.log('Wind:', object.windSpeed, 'km/h')
-
-    await sdk.shutdown()
 }
 
 main()

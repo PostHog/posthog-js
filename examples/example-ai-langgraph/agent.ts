@@ -1,6 +1,6 @@
 /** LangGraph agent, tracked by PostHog via OpenTelemetry. */
 
-import { NodeSDK } from '@opentelemetry/sdk-node'
+import { NodeSDK, tracing } from '@opentelemetry/sdk-node'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 import { PostHogTraceExporter } from '@posthog/ai/otel'
 import { LangChainInstrumentation } from '@traceloop/instrumentation-langchain'
@@ -14,10 +14,14 @@ const sdk = new NodeSDK({
         'service.name': 'example-langgraph-app',
         'user.id': 'example-user',
     }),
-    traceExporter: new PostHogTraceExporter({
-        apiKey: process.env.POSTHOG_API_KEY!,
-        host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
-    }),
+    spanProcessors: [
+        new tracing.SimpleSpanProcessor(
+            new PostHogTraceExporter({
+                apiKey: process.env.POSTHOG_API_KEY!,
+                host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+            })
+        ),
+    ],
     instrumentations: [new LangChainInstrumentation()],
 })
 sdk.start()
@@ -42,7 +46,6 @@ async function main() {
     })
 
     console.log(result.messages[result.messages.length - 1].content)
-    await sdk.shutdown()
 }
 
 main()

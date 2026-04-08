@@ -6,7 +6,7 @@
  * In a real Convex app, this code runs inside a "use node" action.
  */
 
-import { NodeSDK } from '@opentelemetry/sdk-node'
+import { NodeSDK, tracing } from '@opentelemetry/sdk-node'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 import { PostHogTraceExporter } from '@posthog/ai/otel'
 import { generateText } from 'ai'
@@ -17,10 +17,14 @@ const sdk = new NodeSDK({
         'service.name': 'example-convex-app',
         'user.id': 'example-user',
     }),
-    traceExporter: new PostHogTraceExporter({
-        apiKey: process.env.POSTHOG_API_KEY!,
-        host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
-    }),
+    spanProcessors: [
+        new tracing.SimpleSpanProcessor(
+            new PostHogTraceExporter({
+                apiKey: process.env.POSTHOG_API_KEY!,
+                host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+            })
+        ),
+    ],
 })
 sdk.start()
 
@@ -38,7 +42,6 @@ async function main() {
     })
 
     console.log(result.text)
-    await sdk.shutdown()
 }
 
 main()

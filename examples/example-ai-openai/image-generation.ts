@@ -1,6 +1,6 @@
 /** OpenAI image generation, tracked by PostHog via OpenTelemetry. */
 
-import { NodeSDK } from '@opentelemetry/sdk-node'
+import { NodeSDK, tracing } from '@opentelemetry/sdk-node'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 import { PostHogTraceExporter } from '@posthog/ai/otel'
 import { OpenAIInstrumentation } from '@opentelemetry/instrumentation-openai'
@@ -11,10 +11,14 @@ const sdk = new NodeSDK({
         'service.name': 'example-openai-app',
         'user.id': 'example-user',
     }),
-    traceExporter: new PostHogTraceExporter({
-        apiKey: process.env.POSTHOG_API_KEY!,
-        host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
-    }),
+    spanProcessors: [
+        new tracing.SimpleSpanProcessor(
+            new PostHogTraceExporter({
+                apiKey: process.env.POSTHOG_API_KEY!,
+                host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+            })
+        ),
+    ],
     instrumentations: [new OpenAIInstrumentation()],
 })
 sdk.start()
@@ -32,8 +36,6 @@ async function main() {
 
     const imageBase64 = response.data[0].b64_json!
     console.log(`Generated image: ${imageBase64.length} chars of base64 data`)
-
-    await sdk.shutdown()
 }
 
 main()
