@@ -109,6 +109,9 @@ assignableWindow.__PosthogExtensions__.loadExternalDependency = (
     // Default: load from /static/ via request router (snippet v1)
     let scriptUrlToLoad = `/static/${kind}.js` + `?v=${posthog.version}`
     if (kind === 'toolbar') {
+        // toolbar.js has a 24-hour CDN TTL but contains a rotating token valid for
+        // only 5 minutes. Bust the cache on a 5-minute boundary so the browser always
+        // fetches a fresh copy with a valid token.
         const fiveMinutesInMillis = 5 * 60 * 1000
         const timestampToNearestFiveMinutes = Math.floor(Date.now() / fiveMinutesInMillis) * fiveMinutesInMillis
         scriptUrlToLoad = `${scriptUrlToLoad}&t=${timestampToNearestFiveMinutes}`
