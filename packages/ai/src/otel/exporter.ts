@@ -1,11 +1,8 @@
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base'
+import { ExportResultCode } from '@opentelemetry/core'
 
 import { isAISpan } from './spans'
-
-// ExportResultCode.SUCCESS from @opentelemetry/core, inlined to avoid adding
-// a direct dependency on @opentelemetry/core.
-const EXPORT_SUCCESS = 0
 
 export interface PostHogTraceExporterOptions {
   /**
@@ -63,10 +60,10 @@ export class PostHogTraceExporter {
   export(spans: ReadableSpan[], resultCallback: (result: { code: number; error?: Error }) => void): void {
     const aiSpans = spans.filter(isAISpan)
     if (aiSpans.length === 0) {
-      resultCallback({ code: EXPORT_SUCCESS })
+      resultCallback({ code: ExportResultCode.SUCCESS })
       return
     }
-    this.inner.export(aiSpans, resultCallback as any)
+    this.inner.export(aiSpans, resultCallback)
   }
 
   shutdown(): Promise<void> {
