@@ -21,7 +21,7 @@ const sdk = new NodeSDK({
     ],
     instrumentations: [new AnthropicInstrumentation()],
 })
-sdk.start()
+sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
 
 async function main() {
     const client = new Anthropic({

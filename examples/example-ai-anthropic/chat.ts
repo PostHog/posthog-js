@@ -21,7 +21,7 @@ const sdk = new NodeSDK({
     ],
     instrumentations: [new AnthropicInstrumentation()],
 })
-sdk.start()
+sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
 
 async function getWeather(latitude: number, longitude: number, locationName: string): Promise<string> {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`

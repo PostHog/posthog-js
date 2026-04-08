@@ -23,7 +23,7 @@ const sdk = new NodeSDK({
     ],
     instrumentations: [new OpenAIInstrumentation()],
 })
-sdk.start()
+sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
 
 const UserInfo = z.object({
     name: z.string(),

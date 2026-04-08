@@ -19,7 +19,7 @@ const sdk = new NodeSDK({
         ),
     ],
 })
-sdk.start()
+sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
 
 const google = createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY! })
 

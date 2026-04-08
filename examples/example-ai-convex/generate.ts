@@ -26,7 +26,7 @@ const sdk = new NodeSDK({
         ),
     ],
 })
-sdk.start()
+sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
 
 async function main() {
     const result = await generateText({
