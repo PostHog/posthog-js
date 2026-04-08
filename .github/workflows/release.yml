@@ -613,3 +613,26 @@ jobs:
                   message: '🚀 All packages released successfully!'
                   emoji_reaction: 'rocket'
                   remove_emoji_reaction: 'x'
+
+    # Fires when npm publish fully succeeded but the S3/CDN upload failed (e.g.
+    # toolbar build broke against posthog/posthog@master, or one region's
+    # upload failed). Packages are already on npm at this point — the release
+    # isn't reversible — but the versioned CDN artifacts for posthog-js are
+    # stale or missing. Engineers get a single explicit summary message
+    # instead of having to piece the state together from a missing 🚀 message
+    # plus per-region ❌ messages.
+    notify-partial-release:
+        name: Notify Slack - Partial Release (npm only)
+        needs: [notify-approval-needed, build-s3-artifacts, publish, upload-s3]
+        runs-on: ubuntu-latest
+        if: always() && needs.publish.result == 'success' && needs.upload-s3.result == 'failure' && needs.notify-approval-needed.outputs.slack_ts != ''
+        steps:
+            - name: Notify Slack - Partial Release
+              continue-on-error: true # Slack failure shouldn't mark release as failed
+              uses: PostHog/.github/.github/actions/slack-thread-reply@main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '⚠️ npm packages released, but CDN upload failed — posthog-js v${{ needs.build-s3-artifacts.outputs.committed-version }} dist and/or toolbar bundle is stale or missing on S3. <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  emoji_reaction: 'warning'
