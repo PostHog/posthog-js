@@ -9,6 +9,9 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google'
 const sdk = new NodeSDK({
     resource: resourceFromAttributes({
         'service.name': 'example-vercel-ai-app',
+        'posthog.distinct_id': 'example-user',
+        foo: 'bar',
+        'conversation_id': 'abc-123',
     }),
     spanProcessors: [
         new tracing.SimpleSpanProcessor(
