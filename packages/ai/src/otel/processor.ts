@@ -67,6 +67,9 @@ export class PostHogSpanProcessor implements SpanProcessor {
   }
 
   onStart(span: Span, parentContext: Context): void {
+    // Forwarded unconditionally — filtering happens in onEnd. We can't filter
+    // here because the span hasn't finished yet and may not have AI attributes
+    // set. BatchSpanProcessor.onStart is a no-op so this is safe.
     this.inner.onStart(span, parentContext)
   }
 
