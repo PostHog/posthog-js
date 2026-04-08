@@ -54,6 +54,8 @@ A self-contained `SpanProcessor` that handles batching and export internally. Us
 ```typescript
 import { NodeSDK } from '@opentelemetry/sdk-node'
 import { PostHogSpanProcessor } from '@posthog/ai/otel'
+import { generateText } from 'ai'
+import { openai } from '@ai-sdk/openai'
 
 const sdk = new NodeSDK({
   spanProcessors: [
@@ -64,6 +66,21 @@ const sdk = new NodeSDK({
   ],
 })
 sdk.start()
+
+const result = await generateText({
+  model: openai('gpt-5-mini'),
+  prompt: 'Write a short haiku about debugging',
+  experimental_telemetry: {
+    isEnabled: true,
+    functionId: 'my-awesome-function',
+    metadata: {
+      posthog_distinct_id: 'user_123',
+      conversation_id: 'abc123',
+    },
+  },
+})
+
+await sdk.shutdown()
 ```
 
 ### PostHogTraceExporter
