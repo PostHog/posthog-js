@@ -1,6 +1,6 @@
 /** OpenAI audio transcription (Whisper), tracked by PostHog via OpenTelemetry. */
 
-import { NodeSDK } from '@opentelemetry/sdk-node'
+import { NodeSDK, tracing } from '@opentelemetry/sdk-node'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 import { PostHogTraceExporter } from '@posthog/ai/otel'
 import { OpenAIInstrumentation } from '@opentelemetry/instrumentation-openai'
@@ -12,10 +12,14 @@ const sdk = new NodeSDK({
         'service.name': 'example-openai-app',
         'user.id': 'example-user',
     }),
-    traceExporter: new PostHogTraceExporter({
-        apiKey: process.env.POSTHOG_API_KEY!,
-        host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
-    }),
+    spanProcessors: [
+        new tracing.SimpleSpanProcessor(
+            new PostHogTraceExporter({
+                apiKey: process.env.POSTHOG_API_KEY!,
+                host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+            })
+        ),
+    ],
     instrumentations: [new OpenAIInstrumentation()],
 })
 sdk.start()
@@ -31,7 +35,6 @@ async function main() {
     if (!fs.existsSync(audioPath)) {
         console.log(`Skipping: audio file not found at '${audioPath}'`)
         console.log('Set AUDIO_PATH to a valid audio file (mp3, wav, m4a, etc.)')
-        await sdk.shutdown()
         return
     }
 
@@ -41,8 +44,6 @@ async function main() {
     })
 
     console.log(`Transcription: ${transcription.text}`)
-
-    await sdk.shutdown()
 }
 
 main()
