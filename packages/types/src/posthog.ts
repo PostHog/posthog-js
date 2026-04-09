@@ -114,6 +114,19 @@ export interface PostHog {
     identify(new_distinct_id?: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void
 
     /**
+     * Set HMAC-based identity verification.
+     *
+     * @param distinctId - The verified user distinct_id
+     * @param hash - HMAC-SHA256 of distinctId using the project API secret
+     */
+    setIdentity(distinctId: string, hash: string): void
+
+    /**
+     * Clear HMAC-based identity verification, reverting to anonymous mode.
+     */
+    clearIdentity(): void
+
+    /**
      * Set properties on the current user.
      *
      * @param userPropertiesToSet - Properties to set on the user (using $set)
