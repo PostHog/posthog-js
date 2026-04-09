@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.366.1
+
+### Patch Changes
+
+- [#3360](https://github.com/PostHog/posthog-js/pull/3360) [`802bf39`](https://github.com/PostHog/posthog-js/commit/802bf3919304f66694788bf0cb93e457326ab44b) Thanks [@jabahamondes](https://github.com/jabahamondes)! - Re-evaluate consent persistent store when config changes to support cross-subdomain consent sharing
+  (2026-04-09)
+- Updated dependencies []:
+    - @posthog/types@1.366.1
+
 ## 1.366.0
 
 ### Minor Changes
