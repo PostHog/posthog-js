@@ -1,5 +1,128 @@
 # posthog-js
 
+## 1.365.5
+
+### Patch Changes
+
+- Updated dependencies [[`c735b08`](https://github.com/PostHog/posthog-js/commit/c735b08577f8fa85935dcec5bc5814870ac4ed56)]:
+    - @posthog/core@1.25.2
+    - @posthog/types@1.365.5
+
+## 1.365.4
+
+### Patch Changes
+
+- [#3353](https://github.com/PostHog/posthog-js/pull/3353) [`3939856`](https://github.com/PostHog/posthog-js/commit/3939856b917a3bad696cb7e5da73d4d50c3e0c53) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Expose the current question index on `.survey-box` via a `data-question-index` attribute. This gives consumers rendering surveys via the API a reliable way to know which question is currently displayed without parsing input ids or class names — works for every question type, including link questions which render no input or rating element.
+  (2026-04-08)
+- Updated dependencies []:
+    - @posthog/types@1.365.4
+
+## 1.365.3
+
+### Patch Changes
+
+- [#3357](https://github.com/PostHog/posthog-js/pull/3357) [`dbdddca`](https://github.com/PostHog/posthog-js/commit/dbdddcad578adf282f620d2afcd5808600a9c287) Thanks [@pauldambra](https://github.com/pauldambra)! - Bump @posthog/rrweb packages to 0.0.56, which includes:
+    - PostHog/posthog-rrweb#157: fix: clear mutation buffer on iframe pagehide to prevent recording corruption
+    - PostHog/posthog-rrweb#158: fix: skip unchanged setAttribute calls to prevent replay flicker
+    - PostHog/posthog-rrweb#159: fix: prevent iframe leak in untainted prototype and avoid unnecessary iframe creation
+    - PostHog/posthog-rrweb#163: fix: handle SecurityError in IframeManager destroy and removeIframeById
+    - PostHog/posthog-rrweb#166: fix: remove postcss from @posthog/rrweb-record bundle (420KB → 170KB) (2026-04-08)
+- Updated dependencies []:
+    - @posthog/types@1.365.3
+
+## 1.365.2
+
+### Patch Changes
+
+- [#3323](https://github.com/PostHog/posthog-js/pull/3323) [`c387f6d`](https://github.com/PostHog/posthog-js/commit/c387f6dc146c9c09640e471e66043ad832b0476e) Thanks [@pauldambra](https://github.com/pauldambra)! - perf(replay): reduce memory and CPU cost of event compression by caching gzipped empty arrays and eliminating redundant JSON.stringify for size estimation
+  (2026-04-08)
+- Updated dependencies [[`c387f6d`](https://github.com/PostHog/posthog-js/commit/c387f6dc146c9c09640e471e66043ad832b0476e)]:
+    - @posthog/types@1.365.2
+
+## 1.365.1
+
+### Patch Changes
+
+- Updated dependencies [[`57ee5b2`](https://github.com/PostHog/posthog-js/commit/57ee5b25fd2c97f334f52b4eba28ea925033d6ed)]:
+    - @posthog/core@1.25.1
+    - @posthog/types@1.365.1
+
+## 1.365.0
+
+### Minor Changes
+
+- [#3302](https://github.com/PostHog/posthog-js/pull/3302) [`fc5589f`](https://github.com/PostHog/posthog-js/commit/fc5589fcc51bd53ba818822831867d3c00d83a11) Thanks [@dmarticus](https://github.com/dmarticus)! - preserve $set_once semantics in local flag evaluation cache
+  (2026-04-07)
+
+### Patch Changes
+
+- Updated dependencies [[`fc5589f`](https://github.com/PostHog/posthog-js/commit/fc5589fcc51bd53ba818822831867d3c00d83a11)]:
+    - @posthog/core@1.25.0
+    - @posthog/types@1.365.0
+
+## 1.364.7
+
+### Patch Changes
+
+- [#3319](https://github.com/PostHog/posthog-js/pull/3319) [`b25b689`](https://github.com/PostHog/posthog-js/commit/b25b68967f7e85317e2aacb8ecc4dc66a95095eb) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: send $groupidentify for new groups even when no properties are provided
+  (2026-04-03)
+- Updated dependencies []:
+    - @posthog/types@1.364.7
+
+## 1.364.6
+
+### Patch Changes
+
+- [#3316](https://github.com/PostHog/posthog-js/pull/3316) [`68cd4e5`](https://github.com/PostHog/posthog-js/commit/68cd4e5f1133b95bcb87c382a0ae5f1bcb96903d) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Fix slim bundle + extension bundles crash caused by inconsistent property mangling
+  (2026-04-02)
+- Updated dependencies [[`a01a3d5`](https://github.com/PostHog/posthog-js/commit/a01a3d55dc134b1b269be58c7922ce3780c57fc5)]:
+    - @posthog/core@1.24.6
+    - @posthog/types@1.364.6
+
+## 1.364.5
+
+### Patch Changes
+
+- [#3309](https://github.com/PostHog/posthog-js/pull/3309) [`197eeda`](https://github.com/PostHog/posthog-js/commit/197eeda0b09fd2671a8a40f1bfd48a7b940f7371) Thanks [@marandaneto](https://github.com/marandaneto)! - Extract CLI and sourcemap utilities from @posthog/core into @posthog/plugin-utils to remove cross-spawn from React Native dependencies
+  (2026-04-01)
+
+- [#3312](https://github.com/PostHog/posthog-js/pull/3312) [`c5feb5c`](https://github.com/PostHog/posthog-js/commit/c5feb5c35eefe0a459facc3b72752ab7d6696c1c) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Bump @posthog/rrweb-\* to 0.0.52 — adds error recovery to the canvas FPS snapshot pipeline, preventing canvas recording from permanently stopping when createImageBitmap or the worker encounters an error
+  (2026-04-01)
+
+- [#3315](https://github.com/PostHog/posthog-js/pull/3315) [`7b944fc`](https://github.com/PostHog/posthog-js/commit/7b944fc2a6099c0dfa4aa28f55872bd226b17b37) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Bump @posthog/rrweb-\* to 0.0.53 — fixes infinite recursion crash ("Maximum call stack size exceeded") when calling posthog.reset() or restarting the recorder on pages with shadow DOM elements (e.g. CometChat)
+  (2026-04-01)
+- Updated dependencies [[`197eeda`](https://github.com/PostHog/posthog-js/commit/197eeda0b09fd2671a8a40f1bfd48a7b940f7371)]:
+    - @posthog/core@1.24.5
+    - @posthog/types@1.364.5
+
+## 1.364.4
+
+### Patch Changes
+
+- [#3298](https://github.com/PostHog/posthog-js/pull/3298) [`2365df5`](https://github.com/PostHog/posthog-js/commit/2365df5c420fb88dccb74c85beeb058be92eb66e) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix: skip deep copy for snapshot/exception events to prevent stack overflow on deeply nested DOM trees
+  (2026-03-31)
+- Updated dependencies []:
+    - @posthog/types@1.364.4
+
+## 1.364.3
+
+### Patch Changes
+
+- [#3300](https://github.com/PostHog/posthog-js/pull/3300) [`bab5f3a`](https://github.com/PostHog/posthog-js/commit/bab5f3a0c061dc48c2b573136c03758a3ba3c301) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Strip workspace:\* references from lib/package.json after build
+  (2026-03-31)
+- Updated dependencies []:
+    - @posthog/types@1.364.3
+
+## 1.364.2
+
+### Patch Changes
+
+- [#3297](https://github.com/PostHog/posthog-js/pull/3297) [`341caaf`](https://github.com/PostHog/posthog-js/commit/341caaf627d752b35a3b9461a8b1f1fd532f306f) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: wrap sendBeacon body in Blob to ensure Content-Type header is set
+  (2026-03-30)
+- Updated dependencies [[`a863914`](https://github.com/PostHog/posthog-js/commit/a863914bca09643f2aef7ca029b96de9cbfbc24c)]:
+    - @posthog/core@1.24.4
+    - @posthog/types@1.364.2
+
 ## 1.364.1
 
 ### Patch Changes

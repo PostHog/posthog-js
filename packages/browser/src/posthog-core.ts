@@ -1279,7 +1279,9 @@ export class PostHog implements PostHogInterface {
             data.$set_once = setOnceProperties
         }
 
-        data = _copyAndTruncateStrings(data, options?._noTruncate ? null : this.config.properties_string_max_length)
+        if (!options?._noTruncate) {
+            data = _copyAndTruncateStrings(data, this.config.properties_string_max_length)
+        }
         data.timestamp = timestamp
         if (!isUndefined(options?.timestamp)) {
             data.properties['$event_time_override_provided'] = true
@@ -2412,7 +2414,7 @@ export class PostHog implements PostHogInterface {
 
             // Update current user properties
             this.setPersonPropertiesForFlags(
-                { ...(userPropertiesToSetOnce || {}), ...(userPropertiesToSet || {}) },
+                { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} },
                 false
             )
 
@@ -2502,7 +2504,10 @@ export class PostHog implements PostHogInterface {
         }
 
         // Update current user properties
-        this.setPersonPropertiesForFlags({ ...(userPropertiesToSetOnce || {}), ...(userPropertiesToSet || {}) })
+        this.setPersonPropertiesForFlags(
+            { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} },
+            true
+        )
 
         this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
 
@@ -2548,26 +2553,36 @@ export class PostHog implements PostHogInterface {
         }
 
         const existingGroups = this.getGroups()
+        const isNewGroup = existingGroups[groupType] !== groupKey
 
         // if group key changes, remove stored group properties
-        if (existingGroups[groupType] !== groupKey) {
+        if (isNewGroup) {
             this.resetGroupPropertiesForFlags(groupType)
         }
 
         this.register({ $groups: { ...existingGroups, [groupType]: groupKey } })
 
-        if (groupPropertiesToSet) {
-            this.capture(EVENT_GROUPIDENTIFY, {
+        // Send $groupidentify when the group is new/changed OR when properties
+        // are provided. Skip only when the group already exists with the same
+        // key and no new properties are being set.
+        if (isNewGroup || groupPropertiesToSet) {
+            const groupIdentifyProperties: Properties = {
                 $group_type: groupType,
                 $group_key: groupKey,
-                $group_set: groupPropertiesToSet,
-            })
+            }
+            if (groupPropertiesToSet) {
+                groupIdentifyProperties.$group_set = groupPropertiesToSet
+            }
+            this.capture(EVENT_GROUPIDENTIFY, groupIdentifyProperties)
+        }
+
+        if (groupPropertiesToSet) {
             this.setGroupPropertiesForFlags({ [groupType]: groupPropertiesToSet })
         }
 
         // If groups change and no properties change, reload feature flags.
         // The property change reload case is handled in setGroupPropertiesForFlags.
-        if (existingGroups[groupType] !== groupKey && !groupPropertiesToSet) {
+        if (isNewGroup && !groupPropertiesToSet) {
             this.reloadFeatureFlags()
         }
     }

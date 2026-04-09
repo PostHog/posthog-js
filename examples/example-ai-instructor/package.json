@@ -1,0 +1,20 @@
+{
+  "name": "example-ai-instructor",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "extract": "tsx extract.ts"
+  },
+  "dependencies": {
+    "posthog-node": "*",
+    "@posthog/ai": "*",
+    "@instructor-ai/instructor": "^1.0.0",
+    "openai": "^4.0.0",
+    "zod": "^3.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

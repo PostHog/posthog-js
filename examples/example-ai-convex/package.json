@@ -1,0 +1,21 @@
+{
+  "name": "example-ai-convex",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "generate": "tsx generate.ts"
+  },
+  "dependencies": {
+    "posthog-node": "*",
+    "@posthog/ai": "*",
+    "@ai-sdk/openai": "^1.0.0",
+    "ai": "^4.0.0",
+    "@opentelemetry/sdk-node": "^0.55.0",
+    "@opentelemetry/resources": "^1.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

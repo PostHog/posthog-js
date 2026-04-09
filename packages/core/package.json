@@ -1,6 +1,6 @@
 {
   "name": "@posthog/core",
-  "version": "1.24.3",
+  "version": "1.25.2",
   "license": "MIT",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -49,21 +49,12 @@
       "types": "./dist/utils/index.d.ts",
       "require": "./dist/utils/index.js",
       "import": "./dist/utils/index.mjs"
-    },
-    "./process": {
-      "types": "./dist/process/index.d.ts",
-      "require": "./dist/process/index.js",
-      "import": "./dist/process/index.mjs"
     }
   },
   "devDependencies": {
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
-    "@types/cross-spawn": "^6.0.6",
     "@types/jest": "catalog:",
     "jest": "catalog:"
-  },
-  "dependencies": {
-    "cross-spawn": "^7.0.6"
   }
 }

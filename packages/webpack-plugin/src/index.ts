@@ -1,6 +1,6 @@
 import { Logger, createLogger } from '@posthog/core'
 import { PluginConfig, resolveConfig, ResolvedPluginConfig } from './config'
-import { runSourcemapCli } from '@posthog/core/process'
+import { runSourcemapCli } from '@posthog/plugin-utils'
 import webpack from 'webpack'
 import path from 'path'
 

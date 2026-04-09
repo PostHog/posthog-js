@@ -1,3 +1,9 @@
 onlyBuiltDependencies:
   - "@posthog/cli"
 pnpmfile: ../.pnpmfile.cjs
+minimumReleaseAge: 10080
+minimumReleaseAgeExclude:
+  - "@posthog/cli"
+
+blockExoticSubdeps: true
+trustPolicy: no-downgrade

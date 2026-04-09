@@ -255,8 +255,13 @@ const _sendBeacon = (options: RequestWithOptions) => {
 
     try {
         const { contentType, body } = encodePostData(options) ?? {}
-        // sendBeacon requires a blob so we convert it
-        const sendBeaconBody = typeof body === 'string' ? new Blob([body], { type: contentType }) : body
+        if (!body) {
+            return
+        }
+        // sendBeacon requires a Blob to set the Content-Type header correctly.
+        // Without wrapping, ArrayBuffer bodies are sent with no Content-Type,
+        // which can cause issues with proxies/WAFs that require it.
+        const sendBeaconBody = body instanceof Blob ? body : new Blob([body], { type: contentType })
         navigator!.sendBeacon!(url, sendBeaconBody)
     } catch {
         // send beacon is a best-effort, fire-and-forget mechanism on page unload,

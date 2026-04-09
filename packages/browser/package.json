@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.364.1",
+    "version": "1.365.5",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
@@ -12,6 +12,7 @@
         "start": "pnpm build-react && NODE_OPTIONS=\"--max-old-space-size=8192\" pnpm build-rollup -w",
         "dev": "tsc -b && NODE_OPTIONS=\"--max-old-space-size=8192\" rollup -cw",
         "build": "tsc -b && rollup -c",
+        "postbuild": "node scripts/strip-lib-package-json.js && node scripts/check-mangled-property-consistency.js",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
         "lint": "eslint src && eslint playwright",
         "lint:fix": "eslint src --fix && eslint playwright --fix",
@@ -50,9 +51,15 @@
         "dist/*",
         "react/dist/**",
         "react/package.json",
-        "react/surveys/package.json"
+        "react/surveys/package.json",
+        "react/slim/package.json"
     ],
     "dependencies": {
+        "@opentelemetry/api": "^1.9.0",
+        "@opentelemetry/api-logs": "^0.208.0",
+        "@opentelemetry/exporter-logs-otlp-http": "^0.208.0",
+        "@opentelemetry/resources": "^2.2.0",
+        "@opentelemetry/sdk-logs": "^0.208.0",
         "@posthog/core": "workspace:*",
         "@posthog/types": "workspace:*",
         "core-js": "^3.38.1",
@@ -60,12 +67,7 @@
         "fflate": "^0.4.8",
         "preact": "^10.28.2",
         "query-selector-shadow-dom": "^1.0.1",
-        "web-vitals": "^5.1.0",
-        "@opentelemetry/api": "^1.9.0",
-        "@opentelemetry/api-logs": "^0.208.0",
-        "@opentelemetry/exporter-logs-otlp-http": "^0.208.0",
-        "@opentelemetry/resources": "^2.2.0",
-        "@opentelemetry/sdk-logs": "^0.208.0"
+        "web-vitals": "^5.1.0"
     },
     "devDependencies": {
         "@babel/core": "catalog:",
@@ -76,11 +78,12 @@
         "@babel/preset-env": "catalog:",
         "@babel/preset-typescript": "catalog:",
         "@jest/globals": "^29.7.0",
+        "@jridgewell/sourcemap-codec": "^1.5.5",
         "@playwright/test": "^1.52.0",
         "@posthog-tooling/rollup-utils": "workspace:*",
-        "@posthog/rrweb-plugin-console-record": "^0.0.51",
-        "@posthog/rrweb-record": "^0.0.51",
-        "@posthog/rrweb-types": "^0.0.51",
+        "@posthog/rrweb-plugin-console-record": "^0.0.56",
+        "@posthog/rrweb-record": "^0.0.56",
+        "@posthog/rrweb-types": "^0.0.56",
         "@rollup/plugin-babel": "^6.0.4",
         "@rollup/plugin-commonjs": "^28.0.6",
         "@rollup/plugin-json": "^6.1.0",

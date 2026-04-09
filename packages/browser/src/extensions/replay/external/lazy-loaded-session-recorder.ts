@@ -29,7 +29,12 @@ import {
     TriggerType,
     URLTriggerMatching,
 } from './triggerMatching'
-import { estimateSize, INCREMENTAL_SNAPSHOT_EVENT_TYPE, truncateLargeConsoleLogs } from './sessionrecording-utils'
+import {
+    estimateCompressedEventSize,
+    estimateSize,
+    INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+    truncateLargeConsoleLogs,
+} from './sessionrecording-utils'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
 import { assignableWindow, LazyLoadedSessionRecordingInterface, window, document } from '../../../utils/globals'
 import { addEventListener } from '../../../utils'
@@ -37,6 +42,7 @@ import { MutationThrottler } from './mutation-throttler'
 import { createLogger } from '../../../utils/logger'
 import {
     clampToRange,
+    isArray,
     isBoolean,
     isFunction,
     isNull,
@@ -126,7 +132,7 @@ export interface SnapshotBuffer {
     windowId: string
 }
 
-const ACTIVE_SOURCES = [
+const ACTIVE_SOURCES: IncrementalSource[] = [
     IncrementalSource.MouseMove,
     IncrementalSource.MouseInteraction,
     IncrementalSource.Scroll,
@@ -152,12 +158,12 @@ function getRRWebRecord(): rrwebRecordType | undefined {
 }
 
 export type compressedFullSnapshotEvent = {
-    type: EventType.FullSnapshot
+    type: typeof EventType.FullSnapshot
     data: string
 }
 
 export type compressedIncrementalSnapshotEvent = {
-    type: EventType.IncrementalSnapshot
+    type: typeof EventType.IncrementalSnapshot
     data: {
         source: IncrementalSource
         texts: string
@@ -168,9 +174,9 @@ export type compressedIncrementalSnapshotEvent = {
 }
 
 export type compressedIncrementalStyleSnapshotEvent = {
-    type: EventType.IncrementalSnapshot
+    type: typeof EventType.IncrementalSnapshot
     data: {
-        source: IncrementalSource.StyleSheetRule
+        source: typeof IncrementalSource.StyleSheetRule
         id?: number
         styleId?: number
         replace?: string
@@ -195,49 +201,65 @@ function gzipToString(data: unknown): string {
     return strFromU8(gzipSync(strToU8(JSON.stringify(data))), true)
 }
 
+let _gzippedEmptyArray: string | undefined
+
+function gzipField(data: unknown): string {
+    if (isArray(data) && data.length === 0) {
+        _gzippedEmptyArray = _gzippedEmptyArray ?? gzipToString([])
+        return _gzippedEmptyArray
+    }
+    return gzipToString(data)
+}
+
 /**
  * rrweb's packer takes an event and returns a string or the reverse on `unpack`.
  * but we want to be able to inspect metadata during ingestion.
  * and don't want to compress the entire event,
  * so we have a custom packer that only compresses part of some events
+ *
+ * returns the compressed event and its estimated JSON size,
+ * avoiding a redundant JSON.stringify for size estimation
  */
-function compressEvent(event: eventWithTime): eventWithTime | compressedEventWithTime {
+function compressEvent(event: eventWithTime): { event: eventWithTime | compressedEventWithTime; size: number } {
     try {
         if (event.type === EventType.FullSnapshot) {
-            return {
+            const compressed = {
                 ...event,
                 data: gzipToString(event.data),
-                cv: '2024-10',
+                cv: '2024-10' as const,
             }
+            return { event: compressed, size: estimateCompressedEventSize(compressed) }
         }
         if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.Mutation) {
-            return {
+            const compressed = {
                 ...event,
-                cv: '2024-10',
+                cv: '2024-10' as const,
                 data: {
                     ...event.data,
-                    texts: gzipToString(event.data.texts),
-                    attributes: gzipToString(event.data.attributes),
-                    removes: gzipToString(event.data.removes),
-                    adds: gzipToString(event.data.adds),
+                    texts: gzipField(event.data.texts),
+                    attributes: gzipField(event.data.attributes),
+                    removes: gzipField(event.data.removes),
+                    adds: gzipField(event.data.adds),
                 },
             }
+            return { event: compressed, size: estimateCompressedEventSize(compressed) }
         }
         if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.StyleSheetRule) {
-            return {
+            const compressed = {
                 ...event,
-                cv: '2024-10',
+                cv: '2024-10' as const,
                 data: {
                     ...event.data,
                     adds: event.data.adds ? gzipToString(event.data.adds) : undefined,
                     removes: event.data.removes ? gzipToString(event.data.removes) : undefined,
                 },
             }
+            return { event: compressed, size: estimateCompressedEventSize(compressed) }
         }
     } catch (e) {
         logger.error('could not compress event - will use uncompressed event', e)
     }
-    return event
+    return { event, size: estimateSize(event) }
 }
 
 function isCustomEvent(e: eventWithTime, tag: string): e is eventWithTime & customEvent {
@@ -1115,9 +1137,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
         }
 
-        const eventToSend =
-            (this._instance.config.session_recording.compress_events ?? true) ? compressEvent(event) : event
-        const size = estimateSize(eventToSend)
+        const { event: eventToSend, size } =
+            (this._instance.config.session_recording.compress_events ?? true)
+                ? compressEvent(event)
+                : { event, size: estimateSize(event) }
 
         const properties = {
             $snapshot_bytes: size,

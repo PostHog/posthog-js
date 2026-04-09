@@ -64,6 +64,79 @@ describe('PostHog Core', () => {
         ],
       })
     })
+
+    it('should call groupIdentify for a new group even without properties', async () => {
+      posthog.group('other', 'team')
+      await waitForPromises()
+
+      expect(mocks.fetch).toHaveBeenCalledTimes(2) // 1 for flags, 1 for groupIdentify
+      const batchCall = mocks.fetch.mock.calls[1]
+      expect(batchCall[0]).toEqual('https://us.i.posthog.com/batch/')
+      expect(parseBody(batchCall)).toMatchObject({
+        batch: [
+          {
+            event: '$groupidentify',
+            distinct_id: posthog.getDistinctId(),
+            properties: {
+              $group_type: 'other',
+              $group_key: 'team',
+            },
+            type: 'capture',
+          },
+        ],
+      })
+    })
+
+    it('should not call groupIdentify when group already exists with same key and no properties', async () => {
+      posthog.group('other', 'team')
+      await waitForPromises()
+      mocks.fetch.mockClear()
+
+      posthog.group('other', 'team')
+      await waitForPromises()
+
+      // No new fetch calls for groupIdentify (only flags reload if needed)
+      const groupIdentifyCalls = mocks.fetch.mock.calls.filter((call) => {
+        try {
+          const body = parseBody(call)
+          return body.batch?.some((e: any) => e.event === '$groupidentify')
+        } catch {
+          return false
+        }
+      })
+      expect(groupIdentifyCalls).toHaveLength(0)
+    })
+
+    it('should call groupIdentify for an existing group when properties are provided', async () => {
+      posthog.group('other', 'team')
+      await waitForPromises()
+      mocks.fetch.mockClear()
+
+      posthog.group('other', 'team', { name: 'My Team' })
+      await waitForPromises()
+
+      const groupIdentifyCalls = mocks.fetch.mock.calls.filter((call) => {
+        try {
+          const body = parseBody(call)
+          return body.batch?.some((e: any) => e.event === '$groupidentify')
+        } catch {
+          return false
+        }
+      })
+      expect(groupIdentifyCalls).toHaveLength(1)
+      expect(parseBody(groupIdentifyCalls[0])).toMatchObject({
+        batch: [
+          {
+            event: '$groupidentify',
+            properties: {
+              $group_type: 'other',
+              $group_key: 'team',
+              $group_set: { name: 'My Team' },
+            },
+          },
+        ],
+      })
+    })
   })
 
   describe('groupIdentify', () => {

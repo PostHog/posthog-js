@@ -70,6 +70,10 @@ jobs:
             contents: read
         outputs:
             commit-hash: ${{ steps.commit-version-bump.outputs.commit-hash }}
+            # posthog-js SDK version after `pnpm bump`. Downstream jobs use this
+            # to construct version-pinned CDN URLs (e.g. the toolbar bundle's
+            # `TOOLBAR_PUBLIC_PATH`) and to double-check the S3 upload path.
+            version: ${{ steps.get-version.outputs.version }}
         steps:
             - name: Notify Slack - Approved
               continue-on-error: true # Don't block release if Slack notification fails
@@ -111,6 +115,17 @@ jobs:
 
             - name: Update lockfile
               run: pnpm install
+
+            - name: Get posthog-js version
+              id: get-version
+              run: |
+                  VERSION=$(jq -r .version packages/browser/package.json)
+                  if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-][a-zA-Z0-9.]+)?$ ]]; then
+                      echo "ERROR: Invalid version format in packages/browser/package.json: '$VERSION'" >&2
+                      exit 1
+                  fi
+                  echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+                  echo "Resolved posthog-js version: $VERSION"
 
             - name: Commit version bump and lockfile
               id: commit-version-bump
@@ -198,6 +213,7 @@ jobs:
                     - name: '@posthog/convex'
                     - name: '@posthog/nextjs-config'
                     - name: '@posthog/nuxt'
+                    - name: '@posthog/plugin-utils'
                     - name: '@posthog/rollup-plugin'
                     - name: '@posthog/types'
                     - name: '@posthog/webpack-plugin'
@@ -223,7 +239,7 @@ jobs:
 
             - name: Check ${{ matrix.package.name }} version and detect an update
               id: check-package-version
-              uses: PostHog/check-package-version@v2.1.0
+              uses: PostHog/check-package-version@v2
               with:
                   path: ${{ steps.get-package-path.outputs.path }}
 
@@ -333,11 +349,266 @@ jobs:
                   message: '❌ Failed to release `${{ matrix.package.name }}@v${{ steps.check-package-version.outputs.committed-version }}`! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
                   emoji_reaction: 'x'
 
+    build-s3-artifacts:
+        name: Build posthog-js dist for S3
+        needs: [version-bump, notify-approval-needed]
+        runs-on: ubuntu-latest
+        # Run in parallel with publish — must NOT wait for publish because
+        # check-package-version compares against npm. If publish finishes first,
+        # the version is already on the registry and is-new-version returns false.
+        if: always() && needs.version-bump.outputs.commit-hash != ''
+        permissions:
+            contents: read
+        outputs:
+            is-new-version: ${{ steps.check-version.outputs.is-new-version }}
+            committed-version: ${{ steps.check-version.outputs.committed-version }}
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+              with:
+                  ref: ${{ needs.version-bump.outputs.commit-hash }}
+                  fetch-depth: 1
+
+            - name: Check posthog-js version
+              id: check-version
+              uses: PostHog/check-package-version@v2
+              with:
+                  path: packages/browser
+
+            - name: Setup environment
+              if: steps.check-version.outputs.is-new-version == 'true'
+              uses: ./.github/actions/setup
+
+            - name: Upload dist artifact
+              if: steps.check-version.outputs.is-new-version == 'true'
+              uses: actions/upload-artifact@v4
+              with:
+                  name: posthog-js-dist
+                  path: packages/browser/dist/*.js
+                  retention-days: 1
+                  if-no-files-found: error
+
+    build-toolbar:
+        # Build the toolbar bundle from posthog/posthog@master once per region.
+        # Each region gets its own `TOOLBAR_PUBLIC_PATH`, so asset URLs baked
+        # into the JS and CSS (and the runtime CSS loader in ToolbarApp.tsx)
+        # point at the region-local CDN for the SDK version being released.
+        # See the matching posthog/posthog PR that wires up TOOLBAR_PUBLIC_PATH.
+        #
+        # Runs in parallel with `build-s3-artifacts`. If the release turns out
+        # not to include a new posthog-js version, the artifacts produced here
+        # are simply never downloaded by `upload-s3` (which is gated on
+        # `is-new-version`). We prefer parallelism over gating because
+        # `build-s3-artifacts` does a full `pnpm install + build` that would
+        # add minutes to the critical path if it blocked the toolbar build.
+        name: Build toolbar (${{ matrix.region.name }})
+        needs: [version-bump, notify-approval-needed]
+        runs-on: ubuntu-latest
+        if: always() && needs.version-bump.outputs.commit-hash != ''
+        permissions:
+            contents: read
+        strategy:
+            fail-fast: false
+            matrix:
+                region:
+                    - { name: us, host: us-assets.i.posthog.com }
+                    - { name: eu, host: eu-assets.i.posthog.com }
+        env:
+            # esbuild bakes this into the bundle at build time. Trailing slash
+            # is required (posthog/posthog's frontend/toolbar-config.mjs adds
+            # it defensively, but we set it correctly here too).
+            TOOLBAR_PUBLIC_PATH: https://${{ matrix.region.host }}/static/${{ needs.version-bump.outputs.version }}/
+        steps:
+            - name: Checkout posthog/posthog
+              uses: actions/checkout@v6
+              with:
+                  repository: PostHog/posthog
+                  ref: master
+                  fetch-depth: 1
+
+            - name: Install pnpm
+              uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin v4.2.0
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v5
+              with:
+                  node-version: '24'
+                  cache: 'pnpm'
+
+            - name: Install frontend dependencies
+              run: pnpm --filter=@posthog/frontend... install --frozen-lockfile
+
+            # The toolbar imports compiled output from a couple of workspace
+            # packages (`@posthog/tailwind` exposes `dist/tailwind.css`;
+            # `@posthog/hogvm` exposes `dist/index.js`). `pnpm install` does not
+            # run their build scripts, so we build them explicitly first.
+            # `^...` builds only the workspace dependencies of @posthog/frontend,
+            # not @posthog/frontend itself (whose `build` script would build
+            # the whole app, which we don't need for the toolbar).
+            - name: Build toolbar workspace dependencies
+              run: pnpm --filter='@posthog/frontend^...' run build
+
+            # Run from the frontend directory: esbuild's `alias` config (e.g.
+            # `buffer` -> `buffer`) resolves bare specifiers from `process.cwd()`,
+            # and the `buffer` polyfill is hoisted to `frontend/node_modules`,
+            # not the repo root.
+            - name: Build toolbar
+              working-directory: frontend
+              run: node bin/build-toolbar.mjs
+
+            # Production builds emit hashed entrypoint names like
+            # `toolbar-ABCDEFGH.js` / `toolbar-WXYZABCD.css` (the hashes differ
+            # between the two files). Rename both to canonical names so the
+            # upload step has stable filenames. The runtime CSS loader in the
+            # JS bundle expects the literal `toolbar.css`.
+            #
+            # Source maps are discarded (we don't ship them to end users).
+            - name: Normalize toolbar output filenames
+              run: |
+                  set -euo pipefail
+                  # `set -e` alone doesn't propagate failures out of $(...)
+                  # command substitutions. Without inherit_errexit, a failing
+                  # `find frontend/dist/assets` inside an echo would silently
+                  # print "0 files" and the step would pass, only to fail
+                  # confusingly later in upload-artifact's if-no-files-found.
+                  shopt -s inherit_errexit
+                  shopt -s nullglob
+                  jsfiles=(frontend/dist/toolbar-*.js)
+                  cssfiles=(frontend/dist/toolbar-*.css)
+                  if [ ${#jsfiles[@]} -ne 1 ]; then
+                      echo "❌ expected exactly one frontend/dist/toolbar-*.js, got ${#jsfiles[@]}: ${jsfiles[*]:-}"
+                      ls -la frontend/dist/ || true
+                      exit 1
+                  fi
+                  if [ ${#cssfiles[@]} -ne 1 ]; then
+                      echo "❌ expected exactly one frontend/dist/toolbar-*.css, got ${#cssfiles[@]}: ${cssfiles[*]:-}"
+                      ls -la frontend/dist/ || true
+                      exit 1
+                  fi
+                  mv "${jsfiles[0]}" frontend/dist/toolbar.js
+                  mv "${cssfiles[0]}" frontend/dist/toolbar.css
+                  rm -f frontend/dist/*.map
+                  echo "✓ normalized toolbar outputs:"
+                  ls -la frontend/dist/toolbar.js frontend/dist/toolbar.css
+                  echo "✓ assets/ contains $(find frontend/dist/assets -type f | wc -l) files"
+
+            # Assert the cross-repo contract: the `TOOLBAR_PUBLIC_PATH` env
+            # var we passed in must actually appear in the bundle. If
+            # posthog/posthog@master doesn't yet honour TOOLBAR_PUBLIC_PATH
+            # (e.g. the matching PR hasn't landed or was reverted), esbuild
+            # silently falls back to its hardcoded default `publicPath` and
+            # we'd otherwise ship a bundle pointing at the wrong CDN.
+            - name: Verify TOOLBAR_PUBLIC_PATH was baked into the bundle
+              run: |
+                  set -euo pipefail
+                  # See note in "Normalize toolbar output filenames". This
+                  # step has several $(...) substitutions (find, wc, git
+                  # rev-parse) that we want to fail loudly if they break.
+                  shopt -s inherit_errexit
+                  if ! grep -aq "$TOOLBAR_PUBLIC_PATH" frontend/dist/toolbar.js; then
+                      echo "❌ toolbar.js does not contain TOOLBAR_PUBLIC_PATH='$TOOLBAR_PUBLIC_PATH'"
+                      echo "   posthog/posthog@$(git rev-parse HEAD) may not honour the env var yet."
+                      exit 1
+                  fi
+                  echo "✓ TOOLBAR_PUBLIC_PATH baked into bundle"
+                  echo "  region:              ${{ matrix.region.name }}"
+                  echo "  TOOLBAR_PUBLIC_PATH: $TOOLBAR_PUBLIC_PATH"
+                  echo "  toolbar.js:          $(wc -c < frontend/dist/toolbar.js) bytes"
+                  echo "  toolbar.css:         $(wc -c < frontend/dist/toolbar.css) bytes"
+                  echo "  assets/:             $(find frontend/dist/assets -type f | wc -l | tr -d ' ') files"
+                  echo "  built from:          PostHog/posthog@$(git rev-parse HEAD)"
+
+            - name: Upload toolbar artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: toolbar-dist-${{ matrix.region.name }}
+                  # Least common ancestor of these paths is `frontend/dist`,
+                  # so the artifact contains `toolbar.js`, `toolbar.css`, and
+                  # `assets/**` at the root (see actions/upload-artifact docs).
+                  path: |
+                      frontend/dist/toolbar.js
+                      frontend/dist/toolbar.css
+                      frontend/dist/assets
+                  retention-days: 1
+                  if-no-files-found: error
+
+    upload-s3:
+        # Matrixed per region so each cell downloads only the toolbar artifact
+        # that was built with the matching `TOOLBAR_PUBLIC_PATH`. posthog-js's
+        # own dist is region-agnostic and downloaded identically in both cells.
+        name: Upload posthog-js dist to S3 (${{ matrix.region.name }})
+        needs: [build-s3-artifacts, build-toolbar, version-bump, notify-approval-needed]
+        runs-on: ubuntu-latest
+        if: always() && needs.build-s3-artifacts.outputs.is-new-version == 'true'
+        environment: 'S3 Upload' # For OIDC credential scoping only — no required reviewers (single approval at NPM Release)
+        permissions:
+            contents: read
+            id-token: write
+        strategy:
+            fail-fast: false
+            matrix:
+                region:
+                    - { name: us, bucket: posthog-js-prod-us, aws_region: us-east-1 }
+                    - { name: eu, bucket: posthog-js-prod-eu, aws_region: eu-central-1 }
+        steps:
+            # Sparse checkout: only the upload script — no pnpm install/build runs here.
+            - name: Checkout upload script
+              uses: actions/checkout@v6
+              with:
+                  ref: ${{ needs.version-bump.outputs.commit-hash }}
+                  sparse-checkout: .github/scripts
+
+            - name: Download dist artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: posthog-js-dist
+                  path: packages/browser/dist
+
+            # No `if` guard on this step: the toolbar bundle is a required
+            # release artifact, and the matrix runs one upload-s3 cell per
+            # region. `needs.build-toolbar.result` aggregates across both
+            # region cells of build-toolbar, which would make e.g. the US
+            # upload wrongly skip the toolbar download when only the EU build
+            # failed. Letting download-artifact fail naturally if the
+            # region-specific artifact is missing gives us clean per-region
+            # fate-sharing.
+            - name: Download toolbar artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: toolbar-dist-${{ matrix.region.name }}
+                  path: packages/browser/dist
+
+            # GitHub Actions expression contexts don't uniformly support
+            # bracket lookups like `vars[matrix.region.role_var]`, so pick the
+            # right role ARN with a ternary on the region name. If you add a
+            # region here, also add it below.
+            - name: Configure AWS credentials
+              uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6
+              with:
+                  role-to-assume: ${{ matrix.region.name == 'us' && vars.AWS_S3_UPLOAD_ROLE_ARN_US || vars.AWS_S3_UPLOAD_ROLE_ARN_EU }}
+                  aws-region: ${{ matrix.region.aws_region }}
+
+            - name: Upload dist and update manifest
+              env:
+                  VERSION: ${{ needs.build-s3-artifacts.outputs.committed-version }}
+              run: .github/scripts/upload-posthog-js-s3.sh ${{ matrix.region.bucket }}
+
+            - name: Notify Slack - S3 Upload Failed
+              continue-on-error: true
+              if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
+              uses: PostHog/.github/.github/actions/slack-thread-reply@main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '❌ Failed to upload posthog-js v${{ needs.build-s3-artifacts.outputs.committed-version }} dist to ${{ matrix.region.bucket }}! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  emoji_reaction: 'x'
+
     notify-released:
         name: Notify Slack - Released
-        needs: [notify-approval-needed, publish]
+        needs: [notify-approval-needed, publish, upload-s3]
         runs-on: ubuntu-latest
-        if: always() && needs.publish.result == 'success' && needs.notify-approval-needed.outputs.slack_ts != ''
+        if: always() && needs.publish.result == 'success' && (needs.upload-s3.result == 'success' || needs.upload-s3.result == 'skipped') && needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
             - name: Checkout repository
               uses: actions/checkout@v6
@@ -352,3 +623,26 @@ jobs:
                   message: '🚀 All packages released successfully!'
                   emoji_reaction: 'rocket'
                   remove_emoji_reaction: 'x'
+
+    # Fires when npm publish fully succeeded but the S3/CDN upload failed (e.g.
+    # toolbar build broke against posthog/posthog@master, or one region's
+    # upload failed). Packages are already on npm at this point — the release
+    # isn't reversible — but the versioned CDN artifacts for posthog-js are
+    # stale or missing. Engineers get a single explicit summary message
+    # instead of having to piece the state together from a missing 🚀 message
+    # plus per-region ❌ messages.
+    notify-partial-release:
+        name: Notify Slack - Partial Release (npm only)
+        needs: [notify-approval-needed, build-s3-artifacts, publish, upload-s3]
+        runs-on: ubuntu-latest
+        if: always() && needs.publish.result == 'success' && needs.upload-s3.result == 'failure' && needs.notify-approval-needed.outputs.slack_ts != ''
+        steps:
+            - name: Notify Slack - Partial Release
+              continue-on-error: true # Slack failure shouldn't mark release as failed
+              uses: PostHog/.github/.github/actions/slack-thread-reply@main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '⚠️ npm packages released, but CDN upload failed — posthog-js v${{ needs.build-s3-artifacts.outputs.committed-version }} dist and/or toolbar bundle is stale or missing on S3. <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  emoji_reaction: 'warning'

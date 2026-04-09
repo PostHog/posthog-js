@@ -161,6 +161,10 @@ test.describe('surveys - core display logic', () => {
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
 
+        // The SDK writes lastSeenSurveyDate synchronously after dispatching PHSurveyShown,
+        // but the survey render is async — wait for localStorage to be populated
+        await page.waitForFunction(() => window.localStorage.getItem('lastSeenSurveyDate') !== null)
+
         const lastSeenDate = await page.evaluate(() => {
             return window.localStorage.getItem('lastSeenSurveyDate')
         })

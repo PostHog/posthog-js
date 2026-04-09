@@ -477,6 +477,12 @@ export abstract class PostHogCoreStateless {
       ...extraPayload,
     }
 
+    // Extract $device_id from personProperties and send it as a top-level field so the
+    // feature flags service can use it for device-based bucketing during remote evaluation.
+    if (personProperties.$device_id) {
+      requestData.$device_id = personProperties.$device_id
+    }
+
     // Add evaluation contexts if configured
     if (this.evaluationContexts && this.evaluationContexts.length > 0) {
       requestData.evaluation_contexts = this.evaluationContexts

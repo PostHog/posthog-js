@@ -1,8 +1,9 @@
 import type { GetServerSidePropsContext } from 'next'
 import type { PostHogOptions, IPostHog } from 'posthog-node'
 import { getOrCreateNodeClient } from '../server/nodeClientCache'
-import { cookieStoreFromHeader, readPostHogCookie, cookieStateToProperties, isOptedOut } from '../shared/cookie'
+import { cookieStoreFromHeader, readPostHogCookie, isOptedOut } from '../shared/cookie'
 import { resolveApiKey } from '../shared/config'
+import { readTracingHeaders, buildContextData } from '../shared/tracing-headers'
 
 /**
  * Creates a PostHog server client scoped to the current request.
@@ -41,8 +42,8 @@ export async function getServerSidePostHog(
 
     if (!isOptedOut(cookieStore, resolvedApiKey)) {
         const state = readPostHogCookie(cookieStore, resolvedApiKey)
-        const properties = cookieStateToProperties(state)
-        client.enterContext({ distinctId: state?.distinctId, sessionId: state?.sessionId, properties })
+        const tracing = readTracingHeaders(ctx.req.headers)
+        client.enterContext(buildContextData(tracing, state))
     }
 
     return client

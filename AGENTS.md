@@ -37,6 +37,7 @@ The repository contains the following SDK packages in `./packages/`:
 | `nuxt/`          | `@posthog/nuxt`          | Nuxt framework module                           |
 | `next/`          | `@posthog/next`          | Next.js framework module                        |
 | `nextjs-config/` | `@posthog/nextjs-config` | Next.js configuration helper                    |
+| `plugin-utils/`  | `@posthog/plugin-utils`  | Shared CLI and sourcemap utilities for plugins  |
 | `types/`         | `@posthog/types`         | TypeScript type definitions for the SDK         |
 
 ## Workspace

@@ -218,6 +218,16 @@ export class PostHog extends PostHogCore {
 
       this.setupBootstrap(options)
 
+      // Initialize device_id if not already set. This provides a stable identifier
+      // for device-level feature flag bucketing that survives identify() and reset().
+      // We seed it from the anonymous ID at init time; once set, it's independent.
+      if (!this.getPersistedProperty(PostHogPersistedProperty.DeviceId)) {
+        const anonId = this.getAnonymousId()
+        if (anonId) {
+          this.setPersistedProperty(PostHogPersistedProperty.DeviceId, anonId)
+        }
+      }
+
       // Set default person properties for flags if enabled
       if (this._setDefaultPersonProperties) {
         this._setDefaultPersonPropertiesForFlags(false)
@@ -413,26 +423,53 @@ export class PostHog extends PostHogCore {
    * To reset the user's ID and anonymous ID, call reset. Usually you would do this right after the user logs out.
    * This also clears all stored super properties and more.
    *
+   * By default (when `propertiesToKeep` is not provided), the app lifecycle properties
+   * (`InstalledAppBuild` and `InstalledAppVersion`) are automatically preserved to prevent
+   * duplicate "Application Installed" events on the next app launch.
+   *
+   * If you pass `propertiesToKeep` explicitly, only the properties you specify will be preserved.
+   * To keep the default app lifecycle behavior, include `PostHogPersistedProperty.InstalledAppBuild`
+   * and `PostHogPersistedProperty.InstalledAppVersion` in your array.
+   *
+   * Note: The event queue (`PostHogPersistedProperty.Queue`) is always preserved regardless of
+   * what is passed in `propertiesToKeep`, to ensure pending events are not lost.
+   *
    * {@label Identification}
    *
    * @example
    * ```js
-   * // reset after logout
+   * // reset after logout (preserves app lifecycle properties by default)
    * posthog.reset()
    * ```
    *
    * @example
    * ```js
-   * // reset but keep feature flag overrides
-   * posthog.reset([PostHogPersistedProperty.OverrideFeatureFlags])
+   * // reset but keep feature flag overrides and app lifecycle properties
+   * posthog.reset([
+   *   PostHogPersistedProperty.OverrideFeatureFlags,
+   *   PostHogPersistedProperty.InstalledAppBuild,
+   *   PostHogPersistedProperty.InstalledAppVersion,
+   * ])
    * ```
    *
-   * @param propertiesToKeep - Optional array of persisted properties to preserve during reset
+   * @param propertiesToKeep - Optional array of persisted properties to preserve during reset.
+   *   When not provided, app lifecycle and device bucketing properties are automatically preserved.
+   *   When provided, only the specified properties are preserved.
+   *   The event queue is always preserved regardless.
    *
    * @public
    */
   reset(propertiesToKeep?: PostHogPersistedProperty[]): void {
-    super.reset(propertiesToKeep)
+    // When propertiesToKeep is not explicitly provided, automatically preserve app lifecycle
+    // properties and device_id to prevent duplicate "Application Installed" events and
+    // to maintain stable feature flag bucketing across identity changes.
+    const effectivePropertiesToKeep = propertiesToKeep ?? [
+      PostHogPersistedProperty.InstalledAppBuild,
+      PostHogPersistedProperty.InstalledAppVersion,
+      PostHogPersistedProperty.DeviceId,
+    ]
+
+    super.reset(effectivePropertiesToKeep)
 
     if (this._setDefaultPersonProperties) {
       // Reset reloads flags asyncrhonously, but doesn't wait for it.
@@ -742,6 +779,27 @@ export class PostHog extends PostHogCore {
    */
   getDistinctId(): string {
     return super.getDistinctId()
+  }
+
+  /**
+   * Returns the stable device identifier used for device-level feature flag bucketing.
+   * This ID persists across identify() and reset() calls, only changing on a fresh
+   * app install, manual cache clearing, or OS-initiated storage cleanup.
+   *
+   * @returns The device ID, or an empty string if not yet initialized
+   */
+  getDeviceId(): string {
+    const deviceId = this.getPersistedProperty<string>(PostHogPersistedProperty.DeviceId)
+    if (!deviceId) {
+      // Lazy init for upgrades: existing installs won't have a device_id yet
+      const anonId = this.getAnonymousId()
+      if (anonId) {
+        this.setPersistedProperty(PostHogPersistedProperty.DeviceId, anonId)
+        return anonId
+      }
+      return ''
+    }
+    return deviceId
   }
 
   /**
@@ -1127,25 +1185,45 @@ export class PostHog extends PostHogCore {
    */
   identify(distinctId?: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
     const previousDistinctId = this.getDistinctId()
+
+    // Extract $set_once before super.identify() because core deletes it from the properties object
+    const userProps = properties?.$set || properties
+    const userPropsOnce = properties?.$set_once
+
     super.identify(distinctId, properties, options)
 
     // Automatically cache person properties for feature flag evaluation
-    // Use $set if provided, otherwise use top-level properties
-    const userProps = properties?.$set || properties
-    if (userProps && Object.keys(userProps).length > 0) {
-      const propsToCache: Record<string, string> = {}
+
+    const propsToCache: Record<string, string> = {}
+    if (userProps) {
       Object.entries(userProps).forEach(([key, value]) => {
         if (value !== null && value !== undefined) {
           propsToCache[key] = String(value)
         }
       })
-      if (Object.keys(propsToCache).length > 0) {
-        // super.identify() already handles reloading flags in all cases:
-        // - When distinctId changes: it calls reloadFeatureFlags() directly
-        // - When distinctId is the same but properties change: it calls setPersonProperties() which reloads flags
-        // So we only need to set the properties here without triggering another reload.
-        this.setPersonPropertiesForFlags(propsToCache, false)
-      }
+    }
+
+    const propsOnceToCache: Record<string, string> = {}
+    if (userPropsOnce && typeof userPropsOnce === 'object') {
+      Object.entries(userPropsOnce as Record<string, unknown>).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          propsOnceToCache[key] = String(value)
+        }
+      })
+    }
+
+    if (Object.keys(propsToCache).length > 0 || Object.keys(propsOnceToCache).length > 0) {
+      // super.identify() already handles reloading flags in all cases:
+      // - When distinctId changes: it calls reloadFeatureFlags() directly
+      // - When distinctId is the same but properties change: it calls setPersonProperties() which reloads flags
+      // So we only need to set the properties here without triggering another reload.
+      this.setPersonPropertiesForFlags(
+        {
+          $set: propsToCache,
+          ...(Object.keys(propsOnceToCache).length > 0 ? { $set_once: propsOnceToCache } : {}),
+        },
+        false
+      )
     }
 
     if (this._isEnableSessionReplay() && OptionalReactNativeSessionReplay) {

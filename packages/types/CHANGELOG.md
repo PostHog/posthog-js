@@ -1,5 +1,34 @@
 # @posthog/types
 
+## 1.365.5
+
+## 1.365.4
+
+## 1.365.3
+
+## 1.365.2
+
+### Patch Changes
+
+- [#3323](https://github.com/PostHog/posthog-js/pull/3323) [`c387f6d`](https://github.com/PostHog/posthog-js/commit/c387f6dc146c9c09640e471e66043ad832b0476e) Thanks [@pauldambra](https://github.com/pauldambra)! - perf(replay): reduce memory and CPU cost of event compression by caching gzipped empty arrays and eliminating redundant JSON.stringify for size estimation
+  (2026-04-08)
+
+## 1.365.1
+
+## 1.365.0
+
+## 1.364.7
+
+## 1.364.6
+
+## 1.364.5
+
+## 1.364.4
+
+## 1.364.3
+
+## 1.364.2
+
 ## 1.364.1
 
 ## 1.364.0

@@ -798,14 +798,33 @@ describe('PostHog React Native', () => {
         expect(cachedProps).toEqual({ email: 'test@example.com', plan: 'premium' })
       })
 
-      it('should ignore $set_once when caching properties', async () => {
+      it('should cache $set_once properties with set-once semantics', async () => {
         posthog.identify('user-123', {
           $set: { email: 'test@example.com' },
           $set_once: { created_at: '2024-01-01' },
         })
 
         const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
-        expect(cachedProps).toEqual({ email: 'test@example.com' })
+        expect(cachedProps).toEqual({ email: 'test@example.com', created_at: '2024-01-01' })
+      })
+
+      it('should not overwrite existing keys via $set_once on subsequent identify calls', async () => {
+        posthog.identify('user-123', {
+          $set: { email: 'test@example.com' },
+          $set_once: { created_at: '2024-01-01' },
+        })
+
+        posthog.identify('user-123', {
+          $set: { email: 'new@example.com' },
+          $set_once: { created_at: '2025-06-15', new_key: 'hello' },
+        })
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+        expect(cachedProps).toEqual({
+          email: 'new@example.com',
+          created_at: '2024-01-01',
+          new_key: 'hello',
+        })
       })
 
       it('should merge properties from multiple identify() calls with $set', async () => {
@@ -1077,7 +1096,20 @@ describe('PostHog React Native', () => {
         expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual(undefined)
       })
 
-      it('should clear all properties when reset is called without propertiesToKeep', async () => {
+      it.each([
+        {
+          label: 'default (no arg) preserves lifecycle properties',
+          resetArg: undefined as PostHogPersistedProperty[] | undefined,
+          expectBuild: '1',
+          expectVersion: '1.0.0',
+        },
+        {
+          label: 'explicit empty array clears lifecycle properties',
+          resetArg: [] as PostHogPersistedProperty[],
+          expectBuild: undefined,
+          expectVersion: undefined,
+        },
+      ])('reset with $label', async ({ resetArg, expectBuild, expectVersion }) => {
         posthog = new PostHog('test-api-key', {
           customStorage: storage,
           flushInterval: 0,
@@ -1085,17 +1117,211 @@ describe('PostHog React Native', () => {
         })
         await posthog.ready()
 
-        posthog.overrideFeatureFlag({ testFlag: true })
+        posthog.setPersistedProperty(PostHogPersistedProperty.InstalledAppBuild, '1')
+        posthog.setPersistedProperty(PostHogPersistedProperty.InstalledAppVersion, '1.0.0')
         posthog.register({ customProp: 'value' })
 
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual({ testFlag: true })
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual({ customProp: 'value' })
+        posthog.reset(resetArg)
 
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toBeUndefined()
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.InstalledAppBuild)).toEqual(expectBuild)
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.InstalledAppVersion)).toEqual(expectVersion)
+      })
+
+      it('should not trigger duplicate Application Installed after reset', async () => {
+        // Simulate that the app was previously installed (build/version persisted)
+        posthog = new PostHog('test-api-key', {
+          customStorage: storage,
+          flushInterval: 0,
+          setDefaultPersonProperties: false,
+          captureAppLifecycleEvents: false,
+        })
+        await posthog.ready()
+
+        posthog.setPersistedProperty(PostHogPersistedProperty.InstalledAppBuild, '1')
+        posthog.setPersistedProperty(PostHogPersistedProperty.InstalledAppVersion, '1.0.0')
+
+        // User logs out - reset without explicit propertiesToKeep
         posthog.reset()
 
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual(undefined)
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual(undefined)
+        // Lifecycle properties should still be persisted after reset
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.InstalledAppBuild)).toEqual('1')
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.InstalledAppVersion)).toEqual('1.0.0')
+
+        await posthog.shutdown()
+
+        // Second launch - should NOT fire "Application Installed" again
+        const onCapture2 = jest.fn()
+        posthog = new PostHog('test-api-key', {
+          customStorage: storage,
+          captureAppLifecycleEvents: true,
+          customAppProperties: {
+            $app_build: '1',
+            $app_version: '1.0.0',
+          },
+        })
+        posthog.on('capture', onCapture2)
+        await posthog.ready()
+
+        await waitForExpect(200, () => {
+          expect(onCapture2).toHaveBeenCalledWith(expect.objectContaining({ event: 'Application Opened' }))
+        })
+
+        // Should NOT have fired "Application Installed" again
+        const installedCalls = onCapture2.mock.calls.filter((call: any[]) => call[0]?.event === 'Application Installed')
+        expect(installedCalls).toHaveLength(0)
       })
+    })
+  })
+
+  describe('device bucketing', () => {
+    it('should initialize device_id on first init', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+
+      await posthog.ready()
+
+      const deviceId = posthog.getDeviceId()
+      expect(deviceId).toBeTruthy()
+      expect(deviceId).toEqual(posthog.getAnonymousId())
+    })
+
+    it('should persist device_id across SDK restarts', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      const originalDeviceId = posthog.getDeviceId()
+      await posthog.shutdown()
+
+      // Re-init with same storage
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      expect(posthog.getDeviceId()).toEqual(originalDeviceId)
+    })
+
+    it('should preserve device_id across identify()', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      const originalDeviceId = posthog.getDeviceId()
+      posthog.identify('user-123')
+
+      expect(posthog.getDeviceId()).toEqual(originalDeviceId)
+      expect(posthog.getDistinctId()).toEqual('user-123')
+    })
+
+    it('should preserve device_id across reset()', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      const originalDeviceId = posthog.getDeviceId()
+      posthog.identify('user-123')
+      posthog.reset()
+
+      expect(posthog.getDeviceId()).toEqual(originalDeviceId)
+      // distinct_id should have changed
+      expect(posthog.getDistinctId()).not.toEqual('user-123')
+    })
+
+    it('should regenerate device_id when reset is called with explicit propertiesToKeep omitting DeviceId', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      const originalDeviceId = posthog.getDeviceId()
+      // Passing an explicit list without DeviceId causes it to be cleared
+      posthog.reset([])
+
+      await waitForExpect(200, () => {
+        const newDeviceId = posthog.getDeviceId()
+        expect(newDeviceId).toBeTruthy()
+        expect(newDeviceId).not.toEqual(originalDeviceId)
+      })
+    })
+
+    it('should send $device_id in feature flag requests', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      const deviceId = posthog.getDeviceId()
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/flags/'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining(`"$device_id":"${deviceId}"`),
+        })
+      )
+    })
+
+    it('should send the same $device_id after identify()', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      const deviceId = posthog.getDeviceId()
+      posthog.identify('user-123')
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/flags/'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining(`"$device_id":"${deviceId}"`),
+        })
+      )
+    })
+
+    it('should lazy-init device_id for upgrades via getDeviceId()', async () => {
+      // Simulate an upgrade: existing install has anonymous_id persisted but no device_id.
+      // PostHogRNStorage stores all properties in a single JSON blob under '.posthog-rn.json'.
+      const upgradeData = JSON.stringify({
+        version: 'v1',
+        content: { [PostHogPersistedProperty.AnonymousId]: 'existing-anon-id' },
+      })
+      cache['.posthog-rn.json'] = upgradeData
+
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      // device_id should be set to the existing anonymous_id during initAfterStorage
+      expect(posthog.getDeviceId()).toEqual('existing-anon-id')
+      expect(posthog.getAnonymousId()).toEqual('existing-anon-id')
     })
   })
 })

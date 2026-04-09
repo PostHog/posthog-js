@@ -1971,6 +1971,76 @@ describe('featureflags', () => {
             })
         })
 
+        it('set_once properties skip keys that already exist in the cache', () => {
+            featureFlags.resetPersonPropertiesForFlags()
+            featureFlags.setPersonPropertiesForFlags({ $set_once: { first_date: '2025-01-01', plan: 'free' } }, false)
+
+            expect(instance.persistence.props.$stored_person_properties).toEqual({
+                first_date: '2025-01-01',
+                plan: 'free',
+            })
+
+            // Calling again with set_once should NOT overwrite existing keys
+            featureFlags.setPersonPropertiesForFlags(
+                { $set_once: { first_date: '2026-03-30', new_key: 'hello' } },
+                false
+            )
+
+            expect(instance.persistence.props.$stored_person_properties).toEqual({
+                first_date: '2025-01-01',
+                plan: 'free',
+                new_key: 'hello',
+            })
+        })
+
+        it('set properties overwrite existing keys even when set_once does not', () => {
+            featureFlags.resetPersonPropertiesForFlags()
+            featureFlags.setPersonPropertiesForFlags({ $set_once: { first_date: '2025-01-01' } }, false)
+
+            expect(instance.persistence.props.$stored_person_properties).toEqual({
+                first_date: '2025-01-01',
+            })
+
+            // $set should overwrite, $set_once should not
+            featureFlags.setPersonPropertiesForFlags(
+                { $set: { first_date: 'overwritten' }, $set_once: { first_date: 'ignored-by-set-once' } },
+                false
+            )
+
+            expect(instance.persistence.props.$stored_person_properties).toEqual({
+                first_date: 'overwritten',
+            })
+        })
+
+        it('set_once properties are included in /flags request', () => {
+            featureFlags.resetPersonPropertiesForFlags()
+            featureFlags.setPersonPropertiesForFlags(
+                { $set: { plan: 'pro' }, $set_once: { first_date: '2025-01-01' } },
+                false
+            )
+
+            expect(instance.persistence.props.$stored_person_properties).toEqual({
+                plan: 'pro',
+                first_date: '2025-01-01',
+            })
+
+            featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                $anon_distinct_id: undefined,
+                groups: undefined,
+                group_properties: undefined,
+                person_properties: { plan: 'pro', first_date: '2025-01-01' },
+                timezone: expect.any(String),
+            })
+
+            // Clean up to avoid leaking into subsequent tests
+            featureFlags.resetPersonPropertiesForFlags()
+        })
+
         it('on providing groupProperties updates properties successively', () => {
             featureFlags.setGroupPropertiesForFlags({ orgs: { a: 'b', c: 'd' }, projects: { x: 'y', c: 'e' } })
 

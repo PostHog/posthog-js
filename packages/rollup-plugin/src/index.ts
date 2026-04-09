@@ -1,5 +1,5 @@
 import type { Plugin, OutputOptions, OutputAsset, OutputChunk } from 'rollup'
-import { PluginConfig, ResolvedPluginConfig, resolveConfig, runSourcemapCli } from '@posthog/core/process'
+import { PluginConfig, ResolvedPluginConfig, resolveConfig, runSourcemapCli } from '@posthog/plugin-utils'
 import path from 'node:path'
 import fs from 'node:fs/promises'
 

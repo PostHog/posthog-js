@@ -4,6 +4,14 @@ module.exports = {
             files: './src/**/*',
             rules: {
                 'no-restricted-globals': ['error', 'document', 'window'],
+                'no-restricted-syntax': [
+                    'error',
+                    {
+                        selector: 'TSEnumDeclaration',
+                        message:
+                            'Enums add significant bundle bloat. Use a const object with `as const` and a type union instead. Example: `const Foo = { A: "a", B: "b" } as const; type Foo = (typeof Foo)[keyof typeof Foo];`',
+                    },
+                ],
             },
             parserOptions: {
                 ecmaVersion: 2018,

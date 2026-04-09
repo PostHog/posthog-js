@@ -1,5 +1,113 @@
 # @posthog/next
 
+## 0.4.5
+
+### Patch Changes
+
+- Updated dependencies [[`c735b08`](https://github.com/PostHog/posthog-js/commit/c735b08577f8fa85935dcec5bc5814870ac4ed56)]:
+    - @posthog/core@1.25.2
+    - posthog-node@5.29.2
+    - posthog-js@1.365.5
+
+## 0.4.4
+
+### Patch Changes
+
+- Updated dependencies [[`3939856`](https://github.com/PostHog/posthog-js/commit/3939856b917a3bad696cb7e5da73d4d50c3e0c53)]:
+    - posthog-js@1.365.4
+
+## 0.4.3
+
+### Patch Changes
+
+- Updated dependencies [[`dbdddca`](https://github.com/PostHog/posthog-js/commit/dbdddcad578adf282f620d2afcd5808600a9c287)]:
+    - posthog-js@1.365.3
+
+## 0.4.2
+
+### Patch Changes
+
+- Updated dependencies [[`c387f6d`](https://github.com/PostHog/posthog-js/commit/c387f6dc146c9c09640e471e66043ad832b0476e)]:
+    - posthog-js@1.365.2
+
+## 0.4.1
+
+### Patch Changes
+
+- Updated dependencies [[`57ee5b2`](https://github.com/PostHog/posthog-js/commit/57ee5b25fd2c97f334f52b4eba28ea925033d6ed)]:
+    - @posthog/core@1.25.1
+    - posthog-js@1.365.1
+    - posthog-node@5.29.1
+
+## 0.4.0
+
+### Minor Changes
+
+- [#3302](https://github.com/PostHog/posthog-js/pull/3302) [`fc5589f`](https://github.com/PostHog/posthog-js/commit/fc5589fcc51bd53ba818822831867d3c00d83a11) Thanks [@dmarticus](https://github.com/dmarticus)! - preserve $set_once semantics in local flag evaluation cache
+  (2026-04-07)
+
+### Patch Changes
+
+- Updated dependencies [[`fc5589f`](https://github.com/PostHog/posthog-js/commit/fc5589fcc51bd53ba818822831867d3c00d83a11)]:
+    - posthog-js@1.365.0
+    - @posthog/core@1.25.0
+    - posthog-node@5.29.0
+
+## 0.3.1
+
+### Patch Changes
+
+- Updated dependencies [[`b25b689`](https://github.com/PostHog/posthog-js/commit/b25b68967f7e85317e2aacb8ecc4dc66a95095eb)]:
+    - posthog-js@1.364.7
+
+## 0.3.0
+
+### Minor Changes
+
+- [#3301](https://github.com/PostHog/posthog-js/pull/3301) [`bd4b0ac`](https://github.com/PostHog/posthog-js/commit/bd4b0acfb3b0d555fe25fc1af3860e778d2e08cb) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Read PostHog tracing headers (X-POSTHOG-SESSION-ID, X-POSTHOG-DISTINCT-ID, X-POSTHOG-WINDOW-ID) in getPostHog() and getServerSidePostHog()
+  (2026-04-02)
+
+### Patch Changes
+
+- Updated dependencies [[`a01a3d5`](https://github.com/PostHog/posthog-js/commit/a01a3d55dc134b1b269be58c7922ce3780c57fc5), [`68cd4e5`](https://github.com/PostHog/posthog-js/commit/68cd4e5f1133b95bcb87c382a0ae5f1bcb96903d)]:
+    - @posthog/core@1.24.6
+    - posthog-js@1.364.6
+    - posthog-node@5.28.11
+
+## 0.2.19
+
+### Patch Changes
+
+- [#3309](https://github.com/PostHog/posthog-js/pull/3309) [`197eeda`](https://github.com/PostHog/posthog-js/commit/197eeda0b09fd2671a8a40f1bfd48a7b940f7371) Thanks [@marandaneto](https://github.com/marandaneto)! - Extract CLI and sourcemap utilities from @posthog/core into @posthog/plugin-utils to remove cross-spawn from React Native dependencies
+  (2026-04-01)
+- Updated dependencies [[`197eeda`](https://github.com/PostHog/posthog-js/commit/197eeda0b09fd2671a8a40f1bfd48a7b940f7371), [`c5feb5c`](https://github.com/PostHog/posthog-js/commit/c5feb5c35eefe0a459facc3b72752ab7d6696c1c), [`7b944fc`](https://github.com/PostHog/posthog-js/commit/7b944fc2a6099c0dfa4aa28f55872bd226b17b37)]:
+    - @posthog/core@1.24.5
+    - posthog-js@1.364.5
+    - posthog-node@5.28.10
+
+## 0.2.18
+
+### Patch Changes
+
+- Updated dependencies [[`2365df5`](https://github.com/PostHog/posthog-js/commit/2365df5c420fb88dccb74c85beeb058be92eb66e)]:
+    - posthog-js@1.364.4
+
+## 0.2.17
+
+### Patch Changes
+
+- Updated dependencies [[`bab5f3a`](https://github.com/PostHog/posthog-js/commit/bab5f3a0c061dc48c2b573136c03758a3ba3c301)]:
+    - posthog-js@1.364.3
+
+## 0.2.16
+
+### Patch Changes
+
+- Updated dependencies [[`341caaf`](https://github.com/PostHog/posthog-js/commit/341caaf627d752b35a3b9461a8b1f1fd532f306f), [`a863914`](https://github.com/PostHog/posthog-js/commit/a863914bca09643f2aef7ca029b96de9cbfbc24c)]:
+    - posthog-js@1.364.2
+    - @posthog/core@1.24.4
+    - posthog-node@5.28.9
+
 ## 0.2.15
 
 ### Patch Changes

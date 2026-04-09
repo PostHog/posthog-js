@@ -1290,7 +1290,7 @@ export function Questions({
                     }}
                 />
             )}
-            <div className="survey-box">
+            <div className="survey-box" data-question-index={currentQuestionIndex}>
                 {getQuestionComponent({
                     question: currentQuestion,
                     forceDisableHtml,

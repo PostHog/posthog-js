@@ -1,6 +1,6 @@
 {
   "name": "@posthog/nuxt",
-  "version": "1.5.97",
+  "version": "1.6.5",
   "description": "Nuxt module for Posthog 🦔",
   "repository": {
     "type": "git",
@@ -33,6 +33,7 @@
     "@nuxt/kit": ">=3.7.0",
     "posthog-node": "workspace:*",
     "@posthog/core": "workspace:*",
+    "@posthog/plugin-utils": "workspace:*",
     "posthog-js": "workspace:*"
   },
   "devDependencies": {
