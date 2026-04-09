@@ -29,14 +29,23 @@ fi
 
 echo "==> Uploading posthog-js v$VERSION to s3://$BUCKET/static/$VERSION/"
 
-# All uploads are tagged `public=true` so the bucket policy
-# (see posthog-cloud-infra terraform/.../posthog-js/s3.tf) allows Cloudflare
-# to read them without authenticated requests. Objects without this tag are
-# effectively private and would 403 when fetched via the Cloudflare origin
-# rule that routes `/static/{version}/` from {us,eu}-assets.i.posthog.com
-# straight to S3. The `s3:PutObjectTagging` permission is already granted
-# to the GitHub Actions IAM role alongside `s3:PutObject`.
-PUBLIC_TAG='public=true'
+# tag_s3_objects: apply `public=true` tag to every object under a given prefix.
+# `aws s3 cp` does not support `--tagging`, so we tag after upload via the
+# low-level s3api. The tag is required by the bucket policy so Cloudflare can
+# read objects without authenticated requests (see posthog-cloud-infra
+# terraform/.../posthog-js/s3.tf).
+tag_s3_objects() {
+    local prefix="$1"
+    echo "==> Tagging objects under s3://$BUCKET/$prefix with public=true"
+    aws s3api list-objects-v2 --bucket "$BUCKET" --prefix "$prefix" \
+        --query 'Contents[].Key' --output text \
+    | tr '\t' '\n' \
+    | while read -r key; do
+        [ -z "$key" ] && continue
+        aws s3api put-object-tagging --bucket "$BUCKET" --key "$key" \
+            --tagging '{"TagSet":[{"Key":"public","Value":"true"}]}'
+    done
+}
 
 # JS bundles (posthog-js SDK artifacts + toolbar.js). Content type is set
 # explicitly to preserve the existing `application/javascript` behaviour.
@@ -45,8 +54,7 @@ aws s3 cp "$DIST_DIR/" "s3://$BUCKET/static/$VERSION/" \
     --exclude "*" \
     --include "*.js" \
     --cache-control "public, max-age=31536000, immutable" \
-    --content-type "application/javascript" \
-    --tagging "$PUBLIC_TAG"
+    --content-type "application/javascript"
 
 # The toolbar bundle ships a sibling CSS file and an `assets/` directory of
 # fonts/SVGs/PNGs alongside toolbar.js. These only exist when the matching
@@ -57,8 +65,7 @@ if [[ -f "$DIST_DIR/toolbar.css" ]]; then
     echo "==> Uploading toolbar.css"
     aws s3 cp "$DIST_DIR/toolbar.css" "s3://$BUCKET/static/$VERSION/toolbar.css" \
         --cache-control "public, max-age=31536000, immutable" \
-        --content-type "text/css" \
-        --tagging "$PUBLIC_TAG"
+        --content-type "text/css"
 fi
 
 if [[ -d "$DIST_DIR/assets" ]]; then
@@ -69,9 +76,12 @@ if [[ -d "$DIST_DIR/assets" ]]; then
     # all of these correctly.
     aws s3 cp "$DIST_DIR/assets/" "s3://$BUCKET/static/$VERSION/assets/" \
         --recursive \
-        --cache-control "public, max-age=31536000, immutable" \
-        --tagging "$PUBLIC_TAG"
+        --cache-control "public, max-age=31536000, immutable"
 fi
+
+# Tag all uploaded objects with public=true so the bucket policy allows
+# unauthenticated Cloudflare reads.
+tag_s3_objects "static/$VERSION/"
 
 echo "==> Updating versions.json in s3://$BUCKET/"
 TMPWORKDIR="$(mktemp -d)"
