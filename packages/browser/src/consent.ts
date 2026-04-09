@@ -93,9 +93,11 @@ export class ConsentManager {
     }
 
     private get _storage() {
-        if (!this._persistentStore) {
-            const persistenceType = this._config.opt_out_capturing_persistence_type
-            this._persistentStore = persistenceType === 'localStorage' ? localStore : cookieStore
+        const persistenceType = this._config.opt_out_capturing_persistence_type
+        const expectedStore = persistenceType === 'localStorage' ? localStore : cookieStore
+
+        if (!this._persistentStore || this._persistentStore !== expectedStore) {
+            this._persistentStore = expectedStore
             const otherStorage = persistenceType === 'localStorage' ? cookieStore : localStore
 
             if (otherStorage._get(this._storageKey)) {
