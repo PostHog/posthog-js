@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.366.0
+
+### Minor Changes
+
+- [#3305](https://github.com/PostHog/posthog-js/pull/3305) [`b599672`](https://github.com/PostHog/posthog-js/commit/b5996729b1d30fb99429c509e6a85ef8d7aca955) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Add customer side identification
+  (2026-04-09)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.366.0
+
 ## 1.365.5
 
 ### Patch Changes
