@@ -1,7 +1,7 @@
-import { isArray, isNull, isUndefined } from '@posthog/core'
+import { isNull, isUndefined } from '@posthog/core'
 import { jsonStringify } from '../request'
 import { PropertyFilters, PropertyOperator } from '../posthog-surveys-types'
-import type { Properties, SessionRecordingTriggerPropertyFilter } from '../types'
+import type { Properties } from '../types'
 import { isMatchingRegex } from './regex-utils'
 
 export function getPersonPropertiesHash(
@@ -34,45 +34,6 @@ export const propertyComparisons: Record<PropertyOperator, (targets: string[], v
 }
 
 const toLowerCase = (v: string): string => v.toLowerCase()
-
-/**
- * Evaluate trigger property filters (WHERE clauses) against event and person properties.
- * All filters must match (implicit AND). Returns true if no filters are present.
- */
-export function matchTriggerPropertyFilters(
-    filters: SessionRecordingTriggerPropertyFilter[] | undefined,
-    eventProperties: Properties | undefined,
-    personProperties: Properties | undefined
-): boolean {
-    if (!filters || filters.length === 0) {
-        return true
-    }
-
-    return filters.every((filter) => {
-        const source = filter.type === 'person' ? personProperties : eventProperties
-        const propertyValue = source?.[filter.key]
-
-        if (isUndefined(propertyValue) || isNull(propertyValue)) {
-            return false
-        }
-
-        const operator = filter.operator || 'exact'
-        const comparisonFunction = propertyComparisons[operator as PropertyOperator]
-        if (!comparisonFunction) {
-            return false
-        }
-
-        if (isUndefined(filter.value) || isNull(filter.value)) {
-            return false
-        }
-
-        // Normalize filter value and property value to string arrays for comparison
-        const targetValues = isArray(filter.value) ? filter.value.map(String) : [String(filter.value)]
-        const actualValues = isArray(propertyValue) ? propertyValue.map(String) : [String(propertyValue)]
-
-        return comparisonFunction(targetValues, actualValues)
-    })
-}
 
 export function matchPropertyFilters(
     propertyFilters: PropertyFilters | undefined,
