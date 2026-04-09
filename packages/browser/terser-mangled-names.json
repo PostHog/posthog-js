@@ -223,7 +223,6 @@
         "_hasPassedMinimumDuration",
         "_hasPersonProcessing",
         "_hasProcessedRestoreToken",
-        "_identityConfig",
         "_identityFields",
         "_ignoreClick",
         "_initExtensions",
