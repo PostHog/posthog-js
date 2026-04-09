@@ -41,15 +41,13 @@ export interface PostHogTraceExporterOptions {
  * })
  * ```
  */
-export class PostHogTraceExporter {
-  private readonly inner: OTLPTraceExporter
-
+export class PostHogTraceExporter extends OTLPTraceExporter {
   constructor(options: PostHogTraceExporterOptions) {
     if (!options.apiKey) {
       throw new Error('PostHogTraceExporter requires an apiKey')
     }
     const host = new URL(options.host || 'https://us.i.posthog.com').origin
-    this.inner = new OTLPTraceExporter({
+    super({
       url: `${host}/i/v0/ai/otel`,
       headers: {
         Authorization: `Bearer ${options.apiKey}`,
@@ -57,20 +55,12 @@ export class PostHogTraceExporter {
     })
   }
 
-  export(spans: ReadableSpan[], resultCallback: (result: { code: number; error?: Error }) => void): void {
+  override export(spans: ReadableSpan[], resultCallback: (result: { code: number; error?: Error }) => void): void {
     const aiSpans = spans.filter(isAISpan)
     if (aiSpans.length === 0) {
       resultCallback({ code: ExportResultCode.SUCCESS })
       return
     }
-    this.inner.export(aiSpans, resultCallback)
-  }
-
-  shutdown(): Promise<void> {
-    return this.inner.shutdown()
-  }
-
-  forceFlush(): Promise<void> {
-    return this.inner.forceFlush()
+    super.export(aiSpans, resultCallback)
   }
 }

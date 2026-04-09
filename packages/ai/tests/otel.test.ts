@@ -2,20 +2,28 @@ import { PostHogTraceExporter } from '../src/otel'
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base'
 
-const mockExport = jest.fn()
-const mockShutdown = jest.fn().mockResolvedValue(undefined)
-const mockForceFlush = jest.fn().mockResolvedValue(undefined)
-
-jest.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
-  OTLPTraceExporter: jest.fn().mockImplementation(() => ({
-    export: mockExport,
-    shutdown: mockShutdown,
-    forceFlush: mockForceFlush,
-  })),
-}))
+jest.mock('@opentelemetry/exporter-trace-otlp-http', () => {
+  const MockExporter = jest.fn()
+  MockExporter.prototype.export = jest.fn()
+  MockExporter.prototype.shutdown = jest.fn().mockResolvedValue(undefined)
+  MockExporter.prototype.forceFlush = jest.fn().mockResolvedValue(undefined)
+  return { OTLPTraceExporter: MockExporter }
+})
 
 function makeSpan(name: string, attributes: Record<string, unknown> = {}): ReadableSpan {
   return { name, attributes } as unknown as ReadableSpan
+}
+
+function getSuperExport(): jest.Mock {
+  return OTLPTraceExporter.prototype.export as jest.Mock
+}
+
+function getSuperShutdown(): jest.Mock {
+  return OTLPTraceExporter.prototype.shutdown as jest.Mock
+}
+
+function getSuperForceFlush(): jest.Mock {
+  return OTLPTraceExporter.prototype.forceFlush as jest.Mock
 }
 
 describe('PostHogTraceExporter', () => {
@@ -63,16 +71,16 @@ describe('PostHogTraceExporter', () => {
     expect(() => new PostHogTraceExporter({ apiKey: '' })).toThrow('PostHogTraceExporter requires an apiKey')
   })
 
-  it('delegates shutdown', async () => {
+  it('inherits shutdown from OTLPTraceExporter', async () => {
     const exporter = new PostHogTraceExporter({ apiKey: 'phc_test' })
     await exporter.shutdown()
-    expect(mockShutdown).toHaveBeenCalled()
+    expect(getSuperShutdown()).toHaveBeenCalled()
   })
 
-  it('delegates forceFlush', async () => {
+  it('inherits forceFlush from OTLPTraceExporter', async () => {
     const exporter = new PostHogTraceExporter({ apiKey: 'phc_test' })
     await exporter.forceFlush()
-    expect(mockForceFlush).toHaveBeenCalled()
+    expect(getSuperForceFlush()).toHaveBeenCalled()
   })
 })
 
@@ -87,7 +95,7 @@ describe('PostHogTraceExporter AI span filtering', () => {
 
     exporter.export([makeSpan('gen_ai.chat'), makeSpan('http.request'), makeSpan('llm.completion')], callback)
 
-    expect(mockExport).toHaveBeenCalledWith(
+    expect(getSuperExport()).toHaveBeenCalledWith(
       [expect.objectContaining({ name: 'gen_ai.chat' }), expect.objectContaining({ name: 'llm.completion' })],
       callback
     )
@@ -99,7 +107,7 @@ describe('PostHogTraceExporter AI span filtering', () => {
 
     exporter.export([makeSpan('http.request'), makeSpan('db.query')], callback)
 
-    expect(mockExport).not.toHaveBeenCalled()
+    expect(getSuperExport()).not.toHaveBeenCalled()
     expect(callback).toHaveBeenCalledWith({ code: 0 })
   })
 
@@ -109,6 +117,6 @@ describe('PostHogTraceExporter AI span filtering', () => {
 
     exporter.export([makeSpan('some.operation', { 'gen_ai.model': 'gpt-4' }), makeSpan('other.operation')], callback)
 
-    expect(mockExport).toHaveBeenCalledWith([expect.objectContaining({ name: 'some.operation' })], callback)
+    expect(getSuperExport()).toHaveBeenCalledWith([expect.objectContaining({ name: 'some.operation' })], callback)
   })
 })
