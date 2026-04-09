@@ -37,11 +37,13 @@ echo "==> Uploading posthog-js v$VERSION to s3://$BUCKET/static/$VERSION/"
 tag_s3_objects() {
     local prefix="$1"
     echo "==> Tagging objects under s3://$BUCKET/$prefix with public=true"
+    # --no-paginate fetches all pages; filter out the literal "None" AWS CLI
+    # emits on empty results (--output text renders null as the string "None").
     aws s3api list-objects-v2 --bucket "$BUCKET" --prefix "$prefix" \
-        --query 'Contents[].Key' --output text \
+        --no-paginate --query 'Contents[].Key' --output text \
     | tr '\t' '\n' \
     | while read -r key; do
-        [ -z "$key" ] && continue
+        [ -z "$key" ] || [ "$key" = "None" ] && continue
         aws s3api put-object-tagging --bucket "$BUCKET" --key "$key" \
             --tagging '{"TagSet":[{"Key":"public","Value":"true"}]}'
     done
