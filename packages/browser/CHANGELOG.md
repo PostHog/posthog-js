@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.367.0
+
+### Minor Changes
+
+- [#3242](https://github.com/PostHog/posthog-js/pull/3242) [`353be9a`](https://github.com/PostHog/posthog-js/commit/353be9a878fe209a032f2d70376ece78ee67303c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Add support for pre-loaded remote-config
+  (2026-04-09)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.367.0
+
 ## 1.366.2
 
 ### Patch Changes
