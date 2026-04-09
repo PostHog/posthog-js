@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.25.2
+
+### Patch Changes
+
+- [#3351](https://github.com/PostHog/posthog-js/pull/3351) [`c735b08`](https://github.com/PostHog/posthog-js/commit/c735b08577f8fa85935dcec5bc5814870ac4ed56) Thanks [@dmarticus](https://github.com/dmarticus)! - Send $device_id as a top-level field in /flags requests so the feature flags service can use it for device-based bucketing during remote evaluation
+  (2026-04-09)
+
 ## 1.25.1
 
 ### Patch Changes
