@@ -383,23 +383,6 @@ export class PostHogConversations implements Extension {
         return this._conversationsManager?.getWidgetSessionId() ?? null
     }
 
-    /**
-     * Set HMAC-based identity for conversations.
-     * Delegates to `posthog.setIdentity()` which writes the top-level config
-     * and notifies the manager.
-     */
-    setIdentity(distinctId: string, hash: string): void {
-        this._instance.setIdentity(distinctId, hash)
-    }
-
-    /**
-     * Clear HMAC-based identity, reverting to anonymous widget_session_id mode.
-     * Delegates to `posthog.clearIdentity()`.
-     */
-    clearIdentity(): void {
-        this._instance.clearIdentity()
-    }
-
     /** @internal Called by PostHog.setIdentity() -- forwards to the manager without recursing */
     _onIdentityChanged(): void {
         this._conversationsManager?.setIdentity()
