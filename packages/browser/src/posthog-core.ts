@@ -2741,6 +2741,7 @@ export class PostHog implements PostHogInterface {
         // the debouncer, so if the order were reversed a pending refresh could fire after reset.
         this._remoteConfigLoader?.stop()
         this.featureFlags?.reset()
+        this.conversations?.reset()
         this.persistence?.set_property(USER_STATE, USER_STATE_ANONYMOUS)
         this.sessionManager?.resetSessionId()
         this._cachedPersonProperties = null
@@ -2802,7 +2803,7 @@ export class PostHog implements PostHogInterface {
         this.config.identity_distinct_id = distinctId
         this.config.identity_hash = hash
         this.alias(distinctId)
-        this.conversations?._onIdentityChanged({ identity_distinct_id: distinctId, identity_hash: hash })
+        this.conversations?._onIdentityChanged()
     }
 
     /**

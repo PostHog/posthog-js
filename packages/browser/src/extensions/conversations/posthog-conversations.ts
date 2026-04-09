@@ -1,7 +1,6 @@
 import { LOAD_EXT_NOT_FOUND } from '../../constants'
 import { PostHog } from '../../posthog-core'
 import {
-    ConversationsIdentityConfig,
     ConversationsRemoteConfig,
     GetMessagesResponse,
     GetTicketsOptions,
@@ -389,8 +388,8 @@ export class PostHogConversations implements Extension {
      * Delegates to `posthog.setIdentity()` which writes the top-level config
      * and notifies the manager.
      */
-    setIdentity(identity: ConversationsIdentityConfig): void {
-        this._instance.setIdentity(identity.identity_distinct_id, identity.identity_hash)
+    setIdentity(distinctId: string, hash: string): void {
+        this._instance.setIdentity(distinctId, hash)
     }
 
     /**
@@ -402,8 +401,8 @@ export class PostHogConversations implements Extension {
     }
 
     /** @internal Called by PostHog.setIdentity() -- forwards to the manager without recursing */
-    _onIdentityChanged(identity: ConversationsIdentityConfig): void {
-        this._conversationsManager?.setIdentity(identity)
+    _onIdentityChanged(): void {
+        this._conversationsManager?.setIdentity()
     }
 
     /** @internal Called by PostHog.clearIdentity() -- forwards to the manager without recursing */

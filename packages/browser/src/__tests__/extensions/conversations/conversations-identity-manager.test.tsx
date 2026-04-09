@@ -134,16 +134,25 @@ describe('ConversationsManager Identity Verification', () => {
     }
 
     describe('init-time identity from config', () => {
-        it('should read identity from top-level posthog.config during construction', () => {
+        it('should use identity from top-level posthog.config during construction', async () => {
             ;(mockPosthog as any).config.identity_distinct_id = 'user_123'
             ;(mockPosthog as any).config.identity_hash = 'abc123hash'
 
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            jest.clearAllMocks()
 
-            expect(manager['_identityConfig']).toEqual({
-                identity_distinct_id: 'user_123',
-                identity_hash: 'abc123hash',
+            await act(async () => {
+                await manager.getTickets()
             })
+
+            const call = (mockPosthog._send_request as jest.Mock).mock.calls.find(
+                (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
+            )
+            expect(call).toBeDefined()
+            const url = call[0].url as string
+            expect(url).toContain('identity_distinct_id=user_123')
+            expect(url).toContain('identity_hash=abc123hash')
+            expect(url).not.toContain('widget_session_id')
         })
 
         it('should skip restore token when identity config is set', async () => {
@@ -162,18 +171,40 @@ describe('ConversationsManager Identity Verification', () => {
             expect(restoreCalls).toHaveLength(0)
         })
 
-        it('should not set identity when config fields are undefined', () => {
+        it('should use widget_session_id when config fields are undefined', async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            jest.clearAllMocks()
 
-            expect(manager['_identityConfig']).toBeNull()
+            await act(async () => {
+                await manager.getTickets()
+            })
+
+            const call = (mockPosthog._send_request as jest.Mock).mock.calls.find(
+                (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
+            )
+            expect(call).toBeDefined()
+            const url = call[0].url as string
+            expect(url).toContain('widget_session_id')
+            expect(url).not.toContain('identity_distinct_id')
         })
 
-        it('should not set identity when only one config field is set', () => {
+        it('should use widget_session_id when only one config field is set', async () => {
             ;(mockPosthog as any).config.identity_distinct_id = 'user_123'
 
             manager = new ConversationsManager(mockConfig, mockPosthog)
+            jest.clearAllMocks()
 
-            expect(manager['_identityConfig']).toBeNull()
+            await act(async () => {
+                await manager.getTickets()
+            })
+
+            const call = (mockPosthog._send_request as jest.Mock).mock.calls.find(
+                (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
+            )
+            expect(call).toBeDefined()
+            const url = call[0].url as string
+            expect(url).toContain('widget_session_id')
+            expect(url).not.toContain('identity_hash')
         })
     })
 
@@ -182,51 +213,40 @@ describe('ConversationsManager Identity Verification', () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
         })
 
-        it('should store identity config', () => {
-            manager.setIdentity({
-                identity_distinct_id: 'user_456',
-                identity_hash: 'def456hash',
-            })
-
-            expect(manager['_identityConfig']).toEqual({
-                identity_distinct_id: 'user_456',
-                identity_hash: 'def456hash',
-            })
-        })
-
         it('should trigger ticket reload on setIdentity', () => {
+            ;(mockPosthog as any).config.identity_distinct_id = 'user_456'
+            ;(mockPosthog as any).config.identity_hash = 'def456hash'
             jest.clearAllMocks()
 
-            manager.setIdentity({
-                identity_distinct_id: 'user_456',
-                identity_hash: 'def456hash',
-            })
+            manager.setIdentity()
 
             const calls = (mockPosthog._send_request as jest.Mock).mock.calls
             const ticketCalls = calls.filter((c: any) => c[0].url?.includes('/widget/tickets'))
             expect(ticketCalls.length).toBeGreaterThan(0)
         })
 
-        it('should clear identity config on clearIdentity', () => {
-            manager.setIdentity({
-                identity_distinct_id: 'user_456',
-                identity_hash: 'def456hash',
-            })
+        it('should use widget_session_id after clearIdentity', async () => {
+            ;(mockPosthog as any).config.identity_distinct_id = 'user_456'
+            ;(mockPosthog as any).config.identity_hash = 'def456hash'
 
+            manager.setIdentity()
+
+            delete (mockPosthog as any).config.identity_distinct_id
+            delete (mockPosthog as any).config.identity_hash
             manager.clearIdentity()
+            jest.clearAllMocks()
 
-            expect(manager['_identityConfig']).toBeNull()
-        })
-
-        it('should clear identity on reset', () => {
-            manager.setIdentity({
-                identity_distinct_id: 'user_456',
-                identity_hash: 'def456hash',
+            await act(async () => {
+                await manager.getTickets()
             })
 
-            manager.reset()
-
-            expect(manager['_identityConfig']).toBeNull()
+            const call = (mockPosthog._send_request as jest.Mock).mock.calls.find(
+                (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
+            )
+            expect(call).toBeDefined()
+            const url = call[0].url as string
+            expect(url).toContain('widget_session_id')
+            expect(url).not.toContain('identity_distinct_id')
         })
     })
 

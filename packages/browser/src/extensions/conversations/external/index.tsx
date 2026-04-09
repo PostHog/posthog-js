@@ -2,7 +2,6 @@
 import { render, h } from 'preact'
 import { isNumber, isNull } from '@posthog/core'
 import {
-    ConversationsIdentityConfig,
     ConversationsRemoteConfig,
     ConversationsWidgetState,
     UserProvidedTraits,
@@ -55,7 +54,6 @@ export class ConversationsManager implements ConversationsManagerInterface {
     // SECURITY: widget_session_id is the key for access control
     // This is a random UUID that only this browser knows
     private _widgetSessionId: string
-    private _identityConfig: ConversationsIdentityConfig | null = null
     private _isWidgetEnabled: boolean
     private _isDomainAllowed: boolean
     private _widgetState: ConversationsWidgetState = 'closed'
@@ -363,19 +361,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
             return
         }
 
-        // Read identity from init config (set via posthog.init or posthog.setIdentity before load)
-        const idDistinctId = this._posthog.config?.identity_distinct_id
-        const idHash = this._posthog.config?.identity_hash
-        if (idDistinctId && idHash) {
-            this._identityConfig = {
-                identity_distinct_id: idDistinctId,
-                identity_hash: idHash,
-            }
-        }
-
         // In identity mode, restore is unnecessary and the persisted anonymous
         // ticket belongs to a different principal -- clear it before completing.
-        if (this._identityConfig) {
+        if (this._identityFields()) {
             this._persistence.clearTicketId()
             this._completeInitialization()
             return
@@ -692,12 +680,15 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
 
         try {
-            const identityBefore = this._identityConfig
+            const identityBefore = this._posthog.config.identity_distinct_id
             const ticketBefore = this._currentTicketId
             const response = await this.getMessages(this._currentTicketId, this._lastMessageTimestamp || undefined)
 
             // Discard stale response if identity or ticket changed while in-flight
-            if (this._identityConfig !== identityBefore || this._currentTicketId !== ticketBefore) {
+            if (
+                this._posthog.config.identity_distinct_id !== identityBefore ||
+                this._currentTicketId !== ticketBefore
+            ) {
                 return
             }
 
@@ -871,13 +862,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
      */
     private async _determineInitialView(): Promise<{ view: WidgetView; tickets: Ticket[] }> {
         try {
-            const identityBefore = this._identityConfig
+            const identityBefore = this._posthog.config.identity_distinct_id
             const response = await this.getTickets()
 
             // If identity changed while the request was in-flight, discard this
             // stale response -- setIdentity/clearIdentity already triggered a
             // fresh _loadTicketsAndReconcileView() with the correct credentials.
-            if (this._identityConfig !== identityBefore) {
+            if (this._posthog.config.identity_distinct_id !== identityBefore) {
                 return { view: 'messages', tickets: [] }
             }
 
@@ -1062,7 +1053,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     async requestRestoreLink(email: string): Promise<RequestRestoreLinkResponse> {
-        if (this._identityConfig) {
+        if (this._identityFields()) {
             return { ok: true }
         }
 
@@ -1109,7 +1100,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     async restoreFromToken(restoreToken: string): Promise<RestoreFromTokenResponse> {
-        if (this._identityConfig) {
+        if (this._identityFields()) {
             return { status: 'success' }
         }
 
@@ -1125,7 +1116,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     async restoreFromUrlToken(): Promise<RestoreFromTokenResponse | null> {
-        if (this._identityConfig) {
+        if (this._identityFields()) {
             return null
         }
 
@@ -1158,24 +1149,21 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     private _identityFields(): { identity_distinct_id: string; identity_hash: string } | null {
-        if (!this._identityConfig) {
+        const id = this._posthog.config.identity_distinct_id
+        const hash = this._posthog.config.identity_hash
+        if (!id || !hash) {
             return null
         }
-        return {
-            identity_distinct_id: this._identityConfig.identity_distinct_id,
-            identity_hash: this._identityConfig.identity_hash,
-        }
+        return { identity_distinct_id: id, identity_hash: hash }
     }
 
-    setIdentity(identity: ConversationsIdentityConfig): void {
-        this._identityConfig = identity
+    setIdentity(): void {
         this._resetConversationState()
         this._widgetRef?.setIdentityMode(true)
         void this._loadTicketsAndReconcileView()
     }
 
     clearIdentity(): void {
-        this._identityConfig = null
         this._resetConversationState()
         this._widgetRef?.setIdentityMode(false)
         void this._loadTicketsAndReconcileView()
@@ -1190,10 +1178,10 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
     private async _loadTicketsAndReconcileView(): Promise<void> {
         try {
-            const identityBefore = this._identityConfig
+            const identityBefore = this._posthog.config.identity_distinct_id
             const response = await this.getTickets()
 
-            if (this._identityConfig !== identityBefore) {
+            if (this._posthog.config.identity_distinct_id !== identityBefore) {
                 return
             }
 
@@ -1249,7 +1237,6 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._currentTicketId = null
         this._lastMessageTimestamp = null
         this._unreadCount = 0
-        this._identityConfig = null
 
         // Destroy the widget
         this.destroy()
@@ -1294,7 +1281,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 initialState={initialState}
                 initialUserTraits={initialUserTraits}
                 isUserIdentified={this._posthog._isIdentified()}
-                isIdentityMode={!isNull(this._identityConfig)}
+                isIdentityMode={!isNull(this._identityFields())}
                 initialView={initialView}
                 initialTickets={initialTickets}
                 hasMultipleTickets={this._hasMultipleTickets}

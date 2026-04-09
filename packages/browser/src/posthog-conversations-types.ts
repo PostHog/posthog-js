@@ -4,15 +4,6 @@
 export type WidgetPosition = 'bottom_left' | 'bottom_right' | 'top_left' | 'top_right'
 
 /**
- * HMAC-based identity verification config for conversations.
- * When provided, the widget uses server-verified identity instead of widget_session_id.
- */
-export interface ConversationsIdentityConfig {
-    identity_distinct_id: string
-    identity_hash: string
-}
-
-/**
  * Remote configuration for conversations from the PostHog server
  */
 export interface ConversationsRemoteConfig {

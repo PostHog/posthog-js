@@ -9,7 +9,6 @@ import {
     SessionStartReason,
 } from '../types'
 import type {
-    ConversationsIdentityConfig,
     ConversationsRemoteConfig,
     GetMessagesResponse,
     GetTicketsOptions,
@@ -210,7 +209,7 @@ export interface LazyLoadedConversationsInterface {
     reset: () => void
 
     // Identity verification
-    setIdentity: (identity: ConversationsIdentityConfig) => void
+    setIdentity: () => void
     clearIdentity: () => void
 
     // API methods
