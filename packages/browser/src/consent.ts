@@ -93,6 +93,9 @@ export class ConsentManager {
     }
 
     private get _storage() {
+        // Re-evaluate the store on every access so that a config change after the first
+        // access (e.g. init() called after _dom_loaded() fires in bundled apps) is picked
+        // up and any value already stored under the old backend is migrated across.
         const persistenceType = this._config.opt_out_capturing_persistence_type
         const expectedStore = persistenceType === 'localStorage' ? localStore : cookieStore
 
