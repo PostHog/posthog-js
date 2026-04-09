@@ -90,23 +90,33 @@ assignableWindow.__PosthogExtensions__.loadExternalDependency = (
     kind: PostHogExtensionKind,
     callback: (error?: string | Event, event?: Event) => void
 ): void => {
-    let scriptUrlToLoad = `/static/${kind}.js` + `?v=${posthog.version}`
-
+    // remote-config always loads from the token-specific path
     if (kind === 'remote-config') {
-        scriptUrlToLoad = `/array/${posthog.config.token}/config.js`
+        const url = posthog.requestRouter.endpointFor('assets', `/array/${posthog.config.token}/config.js`)
+        loadScript(posthog, url, callback)
+        return
     }
 
-    if (kind === 'toolbar') {
-        // toolbar.js is served from the PostHog CDN, this has a TTL of 24 hours.
-        // the toolbar asset includes a rotating "token" that is valid for 5 minutes.
-        const fiveMinutesInMillis = 5 * 60 * 1000
-        // this ensures that we bust the cache periodically
-        const timestampToNearestFiveMinutes = Math.floor(Date.now() / fiveMinutesInMillis) * fiveMinutesInMillis
+    // When the server provides a resolved SDK version (snippet v2),
+    // load from the version-prefixed path via the request router.
+    // No cache-busting needed — the version in the URL is the cache key.
+    if (posthog._resolvedSdkVersion) {
+        const url = posthog.requestRouter.endpointFor('assets', `/static/${posthog._resolvedSdkVersion}/${kind}.js`)
+        loadScript(posthog, url, callback)
+        return
+    }
 
+    // Default: load from /static/ via request router (snippet v1)
+    let scriptUrlToLoad = `/static/${kind}.js` + `?v=${posthog.version}`
+    if (kind === 'toolbar') {
+        // toolbar.js has a 24-hour CDN TTL but contains a rotating token valid for
+        // only 5 minutes. Bust the cache on a 5-minute boundary so the browser always
+        // fetches a fresh copy with a valid token.
+        const fiveMinutesInMillis = 5 * 60 * 1000
+        const timestampToNearestFiveMinutes = Math.floor(Date.now() / fiveMinutesInMillis) * fiveMinutesInMillis
         scriptUrlToLoad = `${scriptUrlToLoad}&t=${timestampToNearestFiveMinutes}`
     }
     const url = posthog.requestRouter.endpointFor('assets', scriptUrlToLoad)
-
     loadScript(posthog, url, callback)
 }
 

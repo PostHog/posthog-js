@@ -1107,6 +1107,76 @@ describe('posthog core', () => {
             posthogWith(config as Partial<PostHogConfig>)
         })
 
+        it.each([
+            {
+                description: 'caches a plain semver version',
+                resolved: '1.358.0',
+                expected: '1.358.0',
+            },
+            {
+                description: 'caches a valid prerelease version',
+                resolved: '1.358.0-beta.1',
+                expected: '1.358.0-beta.1',
+            },
+            {
+                description: 'caches a dotted prerelease with hyphens',
+                resolved: '1.358.0-rc-1.build-42',
+                expected: '1.358.0-rc-1.build-42',
+            },
+            {
+                description: 'ignores a version prefixed with v',
+                resolved: 'v1.358.0',
+                expected: undefined,
+            },
+            {
+                description: 'ignores build metadata that is not routable by the CDN rule',
+                resolved: '1.358.0+build.1',
+                expected: undefined,
+            },
+            {
+                description: 'ignores a slash in the version segment',
+                resolved: '1.358.0/toolbar',
+                expected: undefined,
+            },
+            {
+                description: 'ignores a path traversal payload',
+                resolved: '..%2fstatic%2farray.js#',
+                expected: undefined,
+            },
+            {
+                description: 'ignores a query-string injection payload',
+                resolved: '1.358.0?x=1',
+                expected: undefined,
+            },
+        ])('$description from preloaded remote config', ({ resolved, expected }) => {
+            const token = uuidv7()
+            globals.assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                [token]: {
+                    config: {
+                        hasFeatureFlags: false,
+                        sdkVersion: {
+                            requested: '1.358.0',
+                            resolved,
+                        },
+                    },
+                    siteApps: [],
+                },
+            } as any
+
+            const posthog = new PostHog().init(
+                token,
+                {
+                    api_host: 'https://us.posthog.com',
+                    disable_surveys: true,
+                    disable_conversations: true,
+                    persistence: 'memory',
+                },
+                uuidv7()
+            )!
+
+            expect(posthog._resolvedSdkVersion).toBe(expected)
+        })
+
         it.skip('does not load feature flags, session recording', () => {
             // TODO this didn't make a tonne of sense in the given form
             // it makes no sense now
