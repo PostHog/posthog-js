@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.366.2
+
+### Patch Changes
+
+- [#3364](https://github.com/PostHog/posthog-js/pull/3364) [`575e354`](https://github.com/PostHog/posthog-js/commit/575e354d0040bd83ac698495a4f0a07dece83eb3) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Add a hover state to numeric survey rating options so they provide clearer pointer feedback before selection.
+  (2026-04-09)
+- Updated dependencies []:
+    - @posthog/types@1.366.2
+
 ## 1.366.1
 
 ### Patch Changes
