@@ -61,6 +61,7 @@ export class WrappedModels {
       const availableTools = extractAvailableToolCalls('gemini', geminiParams)
 
       const metadata = response.usageMetadata
+      const finishReason = response.candidates?.[0]?.finishReason
       await sendEventToPosthog({
         client: this.phClient,
         ...posthogParams,
@@ -82,6 +83,7 @@ export class WrappedModels {
           webSearchCount: calculateGoogleWebSearchCount(response),
           rawUsage: metadata,
         },
+        stopReason: finishReason ?? undefined,
         tools: availableTools,
       })
 
@@ -115,6 +117,7 @@ export class WrappedModels {
     const startTime = Date.now()
     const accumulatedContent: FormattedContent = []
     let firstTokenTime: number | undefined
+    let stopReason: string | undefined
     let usage: TokenUsage = {
       inputTokens: 0,
       outputTokens: 0,
@@ -151,6 +154,11 @@ export class WrappedModels {
           } else {
             accumulatedContent.push({ type: 'text', text: chunk.text })
           }
+        }
+
+        // Track finish reason from candidates
+        if (chunk.candidates?.[0]?.finishReason) {
+          stopReason = chunk.candidates[0].finishReason
         }
 
         // Handle function calls from candidates
@@ -221,6 +229,7 @@ export class WrappedModels {
           webSearchCount: usage.webSearchCount,
           rawUsage: usage.rawUsage,
         },
+        stopReason,
         tools: availableTools,
       })
     } catch (error: unknown) {
@@ -257,8 +266,8 @@ export class WrappedModels {
 
       await sendEventToPosthog({
         client: this.phClient,
-        eventType: AIEvent.Embedding,
         ...posthogParams,
+        eventType: AIEvent.Embedding,
         model: geminiParams.model,
         provider: 'gemini',
         input: withPrivacyMode(this.phClient, posthogParams.privacyMode ?? false, geminiParams.contents),
@@ -277,8 +286,8 @@ export class WrappedModels {
       const latency = (Date.now() - startTime) / 1000
       const enrichedError = await sendEventWithErrorToPosthog({
         client: this.phClient,
-        eventType: AIEvent.Embedding,
         ...posthogParams,
+        eventType: AIEvent.Embedding,
         model: geminiParams.model,
         provider: 'gemini',
         input: withPrivacyMode(this.phClient, posthogParams.privacyMode ?? false, geminiParams.contents),
