@@ -205,8 +205,8 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 }
 
                 if (chunk.type === 'message_delta' && 'delta' in chunk) {
-                  const delta = chunk.delta as { stop_reason?: string }
-                  if (delta.stop_reason) {
+                  const delta = chunk.delta
+                  if ('stop_reason' in delta && typeof delta.stop_reason === 'string' && delta.stop_reason) {
                     stopReason = delta.stop_reason
                   }
                 }

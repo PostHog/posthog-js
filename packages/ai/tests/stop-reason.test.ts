@@ -639,7 +639,10 @@ describe('$ai_stop_reason extraction', () => {
         supportedUrls: {},
         doGenerate: jest.fn().mockResolvedValue({
           text: 'Hello!',
-          usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
+          usage: {
+            inputTokens: { total: 10, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 5, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+          },
           content: [{ type: 'text', text: 'Hello!' }],
           response: { modelId: 'gpt-4' },
           providerMetadata: {},
@@ -715,7 +718,10 @@ describe('$ai_stop_reason extraction', () => {
         { type: 'text-delta', id: 'text-1', delta: 'Hello!' },
         {
           type: 'finish',
-          usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
+          usage: {
+            inputTokens: { total: 10, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 5, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+          },
           finishReason: { unified: 'stop' as const, raw: undefined },
         },
       ]
