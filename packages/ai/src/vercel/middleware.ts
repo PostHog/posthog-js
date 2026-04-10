@@ -626,11 +626,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 const rawFinishReason = chunk.finishReason
                 if (typeof rawFinishReason === 'string') {
                   stopReason = rawFinishReason
-                } else if (
-                  rawFinishReason &&
-                  typeof rawFinishReason === 'object' &&
-                  'unified' in rawFinishReason
-                ) {
+                } else if (rawFinishReason && typeof rawFinishReason === 'object' && 'unified' in rawFinishReason) {
                   stopReason = String(rawFinishReason.unified)
                 }
               }

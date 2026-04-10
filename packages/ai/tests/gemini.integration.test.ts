@@ -12,7 +12,7 @@ if (!GEMINI_API_KEY) {
 } else {
   // Dynamic imports to avoid ESM parse failures when @google/genai
   // transitive deps are not configured in transformIgnorePatterns.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
   const { PostHog } = require('posthog-node')
 
   jest.mock('posthog-node', () => ({
@@ -23,7 +23,7 @@ if (!GEMINI_API_KEY) {
     })),
   }))
 
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
   const PostHogGemini = require('../src/gemini').default
 
   describe('Gemini Integration Tests', () => {
@@ -47,9 +47,7 @@ if (!GEMINI_API_KEY) {
 
       expect(response.text).toBeDefined()
 
-      const captureCall = mockPostHogClient.capture.mock.calls.find(
-        (call: any[]) => call[0].event === '$ai_generation'
-      )
+      const captureCall = mockPostHogClient.capture.mock.calls.find((call: any[]) => call[0].event === '$ai_generation')
       expect(captureCall).toBeDefined()
       const props = captureCall![0].properties
       expect(props.$ai_provider).toBe('gemini')

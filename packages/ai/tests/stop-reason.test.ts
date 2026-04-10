@@ -779,9 +779,17 @@ describe('$ai_stop_reason extraction', () => {
         kwargs: {},
       }
 
-      handler.handleLLMStart(serialized, ['Test prompt'], 'run-1', 'parent-1', {
-        invocation_params: { temperature: 0.7 },
-      }, undefined, { ls_model_name: 'gpt-4', ls_provider: 'openai' })
+      handler.handleLLMStart(
+        serialized,
+        ['Test prompt'],
+        'run-1',
+        'parent-1',
+        {
+          invocation_params: { temperature: 0.7 },
+        },
+        undefined,
+        { ls_model_name: 'gpt-4', ls_provider: 'openai' }
+      )
 
       handler.handleLLMEnd(
         {
@@ -817,9 +825,17 @@ describe('$ai_stop_reason extraction', () => {
         kwargs: {},
       }
 
-      handler.handleLLMStart(serialized, ['Test prompt'], 'run-2', 'parent-2', {
-        invocation_params: {},
-      }, undefined, { ls_model_name: 'claude-3', ls_provider: 'anthropic' })
+      handler.handleLLMStart(
+        serialized,
+        ['Test prompt'],
+        'run-2',
+        'parent-2',
+        {
+          invocation_params: {},
+        },
+        undefined,
+        { ls_model_name: 'claude-3', ls_provider: 'anthropic' }
+      )
 
       handler.handleLLMEnd(
         {
@@ -855,9 +871,17 @@ describe('$ai_stop_reason extraction', () => {
         kwargs: {},
       }
 
-      handler.handleLLMStart(serialized, ['Test prompt'], 'run-3', 'parent-3', {
-        invocation_params: {},
-      }, undefined, { ls_model_name: 'gpt-4', ls_provider: 'openai' })
+      handler.handleLLMStart(
+        serialized,
+        ['Test prompt'],
+        'run-3',
+        'parent-3',
+        {
+          invocation_params: {},
+        },
+        undefined,
+        { ls_model_name: 'gpt-4', ls_provider: 'openai' }
+      )
 
       handler.handleLLMEnd(
         {
