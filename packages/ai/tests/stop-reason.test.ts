@@ -7,7 +7,7 @@ import { withTracing } from '../src/index'
 import { flushPromises } from './test-utils'
 import openaiModule from 'openai'
 import AnthropicOriginal from '@anthropic-ai/sdk'
-import { AIMessage } from '@langchain/core/messages'
+
 import type { ChatCompletion, ChatCompletionChunk } from 'openai/resources/chat/completions'
 import type {
   LanguageModelV2,
@@ -797,7 +797,7 @@ describe('$ai_stop_reason extraction', () => {
             [
               {
                 text: 'Hello!',
-                message: new AIMessage('Hello!'),
+
                 generationInfo: { finish_reason: 'stop' },
               },
             ],
@@ -843,7 +843,7 @@ describe('$ai_stop_reason extraction', () => {
             [
               {
                 text: 'Hello!',
-                message: new AIMessage('Hello!'),
+
                 generationInfo: { stop_reason: 'end_turn' },
               },
             ],
@@ -889,7 +889,6 @@ describe('$ai_stop_reason extraction', () => {
             [
               {
                 text: 'Hello!',
-                message: new AIMessage('Hello!'),
               },
             ],
           ],
