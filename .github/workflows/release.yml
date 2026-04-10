@@ -137,8 +137,22 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ steps.releaser.outputs.token }}
 
+            - name: Send failure event to PostHog
+              if: ${{ failure() }}
+              uses: PostHog/posthog-github-action@v1
+              with:
+                  posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
+                  event: 'posthog-js-github-release-workflow-failure'
+                  properties: >-
+                      {
+                        "commitSha": "${{ github.sha }}",
+                        "jobStatus": "${{ job.status }}",
+                        "ref": "${{ github.ref }}",
+                        "jobName": "version-bump",
+                        "packageName": "posthog-js"
+                      }
+
             - name: Notify Slack - Failed
-              continue-on-error: true
               if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
               uses: PostHog/.github/.github/actions/slack-thread-reply@main
               with:
@@ -325,7 +339,7 @@ jobs:
             # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
             - name: Send failure event to PostHog
               if: ${{ failure() }}
-              uses: PostHog/posthog-github-action@v0.1
+              uses: PostHog/posthog-github-action@v1
               with:
                   posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
                   event: 'posthog-js-github-release-workflow-failure'
@@ -592,6 +606,24 @@ jobs:
               env:
                   VERSION: ${{ needs.build-s3-artifacts.outputs.committed-version }}
               run: .github/scripts/upload-posthog-js-s3.sh ${{ matrix.region.bucket }}
+
+            - name: Send failure event to PostHog
+              if: ${{ failure() }}
+              uses: PostHog/posthog-github-action@v1
+              with:
+                  posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
+                  event: 'posthog-js-github-release-workflow-failure'
+                  properties: >-
+                      {
+                        "commitSha": "${{ github.sha }}",
+                        "jobStatus": "${{ job.status }}",
+                        "ref": "${{ github.ref }}",
+                        "jobName": "upload-s3",
+                        "packageName": "posthog-js",
+                        "packageVersion": "${{ needs.build-s3-artifacts.outputs.committed-version }}",
+                        "region": "${{ matrix.region.name }}",
+                        "bucket": "${{ matrix.region.bucket }}"
+                      }
 
             - name: Notify Slack - S3 Upload Failed
               continue-on-error: true
