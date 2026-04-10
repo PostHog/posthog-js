@@ -1,5 +1,15 @@
 # posthog-ai
 
+## 7.14.0
+
+### Minor Changes
+
+- [#3368](https://github.com/PostHog/posthog-js/pull/3368) [`c1f2c32`](https://github.com/PostHog/posthog-js/commit/c1f2c32218dabefde1b3c9ea2e272dbe9b117e28) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Add `$ai_stop_reason` property capturing the LLM's reason for stopping generation across all providers
+  (2026-04-10)
+
+- [#3369](https://github.com/PostHog/posthog-js/pull/3369) [`cf69f96`](https://github.com/PostHog/posthog-js/commit/cf69f96a75ce3831a948cd5cc7173830085c5e45) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Add Gemini `embedContent` tracking support
+  (2026-04-10)
+
 ## 7.13.2
 
 ### Patch Changes
