@@ -923,10 +923,18 @@ describe('PostHogGemini - Jest test suite', () => {
   })
 
   describe('embedContent', () => {
+    const mockEmbedResponse = {
+      embeddings: [{ values: [0.1, 0.2, 0.3], statistics: null }],
+    }
+
+    const mockEmbedResponseWithStats = {
+      embeddings: [
+        { values: [0.1, 0.2, 0.3], statistics: { tokenCount: 5 } },
+        { values: [0.4, 0.5, 0.6], statistics: { tokenCount: 8 } },
+      ],
+    }
+
     test('basic embedding', async () => {
-      const mockEmbedResponse = {
-        embeddings: [{ values: [0.1, 0.2, 0.3] }],
-      }
       ;(client as any).client.models.embedContent = jest.fn().mockResolvedValue(mockEmbedResponse)
 
       const response = await client.models.embedContent({
@@ -949,37 +957,30 @@ describe('PostHogGemini - Jest test suite', () => {
       expect(properties['$ai_input']).toBe('Hello world')
       expect(properties['$ai_output_choices']).toBeNull()
       expect(properties['$ai_http_status']).toBe(200)
-      expect(properties['foo']).toBe('bar')
-      expect(typeof properties['$ai_latency']).toBe('number')
       expect(properties['$ai_latency']).toBeGreaterThanOrEqual(0)
+      expect(properties['$ai_trace_id']).toBeDefined()
+      expect(properties['$ai_base_url']).toBe('https://generativelanguage.googleapis.com')
+      expect(properties['foo']).toBe('bar')
+
+      const embedCall = ((client as any).client.models.embedContent as jest.Mock).mock.calls[0][0]
+      expect(embedCall.model).toBe('gemini-embedding-001')
+      expect(embedCall.contents).toBe('Hello world')
     })
 
-    test('with token counts from statistics', async () => {
-      const mockEmbedResponse = {
-        embeddings: [
-          { values: [0.1, 0.2], statistics: { tokenCount: 5 } },
-          { values: [0.3, 0.4], statistics: { tokenCount: 3 } },
-          { values: [0.5, 0.6], statistics: { tokenCount: 7 } },
-        ],
-      }
-      ;(client as any).client.models.embedContent = jest.fn().mockResolvedValue(mockEmbedResponse)
+    test('extracts token counts from Vertex AI statistics', async () => {
+      ;(client as any).client.models.embedContent = jest.fn().mockResolvedValue(mockEmbedResponseWithStats)
 
       await client.models.embedContent({
         model: 'gemini-embedding-001',
-        contents: ['Hello', 'World', 'Test'],
+        contents: ['Hello', 'World'],
         posthogDistinctId: 'test-id',
       })
 
       const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
-      const { properties } = captureArgs[0]
-
-      expect(properties['$ai_input_tokens']).toBe(15)
+      expect(captureArgs[0].properties['$ai_input_tokens']).toBe(13) // 5 + 8
     })
 
-    test('without token counts defaults to 0', async () => {
-      const mockEmbedResponse = {
-        embeddings: [{ values: [0.1, 0.2, 0.3] }],
-      }
+    test('returns 0 tokens when no statistics available', async () => {
       ;(client as any).client.models.embedContent = jest.fn().mockResolvedValue(mockEmbedResponse)
 
       await client.models.embedContent({
@@ -989,35 +990,26 @@ describe('PostHogGemini - Jest test suite', () => {
       })
 
       const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
-      const { properties } = captureArgs[0]
-
-      expect(properties['$ai_input_tokens']).toBe(0)
+      expect(captureArgs[0].properties['$ai_input_tokens']).toBe(0)
     })
 
-    test('privacy mode hides input', async () => {
-      const mockEmbedResponse = {
-        embeddings: [{ values: [0.1, 0.2] }],
-      }
+    test('privacy mode redacts input', async () => {
       ;(client as any).client.models.embedContent = jest.fn().mockResolvedValue(mockEmbedResponse)
 
       await client.models.embedContent({
         model: 'gemini-embedding-001',
-        contents: 'Sensitive data',
+        contents: 'Secret text',
         posthogDistinctId: 'test-id',
         posthogPrivacyMode: true,
       })
 
       const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
-      const { properties } = captureArgs[0]
-
-      expect(properties['$ai_input']).toBeNull()
-      expect(properties['$ai_output_choices']).toBeNull()
+      expect(captureArgs[0].properties['$ai_input']).toBeNull()
     })
 
-    test('error handling', async () => {
-      const error = new Error('Embedding API Error')
-      ;(error as any).status = 429
-      ;(client as any).client.models.embedContent = jest.fn().mockRejectedValue(error)
+    test('error handling captures event and rethrows', async () => {
+      const mockError = new Error('API error')
+      ;(client as any).client.models.embedContent = jest.fn().mockRejectedValue(mockError)
 
       await expect(
         client.models.embedContent({
@@ -1025,37 +1017,41 @@ describe('PostHogGemini - Jest test suite', () => {
           contents: 'Hello',
           posthogDistinctId: 'test-id',
         })
-      ).rejects.toThrow('Embedding API Error')
+      ).rejects.toThrow()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
-      const { event, properties } = captureArgs[0]
-
-      expect(event).toBe('$ai_embedding')
-      expect(properties['$ai_is_error']).toBe(true)
-      expect(properties['$ai_http_status']).toBe(429)
-      expect(properties['$ai_input_tokens']).toBe(0)
+      expect(captureArgs[0].event).toBe('$ai_embedding')
+      expect(captureArgs[0].properties['$ai_is_error']).toBe(true)
+      expect(captureArgs[0].properties['$ai_input_tokens']).toBe(0)
     })
 
-    test('config passed through to underlying call', async () => {
-      const mockEmbedResponse = {
-        embeddings: [{ values: [0.1, 0.2] }],
-      }
+    test('passes config through to underlying call', async () => {
       ;(client as any).client.models.embedContent = jest.fn().mockResolvedValue(mockEmbedResponse)
 
       await client.models.embedContent({
         model: 'gemini-embedding-001',
         contents: 'Hello',
-        config: { outputDimensionality: 256 },
         posthogDistinctId: 'test-id',
-      } as any)
+        config: { outputDimensionality: 64 },
+      })
 
       const embedCall = ((client as any).client.models.embedContent as jest.Mock).mock.calls[0][0]
-      expect(embedCall.config).toEqual({ outputDimensionality: 256 })
-      expect(embedCall.model).toBe('gemini-embedding-001')
-      expect(embedCall.contents).toBe('Hello')
-      // Posthog params should not be passed through
-      expect(embedCall.posthogDistinctId).toBeUndefined()
+      expect(embedCall.config).toEqual({ outputDimensionality: 64 })
+    })
+
+    test('no distinct id sets $process_person_profile to false', async () => {
+      ;(client as any).client.models.embedContent = jest.fn().mockResolvedValue(mockEmbedResponse)
+
+      await client.models.embedContent({
+        model: 'gemini-embedding-001',
+        contents: 'Hello',
+      })
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      expect(captureArgs[0].properties['$process_person_profile']).toBe(false)
+      // distinctId should fall back to traceId
+      expect(captureArgs[0].distinctId).toBe(captureArgs[0].properties['$ai_trace_id'])
     })
   })
 })

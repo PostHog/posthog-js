@@ -2,14 +2,15 @@ import {
   GoogleGenAI,
   GenerateContentResponse as GeminiResponse,
   GenerateContentParameters,
-  Part,
-  GenerateContentResponseUsageMetadata,
   EmbedContentParameters,
   EmbedContentResponse,
+  Part,
+  GenerateContentResponseUsageMetadata,
 } from '@google/genai'
 import type { GoogleGenAIOptions } from '@google/genai'
 import { PostHog } from 'posthog-node'
 import {
+  AIEvent,
   MonitoringParams,
   sendEventToPosthog,
   extractAvailableToolCalls,
@@ -17,7 +18,6 @@ import {
   extractPosthogParams,
   toContentString,
   sendEventWithErrorToPosthog,
-  AIEvent,
   withPrivacyMode,
 } from '../utils'
 import { sanitizeGemini } from '../sanitization'
@@ -262,8 +262,7 @@ export class WrappedModels {
       const response = await this.client.models.embedContent(geminiParams as EmbedContentParameters)
       const latency = (Date.now() - startTime) / 1000
 
-      const tokenCount =
-        response.embeddings?.reduce((sum, embedding) => sum + (embedding.statistics?.tokenCount ?? 0), 0) ?? 0
+      const inputTokens = extractEmbeddingTokenCount(response)
 
       await sendEventToPosthog({
         client: this.phClient,
@@ -271,14 +270,14 @@ export class WrappedModels {
         eventType: AIEvent.Embedding,
         model: geminiParams.model,
         provider: 'gemini',
-        input: withPrivacyMode(this.phClient, posthogParams.privacyMode, geminiParams.contents),
+        input: withPrivacyMode(this.phClient, posthogParams.privacyMode ?? false, geminiParams.contents),
         output: null,
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         params: params as EmbedContentParameters & MonitoringParams,
         httpStatus: 200,
         usage: {
-          inputTokens: tokenCount,
+          inputTokens,
         },
       })
 
@@ -291,7 +290,7 @@ export class WrappedModels {
         eventType: AIEvent.Embedding,
         model: geminiParams.model,
         provider: 'gemini',
-        input: withPrivacyMode(this.phClient, posthogParams.privacyMode, geminiParams.contents),
+        input: withPrivacyMode(this.phClient, posthogParams.privacyMode ?? false, geminiParams.contents),
         output: null,
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -445,6 +444,23 @@ export class WrappedModels {
 
     return messages
   }
+}
+
+/**
+ * Extract total token count from a Gemini embed_content response.
+ * Token counts are only available per-embedding via Vertex AI's statistics.tokenCount.
+ * Returns 0 if no token counts are available.
+ */
+function extractEmbeddingTokenCount(response: EmbedContentResponse): number {
+  let total = 0
+  if (response.embeddings) {
+    for (const embedding of response.embeddings) {
+      if (embedding.statistics?.tokenCount != null) {
+        total += embedding.statistics.tokenCount
+      }
+    }
+  }
+  return total
 }
 
 /**
