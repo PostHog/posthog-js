@@ -39,6 +39,7 @@ import { RemoteConfigLoader } from './remote-config'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
 import { DEFAULT_FLUSH_INTERVAL_MS, RequestQueue } from './request-queue'
 import { RetryQueue } from './retry-queue'
+import { OfflineDlq } from './dlq'
 import { ScrollManager } from './scroll-manager'
 import { SessionPropsManager } from './session-props'
 import { SessionIdManager } from './sessionid'
@@ -273,6 +274,12 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     // Used for internal testing
     _onCapture: __NOOP,
 
+    enable_offline_dlq: false,
+    dlq_max_age_hours: 24,
+    dlq_max_entries: 1000,
+    dlq_drain_on_online: true,
+    dlq_drain_on_load: true,
+
     // make the default be lazy loading replay
     __preview_eager_load_replay: false,
 
@@ -378,6 +385,8 @@ export class PostHog implements PostHogInterface {
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
+    _dlq?: OfflineDlq | null
+    private _dlqDrainInProgress: boolean = false
     sessionRecording?: SessionRecording
     externalIntegrations?: ExternalIntegrations
     webPerformance = new DeprecatedWebPerformanceObserver()
@@ -605,6 +614,10 @@ export class PostHog implements PostHogInterface {
             this.config.request_queue_config
         )
         this._retryQueue = new RetryQueue(this)
+        this._dlq = null
+        if (this._shouldEnableDlq()) {
+            this._initDlq()
+        }
         this.__request_queue = []
 
         const startInCookielessMode =
@@ -1061,6 +1074,150 @@ export class PostHog implements PostHogInterface {
             this._retryQueue.retriableRequest(options)
         } else {
             this._send_request(options)
+        }
+    }
+
+    _shouldEnableDlq(): boolean {
+        if (!this.config.enable_offline_dlq) {
+            return false
+        }
+        if (this.config.persistence === 'memory') {
+            return false
+        }
+        if (!this.is_capturing()) {
+            return false
+        }
+        return true
+    }
+
+    _initDlq(): void {
+        if (!this._shouldEnableDlq()) {
+            return
+        }
+
+        const dlq = new OfflineDlq(
+            this.config.dlq_max_age_hours ?? 24,
+            this.config.dlq_max_entries ?? 1000
+        )
+
+        dlq.open().then((opened) => {
+            if (!opened) {
+                return
+            }
+            this._dlq = dlq
+
+            if (this.config.dlq_drain_on_online !== false) {
+                addEventListener(window, 'online', () => {
+                    setTimeout(() => this._drainDlq(), 1000)
+                })
+            }
+
+            if (this.config.dlq_drain_on_load !== false) {
+                setTimeout(() => this._drainDlq(), 3000)
+            }
+        }).catch((e) => {
+            logger.warn('[DLQ] Failed to initialize', e)
+        })
+    }
+
+    _drainDlq(): void {
+        if (this._dlqDrainInProgress || !this._dlq) {
+            return
+        }
+
+        if (!this.is_capturing()) {
+            this._dlq.clear()
+            return
+        }
+
+        this._dlqDrainInProgress = true
+
+        const drain = async () => {
+            const dlq = this._dlq
+            if (!dlq) {
+                return
+            }
+
+            try {
+                await dlq.evictExpired()
+                await dlq.enforceMaxEntries()
+
+                const events = await dlq.readAll()
+                if (events.length === 0) {
+                    return
+                }
+
+                const batchSize = 10
+                for (let i = 0; i < events.length; i += batchSize) {
+                    const batch = events.slice(i, i + batchSize)
+                    const batchData = batch.map((e) => e.data)
+
+                    const success = await new Promise<boolean>((resolve) => {
+                        this._send_retriable_request({
+                            method: 'POST',
+                            url: this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint),
+                            data: batchData.length === 1 ? batchData[0] : batchData,
+                            compression: 'best-available',
+                            callback: (response) => {
+                                resolve(response.statusCode === 200)
+                            },
+                        })
+                    })
+
+                    if (success) {
+                        await dlq.delete(batch.map((e) => e.uuid))
+                    } else {
+                        break
+                    }
+                }
+            } catch (e) {
+                logger.warn('[DLQ] Drain failed', e)
+            } finally {
+                this._dlqDrainInProgress = false
+            }
+        }
+
+        // Use Web Locks if available for cross-tab coordination
+        if (typeof navigator !== 'undefined' && navigator.locks) {
+            navigator.locks.request('posthog_dlq_drain', { ifAvailable: true }, async (lock) => {
+                if (!lock) {
+                    this._dlqDrainInProgress = false
+                    return
+                }
+                await drain()
+            }).catch(() => {
+                drain()
+            })
+        } else {
+            drain()
+        }
+    }
+
+    _onFlushFailure(options: QueuedRequestWithOptions): void {
+        if (!this._shouldEnableDlq() || !this._dlq) {
+            return
+        }
+
+        const data = options.data
+        if (!data) {
+            return
+        }
+
+        const events: Array<{ uuid: string; data: Record<string, any>; stored_at: number }> = []
+        const now = Date.now()
+
+        const items = Array.isArray(data) ? data : [data]
+        for (const item of items) {
+            const uuid = item.uuid
+            if (uuid) {
+                events.push({ uuid, data: item, stored_at: now })
+            }
+        }
+
+        if (events.length > 0) {
+            this._dlq.write(events).then(() => {
+                this._dlq?.enforceMaxEntries()
+            })
         }
     }
 
@@ -3593,6 +3750,8 @@ export class PostHog implements PostHogInterface {
 
         this.consent.optInOut(false)
         this._sync_opt_out_with_persistence()
+
+        this._dlq?.clear()
 
         if (this.config.cookieless_mode === COOKIELESS_ON_REJECT) {
             // If cookieless_mode is COOKIELESS_ON_REJECT, we start capturing events in cookieless mode
