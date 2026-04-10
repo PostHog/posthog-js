@@ -315,6 +315,66 @@ describe('cookieless', () => {
             expect(posthog.sessionRecording).toBeFalsy()
         })
 
+        it('should start in cookieless mode when opt_out_capturing_by_default is set', async () => {
+            // Regression test for https://github.com/PostHog/posthog-js/issues/2841
+            // With `cookieless_mode: 'on_reject'` + `opt_out_capturing_by_default: true`,
+            // the SDK should immediately start sending events in cookieless mode rather
+            // than dropping them until the user explicitly calls opt_out_capturing().
+            const { posthog, beforeSendMock } = await setup({
+                cookieless_mode: 'on_reject',
+                opt_out_capturing_by_default: true,
+            })
+            await delay(1) // wait for async initial pageview capture
+
+            expect(posthog.has_opted_out_capturing()).toEqual(true)
+            expect(posthog.get_explicit_consent_status()).toBe('pending')
+            expect(posthog.sessionRecording).toBeFalsy()
+
+            // initial pageview should have been captured as cookieless
+            expect(beforeSendMock).toBeCalledTimes(1)
+            const pageview = beforeSendMock.mock.calls[0][0]
+            expect(pageview.event).toBe('$pageview')
+            expect(pageview.properties.distinct_id).toEqual('$posthog_cookieless')
+            expect(pageview.properties.$device_id).toBe(null)
+            expect(pageview.properties.$cookieless_mode).toEqual(true)
+
+            // subsequent events should also be captured as cookieless
+            posthog.capture(eventName, eventProperties)
+            expect(beforeSendMock).toBeCalledTimes(2)
+            const event = beforeSendMock.mock.calls[1][0]
+            expect(event.event).toBe(eventName)
+            expect(event.properties.distinct_id).toEqual('$posthog_cookieless')
+            expect(event.properties.$anon_distinct_id).toEqual(undefined)
+            expect(event.properties.$device_id).toBe(null)
+            expect(event.properties.$session_id).toBe(undefined)
+            expect(event.properties.$window_id).toBe(undefined)
+            expect(event.properties.$cookieless_mode).toEqual(true)
+        })
+
+        it('should switch from cookieless to non-cookieless on opt-in when opt_out_capturing_by_default is set', async () => {
+            const { posthog, beforeSendMock } = await setup({
+                cookieless_mode: 'on_reject',
+                opt_out_capturing_by_default: true,
+            })
+            await delay(1) // wait for async initial pageview capture
+            expect(beforeSendMock).toBeCalledTimes(1)
+            expect(beforeSendMock.mock.calls[0][0].properties.$cookieless_mode).toEqual(true)
+
+            posthog.opt_in_capturing()
+            posthog.capture(eventName, eventProperties)
+
+            // opt_in should reset, fire $opt_in, then the custom event as non-cookieless.
+            // No new $pageview since one was already captured in cookieless mode.
+            expect(beforeSendMock).toBeCalledTimes(3)
+            expect(beforeSendMock.mock.calls[1][0].event).toBe('$opt_in')
+            const customEvent = beforeSendMock.mock.calls[2][0]
+            expect(customEvent.event).toBe(eventName)
+            expect(customEvent.properties.distinct_id).toMatch(uuidV7Pattern)
+            expect(customEvent.properties.$device_id).toMatch(uuidV7Pattern)
+            expect(customEvent.properties.$cookieless_mode).toEqual(undefined)
+            expect(posthog.sessionRecording).toBeTruthy()
+        })
+
         it('should restart the request queue when opting in', async () => {
             // we're testing the interaction with the request queue, so we need to mock fetch rather than relying on before_send
             jest.useFakeTimers()

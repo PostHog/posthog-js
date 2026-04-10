@@ -57,6 +57,23 @@ export class ConsentManager {
         return this.consent === ConsentStatus.DENIED
     }
 
+    /**
+     * Returns true if the user should be treated as having rejected consent for the
+     * purposes of cookieless_mode routing. This is true when consent is explicitly
+     * DENIED, or when consent is PENDING and `opt_out_capturing_by_default` is set
+     * (so the user is treated as rejected by default).
+     *
+     * This is distinct from `isExplicitlyOptedOut`, which is used by
+     * `get_explicit_consent_status` to decide whether to show a consent banner and
+     * must only reflect choices the user has actively made.
+     */
+    public isRejected() {
+        return (
+            this.consent === ConsentStatus.DENIED ||
+            (this.consent === ConsentStatus.PENDING && this._config.opt_out_capturing_by_default === true)
+        )
+    }
+
     public optInOut(isOptedIn: boolean) {
         this._storage._set(
             this._storageKey,
