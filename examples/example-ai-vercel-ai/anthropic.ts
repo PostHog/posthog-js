@@ -1,27 +1,45 @@
-/** Vercel AI with Anthropic backend, tracked by PostHog. */
+/** Vercel AI with Anthropic backend, tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from 'posthog-node'
-import { withTracing } from '@posthog/ai/vercel'
+import { NodeSDK, tracing } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogTraceExporter } from '@posthog/ai/otel'
 import { generateText } from 'ai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-vercel-ai-app',
+        'posthog.distinct_id': 'example-user',
+        foo: 'bar',
+        'conversation_id': 'abc-123',
+    }),
+    spanProcessors: [
+        new tracing.SimpleSpanProcessor(
+            new PostHogTraceExporter({
+                apiKey: process.env.POSTHOG_API_KEY!,
+                host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+            })
+        ),
+    ],
 })
+sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
+
 const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 async function main() {
-    const model = withTracing(anthropic('claude-sonnet-4-5-20250929'), phClient, {
-        posthogDistinctId: 'example-user',
-    })
-
     const { text } = await generateText({
-        model,
+        model: anthropic('claude-sonnet-4-5-20250929'),
+        experimental_telemetry: {
+            isEnabled: true,
+            functionId: 'anthropic-generate',
+            metadata: {
+                posthog_distinct_id: 'example-user',
+            },
+        },
         prompt: 'Explain observability in three sentences.',
     })
 
     console.log(text)
-    await phClient.shutdown()
 }
 
 main()

@@ -1,14 +1,30 @@
-/** Vercel AI streamObject for streaming structured output, tracked by PostHog. */
+/** Vercel AI streamObject for streaming structured output, tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from 'posthog-node'
-import { withTracing } from '@posthog/ai/vercel'
+import { NodeSDK, tracing } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogTraceExporter } from '@posthog/ai/otel'
 import { streamObject } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai'
 import { z } from 'zod'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-vercel-ai-app',
+        'posthog.distinct_id': 'example-user',
+        foo: 'bar',
+        'conversation_id': 'abc-123',
+    }),
+    spanProcessors: [
+        new tracing.SimpleSpanProcessor(
+            new PostHogTraceExporter({
+                apiKey: process.env.POSTHOG_API_KEY!,
+                host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+            })
+        ),
+    ],
 })
+sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
+
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 
 const WeatherSchema = z.object({
@@ -20,12 +36,15 @@ const WeatherSchema = z.object({
 })
 
 async function main() {
-    const model = withTracing(openai('gpt-4o-mini'), phClient, {
-        posthogDistinctId: 'example-user',
-    })
-
     const result = streamObject({
-        model,
+        model: openai('gpt-4o-mini'),
+        experimental_telemetry: {
+            isEnabled: true,
+            functionId: 'stream-object',
+            metadata: {
+                posthog_distinct_id: 'example-user',
+            },
+        },
         schema: WeatherSchema,
         prompt: 'Describe typical weather in Dublin, Ireland in March.',
     })
@@ -37,8 +56,6 @@ async function main() {
 
     const final = await result.object
     console.log('\nFinal:', JSON.stringify(final, null, 2))
-
-    await phClient.shutdown()
 }
 
 main()

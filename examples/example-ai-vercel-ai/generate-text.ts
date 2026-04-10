@@ -1,23 +1,42 @@
-/** Vercel AI generateText with tool calling, tracked by PostHog. */
+/** Vercel AI generateText with tool calling, tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from 'posthog-node'
-import { withTracing } from '@posthog/ai/vercel'
+import { NodeSDK, tracing } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogTraceExporter } from '@posthog/ai/otel'
 import { generateText, tool } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai'
 import { z } from 'zod'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-vercel-ai-app',
+        'posthog.distinct_id': 'example-user',
+        foo: 'bar',
+        'conversation_id': 'abc-123',
+    }),
+    spanProcessors: [
+        new tracing.SimpleSpanProcessor(
+            new PostHogTraceExporter({
+                apiKey: process.env.POSTHOG_API_KEY!,
+                host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+            })
+        ),
+    ],
 })
+sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
+
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 
 async function main() {
-    const model = withTracing(openai('gpt-4o-mini'), phClient, {
-        posthogDistinctId: 'example-user',
-    })
-
     const { text, toolResults } = await generateText({
-        model,
+        model: openai('gpt-4o-mini'),
+        experimental_telemetry: {
+            isEnabled: true,
+            functionId: 'generate-text',
+            metadata: {
+                posthog_distinct_id: 'example-user',
+            },
+        },
         tools: {
             get_weather: tool({
                 description: 'Get current weather for a location',
@@ -42,8 +61,6 @@ async function main() {
     for (const result of toolResults ?? []) {
         console.log('Tool result:', result.result)
     }
-
-    await phClient.shutdown()
 }
 
 main()

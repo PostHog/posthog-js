@@ -1,27 +1,45 @@
-/** Vercel AI with Google backend, tracked by PostHog. */
+/** Vercel AI with Google backend, tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from 'posthog-node'
-import { withTracing } from '@posthog/ai/vercel'
+import { NodeSDK, tracing } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogTraceExporter } from '@posthog/ai/otel'
 import { generateText } from 'ai'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-vercel-ai-app',
+        'posthog.distinct_id': 'example-user',
+        foo: 'bar',
+        'conversation_id': 'abc-123',
+    }),
+    spanProcessors: [
+        new tracing.SimpleSpanProcessor(
+            new PostHogTraceExporter({
+                apiKey: process.env.POSTHOG_API_KEY!,
+                host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+            })
+        ),
+    ],
 })
+sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
+
 const google = createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY! })
 
 async function main() {
-    const model = withTracing(google('gemini-2.5-flash'), phClient, {
-        posthogDistinctId: 'example-user',
-    })
-
     const { text } = await generateText({
-        model,
+        model: google('gemini-2.5-flash'),
+        experimental_telemetry: {
+            isEnabled: true,
+            functionId: 'google-generate',
+            metadata: {
+                posthog_distinct_id: 'example-user',
+            },
+        },
         prompt: 'Explain observability in three sentences.',
     })
 
     console.log(text)
-    await phClient.shutdown()
 }
 
 main()

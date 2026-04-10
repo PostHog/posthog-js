@@ -1,22 +1,41 @@
-/** Vercel AI streamText, tracked by PostHog. */
+/** Vercel AI streamText, tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from 'posthog-node'
-import { withTracing } from '@posthog/ai/vercel'
+import { NodeSDK, tracing } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogTraceExporter } from '@posthog/ai/otel'
 import { streamText } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-vercel-ai-app',
+        'posthog.distinct_id': 'example-user',
+        foo: 'bar',
+        'conversation_id': 'abc-123',
+    }),
+    spanProcessors: [
+        new tracing.SimpleSpanProcessor(
+            new PostHogTraceExporter({
+                apiKey: process.env.POSTHOG_API_KEY!,
+                host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+            })
+        ),
+    ],
 })
+sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
+
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 
 async function main() {
-    const model = withTracing(openai('gpt-4o-mini'), phClient, {
-        posthogDistinctId: 'example-user',
-    })
-
     const result = streamText({
-        model,
+        model: openai('gpt-4o-mini'),
+        experimental_telemetry: {
+            isEnabled: true,
+            functionId: 'stream-text',
+            metadata: {
+                posthog_distinct_id: 'example-user',
+            },
+        },
         prompt: 'Explain observability in three sentences.',
     })
 
@@ -25,7 +44,6 @@ async function main() {
     }
 
     console.log()
-    await phClient.shutdown()
 }
 
 main()

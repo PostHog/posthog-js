@@ -6,23 +6,29 @@
  * In a real Convex app, this code runs inside a "use node" action.
  */
 
-import { NodeSDK } from '@opentelemetry/sdk-node'
-import { Resource } from '@opentelemetry/resources'
+import { NodeSDK, tracing } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
 import { PostHogTraceExporter } from '@posthog/ai/otel'
 import { generateText } from 'ai'
 import { openai } from '@ai-sdk/openai'
 
 const sdk = new NodeSDK({
-    resource: new Resource({
+    resource: resourceFromAttributes({
         'service.name': 'example-convex-app',
-        'user.id': 'example-user',
+        'posthog.distinct_id': 'example-user',
+        foo: 'bar',
+        'conversation_id': 'abc-123',
     }),
-    traceExporter: new PostHogTraceExporter({
-        apiKey: process.env.POSTHOG_API_KEY!,
-        host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
-    }),
+    spanProcessors: [
+        new tracing.SimpleSpanProcessor(
+            new PostHogTraceExporter({
+                apiKey: process.env.POSTHOG_API_KEY!,
+                host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+            })
+        ),
+    ],
 })
-sdk.start()
+sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
 
 async function main() {
     const result = await generateText({
@@ -38,7 +44,6 @@ async function main() {
     })
 
     console.log(result.text)
-    await sdk.shutdown()
 }
 
 main()
