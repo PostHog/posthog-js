@@ -641,7 +641,7 @@ describe('$ai_stop_reason extraction', () => {
           text: 'Hello!',
           usage: {
             inputTokens: { total: 10, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
-            outputTokens: { total: 5, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 5, text: undefined, reasoning: undefined },
           },
           content: [{ type: 'text', text: 'Hello!' }],
           response: { modelId: 'gpt-4' },
@@ -720,7 +720,7 @@ describe('$ai_stop_reason extraction', () => {
           type: 'finish',
           usage: {
             inputTokens: { total: 10, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
-            outputTokens: { total: 5, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 5, text: undefined, reasoning: undefined },
           },
           finishReason: { unified: 'stop' as const, raw: undefined },
         },
