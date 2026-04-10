@@ -4,6 +4,8 @@ import {
   GenerateContentParameters,
   Part,
   GenerateContentResponseUsageMetadata,
+  EmbedContentParameters,
+  EmbedContentResponse,
 } from '@google/genai'
 import type { GoogleGenAIOptions } from '@google/genai'
 import { PostHog } from 'posthog-node'
@@ -15,6 +17,8 @@ import {
   extractPosthogParams,
   toContentString,
   sendEventWithErrorToPosthog,
+  AIEvent,
+  withPrivacyMode,
 } from '../utils'
 import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
@@ -57,6 +61,7 @@ export class WrappedModels {
       const availableTools = extractAvailableToolCalls('gemini', geminiParams)
 
       const metadata = response.usageMetadata
+      const finishReason = response.candidates?.[0]?.finishReason
       await sendEventToPosthog({
         client: this.phClient,
         ...posthogParams,
@@ -78,6 +83,7 @@ export class WrappedModels {
           webSearchCount: calculateGoogleWebSearchCount(response),
           rawUsage: metadata,
         },
+        stopReason: finishReason ?? undefined,
         tools: availableTools,
       })
 
@@ -111,6 +117,7 @@ export class WrappedModels {
     const startTime = Date.now()
     const accumulatedContent: FormattedContent = []
     let firstTokenTime: number | undefined
+    let stopReason: string | undefined
     let usage: TokenUsage = {
       inputTokens: 0,
       outputTokens: 0,
@@ -147,6 +154,11 @@ export class WrappedModels {
           } else {
             accumulatedContent.push({ type: 'text', text: chunk.text })
           }
+        }
+
+        // Track finish reason from candidates
+        if (chunk.candidates?.[0]?.finishReason) {
+          stopReason = chunk.candidates[0].finishReason
         }
 
         // Handle function calls from candidates
@@ -217,6 +229,7 @@ export class WrappedModels {
           webSearchCount: usage.webSearchCount,
           rawUsage: usage.rawUsage,
         },
+        stopReason,
         tools: availableTools,
       })
     } catch (error: unknown) {
@@ -234,6 +247,57 @@ export class WrappedModels {
         usage: {
           inputTokens: 0,
           outputTokens: 0,
+        },
+        error: error,
+      })
+      throw enrichedError
+    }
+  }
+
+  public async embedContent(params: EmbedContentParameters & MonitoringParams): Promise<EmbedContentResponse> {
+    const { providerParams: geminiParams, posthogParams } = extractPosthogParams(params)
+    const startTime = Date.now()
+
+    try {
+      const response = await this.client.models.embedContent(geminiParams as EmbedContentParameters)
+      const latency = (Date.now() - startTime) / 1000
+
+      const tokenCount =
+        response.embeddings?.reduce((sum, embedding) => sum + (embedding.statistics?.tokenCount ?? 0), 0) ?? 0
+
+      await sendEventToPosthog({
+        client: this.phClient,
+        ...posthogParams,
+        eventType: AIEvent.Embedding,
+        model: geminiParams.model,
+        provider: 'gemini',
+        input: withPrivacyMode(this.phClient, posthogParams.privacyMode, geminiParams.contents),
+        output: null,
+        latency,
+        baseURL: 'https://generativelanguage.googleapis.com',
+        params: params as EmbedContentParameters & MonitoringParams,
+        httpStatus: 200,
+        usage: {
+          inputTokens: tokenCount,
+        },
+      })
+
+      return response
+    } catch (error: unknown) {
+      const latency = (Date.now() - startTime) / 1000
+      const enrichedError = await sendEventWithErrorToPosthog({
+        client: this.phClient,
+        ...posthogParams,
+        eventType: AIEvent.Embedding,
+        model: geminiParams.model,
+        provider: 'gemini',
+        input: withPrivacyMode(this.phClient, posthogParams.privacyMode, geminiParams.contents),
+        output: null,
+        latency,
+        baseURL: 'https://generativelanguage.googleapis.com',
+        params: params as EmbedContentParameters & MonitoringParams,
+        usage: {
+          inputTokens: 0,
         },
         error: error,
       })

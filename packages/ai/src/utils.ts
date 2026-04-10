@@ -582,6 +582,7 @@ export type SendEventToPosthogParams = {
     MonitoringParams
   error?: unknown
   exceptionId?: string
+  stopReason?: string
   tools?: ChatCompletionTool[] | AnthropicTool[] | GeminiTool[] | null
   captureImmediate?: boolean
 }
@@ -688,6 +689,7 @@ export const sendEventToPosthog = async ({
   usage = {},
   error,
   exceptionId,
+  stopReason,
   tools,
   captureImmediate = false,
 }: SendEventToPosthogParams): Promise<void> => {
@@ -745,6 +747,7 @@ export const sendEventToPosthog = async ({
     ...params.posthogProperties,
     $ai_tokens_source: getTokensSource(params.posthogProperties),
     ...(distinctId ? {} : { $process_person_profile: false }),
+    ...(stopReason ? { $ai_stop_reason: stopReason } : {}),
     ...(tools ? { $ai_tools: tools } : {}),
     ...errorData,
     ...costOverrideData,

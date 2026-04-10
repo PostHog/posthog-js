@@ -467,6 +467,15 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
 
           adjustAnthropicV3CacheTokens(model, provider, usage)
 
+          // Extract finish reason - V2 returns a string, V3 returns an object with .unified
+          const rawFinishReason = result.finishReason
+          const finishReasonStr =
+            typeof rawFinishReason === 'string'
+              ? rawFinishReason
+              : rawFinishReason && typeof rawFinishReason === 'object' && 'unified' in rawFinishReason
+                ? String(rawFinishReason.unified)
+                : undefined
+
           await sendEventToPosthog({
             client: phClient,
             distinctId: mergedOptions.posthogDistinctId,
@@ -480,6 +489,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             params: mergedParams as any,
             httpStatus: 200,
             usage,
+            stopReason: finishReasonStr,
             tools: availableTools,
             captureImmediate: mergedOptions.posthogCaptureImmediate,
           })
@@ -519,6 +529,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
         let firstTokenTime: number | undefined
         let generatedText = ''
         let reasoningText = ''
+        let stopReason: string | undefined
         let usage: {
           inputTokens?: number
           outputTokens?: number
@@ -610,6 +621,18 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                   cacheReadInputTokens: extractCacheReadTokens(chunkUsage),
                   ...additionalTokenValues,
                 }
+
+                // Extract finish reason - V2 returns a string, V3 returns an object with .unified
+                const rawFinishReason = chunk.finishReason
+                if (typeof rawFinishReason === 'string') {
+                  stopReason = rawFinishReason
+                } else if (
+                  rawFinishReason &&
+                  typeof rawFinishReason === 'object' &&
+                  'unified' in rawFinishReason
+                ) {
+                  stopReason = String(rawFinishReason.unified)
+                }
               }
               controller.enqueue(chunk)
             },
@@ -676,6 +699,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 params: mergedParams as any,
                 httpStatus: 200,
                 usage: finalUsage,
+                stopReason,
                 tools: availableTools,
                 captureImmediate: mergedOptions.posthogCaptureImmediate,
               })
