@@ -245,9 +245,7 @@ export class WrappedModels {
     }
   }
 
-  public async embedContent(
-    params: EmbedContentParameters & MonitoringParams
-  ): Promise<EmbedContentResponse> {
+  public async embedContent(params: EmbedContentParameters & MonitoringParams): Promise<EmbedContentResponse> {
     const { providerParams: geminiParams, posthogParams } = extractPosthogParams(params)
     const startTime = Date.now()
 
