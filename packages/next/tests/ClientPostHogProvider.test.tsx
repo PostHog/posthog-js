@@ -16,6 +16,7 @@ jest.mock('posthog-js', () => ({
     default: {
         __loaded: false,
         init: jest.fn(),
+        updateFlags: jest.fn()
     },
 }))
 
@@ -25,6 +26,7 @@ describe('ClientPostHogProvider', () => {
     beforeEach(() => {
         mockPostHogProvider.mockClear()
         ;(mockPostHogJs.init as jest.Mock).mockClear()
+        ;(mockPostHogJs.updateFlags as jest.Mock).mockClear()
         mockPostHogJs.__loaded = false
     })
 
@@ -120,6 +122,30 @@ describe('ClientPostHogProvider', () => {
             </ClientPostHogProvider>
         )
         expect(mockPostHogJs.init).not.toHaveBeenCalled()
+    })
+
+    it('calls updateFlags with bootstrap featureFlags', () => {
+        const bootstrap = {
+            featureFlags: { 'flag-a': true, 'flag-b': 'variant-1' },
+        }
+        render(
+            <ClientPostHogProvider apiKey="phc_test123" bootstrap={bootstrap}>
+                <div>Child</div>
+            </ClientPostHogProvider>
+        )
+        expect(mockPostHogJs.updateFlags).toHaveBeenCalledWith(bootstrap.featureFlags)
+    })
+
+    it('does not call updateFlags when bootstrap featureFlags are not provided', () => {
+        const bootstrap = {
+            distinctID: 'user_abc',
+        }
+        render(
+            <ClientPostHogProvider apiKey="phc_test123" bootstrap={bootstrap}>
+                <div>Child</div>
+            </ClientPostHogProvider>
+        )
+        expect(mockPostHogJs.updateFlags).not.toHaveBeenCalled()
     })
 
     it('renders children and warns when apiKey is empty', () => {
