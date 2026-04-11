@@ -27,6 +27,7 @@ import { propertyComparisons } from '../../utils/property-utils'
 import { Properties, PropertyMatchType } from '../../types'
 import { Z_INDEX_SURVEYS } from '../../constants'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
+import { localStore } from '../../storage'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
@@ -604,7 +605,7 @@ export const canActivateRepeatedly = (
  * @param survey
  */
 export const getSurveySeen = (survey: Survey): boolean => {
-    const surveySeen = localStorage.getItem(getSurveySeenKey(survey))
+    const surveySeen = localStore._get(getSurveySeenKey(survey))
     if (surveySeen) {
         // if a survey has already been seen,
         // we will override it with the event repeated activation value.
@@ -617,7 +618,7 @@ export const getSurveySeen = (survey: Survey): boolean => {
 const LAST_SEEN_SURVEY_DATE_KEY = 'lastSeenSurveyDate'
 
 export const hasWaitPeriodPassed = (waitPeriodInDays: number | undefined): boolean => {
-    const lastSeenSurveyDate = localStorage.getItem(LAST_SEEN_SURVEY_DATE_KEY)
+    const lastSeenSurveyDate = localStore._get(LAST_SEEN_SURVEY_DATE_KEY)
     return hasPeriodPassed(waitPeriodInDays, lastSeenSurveyDate)
 }
 
