@@ -6,6 +6,16 @@ export function isGzipSupported(): boolean {
   return 'CompressionStream' in globalThis
 }
 
+export const isNativeAsyncGzipReadError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+
+  const name = 'name' in error ? String(error.name) : ''
+
+  return name === 'NotReadableError'
+}
+
 export type GzipCompressOptions = {
   /**
    * By default this helper swallows compression errors and returns null.

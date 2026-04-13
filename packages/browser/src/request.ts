@@ -8,7 +8,7 @@ import { AbortController, CompressionStream, fetch, navigator, XMLHttpRequest } 
 import { gzipSync, strToU8 } from 'fflate'
 
 import { _base64Encode } from './utils/encode-utils'
-import { gzipCompress } from '@posthog/core'
+import { gzipCompress, isNativeAsyncGzipReadError } from '@posthog/core'
 
 interface RequestWithEncodedBody extends RequestWithOptions {
     _encodedBody?: EncodedBody
@@ -28,16 +28,6 @@ const SIXTY_FOUR_KILOBYTES = 64 * 1024
 */
 const KEEP_ALIVE_THRESHOLD = SIXTY_FOUR_KILOBYTES * 0.8
 let nativeAsyncGzipDisabled = false
-
-const isNativeAsyncGzipReadError = (error: unknown): boolean => {
-    if (!error || typeof error !== 'object') {
-        return false
-    }
-
-    const name = 'name' in error ? String(error.name) : ''
-
-    return name === 'NotReadableError'
-}
 
 type EncodedBody = {
     contentType: string
@@ -135,7 +125,10 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
 const preEncodeAsync = async (options: RequestWithEncodedBody): Promise<RequestWithEncodedBody> => {
     const jsonData = jsonStringify(options.data)
     const compressedBlob = await gzipCompress(jsonData, Config.DEBUG, { rethrow: true })
-    const body = await compressedBlob!.arrayBuffer()
+    if (!compressedBlob) {
+        return options
+    }
+    const body = await compressedBlob.arrayBuffer()
 
     return {
         ...options,
