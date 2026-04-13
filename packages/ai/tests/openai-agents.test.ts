@@ -344,6 +344,81 @@ describe('PostHogTracingProcessor', () => {
     })
   })
 
+  describe('input role normalization', () => {
+    it('adds role=assistant to function_call items in generation input', async () => {
+      const span = createMockSpan({
+        spanData: {
+          type: 'generation',
+          model: 'gpt-4o',
+          input: [
+            { role: 'user', content: 'What is the weather?', type: 'message' },
+            { type: 'function_call', name: 'get_weather', arguments: '{"city":"Tokyo"}', callId: 'call_1' },
+            { type: 'function_call_result', name: 'get_weather', output: { text: 'Sunny' }, callId: 'call_1' },
+          ],
+        },
+      })
+
+      await processor.onSpanStart(span as any)
+      await processor.onSpanEnd(span as any)
+
+      const call = mockClient.capture.mock.calls[0][0]
+      const input = call.properties.$ai_input
+
+      expect(input[0].role).toBe('user')
+      expect(input[1].role).toBe('assistant')
+      expect(input[1].type).toBe('function_call')
+      expect(input[2].role).toBe('tool')
+      expect(input[2].type).toBe('function_call_result')
+    })
+
+    it('adds role=assistant to function_call items in response span input', async () => {
+      const span = createMockSpan({
+        spanData: {
+          type: 'response',
+          response_id: 'resp_123',
+          _input: [
+            { role: 'user', content: 'Hello', type: 'message' },
+            { type: 'function_call', name: 'search', arguments: '{}', callId: 'call_2' },
+            { type: 'function_call_result', name: 'search', output: { text: 'results' }, callId: 'call_2' },
+          ],
+          _response: { id: 'resp_123', model: 'gpt-4o' },
+        },
+      })
+
+      await processor.onSpanStart(span as any)
+      await processor.onSpanEnd(span as any)
+
+      const call = mockClient.capture.mock.calls[0][0]
+      const input = call.properties.$ai_input
+
+      expect(input[0].role).toBe('user')
+      expect(input[1].role).toBe('assistant')
+      expect(input[2].role).toBe('tool')
+    })
+
+    it('does not override existing role fields', async () => {
+      const span = createMockSpan({
+        spanData: {
+          type: 'generation',
+          model: 'gpt-4o',
+          input: [
+            { role: 'system', content: 'You are helpful', type: 'message' },
+            { role: 'user', content: 'Hi', type: 'message' },
+          ],
+        },
+      })
+
+      await processor.onSpanStart(span as any)
+      await processor.onSpanEnd(span as any)
+
+      const call = mockClient.capture.mock.calls[0][0]
+      const input = call.properties.$ai_input
+
+      expect(input[0].role).toBe('system')
+      expect(input[1].role).toBe('user')
+    })
+  })
+
   describe('function spans', () => {
     it('maps FunctionSpanData to $ai_span event with type=tool', async () => {
       const span = createMockSpan({

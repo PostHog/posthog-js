@@ -18,6 +18,28 @@ import type {
   MCPListToolsSpanData,
 } from '@openai/agents-core'
 
+/**
+ * Normalize OpenAI Responses API input items to include a `role` field.
+ * Items like `function_call` and `function_call_result` don't have a role,
+ * causing PostHog's trace viewer to default them to "user".
+ */
+function normalizeInputRoles(input: unknown): unknown {
+  if (!Array.isArray(input)) {
+    return input
+  }
+  return input.map((item) => {
+    if (item && typeof item === 'object' && !('role' in item) && 'type' in item) {
+      if (item.type === 'function_call') {
+        return { ...item, role: 'assistant' }
+      }
+      if (item.type === 'function_call_result') {
+        return { ...item, role: 'tool' }
+      }
+    }
+    return item
+  })
+}
+
 function ensureSerializable(obj: unknown): unknown {
   if (obj === null || obj === undefined) {
     return obj
@@ -417,7 +439,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
       ...this._baseProperties(traceId, spanId, parentId, latency, groupId, errorProperties),
       $ai_model: spanData.model,
       $ai_model_parameters: Object.keys(modelParams).length > 0 ? modelParams : null,
-      $ai_input: this._withPrivacyMode(ensureSerializable(spanData.input)),
+      $ai_input: this._withPrivacyMode(ensureSerializable(normalizeInputRoles(spanData.input))),
       $ai_output_choices: this._withPrivacyMode(ensureSerializable(spanData.output)),
       $ai_input_tokens: inputTokens,
       $ai_output_tokens: outputTokens,
@@ -476,7 +498,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
       ...this._baseProperties(traceId, spanId, parentId, latency, groupId, errorProperties),
       $ai_model: model,
       $ai_response_id: responseId,
-      $ai_input: this._withPrivacyMode(ensureSerializable((spanData as any)._input)),
+      $ai_input: this._withPrivacyMode(ensureSerializable(normalizeInputRoles((spanData as any)._input))),
       $ai_input_tokens: inputTokens,
       $ai_output_tokens: outputTokens,
       $ai_total_tokens: inputTokens + outputTokens,
