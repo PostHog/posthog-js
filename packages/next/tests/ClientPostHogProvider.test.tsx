@@ -1,14 +1,7 @@
-import React from 'react'
+import React, { useContext } from 'react'
 import { render, screen } from '@testing-library/react'
 import { ClientPostHogProvider } from '../src/client/ClientPostHogProvider'
-
-const mockPostHogProvider = jest.fn(({ children }: { children: React.ReactNode }) => (
-    <div data-testid="posthog-provider">{children}</div>
-))
-jest.mock('posthog-js/react', () => ({
-    PostHogProvider: (props: any) => mockPostHogProvider(props),
-}))
-
+import { PostHogContext, useFeatureFlagEnabled } from 'posthog-js/react'
 import posthogJs from 'posthog-js'
 
 jest.mock('posthog-js', () => ({
@@ -16,14 +9,22 @@ jest.mock('posthog-js', () => ({
     default: {
         __loaded: false,
         init: jest.fn(),
+        isFeatureEnabled: jest.fn(() => undefined),
+        onFeatureFlags: jest.fn(() => () => {}),
     },
 }))
 
 const mockPostHogJs = posthogJs as jest.Mocked<typeof posthogJs> & { __loaded: boolean }
 
+/** Helper component that exposes the PostHogContext value for assertions. */
+function ContextReader({ onContext }: { onContext: (ctx: { client: any; bootstrap?: any }) => void }) {
+    const ctx = useContext(PostHogContext)
+    onContext(ctx)
+    return null
+}
+
 describe('ClientPostHogProvider', () => {
     beforeEach(() => {
-        mockPostHogProvider.mockClear()
         ;(mockPostHogJs.init as jest.Mock).mockClear()
         mockPostHogJs.__loaded = false
     })
@@ -47,13 +48,14 @@ describe('ClientPostHogProvider', () => {
         expect(mockPostHogJs.init).toHaveBeenCalledWith('phc_test123', options)
     })
 
-    it('passes client to upstream provider', () => {
+    it('provides posthog client via context', () => {
+        let contextValue: any
         render(
             <ClientPostHogProvider apiKey="phc_test123">
-                <div>Child</div>
+                <ContextReader onContext={(ctx) => (contextValue = ctx)} />
             </ClientPostHogProvider>
         )
-        expect(mockPostHogProvider).toHaveBeenCalledWith(expect.objectContaining({ client: mockPostHogJs }))
+        expect(contextValue.client).toBe(mockPostHogJs)
     })
 
     it('merges bootstrap into options when provided', () => {
@@ -112,6 +114,30 @@ describe('ClientPostHogProvider', () => {
         )
     })
 
+    it('provides bootstrap via context for SSR hook access', () => {
+        const bootstrap = {
+            featureFlags: { 'flag-a': true, 'flag-b': 'variant-1' },
+            featureFlagPayloads: { 'flag-b': { key: 'value' } },
+        }
+        let contextValue: any
+        render(
+            <ClientPostHogProvider apiKey="phc_test123" bootstrap={bootstrap}>
+                <ContextReader onContext={(ctx) => (contextValue = ctx)} />
+            </ClientPostHogProvider>
+        )
+        expect(contextValue.bootstrap).toEqual(bootstrap)
+    })
+
+    it('context bootstrap is undefined when no bootstrap prop provided', () => {
+        let contextValue: any
+        render(
+            <ClientPostHogProvider apiKey="phc_test123">
+                <ContextReader onContext={(ctx) => (contextValue = ctx)} />
+            </ClientPostHogProvider>
+        )
+        expect(contextValue.bootstrap).toBeUndefined()
+    })
+
     it('does not call init when already loaded', () => {
         mockPostHogJs.__loaded = true
         render(
@@ -120,6 +146,43 @@ describe('ClientPostHogProvider', () => {
             </ClientPostHogProvider>
         )
         expect(mockPostHogJs.init).not.toHaveBeenCalled()
+    })
+
+    it('useFeatureFlagEnabled returns bootstrapped value before client loads flags', () => {
+        // Simulates SSR: posthog-js has no loaded flags, but bootstrap is provided.
+        // The hook should fall back to the bootstrap value from context.
+        const bootstrap = {
+            featureFlags: { 'my-flag': true, 'my-experiment': 'variant-a' },
+        }
+        let flagValue: boolean | undefined
+        function FlagReader() {
+            flagValue = useFeatureFlagEnabled('my-flag')
+            return <div data-testid="flag">{String(flagValue)}</div>
+        }
+        render(
+            <ClientPostHogProvider apiKey="phc_test123" bootstrap={bootstrap}>
+                <FlagReader />
+            </ClientPostHogProvider>
+        )
+        expect(flagValue).toBe(true)
+        expect(screen.getByTestId('flag')).toHaveTextContent('true')
+    })
+
+    it('useFeatureFlagEnabled returns undefined for unknown flag even with bootstrap', () => {
+        const bootstrap = {
+            featureFlags: { 'my-flag': true },
+        }
+        let flagValue: boolean | undefined
+        function FlagReader() {
+            flagValue = useFeatureFlagEnabled('unknown-flag')
+            return null
+        }
+        render(
+            <ClientPostHogProvider apiKey="phc_test123" bootstrap={bootstrap}>
+                <FlagReader />
+            </ClientPostHogProvider>
+        )
+        expect(flagValue).toBeUndefined()
     })
 
     it('renders children and warns when apiKey is empty', () => {
