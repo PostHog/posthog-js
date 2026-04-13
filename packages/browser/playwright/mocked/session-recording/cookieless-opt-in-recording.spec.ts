@@ -40,11 +40,13 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
             opt_out_capturing_persistence_type: 'localStorage',
         }
 
+        // No recorder or snapshot call initially because we're opted out
         void expect(page.waitForResponse('**/*recorder.js*', { timeout: 250 })).rejects.toThrowError('Timeout')
         void expect(page.waitForResponse('**/ses/*', { timeout: 250 })).rejects.toThrowError('Timeout')
 
         await startWith(customerConfig, page, context)
 
+        // Cookieless pageview fires immediately, but no other events
         await page.locator('[data-cy-input]').type('hello posthog!')
         await page.waitForTimeout(250)
         await page.expectCapturedEventsToBe(['$pageview'])
@@ -144,6 +146,7 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
         await page.expectCapturedEventsToBe(['$pageview', '$opt_in'])
         await page.resetCapturedEvents()
 
+        // Verify recording works after opt-in
         await page.locator('[data-cy-input]').type('hello posthog!')
         await pollUntilEventCaptured(page, '$snapshot')
         await assertThatRecordingStarted(page)
