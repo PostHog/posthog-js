@@ -166,8 +166,8 @@ export class PostHogTracingProcessor implements TracingProcessor {
       }
 
       const finalProperties = {
-        ...properties,
         ...this._properties,
+        ...properties,
       }
 
       const eventMessage: EventMessage = {
@@ -671,6 +671,11 @@ export class PostHogTracingProcessor implements TracingProcessor {
       // Text input for TTS
       if (speech.input) {
         properties.$ai_input = this._withPrivacyMode(speech.input)
+      }
+    } else if (spanData.type === 'speech_group') {
+      const speechGroup = spanData as SpeechGroupSpanData
+      if (speechGroup.input) {
+        properties.$ai_input = this._withPrivacyMode(speechGroup.input)
       }
     }
 

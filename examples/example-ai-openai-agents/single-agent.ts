@@ -29,7 +29,8 @@ const calculate = tool({
     expression: z.string().describe('A math expression to evaluate'),
   }),
   execute: async ({ expression }) => {
-    return `Result: ${eval(expression)}`
+    // Stub: replace with a real math library (e.g. mathjs) in production
+    return `Result of "${expression}": (math evaluation not implemented in this example)`
   },
 })
 

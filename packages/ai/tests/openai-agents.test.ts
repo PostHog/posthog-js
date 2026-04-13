@@ -769,82 +769,24 @@ describe('PostHogTracingProcessor', () => {
       expect(call.properties.$ai_error).toBe('Rate limit exceeded')
     })
 
-    it('categorizes ModelBehaviorError', async () => {
+    it.each([
+      ['ModelBehaviorError: Invalid JSON output', 'model_behavior_error'],
+      ['UserError: Tool failed', 'user_error'],
+      ['InputGuardrailTripwireTriggered: Content blocked', 'input_guardrail_triggered'],
+      ['OutputGuardrailTripwireTriggered: Response blocked', 'output_guardrail_triggered'],
+      ['MaxTurnsExceeded: Agent exceeded maximum turns', 'max_turns_exceeded'],
+      ['Some random error occurred', 'unknown'],
+    ])('categorizes "%s" as %s', async (message, expectedType) => {
       const span = createMockSpan({
         spanData: { type: 'generation', model: 'gpt-4o' },
-        error: { message: 'ModelBehaviorError: Invalid JSON output' },
+        error: { message },
       })
 
       await processor.onSpanStart(span as any)
       await processor.onSpanEnd(span as any)
 
       const call = mockClient.capture.mock.calls[0][0]
-      expect(call.properties.$ai_error_type).toBe('model_behavior_error')
-    })
-
-    it('categorizes UserError', async () => {
-      const span = createMockSpan({
-        spanData: { type: 'generation', model: 'gpt-4o' },
-        error: { message: 'UserError: Tool failed' },
-      })
-
-      await processor.onSpanStart(span as any)
-      await processor.onSpanEnd(span as any)
-
-      const call = mockClient.capture.mock.calls[0][0]
-      expect(call.properties.$ai_error_type).toBe('user_error')
-    })
-
-    it('categorizes InputGuardrailTripwireTriggered', async () => {
-      const span = createMockSpan({
-        spanData: { type: 'generation', model: 'gpt-4o' },
-        error: { message: 'InputGuardrailTripwireTriggered: Content blocked' },
-      })
-
-      await processor.onSpanStart(span as any)
-      await processor.onSpanEnd(span as any)
-
-      const call = mockClient.capture.mock.calls[0][0]
-      expect(call.properties.$ai_error_type).toBe('input_guardrail_triggered')
-    })
-
-    it('categorizes OutputGuardrailTripwireTriggered', async () => {
-      const span = createMockSpan({
-        spanData: { type: 'generation', model: 'gpt-4o' },
-        error: { message: 'OutputGuardrailTripwireTriggered: Response blocked' },
-      })
-
-      await processor.onSpanStart(span as any)
-      await processor.onSpanEnd(span as any)
-
-      const call = mockClient.capture.mock.calls[0][0]
-      expect(call.properties.$ai_error_type).toBe('output_guardrail_triggered')
-    })
-
-    it('categorizes MaxTurnsExceeded', async () => {
-      const span = createMockSpan({
-        spanData: { type: 'generation', model: 'gpt-4o' },
-        error: { message: 'MaxTurnsExceeded: Agent exceeded maximum turns' },
-      })
-
-      await processor.onSpanStart(span as any)
-      await processor.onSpanEnd(span as any)
-
-      const call = mockClient.capture.mock.calls[0][0]
-      expect(call.properties.$ai_error_type).toBe('max_turns_exceeded')
-    })
-
-    it('categorizes unknown errors', async () => {
-      const span = createMockSpan({
-        spanData: { type: 'generation', model: 'gpt-4o' },
-        error: { message: 'Some random error occurred' },
-      })
-
-      await processor.onSpanStart(span as any)
-      await processor.onSpanEnd(span as any)
-
-      const call = mockClient.capture.mock.calls[0][0]
-      expect(call.properties.$ai_error_type).toBe('unknown')
+      expect(call.properties.$ai_error_type).toBe(expectedType)
     })
   })
 
@@ -994,12 +936,11 @@ describe('instrument()', () => {
     mockAddTraceProcessor.mockClear()
   })
 
-  it('creates processor and registers it', () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { instrument } = require('../src/openai-agents')
+  it('creates processor and registers it', async () => {
+    const { instrument } = await import('../src/openai-agents')
     const mockClient = createMockClient()
 
-    const processor = instrument({
+    const processor = await instrument({
       client: mockClient,
       distinctId: 'test-user',
     })
@@ -1008,12 +949,11 @@ describe('instrument()', () => {
     expect(mockAddTraceProcessor).toHaveBeenCalledWith(processor)
   })
 
-  it('passes privacy mode to processor', () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { instrument } = require('../src/openai-agents')
+  it('passes privacy mode to processor', async () => {
+    const { instrument } = await import('../src/openai-agents')
     const mockClient = createMockClient()
 
-    const processor = instrument({
+    const processor = await instrument({
       client: mockClient,
       privacyMode: true,
     })
@@ -1021,12 +961,11 @@ describe('instrument()', () => {
     expect((processor as any)._privacyMode).toBe(true)
   })
 
-  it('passes groups and properties to processor', () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { instrument } = require('../src/openai-agents')
+  it('passes groups and properties to processor', async () => {
+    const { instrument } = await import('../src/openai-agents')
     const mockClient = createMockClient()
 
-    const processor = instrument({
+    const processor = await instrument({
       client: mockClient,
       groups: { company: 'acme' },
       properties: { env: 'test' },

@@ -46,10 +46,8 @@ export interface InstrumentOptions {
  * const result = await run(agent, 'Hello!')
  * ```
  */
-export function instrument(options: InstrumentOptions): PostHogTracingProcessor {
-  // Dynamic import to avoid requiring @openai/agents-core at module load time
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { addTraceProcessor } = require('@openai/agents-core')
+export async function instrument(options: InstrumentOptions): Promise<PostHogTracingProcessor> {
+  const { addTraceProcessor } = await import('@openai/agents-core')
 
   const processor = new PostHogTracingProcessor({
     client: options.client,
