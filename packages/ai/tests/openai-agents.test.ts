@@ -855,7 +855,10 @@ describe('PostHogTracingProcessor', () => {
       })
 
       const now = Date.now()
-      jest.spyOn(Date, 'now').mockReturnValueOnce(now).mockReturnValueOnce(now + 1500)
+      jest
+        .spyOn(Date, 'now')
+        .mockReturnValueOnce(now)
+        .mockReturnValueOnce(now + 1500)
 
       await processor.onSpanStart(span as any)
       await processor.onSpanEnd(span as any)
@@ -992,6 +995,7 @@ describe('instrument()', () => {
   })
 
   it('creates processor and registers it', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { instrument } = require('../src/openai-agents')
     const mockClient = createMockClient()
 
@@ -1005,6 +1009,7 @@ describe('instrument()', () => {
   })
 
   it('passes privacy mode to processor', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { instrument } = require('../src/openai-agents')
     const mockClient = createMockClient()
 
@@ -1017,6 +1022,7 @@ describe('instrument()', () => {
   })
 
   it('passes groups and properties to processor', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { instrument } = require('../src/openai-agents')
     const mockClient = createMockClient()
 

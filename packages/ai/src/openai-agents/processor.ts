@@ -422,10 +422,8 @@ export class PostHogTracingProcessor implements TracingProcessor {
     errorProperties: Record<string, any>
   ): void {
     const usage = spanData.usage ?? {}
-    const inputTokens =
-      (usage.input_tokens as number) || (usage as any).prompt_tokens || 0
-    const outputTokens =
-      (usage.output_tokens as number) || (usage as any).completion_tokens || 0
+    const inputTokens = (usage.input_tokens as number) || (usage as any).prompt_tokens || 0
+    const outputTokens = (usage.output_tokens as number) || (usage as any).completion_tokens || 0
 
     const modelConfig = spanData.model_config ?? {}
     const modelParams: Record<string, any> = {}
