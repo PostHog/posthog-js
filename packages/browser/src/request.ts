@@ -29,6 +29,10 @@ const SIXTY_FOUR_KILOBYTES = 64 * 1024
 const KEEP_ALIVE_THRESHOLD = SIXTY_FOUR_KILOBYTES * 0.8
 let nativeAsyncGzipDisabled = false
 
+export const __resetNativeAsyncGzipDisabledForTests = (): void => {
+    nativeAsyncGzipDisabled = false
+}
+
 type EncodedBody = {
     contentType: string
     body: string | BlobPart | ArrayBuffer
@@ -304,10 +308,6 @@ export const request = (_options: RequestWithOptions) => {
     // Clone the options so we don't modify the original object
     const options: RequestWithEncodedBody = { ..._options }
     options.timeout = options.timeout || 60000
-
-    if (nativeAsyncGzipDisabled && options.compression === Compression.GZipJS) {
-        options.compression = undefined
-    }
 
     options.url = extendURLParams(options.url, {
         _: new Date().getTime().toString(),
