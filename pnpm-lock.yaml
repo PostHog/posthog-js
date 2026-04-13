@@ -218,6 +218,9 @@ importers:
       '@babel/preset-typescript':
         specifier: 'catalog:'
         version: 7.28.5(@babel/core@7.28.5)
+      '@openai/agents':
+        specifier: ^0.8.0
+        version: 0.8.3(@cfworker/json-schema@4.1.1)(ws@8.19.0)(zod@4.1.13)
       '@openai/agents-core':
         specifier: ^0.8.0
         version: 0.8.3(@cfworker/json-schema@4.1.1)(ws@8.19.0)(zod@4.1.13)
@@ -3495,6 +3498,21 @@ packages:
       zod:
         optional: true
 
+  '@openai/agents-openai@0.8.3':
+    resolution: {integrity: sha512-n5bsRfVDINupkeSh/E/lRoGWUi9xVSRpf6muRjnEckIO0pmCG3NzKO+FQVhiyFA3c8i2vrn28SXF/ZdGcG4+vQ==}
+    peerDependencies:
+      zod: ^4.0.0
+
+  '@openai/agents-realtime@0.8.3':
+    resolution: {integrity: sha512-no5AdAfYM5V/1u32OEQpP+VOJP/Y/JyTCVOvcgAdSKIV43ZG82f72pxbB0B2aFRdLZwC7C6sDgCJz6pbp+TjRg==}
+    peerDependencies:
+      zod: ^4.0.0
+
+  '@openai/agents@0.8.3':
+    resolution: {integrity: sha512-VmUywYNVaOuBOOv5hdH6tj3UjU3ZOkvM5WyRyEgRXEVkYbISkZuVWlnzEtiZkQ3lWjp0M8GGtKfSq2Dbr5DaQQ==}
+    peerDependencies:
+      zod: ^4.0.0
+
   '@opentelemetry/api-logs@0.200.0':
     resolution: {integrity: sha512-IKJBQxh91qJ+3ssRly5hYEJ8NDHu9oY/B1PXVSCWf7zytmYO9RNLB0Ox9XQ/fJ8m6gY6Q6NtBWlmXfaXt5Uc4Q==}
     engines: {node: '>=8.0.0'}
@@ -4883,6 +4901,9 @@ packages:
 
   '@types/web@0.0.222':
     resolution: {integrity: sha512-vBvVv2L5ArWQenebQiUCtZNpL4mguLCbrZ8aqzVCundYRvwZZzlqBP7EEpoUszLnztmzWmBxQ4+4nHAMFlfYlA==}
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@types/yargs-parser@21.0.3':
     resolution: {integrity: sha512-I4q9QU9MQv4oEOz4tAHJtNz1cwuLxn2F3xcc2iV5WdqLPpUnj30aUuxt1mAxYTG+oe8CZMV/+6rU4S4gRDzqtQ==}
@@ -17525,6 +17546,45 @@ snapshots:
       - supports-color
       - ws
 
+  '@openai/agents-openai@0.8.3(@cfworker/json-schema@4.1.1)(ws@8.19.0)(zod@4.1.13)':
+    dependencies:
+      '@openai/agents-core': 0.8.3(@cfworker/json-schema@4.1.1)(ws@8.19.0)(zod@4.1.13)
+      debug: 4.4.3
+      openai: 6.33.0(ws@8.19.0)(zod@4.1.13)
+      zod: 4.1.13
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - supports-color
+      - ws
+
+  '@openai/agents-realtime@0.8.3(@cfworker/json-schema@4.1.1)(zod@4.1.13)':
+    dependencies:
+      '@openai/agents-core': 0.8.3(@cfworker/json-schema@4.1.1)(ws@8.19.0)(zod@4.1.13)
+      '@types/ws': 8.18.1
+      debug: 4.4.3
+      ws: 8.19.0
+      zod: 4.1.13
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+
+  '@openai/agents@0.8.3(@cfworker/json-schema@4.1.1)(ws@8.19.0)(zod@4.1.13)':
+    dependencies:
+      '@openai/agents-core': 0.8.3(@cfworker/json-schema@4.1.1)(ws@8.19.0)(zod@4.1.13)
+      '@openai/agents-openai': 0.8.3(@cfworker/json-schema@4.1.1)(ws@8.19.0)(zod@4.1.13)
+      '@openai/agents-realtime': 0.8.3(@cfworker/json-schema@4.1.1)(zod@4.1.13)
+      debug: 4.4.3
+      openai: 6.33.0(ws@8.19.0)(zod@4.1.13)
+      zod: 4.1.13
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+      - ws
+
   '@opentelemetry/api-logs@0.200.0':
     dependencies:
       '@opentelemetry/api': 1.9.0
@@ -19050,6 +19110,10 @@ snapshots:
   '@types/uuid@10.0.0': {}
 
   '@types/web@0.0.222': {}
+
+  '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 22.19.1
 
   '@types/yargs-parser@21.0.3': {}
 

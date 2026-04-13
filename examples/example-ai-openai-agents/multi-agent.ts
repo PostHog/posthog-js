@@ -9,8 +9,6 @@ const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
   host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
 })
 
-instrument({ client: phClient, distinctId: 'example-user' })
-
 const getWeather = tool({
   name: 'get_weather',
   description: 'Get current weather for a city',
@@ -62,6 +60,8 @@ const triageAgent = new Agent({
 })
 
 async function main() {
+  await instrument({ client: phClient, distinctId: 'example-user' })
+
   const result = await run(triageAgent, "What's the weather in Tokyo?")
   console.log(result.finalOutput)
   await phClient.shutdown()

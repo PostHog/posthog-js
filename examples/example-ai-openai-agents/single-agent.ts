@@ -9,8 +9,6 @@ const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
   host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
 })
 
-instrument({ client: phClient, distinctId: 'example-user' })
-
 const getWeather = tool({
   name: 'get_weather',
   description: 'Get current weather for a city',
@@ -42,6 +40,8 @@ const agent = new Agent({
 })
 
 async function main() {
+  await instrument({ client: phClient, distinctId: 'example-user' })
+
   const result = await run(agent, "What's 15% of 280?")
   console.log(result.finalOutput)
   await phClient.shutdown()

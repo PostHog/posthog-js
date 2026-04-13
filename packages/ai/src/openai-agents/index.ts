@@ -29,11 +29,11 @@ export interface InstrumentOptions {
  *
  * const phClient = new PostHog('<API_KEY>')
  *
- * // Simple setup
- * instrument({ client: phClient, distinctId: 'user@example.com' })
+ * // Simple setup — await before running agents
+ * await instrument({ client: phClient, distinctId: 'user@example.com' })
  *
  * // With dynamic distinct ID
- * instrument({
+ * await instrument({
  *   client: phClient,
  *   distinctId: (trace) => trace.metadata?.userId,
  *   privacyMode: true,
