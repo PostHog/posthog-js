@@ -7,6 +7,12 @@ export function isGzipSupported(): boolean {
 }
 
 export type GzipCompressOptions = {
+  /**
+   * By default this helper swallows compression errors and returns null.
+   * Some browsers, notably Safari 16, can throw NotReadableError from the
+   * native CompressionStream path. Callers can opt into rethrowing so they
+   * can detect that case and change future compression behavior if needed.
+   */
   rethrow?: boolean
 }
 
