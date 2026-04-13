@@ -2886,6 +2886,127 @@ describe('parseFlagsResponse', () => {
             $feature_flag_request_id: 'test-request-id-123',
         })
     })
+
+    describe('partialResponse option', () => {
+        it('merges partial response with existing flags instead of overwriting', () => {
+            const existingFlags = {
+                'bootstrapped-flag': true,
+                'session-recording': true,
+            }
+            const existingPayloads = {
+                'bootstrapped-flag': 'bootstrap-payload',
+            }
+            const existingDetails = {
+                'bootstrapped-flag': {
+                    key: 'bootstrapped-flag',
+                    enabled: true,
+                    variant: undefined,
+                    reason: { code: 'condition_match', condition_index: 0, description: undefined },
+                    metadata: { id: 10, version: 1, payload: 'bootstrap-payload', description: undefined },
+                },
+            }
+
+            const flagsResponse = {
+                flags: {
+                    'survey-flag': {
+                        key: 'survey-flag',
+                        enabled: true,
+                        variant: undefined,
+                        reason: { code: 'condition_match', condition_index: 0, description: undefined },
+                        metadata: { id: 1, version: 1, payload: undefined, description: undefined },
+                    },
+                },
+            }
+
+            parseFlagsResponse(flagsResponse, persistence, existingFlags, existingPayloads, existingDetails, {
+                partialResponse: true,
+            })
+
+            expect(persistence.register).toHaveBeenCalledWith({
+                $active_feature_flags: ['bootstrapped-flag', 'session-recording', 'survey-flag'],
+                $enabled_feature_flags: {
+                    'bootstrapped-flag': true,
+                    'session-recording': true,
+                    'survey-flag': true,
+                },
+                $feature_flag_payloads: {
+                    'bootstrapped-flag': 'bootstrap-payload',
+                },
+                $feature_flag_details: {
+                    'bootstrapped-flag': existingDetails['bootstrapped-flag'],
+                    'survey-flag': flagsResponse.flags['survey-flag'],
+                },
+            })
+        })
+
+        it('partial response overwrites values for overlapping flag keys', () => {
+            const existingFlags = {
+                'survey-flag': false,
+                'other-flag': true,
+            }
+
+            const flagsResponse = {
+                flags: {
+                    'survey-flag': {
+                        key: 'survey-flag',
+                        enabled: true,
+                        variant: undefined,
+                        reason: { code: 'condition_match', condition_index: 0, description: undefined },
+                        metadata: { id: 1, version: 2, payload: undefined, description: undefined },
+                    },
+                },
+            }
+
+            parseFlagsResponse(
+                flagsResponse,
+                persistence,
+                existingFlags,
+                {},
+                {},
+                {
+                    partialResponse: true,
+                }
+            )
+
+            expect(persistence.register).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    $enabled_feature_flags: {
+                        'survey-flag': true,
+                        'other-flag': true,
+                    },
+                })
+            )
+        })
+
+        it('without partialResponse, response overwrites existing flags entirely', () => {
+            const existingFlags = {
+                'bootstrapped-flag': true,
+                'session-recording': true,
+            }
+
+            const flagsResponse = {
+                flags: {
+                    'survey-flag': {
+                        key: 'survey-flag',
+                        enabled: true,
+                        variant: undefined,
+                        reason: { code: 'condition_match', condition_index: 0, description: undefined },
+                        metadata: { id: 1, version: 1, payload: undefined, description: undefined },
+                    },
+                },
+            }
+
+            parseFlagsResponse(flagsResponse, persistence, existingFlags, {}, {})
+
+            expect(persistence.register).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    $enabled_feature_flags: {
+                        'survey-flag': true,
+                    },
+                })
+            )
+        })
+    })
 })
 
 describe('filterActiveFeatureFlags', () => {
