@@ -1,5 +1,19 @@
 # posthog-js
 
+## 1.368.0
+
+### Minor Changes
+
+- [#3345](https://github.com/PostHog/posthog-js/pull/3345) [`3fcf5c4`](https://github.com/PostHog/posthog-js/commit/3fcf5c449b3fe10ce187d40ea03425de9f94e85f) Thanks [@jonmcwest](https://github.com/jonmcwest)! - Add posthog.captureLog() API for sending structured log entries to PostHog logs
+  (2026-04-13)
+
+### Patch Changes
+
+- [#3373](https://github.com/PostHog/posthog-js/pull/3373) [`f5fe0a8`](https://github.com/PostHog/posthog-js/commit/f5fe0a8b11457a33c02029162a43e4eb2d3cb2d9) Thanks [@ksvat](https://github.com/ksvat)! - bump rrweb version
+  (2026-04-13)
+- Updated dependencies [[`3fcf5c4`](https://github.com/PostHog/posthog-js/commit/3fcf5c449b3fe10ce187d40ea03425de9f94e85f)]:
+    - @posthog/types@1.368.0
+
 ## 1.367.0
 
 ### Minor Changes
