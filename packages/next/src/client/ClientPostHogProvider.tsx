@@ -47,9 +47,5 @@ export function ClientPostHogProvider({ apiKey, options, bootstrap, children }: 
         posthogJs.init(apiKey, mergedOptions)
     }
 
-    return (
-        <PostHogContext.Provider value={{ client: posthogJs, bootstrap }}>
-            {children}
-        </PostHogContext.Provider>
-    )
+    return <PostHogContext.Provider value={{ client: posthogJs, bootstrap }}>{children}</PostHogContext.Provider>
 }
