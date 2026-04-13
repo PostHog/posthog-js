@@ -29,11 +29,7 @@ export type GzipCompressOptions = {
 /**
  * Gzip a string using Compression Streams API if it's available
  */
-export async function gzipCompress(
-  input: string,
-  isDebug = true,
-  options?: GzipCompressOptions
-): Promise<Blob | null> {
+export async function gzipCompress(input: string, isDebug = true, options?: GzipCompressOptions): Promise<Blob | null> {
   try {
     // Turn the string into a stream using a Blob, and then compress it
     const dataStream = new Blob([input], {

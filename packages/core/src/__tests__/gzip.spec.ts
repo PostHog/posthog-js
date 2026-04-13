@@ -51,14 +51,12 @@ describe('gzip', () => {
       expect(isNativeAsyncGzipReadError(null)).toBe(false)
     })
   })
-
   describe('gzipCompress', () => {
     it('rethrows errors when requested', async () => {
       const CompressionStream = globalThis.CompressionStream
       delete (globalThis as any).CompressionStream
 
       await expect(gzipCompress(RANDOM_TEST_INPUT, false, { rethrow: true })).rejects.toThrow()
-
       ;(globalThis as any).CompressionStream = CompressionStream
     })
 
