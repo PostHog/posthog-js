@@ -26,6 +26,8 @@ function ContextReader({ onContext }: { onContext: (ctx: { client: any; bootstra
 describe('ClientPostHogProvider', () => {
     beforeEach(() => {
         ;(mockPostHogJs.init as jest.Mock).mockClear()
+        ;(mockPostHogJs.isFeatureEnabled as jest.Mock).mockClear()
+        ;(mockPostHogJs.onFeatureFlags as jest.Mock).mockClear()
         mockPostHogJs.__loaded = false
     })
 
