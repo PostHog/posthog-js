@@ -17,6 +17,8 @@ import type {
   SpeechGroupSpanData,
   MCPListToolsSpanData,
 } from '@openai/agents-core'
+import { withPrivacyMode } from '../utils'
+import { version } from '../../package.json'
 
 /**
  * Normalize OpenAI Responses API input items to include a `role` field.
@@ -135,10 +137,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
   }
 
   private _withPrivacyMode(value: unknown): unknown {
-    if (this._privacyMode || (this._client as any).privacy_mode) {
-      return null
-    }
-    return value
+    return withPrivacyMode(this._client, this._privacyMode, value)
   }
 
   private _evictStaleEntries(): void {
@@ -192,6 +191,8 @@ export class PostHogTracingProcessor implements TracingProcessor {
     errorProperties: Record<string, any>
   ): Record<string, any> {
     const properties: Record<string, any> = {
+      $ai_lib: 'posthog-ai',
+      $ai_lib_version: version,
       $ai_trace_id: traceId,
       $ai_span_id: spanId,
       $ai_parent_id: parentId,
@@ -274,6 +275,8 @@ export class PostHogTracingProcessor implements TracingProcessor {
       const latency = startTime != null ? Date.now() / 1000 - startTime : undefined
 
       const properties: Record<string, any> = {
+        $ai_lib: 'posthog-ai',
+        $ai_lib_version: version,
         $ai_trace_id: traceId,
         $ai_trace_name: traceName,
         $ai_provider: 'openai',
