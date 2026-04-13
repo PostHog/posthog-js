@@ -31,6 +31,8 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
         page,
         context,
     }) => {
+        // NOTE: cookieless_mode: 'on_reject' already behaves like opt_out_capturing_by_default,
+        // so using both is redundant, but we test with both to match the customer's exact setup
         const customerConfig: Partial<PostHogConfig> = {
             cross_subdomain_cookie: false,
             capture_pageview: true,
@@ -46,7 +48,7 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
 
         await startWith(customerConfig, page, context)
 
-        // Cookieless pageview fires immediately, but no other events
+        // Cookieless pageview fires at init, but no other events
         await page.locator('[data-cy-input]').type('hello posthog!')
         await page.waitForTimeout(250)
         await page.expectCapturedEventsToBe(['$pageview'])
@@ -62,6 +64,7 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
             },
         })
 
+        // Verify opt-in event is captured (no second pageview since one was already sent cookieless)
         await page.expectCapturedEventsToBe(['$pageview', '$opt_in'])
 
         // Check localStorage to confirm opt-in is stored
