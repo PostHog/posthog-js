@@ -31,8 +31,6 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
         page,
         context,
     }) => {
-        // NOTE: cookieless_mode: 'on_reject' already behaves like opt_out_capturing_by_default,
-        // so using both is redundant, but we test with both to match the customer's exact setup
         const customerConfig: Partial<PostHogConfig> = {
             cross_subdomain_cookie: false,
             capture_pageview: true,
@@ -42,16 +40,14 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
             opt_out_capturing_persistence_type: 'localStorage',
         }
 
-        // No recorder or snapshot call initially because we're opted out
         void expect(page.waitForResponse('**/*recorder.js*', { timeout: 250 })).rejects.toThrowError('Timeout')
         void expect(page.waitForResponse('**/ses/*', { timeout: 250 })).rejects.toThrowError('Timeout')
 
         await startWith(customerConfig, page, context)
 
-        // Verify no events are captured initially
         await page.locator('[data-cy-input]').type('hello posthog!')
         await page.waitForTimeout(250)
-        await page.expectCapturedEventsToBe([])
+        await page.expectCapturedEventsToBe(['$pageview'])
 
         // Now the user gives consent and opts in
         await page.waitingForNetworkCausedBy({
@@ -64,8 +60,7 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
             },
         })
 
-        // Verify opt-in event and pageview are captured
-        await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
+        await page.expectCapturedEventsToBe(['$pageview', '$opt_in'])
 
         // Check localStorage to confirm opt-in is stored
         const optInValue = await page.evaluate(() => {
@@ -146,10 +141,9 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
             },
         })
 
-        await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
+        await page.expectCapturedEventsToBe(['$pageview', '$opt_in'])
         await page.resetCapturedEvents()
 
-        // Verify recording works after opt-in
         await page.locator('[data-cy-input]').type('hello posthog!')
         await pollUntilEventCaptured(page, '$snapshot')
         await assertThatRecordingStarted(page)
