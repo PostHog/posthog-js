@@ -8,6 +8,7 @@
 import type { PostHogConfig } from './posthog-config'
 import type { Properties, JsonType } from './common'
 import type { CaptureResult, CaptureOptions } from './capture'
+import type { CaptureLogOptions, Logger } from './capture-log'
 import type {
     FeatureFlagsCallback,
     EarlyAccessFeatureCallback,
@@ -99,6 +100,24 @@ export interface PostHog {
      * @returns The capture result
      */
     captureException(error: unknown, additionalProperties?: Properties): CaptureResult | undefined
+
+    /**
+     * Capture a log entry and send it to the PostHog logs endpoint.
+     *
+     * @param options - The log entry options (body, level, attributes, etc.)
+     */
+    captureLog(options: CaptureLogOptions): void
+
+    /**
+     * Logger with convenience methods for each severity level.
+     *
+     * @example
+     * ```js
+     * posthog.logger.info('checkout completed', { order_id: 'ord_789' })
+     * posthog.logger.error('payment failed', { error_code: 'E001' })
+     * ```
+     */
+    logger: Logger
 
     // ============================================================================
     // User Identification

@@ -3,6 +3,7 @@
  */
 
 import type { JsonType, Properties } from './common'
+import type { LogAttributes } from './capture-log'
 import type { BeforeSendFn, CaptureResult } from './capture'
 import type { RequestResponse } from './request'
 import type { CapturedNetworkRequest, NetworkRequest, SessionRecordingCanvasOptions } from './session-recording'
@@ -565,16 +566,62 @@ export interface SurveyConfig {
 }
 
 /**
- * Logs configuration options
+ * Options for the captureLog API and posthog.logger convenience methods.
  */
-export interface LogsConfig {
-    captureConsoleLogs?: boolean
+export interface LogCaptureOptions {
     /**
-     * The service name to use in OpenTelemetry resource attributes for logs.
+     * The service name for log records.
+     * Maps to the OTel resource attribute 'service.name'.
      *
-     * @default 'posthog-browser-logs'
+     * @default 'unknown_service'
      */
     serviceName?: string
+    /**
+     * The deployment environment for log records (e.g. 'production', 'staging').
+     * Maps to the OTel resource attribute 'deployment.environment'.
+     */
+    environment?: string
+    /**
+     * The service version for log records (e.g. '1.2.3').
+     * Maps to the OTel resource attribute 'service.version'.
+     */
+    serviceVersion?: string
+    /**
+     * Additional resource attributes applied to all log records.
+     * These describe the service/deployment, not individual log entries.
+     * Named fields (serviceName, environment, serviceVersion) are set first;
+     * resourceAttributes can override them.
+     *
+     * @example { 'host.name': 'web-01', 'cloud.region': 'us-east-1' }
+     */
+    resourceAttributes?: LogAttributes
+    /**
+     * Flush interval in milliseconds for batched log records.
+     *
+     * @default 3000
+     */
+    flushIntervalMs?: number
+    /**
+     * Maximum number of log records to buffer before forcing a flush.
+     *
+     * @default 100
+     */
+    maxBufferSize?: number
+    /**
+     * Maximum number of log records accepted per flush interval. Subsequent calls
+     * within the same window are dropped with a single warning, protecting
+     * against runaway loggers flooding the network.
+     *
+     * @default 1000
+     */
+    maxLogsPerInterval?: number
+}
+
+/**
+ * Logs configuration options
+ */
+export interface LogsConfig extends LogCaptureOptions {
+    captureConsoleLogs?: boolean
 }
 
 // See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
