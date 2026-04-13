@@ -60,7 +60,7 @@ export class ConsentManager {
     public isRejected() {
         return (
             this.consent === ConsentStatus.DENIED ||
-            (this.consent === ConsentStatus.PENDING && this._config.opt_out_capturing_by_default === true)
+            (this.consent === ConsentStatus.PENDING && this._config.opt_out_capturing_by_default)
         )
     }
 
