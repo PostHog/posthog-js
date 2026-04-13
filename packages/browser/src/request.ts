@@ -27,6 +27,18 @@ const SIXTY_FOUR_KILOBYTES = 64 * 1024
  any overhead doesn't push over the threshold after checking here
 */
 const KEEP_ALIVE_THRESHOLD = SIXTY_FOUR_KILOBYTES * 0.8
+let nativeAsyncGzipDisabled = false
+
+const isNativeAsyncGzipReadError = (error: unknown): boolean => {
+    if (!error || typeof error !== 'object') {
+        return false
+    }
+
+    const name = 'name' in error ? String(error.name) : ''
+
+    return name === 'NotReadableError'
+}
+
 type EncodedBody = {
     contentType: string
     body: string | BlobPart | ArrayBuffer
@@ -118,15 +130,13 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
  * which can take 300ms+ on constrained devices.
  *
  * Callers must check preconditions (data exists, gzip compression, CompressionStream available)
- * before calling this function. Uses `gzipCompress` from @posthog/core.
+ * before calling this function.
  */
 const preEncodeAsync = async (options: RequestWithEncodedBody): Promise<RequestWithEncodedBody> => {
     const jsonData = jsonStringify(options.data)
-    const compressed = await gzipCompress(jsonData, Config.DEBUG)
-    if (!compressed) {
-        return options
-    }
-    const body = await compressed.arrayBuffer()
+    const compressedBlob = await gzipCompress(jsonData, Config.DEBUG, { rethrow: true })
+    const body = await compressedBlob!.arrayBuffer()
+
     return {
         ...options,
         _encodedBody: {
@@ -302,6 +312,10 @@ export const request = (_options: RequestWithOptions) => {
     const options: RequestWithEncodedBody = { ..._options }
     options.timeout = options.timeout || 60000
 
+    if (nativeAsyncGzipDisabled && options.compression === Compression.GZipJS) {
+        options.compression = undefined
+    }
+
     options.url = extendURLParams(options.url, {
         _: new Date().getTime().toString(),
         ver: Config.JS_SDK_VERSION,
@@ -328,14 +342,24 @@ export const request = (_options: RequestWithOptions) => {
         transport !== 'sendBeacon' &&
         options.data &&
         options.compression === Compression.GZipJS &&
-        !!CompressionStream
+        !!CompressionStream &&
+        !nativeAsyncGzipDisabled
     ) {
         preEncodeAsync(options)
             .then((encodedOptions) => {
                 transportMethod(encodedOptions)
             })
-            .catch(() => {
-                // If async compression fails, fall back to the synchronous fflate path
+            .catch((error) => {
+                if (isNativeAsyncGzipReadError(error)) {
+                    nativeAsyncGzipDisabled = true
+                    transportMethod({
+                        ...options,
+                        compression: undefined,
+                    })
+                    return
+                }
+
+                // If async compression fails for another reason, fall back to the synchronous fflate path
                 transportMethod(options)
             })
     } else {

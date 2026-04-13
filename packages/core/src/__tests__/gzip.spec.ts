@@ -42,6 +42,15 @@ describe('gzip', () => {
     })
   })
   describe('gzipCompress', () => {
+    it('rethrows errors when requested', async () => {
+      const CompressionStream = globalThis.CompressionStream
+      delete (globalThis as any).CompressionStream
+
+      await expect(gzipCompress(RANDOM_TEST_INPUT, false, { rethrow: true })).rejects.toThrow()
+
+      ;(globalThis as any).CompressionStream = CompressionStream
+    })
+
     it('compressed random data should match node', async () => {
       const compressed = await gzipCompress(RANDOM_TEST_INPUT)
       expect(compressed).not.toBe(null)
