@@ -3450,10 +3450,7 @@ export class PostHog implements PostHogInterface {
             return
         }
         if (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isRejected()) {
-            // If the user was being treated as rejected in on_reject mode (either explicitly opted out,
-            // or opted out by default via opt_out_capturing_by_default), then before we can start
-            // sending regular non-cookieless events we need to reset the instance to ensure that
-            // there is no leaking of state or data between the cookieless and regular events
+            // Reset the instance to prevent state leaking between cookieless and regular events
             this.reset(true)
             this.sessionManager?.destroy()
             this.pageViewManager?.destroy()
@@ -3626,8 +3623,7 @@ export class PostHog implements PostHogInterface {
      * some config options.
      *
      * Additionally, if the cookieless_mode is set to `'on_reject'`, we will capture events in cookieless mode if the
-     * user has explicitly opted out, or if `opt_out_capturing_by_default` is set and the user has not yet made a
-     * consent choice.
+     * user has opted out or been defaulted to opt-out.
      *
      * {@label Privacy}
      *

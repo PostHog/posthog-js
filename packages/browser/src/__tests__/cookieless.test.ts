@@ -316,10 +316,6 @@ describe('cookieless', () => {
         })
 
         it('should start in cookieless mode when opt_out_capturing_by_default is set', async () => {
-            // Regression test for https://github.com/PostHog/posthog-js/issues/2841
-            // With `cookieless_mode: 'on_reject'` + `opt_out_capturing_by_default: true`,
-            // the SDK should immediately start sending events in cookieless mode rather
-            // than dropping them until the user explicitly calls opt_out_capturing().
             const { posthog, beforeSendMock } = await setup({
                 cookieless_mode: 'on_reject',
                 opt_out_capturing_by_default: true,
@@ -330,7 +326,6 @@ describe('cookieless', () => {
             expect(posthog.get_explicit_consent_status()).toBe('pending')
             expect(posthog.sessionRecording).toBeFalsy()
 
-            // initial pageview should have been captured as cookieless
             expect(beforeSendMock).toBeCalledTimes(1)
             const pageview = beforeSendMock.mock.calls[0][0]
             expect(pageview.event).toBe('$pageview')
@@ -338,7 +333,6 @@ describe('cookieless', () => {
             expect(pageview.properties.$device_id).toBe(null)
             expect(pageview.properties.$cookieless_mode).toEqual(true)
 
-            // subsequent events should also be captured as cookieless
             posthog.capture(eventName, eventProperties)
             expect(beforeSendMock).toBeCalledTimes(2)
             const event = beforeSendMock.mock.calls[1][0]
@@ -363,8 +357,6 @@ describe('cookieless', () => {
             posthog.opt_in_capturing()
             posthog.capture(eventName, eventProperties)
 
-            // opt_in should reset, fire $opt_in, then the custom event as non-cookieless.
-            // No new $pageview since one was already captured in cookieless mode.
             expect(beforeSendMock).toBeCalledTimes(3)
             expect(beforeSendMock.mock.calls[1][0].event).toBe('$opt_in')
             const customEvent = beforeSendMock.mock.calls[2][0]
