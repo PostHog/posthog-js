@@ -17,6 +17,7 @@ import {
     EVENT_PAGEVIEW,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
+    SESSION_RECORDING_REMOTE_CONFIG,
     SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
     COOKIELESS_ALWAYS,
@@ -3450,8 +3451,13 @@ export class PostHog implements PostHogInterface {
             return
         }
         if (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isRejected()) {
-            // Reset the instance to prevent state leaking between cookieless and regular events
+            // Reset the instance to prevent state leaking between cookieless and regular events.
+            // Preserve remote config so session recording can restart after opt-in.
+            const savedRecordingConfig = this.persistence?.get_property(SESSION_RECORDING_REMOTE_CONFIG)
             this.reset(true)
+            if (savedRecordingConfig && this.persistence) {
+                this.persistence.set_property(SESSION_RECORDING_REMOTE_CONFIG, savedRecordingConfig)
+            }
             this.sessionManager?.destroy()
             this.pageViewManager?.destroy()
             this.sessionManager = new SessionIdManager(this)
