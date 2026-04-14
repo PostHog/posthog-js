@@ -1,3 +1,5 @@
+*       @PostHog/team-client-libraries
+
 # the recorder file can have unexpected impact on users' sites
 packages/browser/src/entrypoints/recorder.ts           @PostHog/team-replay
 
