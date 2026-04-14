@@ -17,7 +17,6 @@ import {
     EVENT_PAGEVIEW,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
-    SESSION_RECORDING_REMOTE_CONFIG,
     SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
     COOKIELESS_ALWAYS,
@@ -607,7 +606,7 @@ export class PostHog implements PostHogInterface {
 
         const startInCookielessMode =
             this.config.cookieless_mode === COOKIELESS_ALWAYS ||
-            (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isRejected())
+            (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isExplicitlyOptedOut())
 
         if (!startInCookielessMode) {
             this.sessionManager = new SessionIdManager(this)
@@ -940,11 +939,7 @@ export class PostHog implements PostHogInterface {
             // NOTE: We want to fire this on the next tick as the previous implementation had this side effect
             // and some clients may rely on it
             setTimeout(() => {
-                if (
-                    this.consent.isOptedIn() ||
-                    this.config.cookieless_mode === COOKIELESS_ALWAYS ||
-                    (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isRejected())
-                ) {
+                if (this.consent.isOptedIn() || this.config.cookieless_mode === COOKIELESS_ALWAYS) {
                     this._captureInitialPageview()
                 }
             }, 1)
@@ -3450,14 +3445,10 @@ export class PostHog implements PostHogInterface {
             logger.warn(CONSENT_COOKIELESS_WARN)
             return
         }
-        if (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isRejected()) {
-            // Reset the instance to prevent state leaking between cookieless and regular events.
-            // Preserve remote config so session recording can restart after opt-in.
-            const savedRecordingConfig = this.persistence?.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+        if (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isExplicitlyOptedOut()) {
+            // If the user has explicitly opted out on_reject mode, then before we can start sending regular non-cookieless events
+            // we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
             this.reset(true)
-            if (savedRecordingConfig && this.persistence) {
-                this.persistence.set_property(SESSION_RECORDING_REMOTE_CONFIG, savedRecordingConfig)
-            }
             this.sessionManager?.destroy()
             this.pageViewManager?.destroy()
             this.sessionManager = new SessionIdManager(this)
