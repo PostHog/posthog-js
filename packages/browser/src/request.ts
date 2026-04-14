@@ -29,10 +29,6 @@ const SIXTY_FOUR_KILOBYTES = 64 * 1024
 const KEEP_ALIVE_THRESHOLD = SIXTY_FOUR_KILOBYTES * 0.8
 let nativeAsyncGzipDisabled = false
 
-export const __resetNativeAsyncGzipDisabledForTests = (): void => {
-    nativeAsyncGzipDisabled = false
-}
-
 type EncodedBody = {
     contentType: string
     body: string | BlobPart | ArrayBuffer
@@ -128,11 +124,11 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
  */
 const preEncodeAsync = async (options: RequestWithEncodedBody): Promise<RequestWithEncodedBody> => {
     const jsonData = jsonStringify(options.data)
-    const compressedBlob = await gzipCompress(jsonData, Config.DEBUG, { rethrow: true })
-    if (!compressedBlob) {
+    const compressed = await gzipCompress(jsonData, Config.DEBUG, { rethrow: true })
+    if (!compressed) {
         return options
     }
-    const body = await compressedBlob.arrayBuffer()
+    const body = await compressed.arrayBuffer()
 
     return {
         ...options,

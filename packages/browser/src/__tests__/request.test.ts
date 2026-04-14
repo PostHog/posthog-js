@@ -598,11 +598,6 @@ describe('request', () => {
 
             isolatedRequestModule = await import('../request')
             isolatedCompression = (await import('../types')).Compression
-            isolatedRequestModule.__resetNativeAsyncGzipDisabledForTests()
-        })
-
-        afterEach(() => {
-            isolatedRequestModule.__resetNativeAsyncGzipDisabledForTests()
         })
 
         it('retries uncompressed and disables native async gzip after NotReadableError', async () => {
@@ -645,23 +640,7 @@ describe('request', () => {
             expect(mockedIsolatedFetch.mock.calls[0][1].body).toBeInstanceOf(ArrayBuffer)
         })
 
-        it('resets native async gzip state between tests', async () => {
-            mockedIsolatedGzipCompress.mockRejectedValueOnce({ name: 'NotReadableError' })
-
-            isolatedRequestModule.request({
-                url: 'https://any.posthog-instance.com?ver=1.23.45',
-                data: { foo: 'bar' },
-                headers: {},
-                callback: jest.fn(),
-                transport: 'fetch',
-                method: 'POST',
-                compression: isolatedCompression.GZipJS,
-            })
-
-            await flushPromises()
-
-            isolatedRequestModule.__resetNativeAsyncGzipDisabledForTests()
-            mockedIsolatedFetch.mockClear()
+        it('starts with native async gzip enabled in a fresh module instance', async () => {
             mockedIsolatedGzipCompress.mockResolvedValueOnce(new Blob(['compressed'], { type: 'text/plain' }))
 
             isolatedRequestModule.request({
@@ -676,7 +655,7 @@ describe('request', () => {
 
             await flushPromises()
 
-            expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(2)
+            expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
             expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
             expect(mockedIsolatedFetch.mock.calls[0][0]).toContain('&compression=gzip-js')
             expect(mockedIsolatedFetch.mock.calls[0][1].body).toBeInstanceOf(ArrayBuffer)
