@@ -617,7 +617,7 @@ describe('request', () => {
 
             expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
             expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
-            expect(mockedIsolatedFetch.mock.calls[0][0]).toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][0]).not.toContain('&compression=gzip-js')
             expect(mockedIsolatedFetch.mock.calls[0][1].body).toBe('{"foo":"bar"}')
 
             mockedIsolatedFetch.mockClear()

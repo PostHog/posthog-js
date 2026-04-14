@@ -272,6 +272,14 @@ const _sendBeacon = (options: RequestWithOptions) => {
     }
 }
 
+const buildRequestURL = (url: string, compression?: Compression): string => {
+    return extendURLParams(url, {
+        _: new Date().getTime().toString(),
+        ver: Config.JS_SDK_VERSION,
+        compression,
+    })
+}
+
 const AVAILABLE_TRANSPORTS: {
     transport: RequestWithOptions['transport']
     method: (options: RequestWithOptions) => void
@@ -305,11 +313,7 @@ export const request = (_options: RequestWithOptions) => {
     const options: RequestWithEncodedBody = { ..._options }
     options.timeout = options.timeout || 60000
 
-    options.url = extendURLParams(options.url, {
-        _: new Date().getTime().toString(),
-        ver: Config.JS_SDK_VERSION,
-        compression: options.compression,
-    })
+    options.url = buildRequestURL(options.url, options.compression)
 
     const transport = options.transport ?? 'fetch'
 
@@ -344,6 +348,7 @@ export const request = (_options: RequestWithOptions) => {
                     transportMethod({
                         ...options,
                         compression: undefined,
+                        url: buildRequestURL(_options.url, undefined),
                     })
                     return
                 }
