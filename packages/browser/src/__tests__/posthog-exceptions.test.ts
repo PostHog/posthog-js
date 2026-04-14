@@ -207,4 +207,149 @@ describe('PostHogExceptions', () => {
             })
         })
     })
+
+    describe('exception steps', () => {
+        it('attaches buffered exception steps to the next exception and clears after capture', () => {
+            exceptions.addExceptionStep('step one', { context: 'A' })
+
+            exceptions.sendExceptionEvent({ custom_property: true })
+            exceptions.sendExceptionEvent({ custom_property: true })
+
+            expect(captureMock.mock.calls[0][1]).toMatchObject({
+                custom_property: true,
+                $exception_steps: [
+                    {
+                        $message: 'step one',
+                        context: 'A',
+                        $timestamp: expect.any(String),
+                    },
+                ],
+            })
+            expect(captureMock.mock.calls[1][1]).toEqual({ custom_property: true })
+        })
+
+        it('lets manually provided $exception_steps override buffered steps', () => {
+            exceptions.addExceptionStep('buffered step')
+
+            const manualSteps = [{ $message: 'manual', $timestamp: '2026-01-01T00:00:00.000Z' }]
+            exceptions.sendExceptionEvent({ custom_property: true, $exception_steps: manualSteps })
+
+            expect(captureMock).toHaveBeenCalledWith(
+                '$exception',
+                { custom_property: true, $exception_steps: manualSteps },
+                expect.anything()
+            )
+        })
+
+        it('keeps buffered steps when the exception is dropped before capture', () => {
+            exceptions.addExceptionStep('kept step')
+
+            const suppressionRule = createSuppressionRule('OR')
+            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig)
+
+            exceptions.sendExceptionEvent({
+                $exception_list: [{ type: 'TypeError', value: 'This is a type error' }],
+            })
+            expect(captureMock).not.toHaveBeenCalled()
+
+            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [] } } as RemoteConfig)
+            exceptions.sendExceptionEvent({ custom_property: true })
+
+            expect(captureMock).toHaveBeenCalledWith(
+                '$exception',
+                {
+                    custom_property: true,
+                    $exception_steps: [
+                        {
+                            $message: 'kept step',
+                            $timestamp: expect.any(String),
+                        },
+                    ],
+                },
+                expect.anything()
+            )
+        })
+
+        it('respects max_queue_size and keeps the newest steps', () => {
+            config.capture_exceptions = {
+                exception_steps: {
+                    max_queue_size: 2,
+                },
+            }
+            exceptions = new PostHogExceptions(posthog)
+
+            exceptions.addExceptionStep('one')
+            exceptions.addExceptionStep('two')
+            exceptions.addExceptionStep('three')
+
+            exceptions.sendExceptionEvent({ custom_property: true })
+
+            expect(captureMock.mock.calls[0][1]).toMatchObject({
+                custom_property: true,
+                $exception_steps: [
+                    { $message: 'two', $timestamp: expect.any(String) },
+                    { $message: 'three', $timestamp: expect.any(String) },
+                ],
+            })
+        })
+
+        it('respects max_bytes by keeping the most recent steps', () => {
+            config.capture_exceptions = {
+                exception_steps: {
+                    max_bytes: 200,
+                },
+            }
+            exceptions = new PostHogExceptions(posthog)
+
+            exceptions.addExceptionStep('first')
+            exceptions.addExceptionStep('second', { payload: 'x'.repeat(1000) })
+            exceptions.addExceptionStep('third')
+
+            exceptions.sendExceptionEvent({ custom_property: true })
+
+            expect(captureMock.mock.calls[0][1]).toMatchObject({
+                custom_property: true,
+                $exception_steps: [{ $message: 'third', $timestamp: expect.any(String) }],
+            })
+        })
+
+        it('disables add and attach when exception_steps.enabled is false', () => {
+            config.capture_exceptions = {
+                exception_steps: {
+                    enabled: false,
+                },
+            }
+            exceptions = new PostHogExceptions(posthog)
+
+            exceptions.addExceptionStep('ignored')
+            exceptions.sendExceptionEvent({ custom_property: true })
+
+            expect(captureMock).toHaveBeenCalledWith('$exception', { custom_property: true }, expect.anything())
+        })
+
+        it('drops reserved keys from addExceptionStep properties', () => {
+            exceptions.addExceptionStep('from-message-arg', {
+                type: 'legacy.type',
+                level: 'warning',
+                $message: 'ignored',
+                $timestamp: 'ignored',
+                custom_property: true,
+            })
+
+            exceptions.sendExceptionEvent({ custom_property: true })
+
+            expect(captureMock.mock.calls[0][1]).toMatchObject({
+                custom_property: true,
+                $exception_steps: [
+                    {
+                        $message: 'from-message-arg',
+                        $type: 'legacy.type',
+                        $level: 'warning',
+                        custom_property: true,
+                        $timestamp: expect.any(String),
+                    },
+                ],
+            })
+        })
+    })
 })
