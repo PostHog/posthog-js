@@ -280,6 +280,7 @@
         "_lastMessageTimestamp",
         "_lastMutation",
         "_lastPathname",
+        "_lastRemoteConfig",
         "_lastSelectionChanged",
         "_lastVisibilityChange",
         "_lazyLoadAndStart",
