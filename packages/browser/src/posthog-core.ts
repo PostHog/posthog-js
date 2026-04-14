@@ -387,6 +387,7 @@ export class PostHog implements PostHogInterface {
     compression?: Compression
     __request_queue: QueuedRequestWithOptions[]
     _pendingRemoteConfig?: RemoteConfig
+    _lastRemoteConfig?: RemoteConfig
     _remoteConfigLoader?: RemoteConfigLoader
     analyticsDefaultEndpoint: string
     version: string = Config.LIB_VERSION
@@ -892,6 +893,11 @@ export class PostHog implements PostHogInterface {
         if (this.config.__preview_deferred_init_extensions) {
             this._pendingRemoteConfig = config
         }
+
+        // Cache the latest remote config so extensions that are created later
+        // (e.g. sessionRecording after opt_in_capturing from cookieless mode) can
+        // replay it and pick up server-side settings like recording enable flags.
+        this._lastRemoteConfig = config
 
         this.compression = undefined
         if (config.supportedCompression && !this.config.disable_compression) {
@@ -3469,6 +3475,12 @@ export class PostHog implements PostHogInterface {
                     this.sessionRecording,
                     new SessionRecordingClass(this) as SessionRecording
                 )
+                // Replay the cached remote config so the new recorder picks up server-side
+                // settings (enable flag, endpoint, sampling) that arrived while we were
+                // still in cookieless mode and sessionRecording didn't yet exist.
+                if (this._lastRemoteConfig) {
+                    this.sessionRecording?.onRemoteConfig?.(this._lastRemoteConfig)
+                }
             }
         }
 
