@@ -7,11 +7,8 @@
     "exporter": "tsx exporter.ts"
   },
   "dependencies": {
-    "posthog-node": "*",
     "@posthog/ai": "*",
-    "@opentelemetry/sdk-node": "^0.200.0",
-    "@opentelemetry/sdk-trace-node": "^2.0.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.200.0"
+    "@opentelemetry/sdk-node": "^0.200.0"
   },
   "devDependencies": {
     "tsx": "^4.0.0",

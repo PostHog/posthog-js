@@ -1,8 +1,8 @@
 /** OpenAI Chat Completions API with tool calling, tracked by PostHog via OpenTelemetry. */
 
-import { NodeSDK, tracing } from '@opentelemetry/sdk-node'
+import { NodeSDK } from '@opentelemetry/sdk-node'
 import { resourceFromAttributes } from '@opentelemetry/resources'
-import { PostHogTraceExporter } from '@posthog/ai/otel'
+import { PostHogSpanProcessor } from '@posthog/ai/otel'
 import { OpenAIInstrumentation } from '@opentelemetry/instrumentation-openai'
 import OpenAI from 'openai'
 
@@ -11,19 +11,17 @@ const sdk = new NodeSDK({
         'service.name': 'example-openai-app',
         'posthog.distinct_id': 'example-user',
         foo: 'bar',
-        'conversation_id': 'abc-123',
+        conversation_id: 'abc-123',
     }),
     spanProcessors: [
-        new tracing.SimpleSpanProcessor(
-            new PostHogTraceExporter({
-                apiKey: process.env.POSTHOG_API_KEY!,
-                host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
-            })
-        ),
+        new PostHogSpanProcessor({
+            apiKey: process.env.POSTHOG_API_KEY!,
+            host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+        }),
     ],
     instrumentations: [new OpenAIInstrumentation()],
 })
-sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
+sdk.start()
 
 async function getWeather(latitude: number, longitude: number, locationName: string): Promise<string> {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`
@@ -87,4 +85,4 @@ async function main() {
     }
 }
 
-main()
+main().finally(() => sdk.shutdown())

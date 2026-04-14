@@ -1,8 +1,8 @@
 /** LangGraph agent, tracked by PostHog via OpenTelemetry. */
 
-import { NodeSDK, tracing } from '@opentelemetry/sdk-node'
+import { NodeSDK } from '@opentelemetry/sdk-node'
 import { resourceFromAttributes } from '@opentelemetry/resources'
-import { PostHogTraceExporter } from '@posthog/ai/otel'
+import { PostHogSpanProcessor } from '@posthog/ai/otel'
 import { LangChainInstrumentation } from '@traceloop/instrumentation-langchain'
 import { createReactAgent } from '@langchain/langgraph/prebuilt'
 import { ChatOpenAI } from '@langchain/openai'
@@ -14,19 +14,17 @@ const sdk = new NodeSDK({
         'service.name': 'example-langgraph-app',
         'posthog.distinct_id': 'example-user',
         foo: 'bar',
-        'conversation_id': 'abc-123',
+        conversation_id: 'abc-123',
     }),
     spanProcessors: [
-        new tracing.SimpleSpanProcessor(
-            new PostHogTraceExporter({
-                apiKey: process.env.POSTHOG_API_KEY!,
-                host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
-            })
-        ),
+        new PostHogSpanProcessor({
+            apiKey: process.env.POSTHOG_API_KEY!,
+            host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+        }),
     ],
     instrumentations: [new LangChainInstrumentation()],
 })
-sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
+sdk.start()
 
 const getWeather = tool((input) => `It's always sunny in ${input.city}!`, {
     name: 'get_weather',
@@ -50,4 +48,4 @@ async function main() {
     console.log(result.messages[result.messages.length - 1].content)
 }
 
-main()
+main().finally(() => sdk.shutdown())

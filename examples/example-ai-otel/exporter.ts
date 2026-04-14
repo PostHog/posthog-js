@@ -1,19 +1,18 @@
-/** PostHog OTEL trace exporter for any OpenTelemetry-instrumented AI SDK. */
+/** PostHog OTEL span processor for any OpenTelemetry-instrumented AI SDK. */
 
-import { PostHogTraceExporter } from '@posthog/ai/otel'
+import { PostHogSpanProcessor } from '@posthog/ai/otel'
 import { NodeSDK } from '@opentelemetry/sdk-node'
-import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node'
-
-const exporter = new PostHogTraceExporter({
-    apiKey: process.env.POSTHOG_API_KEY!,
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
-})
 
 const sdk = new NodeSDK({
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [
+        new PostHogSpanProcessor({
+            apiKey: process.env.POSTHOG_API_KEY!,
+            host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+        }),
+    ],
 })
 
-sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
+sdk.start()
 console.log('OTEL SDK started with PostHog trace exporter.')
 console.log('Any gen_ai.* spans will be converted to $ai_generation events in PostHog.')
 console.log('Add your OTEL-instrumented AI SDK code here.')

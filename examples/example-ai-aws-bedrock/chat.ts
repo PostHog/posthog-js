@@ -1,8 +1,8 @@
 /** AWS Bedrock chat with OpenTelemetry instrumentation, tracked by PostHog. */
 
-import { NodeSDK, tracing } from '@opentelemetry/sdk-node'
+import { NodeSDK } from '@opentelemetry/sdk-node'
 import { resourceFromAttributes } from '@opentelemetry/resources'
-import { PostHogTraceExporter } from '@posthog/ai/otel'
+import { PostHogSpanProcessor } from '@posthog/ai/otel'
 import { AwsInstrumentation } from '@opentelemetry/instrumentation-aws-sdk'
 
 const sdk = new NodeSDK({
@@ -10,19 +10,17 @@ const sdk = new NodeSDK({
         'service.name': 'example-bedrock-app',
         'posthog.distinct_id': 'example-user',
         foo: 'bar',
-        'conversation_id': 'abc-123',
+        conversation_id: 'abc-123',
     }),
     spanProcessors: [
-        new tracing.SimpleSpanProcessor(
-            new PostHogTraceExporter({
-                apiKey: process.env.POSTHOG_API_KEY!,
-                host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
-            })
-        ),
+        new PostHogSpanProcessor({
+            apiKey: process.env.POSTHOG_API_KEY!,
+            host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+        }),
     ],
     instrumentations: [new AwsInstrumentation()],
 })
-sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
+sdk.start()
 
 async function main() {
     // Import after sdk.start() so the instrumentation can patch the AWS SDK.
@@ -48,4 +46,4 @@ async function main() {
     console.log(textBlock?.text)
 }
 
-main()
+main().finally(() => sdk.shutdown())

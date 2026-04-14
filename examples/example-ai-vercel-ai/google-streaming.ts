@@ -1,8 +1,8 @@
 /** Vercel AI with Google Gemini backend (streaming), tracked by PostHog via OpenTelemetry. */
 
-import { NodeSDK, tracing } from '@opentelemetry/sdk-node'
+import { NodeSDK } from '@opentelemetry/sdk-node'
 import { resourceFromAttributes } from '@opentelemetry/resources'
-import { PostHogTraceExporter } from '@posthog/ai/otel'
+import { PostHogSpanProcessor } from '@posthog/ai/otel'
 import { streamText } from 'ai'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { z } from 'zod'
@@ -12,18 +12,16 @@ const sdk = new NodeSDK({
         'service.name': 'example-vercel-ai-app',
         'posthog.distinct_id': 'example-user',
         foo: 'bar',
-        'conversation_id': 'abc-123',
+        conversation_id: 'abc-123',
     }),
     spanProcessors: [
-        new tracing.SimpleSpanProcessor(
-            new PostHogTraceExporter({
-                apiKey: process.env.POSTHOG_API_KEY!,
-                host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
-            })
-        ),
+        new PostHogSpanProcessor({
+            apiKey: process.env.POSTHOG_API_KEY!,
+            host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+        }),
     ],
 })
-sdk.start() // SimpleSpanProcessor exports each span synchronously — no shutdown needed
+sdk.start()
 
 const google = createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY! })
 
@@ -72,4 +70,4 @@ async function main() {
     console.log()
 }
 
-main()
+main().finally(() => sdk.shutdown())
