@@ -1,5 +1,15 @@
 # posthog-ai
 
+## 7.15.0
+
+### Minor Changes
+
+- [#3358](https://github.com/PostHog/posthog-js/pull/3358) [`85d3bd1`](https://github.com/PostHog/posthog-js/commit/85d3bd134dce1ae7b9287b73f2311c938bb42761) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Add `PostHogSpanProcessor` as a self-contained OpenTelemetry `SpanProcessor` that handles batching and export internally. Both `PostHogSpanProcessor` and `PostHogTraceExporter` now automatically filter to AI-related spans only (`gen_ai.*`, `llm.*`, `ai.*`, `traceloop.*`).
+  (2026-04-14)
+
+- [#3377](https://github.com/PostHog/posthog-js/pull/3377) [`b90b54e`](https://github.com/PostHog/posthog-js/commit/b90b54e222ea27e7ba8113e617c5f1a924a2fc7a) Thanks [@andrewm4894](https://github.com/andrewm4894)! - Add OpenAI Agents SDK tracing support via `@posthog/ai/openai-agents`. Implements `PostHogTracingProcessor` that captures agent traces, spans, and LLM generations as PostHog LLM analytics events. Supports all span types including generation, response, function/tool, agent, handoff, guardrail, custom, audio, and MCP.
+  (2026-04-14)
+
 ## 7.14.0
 
 ### Minor Changes
