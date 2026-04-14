@@ -726,6 +726,12 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true"
   ],
+  "__preview_external_dependency_versioned_paths": [
+    "undefined",
+    "string",
+    "false",
+    "true"
+  ],
   "__preview_capture_bot_pageviews": [
     "undefined",
     "false",
