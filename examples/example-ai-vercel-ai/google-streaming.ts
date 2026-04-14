@@ -1,14 +1,27 @@
-/** Vercel AI SDK with Google Gemini backend, streaming, tracked by PostHog. */
+/** Vercel AI with Google Gemini backend (streaming), tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from 'posthog-node'
-import { withTracing } from '@posthog/ai/vercel'
+import { NodeSDK } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogSpanProcessor } from '@posthog/ai/otel'
 import { streamText } from 'ai'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { z } from 'zod'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-vercel-ai-app',
+        'posthog.distinct_id': 'example-user',
+        foo: 'bar',
+        conversation_id: 'abc-123',
+    }),
+    spanProcessors: [
+        new PostHogSpanProcessor({
+            apiKey: process.env.POSTHOG_API_KEY!,
+            host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+        }),
+    ],
 })
+sdk.start()
 
 const google = createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY! })
 
@@ -21,12 +34,15 @@ async function getWeather(latitude: number, longitude: number, locationName: str
 }
 
 async function main() {
-    const model = withTracing(google('gemini-2.5-flash'), phClient, {
-        posthogDistinctId: 'example-user',
-    })
-
     const result = streamText({
-        model,
+        model: google('gemini-2.5-flash'),
+        experimental_telemetry: {
+            isEnabled: true,
+            functionId: 'google-streaming',
+            metadata: {
+                posthog_distinct_id: 'example-user',
+            },
+        },
         maxTokens: 1024,
         messages: [
             { role: 'system', content: 'You are a helpful assistant with access to weather data.' },
@@ -52,7 +68,6 @@ async function main() {
     }
 
     console.log()
-    await phClient.shutdown()
 }
 
-main()
+main().finally(() => sdk.shutdown())

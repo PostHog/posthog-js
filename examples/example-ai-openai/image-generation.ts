@@ -1,19 +1,33 @@
-/** OpenAI image generation, tracked by PostHog. */
+/** OpenAI image generation, tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from 'posthog-node'
-import { OpenAI } from '@posthog/ai/openai'
+import { NodeSDK } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogSpanProcessor } from '@posthog/ai/otel'
+import { OpenAIInstrumentation } from '@opentelemetry/instrumentation-openai'
+import OpenAI from 'openai'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-openai-app',
+        'posthog.distinct_id': 'example-user',
+        foo: 'bar',
+        conversation_id: 'abc-123',
+    }),
+    spanProcessors: [
+        new PostHogSpanProcessor({
+            apiKey: process.env.POSTHOG_API_KEY!,
+            host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+        }),
+    ],
+    instrumentations: [new OpenAIInstrumentation()],
 })
-const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY!,
-    posthog: phClient,
-})
+sdk.start()
 
 async function main() {
-    // Note: @posthog/ai does not wrap images.generate yet,
-    // so this call is not automatically tracked.
+    const client = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY!,
+    })
+
     const response = await client.images.generate({
         model: 'gpt-image-1',
         prompt: 'A hedgehog wearing a PostHog t-shirt, pixel art style',
@@ -22,8 +36,6 @@ async function main() {
 
     const imageBase64 = response.data[0].b64_json!
     console.log(`Generated image: ${imageBase64.length} chars of base64 data`)
-
-    await phClient.shutdown()
 }
 
-main()
+main().finally(() => sdk.shutdown())

@@ -1,32 +1,27 @@
-/** OpenAI Responses API with tool calling, tracked by PostHog. */
+/** OpenAI Responses API with tool calling, tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from 'posthog-node'
-import { OpenAI } from '@posthog/ai/openai'
+import { NodeSDK } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogSpanProcessor } from '@posthog/ai/otel'
+import { OpenAIInstrumentation } from '@opentelemetry/instrumentation-openai'
+import OpenAI from 'openai'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-openai-app',
+        'posthog.distinct_id': 'example-user',
+        foo: 'bar',
+        conversation_id: 'abc-123',
+    }),
+    spanProcessors: [
+        new PostHogSpanProcessor({
+            apiKey: process.env.POSTHOG_API_KEY!,
+            host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+        }),
+    ],
+    instrumentations: [new OpenAIInstrumentation()],
 })
-const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY!,
-    posthog: phClient,
-})
-
-const tools = [
-    {
-        type: 'function' as const,
-        name: 'get_weather',
-        description: 'Get current weather for a location',
-        parameters: {
-            type: 'object',
-            properties: {
-                latitude: { type: 'number' },
-                longitude: { type: 'number' },
-                location_name: { type: 'string' },
-            },
-            required: ['latitude', 'longitude', 'location_name'],
-        },
-    },
-]
+sdk.start()
 
 async function getWeather(latitude: number, longitude: number, locationName: string): Promise<string> {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`
@@ -37,10 +32,30 @@ async function getWeather(latitude: number, longitude: number, locationName: str
 }
 
 async function main() {
+    const client = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY!,
+    })
+
+    const tools = [
+        {
+            type: 'function' as const,
+            name: 'get_weather',
+            description: 'Get current weather for a location',
+            parameters: {
+                type: 'object',
+                properties: {
+                    latitude: { type: 'number' },
+                    longitude: { type: 'number' },
+                    location_name: { type: 'string' },
+                },
+                required: ['latitude', 'longitude', 'location_name'],
+            },
+        },
+    ]
+
     const response = await client.responses.create({
         model: 'gpt-4o-mini',
         max_output_tokens: 1024,
-        posthogDistinctId: 'example-user',
         tools,
         instructions: 'You are a helpful assistant with access to weather data.',
         input: [{ role: 'user', content: "What's the weather like in Tokyo?" }],
@@ -60,8 +75,6 @@ async function main() {
             console.log(result)
         }
     }
-
-    await phClient.shutdown()
 }
 
-main()
+main().finally(() => sdk.shutdown())
