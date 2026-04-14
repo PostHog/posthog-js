@@ -90,7 +90,7 @@ set -x -e
 
 # Execute posthog cli clone
 set +x +e
-CLI_CLONE_OUTPUT=$(/bin/sh -c "$PH_CLI_PATH exp hermes clone --minified-map-path $SOURCEMAP_PACKAGER_FILE --composed-map-path $SOURCEMAP_FILE" 2>&1)
+CLI_CLONE_OUTPUT=$(/bin/sh -c "$PH_CLI_PATH hermes clone --minified-map-path $SOURCEMAP_PACKAGER_FILE --composed-map-path $SOURCEMAP_FILE" 2>&1)
 CLONE_EXIT_CODE=$?
 if [ $CLONE_EXIT_CODE -eq 0 ]; then
   echo "$CLI_CLONE_OUTPUT" | awk '{print "output: posthog-cli - " $0}'
@@ -102,7 +102,7 @@ set -x -e
 
 # Execute posthog cli upload
 set +x +e
-CLI_UPLOAD_OUTPUT=$(/bin/sh -c "$PH_CLI_PATH exp hermes upload --directory $DERIVED_FILE_DIR" 2>&1)
+CLI_UPLOAD_OUTPUT=$(/bin/sh -c "$PH_CLI_PATH hermes upload --directory $DERIVED_FILE_DIR" 2>&1)
 UPLOAD_EXIT_CODE=$?
 if [ $UPLOAD_EXIT_CODE -eq 0 ]; then
   echo "$CLI_UPLOAD_OUTPUT" | awk '{print "output: posthog-cli - " $0}'
