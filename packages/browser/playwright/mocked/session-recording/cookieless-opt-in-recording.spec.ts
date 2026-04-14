@@ -48,7 +48,7 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
 
         await startWith(customerConfig, page, context)
 
-        // No events captured until the user makes a consent decision
+        // Verify no events are captured initially
         await page.locator('[data-cy-input]').type('hello posthog!')
         await page.waitForTimeout(250)
         await page.expectCapturedEventsToBe([])
@@ -64,6 +64,7 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
             },
         })
 
+        // Verify opt-in event and pageview are captured
         await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
 
         // Check localStorage to confirm opt-in is stored
