@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.368.1
+
+### Patch Changes
+
+- [#3379](https://github.com/PostHog/posthog-js/pull/3379) [`d7c71b1`](https://github.com/PostHog/posthog-js/commit/d7c71b1316720d972e41b63987ef57512d615ea7) Thanks [@dmarticus](https://github.com/dmarticus)! - Fix bootstrapped feature flags being overwritten by partial /flags response when `advanced_only_evaluate_survey_feature_flags` is enabled
+  (2026-04-14)
+- Updated dependencies []:
+    - @posthog/types@1.368.1
+
 ## 1.368.0
 
 ### Minor Changes
