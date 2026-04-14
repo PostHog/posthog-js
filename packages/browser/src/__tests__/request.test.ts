@@ -560,4 +560,105 @@ describe('request', () => {
             )
         })
     })
+
+    describe('native async gzip retry flow', () => {
+        let isolatedRequestModule: any
+        let isolatedCompression: typeof Compression
+        let mockedIsolatedFetch: jest.Mock
+        let mockedIsolatedGzipCompress: jest.Mock
+
+        beforeEach(async () => {
+            jest.resetModules()
+            jest.clearAllMocks()
+            jest.useFakeTimers()
+            jest.setSystemTime(now)
+
+            mockedIsolatedFetch = jest.fn(() =>
+                Promise.resolve({
+                    status: 200,
+                    text: () => Promise.resolve('{ "a": 1 }'),
+                })
+            )
+            mockedIsolatedGzipCompress = jest.fn()
+
+            jest.doMock('../utils/globals', () => ({
+                ...jest.requireActual('../utils/globals'),
+                fetch: mockedIsolatedFetch,
+                XMLHttpRequest: jest.fn(),
+                navigator: {
+                    sendBeacon: jest.fn(),
+                },
+                CompressionStream: jest.fn(),
+            }))
+
+            jest.doMock('@posthog/core', () => ({
+                ...jest.requireActual('@posthog/core'),
+                gzipCompress: mockedIsolatedGzipCompress,
+            }))
+
+            isolatedRequestModule = await import('../request')
+            isolatedCompression = (await import('../types')).Compression
+        })
+
+        it('retries uncompressed and disables native async gzip after NotReadableError', async () => {
+            mockedIsolatedGzipCompress.mockRejectedValueOnce({ name: 'NotReadableError' })
+
+            isolatedRequestModule.request({
+                url: 'https://any.posthog-instance.com?ver=1.23.45',
+                data: { foo: 'bar' },
+                headers: {},
+                callback: jest.fn(),
+                transport: 'fetch',
+                method: 'POST',
+                compression: isolatedCompression.GZipJS,
+            })
+
+            await flushPromises()
+
+            expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
+            expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
+            expect(mockedIsolatedFetch.mock.calls[0][0]).not.toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][1].body).toBe('{"foo":"bar"}')
+
+            mockedIsolatedFetch.mockClear()
+
+            isolatedRequestModule.request({
+                url: 'https://any.posthog-instance.com?ver=1.23.45',
+                data: { foo: 'baz' },
+                headers: {},
+                callback: jest.fn(),
+                transport: 'fetch',
+                method: 'POST',
+                compression: isolatedCompression.GZipJS,
+            })
+
+            await flushPromises()
+
+            expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
+            expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
+            expect(mockedIsolatedFetch.mock.calls[0][0]).toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][1].body).toBeInstanceOf(ArrayBuffer)
+        })
+
+        it('starts with native async gzip enabled in a fresh module instance', async () => {
+            mockedIsolatedGzipCompress.mockResolvedValueOnce(new Blob(['compressed'], { type: 'text/plain' }))
+
+            isolatedRequestModule.request({
+                url: 'https://any.posthog-instance.com?ver=1.23.45',
+                data: { foo: 'baz' },
+                headers: {},
+                callback: jest.fn(),
+                transport: 'fetch',
+                method: 'POST',
+                compression: isolatedCompression.GZipJS,
+            })
+
+            await flushPromises()
+
+            expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
+            expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
+            expect(mockedIsolatedFetch.mock.calls[0][0]).toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][1].body).toBeInstanceOf(ArrayBuffer)
+        })
+    })
 })
