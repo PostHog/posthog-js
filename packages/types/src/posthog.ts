@@ -102,6 +102,14 @@ export interface PostHog {
     captureException(error: unknown, additionalProperties?: Properties): CaptureResult | undefined
 
     /**
+     * Adds a breadcrumb-like step that will be attached to the next captured exception as `$exception_steps`.
+     *
+     * @param message - The step message
+     * @param properties - Additional context for this step
+     */
+    addExceptionStep(message: string, properties?: Properties): void
+
+    /**
      * Capture a log entry and send it to the PostHog logs endpoint.
      *
      * @param options - The log entry options (body, level, attributes, etc.)

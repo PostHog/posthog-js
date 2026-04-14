@@ -79,6 +79,7 @@ export type {
     PerformanceCaptureConfig,
     DeadClickCandidate,
     ExceptionAutoCaptureConfig,
+    ExceptionStepsConfig,
     DeadClicksAutoCaptureConfig,
     HeatmapConfig,
     ConfigDefaults,

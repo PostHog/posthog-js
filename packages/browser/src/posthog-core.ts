@@ -3048,6 +3048,7 @@ export class PostHog implements PostHogInterface {
             }
 
             this.exceptionObserver?.onConfigChange()
+            this.exceptions?.onConfigChange()
 
             this.sessionRecording?.startIfEnabledOrStop()
             this.autocapture?.startIfEnabled()
@@ -3219,6 +3220,26 @@ export class PostHog implements PostHogInterface {
             ...errorToProperties,
             ...additionalProperties,
         })
+    }
+
+    /**
+     * Add a breadcrumb-like step that will be attached to the next captured exception.
+     *
+     * {@label Error tracking}
+     *
+     * @public
+     *
+     * @example
+     * ```js
+     * posthog.addExceptionStep('Checkout button clicked', {
+     *   type: 'ui.interaction',
+     *   level: 'info',
+     *   checkout_id: 'ch_123',
+     * })
+     * ```
+     */
+    addExceptionStep(message: string, properties?: Properties): void {
+        this.exceptions?.addExceptionStep(message, properties)
     }
 
     /**

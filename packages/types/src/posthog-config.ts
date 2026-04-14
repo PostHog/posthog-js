@@ -211,27 +211,55 @@ export interface DeadClickCandidate {
     absoluteDelayMs?: number
 }
 
+export type ExceptionStepsConfig = {
+    /**
+     * Determines whether PostHog should collect exception steps and attach them to the next captured exception.
+     *
+     * @default true
+     */
+    enabled?: boolean
+
+    /**
+     * The maximum number of exception steps to buffer in memory.
+     *
+     * @default 20
+     */
+    max_queue_size?: number
+
+    /**
+     * The maximum UTF-8 byte budget used when attaching `$exception_steps` to an exception event.
+     *
+     * @default 16384
+     */
+    max_bytes?: number
+}
+
 export type ExceptionAutoCaptureConfig = {
     /**
      * Determines whether PostHog should capture unhandled errors.
      *
      * @default true
      */
-    capture_unhandled_errors: boolean
+    capture_unhandled_errors?: boolean
 
     /**
      * Determines whether PostHog should capture unhandled promise rejections.
      *
      * @default true
      */
-    capture_unhandled_rejections: boolean
+    capture_unhandled_rejections?: boolean
 
     /**
      * Determines whether PostHog should capture console errors.
      *
      * @default false
      */
-    capture_console_errors: boolean
+    capture_console_errors?: boolean
+
+    /**
+     * Controls buffering and payload limits for exception steps added via `addExceptionStep`.
+     */
+    exception_steps?: ExceptionStepsConfig
 }
 
 export type DeadClicksAutoCaptureConfig = {
