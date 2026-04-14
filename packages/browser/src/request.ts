@@ -272,7 +272,7 @@ const _sendBeacon = (options: RequestWithOptions) => {
     }
 }
 
-const buildRequestURL = (url: string, compression?: Compression): string => {
+const buildRequestURL = (url: string, compression?: RequestWithOptions['compression']): string => {
     return extendURLParams(url, {
         _: new Date().getTime().toString(),
         ver: Config.JS_SDK_VERSION,
