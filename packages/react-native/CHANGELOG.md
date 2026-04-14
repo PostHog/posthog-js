@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.41.2
+
+### Patch Changes
+
+- [#3388](https://github.com/PostHog/posthog-js/pull/3388) [`6d0aae3`](https://github.com/PostHog/posthog-js/commit/6d0aae3795da50ba803ab99c65cc8e843254ed64) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - "exp" flag is no longer needed in tooling to upload or clone with hermes when using posthog-cli >= 0.7.4
+  (2026-04-14)
+
 ## 4.41.1
 
 ### Patch Changes

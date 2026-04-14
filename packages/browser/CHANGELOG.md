@@ -1,5 +1,20 @@
 # posthog-js
 
+## 1.369.0
+
+### Minor Changes
+
+- [#3342](https://github.com/PostHog/posthog-js/pull/3342) [`eea5260`](https://github.com/PostHog/posthog-js/commit/eea5260bbd58fb8b2d7f0550bb03d741aaab376a) Thanks [@ksvat](https://github.com/ksvat)! - Account for property filters on events in recording triggers for v2 triggers
+  (2026-04-14)
+
+- [#3281](https://github.com/PostHog/posthog-js/pull/3281) [`b1fd228`](https://github.com/PostHog/posthog-js/commit/b1fd228eab45dc688b769378afa96a0f74167fab) Thanks [@ksvat](https://github.com/ksvat)! - Add session replay trigger groups handling (V2)
+  (2026-04-14)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.369.0
+
 ## 1.368.2
 
 ### Patch Changes
