@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.368.2
+
+### Patch Changes
+
+- [#3378](https://github.com/PostHog/posthog-js/pull/3378) [`f1bea33`](https://github.com/PostHog/posthog-js/commit/f1bea33f64800c187f09a0989426ea0e73f43128) Thanks [@marandaneto](https://github.com/marandaneto)! - Disable native gzip compression after a NotReadableError in the browser SDK
+  (2026-04-14)
+- Updated dependencies []:
+    - @posthog/types@1.368.2
+
 ## 1.368.1
 
 ### Patch Changes
