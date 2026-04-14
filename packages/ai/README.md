@@ -41,23 +41,29 @@ await phClient.shutdown()
 
 ## OpenTelemetry
 
-`@posthog/ai` provides a `PostHogTraceExporter` that sends OpenTelemetry traces to PostHog's OTLP ingestion endpoint. PostHog converts `gen_ai.*` spans into `$ai_generation` events server-side. This works with any LLM provider SDK that supports OpenTelemetry.
+`@posthog/ai/otel` provides two ways to send AI traces to PostHog via OpenTelemetry. Both automatically filter to AI-related spans only (`gen_ai.*`, `llm.*`, `ai.*`, `traceloop.*`) and PostHog converts them into `$ai_generation` events server-side. This works with any LLM provider SDK that supports OpenTelemetry.
 
 ```bash
-npm install @posthog/ai @opentelemetry/sdk-node @opentelemetry/exporter-trace-otlp-http
+npm install @posthog/ai @opentelemetry/sdk-node @opentelemetry/sdk-trace-base @opentelemetry/exporter-trace-otlp-http
 ```
+
+### PostHogSpanProcessor (recommended)
+
+A self-contained `SpanProcessor` that handles batching and export internally. Use this when your setup accepts a span processor.
 
 ```typescript
 import { NodeSDK } from '@opentelemetry/sdk-node'
+import { PostHogSpanProcessor } from '@posthog/ai/otel'
 import { generateText } from 'ai'
 import { openai } from '@ai-sdk/openai'
-import { PostHogTraceExporter } from '@posthog/ai/otel'
 
 const sdk = new NodeSDK({
-  traceExporter: new PostHogTraceExporter({
-    apiKey: '<YOUR_PROJECT_API_KEY>',
-    host: 'https://us.i.posthog.com', // optional, defaults to https://us.i.posthog.com
-  }),
+  spanProcessors: [
+    new PostHogSpanProcessor({
+      apiKey: '<YOUR_PROJECT_API_KEY>',
+      host: 'https://us.i.posthog.com', // optional, defaults to https://us.i.posthog.com
+    }),
+  ],
 })
 sdk.start()
 
@@ -75,6 +81,23 @@ const result = await generateText({
 })
 
 await sdk.shutdown()
+```
+
+### PostHogTraceExporter
+
+A `TraceExporter` for APIs that only accept an exporter, such as Vercel's `registerOTel`.
+
+```typescript
+import { PostHogTraceExporter } from '@posthog/ai/otel'
+import { registerOTel } from '@vercel/otel'
+
+registerOTel({
+  serviceName: 'my-app',
+  traceExporter: new PostHogTraceExporter({
+    apiKey: '<YOUR_PROJECT_API_KEY>',
+    host: 'https://us.i.posthog.com', // optional, defaults to https://us.i.posthog.com
+  }),
+})
 ```
 
 LLM Observability [docs](https://posthog.com/docs/ai-engineering/observability)
