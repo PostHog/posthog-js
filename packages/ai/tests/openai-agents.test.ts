@@ -342,6 +342,28 @@ describe('PostHogTracingProcessor', () => {
       expect(call.properties.$ai_cache_read_input_tokens).toBe(80)
       expect(call.properties.$ai_cache_creation_input_tokens).toBe(20)
     })
+
+    it('truncates oversized generation payloads', async () => {
+      const largeContent = 'x'.repeat(220000)
+      const span = createMockSpan({
+        spanData: {
+          type: 'generation',
+          input: [{ role: 'user', content: largeContent }],
+          output: [{ role: 'assistant', content: largeContent }],
+          model: 'gpt-4o',
+        },
+      })
+
+      await processor.onSpanStart(span as any)
+      await processor.onSpanEnd(span as any)
+
+      const call = mockClient.capture.mock.calls[0][0]
+
+      expect(typeof call.properties.$ai_input).toBe('string')
+      expect(call.properties.$ai_input).toContain('[truncated]')
+      expect(typeof call.properties.$ai_output_choices).toBe('string')
+      expect(call.properties.$ai_output_choices).toContain('[truncated]')
+    })
   })
 
   describe('input role normalization', () => {
@@ -583,6 +605,33 @@ describe('PostHogTracingProcessor', () => {
       expect(call.properties.$ai_total_tokens).toBe(35)
       expect(call.properties.$ai_output_choices).toEqual([{ type: 'message', content: 'Hello!' }])
     })
+
+    it('truncates oversized response span payloads', async () => {
+      const largeContent = 'x'.repeat(220000)
+      const span = createMockSpan({
+        spanData: {
+          type: 'response',
+          response_id: 'resp_oversized',
+          _input: largeContent,
+          _response: {
+            id: 'resp_oversized',
+            model: 'gpt-4o',
+            output: [{ type: 'message', content: largeContent }],
+            usage: { input_tokens: 25, output_tokens: 10 },
+          },
+        },
+      })
+
+      await processor.onSpanStart(span as any)
+      await processor.onSpanEnd(span as any)
+
+      const call = mockClient.capture.mock.calls[0][0]
+
+      expect(typeof call.properties.$ai_input).toBe('string')
+      expect(call.properties.$ai_input).toContain('[truncated]')
+      expect(typeof call.properties.$ai_output_choices).toBe('string')
+      expect(call.properties.$ai_output_choices).toContain('[truncated]')
+    })
   })
 
   describe('audio spans', () => {
@@ -605,8 +654,8 @@ describe('PostHogTracingProcessor', () => {
       expect(call.event).toBe('$ai_span')
       expect(call.properties.$ai_span_type).toBe('transcription')
       expect(call.properties.$ai_model).toBe('whisper-1')
-      expect(call.properties.audio_input_format).toBe('pcm')
-      expect(call.properties.model_config).toEqual({ language: 'en' })
+      expect(call.properties.$ai_audio_input_format).toBe('pcm')
+      expect(call.properties.$ai_model_config).toEqual({ language: 'en' })
       expect(call.properties.$ai_output_state).toBe('This is the transcribed text.')
     })
 
@@ -629,7 +678,7 @@ describe('PostHogTracingProcessor', () => {
       expect(call.event).toBe('$ai_span')
       expect(call.properties.$ai_span_type).toBe('speech')
       expect(call.properties.$ai_model).toBe('tts-1')
-      expect(call.properties.audio_output_format).toBe('pcm')
+      expect(call.properties.$ai_audio_output_format).toBe('pcm')
       expect(call.properties.$ai_input).toBe('Hello, how can I help you?')
     })
 
@@ -648,6 +697,24 @@ describe('PostHogTracingProcessor', () => {
 
       expect(call.event).toBe('$ai_span')
       expect(call.properties.$ai_span_type).toBe('speech_group')
+    })
+
+    it('truncates oversized custom span data', async () => {
+      const span = createMockSpan({
+        spanData: {
+          type: 'custom',
+          name: 'oversized_payload',
+          data: { content: 'x'.repeat(220000) },
+        },
+      })
+
+      await processor.onSpanStart(span as any)
+      await processor.onSpanEnd(span as any)
+
+      const call = mockClient.capture.mock.calls[0][0]
+
+      expect(typeof call.properties.$ai_custom_data).toBe('string')
+      expect(call.properties.$ai_custom_data).toContain('[truncated]')
     })
   })
 

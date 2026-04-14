@@ -17,7 +17,7 @@ import type {
   SpeechGroupSpanData,
   MCPListToolsSpanData,
 } from '@openai/agents-core'
-import { withPrivacyMode } from '../utils'
+import { MAX_OUTPUT_SIZE, truncate, withPrivacyMode } from '../utils'
 import { version } from '../../package.json'
 
 /**
@@ -51,6 +51,19 @@ function ensureSerializable(obj: unknown): unknown {
     return obj
   } catch {
     return String(obj)
+  }
+}
+
+function exceedsMaxOutputSize(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return false
+  }
+
+  try {
+    const serializedValue = typeof value === 'string' ? value : JSON.stringify(value)
+    return new TextEncoder().encode(serializedValue).length > MAX_OUTPUT_SIZE
+  } catch {
+    return false
   }
 }
 
@@ -138,6 +151,12 @@ export class PostHogTracingProcessor implements TracingProcessor {
 
   private _withPrivacyMode(value: unknown): unknown {
     return withPrivacyMode(this._client, this._privacyMode, value)
+  }
+
+  private _prepareCapturedValue(value: unknown): unknown {
+    const serializableValue = ensureSerializable(value)
+    const boundedValue = exceedsMaxOutputSize(serializableValue) ? truncate(serializableValue) : serializableValue
+    return this._withPrivacyMode(boundedValue)
   }
 
   private _evictStaleEntries(): void {
@@ -292,7 +311,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
       }
 
       if (metadata && Object.keys(metadata).length > 0) {
-        properties.$ai_trace_metadata = ensureSerializable(metadata)
+        properties.$ai_trace_metadata = this._prepareCapturedValue(metadata)
       }
 
       if (distinctId == null) {
@@ -440,11 +459,11 @@ export class PostHogTracingProcessor implements TracingProcessor {
       ...this._baseProperties(traceId, spanId, parentId, latency, groupId, errorProperties),
       $ai_model: spanData.model,
       $ai_model_parameters: Object.keys(modelParams).length > 0 ? modelParams : null,
-      $ai_input: this._withPrivacyMode(ensureSerializable(normalizeInputRoles(spanData.input))),
-      $ai_output_choices: this._withPrivacyMode(ensureSerializable(spanData.output)),
+      $ai_input: this._prepareCapturedValue(normalizeInputRoles(spanData.input)),
+      $ai_output_choices: this._prepareCapturedValue(spanData.output),
       $ai_input_tokens: inputTokens,
       $ai_output_tokens: outputTokens,
-      $ai_total_tokens: (inputTokens || 0) + (outputTokens || 0),
+      $ai_total_tokens: inputTokens + outputTokens,
     }
 
     if (usage.details) {
@@ -484,7 +503,10 @@ export class PostHogTracingProcessor implements TracingProcessor {
     groupId: string | null,
     errorProperties: Record<string, any>
   ): void {
-    const response = (spanData as any)._response
+    // The OpenAI Agents SDK exposes these underscored fields for non-OpenAI tracing providers.
+    // Treat them as best-effort and avoid assuming they are always present.
+    const responseSpanData = spanData as ResponseSpanData & { _input?: unknown; _response?: Record<string, any> }
+    const response = responseSpanData._response
     const responseId = spanData.response_id ?? (response?.id as string | undefined)
 
     // Extract usage from response
@@ -499,7 +521,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
       ...this._baseProperties(traceId, spanId, parentId, latency, groupId, errorProperties),
       $ai_model: model,
       $ai_response_id: responseId,
-      $ai_input: this._withPrivacyMode(ensureSerializable(normalizeInputRoles((spanData as any)._input))),
+      $ai_input: this._prepareCapturedValue(normalizeInputRoles(responseSpanData._input)),
       $ai_input_tokens: inputTokens,
       $ai_output_tokens: outputTokens,
       $ai_total_tokens: inputTokens + outputTokens,
@@ -507,7 +529,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
 
     // Extract output from response
     if (response?.output) {
-      properties.$ai_output_choices = this._withPrivacyMode(ensureSerializable(response.output))
+      properties.$ai_output_choices = this._prepareCapturedValue(response.output)
     }
 
     this._captureEvent('$ai_generation', properties, distinctId)
@@ -527,12 +549,12 @@ export class PostHogTracingProcessor implements TracingProcessor {
       ...this._baseProperties(traceId, spanId, parentId, latency, groupId, errorProperties),
       $ai_span_name: spanData.name,
       $ai_span_type: 'tool',
-      $ai_input_state: this._withPrivacyMode(ensureSerializable(spanData.input)),
-      $ai_output_state: this._withPrivacyMode(ensureSerializable(spanData.output)),
+      $ai_input_state: this._prepareCapturedValue(spanData.input),
+      $ai_output_state: this._prepareCapturedValue(spanData.output),
     }
 
     if (spanData.mcp_data) {
-      properties.$ai_mcp_data = ensureSerializable(spanData.mcp_data)
+      properties.$ai_mcp_data = this._prepareCapturedValue(spanData.mcp_data)
     }
 
     this._captureEvent('$ai_span', properties, distinctId)
@@ -622,7 +644,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
       ...this._baseProperties(traceId, spanId, parentId, latency, groupId, errorProperties),
       $ai_span_name: spanData.name,
       $ai_span_type: 'custom',
-      $ai_custom_data: this._withPrivacyMode(ensureSerializable(spanData.data)),
+      $ai_custom_data: this._prepareCapturedValue(spanData.data),
     }
 
     this._captureEvent('$ai_span', properties, distinctId)
@@ -653,32 +675,32 @@ export class PostHogTracingProcessor implements TracingProcessor {
 
     // Add model config if available
     if ('model_config' in spanData && spanData.model_config) {
-      properties.model_config = ensureSerializable(spanData.model_config)
+      properties.$ai_model_config = this._prepareCapturedValue(spanData.model_config)
     }
 
     // Add audio format info
     if (spanData.type === 'transcription') {
       const transcription = spanData as TranscriptionSpanData
       if (transcription.input?.format) {
-        properties.audio_input_format = transcription.input.format
+        properties.$ai_audio_input_format = transcription.input.format
       }
       // Transcription output is text
       if (transcription.output) {
-        properties.$ai_output_state = this._withPrivacyMode(transcription.output)
+        properties.$ai_output_state = this._prepareCapturedValue(transcription.output)
       }
     } else if (spanData.type === 'speech') {
       const speech = spanData as SpeechSpanData
       if (speech.output?.format) {
-        properties.audio_output_format = speech.output.format
+        properties.$ai_audio_output_format = speech.output.format
       }
       // Text input for TTS
       if (speech.input) {
-        properties.$ai_input = this._withPrivacyMode(speech.input)
+        properties.$ai_input = this._prepareCapturedValue(speech.input)
       }
     } else if (spanData.type === 'speech_group') {
       const speechGroup = spanData as SpeechGroupSpanData
       if (speechGroup.input) {
-        properties.$ai_input = this._withPrivacyMode(speechGroup.input)
+        properties.$ai_input = this._prepareCapturedValue(speechGroup.input)
       }
     }
 
@@ -700,7 +722,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
       $ai_span_name: `mcp:${spanData.server}`,
       $ai_span_type: 'mcp_tools',
       $ai_mcp_server: spanData.server,
-      $ai_mcp_tools: spanData.result,
+      $ai_mcp_tools: this._prepareCapturedValue(spanData.result),
     }
 
     this._captureEvent('$ai_span', properties, distinctId)

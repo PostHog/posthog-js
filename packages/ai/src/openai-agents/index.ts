@@ -1,17 +1,10 @@
-import type { PostHog } from 'posthog-node'
 import { PostHogTracingProcessor } from './processor'
-import type { DistinctIdResolver } from './processor'
+import type { PostHogTracingProcessorOptions } from './processor'
 
 export { PostHogTracingProcessor } from './processor'
 export type { PostHogTracingProcessorOptions, DistinctIdResolver } from './processor'
 
-export interface InstrumentOptions {
-  client: PostHog
-  distinctId?: DistinctIdResolver
-  privacyMode?: boolean
-  groups?: Record<string, any>
-  properties?: Record<string, any>
-}
+export type InstrumentOptions = PostHogTracingProcessorOptions
 
 /**
  * One-liner to instrument OpenAI Agents SDK with PostHog tracing.
