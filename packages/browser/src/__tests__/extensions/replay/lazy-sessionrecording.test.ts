@@ -4494,6 +4494,223 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_isBelowMinimumDuration']()).toBe(false)
         })
 
+        it('blocks event trigger activation when per-event property filters fail', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'high-value-errors',
+                                name: 'High Value Errors',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [
+                                        {
+                                            name: 'purchase_error',
+                                            properties: [
+                                                { key: 'amount', type: 'event', operator: 'gt', value: '100' },
+                                            ],
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Event name matches but property filter fails
+            simpleEventEmitter.emit('eventCaptured', { event: 'purchase_error', properties: { amount: 50 } })
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Event name matches and property filter passes
+            simpleEventEmitter.emit('eventCaptured', { event: 'purchase_error', properties: { amount: 200 } })
+            expect(sessionRecording.status).toBe('sampled')
+        })
+
+        it('treats multiple same-name event entries as a disjunction of property filters', () => {
+            // Regression: A group may list the same event name twice with different property
+            // filters to express OR between clauses (e.g. "purchase amount > 100" OR
+            // "purchase by a VIP"). An earlier .find()-based implementation only ever
+            // evaluated the first clause, making subsequent same-name entries unreachable.
+            posthog.persistence?.register({ $stored_person_properties: { tier: 'vip' } })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'high-value-or-vip',
+                                name: 'High Value Or VIP Purchases',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [
+                                        {
+                                            name: 'purchase',
+                                            properties: [
+                                                { key: 'amount', type: 'event', operator: 'gt', value: '100' },
+                                            ],
+                                        },
+                                        {
+                                            name: 'purchase',
+                                            properties: [
+                                                { key: 'tier', type: 'person', operator: 'exact', value: 'vip' },
+                                            ],
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // First clause (amount > 100) fails, but second clause (tier = vip) matches.
+            // With .find() the first entry would be chosen and the group would never activate.
+            simpleEventEmitter.emit('eventCaptured', { event: 'purchase', properties: { amount: 50 } })
+            expect(sessionRecording.status).toBe('sampled')
+        })
+
+        it('does not activate when all same-name event clauses fail', () => {
+            // Companion regression: when no same-name clause passes, activation is still blocked.
+            posthog.persistence?.register({ $stored_person_properties: { tier: 'free' } })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'high-value-or-vip',
+                                name: 'High Value Or VIP Purchases',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [
+                                        {
+                                            name: 'purchase',
+                                            properties: [
+                                                { key: 'amount', type: 'event', operator: 'gt', value: '100' },
+                                            ],
+                                        },
+                                        {
+                                            name: 'purchase',
+                                            properties: [
+                                                { key: 'tier', type: 'person', operator: 'exact', value: 'vip' },
+                                            ],
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Neither clause matches: amount is 50 (< 100) and tier is free (not vip).
+            simpleEventEmitter.emit('eventCaptured', { event: 'purchase', properties: { amount: 50 } })
+            expect(sessionRecording.status).toBe('buffering')
+
+            // A later event that matches the second clause should still activate.
+            posthog.persistence?.register({ $stored_person_properties: { tier: 'vip' } })
+            simpleEventEmitter.emit('eventCaptured', { event: 'purchase', properties: { amount: 50 } })
+            expect(sessionRecording.status).toBe('sampled')
+        })
+
+        it('blocks trigger activation when group-level property filters fail', () => {
+            // Set person properties
+            posthog.persistence?.register({ $stored_person_properties: { country: 'DE' } })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'us-only',
+                                name: 'US Only',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [{ name: '$exception' }],
+                                    properties: [{ key: 'country', type: 'person', operator: 'exact', value: 'US' }],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Event name matches but group-level person property fails (country is DE, not US)
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Update person properties to US
+            posthog.persistence?.register({ $stored_person_properties: { country: 'US' } })
+
+            // Now it should match
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+            expect(sessionRecording.status).toBe('sampled')
+        })
+
+        it('checks both group-level and per-event properties (both must pass)', () => {
+            posthog.persistence?.register({ $stored_person_properties: { country: 'US' } })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'us-high-value',
+                                name: 'US High Value',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [
+                                        {
+                                            name: 'purchase',
+                                            properties: [
+                                                { key: 'amount', type: 'event', operator: 'gt', value: '100' },
+                                            ],
+                                        },
+                                    ],
+                                    properties: [{ key: 'country', type: 'person', operator: 'exact', value: 'US' }],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Group passes (US) but per-event fails (amount 50)
+            simpleEventEmitter.emit('eventCaptured', { event: 'purchase', properties: { amount: 50 } })
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Both pass
+            simpleEventEmitter.emit('eventCaptured', { event: 'purchase', properties: { amount: 200 } })
+            expect(sessionRecording.status).toBe('sampled')
+        })
+
         it('stops checking triggers after initial buffer flush (performance optimization)', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
