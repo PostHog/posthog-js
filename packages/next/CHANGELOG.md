@@ -1,5 +1,12 @@
 # @posthog/next
 
+## 0.4.14
+
+### Patch Changes
+
+- [#3376](https://github.com/PostHog/posthog-js/pull/3376) [`e8548a5`](https://github.com/PostHog/posthog-js/commit/e8548a58dd4f574d825c5750624b074f51eeae27) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: pass bootstrap flags via React context so feature flag hooks return correct values during SSR
+  (2026-04-15)
+
 ## 0.4.13
 
 ### Patch Changes
