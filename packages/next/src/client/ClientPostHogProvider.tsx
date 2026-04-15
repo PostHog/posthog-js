@@ -2,7 +2,7 @@
 
 import React from 'react'
 import posthogJs from 'posthog-js'
-import { PostHogProvider as ReactPostHogProvider } from 'posthog-js/react'
+import { PostHogContext } from 'posthog-js/react'
 import type { BootstrapConfig, PostHogConfig } from 'posthog-js'
 
 export type { BootstrapConfig }
@@ -47,5 +47,5 @@ export function ClientPostHogProvider({ apiKey, options, bootstrap, children }: 
         posthogJs.init(apiKey, mergedOptions)
     }
 
-    return <ReactPostHogProvider client={posthogJs}>{children}</ReactPostHogProvider>
+    return <PostHogContext.Provider value={{ client: posthogJs, bootstrap }}>{children}</PostHogContext.Provider>
 }
