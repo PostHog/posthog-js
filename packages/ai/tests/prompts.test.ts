@@ -558,10 +558,7 @@ describe('Prompts', () => {
         name: 'test-prompt',
         version: 1,
       })
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('using stale cache'),
-        expect.any(Error)
-      )
+      expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('using stale cache'), expect.any(Error))
     })
 
     it('should return source "code_fallback" with undefined name/version when fallback is used', async () => {
@@ -639,7 +636,11 @@ describe('Prompts', () => {
   })
 
   describe('get() deprecation warning', () => {
-    it('should emit a deprecation warning once when withMetadata is not provided', async () => {
+    it.each([
+      [undefined, 1],
+      [false, 0],
+      [true, 0],
+    ] as const)('deprecation warning count when withMetadata=%s', async (withMetadata, expectedWarnings) => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
@@ -655,49 +656,13 @@ describe('Prompts', () => {
       const posthog = createMockPostHog()
       const prompts = new Prompts({ posthog })
 
-      await prompts.get('test-prompt')
-      await prompts.get('other-prompt')
+      await prompts.get('test-prompt', withMetadata !== undefined ? { withMetadata } : undefined)
+      await prompts.get('other-prompt', withMetadata !== undefined ? { withMetadata } : undefined)
 
       const deprecationWarnings = consoleWarnSpy.mock.calls.filter(
         (call: unknown[]) => typeof call[0] === 'string' && call[0].includes('deprecated')
       )
-      expect(deprecationWarnings).toHaveLength(1)
-    })
-
-    it('should not emit a deprecation warning when withMetadata is false', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve(mockPromptResponse),
-      })
-
-      const posthog = createMockPostHog()
-      const prompts = new Prompts({ posthog })
-
-      await prompts.get('test-prompt', { withMetadata: false })
-
-      const deprecationWarnings = consoleWarnSpy.mock.calls.filter(
-        (call: unknown[]) => typeof call[0] === 'string' && call[0].includes('deprecated')
-      )
-      expect(deprecationWarnings).toHaveLength(0)
-    })
-
-    it('should not emit a deprecation warning when withMetadata is true', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve(mockPromptResponse),
-      })
-
-      const posthog = createMockPostHog()
-      const prompts = new Prompts({ posthog })
-
-      await prompts.get('test-prompt', { withMetadata: true })
-
-      const deprecationWarnings = consoleWarnSpy.mock.calls.filter(
-        (call: unknown[]) => typeof call[0] === 'string' && call[0].includes('deprecated')
-      )
-      expect(deprecationWarnings).toHaveLength(0)
+      expect(deprecationWarnings).toHaveLength(expectedWarnings)
     })
   })
 

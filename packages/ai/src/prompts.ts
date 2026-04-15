@@ -179,9 +179,9 @@ export class Prompts {
 
     if (cached) {
       const isFresh = now - cached.fetchedAt < cacheTtlSeconds * 1000
-      const { fetchedAt: _, ...cachedResult } = cached
 
       if (isFresh) {
+        const { fetchedAt: _, ...cachedResult } = cached
         return { source: 'cache', ...cachedResult }
       }
     }
