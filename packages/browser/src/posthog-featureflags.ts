@@ -30,6 +30,8 @@ import {
     STORED_PERSON_PROPERTIES_KEY,
     FLAG_CALL_REPORTED,
     FLAG_CALL_REPORTED_SESSION_ID,
+    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+    PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
 } from './constants'
 
 import { isUndefined, isArray, isNull } from '@posthog/core'
@@ -59,8 +61,6 @@ export const FeatureFlagError = {
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
-const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
-const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
 const PERSISTENCE_FEATURE_FLAG_REQUEST_ID = '$feature_flag_request_id'
 
 /** Converts an array of flag names to a Record where each flag is set to true. */

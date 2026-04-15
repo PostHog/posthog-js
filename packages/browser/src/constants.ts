@@ -54,6 +54,8 @@ export const SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP = '$debug_first_ful
 export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
 export const PERSISTENCE_EARLY_ACCESS_FEATURES = '$early_access_features'
 export const PERSISTENCE_FEATURE_FLAG_DETAILS = '$feature_flag_details'
+export const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
+export const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
 export const STORED_PERSON_PROPERTIES_KEY = '$stored_person_properties'
 export const STORED_GROUP_PROPERTIES_KEY = '$stored_group_properties'
 export const SURVEYS = '$surveys'
@@ -119,6 +121,8 @@ export const PERSISTENCE_RESERVED_PROPERTIES = [
     PRODUCT_TOURS_ENABLED_SERVER_SIDE,
     SURVEYS_ACTIVATED,
     SESSION_RECORDING_REMOTE_CONFIG,
+    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+    PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
 ]
 
 export const SURVEYS_REQUEST_TIMEOUT_MS = 10000
