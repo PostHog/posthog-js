@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Fix unnecessary config (product tours, session recording config) added to captured events
+Fix unnecessary persisted config and activation properties (including product tours, surveys, and session recording config) added to captured events
