@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Stop sending all active flags payloads in events
+Exclude active feature flag payloads from event properties
