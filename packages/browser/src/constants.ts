@@ -58,6 +58,7 @@ export const STORED_PERSON_PROPERTIES_KEY = '$stored_person_properties'
 export const STORED_GROUP_PROPERTIES_KEY = '$stored_group_properties'
 export const SURVEYS = '$surveys'
 export const SURVEYS_ACTIVATED = '$surveys_activated'
+export const PRODUCT_TOURS = 'ph_product_tours'
 export const PRODUCT_TOURS_ACTIVATED = '$product_tours_activated'
 export const CONVERSATIONS = '$conversations'
 export const FLAG_CALL_REPORTED = '$flag_call_reported'
@@ -113,6 +114,11 @@ export const PERSISTENCE_RESERVED_PROPERTIES = [
     INITIAL_REFERRER_INFO,
     ENABLE_PERSON_PROCESSING,
     INITIAL_PERSON_INFO,
+    PRODUCT_TOURS,
+    PRODUCT_TOURS_ACTIVATED,
+    PRODUCT_TOURS_ENABLED_SERVER_SIDE,
+    SURVEYS_ACTIVATED,
+    SESSION_RECORDING_REMOTE_CONFIG,
 ]
 
 export const SURVEYS_REQUEST_TIMEOUT_MS = 10000

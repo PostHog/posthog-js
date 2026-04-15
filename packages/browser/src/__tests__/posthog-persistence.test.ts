@@ -1,6 +1,16 @@
 /// <reference lib="dom" />
 import { PostHogPersistence } from '../posthog-persistence'
-import { DEVICE_ID, INITIAL_PERSON_INFO, SESSION_ID, USER_STATE } from '../constants'
+import {
+    DEVICE_ID,
+    INITIAL_PERSON_INFO,
+    PERSISTENCE_RESERVED_PROPERTIES,
+    PRODUCT_TOURS,
+    PRODUCT_TOURS_ACTIVATED,
+    SESSION_ID,
+    SESSION_RECORDING_REMOTE_CONFIG,
+    SURVEYS_ACTIVATED,
+    USER_STATE,
+} from '../constants'
 import { PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
@@ -243,6 +253,24 @@ describe('persistence', () => {
                 [INITIAL_PERSON_INFO]: initialPersonInfo,
             })
             expect(library.props[INITIAL_PERSON_INFO]).toEqual(initialPersonInfo)
+            expect(library.properties()).toEqual({})
+        })
+
+        it.each([
+            [PRODUCT_TOURS, [{ id: 1, name: 'tour' }]],
+            [PRODUCT_TOURS_ACTIVATED, ['tour-1']],
+            [SURVEYS_ACTIVATED, ['survey-1']],
+            [SESSION_RECORDING_REMOTE_CONFIG, { endpoint: '/s/' }],
+        ])('should not include reserved property %s in event properties', (key, value) => {
+            library.register({ [key]: value })
+            expect(library.props[key]).toEqual(value)
+            expect(library.properties()).toEqual({})
+        })
+
+        it('should have all PERSISTENCE_RESERVED_PROPERTIES excluded from properties()', () => {
+            for (const key of PERSISTENCE_RESERVED_PROPERTIES) {
+                library.register({ [key]: 'test-value' })
+            }
             expect(library.properties()).toEqual({})
         })
     })
