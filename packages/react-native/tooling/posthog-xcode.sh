@@ -60,6 +60,19 @@ fi
 # mimics how the file is defined in node_modules/react-native/scripts/react-native-xcode.sh (PACKAGER_SOURCEMAP_FILE)
 SOURCEMAP_PACKAGER_FILE="$CONFIGURATION_BUILD_DIR/$SOURCEMAP_NAME"
 
+# Pass release info from Xcode build settings when available
+CLI_RELEASE_ARGS=""
+if [ -n "${PRODUCT_BUNDLE_IDENTIFIER}" ]; then
+  CLI_RELEASE_ARGS="$CLI_RELEASE_ARGS --release-name $PRODUCT_BUNDLE_IDENTIFIER"
+fi
+if [ -n "${MARKETING_VERSION}" ]; then
+  RELEASE_VERSION="$MARKETING_VERSION"
+  if [ -n "${CURRENT_PROJECT_VERSION}" ]; then
+    RELEASE_VERSION="${MARKETING_VERSION}+${CURRENT_PROJECT_VERSION}"
+  fi
+  CLI_RELEASE_ARGS="$CLI_RELEASE_ARGS --release-version $RELEASE_VERSION"
+fi
+
 # RN deletes the PACKAGER_SOURCEMAP_FILE file after execution but we need it
 # lets patch the script to comment out this part if not yet
 if grep -q '^[[:space:]]*rm.*PACKAGER_SOURCEMAP_FILE' "$REACT_NATIVE_XCODE"; then
@@ -90,7 +103,7 @@ set -x -e
 
 # Execute posthog cli clone
 set +x +e
-CLI_CLONE_OUTPUT=$(/bin/sh -c "$PH_CLI_PATH hermes clone --minified-map-path $SOURCEMAP_PACKAGER_FILE --composed-map-path $SOURCEMAP_FILE" 2>&1)
+CLI_CLONE_OUTPUT=$(/bin/sh -c "$PH_CLI_PATH hermes clone --minified-map-path $SOURCEMAP_PACKAGER_FILE --composed-map-path $SOURCEMAP_FILE $CLI_RELEASE_ARGS" 2>&1)
 CLONE_EXIT_CODE=$?
 if [ $CLONE_EXIT_CODE -eq 0 ]; then
   echo "$CLI_CLONE_OUTPUT" | awk '{print "output: posthog-cli - " $0}'
@@ -102,7 +115,7 @@ set -x -e
 
 # Execute posthog cli upload
 set +x +e
-CLI_UPLOAD_OUTPUT=$(/bin/sh -c "$PH_CLI_PATH hermes upload --directory $DERIVED_FILE_DIR" 2>&1)
+CLI_UPLOAD_OUTPUT=$(/bin/sh -c "$PH_CLI_PATH hermes upload --directory $DERIVED_FILE_DIR $CLI_RELEASE_ARGS" 2>&1)
 UPLOAD_EXIT_CODE=$?
 if [ $UPLOAD_EXIT_CODE -eq 0 ]; then
   echo "$CLI_UPLOAD_OUTPUT" | awk '{print "output: posthog-cli - " $0}'

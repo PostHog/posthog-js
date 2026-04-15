@@ -54,6 +54,8 @@ plugins.withId('com.android.application') {
                     def releaseName = currentVariant[1]
                     def versionCode = currentVariant[2]
                     applicationVariant = currentVariant[3]
+                    def appId = currentVariant[4]
+                    def versionName = currentVariant[5]
 
                     try {
                         if (versionCode instanceof String) {
@@ -76,6 +78,13 @@ plugins.withId('com.android.application') {
                         group = 'posthog.com'
 
                         def extraArgs = []
+                        if (appId != null && !appId.isEmpty()) {
+                            extraArgs.addAll(["--release-name", appId.toString()])
+                        }
+                        if (versionName != null && !versionName.toString().isEmpty()) {
+                            def releaseVersion = versionCode != null ? "${versionName}+${versionCode}" : versionName.toString()
+                            extraArgs.addAll(["--release-version", releaseVersion])
+                        }
 
                         def injected = project.objects.newInstance(InjectedExecOps)
                         doFirst {
@@ -365,7 +374,7 @@ static extractCurrentVariants(bundleTask, variant) {
             def outputName = output.baseName
 
             if (currentVariants[outputName] == null) currentVariants[outputName] = []
-            currentVariants[outputName] = [outputName, releaseName, versionCode, variantName]
+            currentVariants[outputName] = [outputName, releaseName, versionCode, variantName, appId, versionName]
         }
     }
 
