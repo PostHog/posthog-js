@@ -96,24 +96,39 @@ describe('external-scripts-loader', () => {
             )
         })
 
-        it('uses versioned asset paths on the normal asset host when the preview flag is enabled as a boolean', () => {
-            mockPostHog.config.__preview_external_dependency_versioned_paths = true
+        it.each([
+            [
+                'uses versioned asset paths on the normal asset host when the preview flag is enabled as a boolean',
+                'https://us.posthog.com',
+                true,
+                'https://us-assets.i.posthog.com/static/1.0.0/recorder.js',
+            ],
+            [
+                'uses a configured asset host override for versioned asset paths',
+                'https://us.posthog.com',
+                'https://cdn-preview.example.com/',
+                'https://cdn-preview.example.com/static/1.0.0/recorder.js',
+            ],
+            [
+                'uses the custom asset host from endpointFor when the preview flag is enabled',
+                'https://my-proxy.example.com',
+                true,
+                'https://my-proxy.example.com/static/1.0.0/recorder.js',
+            ],
+        ])('%s', (_, apiHost, previewFlag, expectedSrc) => {
+            const posthog = {
+                config: {
+                    api_host: apiHost,
+                    external_scripts_inject_target: 'body',
+                    __preview_external_dependency_versioned_paths: previewFlag,
+                },
+                version: '1.0.0',
+            } as PostHog
+            posthog.requestRouter = new RequestRouter(posthog)
 
-            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(posthog, 'recorder', callback)
 
-            expect(document!.getElementsByTagName('script')[0].src).toBe(
-                'https://us-assets.i.posthog.com/static/1.0.0/recorder.js'
-            )
-        })
-
-        it('uses a configured asset host override for versioned asset paths', () => {
-            mockPostHog.config.__preview_external_dependency_versioned_paths = 'https://cdn-preview.example.com/'
-
-            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
-
-            expect(document!.getElementsByTagName('script')[0].src).toBe(
-                'https://cdn-preview.example.com/static/1.0.0/recorder.js'
-            )
+            expect(document!.getElementsByTagName('script')[0].src).toBe(expectedSrc)
         })
 
         it('uses eu-assets on the EU region', () => {
@@ -130,24 +145,6 @@ describe('external-scripts-loader', () => {
 
             expect(document!.getElementsByTagName('script')[0].src).toBe(
                 'https://eu-assets.i.posthog.com/static/recorder.js?v=1.0.0'
-            )
-        })
-
-        it('uses the custom asset host from endpointFor when the preview flag is enabled', () => {
-            const customPostHog = {
-                config: {
-                    api_host: 'https://my-proxy.example.com',
-                    external_scripts_inject_target: 'body',
-                    __preview_external_dependency_versioned_paths: true,
-                },
-                version: '1.0.0',
-            } as PostHog
-            customPostHog.requestRouter = new RequestRouter(customPostHog)
-
-            assignableWindow.__PosthogExtensions__.loadExternalDependency(customPostHog, 'recorder', callback)
-
-            expect(document!.getElementsByTagName('script')[0].src).toBe(
-                'https://my-proxy.example.com/static/1.0.0/recorder.js'
             )
         })
 
