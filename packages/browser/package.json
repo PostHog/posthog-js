@@ -3,7 +3,7 @@
     "version": "1.369.1",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
-    "author": "hey@posthog.com",
+    "author": "engineering@posthog.com",
     "license": "SEE LICENSE IN LICENSE",
     "homepage": "https://posthog.com/docs/libraries/js",
     "packageManager": "pnpm@10.12.4",

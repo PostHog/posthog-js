@@ -9,7 +9,7 @@
     },
     "author": {
         "name": "PostHog",
-        "email": "hey@posthog.com",
+        "email": "engineering@posthog.com",
         "url": "https://posthog.com"
     },
     "type": "module",
