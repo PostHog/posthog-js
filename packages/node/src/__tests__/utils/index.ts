@@ -59,7 +59,7 @@ export const apiImplementation = ({
   localFlagsEtag?: string
 }) => {
   return (url: any): Promise<any> => {
-    if ((url as any).includes('/flags/')) {
+    if ((url as any).includes('/flags/?')) {
       return Promise.resolve({
         status: flagsStatus,
         text: () => Promise.resolve('ok'),
