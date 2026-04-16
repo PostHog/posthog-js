@@ -112,7 +112,7 @@ export const apiImplementation = ({
 }
 
 export const anyLocalEvalCall = [
-  'http://example.com/api/feature_flag/local_evaluation?token=TEST_API_KEY&send_cohorts',
+  'http://example.com/flags/definitions?token=TEST_API_KEY&send_cohorts',
   expect.any(Object),
 ]
 export const anyFlagsCall = ['http://example.com/flags/?v=2', expect.any(Object)]
