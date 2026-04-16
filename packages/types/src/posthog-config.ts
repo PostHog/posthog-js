@@ -1585,8 +1585,8 @@ export interface PostHogConfig {
      * semver-qualified asset paths such as /static/1.370.0/recorder.js instead of the
      * legacy /static/recorder.js?v=1.370.0 form.
      *
-     * When set to a string, that string is treated as an asset host override for exact
-     * semver-qualified dependency paths only.
+     * When set to a string, that string is treated as an asset host override for any
+     * /static/* asset path while leaving non-static asset paths unchanged.
      */
     __preview_external_dependency_versioned_paths?: boolean | string
 

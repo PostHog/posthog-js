@@ -87,55 +87,65 @@ describe('request-router', () => {
     })
 
     describe('preview versioned asset host routing', () => {
-        it('keeps exact semver asset paths on the normal regional asset host when enabled as a boolean', () => {
+        it.each([
+            [
+                'keeps exact semver asset paths on the normal US asset host when enabled as a boolean',
+                'https://app.posthog.com',
+                true,
+                '/static/1.370.0/recorder.js',
+                'https://us-assets.i.posthog.com/static/1.370.0/recorder.js',
+            ],
+            [
+                'keeps exact semver asset paths on the normal EU asset host when enabled as a boolean',
+                'https://eu.posthog.com',
+                true,
+                '/static/1.370.0/recorder.js',
+                'https://eu-assets.i.posthog.com/static/1.370.0/recorder.js',
+            ],
+            [
+                'accepts a string asset host override for exact semver asset paths',
+                'https://app.posthog.com',
+                'https://cdn-preview.example.com/',
+                '/static/1.370.0/recorder.js',
+                'https://cdn-preview.example.com/static/1.370.0/recorder.js',
+            ],
+            [
+                'accepts a string asset host override for compatibility asset paths',
+                'https://app.posthog.com',
+                'https://cdn-preview.example.com/',
+                '/static/recorder.js?v=1.370.0',
+                'https://cdn-preview.example.com/static/recorder.js?v=1.370.0',
+            ],
+            [
+                'lets a string asset host override win even when api_host is custom',
+                'https://my-proxy.example.com',
+                'https://cdn-preview.example.com',
+                '/static/1.370.0/recorder.js',
+                'https://cdn-preview.example.com/static/1.370.0/recorder.js',
+            ],
+            [
+                'keeps custom asset hosts unchanged when enabled as a boolean',
+                'https://my-proxy.example.com',
+                true,
+                '/static/1.370.0/recorder.js',
+                'https://my-proxy.example.com/static/1.370.0/recorder.js',
+            ],
+        ])('%s', (_, apiHost, override, path, expected) => {
             expect(
-                router('https://app.posthog.com', undefined, {
-                    __preview_external_dependency_versioned_paths: true,
-                }).endpointFor('assets', '/static/1.370.0/recorder.js')
-            ).toEqual('https://us-assets.i.posthog.com/static/1.370.0/recorder.js')
-
-            expect(
-                router('https://eu.posthog.com', undefined, {
-                    __preview_external_dependency_versioned_paths: true,
-                }).endpointFor('assets', '/static/1.370.0/recorder.js')
-            ).toEqual('https://eu-assets.i.posthog.com/static/1.370.0/recorder.js')
+                router(apiHost, undefined, {
+                    __preview_external_dependency_versioned_paths: override,
+                }).endpointFor('assets', path)
+            ).toEqual(expected)
         })
 
-        it('accepts a string asset host override for exact semver asset paths', () => {
-            expect(
-                router('https://app.posthog.com', undefined, {
-                    __preview_external_dependency_versioned_paths: 'https://cdn-preview.example.com/',
-                }).endpointFor('assets', '/static/1.370.0/recorder.js')
-            ).toEqual('https://cdn-preview.example.com/static/1.370.0/recorder.js')
-        })
-
-        it('keeps non-versioned asset paths on the normal asset host even when a preview override is configured', () => {
+        it('keeps non-static asset paths on the normal asset host even when a preview override is configured', () => {
             const previewRouter = router('https://app.posthog.com', undefined, {
                 __preview_external_dependency_versioned_paths: 'https://cdn-preview.example.com/',
             })
 
-            expect(previewRouter.endpointFor('assets', '/static/recorder.js?v=1.370.0')).toEqual(
-                'https://us-assets.i.posthog.com/static/recorder.js?v=1.370.0'
-            )
             expect(previewRouter.endpointFor('assets', '/array/test-token/config.js')).toEqual(
                 'https://us-assets.i.posthog.com/array/test-token/config.js'
             )
-        })
-
-        it('lets a string asset host override win even when api_host is custom', () => {
-            expect(
-                router('https://my-proxy.example.com', undefined, {
-                    __preview_external_dependency_versioned_paths: 'https://cdn-preview.example.com',
-                }).endpointFor('assets', '/static/1.370.0/recorder.js')
-            ).toEqual('https://cdn-preview.example.com/static/1.370.0/recorder.js')
-        })
-
-        it('keeps custom asset hosts unchanged when enabled as a boolean', () => {
-            expect(
-                router('https://my-proxy.example.com', undefined, {
-                    __preview_external_dependency_versioned_paths: true,
-                }).endpointFor('assets', '/static/1.370.0/recorder.js')
-            ).toEqual('https://my-proxy.example.com/static/1.370.0/recorder.js')
         })
     })
 
