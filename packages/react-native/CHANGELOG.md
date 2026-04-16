@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.42.0
+
+### Minor Changes
+
+- [#3399](https://github.com/PostHog/posthog-js/pull/3399) [`1d7e298`](https://github.com/PostHog/posthog-js/commit/1d7e298648a6c47880e2130f6d68d755342cbdd1) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add version and project to expo react native symbols
+  (2026-04-16)
+
 ## 4.41.2
 
 ### Patch Changes

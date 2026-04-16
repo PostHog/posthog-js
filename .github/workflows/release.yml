@@ -87,9 +87,9 @@ jobs:
 
             - name: Get GitHub App token
               id: releaser
-              uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+              uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
               with:
-                  app-id: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_APP_ID }}
+                  client-id: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_APP_ID }}
                   private-key: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_PRIVATE_KEY }} # Secrets available only inside the `NPM Release` environment, requires approval from a maintainer
 
             - name: Checkout repository
@@ -395,7 +395,7 @@ jobs:
 
             - name: Upload dist artifact
               if: steps.check-version.outputs.is-new-version == 'true'
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: posthog-js-dist
                   path: packages/browser/dist/*.js
@@ -441,10 +441,10 @@ jobs:
                   fetch-depth: 1
 
             - name: Install pnpm
-              uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin v4.2.0
+              uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # pin v5.0.0
 
             - name: Setup Node.js
-              uses: actions/setup-node@v5
+              uses: actions/setup-node@v6
               with:
                   node-version: '24'
                   cache: 'pnpm'
@@ -533,7 +533,7 @@ jobs:
                   echo "  built from:          PostHog/posthog@$(git rev-parse HEAD)"
 
             - name: Upload toolbar artifact
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: toolbar-dist-${{ matrix.region.name }}
                   # Least common ancestor of these paths is `frontend/dist`,
@@ -565,15 +565,34 @@ jobs:
                     - { name: us, bucket: posthog-js-prod-us, aws_region: us-east-1 }
                     - { name: eu, bucket: posthog-js-prod-eu, aws_region: eu-central-1 }
         steps:
-            # Sparse checkout: only the upload script — no pnpm install/build runs here.
-            - name: Checkout upload script
+            # Sparse checkout the release tooling plus the root pnpm files so
+            # we can do a locked, filtered install for @posthog-tooling/release.
+            - name: Checkout release tooling
               uses: actions/checkout@v6
               with:
                   ref: ${{ needs.version-bump.outputs.commit-hash }}
-                  sparse-checkout: .github/scripts
+                  sparse-checkout: |
+                      .npmrc
+                      package.json
+                      patches
+                      pnpm-lock.yaml
+                      pnpm-workspace.yaml
+                      tooling/release
+
+            - name: Install pnpm
+              uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin v4.2.0
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v5
+              with:
+                  node-version: '24'
+                  cache: 'pnpm'
+
+            - name: Install release tooling dependencies
+              run: pnpm install --filter @posthog-tooling/release... --frozen-lockfile
 
             - name: Download dist artifact
-              uses: actions/download-artifact@v4
+              uses: actions/download-artifact@v8
               with:
                   name: posthog-js-dist
                   path: packages/browser/dist
@@ -587,7 +606,7 @@ jobs:
             # region-specific artifact is missing gives us clean per-region
             # fate-sharing.
             - name: Download toolbar artifact
-              uses: actions/download-artifact@v4
+              uses: actions/download-artifact@v8
               with:
                   name: toolbar-dist-${{ matrix.region.name }}
                   path: packages/browser/dist
@@ -602,10 +621,11 @@ jobs:
                   role-to-assume: ${{ matrix.region.name == 'us' && vars.AWS_S3_UPLOAD_ROLE_ARN_US || vars.AWS_S3_UPLOAD_ROLE_ARN_EU }}
                   aws-region: ${{ matrix.region.aws_region }}
 
-            - name: Upload dist and update manifest
+            - name: Upload immutable dist plus major and compatibility aliases
               env:
+                  BUCKET: ${{ matrix.region.bucket }}
                   VERSION: ${{ needs.build-s3-artifacts.outputs.committed-version }}
-              run: .github/scripts/upload-posthog-js-s3.sh ${{ matrix.region.bucket }}
+              run: node tooling/release/src/cli.ts upload-s3 "$BUCKET" "$VERSION"
 
             - name: Send failure event to PostHog
               if: ${{ failure() }}
@@ -640,7 +660,11 @@ jobs:
         name: Notify Slack - Released
         needs: [notify-approval-needed, publish, upload-s3]
         runs-on: ubuntu-latest
-        if: always() && needs.publish.result == 'success' && (needs.upload-s3.result == 'success' || needs.upload-s3.result == 'skipped') && needs.notify-approval-needed.outputs.slack_ts != ''
+        if: >-
+            always() &&
+            needs.publish.result == 'success' &&
+            (needs.upload-s3.result == 'success' || needs.upload-s3.result == 'skipped') &&
+            needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
             - name: Checkout repository
               uses: actions/checkout@v6
@@ -656,18 +680,21 @@ jobs:
                   emoji_reaction: 'rocket'
                   remove_emoji_reaction: 'x'
 
-    # Fires when npm publish fully succeeded but the S3/CDN upload failed (e.g.
-    # toolbar build broke against posthog/posthog@master, or one region's
-    # upload failed). Packages are already on npm at this point — the release
-    # isn't reversible — but the versioned CDN artifacts for posthog-js are
-    # stale or missing. Engineers get a single explicit summary message
-    # instead of having to piece the state together from a missing 🚀 message
-    # plus per-region ❌ messages.
+    # Fires when npm publish fully succeeded but the S3 publish of immutable,
+    # major-version alias, and/or top-level compatibility assets failed.
+    # Packages are already on npm at this point — the release isn't reversible
+    # — but the browser CDN artifacts may be stale or incomplete until the
+    # failed step is retried.
     notify-partial-release:
         name: Notify Slack - Partial Release (npm only)
         needs: [notify-approval-needed, build-s3-artifacts, publish, upload-s3]
         runs-on: ubuntu-latest
-        if: always() && needs.publish.result == 'success' && needs.upload-s3.result == 'failure' && needs.notify-approval-needed.outputs.slack_ts != ''
+        if: >-
+            always() &&
+            needs.publish.result == 'success' &&
+            needs.build-s3-artifacts.outputs.is-new-version == 'true' &&
+            needs.upload-s3.result == 'failure' &&
+            needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
             - name: Notify Slack - Partial Release
               continue-on-error: true # Slack failure shouldn't mark release as failed
@@ -676,5 +703,5 @@ jobs:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '⚠️ npm packages released, but CDN upload failed — posthog-js v${{ needs.build-s3-artifacts.outputs.committed-version }} dist and/or toolbar bundle is stale or missing on S3. <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  message: '⚠️ npm packages released, but S3 publish failed — posthog-js v${{ needs.build-s3-artifacts.outputs.committed-version }} immutable assets and/or major-version or top-level aliases need attention. <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
                   emoji_reaction: 'warning'

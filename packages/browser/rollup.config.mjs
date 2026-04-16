@@ -200,9 +200,6 @@ const plugins = (es5, noExternal) => [
                               '_patchFetch',
                               '_patchXHR',
 
-                              // accessed across bundles (external-scripts-loader reads it from the posthog instance)
-                              '_resolvedSdkVersion',
-
                               // set as part of lazy-loading (doesn't start with _ BUT be abundantly cautious)
                               'loadExternalDependency',
 

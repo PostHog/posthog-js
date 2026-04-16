@@ -403,15 +403,6 @@ export interface RemoteConfig {
      * Conversations widget configuration
      */
     conversations?: boolean | ConversationsRemoteConfig
-
-    /**
-     * SDK version information from the server (snippet versioning).
-     * Present when the team has version pinning configured.
-     */
-    sdkVersion?: {
-        requested: string
-        resolved?: string
-    }
 }
 
 /**

@@ -1581,6 +1581,17 @@ export interface PostHogConfig {
 
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+     * Loads external dependency bundles (for example recorder.js and toolbar.js) from
+     * semver-qualified asset paths such as /static/1.370.0/recorder.js instead of the
+     * legacy /static/recorder.js?v=1.370.0 form.
+     *
+     * When set to a string, that string is treated as an asset host override for any
+     * /static/* asset path while leaving non-static asset paths unchanged.
+     */
+    __preview_external_dependency_versioned_paths?: boolean | string
+
+    /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
      * Enables collection of bot traffic as $bot_pageview events with detailed bot detection
      * properties instead of dropping them entirely. Use it alongside opt_out_useragent_filter
      */
