@@ -413,6 +413,13 @@ export class PostHog implements PostHogInterface {
         return newExt
     }
 
+    private _inCookielessMode(): boolean {
+        return (
+            this.config.cookieless_mode === COOKIELESS_ALWAYS ||
+            (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isRejected())
+        )
+    }
+
     // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
     /** @deprecated Use `flagsEndpointWasHit` instead.  We migrated to using a new feature flag endpoint and the new method is more semantically accurate */
     public get decideEndpointWasHit(): boolean {
@@ -605,9 +612,7 @@ export class PostHog implements PostHogInterface {
         this._retryQueue = new RetryQueue(this)
         this.__request_queue = []
 
-        const startInCookielessMode =
-            this.config.cookieless_mode === COOKIELESS_ALWAYS ||
-            (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isRejected())
+        const startInCookielessMode = this._inCookielessMode()
 
         if (!startInCookielessMode) {
             this.sessionManager = new SessionIdManager(this)
@@ -945,11 +950,7 @@ export class PostHog implements PostHogInterface {
             // NOTE: We want to fire this on the next tick as the previous implementation had this side effect
             // and some clients may rely on it
             setTimeout(() => {
-                if (
-                    this.consent.isOptedIn() ||
-                    this.config.cookieless_mode === COOKIELESS_ALWAYS ||
-                    (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isRejected())
-                ) {
+                if (this.consent.isOptedIn() || this._inCookielessMode()) {
                     this._captureInitialPageview()
                 }
             }, 1)
@@ -1386,10 +1387,7 @@ export class PostHog implements PostHogInterface {
         properties['token'] = this.config.token
         properties['$config_defaults'] = this.config.defaults
 
-        if (
-            this.config.cookieless_mode == COOKIELESS_ALWAYS ||
-            (this.config.cookieless_mode == COOKIELESS_ON_REJECT && this.consent.isRejected())
-        ) {
+        if (this._inCookielessMode()) {
             // Set a flag to tell the plugin server to use cookieless server hash mode
             properties[COOKIELESS_MODE_FLAG_PROPERTY] = true
         }
@@ -3455,7 +3453,7 @@ export class PostHog implements PostHogInterface {
             logger.warn(CONSENT_COOKIELESS_WARN)
             return
         }
-        if (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isRejected()) {
+        if (this._inCookielessMode()) {
             // If the user was being treated as rejected in on_reject mode (either explicitly opted out, or opted out by default via opt_out_capturing_by_default), then before we can start sending regular non-cookieless events
             // we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
             this.reset(true)

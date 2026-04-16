@@ -38,14 +38,10 @@ export class ConsentManager {
         if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
             return true
         }
-        // we are opted out if:
-        // * consent is explicitly denied
-        // * consent is pending, and we are configured to opt out by default
-        // * consent is pending, and we are in cookieless mode "on_reject"
+        // we are opted out if we are rejected, or if consent is pending and we are in cookieless mode "on_reject"
         return (
-            this.consent === ConsentStatus.DENIED ||
-            (this.consent === ConsentStatus.PENDING &&
-                (this._config.opt_out_capturing_by_default || this._config.cookieless_mode === COOKIELESS_ON_REJECT))
+            this.isRejected() ||
+            (this.consent === ConsentStatus.PENDING && this._config.cookieless_mode === COOKIELESS_ON_REJECT)
         )
     }
 
