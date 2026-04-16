@@ -24,12 +24,12 @@ const sdk = new NodeSDK({
 sdk.start()
 
 async function main() {
-    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID!
-    const gatewayId = process.env.CLOUDFLARE_GATEWAY_ID!
-
     const client = new OpenAI({
-        baseURL: `https://gateway.ai.cloudflare.com/v1/${accountId}/${gatewayId}/compat`,
         apiKey: process.env.OPENAI_API_KEY!,
+        defaultHeaders: {
+            'cf-aig-authorization': `Bearer ${process.env.CF_AIG_TOKEN}`,
+        },
+        baseURL: `https://gateway.ai.cloudflare.com/v1/${process.env.CF_AIG_ACCOUNT_ID}/${process.env.CF_AIG_GATEWAY_ID}/compat`,
     })
 
     const response = await client.chat.completions.create({
