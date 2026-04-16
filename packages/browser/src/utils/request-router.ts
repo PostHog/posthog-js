@@ -73,7 +73,7 @@ export class RequestRouter {
         return this._regionCache[this.apiHost]
     }
 
-    private staticAssetHostOverride(path: string): string | undefined {
+    private _staticAssetHostOverride(path: string): string | undefined {
         const override = this.instance.config.__preview_external_dependency_versioned_paths
         if (typeof override !== 'string' || !staticAssetPath.test(path)) {
             return undefined
@@ -97,7 +97,7 @@ export class RequestRouter {
         }
 
         if (target === 'assets') {
-            const assetHostOverride = this.staticAssetHostOverride(path)
+            const assetHostOverride = this._staticAssetHostOverride(path)
             if (assetHostOverride) {
                 return `${assetHostOverride}${path}`
             }
