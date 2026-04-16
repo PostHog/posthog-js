@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-import { HeadObjectCommand, PutObjectCommand, PutObjectTaggingCommand, S3Client } from '@aws-sdk/client-s3'
+import { HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 
 let cachedClient: S3Client | null = null
 
@@ -61,18 +61,7 @@ export async function putS3ObjectFromFile(
             Body: fs.createReadStream(filePath),
             ContentType: options.contentType,
             CacheControl: options.cacheControl,
-        })
-    )
-}
-
-export async function tagS3ObjectPublic(bucket: string, key: string): Promise<void> {
-    await getS3Client().send(
-        new PutObjectTaggingCommand({
-            Bucket: bucket,
-            Key: key,
-            Tagging: {
-                TagSet: [{ Key: 'public', Value: 'true' }],
-            },
+            Tagging: 'public=true',
         })
     )
 }

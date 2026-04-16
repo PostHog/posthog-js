@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { parseSemver } from './release-utils.ts'
-import { putS3ObjectFromFile, s3ObjectExists, tagS3ObjectPublic } from './s3.ts'
+import { putS3ObjectFromFile, s3ObjectExists } from './s3.ts'
 
 const require = createRequire(import.meta.url)
 const mimeTypes = require('mime-types') as {
@@ -54,15 +54,6 @@ async function listFilesRecursively(root: string): Promise<string[]> {
     )
 
     return files.flat()
-}
-
-async function tagS3Keys(bucket: string, keys: string[]): Promise<void> {
-    if (keys.length === 0) {
-        return
-    }
-
-    console.log(`==> Tagging ${keys.length} uploaded object(s) in s3://${bucket} with public=true`)
-    await Promise.all(keys.map((key) => tagS3ObjectPublic(bucket, key)))
 }
 
 async function collectReleaseAssets(): Promise<ReleaseAsset[]> {
@@ -208,11 +199,9 @@ export async function uploadPostHogJsS3(bucket: string, version: string): Promis
     }
 
     const immutableKeys = await uploadReleaseAssets(bucket, uploadPlans.immutable, 'immutable release assets')
-    await tagS3Keys(bucket, immutableKeys)
     await verifyUploadedAssets(bucket, immutableKeys, 'immutable assets')
 
     const majorAliasKeys = await uploadReleaseAssets(bucket, uploadPlans.majorAlias, 'major-version alias assets')
-    await tagS3Keys(bucket, majorAliasKeys)
     await verifyUploadedAssets(bucket, majorAliasKeys, 'major-version alias assets')
 
     const compatibilityKeys = await uploadReleaseAssets(
@@ -220,7 +209,6 @@ export async function uploadPostHogJsS3(bucket: string, version: string): Promis
         uploadPlans.compatibility,
         'top-level compatibility assets'
     )
-    await tagS3Keys(bucket, compatibilityKeys)
     await verifyUploadedAssets(bucket, compatibilityKeys, 'top-level compatibility assets')
 
     console.log(
