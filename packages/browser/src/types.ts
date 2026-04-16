@@ -403,7 +403,6 @@ export interface RemoteConfig {
      * Conversations widget configuration
      */
     conversations?: boolean | ConversationsRemoteConfig
-
 }
 
 /**
