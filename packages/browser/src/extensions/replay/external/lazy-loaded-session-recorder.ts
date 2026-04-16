@@ -10,12 +10,22 @@ import {
 import { buildNetworkRequestOptions } from './config'
 import {
     ACTIVE,
+    allMatchSessionRecordingStatus,
+    AndTriggerMatching,
+    anyMatchSessionRecordingStatus,
     BUFFERING,
     DISABLED,
     EventTriggerMatching,
     LinkedFlagMatching,
+    nullMatchSessionRecordingStatus,
+    OrTriggerMatching,
     PAUSED,
+    PendingTriggerMatching,
+    RecordingTriggersStatus,
+    SAMPLED,
     SessionRecordingStatus,
+    TRIGGER_PENDING,
+    TriggerStatusMatching,
     TriggerType,
     URLTriggerMatching,
 } from './triggerMatching'
@@ -43,6 +53,7 @@ import {
     isUndefined,
 } from '@posthog/core'
 import {
+    SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_OVERRIDE_SAMPLING,
@@ -52,10 +63,10 @@ import {
     SESSION_RECORDING_PAST_MINIMUM_DURATION,
     SESSION_RECORDING_REMOTE_CONFIG,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
-    SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
 } from '../../../constants'
 import { PostHog } from '../../../posthog-core'
 import {
+    CaptureResult,
     NetworkRecordOptions,
     PerformanceCaptureConfig,
     Properties,
@@ -66,13 +77,8 @@ import {
 } from '../../../types'
 import { isLocalhost } from '../../../utils/request-utils'
 import Config from '../../../config'
+import { sampleOnProperty } from '../../sampling'
 import { FlushedSizeTracker } from './flushed-size-tracker'
-import {
-    RecordingStrategy,
-    V1RecordingStrategy,
-    V2TriggerGroupStrategy,
-    RecordingStrategyContext,
-} from './recording-strategies'
 
 const BASE_ENDPOINT = '/s/'
 const DEFAULT_CANVAS_QUALITY = 0.4
@@ -359,8 +365,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _linkedFlagMatching: LinkedFlagMatching
     private _urlTriggerMatching: URLTriggerMatching
     private _eventTriggerMatching: EventTriggerMatching
-    // Strategy pattern: V1 vs V2 trigger logic
-    private _strategy: RecordingStrategy | undefined
+    // we need to be able to check the state of the event and url triggers separately
+    // as we make some decisions based on them without referencing LinkedFlag etc
+    private _triggerMatching: TriggerStatusMatching = new PendingTriggerMatching()
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
     private _fullSnapshotTimestamps: Array<[string, number]> = []
 
@@ -410,8 +417,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private get _minimumDuration(): number | null {
-        return this._strategy?.getMinimumDuration(this.sessionId) ?? null
+        const duration = this._remoteConfig?.minimumDurationMilliseconds
+        return isNumber(duration) ? duration : null
     }
+
+    private _statusMatcher: (triggersStatus: RecordingTriggersStatus) => SessionRecordingStatus =
+        nullMatchSessionRecordingStatus
 
     private _onSessionIdListener: (() => void) | undefined = undefined
     private _onSessionIdleResetForcedListener: (() => void) | undefined = undefined
@@ -637,7 +648,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private get _fullSnapshotIntervalMillis(): number {
-        if (this._strategy?.hasPendingTriggers(this.sessionId) && !['sampled', 'active'].includes(this.status)) {
+        if (
+            this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING &&
+            !['sampled', 'active'].includes(this.status)
+        ) {
             return ONE_MINUTE
         }
 
@@ -698,38 +712,29 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _activateTrigger(triggerType: TriggerType, matchDetail?: string) {
-        // V1 only: V2 uses per-group activation and never calls this method
         // Prevent re-entry: if we're already activating a trigger, skip to avoid infinite recursion
         // This can happen when _reportStarted emits custom events that match the trigger condition
         if (this._isActivatingTrigger) {
             return
         }
 
-        if (!this._strategy?.hasPendingTriggers(this.sessionId)) {
-            return
-        }
+        if (this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING) {
+            this._isActivatingTrigger = true
+            try {
+                // status is stored separately for URL and event triggers
+                this._instance?.persistence?.register({
+                    [triggerType === 'url'
+                        ? SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION
+                        : SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION]: this._sessionId,
+                })
 
-        this._isActivatingTrigger = true
-        try {
-            // V1: Write trigger activation to persistence
-            // (V2 handles this per-group via TriggerGroupMatching.activateTrigger)
-            const persistenceKey =
-                triggerType === 'url'
-                    ? SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION
-                    : SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION
-
-            this._instance.persistence?.register({
-                [persistenceKey]: this.sessionId,
-            })
-
-            this._strategy?.updateActiveTriggers(this.sessionId)
-
-            this._flushBuffer()
-            this._reportStarted((triggerType + '_trigger_matched') as SessionStartReason, {
-                [triggerType === 'url' ? 'matchedUrl' : 'matchedEvent']: matchDetail,
-            })
-        } finally {
-            this._isActivatingTrigger = false
+                this._flushBuffer()
+                this._reportStarted((triggerType + '_trigger_matched') as SessionStartReason, {
+                    [triggerType === 'url' ? 'matchedUrl' : 'matchedEvent']: matchDetail,
+                })
+            } finally {
+                this._isActivatingTrigger = false
+            }
         }
     }
 
@@ -792,37 +797,31 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._endpoint = config?.endpoint
         }
 
-        // Initialize the appropriate strategy based on config version
-        const isV2 = config?.version === 2 && config?.triggerGroups && config.triggerGroups.length > 0
-
-        if (isV2) {
-            this._strategy = new V2TriggerGroupStrategy(
-                this._instance,
-                this._urlTriggerMatching,
-                this._reportStarted.bind(this),
-                this._tryAddCustomEvent.bind(this)
-            )
+        if (config?.triggerMatchType === 'any') {
+            this._statusMatcher = anyMatchSessionRecordingStatus
+            this._triggerMatching = new OrTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
         } else {
-            this._strategy = new V1RecordingStrategy(
-                this._instance,
-                this._urlTriggerMatching,
-                this._eventTriggerMatching,
-                this._linkedFlagMatching,
-                this._reportStarted.bind(this),
-                this._tryTakeFullSnapshot.bind(this)
-            )
+            // either the setting is "ALL"
+            // or we default to the most restrictive
+            this._statusMatcher = allMatchSessionRecordingStatus
+            this._triggerMatching = new AndTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
         }
+        this._instance.register_for_session({
+            $sdk_debug_replay_remote_trigger_matching_config: config?.triggerMatchType,
+        })
 
-        // Let the strategy configure itself
-        this._strategy.onRemoteConfig(config)
+        this._urlTriggerMatching.onConfig(config)
 
-        // Setup event trigger listeners via strategy
+        this._eventTriggerMatching.onConfig(config)
         this._removeEventTriggerCaptureHook?.()
-        this._removeEventTriggerCaptureHook = this._strategy.setupEventTriggerListeners(
-            this._instance.on.bind(this._instance, 'eventCaptured'),
-            this.sessionId,
-            (triggerType, matchDetail) => this._activateTrigger(triggerType, matchDetail)
-        )
+        this._addEventTriggerListener()
+
+        this._linkedFlagMatching.onConfig(config, (flag, variant) => {
+            this._reportStarted('linked_flag_matched', {
+                flag,
+                variant,
+            })
+        })
 
         this._checkOverride(SESSION_RECORDING_OVERRIDE_SAMPLING, () => {
             this.overrideSampling()
@@ -837,8 +836,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this.overrideTrigger('url')
         })
 
-        // Let strategy make sampling decisions
-        this._strategy.makeSamplingDecisions(this.sessionId)
+        this._makeSamplingDecision(this.sessionId)
         this._startRecorder()
 
         if (this._rrwebError) {
@@ -967,7 +965,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         if (isNumber(this._sampleRate) && isNullish(this._samplingSessionListener)) {
-            this._strategy?.makeSamplingDecisions(sessionId)
+            this._makeSamplingDecision(sessionId)
         }
     }
 
@@ -993,7 +991,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._forceIdleSessionIdListener?.()
         this._forceIdleSessionIdListener = undefined
 
-        this._strategy?.stop()
+        this._eventTriggerMatching.stop()
+        this._urlTriggerMatching.stop()
+        this._linkedFlagMatching.stop()
 
         this._mutationThrottler?.stop()
 
@@ -1035,14 +1035,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._pageViewFallBack()
         }
 
-        // Check if the URL matches any trigger patterns - delegate to strategy
-        this._strategy?.checkUrlTriggers(
-            this.sessionId,
+        // Check if the URL matches any trigger patterns
+        this._urlTriggerMatching.checkUrlTriggerConditions(
             () => this._pauseRecording(),
             () => this._resumeRecording(),
-            (triggerType, matchDetail) => this._activateTrigger(triggerType, matchDetail)
+            (triggerType, matchDetail) => this._activateTrigger(triggerType, matchDetail),
+            this.sessionId
         )
-
         // always have to check if the URL is blocked really early,
         // or you risk getting stuck in a loop
         if (this._urlTriggerMatching.urlBlocked && !isRecordingPausedEvent(rawEvent)) {
@@ -1067,7 +1066,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         // Clear the buffer if waiting for a trigger and only keep data from after the current full snapshot
-        if (rawEvent.type === EventType.FullSnapshot && this._strategy?.hasPendingTriggers(this.sessionId)) {
+        // we always start trigger pending so need to wait for flags before we know if we're really pending
+        if (
+            rawEvent.type === EventType.FullSnapshot &&
+            this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING
+        ) {
             this._clearBufferBeforeMostRecentMeta()
         }
 
@@ -1159,22 +1162,18 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     get status(): SessionRecordingStatus {
-        if (!this._strategy) {
-            return DISABLED
-        }
-
-        const context: RecordingStrategyContext = {
-            instance: this._instance,
-            sessionId: this.sessionId,
+        return this._statusMatcher({
+            // can't get here without recording being enabled...
+            receivedFlags: true,
+            isRecordingEnabled: true,
+            // things that do still vary
             isSampled: this._isSampled,
             rrwebError: this._rrwebError,
             urlTriggerMatching: this._urlTriggerMatching,
             eventTriggerMatching: this._eventTriggerMatching,
             linkedFlagMatching: this._linkedFlagMatching,
-            remoteConfig: this._remoteConfig,
-        }
-
-        return this._strategy.getStatus(context)
+            sessionId: this.sessionId,
+        })
     }
 
     log(message: string, level: 'log' | 'warn' | 'error' = 'log') {
@@ -1256,9 +1255,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     $lib_version: Config.LIB_VERSION,
                 })
             })
-
-            // Notify strategy that initial flush is complete (performance optimization)
-            this._strategy?.onFlushComplete()
         }
 
         // buffer is empty, we clear it in case the session id has changed
@@ -1519,7 +1515,75 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _clearConditionalRecordingPersistence(): void {
-        this._strategy?.clearConditionalRecordingPersistence()
+        this._instance?.persistence?.unregister(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
+        this._instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
+        this._instance?.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
+        this._instance?.persistence?.unregister(SESSION_RECORDING_PAST_MINIMUM_DURATION)
+    }
+
+    private _makeSamplingDecision(sessionId: string): void {
+        const sessionIdChanged = this._sessionId !== sessionId
+
+        // capture the current sample rate
+        // because it is re-used multiple times
+        // and the bundler won't minimize any of the references
+        const currentSampleRate = this._sampleRate
+
+        if (!isNumber(currentSampleRate)) {
+            this._instance.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
+            return
+        }
+
+        const storedIsSampled = this._isSampled
+
+        /**
+         * if we get this far, then we should make a sampling decision.
+         * When the session id changes or there is no stored sampling decision for this session id
+         * then we should make a new decision.
+         *
+         * Otherwise, we should use the stored decision.
+         */
+        const makeDecision = sessionIdChanged || !isBoolean(storedIsSampled)
+        const shouldSample = makeDecision ? sampleOnProperty(sessionId, currentSampleRate) : storedIsSampled
+
+        if (makeDecision) {
+            if (shouldSample) {
+                this._reportStarted(SAMPLED)
+            } else {
+                logger.warn(
+                    `Sample rate (${currentSampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
+                )
+            }
+
+            this._tryAddCustomEvent('samplingDecisionMade', {
+                sampleRate: currentSampleRate,
+                isSampled: shouldSample,
+            })
+        }
+
+        this._instance.persistence?.register({
+            [SESSION_RECORDING_IS_SAMPLED]: shouldSample ? sessionId : false,
+        })
+    }
+
+    private _addEventTriggerListener() {
+        if (this._eventTriggerMatching._eventTriggers.length === 0 || !isNullish(this._removeEventTriggerCaptureHook)) {
+            return
+        }
+
+        this._removeEventTriggerCaptureHook = this._instance.on('eventCaptured', (event: CaptureResult) => {
+            // If anything could go wrong here, it has the potential to block the main loop,
+            // so we catch all errors.
+            try {
+                this._eventTriggerMatching.checkEventTriggerConditions(
+                    event.event,
+                    (triggerType, matchDetail) => this._activateTrigger(triggerType, matchDetail),
+                    this.sessionId
+                )
+            } catch (e) {
+                logger.error('Could not activate event trigger', e)
+            }
+        })
     }
 
     get sdkDebugProperties(): Properties {
