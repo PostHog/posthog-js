@@ -45,6 +45,9 @@ describe('posthog-xcode.sh remote URL parsing', () => {
     ['git@bitbucket.org:foo/bar.git', 'bitbucket.org', 'foo/bar'],
     ['git@git.mycompany.internal:team/repo.git', 'git.mycompany.internal', 'team/repo'],
     ['ssh://git@github.com:22/foo/bar.git', 'github.com', 'foo/bar'],
+    ['https://gitlab.com/org/subgroup/repo.git', 'gitlab.com', 'org/subgroup/repo'],
+    ['git@gitlab.com:org/subgroup/repo.git', 'gitlab.com', 'org/subgroup/repo'],
+    ['https://gitlab.com/org/deep/nested/subgroup/repo.git', 'gitlab.com', 'org/deep/nested/subgroup/repo'],
   ]
 
   it.each(cases)('parses %s → host=%s repo=%s', (url, expectedHost, expectedRepo) => {

@@ -123,12 +123,14 @@ if [ -z "$GITHUB_SHA" ] && [ -z "$VERCEL" ]; then
     GIT_REMOTE_URL=$(git -C "$GIT_TOPLEVEL" config --get remote.origin.url 2>/dev/null)
     if [ -n "$GIT_REMOTE_URL" ]; then
       # Parse host and "owner/repo" from either:
-      #   git@host:owner/repo.git           → host=host, repo=owner/repo
-      #   https://host/owner/repo.git       → host=host, repo=owner/repo
-      #   ssh://git@host:port/owner/repo    → host=host, repo=owner/repo
+      #   git@host:owner/repo.git                    → host=host, repo=owner/repo
+      #   https://host/owner/repo.git                → host=host, repo=owner/repo
+      #   ssh://git@host:port/owner/repo             → host=host, repo=owner/repo
+      #   git@gitlab.com:org/subgroup/repo.git       → host=gitlab.com, repo=org/subgroup/repo
       # Strip leading scheme + optional user@, then take everything up to the first : or /
       GIT_HOST=$(echo "$GIT_REMOTE_URL" | sed -E 's#^[a-z]+://##; s#^[^@]*@##; s#[:/].*$##')
-      GIT_REPO_PATH=$(echo "$GIT_REMOTE_URL" | sed -E 's#^.*[:/]([^:/]+/[^/]+)$#\1#; s#\.git$##')
+      # Strip scheme + user@host + separator, optional port, and .git suffix
+      GIT_REPO_PATH=$(echo "$GIT_REMOTE_URL" | sed -E 's#^([a-z]+://)?[^:/]*[:/]##; s#^[0-9]+/##; s#\.git$##')
       if [ -n "$GIT_HOST" ] && [ -n "$GIT_REPO_PATH" ]; then
         GIT_BRANCH_NAME=$(git -C "$GIT_TOPLEVEL" rev-parse --abbrev-ref HEAD 2>/dev/null)
         # --abbrev-ref returns the literal string "HEAD" when the working copy

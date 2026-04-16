@@ -65,11 +65,11 @@ export function disableUserScriptSandboxing(xcodeProject: any): void {
   // posthog-cli needs to read .git/ for release auto-detection, which the
   // Xcode 14+ user script sandbox blocks.
   //
-  // Scope: withXcodeProject only exposes the main app's .xcodeproj. The Pods
-  // project is a separate .xcodeproj in the workspace with its own sandboxing
-  // settings managed by CocoaPods — we neither see nor touch those here.
-  // This function only flips ENABLE_USER_SCRIPT_SANDBOXING on the user's main
-  // app target configurations (Debug/Release/custom schemes).
+  // Scope: withXcodeProject only exposes the main app's .xcodeproj (the Pods
+  // project is a separate .xcodeproj managed by CocoaPods — not touched here).
+  // Within the main .xcodeproj, this iterates ALL build configurations without
+  // filtering — that includes the app target, test targets, app extensions, and
+  // any other target defined in the project.
   const configurations = xcodeProject.pbxXCBuildConfigurationSection()
   for (const key in configurations) {
     const configuration = configurations[key]
@@ -88,8 +88,8 @@ type PostHogPluginProps = {
    * or fail silently.
    *
    * Default: true (disable sandboxing so uploads "just work").
-   * Set to false if your org requires sandboxing stays on for security/compliance —
-   * you'll lose automatic git metadata on sourcemap uploads.
+   * Set to false if your org requires sandboxing stays on —
+   * you'll lose automatic git metadata on sourcemap uploads on iOS builds only.
    */
   disableSandboxing?: boolean
 }
