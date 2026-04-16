@@ -79,7 +79,7 @@ export const apiImplementation = ({
       }) as any
     }
 
-    if ((url as any).includes('api/feature_flag/local_evaluation?token=TEST_API_KEY&send_cohorts')) {
+    if ((url as any).includes('flags/definitions?token=TEST_API_KEY&send_cohorts')) {
       const headers = localFlagsEtag ? createMockHeaders({ ETag: localFlagsEtag }) : createMockHeaders()
       return Promise.resolve({
         status: localFlagsStatus,
