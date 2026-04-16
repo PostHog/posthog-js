@@ -162,8 +162,6 @@ const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
 const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
 
-const RESOLVED_SDK_VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
-
 const PRIMARY_INSTANCE_NAME = 'posthog'
 
 /*
@@ -215,6 +213,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     defaults: defaults ?? 'unset',
     __preview_deferred_init_extensions: false, // Opt-in only for now
+    __preview_external_dependency_versioned_paths: false,
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookie_expiration: 365,
     upgrade: false,
@@ -391,7 +390,6 @@ export class PostHog implements PostHogInterface {
     __request_queue: QueuedRequestWithOptions[]
     _pendingRemoteConfig?: RemoteConfig
     _remoteConfigLoader?: RemoteConfigLoader
-    _resolvedSdkVersion?: string
     analyticsDefaultEndpoint: string
     version: string = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
@@ -615,18 +613,6 @@ export class PostHog implements PostHogInterface {
         if (!startInCookielessMode) {
             this.sessionManager = new SessionIdManager(this)
             this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
-        }
-
-        // Read resolved SDK version from pre-loaded config (snippet v2) before extensions
-        // initialize, so loadExternalDependency uses the versioned asset path
-        const preloadedConfig = assignableWindow._POSTHOG_REMOTE_CONFIG?.[this.config.token]?.config
-        const resolved = preloadedConfig?.sdkVersion?.resolved
-        if (resolved) {
-            if (RESOLVED_SDK_VERSION_RE.test(resolved)) {
-                this._resolvedSdkVersion = resolved
-            } else {
-                logger.warn(`Ignoring invalid preloaded sdkVersion.resolved from remote config: ${resolved}`)
-            }
         }
 
         // Conditionally defer extension initialization based on config
