@@ -87,7 +87,7 @@ jobs:
 
             - name: Get GitHub App token
               id: releaser
-              uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+              uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
               with:
                   app-id: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_APP_ID }}
                   private-key: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_PRIVATE_KEY }} # Secrets available only inside the `NPM Release` environment, requires approval from a maintainer
@@ -395,7 +395,7 @@ jobs:
 
             - name: Upload dist artifact
               if: steps.check-version.outputs.is-new-version == 'true'
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: posthog-js-dist
                   path: packages/browser/dist/*.js
@@ -441,10 +441,10 @@ jobs:
                   fetch-depth: 1
 
             - name: Install pnpm
-              uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin v4.2.0
+              uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # pin v5.0.0
 
             - name: Setup Node.js
-              uses: actions/setup-node@v5
+              uses: actions/setup-node@v6
               with:
                   node-version: '24'
                   cache: 'pnpm'
@@ -533,7 +533,7 @@ jobs:
                   echo "  built from:          PostHog/posthog@$(git rev-parse HEAD)"
 
             - name: Upload toolbar artifact
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: toolbar-dist-${{ matrix.region.name }}
                   # Least common ancestor of these paths is `frontend/dist`,
@@ -573,7 +573,7 @@ jobs:
                   sparse-checkout: .github/scripts
 
             - name: Download dist artifact
-              uses: actions/download-artifact@v4
+              uses: actions/download-artifact@v8
               with:
                   name: posthog-js-dist
                   path: packages/browser/dist
@@ -587,7 +587,7 @@ jobs:
             # region-specific artifact is missing gives us clean per-region
             # fate-sharing.
             - name: Download toolbar artifact
-              uses: actions/download-artifact@v4
+              uses: actions/download-artifact@v8
               with:
                   name: toolbar-dist-${{ matrix.region.name }}
                   path: packages/browser/dist
