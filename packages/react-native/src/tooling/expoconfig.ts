@@ -90,6 +90,9 @@ type PostHogPluginProps = {
    * Default: true (disable sandboxing so uploads "just work").
    * Set to false if your org requires sandboxing stays on —
    * you'll lose automatic git metadata on sourcemap uploads on iOS builds only.
+   * 
+   * Note that this setting is recommended in the Expo docs: 
+   * https://docs.expo.dev/brownfield/integrated-approach/#configuring-your-xcode-project
    */
   disableSandboxing?: boolean
 }

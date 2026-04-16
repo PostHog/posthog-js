@@ -82,8 +82,10 @@ plugins.withId('com.android.application') {
                             extraArgs.addAll(["--release-name", appId.toString()])
                         }
                         if (versionName != null && !versionName.toString().isEmpty()) {
-                            def releaseVersion = versionCode != null ? "${versionName}+${versionCode}" : versionName.toString()
-                            extraArgs.addAll(["--release-version", releaseVersion])
+                            extraArgs.addAll(["--release-version", versionName.toString()])
+                        }
+                        if (versionCode != null) {
+                            extraArgs.addAll(["--build", versionCode.toString()])
                         }
 
                         def injected = project.objects.newInstance(InjectedExecOps)
