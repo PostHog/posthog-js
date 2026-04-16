@@ -546,12 +546,97 @@ jobs:
                   retention-days: 1
                   if-no-files-found: error
 
+    prepare-cdn-version-pointers:
+        name: Prepare CDN / version pointers
+        needs: [build-s3-artifacts, version-bump, notify-approval-needed]
+        runs-on: ubuntu-latest
+        if: always() && needs.build-s3-artifacts.outputs.is-new-version == 'true'
+        environment: 'S3 Upload' # For OIDC credential scoping only — no required reviewers
+        permissions:
+            contents: read
+            id-token: write
+        steps:
+            - name: Checkout release tooling
+              uses: actions/checkout@v6
+              with:
+                  ref: ${{ needs.version-bump.outputs.commit-hash }}
+                  sparse-checkout: |
+                      .npmrc
+                      package.json
+                      patches
+                      pnpm-lock.yaml
+                      pnpm-workspace.yaml
+                      tooling/release
+
+            - name: Install pnpm
+              uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin v4.2.0
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v5
+              with:
+                  node-version: '24'
+                  cache: 'pnpm'
+
+            - name: Install release tooling dependencies
+              run: pnpm install --filter @posthog-tooling/release... --frozen-lockfile
+
+            - name: Configure AWS credentials
+              uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6
+              with:
+                  role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_US }}
+                  aws-region: us-east-1
+
+            - name: Prepare canonical versions.json and manifest.json
+              run: |
+                  mkdir -p "$RUNNER_TEMP/cdn-version-pointers"
+                  node tooling/release/src/cli.ts prepare-version-pointers \
+                    ${{ needs.build-s3-artifacts.outputs.committed-version }} \
+                    posthog-js-prod-us \
+                    "$RUNNER_TEMP/cdn-version-pointers"
+
+            - name: Upload canonical version pointer artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: cdn-version-pointers
+                  path: |
+                      ${{ runner.temp }}/cdn-version-pointers/versions.json
+                      ${{ runner.temp }}/cdn-version-pointers/manifest.json
+                  retention-days: 1
+                  if-no-files-found: error
+
+            - name: Send failure event to PostHog
+              if: ${{ failure() }}
+              uses: PostHog/posthog-github-action@v1
+              with:
+                  posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
+                  event: 'posthog-js-github-release-workflow-failure'
+                  properties: >-
+                      {
+                        "commitSha": "${{ github.sha }}",
+                        "jobStatus": "${{ job.status }}",
+                        "ref": "${{ github.ref }}",
+                        "jobName": "prepare-cdn-version-pointers",
+                        "packageName": "posthog-js",
+                        "packageVersion": "${{ needs.build-s3-artifacts.outputs.committed-version }}"
+                      }
+
+            - name: Notify Slack - Prepare CDN / Version Pointers Failed
+              continue-on-error: true
+              if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
+              uses: PostHog/.github/.github/actions/slack-thread-reply@main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '❌ Failed to prepare canonical CDN / version pointers for posthog-js v${{ needs.build-s3-artifacts.outputs.committed-version }}! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  emoji_reaction: 'x'
+
     upload-s3:
         # Matrixed per region so each cell downloads only the toolbar artifact
         # that was built with the matching `TOOLBAR_PUBLIC_PATH`. posthog-js's
         # own dist is region-agnostic and downloaded identically in both cells.
         name: Upload posthog-js dist to S3 (${{ matrix.region.name }})
-        needs: [build-s3-artifacts, build-toolbar, version-bump, notify-approval-needed]
+        needs: [build-s3-artifacts, build-toolbar, prepare-cdn-version-pointers, version-bump, notify-approval-needed]
         runs-on: ubuntu-latest
         if: always() && needs.build-s3-artifacts.outputs.is-new-version == 'true'
         environment: 'S3 Upload' # For OIDC credential scoping only — no required reviewers (single approval at NPM Release)
@@ -565,18 +650,43 @@ jobs:
                     - { name: us, bucket: posthog-js-prod-us, aws_region: us-east-1 }
                     - { name: eu, bucket: posthog-js-prod-eu, aws_region: eu-central-1 }
         steps:
-            # Sparse checkout: only the upload script — no pnpm install/build runs here.
-            - name: Checkout upload script
+            # Sparse checkout the release tooling plus the root pnpm files so
+            # we can do a locked, filtered install for @posthog-tooling/release.
+            - name: Checkout release tooling
               uses: actions/checkout@v6
               with:
                   ref: ${{ needs.version-bump.outputs.commit-hash }}
-                  sparse-checkout: .github/scripts
+                  sparse-checkout: |
+                      .npmrc
+                      package.json
+                      patches
+                      pnpm-lock.yaml
+                      pnpm-workspace.yaml
+                      tooling/release
+
+            - name: Install pnpm
+              uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin v4.2.0
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v5
+              with:
+                  node-version: '24'
+                  cache: 'pnpm'
+
+            - name: Install release tooling dependencies
+              run: pnpm install --filter @posthog-tooling/release... --frozen-lockfile
 
             - name: Download dist artifact
               uses: actions/download-artifact@v4
               with:
                   name: posthog-js-dist
                   path: packages/browser/dist
+
+            - name: Download canonical version pointer artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: cdn-version-pointers
+                  path: ${{ runner.temp }}/cdn-version-pointers
 
             # No `if` guard on this step: the toolbar bundle is a required
             # release artifact, and the matrix runs one upload-s3 cell per
@@ -602,10 +712,13 @@ jobs:
                   role-to-assume: ${{ matrix.region.name == 'us' && vars.AWS_S3_UPLOAD_ROLE_ARN_US || vars.AWS_S3_UPLOAD_ROLE_ARN_EU }}
                   aws-region: ${{ matrix.region.aws_region }}
 
-            - name: Upload dist and update manifest
-              env:
-                  VERSION: ${{ needs.build-s3-artifacts.outputs.committed-version }}
-              run: .github/scripts/upload-posthog-js-s3.sh ${{ matrix.region.bucket }}
+            - name: Upload immutable dist and publish canonical version pointers
+              run: |
+                  node tooling/release/src/cli.ts upload-s3 \
+                    ${{ matrix.region.bucket }} \
+                    ${{ needs.build-s3-artifacts.outputs.committed-version }} \
+                    "$RUNNER_TEMP/cdn-version-pointers/versions.json" \
+                    "$RUNNER_TEMP/cdn-version-pointers/manifest.json"
 
             - name: Send failure event to PostHog
               if: ${{ failure() }}
@@ -636,11 +749,86 @@ jobs:
                   message: '❌ Failed to upload posthog-js v${{ needs.build-s3-artifacts.outputs.committed-version }} dist to ${{ matrix.region.bucket }}! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
                   emoji_reaction: 'x'
 
+    cdn-version-pointer-sync:
+        name: CDN / version pointer sync
+        needs: [build-s3-artifacts, prepare-cdn-version-pointers, upload-s3, notify-approval-needed]
+        runs-on: ubuntu-latest
+        if: >-
+            always() &&
+            needs.build-s3-artifacts.outputs.is-new-version == 'true' &&
+            needs.upload-s3.result == 'success'
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout release tooling
+              uses: actions/checkout@v6
+              with:
+                  ref: ${{ github.sha }}
+                  sparse-checkout: tooling/release
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v5
+              with:
+                  node-version: '24'
+
+            - name: Download canonical version pointer artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: cdn-version-pointers
+                  path: ${{ runner.temp }}/cdn-version-pointers
+
+            - name: Load canonical manifest.json
+              run: |
+                  cp "$RUNNER_TEMP/cdn-version-pointers/manifest.json" "$RUNNER_TEMP/manifest.json"
+                  node -e "JSON.parse(require('node:fs').readFileSync(process.argv[1], 'utf8'))" "$RUNNER_TEMP/manifest.json"
+
+            - name: Sync Cloudflare Workers KV manifests
+              env:
+                  CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+                  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+                  CLOUDFLARE_POSTHOG_JS_ASSET_MANIFEST_KV_NAMESPACE_ID: ${{ vars.CLOUDFLARE_POSTHOG_JS_ASSET_MANIFEST_KV_NAMESPACE_ID }}
+              run: |
+                  node tooling/release/src/cli.ts write-kv \
+                    "$RUNNER_TEMP/manifest.json"
+
+            - name: Send failure event to PostHog
+              if: ${{ failure() }}
+              uses: PostHog/posthog-github-action@v1
+              with:
+                  posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
+                  event: 'posthog-js-github-release-workflow-failure'
+                  properties: >-
+                      {
+                        "commitSha": "${{ github.sha }}",
+                        "jobStatus": "${{ job.status }}",
+                        "ref": "${{ github.ref }}",
+                        "jobName": "cdn-version-pointer-sync",
+                        "packageName": "posthog-js",
+                        "packageVersion": "${{ needs.build-s3-artifacts.outputs.committed-version }}"
+                      }
+
+            - name: Notify Slack - CDN / Version Pointer Sync Failed
+              continue-on-error: true
+              if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
+              uses: PostHog/.github/.github/actions/slack-thread-reply@main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '❌ CDN / version pointer sync failed for posthog-js v${{ needs.build-s3-artifacts.outputs.committed-version }}! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  emoji_reaction: 'x'
+
     notify-released:
         name: Notify Slack - Released
-        needs: [notify-approval-needed, publish, upload-s3]
+        needs: [notify-approval-needed, publish, prepare-cdn-version-pointers, upload-s3, cdn-version-pointer-sync]
         runs-on: ubuntu-latest
-        if: always() && needs.publish.result == 'success' && (needs.upload-s3.result == 'success' || needs.upload-s3.result == 'skipped') && needs.notify-approval-needed.outputs.slack_ts != ''
+        if: >-
+            always() &&
+            needs.publish.result == 'success' &&
+            (needs.prepare-cdn-version-pointers.result == 'success' || needs.prepare-cdn-version-pointers.result == 'skipped') &&
+            (needs.upload-s3.result == 'success' || needs.upload-s3.result == 'skipped') &&
+            (needs.cdn-version-pointer-sync.result == 'success' || needs.cdn-version-pointer-sync.result == 'skipped') &&
+            needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
             - name: Checkout repository
               uses: actions/checkout@v6
@@ -656,18 +844,25 @@ jobs:
                   emoji_reaction: 'rocket'
                   remove_emoji_reaction: 'x'
 
-    # Fires when npm publish fully succeeded but the S3/CDN upload failed (e.g.
-    # toolbar build broke against posthog/posthog@master, or one region's
-    # upload failed). Packages are already on npm at this point — the release
-    # isn't reversible — but the versioned CDN artifacts for posthog-js are
-    # stale or missing. Engineers get a single explicit summary message
-    # instead of having to piece the state together from a missing 🚀 message
-    # plus per-region ❌ messages.
+    # Fires when npm publish fully succeeded but some part of canonical
+    # version pointer preparation, CDN asset publish, or version pointer sync
+    # failed. Packages are already on npm at this point — the release isn't
+    # reversible — but immutable assets and/or Workers KV manifest pointers may
+    # be incomplete until the failed step is retried.
     notify-partial-release:
         name: Notify Slack - Partial Release (npm only)
-        needs: [notify-approval-needed, build-s3-artifacts, publish, upload-s3]
+        needs: [notify-approval-needed, build-s3-artifacts, publish, prepare-cdn-version-pointers, upload-s3, cdn-version-pointer-sync]
         runs-on: ubuntu-latest
-        if: always() && needs.publish.result == 'success' && needs.upload-s3.result == 'failure' && needs.notify-approval-needed.outputs.slack_ts != ''
+        if: >-
+            always() &&
+            needs.publish.result == 'success' &&
+            needs.build-s3-artifacts.outputs.is-new-version == 'true' &&
+            (
+                needs.prepare-cdn-version-pointers.result == 'failure' ||
+                needs.upload-s3.result == 'failure' ||
+                needs.cdn-version-pointer-sync.result == 'failure'
+            ) &&
+            needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
             - name: Notify Slack - Partial Release
               continue-on-error: true # Slack failure shouldn't mark release as failed
@@ -676,5 +871,5 @@ jobs:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '⚠️ npm packages released, but CDN upload failed — posthog-js v${{ needs.build-s3-artifacts.outputs.committed-version }} dist and/or toolbar bundle is stale or missing on S3. <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  message: '⚠️ npm packages released, but canonical version pointer preparation, CDN asset publish, and/or version pointer sync failed — posthog-js v${{ needs.build-s3-artifacts.outputs.committed-version }} immutable assets and/or Workers KV manifest pointers need attention. <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
                   emoji_reaction: 'warning'
