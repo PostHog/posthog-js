@@ -223,6 +223,7 @@
         "_hasPersonProcessing",
         "_hasProcessedRestoreToken",
         "_ignoreClick",
+        "_inCookielessMode",
         "_initExtensions",
         "_initialPageviewCaptured",
         "_initialPersonProfilesConfig",
