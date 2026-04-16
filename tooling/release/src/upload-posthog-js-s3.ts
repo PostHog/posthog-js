@@ -129,6 +129,7 @@ export function buildAssetUploadPlans(
     const versionPrefix = `static/${version}/`
     const majorPrefix = `static/${parsedVersion.major}/`
     const compatibilityPrefix = 'static/'
+    const shouldPublishMutableAliases = !parsedVersion.prerelease
 
     assertNoCompatibilityVersionNamespaceCollisions(assets)
 
@@ -139,18 +140,22 @@ export function buildAssetUploadPlans(
             contentType: asset.contentType,
             cacheControl: IMMUTABLE_ASSET_CACHE_CONTROL,
         })),
-        majorAlias: assets.map((asset) => ({
-            key: getAssetKey(majorPrefix, asset),
-            filePath: asset.filePath,
-            contentType: asset.contentType,
-            cacheControl: MUTABLE_ALIAS_CACHE_CONTROL,
-        })),
-        compatibility: assets.map((asset) => ({
-            key: getAssetKey(compatibilityPrefix, asset),
-            filePath: asset.filePath,
-            contentType: asset.contentType,
-            cacheControl: MUTABLE_ALIAS_CACHE_CONTROL,
-        })),
+        majorAlias: shouldPublishMutableAliases
+            ? assets.map((asset) => ({
+                  key: getAssetKey(majorPrefix, asset),
+                  filePath: asset.filePath,
+                  contentType: asset.contentType,
+                  cacheControl: MUTABLE_ALIAS_CACHE_CONTROL,
+              }))
+            : [],
+        compatibility: shouldPublishMutableAliases
+            ? assets.map((asset) => ({
+                  key: getAssetKey(compatibilityPrefix, asset),
+                  filePath: asset.filePath,
+                  contentType: asset.contentType,
+                  cacheControl: MUTABLE_ALIAS_CACHE_CONTROL,
+              }))
+            : [],
     }
 }
 
@@ -181,9 +186,7 @@ async function verifyUploadedObject(bucket: string, key: string): Promise<void> 
 
 async function verifyUploadedAssets(bucket: string, keys: string[], label: string): Promise<void> {
     console.log(`==> Verifying ${label} exist in s3://${bucket}`)
-    for (const key of keys) {
-        await verifyUploadedObject(bucket, key)
-    }
+    await Promise.all(keys.map((key) => verifyUploadedObject(bucket, key)))
 }
 
 export async function uploadPostHogJsS3(bucket: string, version: string): Promise<void> {
@@ -197,8 +200,12 @@ export async function uploadPostHogJsS3(bucket: string, version: string): Promis
 
     console.log(`==> Uploading posthog-js v${version}`)
     console.log(`    immutable prefix: s3://${bucket}/static/${version}/`)
-    console.log(`    major alias prefix: s3://${bucket}/static/${parsedVersion.major}/`)
-    console.log(`    compatibility prefix: s3://${bucket}/static/`)
+    if (parsedVersion.prerelease) {
+        console.log('    mutable aliases: skipped for prerelease publish')
+    } else {
+        console.log(`    major alias prefix: s3://${bucket}/static/${parsedVersion.major}/`)
+        console.log(`    compatibility prefix: s3://${bucket}/static/`)
+    }
 
     const immutableKeys = await uploadReleaseAssets(bucket, uploadPlans.immutable, 'immutable release assets')
     await tagS3Keys(bucket, immutableKeys)

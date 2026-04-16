@@ -129,6 +129,25 @@ test('assertNoCompatibilityVersionNamespaceCollisions rejects compatibility keys
     )
 })
 
+test('buildAssetUploadPlans skips mutable aliases for prerelease versions', () => {
+    const assets: ReleaseAsset[] = [
+        {
+            relativeKey: 'array.js',
+            filePath: '/tmp/array.js',
+            contentType: 'application/javascript',
+        },
+    ]
+
+    const plans = buildAssetUploadPlans('1.370.0-beta.1', assets)
+
+    assert.deepEqual(
+        plans.immutable.map(({ key }) => key),
+        ['static/1.370.0-beta.1/array.js']
+    )
+    assert.deepEqual(plans.majorAlias, [])
+    assert.deepEqual(plans.compatibility, [])
+})
+
 test('buildAssetUploadPlans rejects invalid versions', () => {
     assert.throws(() => buildAssetUploadPlans('1.370', []), /Invalid version format/)
 })
