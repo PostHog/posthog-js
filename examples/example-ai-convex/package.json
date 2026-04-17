@@ -7,12 +7,12 @@
     "generate": "tsx generate.ts"
   },
   "dependencies": {
+    "posthog-node": "*",
+    "@posthog/ai": "*",
     "@ai-sdk/openai": "^1.0.0",
-    "@opentelemetry/resources": "^2.0.0",
-    "@opentelemetry/sdk-node": "^0.200.0",
-    "@posthog/ai": "^7.16.0",
     "ai": "^4.0.0",
-    "posthog-node": "*"
+    "@opentelemetry/sdk-node": "^0.200.0",
+    "@opentelemetry/resources": "^2.0.0"
   },
   "devDependencies": {
     "tsx": "^4.0.0",

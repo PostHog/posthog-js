@@ -7,11 +7,11 @@
     "chat": "tsx chat.ts"
   },
   "dependencies": {
-    "@opentelemetry/instrumentation-openai": "^0.12.0",
-    "@opentelemetry/resources": "^2.0.0",
+    "@posthog/ai": "*",
+    "openai": "^4.0.0",
     "@opentelemetry/sdk-node": "^0.200.0",
-    "@posthog/ai": "^7.16.0",
-    "openai": "^4.0.0"
+    "@opentelemetry/resources": "^2.0.0",
+    "@opentelemetry/instrumentation-openai": "^0.12.0"
   },
   "devDependencies": {
     "tsx": "^4.0.0",

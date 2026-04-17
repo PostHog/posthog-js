@@ -7,12 +7,12 @@
     "chat": "tsx chat.ts"
   },
   "dependencies": {
+    "posthog-node": "*",
+    "@posthog/ai": "*",
     "@aws-sdk/client-bedrock-runtime": "^3.0.0",
     "@opentelemetry/instrumentation-aws-sdk": "^0.48.0",
-    "@opentelemetry/resources": "^2.0.0",
     "@opentelemetry/sdk-node": "^0.200.0",
-    "@posthog/ai": "^7.16.0",
-    "posthog-node": "*"
+    "@opentelemetry/resources": "^2.0.0"
   },
   "devDependencies": {
     "tsx": "^4.0.0",
