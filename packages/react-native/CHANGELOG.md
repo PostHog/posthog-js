@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.42.1
+
+### Patch Changes
+
+- [#3402](https://github.com/PostHog/posthog-js/pull/3402) [`f2758ef`](https://github.com/PostHog/posthog-js/commit/f2758ef4dae345d131c25281a75c3da764c1a109) Thanks [@ioannisj](https://github.com/ioannisj)! - chore: bump plugin dependency to 1.5.4
+  (2026-04-17)
+
 ## 4.42.0
 
 ### Minor Changes
