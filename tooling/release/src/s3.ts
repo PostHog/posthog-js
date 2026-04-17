@@ -3,13 +3,19 @@ import { HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s
 
 let cachedClient: S3Client | null = null
 
+export function createS3ClientConfig() {
+    return {
+        region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1',
+        endpoint: process.env.AWS_ENDPOINT_URL_S3,
+        // Production bucket names contain dots, so virtual-hosted-style HTTPS
+        // would produce hostnames that fail AWS wildcard certificate matching.
+        forcePathStyle: true,
+    }
+}
+
 function getS3Client(): S3Client {
     if (!cachedClient) {
-        cachedClient = new S3Client({
-            region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1',
-            endpoint: process.env.AWS_ENDPOINT_URL_S3,
-            forcePathStyle: !!process.env.AWS_ENDPOINT_URL_S3,
-        })
+        cachedClient = new S3Client(createS3ClientConfig())
     }
 
     return cachedClient
