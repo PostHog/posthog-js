@@ -128,15 +128,9 @@ Q: I see stack traces but I do not see line context in the error tracking tab
 A: Double check whether you enabled sourcemaps generation in the nuxt config both for vue and nitro. It is covered in the docs.
 ```
 
-## Developing this module
+## Contributing
 
-1. Navigate into module directory
-2. Install dependencies using `pnpm i`
-3. Build the module using `pnpm build`
-4. Navigate into playground directory
-5. Install dependencies using `npm i`
-6. Build the playground using `npm run build`
-7. Run the playground using `node .output/server/index.mjs`
+See [CONTRIBUTING.md](CONTRIBUTING.md) for package-specific development instructions.
 
 ## Questions?
 
