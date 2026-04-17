@@ -1,57 +1,47 @@
+# Contributing
+
 ## Tooling
 
-- Install [corepack](https://github.com/nodejs/corepack), if it's not already the case
-- Install [nvm](https://github.com/nvm-sh/nvm), if it's not already the case
+- Install [corepack](https://github.com/nodejs/corepack), if it is not already available
+- Install [nvm](https://github.com/nvm-sh/nvm), if it is not already available
 
-At the root folder, run :
+At the repository root, run:
 
-```
+```sh
 nvm use
+pnpm install --frozen-lockfile
 ```
 
-## Installation
+## CI-aligned checks
 
-At the root of the project, run:
+Run these commands from the repository root before opening a PR:
 
-```shell
-pnpm install
-```
-
-This will install all the workspace dependencies.
-
-## Building
-
-From the root folder, run:
-
-```shell
+```sh
 pnpm build
+pnpm lint
+pnpm lint:playground
+pnpm test:unit
+pnpm test:functional
 ```
 
-This will build all packages, by taking dependencies into account.
+These are the main build, lint, and test commands used by CI for the monorepo.
 
 ## Development
 
-Go to the `packages` directory and run:
+Run watch mode from the repository root:
 
-```shell
+```sh
 pnpm dev
 ```
 
-It will watch for changes and rebuild the packages.
+## Package-specific guides
 
-## Testing
+Some packages have their own contributor guides with extra package-level checks:
 
-To run tests for a specific package, navigate to the package directory and run:
-
-```shell
-pnpm test
-```
-
-or from the root of the project, run:
-
-```shell
-pnpm --filter=<package-name> test
-```
+- [packages/browser/CONTRIBUTING.md](packages/browser/CONTRIBUTING.md)
+- [packages/react-native/CONTRIBUTING.md](packages/react-native/CONTRIBUTING.md)
+- [packages/convex/CONTRIBUTING.md](packages/convex/CONTRIBUTING.md)
+- [packages/nuxt/CONTRIBUTING.md](packages/nuxt/CONTRIBUTING.md)
 
 ## Opening a new PR
 
