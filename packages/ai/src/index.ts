@@ -13,3 +13,4 @@ export { PostHogGoogleGenAI as GoogleGenAI }
 export { wrapVercelLanguageModel as withTracing }
 export { LangChainCallbackHandler }
 export { Prompts }
+export type { PromptResult, PromptRemoteResult, PromptCodeFallbackResult } from './types'

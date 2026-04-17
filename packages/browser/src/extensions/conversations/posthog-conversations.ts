@@ -382,4 +382,14 @@ export class PostHogConversations implements Extension {
     getWidgetSessionId(): string | null {
         return this._conversationsManager?.getWidgetSessionId() ?? null
     }
+
+    /** @internal Called by PostHog.setIdentity() -- forwards to the manager without recursing */
+    _onIdentityChanged(): void {
+        this._conversationsManager?.setIdentity()
+    }
+
+    /** @internal Called by PostHog.clearIdentity() -- forwards to the manager without recursing */
+    _onIdentityCleared(): void {
+        this._conversationsManager?.clearIdentity()
+    }
 }

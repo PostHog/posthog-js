@@ -1,6 +1,6 @@
 {
     "name": "@posthog/webpack-plugin",
-    "version": "1.4.0",
+    "version": "1.4.2",
     "description": "Webpack plugin for Posthog 🦔",
     "repository": {
         "type": "git",
@@ -9,7 +9,7 @@
     },
     "author": {
         "name": "PostHog",
-        "email": "hey@posthog.com",
+        "email": "engineering@posthog.com",
         "url": "https://posthog.com"
     },
     "main": "./dist/index.js",

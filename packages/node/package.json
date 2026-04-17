@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.29.0",
+  "version": "5.29.2",
   "description": "PostHog Node.js integration",
   "repository": {
     "type": "git",
@@ -31,7 +31,7 @@
   "license": "MIT",
   "author": {
     "name": "PostHog",
-    "email": "hey@posthog.com",
+    "email": "engineering@posthog.com",
     "url": "https://posthog.com"
   },
   "main": "dist/entrypoints/index.node.js",

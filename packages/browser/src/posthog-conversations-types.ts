@@ -465,4 +465,14 @@ export interface SendMessagePayload {
      * Stored in a JSONField for flexibility
      */
     session_context?: SessionContext
+
+    /**
+     * Verified distinct_id for HMAC identity mode (requires identity_hash)
+     */
+    identity_distinct_id?: string
+
+    /**
+     * HMAC-SHA256 of identity_distinct_id using team secret_api_token
+     */
+    identity_hash?: string
 }

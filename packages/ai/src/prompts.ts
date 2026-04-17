@@ -1,18 +1,26 @@
 /// <reference lib="dom" />
 
 import type { PostHog } from 'posthog-node'
-import type { CachedPrompt, GetPromptOptions, PromptApiResponse, PromptVariables, PromptsDirectOptions } from './types'
+import type {
+  CachedPrompt,
+  GetPromptOptions,
+  PromptApiResponse,
+  PromptCodeFallbackResult,
+  PromptRemoteResult,
+  PromptResult,
+  PromptVariables,
+  PromptsDirectOptions,
+} from './types'
 
 const DEFAULT_CACHE_TTL_SECONDS = 300 // 5 minutes
 type PromptVersionCache = Map<number | undefined, CachedPrompt>
 
 function isPromptApiResponse(data: unknown): data is PromptApiResponse {
-  return (
-    typeof data === 'object' &&
-    data !== null &&
-    'prompt' in data &&
-    typeof (data as PromptApiResponse).prompt === 'string'
-  )
+  if (typeof data !== 'object' || data === null) {
+    return false
+  }
+  const record = data as Record<string, unknown>
+  return typeof record.prompt === 'string' && typeof record.name === 'string' && typeof record.version === 'number'
 }
 
 export interface PromptsWithPostHogOptions {
@@ -65,6 +73,7 @@ export class Prompts {
   private host: string
   private defaultCacheTtlSeconds: number
   private cache: Map<string, PromptVersionCache> = new Map()
+  private hasWarnedDeprecation = false
 
   constructor(options: PromptsOptions) {
     this.defaultCacheTtlSeconds = options.defaultCacheTtlSeconds ?? DEFAULT_CACHE_TTL_SECONDS
@@ -101,16 +110,66 @@ export class Prompts {
   }
 
   /**
-   * Fetch a prompt by name from the PostHog API
+   * Fetch a prompt by name from the PostHog API.
    *
-   * @param name - The name of the prompt to fetch
-   * @param options - Optional settings for caching, fallback, and exact version selection
-   * @returns The prompt string
-   * @throws Error if the prompt cannot be fetched and no fallback is provided
+   * When `withMetadata` is `true`, returns a `PromptResult` object with `source`,
+   * `name`, and `version` metadata. When omitted or `false`, returns a plain string
+   * (deprecated — will be removed in a future major version).
    */
-  async get(name: string, options?: GetPromptOptions): Promise<string> {
+  async get(name: string, options: GetPromptOptions & { withMetadata: true }): Promise<PromptResult>
+  /** @deprecated Omitting `withMetadata` is deprecated. Pass `{ withMetadata: true }` to receive a `PromptResult`. */
+  async get(name: string, options?: GetPromptOptions): Promise<string>
+  async get(name: string, options?: GetPromptOptions): Promise<string | PromptResult> {
+    const withMetadata = options?.withMetadata
+
+    if (withMetadata === undefined && !this.hasWarnedDeprecation) {
+      this.hasWarnedDeprecation = true
+      console.warn(
+        '[PostHog Prompts] Calling get() without { withMetadata: true } is deprecated and will be ' +
+          'removed in a future major version. Pass { withMetadata: true } to receive a PromptResult ' +
+          'object with source, name, and version metadata. ' +
+          'You can pass { withMetadata: false } to silence this warning, but the plain-string return ' +
+          'will still be removed in the next major version.'
+      )
+    }
+
+    try {
+      const result = await this.getInternal(name, options)
+
+      if (withMetadata) {
+        return result
+      }
+
+      return result.prompt
+    } catch (error) {
+      const fallback = options?.fallback
+
+      if (fallback !== undefined) {
+        const promptLabel = this.getPromptLabel(name, options?.version)
+        console.warn(`[PostHog Prompts] Failed to fetch prompt ${promptLabel}, using fallback:`, error)
+
+        if (withMetadata) {
+          return {
+            source: 'code_fallback',
+            prompt: fallback,
+            name: undefined,
+            version: undefined,
+          } satisfies PromptCodeFallbackResult
+        }
+
+        return fallback
+      }
+
+      throw error
+    }
+  }
+
+  /**
+   * Internal method that handles cache + fetch logic, returning full metadata.
+   * Does NOT handle the string `fallback` option — callers handle that.
+   */
+  private async getInternal(name: string, options?: GetPromptOptions): Promise<PromptRemoteResult> {
     const cacheTtlSeconds = options?.cacheTtlSeconds ?? this.defaultCacheTtlSeconds
-    const fallback = options?.fallback
     const version = options?.version
     const promptLabel = this.getPromptLabel(name, version)
 
@@ -122,37 +181,27 @@ export class Prompts {
       const isFresh = now - cached.fetchedAt < cacheTtlSeconds * 1000
 
       if (isFresh) {
-        return cached.prompt
+        const { fetchedAt: _, ...cachedResult } = cached
+        return { source: 'cache', ...cachedResult }
       }
     }
 
     // Try to fetch from API
     try {
-      const prompt = await this.fetchPromptFromApi(name, version)
-      const fetchedAt = Date.now()
+      const fetched = await this.fetchPromptFromApi(name, version)
 
       // Update cache
-      this.getOrCreatePromptCache(name).set(version, {
-        prompt,
-        fetchedAt,
-      })
+      this.getOrCreatePromptCache(name).set(version, { ...fetched, fetchedAt: Date.now() })
 
-      return prompt
+      return { source: 'api', ...fetched }
     } catch (error) {
-      // Fallback order:
-      // 1. Return stale cache (with warning)
+      // Return stale cache (with warning)
       if (cached) {
+        const { fetchedAt: _, ...cachedResult } = cached
         console.warn(`[PostHog Prompts] Failed to fetch prompt ${promptLabel}, using stale cache:`, error)
-        return cached.prompt
+        return { source: 'stale_cache', ...cachedResult }
       }
 
-      // 2. Return fallback (with warning)
-      if (fallback !== undefined) {
-        console.warn(`[PostHog Prompts] Failed to fetch prompt ${promptLabel}, using fallback:`, error)
-        return fallback
-      }
-
-      // 3. Throw error
       throw error
     }
   }
@@ -206,7 +255,7 @@ export class Prompts {
     }
   }
 
-  private async fetchPromptFromApi(name: string, version?: number): Promise<string> {
+  private async fetchPromptFromApi(name: string, version?: number): Promise<Omit<PromptRemoteResult, 'source'>> {
     if (!this.personalApiKey) {
       throw new Error(
         '[PostHog Prompts] personalApiKey is required to fetch prompts. ' +
@@ -254,6 +303,6 @@ export class Prompts {
       throw new Error(`[PostHog Prompts] Invalid response format for prompt ${promptLabel}`)
     }
 
-    return data.prompt
+    return { prompt: data.prompt, name: data.name, version: data.version }
   }
 }

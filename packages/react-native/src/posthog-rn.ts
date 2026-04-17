@@ -218,6 +218,16 @@ export class PostHog extends PostHogCore {
 
       this.setupBootstrap(options)
 
+      // Initialize device_id if not already set. This provides a stable identifier
+      // for device-level feature flag bucketing that survives identify() and reset().
+      // We seed it from the anonymous ID at init time; once set, it's independent.
+      if (!this.getPersistedProperty(PostHogPersistedProperty.DeviceId)) {
+        const anonId = this.getAnonymousId()
+        if (anonId) {
+          this.setPersistedProperty(PostHogPersistedProperty.DeviceId, anonId)
+        }
+      }
+
       // Set default person properties for flags if enabled
       if (this._setDefaultPersonProperties) {
         this._setDefaultPersonPropertiesForFlags(false)
@@ -443,7 +453,7 @@ export class PostHog extends PostHogCore {
    * ```
    *
    * @param propertiesToKeep - Optional array of persisted properties to preserve during reset.
-   *   When not provided, app lifecycle properties are automatically preserved.
+   *   When not provided, app lifecycle and device bucketing properties are automatically preserved.
    *   When provided, only the specified properties are preserved.
    *   The event queue is always preserved regardless.
    *
@@ -451,10 +461,12 @@ export class PostHog extends PostHogCore {
    */
   reset(propertiesToKeep?: PostHogPersistedProperty[]): void {
     // When propertiesToKeep is not explicitly provided, automatically preserve app lifecycle
-    // properties to prevent duplicate "Application Installed" events after reset.
+    // properties and device_id to prevent duplicate "Application Installed" events and
+    // to maintain stable feature flag bucketing across identity changes.
     const effectivePropertiesToKeep = propertiesToKeep ?? [
       PostHogPersistedProperty.InstalledAppBuild,
       PostHogPersistedProperty.InstalledAppVersion,
+      PostHogPersistedProperty.DeviceId,
     ]
 
     super.reset(effectivePropertiesToKeep)
@@ -767,6 +779,27 @@ export class PostHog extends PostHogCore {
    */
   getDistinctId(): string {
     return super.getDistinctId()
+  }
+
+  /**
+   * Returns the stable device identifier used for device-level feature flag bucketing.
+   * This ID persists across identify() and reset() calls, only changing on a fresh
+   * app install, manual cache clearing, or OS-initiated storage cleanup.
+   *
+   * @returns The device ID, or an empty string if not yet initialized
+   */
+  getDeviceId(): string {
+    const deviceId = this.getPersistedProperty<string>(PostHogPersistedProperty.DeviceId)
+    if (!deviceId) {
+      // Lazy init for upgrades: existing installs won't have a device_id yet
+      const anonId = this.getAnonymousId()
+      if (anonId) {
+        this.setPersistedProperty(PostHogPersistedProperty.DeviceId, anonId)
+        return anonId
+      }
+      return ''
+    }
+    return deviceId
   }
 
   /**

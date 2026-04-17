@@ -46,14 +46,21 @@ export const SESSION_RECORDING_IS_SAMPLED = '$session_is_sampled'
 export const SESSION_RECORDING_PAST_MINIMUM_DURATION = '$session_past_minimum_duration'
 export const SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION = '$session_recording_url_trigger_activated_session'
 export const SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION = '$session_recording_event_trigger_activated_session'
+// V2 Trigger Groups: Per-group persistence key prefixes (suffix with group ID)
+export const SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX = '$posthog_sr_group_event_trigger_'
+export const SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX = '$posthog_sr_group_url_trigger_'
+export const SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX = '$posthog_sr_group_sampling_'
 export const SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP = '$debug_first_full_snapshot_timestamp'
 export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
 export const PERSISTENCE_EARLY_ACCESS_FEATURES = '$early_access_features'
 export const PERSISTENCE_FEATURE_FLAG_DETAILS = '$feature_flag_details'
+export const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
+export const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
 export const STORED_PERSON_PROPERTIES_KEY = '$stored_person_properties'
 export const STORED_GROUP_PROPERTIES_KEY = '$stored_group_properties'
 export const SURVEYS = '$surveys'
 export const SURVEYS_ACTIVATED = '$surveys_activated'
+export const PRODUCT_TOURS = 'ph_product_tours'
 export const PRODUCT_TOURS_ACTIVATED = '$product_tours_activated'
 export const CONVERSATIONS = '$conversations'
 export const FLAG_CALL_REPORTED = '$flag_call_reported'
@@ -109,6 +116,13 @@ export const PERSISTENCE_RESERVED_PROPERTIES = [
     INITIAL_REFERRER_INFO,
     ENABLE_PERSON_PROCESSING,
     INITIAL_PERSON_INFO,
+    PRODUCT_TOURS,
+    PRODUCT_TOURS_ACTIVATED,
+    PRODUCT_TOURS_ENABLED_SERVER_SIDE,
+    SURVEYS_ACTIVATED,
+    SESSION_RECORDING_REMOTE_CONFIG,
+    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+    PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
 ]
 
 export const SURVEYS_REQUEST_TIMEOUT_MS = 10000

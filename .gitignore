@@ -41,6 +41,8 @@ tsconfig.tsbuildinfo
 target
 
 .cursor/mcp.json
+# Ignore Cursor plans
+.cursor/**/*.plan.md
 
 .next
 next-env.d.ts

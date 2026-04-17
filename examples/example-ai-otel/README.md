@@ -12,7 +12,7 @@ cp .env.example .env
 
 ## Examples
 
-- **exporter.ts** - PostHog OTEL trace exporter setup
+- **exporter.ts** - PostHog OTEL span processor setup
 
 ## Run
 
