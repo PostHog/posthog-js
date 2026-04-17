@@ -562,8 +562,8 @@ jobs:
             fail-fast: false
             matrix:
                 region:
-                    - { name: us, bucket: posthog-js-prod-us, aws_region: us-east-1 }
-                    - { name: eu, bucket: posthog-js-prod-eu, aws_region: eu-central-1 }
+                    - { name: us, bucket: us-assets.i.posthog.com, aws_region: us-east-1 }
+                    - { name: eu, bucket: eu-assets.i.posthog.com, aws_region: eu-central-1 }
         steps:
             # Sparse checkout the release tooling plus the root pnpm files so
             # we can do a locked, filtered install for @posthog-tooling/release.
