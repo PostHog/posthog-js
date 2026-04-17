@@ -23,6 +23,7 @@ interface SourcemapsConfig {
   /** @deprecated Use releaseName instead */
   project?: string
   releaseName?: string
+  build?: string | number
   logLevel?: LogLevel
   deleteAfterUpload?: boolean
   batchSize?: number
@@ -180,6 +181,10 @@ function getInjectArgs(directory: string, sourcemapsConfig: SourcemapsConfig) {
   const releaseVersion = sourcemapsConfig.releaseVersion ?? sourcemapsConfig.version
   if (releaseVersion) {
     processOptions.push('--release-version', releaseVersion)
+  }
+
+  if (sourcemapsConfig.build !== undefined && sourcemapsConfig.build !== '') {
+    processOptions.push('--build', String(sourcemapsConfig.build))
   }
 
   return processOptions

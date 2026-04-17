@@ -18,6 +18,7 @@ export interface PluginConfig {
         /** @deprecated Use releaseVersion instead */
         version?: string
         releaseVersion?: string
+        build?: string | number
         deleteAfterUpload?: boolean
         batchSize?: number
     }
@@ -32,6 +33,7 @@ export interface ResolvedPluginConfig extends Omit<PluginConfig, 'envId' | 'proj
         enabled: boolean
         releaseName?: string
         releaseVersion?: string
+        build?: string
         deleteAfterUpload: boolean
         batchSize?: number
     }
@@ -79,6 +81,7 @@ export function resolveConfig(options: PluginConfig, resolveOptions?: ResolveCon
             enabled,
             releaseName: userSourcemaps.releaseName ?? userSourcemaps.project,
             releaseVersion: userSourcemaps.releaseVersion ?? userSourcemaps.version,
+            build: userSourcemaps.build !== undefined ? String(userSourcemaps.build) : undefined,
             deleteAfterUpload: userSourcemaps.deleteAfterUpload ?? true,
             batchSize: userSourcemaps.batchSize,
         },
