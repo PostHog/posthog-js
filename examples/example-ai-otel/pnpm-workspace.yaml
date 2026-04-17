@@ -1,6 +1,0 @@
-packages:
-  - '.'
-minimumReleaseAge: 10080
-
-blockExoticSubdeps: true
-trustPolicy: no-downgrade
