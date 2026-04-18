@@ -48,13 +48,18 @@ export const getSurveyAbandonedKey = (survey: Pick<Survey, 'id' | 'current_itera
 }
 
 export const setSurveySeenOnLocalStorage = (survey: Pick<Survey, 'id' | 'current_iteration'>) => {
-    const isSurveySeen = localStorage.getItem(getSurveySeenKey(survey))
-    // if survey is already seen, no need to set it again
-    if (isSurveySeen) {
-        return
-    }
+    try {
+        const surveySeenKey = getSurveySeenKey(survey)
+        const isSurveySeen = localStorage.getItem(surveySeenKey)
+        // if survey is already seen, no need to set it again
+        if (isSurveySeen) {
+            return
+        }
 
-    localStorage.setItem(getSurveySeenKey(survey), 'true')
+        localStorage.setItem(surveySeenKey, 'true')
+    } catch (error) {
+        SURVEY_LOGGER.error('Failed to persist survey seen state', error)
+    }
 }
 
 // These surveys are relevant for the getActiveMatchingSurveys method. They are used to
