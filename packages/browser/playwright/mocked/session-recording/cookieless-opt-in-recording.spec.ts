@@ -48,10 +48,10 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
 
         await startWith(customerConfig, page, context)
 
-        // Verify no events are captured initially
+        // Initial cookieless pageview fires at init (the fix for #2841)
         await page.locator('[data-cy-input]').type('hello posthog!')
         await page.waitForTimeout(250)
-        await page.expectCapturedEventsToBe([])
+        await page.expectCapturedEventsToBe(['$pageview'])
 
         // Now the user gives consent and opts in
         await page.waitingForNetworkCausedBy({
@@ -64,8 +64,8 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
             },
         })
 
-        // Verify opt-in event and pageview are captured
-        await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
+        // Verify opt-in event is captured (pageview already fired at init, so no second one)
+        await page.expectCapturedEventsToBe(['$pageview', '$opt_in'])
 
         // Check localStorage to confirm opt-in is stored
         const optInValue = await page.evaluate(() => {
@@ -146,7 +146,7 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
             },
         })
 
-        await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
+        await page.expectCapturedEventsToBe(['$pageview', '$opt_in'])
         await page.resetCapturedEvents()
 
         // Verify recording works after opt-in
