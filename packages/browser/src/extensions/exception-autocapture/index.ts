@@ -1,6 +1,6 @@
 import { assignableWindow, window } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
-import { ExceptionAutoCaptureConfig, RemoteConfig } from '../../types'
+import { RemoteConfig } from '../../types'
 
 import { createLogger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
@@ -9,11 +9,17 @@ import { ErrorTracking } from '@posthog/core'
 
 const logger = createLogger('[ExceptionAutocapture]')
 
+type ExceptionAutocaptureRuntimeConfig = {
+    capture_unhandled_errors: boolean
+    capture_unhandled_rejections: boolean
+    capture_console_errors: boolean
+}
+
 export class ExceptionObserver {
     private _instance: PostHog
     private _rateLimiter: BucketedRateLimiter<string>
     private _remoteEnabled: boolean | undefined
-    private _config: Required<ExceptionAutoCaptureConfig>
+    private _config: ExceptionAutocaptureRuntimeConfig
     private _unwrapOnError: (() => void) | undefined
     private _unwrapUnhandledRejection: (() => void) | undefined
     private _unwrapConsoleError: (() => void) | undefined
@@ -36,9 +42,9 @@ export class ExceptionObserver {
         this.startIfEnabledOrStop()
     }
 
-    private _requiredConfig(): Required<ExceptionAutoCaptureConfig> {
+    private _requiredConfig(): ExceptionAutocaptureRuntimeConfig {
         const providedConfig = this._instance.config.capture_exceptions
-        let config = {
+        let config: ExceptionAutocaptureRuntimeConfig = {
             capture_unhandled_errors: false,
             capture_unhandled_rejections: false,
             capture_console_errors: false,
