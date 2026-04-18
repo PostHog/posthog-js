@@ -3,14 +3,12 @@ import { PostHogPersistence } from '../posthog-persistence'
 import {
     DEVICE_ID,
     INITIAL_PERSON_INFO,
-    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
     PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
     PERSISTENCE_RESERVED_PROPERTIES,
     PRODUCT_TOURS,
     PRODUCT_TOURS_ACTIVATED,
     SESSION_ID,
     SESSION_RECORDING_REMOTE_CONFIG,
-    SURVEYS_ACTIVATED,
     USER_STATE,
 } from '../constants'
 import { PostHogConfig } from '../types'
@@ -261,9 +259,7 @@ describe('persistence', () => {
         it.each([
             [PRODUCT_TOURS, [{ id: 1, name: 'tour' }]],
             [PRODUCT_TOURS_ACTIVATED, ['tour-1']],
-            [SURVEYS_ACTIVATED, ['survey-1']],
             [SESSION_RECORDING_REMOTE_CONFIG, { endpoint: '/s/' }],
-            [PERSISTENCE_FEATURE_FLAG_PAYLOADS, { 'flag-a': '{"key":"value"}' }],
             [PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS, { 'flag-a': '{"key":"value"}' }],
         ])('should not include reserved property %s in event properties', (key, value) => {
             library.register({ [key]: value })
