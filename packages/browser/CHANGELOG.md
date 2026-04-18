@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.369.3
+
+### Patch Changes
+
+- [#3419](https://github.com/PostHog/posthog-js/pull/3419) [`ea08727`](https://github.com/PostHog/posthog-js/commit/ea087272bbe210e5610c9271aa1194776e927353) Thanks [@haacked](https://github.com/haacked)! - Reinstate `$feature_flag_payloads` and `$surveys_activated` in captured event properties.
+  (2026-04-18)
+
+- [#3416](https://github.com/PostHog/posthog-js/pull/3416) [`3d8b2e2`](https://github.com/PostHog/posthog-js/commit/3d8b2e282927d0c09670b3f112c7dc159cebf059) Thanks [@feliperalmeida](https://github.com/feliperalmeida)! - Updated dependencies: - protobufjs@7.5.5
+  (2026-04-18)
+- Updated dependencies []:
+    - @posthog/types@1.369.3
+
 ## 1.369.2
 
 ### Patch Changes
