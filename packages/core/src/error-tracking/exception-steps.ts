@@ -140,7 +140,7 @@ export class ExceptionStepsBuffer {
 }
 
 function normalizePositiveInteger(input: number | undefined, fallback: number): number {
-  if (typeof input !== 'number' || !Number.isFinite(input)) {
+  if (typeof input !== 'number' || !isFiniteNumber(input)) {
     return fallback
   }
 
@@ -150,6 +150,10 @@ function normalizePositiveInteger(input: number | undefined, fallback: number): 
   }
 
   return normalized
+}
+
+function isFiniteNumber(value: number): boolean {
+  return value === value && value !== Infinity && value !== -Infinity
 }
 
 function normalizeAndSerializeStep(step: ExceptionStep): { step: ExceptionStep; json: string } | undefined {
