@@ -35,7 +35,7 @@ export type ResolvedExceptionStepsConfig = {
 export const DEFAULT_EXCEPTION_STEPS_CONFIG: ResolvedExceptionStepsConfig = {
   enabled: true,
   max_queue_size: 20,
-  max_bytes: 16384,
+  max_bytes: 32768,
 }
 
 export function resolveExceptionStepsConfig(config?: ExceptionStepsConfig | null): ResolvedExceptionStepsConfig {

@@ -229,7 +229,7 @@ export type ExceptionStepsConfig = {
     /**
      * The maximum UTF-8 byte budget used when attaching `$exception_steps` to an exception event.
      *
-     * @default 16384
+     * @default 32768
      */
     max_bytes?: number
 }

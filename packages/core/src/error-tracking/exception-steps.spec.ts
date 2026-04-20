@@ -13,7 +13,7 @@ describe('exception steps', () => {
       expect(resolveExceptionStepsConfig()).toEqual({
         enabled: true,
         max_queue_size: 20,
-        max_bytes: 16384,
+        max_bytes: 32768,
       })
     })
 
@@ -21,7 +21,7 @@ describe('exception steps', () => {
       expect(resolveExceptionStepsConfig({ max_queue_size: -1, max_bytes: Number.NaN })).toEqual({
         enabled: true,
         max_queue_size: 20,
-        max_bytes: 16384,
+        max_bytes: 32768,
       })
     })
   })
