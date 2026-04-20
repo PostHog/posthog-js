@@ -1,4 +1,5 @@
 'use client'
+import { useEffect } from 'react'
 import { usePostHog } from 'posthog-js/react'
 import { captureServerError } from './actions'
 
@@ -8,6 +9,14 @@ function randomID() {
 
 export default function Home() {
     const posthog = usePostHog()
+
+    useEffect(() => {
+        posthog.addExceptionStep('Viewed checkout page', {
+            flow: 'checkout',
+            step: 'pageview',
+            pathname: window.location.pathname,
+        })
+    }, [posthog])
 
     const addCheckoutExceptionSteps = () => {
         posthog.addExceptionStep('Opened checkout modal', {
